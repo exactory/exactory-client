@@ -62,8 +62,8 @@ _WARNING_STATUSES = {"year_mismatch", "no_query", "network_error"}
 
 
 _CONTACT_EMAIL = os.environ.get("EXACTORY_CONTACT_EMAIL", "").strip()
-_USER_AGENT = (f"exactory-check/0.5.0 (mailto:{_CONTACT_EMAIL})" if _CONTACT_EMAIL
-               else "exactory-check/0.5.0")
+_USER_AGENT = (f"exactory-check/0.6.0 (mailto:{_CONTACT_EMAIL})" if _CONTACT_EMAIL
+               else "exactory-check/0.6.0")
 
 
 def _exit_with_error(message: str, code: int = 1) -> None:

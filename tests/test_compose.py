@@ -1,0 +1,157 @@
+"""Tests for claim composition: exactory compose-claim and exactory-predict compose."""
+
+from __future__ import annotations
+
+import contextlib
+import importlib.machinery
+import importlib.util
+import io
+import json
+import os
+import tempfile
+import unittest
+from pathlib import Path
+
+_PLUGIN_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _load_bin_module(command_name: str, module_name: str):
+    loader = importlib.machinery.SourceFileLoader(
+        module_name, str(_PLUGIN_ROOT / "bin" / command_name)
+    )
+    spec = importlib.util.spec_from_loader(module_name, loader)
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+    return module
+
+
+_exactory = _load_bin_module("exactory", "exactory_cli")
+_predict = _load_bin_module("exactory-predict", "exactory_predict_compose")
+
+
+def _run(module, argv):
+    args = module._build_parser().parse_args(argv)
+    with contextlib.redirect_stdout(io.StringIO()):
+        args.handler(args)
+
+
+class ComposeClaimTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.out = os.path.join(self._tmp.name, "review.json")
+
+    def _read_claims(self):
+        with open(self.out, encoding="utf-8") as handle:
+            return json.load(handle)["claims"]
+
+    def test_cross_reference_claim_carries_the_envelope(self):
+        _run(_exactory, [
+            "compose-claim", "cross-reference",
+            "--paper-locator", "Section 5",
+            "--referencing-text", "as shown in Figure 7, the loss diverges",
+            "--kind", "figure", "--label", "7",
+            "--severity", "minor",
+            "--source-url", "https://example.org/evidence",
+            "--out", self.out,
+        ])
+
+        (claim,) = self._read_claims()
+        self.assertEqual(claim["dimension"], "consistency")
+        self.assertEqual(claim["procedure"], "cross_reference_resolution")
+        self.assertEqual(claim["severity"], "minor")
+        self.assertEqual(claim["sources"], [{"url": "https://example.org/evidence"}])
+        self.assertEqual(claim["payload"]["referencedKind"], "figure")
+        self.assertEqual(claim["payload"]["referencedLabel"], "7")
+
+    def test_claims_append_to_one_review_file(self):
+        for label in ("7", "8"):
+            _run(_exactory, [
+                "compose-claim", "cross-reference",
+                "--paper-locator", "Section 5",
+                "--referencing-text", "as shown in Figure %s, the loss diverges" % label,
+                "--kind", "figure", "--label", label,
+                "--out", self.out,
+            ])
+
+        self.assertEqual(len(self._read_claims()), 2)
+
+    def test_value_agreement_refuses_a_value_text_outside_its_quote(self):
+        with self.assertRaises(SystemExit):
+            _run(_exactory, [
+                "compose-claim", "value-agreement",
+                "--quantity", "corpus size",
+                "--locator-a", "Abstract",
+                "--quote-a", "we train on thirty million pairs",
+                "--value-text-a", "30", "--value-a", "30",
+                "--locator-b", "Section 4",
+                "--quote-b", "the corpus contains 0.3 million pairs",
+                "--value-text-b", "0.3", "--value-b", "0.3",
+                "--out", self.out,
+            ])
+
+    def test_citation_not_found_needs_a_checkable_handle(self):
+        with self.assertRaises(SystemExit):
+            _run(_exactory, [
+                "compose-claim", "citation",
+                "--reference-string", "Nobody, A. (1999). Nothing.",
+                "--finding", "not_found",
+                "--author", "A. Nobody",
+                "--out", self.out,
+            ])
+
+    def test_citation_claim_carries_finding_and_bibliography(self):
+        _run(_exactory, [
+            "compose-claim", "citation",
+            "--reference-string", "Nobody, A. (1999). A paper that does not exist.",
+            "--finding", "not_found",
+            "--title", "A paper that does not exist",
+            "--author", "A. Nobody", "--year", "1999",
+            "--out", self.out,
+        ])
+
+        (claim,) = self._read_claims()
+        self.assertEqual(claim["dimension"], "citation")
+        self.assertEqual(claim["procedure"], "registry_lookup")
+        self.assertEqual(claim["payload"]["finding"], "not_found")
+        self.assertEqual(claim["payload"]["bibliography"]["title"],
+                         "A paper that does not exist")
+        self.assertIsNone(claim["payload"]["bibliography"]["doi"])
+
+
+class PredictComposeTest(unittest.TestCase):
+    def test_compose_emits_the_claim_envelope(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cohort_path = os.path.join(tmp, "cohort.json")
+            rationale_path = os.path.join(tmp, "rationale.txt")
+            out = os.path.join(tmp, "review.json")
+            with open(cohort_path, "w", encoding="utf-8") as handle:
+                json.dump({"corpus": "arxiv", "primaryCategory": "cs.LG",
+                           "windowStart": "2026-01-01", "windowEnd": "2026-04-01",
+                           "initialAgeMonths": 6, "lifelongAgeMonths": 60}, handle)
+            with open(rationale_path, "w", encoding="utf-8") as handle:
+                handle.write("Strong author record; rising subfield.")
+
+            _run(_predict, [
+                "compose",
+                "--cohort-file", cohort_path,
+                "--initial-percentile", "0.9", "--initial-sigma", "0.8",
+                "--delta", "-0.4", "--delta-sigma", "0.6",
+                "--rationale-file", rationale_path,
+                "--source-url", "https://api.openalex.org/works?filter=example",
+                "--out", out,
+            ])
+
+            with open(out, encoding="utf-8") as handle:
+                (claim,) = json.load(handle)["claims"]
+            self.assertEqual(claim["dimension"], "impact")
+            self.assertEqual(claim["procedure"], "cohort_forecast")
+            self.assertEqual(claim["rationale"], "Strong author record; rising subfield.")
+            self.assertEqual(claim["sources"],
+                             [{"url": "https://api.openalex.org/works?filter=example"}])
+            self.assertNotIn("rationale", claim["payload"])
+            self.assertNotIn("claimType", claim)
+
+
+if __name__ == "__main__":
+    unittest.main()

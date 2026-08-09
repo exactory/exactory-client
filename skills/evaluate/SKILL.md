@@ -38,10 +38,8 @@ exactory-check verify
 ```
 
 Pass `--bib <path>` for a references file outside the workspace default. For a paper
-outside a draft workspace with no BibTeX, build a JSON list in the
-`o1_citation_existence` payload shape (the claim format exactory uses for
-citation-existence checks, named O1 in the exactory design), one object per
-reference:
+outside a draft workspace with no BibTeX, build a JSON list in the shape
+`exactory-check` reads, one object per reference:
 
 ```json
 [{"referenceString": "the reference exactly as the paper prints it",

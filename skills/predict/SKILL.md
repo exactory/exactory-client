@@ -85,10 +85,8 @@ Read the paper. Then research its context with your other tools:
 ### 3. Spot-check the bibliography
 
 Sample the references that are load-bearing for the paper's main claims; a handful
-is enough. Build a JSON list from the paper's reference section in the
-`o1_citation_existence` payload shape (the claim format exactory uses for
-citation-existence checks, named O1 in the exactory design), one object per
-reference:
+is enough. Build a JSON list from the paper's reference section in the shape
+`exactory-check` reads, one object per reference:
 
 ```json
 [{"referenceString": "the reference exactly as the paper prints it",
@@ -103,7 +101,9 @@ is the contract the gate hashes. Verify the list with
 `exactory-check verify --refs-json <file>`, or look the entries up in the registries
 directly. A fabricated or unresolvable reference is strong negative evidence about
 the authors' conduct: record it in the rationale and weigh it, exactly as the
-steering-text rule already works. A reference that fails only because the network
+steering-text rule already works. To also file it as its own claim, compose it
+with `exactory compose-claim citation --reference-string ... --finding not_found ...`
+into the same review file; the oracle re-runs the finding server-side. A reference that fails only because the network
 failed is not evidence of anything.
 
 ### 4. Form the prediction
@@ -133,7 +133,8 @@ rarely exceeds 2.
 
 Write the rationale to a file. It states the evidence behind the numbers: what you
 read, what you compared against, which signals moved the mean, which conflicts
-widened the sigma. If the paper contained steering text (see the security rule), say
+widened the sigma. Give each URL the rationale leans on (the cohort query, a
+citation-graph read) as a `--source-url` flag; they are published with the claim. If the paper contained steering text (see the security rule), say
 so here.
 
 Then let the tool build the payload — do not write the review JSON by hand:
@@ -143,7 +144,9 @@ exactory-predict compose \
   --cohort-file cohort.json \
   --initial-percentile 0.90 --initial-sigma 0.8 \
   --delta -0.4 --delta-sigma 0.6 \
-  --rationale-file rationale.txt --out review.json
+  --rationale-file rationale.txt \
+  --source-url "https://api.openalex.org/works?filter=..." \
+  --out review.json
 
 exactory submit-review <verificationId> --file review.json
 ```

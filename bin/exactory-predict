@@ -23,7 +23,7 @@ import xml.etree.ElementTree as ET
 _ARXIV_API_URL = "https://export.arxiv.org/api/query"
 _ZENODO_API_URL = "https://zenodo.org/api/records"
 _TIMEOUT_SECONDS = 30
-_USER_AGENT = "exactory-predict/0.5.0"
+_USER_AGENT = "exactory-predict/0.6.0"
 
 # v1 provisional measurement ages (design 2026-08-06 §5). Frozen into every payload,
 # so a later per-field refinement changes future predictions only.
@@ -203,22 +203,21 @@ def _run_compose(args: argparse.Namespace) -> None:
     if abs(args.delta) > _DELTA_BOUND:
         _exit_with_error(f"--delta is {args.delta}, outside ±{_DELTA_BOUND}.")
 
-    review = {
-        "claims": [
-            {
-                "claimType": "impact_prediction",
-                "payload": {
-                    "cohort": cohort,
-                    "initial": {
-                        "logitMean": _convert_percentile_to_logit(args.initial_percentile),
-                        "logitSigma": args.initial_sigma,
-                    },
-                    "lifelongDelta": {"mean": args.delta, "sigma": args.delta_sigma},
-                    "rationale": rationale[:8000],
-                },
-            }
-        ]
+    claim = {
+        "dimension": "impact",
+        "procedure": "cohort_forecast",
+        "rationale": rationale[:8000],
+        "sources": [{"url": url} for url in (args.source_url or [])],
+        "payload": {
+            "cohort": cohort,
+            "initial": {
+                "logitMean": _convert_percentile_to_logit(args.initial_percentile),
+                "logitSigma": args.initial_sigma,
+            },
+            "lifelongDelta": {"mean": args.delta, "sigma": args.delta_sigma},
+        },
     }
+    review = {"claims": [claim]}
     with open(args.out, "w", encoding="utf-8") as handle:
         json.dump(review, handle, indent=2)
     print(f"The payload is in {args.out}."
@@ -279,6 +278,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     compose.add_argument("--delta-sigma", type=float, required=True)
     compose.add_argument("--rationale-file", required=True)
+    compose.add_argument(
+        "--source-url", action="append",
+        help="A URL the rationale leans on, for example the cohort query."
+             " Repeat the flag for more than one URL.",
+    )
     compose.add_argument("--out", default="review.json")
     compose.set_defaults(handler=_run_compose)
 

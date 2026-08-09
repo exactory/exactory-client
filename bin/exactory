@@ -60,7 +60,7 @@ def _send_request(method: str, path: str, body: dict | None = None) -> tuple[dic
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
-            "User-Agent": "exactory-client/0.5.0",
+            "User-Agent": "exactory-client/0.6.0",
         },
     )
 
@@ -133,11 +133,7 @@ def _run_tasks(args: argparse.Namespace) -> None:
 
 
 def _run_paper(args: argparse.Namespace) -> None:
-    identifier = args.identifier
-    match = _BARE_ARXIV_ID_RE.fullmatch(identifier)
-    if match:
-        # The server looks papers up by DOI; a bare arXiv id maps to its DataCite DOI.
-        identifier = "10.48550/arxiv." + match.group(1)
+    identifier = _resolve_paper_identifier(args.identifier)
     payload, _ = _send_request("GET", "/api/v1/papers/" + urllib.parse.quote(identifier))
     _print_json(payload)
 
@@ -158,6 +154,164 @@ def _run_submit_review(args: argparse.Namespace) -> None:
         + urllib.parse.quote(args.verification_id, safe="")
         + "/reviews",
         review,
+    )
+    _print_json(payload)
+
+
+def _resolve_paper_identifier(identifier: str) -> str:
+    match = _BARE_ARXIV_ID_RE.fullmatch(identifier)
+    if match:
+        # The server looks papers up by DOI; a bare arXiv id maps to its DataCite DOI.
+        return "10.48550/arxiv." + match.group(1)
+    return identifier
+
+
+def _read_review_file(path: str) -> dict:
+    if not os.path.exists(path):
+        return {"claims": []}
+    try:
+        with open(path, encoding="utf-8") as handle:
+            review = json.load(handle)
+    except json.JSONDecodeError as error:
+        _exit_with_error(f"The file {path} is not valid JSON. Cause: {error}."
+                         " Correct or delete the file. Then run the command again.")
+    if not isinstance(review, dict) or not isinstance(review.get("claims"), list):
+        _exit_with_error(f"The file {path} does not hold a review object with a claims list.")
+    return review
+
+
+def _append_claim_to_review(path: str, claim: dict) -> None:
+    review = _read_review_file(path)
+    review["claims"].append(claim)
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(review, handle, indent=2)
+    count = len(review["claims"])
+    print(f"The file {path} now holds {count} claim(s)."
+          f" Submit with: exactory submit-review <verification-id> --file {path}")
+
+
+def _read_rationale(args: argparse.Namespace) -> str | None:
+    if getattr(args, "rationale_file", None) is None:
+        return None
+    try:
+        with open(args.rationale_file, encoding="utf-8") as handle:
+            rationale = handle.read().strip()
+    except FileNotFoundError:
+        _exit_with_error(f"The file {args.rationale_file} does not exist.")
+    if rationale == "":
+        _exit_with_error("The rationale file is empty. State the evidence, or omit the flag.")
+    return rationale[:8000]
+
+
+def _build_claim_envelope(args: argparse.Namespace, dimension: str, procedure: str,
+                          payload: dict) -> dict:
+    claim = {
+        "dimension": dimension,
+        "procedure": procedure,
+        "severity": args.severity,
+        "sources": [{"url": url} for url in (args.source_url or [])],
+        "payload": payload,
+    }
+    rationale = _read_rationale(args)
+    if rationale is not None:
+        claim["rationale"] = rationale
+    if getattr(args, "target_claim_id", None):
+        claim["targetClaimId"] = args.target_claim_id
+    return claim
+
+
+def _run_compose_cross_reference(args: argparse.Namespace) -> None:
+    payload = {
+        "paperLocator": args.paper_locator,
+        "referencingText": args.referencing_text,
+        "referencedKind": args.kind,
+        "referencedLabel": args.label,
+    }
+    claim = _build_claim_envelope(args, "consistency", "cross_reference_resolution", payload)
+    _append_claim_to_review(args.out, claim)
+
+
+def _run_compose_value_agreement(args: argparse.Namespace) -> None:
+    for name, quote, value_text in (("A", args.quote_a, args.value_text_a),
+                                    ("B", args.quote_b, args.value_text_b)):
+        if value_text not in quote:
+            _exit_with_error(f"--value-text-{name.lower()} must appear verbatim inside"
+                             f" --quote-{name.lower()}. Quote the paper exactly.")
+    if args.value_a == args.value_b:
+        _exit_with_error("The two values are equal. A value-agreement claim states a"
+                         " disagreement; with equal values there is nothing to verify.")
+    payload = {
+        "quantity": args.quantity,
+        "statementA": {"paperLocator": args.locator_a, "quote": args.quote_a,
+                       "valueText": args.value_text_a, "value": args.value_a},
+        "statementB": {"paperLocator": args.locator_b, "quote": args.quote_b,
+                       "valueText": args.value_text_b, "value": args.value_b},
+    }
+    claim = _build_claim_envelope(args, "consistency", "value_agreement", payload)
+    _append_claim_to_review(args.out, claim)
+
+
+def _run_compose_citation(args: argparse.Namespace) -> None:
+    handles = [args.doi, args.title, args.arxiv_id, args.pmid]
+    if args.finding == "not_found" and all(h is None for h in handles):
+        _exit_with_error("A not_found claim needs at least one checkable handle:"
+                         " --doi, --title, --arxiv-id, or --pmid.")
+    if args.finding != "not_found" and args.doi is None:
+        _exit_with_error(f"A {args.finding} claim is about a DOI's registry record."
+                         " Give the DOI with --doi.")
+    if args.finding == "title_mismatch" and args.title is None:
+        _exit_with_error("A title_mismatch claim needs --title, the title the paper printed.")
+    if args.finding == "author_mismatch" and not args.author:
+        _exit_with_error("An author_mismatch claim needs --author, the authors the paper"
+                         " printed. Repeat the flag for more than one author.")
+    payload = {
+        "referenceString": args.reference_string,
+        "bibliography": {
+            "doi": args.doi,
+            "title": args.title,
+            "arxivId": args.arxiv_id,
+            "pmid": args.pmid,
+            "authors": args.author or [],
+            "year": args.year,
+        },
+        "finding": args.finding,
+    }
+    claim = _build_claim_envelope(args, "citation", "registry_lookup", payload)
+    _append_claim_to_review(args.out, claim)
+
+
+def _run_discuss(args: argparse.Namespace) -> None:
+    if args.body is not None:
+        body = args.body
+    else:
+        try:
+            with open(args.body_file, encoding="utf-8") as handle:
+                body = handle.read().strip()
+        except FileNotFoundError:
+            _exit_with_error(f"The file {args.body_file} does not exist.")
+        if body == "":
+            _exit_with_error("The body file is empty. Write the discussion text first.")
+    discussion = {"body": body}
+    if args.claim_id:
+        discussion["targetClaimId"] = args.claim_id
+    if args.parent_id:
+        discussion["parentId"] = args.parent_id
+    doi = _resolve_paper_identifier(args.identifier)
+    payload, _ = _send_request(
+        "POST", "/api/v1/papers/" + urllib.parse.quote(doi) + "/discussions", discussion,
+    )
+    _print_json(payload)
+
+
+def _run_discussions(args: argparse.Namespace) -> None:
+    query = {"limit": str(args.limit)}
+    if args.cursor:
+        query["cursor"] = args.cursor
+    doi = _resolve_paper_identifier(args.identifier)
+    payload, _ = _send_request(
+        "GET",
+        "/api/v1/papers/" + urllib.parse.quote(doi) + "/discussions?"
+        + urllib.parse.urlencode(query),
     )
     _print_json(payload)
 
@@ -203,6 +357,97 @@ def _build_parser() -> argparse.ArgumentParser:
     submit_review.add_argument("verification_id")
     submit_review.add_argument("--file", required=True, help="Path of the review JSON file.")
     submit_review.set_defaults(handler=_run_submit_review)
+
+    compose = commands.add_parser(
+        "compose-claim", allow_abbrev=False,
+        help="Append one claim to a review file, so no claim JSON is written by hand."
+    )
+    claim_kinds = compose.add_subparsers(dest="claim_kind", required=True)
+
+    def _add_envelope_flags(subparser: argparse.ArgumentParser) -> None:
+        subparser.add_argument("--severity", choices=["substantive", "minor"],
+                               default="substantive")
+        subparser.add_argument("--rationale-file",
+                               help="A file with the natural-language reasoning.")
+        subparser.add_argument("--source-url", action="append",
+                               help="A URL the claim leans on. Repeat for more than one.")
+        subparser.add_argument("--target-claim-id",
+                               help="The claim this claim disputes (meta-verification).")
+        subparser.add_argument("--out", default="review.json")
+
+    cross_reference = claim_kinds.add_parser(
+        "cross-reference", allow_abbrev=False,
+        help="The paper references a figure, table, or section that does not exist."
+    )
+    cross_reference.add_argument("--paper-locator", required=True,
+                                 help="Where the reference sits, for example 'Section 5'.")
+    cross_reference.add_argument("--referencing-text", required=True,
+                                 help="The referencing sentence, verbatim from the paper.")
+    cross_reference.add_argument(
+        "--kind", required=True,
+        choices=["figure", "table", "section", "appendix", "algorithm", "theorem", "lemma"])
+    cross_reference.add_argument("--label", required=True,
+                                 help="The number or letter as printed, for example 7 or B.")
+    _add_envelope_flags(cross_reference)
+    cross_reference.set_defaults(handler=_run_compose_cross_reference)
+
+    value_agreement = claim_kinds.add_parser(
+        "value-agreement", allow_abbrev=False,
+        help="The same quantity is stated with two different values."
+    )
+    value_agreement.add_argument("--quantity", required=True,
+                                 help="What both statements measure, in plain words.")
+    value_agreement.add_argument("--locator-a", required=True)
+    value_agreement.add_argument("--quote-a", required=True,
+                                 help="The first statement, verbatim from the paper.")
+    value_agreement.add_argument("--value-text-a", required=True,
+                                 help="The value exactly as it appears inside --quote-a.")
+    value_agreement.add_argument("--value-a", type=float, required=True)
+    value_agreement.add_argument("--locator-b", required=True)
+    value_agreement.add_argument("--quote-b", required=True)
+    value_agreement.add_argument("--value-text-b", required=True)
+    value_agreement.add_argument("--value-b", type=float, required=True)
+    _add_envelope_flags(value_agreement)
+    value_agreement.set_defaults(handler=_run_compose_value_agreement)
+
+    citation = claim_kinds.add_parser(
+        "citation", allow_abbrev=False,
+        help="A reference does not exist, does not resolve, or misstates its record."
+    )
+    citation.add_argument("--reference-string", required=True,
+                          help="The reference exactly as the paper prints it.")
+    citation.add_argument(
+        "--finding", required=True,
+        choices=["not_found", "unresolved", "title_mismatch", "author_mismatch"])
+    citation.add_argument("--doi")
+    citation.add_argument("--title")
+    citation.add_argument("--arxiv-id")
+    citation.add_argument("--pmid")
+    citation.add_argument("--author", action="append",
+                          help="One author as printed. Repeat for more than one.")
+    citation.add_argument("--year", type=int)
+    _add_envelope_flags(citation)
+    citation.set_defaults(handler=_run_compose_citation)
+
+    discuss = commands.add_parser(
+        "discuss", allow_abbrev=False,
+        help="Post a discussion on a paper. Discussions are never adjudicated."
+    )
+    discuss.add_argument("identifier", help="A DOI or an arXiv id.")
+    body_source = discuss.add_mutually_exclusive_group(required=True)
+    body_source.add_argument("--body", help="The discussion text.")
+    body_source.add_argument("--body-file", help="A file with the discussion text.")
+    discuss.add_argument("--claim-id", help="Anchor the discussion to this claim.")
+    discuss.add_argument("--parent-id", help="Reply under this discussion.")
+    discuss.set_defaults(handler=_run_discuss)
+
+    discussions = commands.add_parser(
+        "discussions", allow_abbrev=False, help="List a paper's discussions."
+    )
+    discussions.add_argument("identifier", help="A DOI or an arXiv id.")
+    discussions.add_argument("--cursor", help="Opaque cursor from a previous page.")
+    discussions.add_argument("--limit", type=int, default=50)
+    discussions.set_defaults(handler=_run_discussions)
 
     return parser
 

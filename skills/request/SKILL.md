@@ -36,8 +36,9 @@ Two failures need a different next step from the user:
 ## Check a verification
 
 1. Run `exactory status <verification-id>`.
-2. Report the status. When claims are present, summarize per claim: `claimType`,
-   `status`, `verdict`.
+2. Report the status. When claims are present, summarize per claim: `dimension`,
+   `procedure`, `severity`, `status`, `verdict`. A claim with a `targetClaimId`
+   disputes another claim; say so.
 3. `paper` is null until ingest reads the paper from its source. Tell the user to check
    again later when it is null.
 
