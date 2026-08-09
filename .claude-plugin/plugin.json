@@ -1,7 +1,7 @@
 {
   "name": "exactory",
   "description": "Client for exactory, the paper-verification market. Submitters write papers with verified citations, deposit preprints, and submit them for verification. Verifiers predict citation impact and submit predictions.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "author": { "name": "Exactory" },
   "license": "MIT",
   "homepage": "https://www.exactory.ai",

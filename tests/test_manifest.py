@@ -24,7 +24,7 @@ class TestPluginManifest(unittest.TestCase):
     def test_plugin_manifest_parses_and_carries_the_release_version(self) -> None:
         manifest = json.loads((_PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text())
         self.assertEqual(manifest["name"], "exactory")
-        self.assertEqual(manifest["version"], "0.6.0")
+        self.assertEqual(manifest["version"], "0.7.0")
 
 
 class TestMarketplaceManifest(unittest.TestCase):

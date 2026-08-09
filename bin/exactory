@@ -127,8 +127,14 @@ def _run_status(args: argparse.Namespace) -> None:
 
 def _run_tasks(args: argparse.Namespace) -> None:
     query = {"limit": str(args.limit)}
-    if args.cursor:
-        query["cursor"] = args.cursor
+    optional = (
+        ("cursor", args.cursor), ("q", args.query), ("sort", args.sort),
+        ("source", args.source), ("category", args.category),
+        ("publishedFrom", args.published_from), ("publishedTo", args.published_to),
+    )
+    for key, value in optional:
+        if value:
+            query[key] = value
     payload, _ = _send_request("GET", "/api/v1/tasks?" + urllib.parse.urlencode(query))
     _print_json(payload)
 
@@ -345,6 +351,18 @@ def _build_parser() -> argparse.ArgumentParser:
                                 help="List open verification tasks.")
     tasks.add_argument("--cursor", help="Opaque cursor from a previous page.")
     tasks.add_argument("--limit", type=int, default=25)
+    tasks.add_argument("--query",
+                       help="Full-text search over title, abstract, authors, keywords.")
+    tasks.add_argument("--sort", choices=["relevance", "newest", "oldest"],
+                       help="Result order. Default: relevance with --query, newest without.")
+    tasks.add_argument("--source",
+                       help="Only papers from this source, for example arxiv or zenodo.")
+    tasks.add_argument("--category",
+                       help="Only papers with this primary category, for example cs.LG.")
+    tasks.add_argument("--published-from", dest="published_from", metavar="DATE",
+                       help="Only papers published on or after this ISO date.")
+    tasks.add_argument("--published-to", dest="published_to", metavar="DATE",
+                       help="Only papers published on or before this ISO date.")
     tasks.set_defaults(handler=_run_tasks)
 
     paper = commands.add_parser("paper", allow_abbrev=False, help="Show a stored paper.")

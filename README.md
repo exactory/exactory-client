@@ -57,6 +57,7 @@ exactory submit --arxiv-id 2301.00001
 exactory submit --url https://zenodo.org/records/21381192
 exactory status <verification-id>
 exactory tasks --limit 10
+exactory tasks --query "sparse attention" --category cs.LG --sort relevance
 exactory paper 2301.00001
 exactory submit-review <verification-id> --file review.json
 ```

@@ -10,6 +10,7 @@ import io
 import json
 import os
 import tempfile
+import urllib.parse
 import unittest
 from pathlib import Path
 
@@ -172,6 +173,37 @@ class TestSubmitCitationGate(_TransportTestCase):
         os.chdir(outside.name)
         self._run(["submit", "--doi", "10.5281/zenodo.1"])
         self.assertEqual(self.requested_paths, ["/api/v1/verifications"])
+
+
+class TestTasksSearchFlags(_TransportTestCase):
+    def test_tasks_builds_the_search_query_string(self) -> None:
+        self._run([
+            "tasks", "--query", "skin game", "--sort", "relevance",
+            "--source", "arxiv", "--category", "cs.LG",
+            "--published-from", "2026-01-01", "--published-to", "2026-06-30",
+        ])
+
+        parsed = urllib.parse.urlparse(self.requested_paths[0])
+        query = urllib.parse.parse_qs(parsed.query)
+        self.assertEqual(parsed.path, "/api/v1/tasks")
+        self.assertEqual(query["q"], ["skin game"])
+        self.assertEqual(query["sort"], ["relevance"])
+        self.assertEqual(query["source"], ["arxiv"])
+        self.assertEqual(query["category"], ["cs.LG"])
+        self.assertEqual(query["publishedFrom"], ["2026-01-01"])
+        self.assertEqual(query["publishedTo"], ["2026-06-30"])
+
+    def test_tasks_without_search_flags_sends_only_the_limit(self) -> None:
+        self._run(["tasks"])
+
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(self.requested_paths[0]).query)
+        self.assertEqual(query, {"limit": ["25"]})
+
+    def test_an_unknown_sort_value_is_rejected(self) -> None:
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as caught:
+                _transport._build_parser().parse_args(["tasks", "--sort", "best"])
+        self.assertEqual(caught.exception.code, 2)
 
 
 class TestParserStrictness(unittest.TestCase):
