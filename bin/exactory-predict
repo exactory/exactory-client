@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import sys
 import urllib.parse
 import urllib.request
@@ -217,11 +218,25 @@ def _run_compose(args: argparse.Namespace) -> None:
             "lifelongDelta": {"mean": args.delta, "sigma": args.delta_sigma},
         },
     }
-    review = {"claims": [claim]}
+    # Append into an existing review file: `exactory compose-claim` writes to the same
+    # file, and a forecast that overwrote those claims would silently discard them.
+    review = {"claims": []}
+    if os.path.exists(args.out):
+        try:
+            with open(args.out, encoding="utf-8") as handle:
+                review = json.load(handle)
+        except json.JSONDecodeError as error:
+            _exit_with_error(f"The file {args.out} is not valid JSON. Cause: {error}."
+                             " Correct or delete the file. Then run compose again.")
+        if not isinstance(review, dict) or not isinstance(review.get("claims"), list):
+            _exit_with_error(f"The file {args.out} does not hold a review object"
+                             " with a claims list.")
+    review["claims"].append(claim)
     with open(args.out, "w", encoding="utf-8") as handle:
         json.dump(review, handle, indent=2)
-    print(f"The payload is in {args.out}."
-          f" Submit it with: exactory submit-review <id> --file {args.out}")
+    count = len(review["claims"])
+    print(f"The file {args.out} now holds {count} claim(s)."
+          f" Submit with: exactory submit-review <id> --file {args.out}")
 
 
 def _build_parser() -> argparse.ArgumentParser:

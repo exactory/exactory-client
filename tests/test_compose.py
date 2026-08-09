@@ -152,6 +152,32 @@ class PredictComposeTest(unittest.TestCase):
             self.assertNotIn("rationale", claim["payload"])
             self.assertNotIn("claimType", claim)
 
+    def test_compose_appends_to_a_review_file_compose_claim_started(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "review.json")
+            with open(out, "w", encoding="utf-8") as handle:
+                json.dump({"claims": [{"dimension": "citation"}]}, handle)
+            cohort_path = os.path.join(tmp, "cohort.json")
+            rationale_path = os.path.join(tmp, "rationale.txt")
+            with open(cohort_path, "w", encoding="utf-8") as handle:
+                json.dump({"corpus": "arxiv"}, handle)
+            with open(rationale_path, "w", encoding="utf-8") as handle:
+                handle.write("Evidence.")
+
+            _run(_predict, [
+                "compose",
+                "--cohort-file", cohort_path,
+                "--initial-percentile", "0.9", "--initial-sigma", "0.8",
+                "--delta", "-0.4", "--delta-sigma", "0.6",
+                "--rationale-file", rationale_path,
+                "--out", out,
+            ])
+
+            with open(out, encoding="utf-8") as handle:
+                claims = json.load(handle)["claims"]
+            self.assertEqual(len(claims), 2)
+            self.assertEqual(claims[0], {"dimension": "citation"})
+
 
 if __name__ == "__main__":
     unittest.main()
