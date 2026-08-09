@@ -298,7 +298,7 @@ def _run_discuss(args: argparse.Namespace) -> None:
         discussion["parentId"] = args.parent_id
     doi = _resolve_paper_identifier(args.identifier)
     payload, _ = _send_request(
-        "POST", "/api/v1/papers/" + urllib.parse.quote(doi) + "/discussions", discussion,
+        "POST", "/api/v1/discussions/" + urllib.parse.quote(doi), discussion,
     )
     _print_json(payload)
 
@@ -310,7 +310,7 @@ def _run_discussions(args: argparse.Namespace) -> None:
     doi = _resolve_paper_identifier(args.identifier)
     payload, _ = _send_request(
         "GET",
-        "/api/v1/papers/" + urllib.parse.quote(doi) + "/discussions?"
+        "/api/v1/discussions/" + urllib.parse.quote(doi) + "?"
         + urllib.parse.urlencode(query),
     )
     _print_json(payload)
