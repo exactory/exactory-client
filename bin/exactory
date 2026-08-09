@@ -32,7 +32,8 @@ _HTTP_ERR_MSGS = {
     409: "The resource is in a state that does not accept this operation."
          " Run exactory status <verification-id> to see the current state.",
     422: "The server rejected the request body. Correct the body. Then send it again.",
-    429: "The rate limit is reached. Wait one minute. Then send the request again.",
+    429: "The hourly posting limit is reached. The Retry-After response header"
+         " states the seconds to wait. Send the request again after that.",
     503: "The paper source is not reachable now. Send the same request again later.",
 }
 
