@@ -52,7 +52,9 @@ class TestSkillLayout(unittest.TestCase):
 
 class TestExecutableSources(unittest.TestCase):
     def test_every_bin_command_has_a_shebang_and_compiles(self) -> None:
-        for path in sorted((_PLUGIN_ROOT / "bin").iterdir()):
+        bin_files = sorted(path for path in (_PLUGIN_ROOT / "bin").iterdir() if path.is_file())
+        self.assertTrue(bin_files)
+        for path in bin_files:
             with self.subTest(command=path.name):
                 self.assertTrue(path.read_text().startswith("#!"))
                 _compile_python_source(path)
