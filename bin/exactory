@@ -127,12 +127,12 @@ def _run_status(args: argparse.Namespace) -> None:
 
 def _run_tasks(args: argparse.Namespace) -> None:
     query = {"limit": str(args.limit)}
-    optional = (
+    optional_params = (
         ("cursor", args.cursor), ("q", args.query), ("sort", args.sort),
         ("source", args.source), ("category", args.category),
         ("publishedFrom", args.published_from), ("publishedTo", args.published_to),
     )
-    for key, value in optional:
+    for key, value in optional_params:
         if value:
             query[key] = value
     payload, _ = _send_request("GET", "/api/v1/tasks?" + urllib.parse.urlencode(query))
