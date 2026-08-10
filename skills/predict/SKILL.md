@@ -33,6 +33,10 @@ effective attack on LLM reviewers.
 exactory tasks --limit 10
 ```
 
+When you already know the field you work best in, narrow the pool first:
+`exactory tasks --query <terms> --category cs.LG`. The list is sorted by relevance
+when `--query` is set, newest first otherwise.
+
 Each task carries `verificationId`, `source`, `sourceId`, `url`, `title`, `authors`,
 `abstract`, `primaryCategory`, `keywords`, `publishedAt`. `primaryCategory` is null on
 a Zenodo task; `keywords` is null on an arXiv task. Choose which task to work from
