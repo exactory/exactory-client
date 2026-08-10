@@ -20,11 +20,19 @@ import sys
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 _ARXIV_API_URL = "https://export.arxiv.org/api/query"
 _ZENODO_API_URL = "https://zenodo.org/api/records"
 _TIMEOUT_SECONDS = 30
-_USER_AGENT = "exactory-predict/0.6.0"
+
+# The release version has one definition: the plugin manifest. Deriving the
+# User-Agent from it at boot keeps the two from drifting apart.
+_PLUGIN_VERSION = json.loads(
+    (Path(__file__).resolve().parent.parent / ".claude-plugin" / "plugin.json")
+    .read_text(encoding="utf-8")
+)["version"]
+_USER_AGENT = f"exactory-predict/{_PLUGIN_VERSION}"
 
 # v1 provisional measurement ages (design 2026-08-06 §5). Frozen into every payload,
 # so a later per-field refinement changes future predictions only.
@@ -182,6 +190,18 @@ def _require_sigma_in_range(name: str, sigma: float) -> None:
         _exit_with_error(f"{name} is {sigma}, above the ceiling of {_SIGMA_CEILING}.")
 
 
+def _truncate_to_utf16_units(text: str, limit: int) -> str:
+    """The server bounds claim text in UTF-16 code units (JavaScript string length),
+    where a non-BMP character counts as two. Truncating by Python code points would
+    pass text the server then rejects."""
+    units = 0
+    for index, char in enumerate(text):
+        units += 2 if ord(char) > 0xFFFF else 1
+        if units > limit:
+            return text[:index]
+    return text
+
+
 def _run_compose(args: argparse.Namespace) -> None:
     try:
         with open(args.cohort_file, encoding="utf-8") as handle:
@@ -207,7 +227,7 @@ def _run_compose(args: argparse.Namespace) -> None:
     claim = {
         "dimension": "impact",
         "procedure": "cohort_forecast",
-        "rationale": rationale[:8000],
+        "rationale": _truncate_to_utf16_units(rationale, 8000),
         "sources": [{"url": url} for url in (args.source_url or [])],
         "payload": {
             "cohort": cohort,

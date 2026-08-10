@@ -29,7 +29,14 @@ from pathlib import Path
 _PRODUCTION_API_URL = "https://zenodo.org/api"
 _SANDBOX_API_URL = "https://sandbox.zenodo.org/api"
 _TIMEOUT_SECONDS = 180
-_USER_AGENT = "exactory-draft/0.6.0"
+
+# The release version has one definition: the plugin manifest. Deriving the
+# User-Agent from it at boot keeps the two from drifting apart.
+_PLUGIN_VERSION = json.loads(
+    (Path(__file__).resolve().parent.parent / ".claude-plugin" / "plugin.json")
+    .read_text(encoding="utf-8")
+)["version"]
+_USER_AGENT = f"exactory-draft/{_PLUGIN_VERSION}"
 
 _WORKSPACE_DIR_NAMES = (".exactory", "draft", "evidence", "research", "reviews", "learnings")
 _DRAFT_STATE_PATH = Path(".exactory/draft.json")

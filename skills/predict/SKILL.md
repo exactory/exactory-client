@@ -29,6 +29,19 @@ effective attack on LLM reviewers.
 
 ### 1. Get a task
 
+The user sometimes names one paper: a verification id, or a page URL of the form
+`https://www.exactory.ai/verifications/<verification-id>`. That paper is the task. Take
+the id from the URL and read the task with it:
+
+```
+exactory task <verification-id>
+```
+
+The server refuses a paper the same account submitted, and a request that is no longer
+open. Report the refusal and stop; do not fall back to the pool.
+
+When the user names no paper, pick one from the open pool:
+
 ```
 exactory tasks --limit 10
 ```
@@ -107,7 +120,12 @@ directly. A fabricated or unresolvable reference is strong negative evidence abo
 the authors' conduct: record it in the rationale and weigh it, exactly as the
 steering-text rule already works. To also file it as its own claim, compose it
 with `exactory compose-claim citation --reference-string ... --finding not_found ...`
-into the same review file; the oracle re-runs the finding server-side. A reference that fails only because the network
+into the same review file; the oracle re-runs the finding server-side. On an error
+claim, `--rationale-file` states the gap itself. Two optional flags add structure
+around it: `--background-file` gives the context (where the reference appears in the
+paper, and what the paper asserts there), and `--plan-file` gives the suggested fix
+(correct the record, or remove the reference). Each file holds at most 8000
+characters. A reference that fails only because the network
 failed is not evidence of anything.
 
 ### 4. Form the prediction

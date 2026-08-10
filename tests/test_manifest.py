@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib.machinery
+import importlib.util
 import json
 import os
 import py_compile
@@ -20,11 +22,38 @@ def _compile_python_source(path: Path) -> None:
         py_compile.compile(str(path), cfile=os.path.join(scratch_dir, "out.pyc"), doraise=True)
 
 
+def _load_bin_module(command_name: str):
+    loader = importlib.machinery.SourceFileLoader(
+        f"manifest_{command_name.replace('-', '_')}", str(_PLUGIN_ROOT / "bin" / command_name)
+    )
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+    return module
+
+
 class TestPluginManifest(unittest.TestCase):
     def test_plugin_manifest_parses_and_carries_the_release_version(self) -> None:
         manifest = json.loads((_PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text())
         self.assertEqual(manifest["name"], "exactory")
-        self.assertEqual(manifest["version"], "0.7.1")
+        self.assertEqual(manifest["version"], "0.8.0")
+
+    def test_every_bin_user_agent_carries_the_manifest_version(self) -> None:
+        version = json.loads(
+            (_PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text()
+        )["version"]
+        expected_ua_prefixes = {
+            "exactory": f"exactory-client/{version}",
+            "exactory-check": f"exactory-check/{version}",
+            "exactory-draft": f"exactory-draft/{version}",
+            "exactory-predict": f"exactory-predict/{version}",
+        }
+        bin_names = sorted(path.name for path in (_PLUGIN_ROOT / "bin").iterdir())
+        self.assertEqual(bin_names, sorted(expected_ua_prefixes))
+        for command_name, expected_ua_prefix in expected_ua_prefixes.items():
+            with self.subTest(command=command_name):
+                module = _load_bin_module(command_name)
+                self.assertTrue(module._USER_AGENT.startswith(expected_ua_prefix))
 
 
 class TestMarketplaceManifest(unittest.TestCase):

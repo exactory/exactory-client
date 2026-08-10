@@ -63,6 +63,83 @@ class ComposeClaimTest(unittest.TestCase):
         self.assertEqual(claim["sources"], [{"url": "https://example.org/evidence"}])
         self.assertEqual(claim["payload"]["referencedKind"], "figure")
         self.assertEqual(claim["payload"]["referencedLabel"], "7")
+        self.assertNotIn("background", claim)
+        self.assertNotIn("plan", claim)
+
+    def _write_text_file(self, name, text):
+        path = os.path.join(self._tmp.name, name)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        return path
+
+    def test_claim_carries_background_and_plan_when_the_flags_are_given(self):
+        rationale_path = self._write_text_file("rationale.txt", "Figure 7 does not exist.\n")
+        background_path = self._write_text_file(
+            "background.txt", "Section 5 reads the loss curve off Figure 7.\n")
+        plan_path = self._write_text_file(
+            "plan.txt", "Renumber the reference to Figure 6, or add the figure.\n")
+        _run(_exactory, [
+            "compose-claim", "cross-reference",
+            "--paper-locator", "Section 5",
+            "--referencing-text", "as shown in Figure 7, the loss diverges",
+            "--kind", "figure", "--label", "7",
+            "--rationale-file", rationale_path,
+            "--background-file", background_path,
+            "--plan-file", plan_path,
+            "--out", self.out,
+        ])
+
+        (claim,) = self._read_claims()
+        self.assertEqual(claim["rationale"], "Figure 7 does not exist.")
+        self.assertEqual(claim["background"],
+                         "Section 5 reads the loss curve off Figure 7.")
+        self.assertEqual(claim["plan"],
+                         "Renumber the reference to Figure 6, or add the figure.")
+
+    def test_claim_refuses_an_empty_background_file(self):
+        background_path = self._write_text_file("background.txt", "  \n")
+        with self.assertRaises(SystemExit):
+            _run(_exactory, [
+                "compose-claim", "cross-reference",
+                "--paper-locator", "Section 5",
+                "--referencing-text", "as shown in Figure 7, the loss diverges",
+                "--kind", "figure", "--label", "7",
+                "--background-file", background_path,
+                "--out", self.out,
+            ])
+
+    def test_claim_truncates_background_and_plan_to_the_contract_limit(self):
+        background_path = self._write_text_file("background.txt", "b" * 9000)
+        plan_path = self._write_text_file("plan.txt", "p" * 9000)
+        _run(_exactory, [
+            "compose-claim", "cross-reference",
+            "--paper-locator", "Section 5",
+            "--referencing-text", "as shown in Figure 7, the loss diverges",
+            "--kind", "figure", "--label", "7",
+            "--background-file", background_path,
+            "--plan-file", plan_path,
+            "--out", self.out,
+        ])
+
+        (claim,) = self._read_claims()
+        self.assertEqual(len(claim["background"]), 8000)
+        self.assertEqual(len(claim["plan"]), 8000)
+
+    def test_claim_truncation_counts_utf16_units_as_the_server_does(self):
+        # U+1D465 (mathematical italic x) is one Python code point but two UTF-16
+        # code units, the unit the server's zod .max(8000) counts.
+        background_path = self._write_text_file("background.txt", "\U0001d465" * 9000)
+        _run(_exactory, [
+            "compose-claim", "cross-reference",
+            "--paper-locator", "Section 5",
+            "--referencing-text", "as shown in Figure 7, the loss diverges",
+            "--kind", "figure", "--label", "7",
+            "--background-file", background_path,
+            "--out", self.out,
+        ])
+
+        (claim,) = self._read_claims()
+        self.assertEqual(len(claim["background"].encode("utf-16-le")) // 2, 8000)
 
     def test_claims_append_to_one_review_file(self):
         for label in ("7", "8"):
@@ -151,6 +228,31 @@ class PredictComposeTest(unittest.TestCase):
                              [{"url": "https://api.openalex.org/works?filter=example"}])
             self.assertNotIn("rationale", claim["payload"])
             self.assertNotIn("claimType", claim)
+            self.assertNotIn("background", claim)
+            self.assertNotIn("plan", claim)
+
+    def test_compose_truncates_the_rationale_by_utf16_units(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cohort_path = os.path.join(tmp, "cohort.json")
+            rationale_path = os.path.join(tmp, "rationale.txt")
+            out = os.path.join(tmp, "review.json")
+            with open(cohort_path, "w", encoding="utf-8") as handle:
+                json.dump({"corpus": "arxiv"}, handle)
+            with open(rationale_path, "w", encoding="utf-8") as handle:
+                handle.write("\U0001d465" * 9000)
+
+            _run(_predict, [
+                "compose",
+                "--cohort-file", cohort_path,
+                "--initial-percentile", "0.9", "--initial-sigma", "0.8",
+                "--delta", "-0.4", "--delta-sigma", "0.6",
+                "--rationale-file", rationale_path,
+                "--out", out,
+            ])
+
+            with open(out, encoding="utf-8") as handle:
+                (claim,) = json.load(handle)["claims"]
+            self.assertEqual(len(claim["rationale"].encode("utf-16-le")) // 2, 8000)
 
     def test_compose_appends_to_a_review_file_compose_claim_started(self):
         with tempfile.TemporaryDirectory() as tmp:

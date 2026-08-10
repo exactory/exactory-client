@@ -24,6 +24,14 @@ _DEFAULT_API_URL = "https://www.exactory.ai"
 _TIMEOUT_SECONDS = 30
 _BARE_ARXIV_ID_RE = re.compile(r"(\d{4}\.\d{4,5})(?:v\d+)?")
 
+# The release version has one definition: the plugin manifest. Deriving the
+# User-Agent from it at boot keeps the two from drifting apart.
+_PLUGIN_VERSION = json.loads(
+    (Path(__file__).resolve().parent.parent / ".claude-plugin" / "plugin.json")
+    .read_text(encoding="utf-8")
+)["version"]
+_USER_AGENT = f"exactory-client/{_PLUGIN_VERSION}"
+
 _HTTP_ERR_MSGS = {
     401: "The server rejected the API key. Make sure that EXACTORY_API_KEY holds a current key.",
     403: "The server refused this operation for this account."
@@ -61,7 +69,7 @@ def _send_request(method: str, path: str, body: dict | None = None) -> tuple[dic
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
-            "User-Agent": "exactory-client/0.6.0",
+            "User-Agent": _USER_AGENT,
         },
     )
 
@@ -139,6 +147,14 @@ def _run_tasks(args: argparse.Namespace) -> None:
     _print_json(payload)
 
 
+def _run_task(args: argparse.Namespace) -> None:
+    payload, _ = _send_request(
+        "GET",
+        "/api/v1/tasks/" + urllib.parse.quote(args.verification_id, safe=""),
+    )
+    _print_json(payload)
+
+
 def _run_paper(args: argparse.Namespace) -> None:
     identifier = _resolve_paper_identifier(args.identifier)
     payload, _ = _send_request("GET", "/api/v1/papers/" + urllib.parse.quote(identifier))
@@ -197,17 +213,30 @@ def _append_claim_to_review(path: str, claim: dict) -> None:
           f" Submit with: exactory submit-review <verification-id> --file {path}")
 
 
-def _read_rationale(args: argparse.Namespace) -> str | None:
-    if getattr(args, "rationale_file", None) is None:
+def _truncate_to_utf16_units(text: str, limit: int) -> str:
+    """The server bounds claim text in UTF-16 code units (JavaScript string length),
+    where a non-BMP character counts as two. Truncating by Python code points would
+    pass text the server then rejects."""
+    units = 0
+    for index, char in enumerate(text):
+        units += 2 if ord(char) > 0xFFFF else 1
+        if units > limit:
+            return text[:index]
+    return text
+
+
+def _read_claim_text_file(path: str | None, field_name: str) -> str | None:
+    if path is None:
         return None
     try:
-        with open(args.rationale_file, encoding="utf-8") as handle:
-            rationale = handle.read().strip()
+        with open(path, encoding="utf-8") as handle:
+            text = handle.read().strip()
     except FileNotFoundError:
-        _exit_with_error(f"The file {args.rationale_file} does not exist.")
-    if rationale == "":
-        _exit_with_error("The rationale file is empty. State the evidence, or omit the flag.")
-    return rationale[:8000]
+        _exit_with_error(f"The file {path} does not exist.")
+    if text == "":
+        _exit_with_error(f"The {field_name} file is empty."
+                         f" Write the {field_name}, or omit the flag.")
+    return _truncate_to_utf16_units(text, 8000)
 
 
 def _build_claim_envelope(args: argparse.Namespace, dimension: str, procedure: str,
@@ -219,9 +248,12 @@ def _build_claim_envelope(args: argparse.Namespace, dimension: str, procedure: s
         "sources": [{"url": url} for url in (args.source_url or [])],
         "payload": payload,
     }
-    rationale = _read_rationale(args)
-    if rationale is not None:
-        claim["rationale"] = rationale
+    for field_name, path in (("rationale", args.rationale_file),
+                             ("background", args.background_file),
+                             ("plan", args.plan_file)):
+        text = _read_claim_text_file(path, field_name)
+        if text is not None:
+            claim[field_name] = text
     if getattr(args, "target_claim_id", None):
         claim["targetClaimId"] = args.target_claim_id
     return claim
@@ -365,6 +397,13 @@ def _build_parser() -> argparse.ArgumentParser:
                        help="Only papers published on or before this ISO date.")
     tasks.set_defaults(handler=_run_tasks)
 
+    task = commands.add_parser(
+        "task", allow_abbrev=False,
+        help="Show one open task by the verification id its page names."
+    )
+    task.add_argument("verification_id")
+    task.set_defaults(handler=_run_task)
+
     paper = commands.add_parser("paper", allow_abbrev=False, help="Show a stored paper.")
     paper.add_argument("identifier", help="A DOI or an arXiv id.")
     paper.set_defaults(handler=_run_paper)
@@ -388,6 +427,11 @@ def _build_parser() -> argparse.ArgumentParser:
                                default="substantive")
         subparser.add_argument("--rationale-file",
                                help="A file with the natural-language reasoning.")
+        subparser.add_argument("--background-file",
+                               help="A file with context: where the finding sits in the"
+                                    " paper, and what the paper asserts there.")
+        subparser.add_argument("--plan-file",
+                               help="A file with the suggested next step or fix.")
         subparser.add_argument("--source-url", action="append",
                                help="A URL the claim leans on. Repeat for more than one.")
         subparser.add_argument("--target-claim-id",

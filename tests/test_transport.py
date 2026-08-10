@@ -117,7 +117,21 @@ class TestPaperSubcommand(_TransportTestCase):
         self.assertEqual(self.requested_paths, ["/api/v1/papers/10.5281/zenodo.21381192"])
 
 
+class TestTaskSubcommand(_TransportTestCase):
+    def test_it_reads_one_task_by_verification_id(self) -> None:
+        self._run(["task", "656c336e-e892-4c47-80d2-a71d022f4116"])
+        self.assertEqual(
+            self.requested_paths, ["/api/v1/tasks/656c336e-e892-4c47-80d2-a71d022f4116"]
+        )
+
+
 class TestPathEncoding(_TransportTestCase):
+    def test_task_url_encodes_the_verification_id(self) -> None:
+        self._run(["task", "../verifications?limit=1"])
+        self.assertEqual(
+            self.requested_paths, ["/api/v1/tasks/..%2Fverifications%3Flimit%3D1"]
+        )
+
     def test_status_url_encodes_the_verification_id(self) -> None:
         self._run(["status", "../tasks?limit=1"])
         self.assertEqual(

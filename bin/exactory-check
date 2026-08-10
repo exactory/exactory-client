@@ -61,9 +61,16 @@ _BLOCKING_STATUSES = {"not_found", "unresolved", "title_mismatch", "author_misma
 _WARNING_STATUSES = {"year_mismatch", "no_query", "network_error"}
 
 
+# The release version has one definition: the plugin manifest. Deriving the
+# User-Agent from it at boot keeps the two from drifting apart.
+_PLUGIN_VERSION = json.loads(
+    (Path(__file__).resolve().parent.parent / ".claude-plugin" / "plugin.json")
+    .read_text(encoding="utf-8")
+)["version"]
+
 _CONTACT_EMAIL = os.environ.get("EXACTORY_CONTACT_EMAIL", "").strip()
-_USER_AGENT = (f"exactory-check/0.6.0 (mailto:{_CONTACT_EMAIL})" if _CONTACT_EMAIL
-               else "exactory-check/0.6.0")
+_USER_AGENT = (f"exactory-check/{_PLUGIN_VERSION} (mailto:{_CONTACT_EMAIL})" if _CONTACT_EMAIL
+               else f"exactory-check/{_PLUGIN_VERSION}")
 
 
 def _exit_with_error(message: str, code: int = 1) -> None:
