@@ -5,7 +5,7 @@ Three commands:
   add     - fetch the registry record for a DOI or arXiv id (Crossref, DataCite,
             arXiv) and append the rendered BibTeX entry, so no entry is written
             by hand
-  verify  - check every reference against the registries and write the report
+  lookup  - check every reference against the registries and write the report
             that the deposit and submit gates read
   gate    - check offline that the report is fresh and clean, as the submit and
             deposit commands do before they send anything
@@ -708,7 +708,7 @@ def _classify_entry(entry: dict) -> dict:
             result = _search_title(entry)
         else:
             result = {"status": "no_query",
-                      "detail": "the entry has no DOI, arXiv id, PMID, or title to verify"}
+                      "detail": "the entry has no DOI, arXiv id, PMID, or title to look up"}
     return result
 
 
@@ -836,7 +836,7 @@ def _read_refs_json_entries(path: Path, text: str) -> list[dict]:
     return entries
 
 
-def _print_verify_summary(report: dict, out_path: Path) -> None:
+def _print_lookup_summary(report: dict, out_path: Path) -> None:
     counts = report["counts"]
     print(f"Checked {len(report['entries'])} references: {counts['verified']} verified,"
           f" {counts['blocking']} blocking, {counts['warning']} warnings.")
@@ -850,7 +850,7 @@ def _print_verify_summary(report: dict, out_path: Path) -> None:
     print(f"The report is in {out_path}.")
 
 
-def _run_verify(args: argparse.Namespace) -> None:
+def _run_lookup(args: argparse.Namespace) -> None:
     source_path = Path(args.refs_json) if args.refs_json else Path(args.bib or _DEFAULT_BIB_PATH)
     # One read serves both the parse and the hash, so the report can never
     # certify bytes that were not the bytes checked.
@@ -909,7 +909,7 @@ def _run_verify(args: argparse.Namespace) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     cache_path.write_text(json.dumps(cache, indent=2) + "\n", encoding="utf-8")
-    _print_verify_summary(report, out_path)
+    _print_lookup_summary(report, out_path)
     if not report["ok"]:
         sys.exit(1)
 
@@ -964,7 +964,7 @@ def _run_add(args: argparse.Namespace) -> None:
     print(f"\nThe entry {key} is now in {bib_path}.")
 
 
-_GATE_VERIFY_CMD = "exactory-check verify --bib draft/references.bib"
+_GATE_LOOKUP_CMD = "exactory-check lookup --bib draft/references.bib"
 
 
 def _run_gate(args: argparse.Namespace) -> None:
@@ -995,20 +995,20 @@ def _run_gate(args: argparse.Namespace) -> None:
     try:
         report = json.loads(report_path.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        _exit_with_error(f"No citation report exists. Run: {_GATE_VERIFY_CMD}")
+        _exit_with_error(f"No citation report exists. Run: {_GATE_LOOKUP_CMD}")
     except (OSError, ValueError):
         report = None
     if not isinstance(report, dict):
-        _exit_with_error(f"The citation report is not readable. Run: {_GATE_VERIFY_CMD}")
+        _exit_with_error(f"The citation report is not readable. Run: {_GATE_LOOKUP_CMD}")
     if report.get("bib_sha256") != hashlib.sha256(references_path.read_bytes()).hexdigest():
         _exit_with_error("The citation report is stale because draft/references.bib"
-                         f" changed. Run: {_GATE_VERIFY_CMD}")
+                         f" changed. Run: {_GATE_LOOKUP_CMD}")
     if report.get("blocking") != 0:
         _exit_with_error("The citation report shows blocking references. Correct"
-                         f" them. Then run: {_GATE_VERIFY_CMD}")
+                         f" them. Then run: {_GATE_LOOKUP_CMD}")
     if report.get("nothing_verified") is not False:
         _exit_with_error("The citation report verified zero references. Connect to"
-                         f" the network. Then run: {_GATE_VERIFY_CMD}")
+                         f" the network. Then run: {_GATE_LOOKUP_CMD}")
     print("Citation gate: pass")
 
 
@@ -1026,18 +1026,18 @@ def _build_parser() -> argparse.ArgumentParser:
                      help=f"Path of the references file (default: {_DEFAULT_BIB_PATH}).")
     add.set_defaults(handler=_run_add)
 
-    verify = commands.add_parser("verify", allow_abbrev=False,
+    lookup = commands.add_parser("lookup", allow_abbrev=False,
                                  help="Check every reference against the registries.")
-    source = verify.add_mutually_exclusive_group()
+    source = lookup.add_mutually_exclusive_group()
     source.add_argument("--bib",
                         help=f"Path of the references file (default: {_DEFAULT_BIB_PATH}).")
     source.add_argument("--refs-json",
                         help="Path of a JSON reference list in the o1_citation_existence"
                              " payload shape (the claim format exactory uses for"
                              " citation-existence checks).")
-    verify.add_argument("--out", default=_DEFAULT_REPORT_PATH,
+    lookup.add_argument("--out", default=_DEFAULT_REPORT_PATH,
                         help=f"Path of the report file (default: {_DEFAULT_REPORT_PATH}).")
-    verify.set_defaults(handler=_run_verify)
+    lookup.set_defaults(handler=_run_lookup)
 
     gate = commands.add_parser("gate", allow_abbrev=False,
                                help="Check offline that the citation report is fresh"

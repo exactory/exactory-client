@@ -13,7 +13,7 @@ but does not split as shell text is denied as unparseable, in and out of a
 workspace. For a matched command, the gate acts only when the payload's `cwd`
 is inside a draft workspace (an ancestor directory holds
 `.exactory/draft.json`). The gate never touches the network: it reads the
-report `exactory-check verify` wrote to `.exactory/citation-check.json` and
+report `exactory-check lookup` wrote to `.exactory/citation-check.json` and
 denies unless the report is present, fresh (its `bib_sha256` matches the
 current `draft/references.bib`), clean (`blocking == 0`), and non-trivial
 (`nothing_verified` is false). A workspace with no references file at all is
@@ -30,7 +30,7 @@ import shlex
 import sys
 from pathlib import Path
 
-_VERIFY_CMD = "exactory-check verify --bib draft/references.bib"
+_LOOKUP_CMD = "exactory-check lookup --bib draft/references.bib"
 
 
 def _deny(reason: str) -> None:
@@ -97,27 +97,27 @@ def main() -> None:
 
     report_path = workspace / ".exactory" / "citation-check.json"
     if not report_path.is_file():
-        _deny(f"No citation report exists: run {_VERIFY_CMD} before you submit.")
+        _deny(f"No citation report exists: run {_LOOKUP_CMD} before you submit.")
     try:
         report = json.loads(report_path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         report = None
     if not isinstance(report, dict):
-        _deny(f"The citation report is not readable: run {_VERIFY_CMD} again.")
+        _deny(f"The citation report is not readable: run {_LOOKUP_CMD} again.")
 
     current_bib_sha256 = hashlib.sha256(references_path.read_bytes()).hexdigest()
     if report.get("bib_sha256") != current_bib_sha256:
         _deny(
             "The citation report is stale because draft/references.bib changed:"
-            f" run {_VERIFY_CMD} again."
+            f" run {_LOOKUP_CMD} again."
         )
     if report.get("blocking") != 0:
         _deny(
             "The citation report shows blocking references: correct them,"
-            f" then run {_VERIFY_CMD} again."
+            f" then run {_LOOKUP_CMD} again."
         )
     if report.get("nothing_verified") is not False:
-        _deny(f"The citation report verified zero references: go online, then run {_VERIFY_CMD}.")
+        _deny(f"The citation report verified zero references: go online, then run {_LOOKUP_CMD}.")
     sys.exit(0)
 
 

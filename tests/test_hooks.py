@@ -17,7 +17,7 @@ _ADVISORY_SCRIPT_PATH = _PLUGIN_ROOT / "hooks" / "check_references_edit.py"
 
 _SUBMIT_CMD = "exactory submit --doi 10.5281/zenodo.1234567"
 _PRODUCTION_DEPOSIT_CMD = "exactory-draft deposit --production --publish"
-_VERIFY_CMD = "exactory-check lookup --bib draft/references.bib"
+_LOOKUP_CMD = "exactory-check lookup --bib draft/references.bib"
 
 _CLEAN_BIB_TEXT = """@article{doe2024,
   title = {A Real Paper},
@@ -136,24 +136,24 @@ class TestCitationGate(unittest.TestCase):
 
     def test_denies_submission_when_the_report_is_missing(self) -> None:
         reason = self._read_denial_reason(self._run_gate(_SUBMIT_CMD))
-        self.assertIn(_VERIFY_CMD, reason)
+        self.assertIn(_LOOKUP_CMD, reason)
 
     def test_denies_submission_when_the_report_is_stale(self) -> None:
         _write_report(self.workspace)
         bib_path = self.workspace / "draft" / "references.bib"
         bib_path.write_text(bib_path.read_text() + "\n% edited after the check\n")
         reason = self._read_denial_reason(self._run_gate(_SUBMIT_CMD))
-        self.assertIn(_VERIFY_CMD, reason)
+        self.assertIn(_LOOKUP_CMD, reason)
 
     def test_denies_submission_when_the_report_has_blocking_entries(self) -> None:
         _write_report(self.workspace, blocking=2, ok=False)
         reason = self._read_denial_reason(self._run_gate(_SUBMIT_CMD))
-        self.assertIn(_VERIFY_CMD, reason)
+        self.assertIn(_LOOKUP_CMD, reason)
 
     def test_denies_submission_when_nothing_was_verified(self) -> None:
         _write_report(self.workspace, nothing_verified=True)
         reason = self._read_denial_reason(self._run_gate(_SUBMIT_CMD))
-        self.assertIn(_VERIFY_CMD, reason)
+        self.assertIn(_LOOKUP_CMD, reason)
 
     def test_denies_submission_when_the_workspace_has_no_references_file(self) -> None:
         (self.workspace / "draft" / "references.bib").unlink()
@@ -162,7 +162,7 @@ class TestCitationGate(unittest.TestCase):
 
     def test_denies_production_deposit_when_the_report_is_missing(self) -> None:
         reason = self._read_denial_reason(self._run_gate(_PRODUCTION_DEPOSIT_CMD))
-        self.assertIn(_VERIFY_CMD, reason)
+        self.assertIn(_LOOKUP_CMD, reason)
 
     def test_allows_submission_with_a_fresh_clean_report(self) -> None:
         _write_report(self.workspace)
@@ -174,17 +174,17 @@ class TestCitationGate(unittest.TestCase):
 
     def test_denies_submit_followed_by_a_submit_review_token_elsewhere(self) -> None:
         reason = self._read_denial_reason(self._run_gate(_SUBMIT_CMD + " && echo submit-review"))
-        self.assertIn(_VERIFY_CMD, reason)
+        self.assertIn(_LOOKUP_CMD, reason)
 
     def test_denies_submit_with_extra_whitespace_between_tokens(self) -> None:
         reason = self._read_denial_reason(
             self._run_gate("exactory  submit --doi 10.5281/zenodo.1234567")
         )
-        self.assertIn(_VERIFY_CMD, reason)
+        self.assertIn(_LOOKUP_CMD, reason)
 
     def test_denies_production_deposit_spelled_with_an_abbreviated_flag(self) -> None:
         reason = self._read_denial_reason(self._run_gate("exactory-draft deposit --prod --publish"))
-        self.assertIn(_VERIFY_CMD, reason)
+        self.assertIn(_LOOKUP_CMD, reason)
 
     def test_denies_an_unparseable_command_that_names_exactory_submit(self) -> None:
         reason = self._read_denial_reason(self._run_gate('exactory submit --title "broken'))
