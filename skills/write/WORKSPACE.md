@@ -127,8 +127,10 @@ adopted, and the revision commit hash.
 ## Commits and reverts (stage 4)
 
 The loop runs inside a git repository; `exactory-draft init` does not
-create one, so stage 4's setup runs `git init` and commits the pre-loop
-state. Each iteration makes two commits:
+create one, so stage 4's setup runs `git init`, writes a `.gitignore` for
+LaTeX build artifacts (`*.aux`, `*.log`, `*.bbl`, `*.blg`, `*.out`,
+`*.pdf`), and commits the pre-loop state. Each iteration makes two
+commits:
 
 - the revision commit: files under `draft/` only, made before measuring;
 - the records commit: every other changed file, made after the logs are
