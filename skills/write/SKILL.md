@@ -106,24 +106,61 @@ search pass changed the text. Wait.
 
 ## Stage 4: Self-evaluation
 
-Iterate: evaluate, revise, evaluate again, until the review clears the bar
-honestly or real improvement plateaus. A truthful low score beats an inflated
-one; never nudge a score toward a target.
+Stage 4 is a conditional optimization loop: measure first, engage the loop
+only when it can help, run it unattended until a stop condition, and end at
+the checkpoint. A truthful low score beats an inflated one; never nudge a
+score toward a target.
 
-Each iteration:
+Setup, once per draft:
 
-1. Read the recent learning logs and `research/literature.md`, and refresh the
-   literature when the revision adds a claim or reframes the contribution
-   (cadence in WORKSPACE.md).
-2. Record the expected overall score, with brief reasoning, in
-   `learnings/iter_NNN.md` before the review runs.
-3. Invoke `/exactory:evaluate`. The review is blind: the draft carries no
-   revision markers, and the reviewer sees no prior scores.
-4. After the review, record the actual score, the delta, and why the gap, in
-   the same `learnings/iter_NNN.md`.
-5. Fix every blocking citation finding at the reference itself.
+1. If the user has not stated an improvement target, ask once and record it
+   in `learnings/iter_001.md`. The iteration budget defaults to 8; the user
+   can change it here.
+2. If the workspace is not a git repository, run `git init` and commit the
+   current state as the pre-loop baseline.
+3. Measure the baseline: three independent blind reviews, median, under the
+   measurement protocol in WORKSPACE.md. This is iteration 001's actual
+   score; log it like any iteration.
 
-Checkpoint: present the score trajectory and the latest review's main
+Engage the loop only when both hold:
+
+- the baseline median is below the target, and
+- the dominant weaknesses are fixable by revision: framing, structure,
+  clarity, citation coverage. When they need new evidence instead (missing
+  experiments, data, or sources), skip the loop, list the evidence needed,
+  and go to the checkpoint; revision cannot fix an evidence gap.
+
+Each loop iteration:
+
+1. Read the recent learning logs and `research/literature.md` under the
+   cadence rules in WORKSPACE.md, and refresh the literature when the
+   revision adds a claim or reframes the contribution.
+2. Merge the weaknesses from the latest measurement's three reviews, rank
+   them by how much each holds the overall score down, and revise the
+   highest-leverage ones revision can fix. A new quantitative claim goes
+   through stage 2's rules first.
+3. Add every reference through `exactory-check add` at the moment you cite
+   it, compile the PDF, and pass `exactory-check verify` before measuring.
+   Fix blocking citation findings at the reference itself. A revision that
+   cannot be made to compile and verify inside the iteration is reverted
+   and counts as not adopted.
+4. Commit the revision: files under `draft/` only, iteration number in the
+   message.
+5. Record the expected overall score, with brief reasoning, in
+   `learnings/iter_NNN.md`, then measure: three fresh blind reviews,
+   median. The review is blind: the draft carries no revision markers, and
+   the reviewers see no prior scores.
+6. Adopt or revert: a median above the best kept median stays and becomes
+   the new best; otherwise `git revert` the revision commit.
+7. Append the history line, finish `learnings/iter_NNN.md` with the actual
+   score, the delta, and why the gap, then commit every changed file
+   outside `draft/` as a separate records commit. Records are never
+   reverted.
+8. Stop when the target is reached, two consecutive iterations were not
+   adopted, or the budget is spent. When honest work plateaus below the
+   target, report the plateau and what it would take to clear it.
+
+Checkpoint: present the score trajectory and the latest measurement's main
 weaknesses. Wait.
 
 ## Stage 5: Deposit
