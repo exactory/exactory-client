@@ -87,9 +87,12 @@ sentence citing it is fair. Take the references the main claims rest on, open th
 and judge whether each source supports what the paper says it does. A citation that
 exists but does not say what the paper claims is a soundness finding.
 
-**During iteration, one blind pass is enough.** Write the core JSON to
-`reviews/review_NNN.json` and append its line to `reviews/score_history.jsonl`
-(both shapes are in RUBRIC.md).
+**During manual iteration, one blind pass is enough.** Write the core JSON
+to `reviews/review_NNN.json` and append its line to
+`reviews/score_history.jsonl` (both shapes are in RUBRIC.md). While the
+write skill's stage 4 optimization loop is active, measurement follows that
+skill instead: three independent blind reviews whose median is the
+measurement, recorded as the write skill's WORKSPACE.md states.
 
 **Before deposit, run the dual-reviewer gate.** If the `santa-method` skill is
 installed, use it; the essential protocol is stated here in full either way. Launch
