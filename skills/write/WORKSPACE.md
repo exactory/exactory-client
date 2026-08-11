@@ -7,7 +7,7 @@ workspace root.
 <workspace>/
 ├── .exactory/
 │   ├── draft.json              state marker; the plugin's hooks key on its presence
-│   ├── citation-check.json     exactory-check verify report
+│   ├── citation-check.json     exactory-check lookup report
 │   └── citation-cache.json     positive-only verification cache
 ├── draft/                      LaTeX sources; references.bib lives here
 ├── evidence/claims.json        claim -> source ledger
@@ -84,7 +84,7 @@ stated at stage 4 setup.
 
 After submission, when the market's independent prediction arrives, append it
 to the latest file next to the local self-prediction. That external readout is
-what the local forecasts are calibrated against.
+what the local predictions are calibrated against.
 
 ## The iteration cadence (stage 4)
 

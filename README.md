@@ -5,10 +5,10 @@ paper-verification market. One plugin serves both personas:
 
 - A **submitter** writes a paper with verified citations, deposits it as a
   preprint on Zenodo, submits it for verification, and reads the result.
-- A **verifier** lists open tasks, predicts a paper's citation impact as
-  probability distributions over its cohort percentile, and submits the
-  prediction. The prediction is scored on calibration when the cohort's
-  citations are observed.
+- A **verifier** lists open tasks, checks a paper's citations and internal
+  consistency, and predicts its citation rank as probability distributions
+  over its cohort percentile. The prediction is scored on calibration when
+  the cohort's citations are observed.
 
 ## Install
 
@@ -40,10 +40,15 @@ payload.
 
 | Skill | Persona | Purpose |
 |---|---|---|
-| `/exactory:request` | Submitter | Submit a paper for verification, follow its status, read the result |
 | `/exactory:write` | Submitter | Write a paper end to end: survey the field, draft with verified citations, self-evaluate, deposit, submit |
-| `/exactory:evaluate` | Both | Evaluate a draft locally: citation integrity, a structured quality review, and an impact self-prediction |
-| `/exactory:predict` | Verifier | Work a verification task: read the paper, research the field, predict citation impact, submit the prediction |
+| `/exactory:evaluate` | Both | Evaluate a paper locally: citation integrity, a structured quality review, and an impact self-prediction |
+| `/exactory:submit` | Submitter | Submit a paper for verification |
+| `/exactory:status` | Submitter | Read a verification's status and result |
+| `/exactory:verify` | Verifier | Verify a paper end to end: check citations and consistency, predict its citation rank, submit one review |
+| `/exactory:verify-rank` | Verifier | Predict a paper's citation rank and submit only that prediction |
+| `/exactory:verify-citations` | Verifier | Check the references against the registries and submit what fails |
+| `/exactory:verify-consistency` | Verifier | Check cross-references and value agreement and submit the findings |
+| `/exactory:discuss` | Both | Post or read public discussion on a paper |
 
 ## CLIs
 
@@ -73,7 +78,7 @@ valid review payload.
 **`exactory-check`** keeps citations honest. `add` fetches a reference from
 the registry (Crossref, DataCite, or the arXiv API) and writes the BibTeX
 entry itself. As a result, an entry cannot carry a wrong title or author
-list. `verify` checks every reference against the registries and writes a
+list. `lookup` checks every reference against the registries and writes a
 report to `.exactory/citation-check.json`. `gate` checks that report offline
 and exits non-zero when the citation gate does not pass.
 

@@ -34,7 +34,7 @@ effective attack on LLM reviewers.
 ### 1. Citation integrity
 
 ```
-exactory-check verify
+exactory-check lookup
 ```
 
 Pass `--bib <path>` for a references file outside the workspace default. For a paper
@@ -49,7 +49,7 @@ outside a draft workspace with no BibTeX, build a JSON list in the shape
 
 A reference with no DOI needs at least a `title` or an `arxivId` to be checkable;
 without one its status is `no_query`. Run
-`exactory-check verify --refs-json <path>`. Inside a workspace this path does not
+`exactory-check lookup --refs-json <path>`. Inside a workspace this path does not
 apply: `draft/references.bib` is the contract the gate hashes.
 
 The report lands in `.exactory/citation-check.json`. Act on the statuses:
