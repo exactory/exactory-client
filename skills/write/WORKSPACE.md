@@ -12,7 +12,7 @@ workspace root.
 ├── draft/                      LaTeX sources; references.bib lives here
 ├── evidence/claims.json        claim -> source ledger
 ├── research/literature.md      append-only survey log
-├── reviews/                    review_NNN.json + score_history.jsonl
+├── reviews/                    review JSON files + score_history.jsonl
 └── learnings/iter_NNN.md       predict-before-review ledger
 ```
 
@@ -79,6 +79,9 @@ One file per evaluation iteration, numbered from `iter_001.md`. Four parts:
    review and the evidence.
 4. **Plan**: what the next iteration will try, and why.
 
+`iter_001.md` also records the improvement target and the iteration budget
+stated at stage 4 setup.
+
 After submission, when the market's independent prediction arrives, append it
 to the latest file next to the local self-prediction. That external readout is
 what the local forecasts are calibrated against.
@@ -97,11 +100,43 @@ At the start of each iteration:
 3. Rank the latest review's weaknesses by how much each holds the overall
    score down, and revise the highest-leverage ones first.
 
-At the end of each iteration, save the review as `reviews/review_NNN.json` and
-append one line to `reviews/score_history.jsonl`, so the score trajectory
-stays readable after the fact.
+At the end of each iteration, save the reviews under `reviews/` and append
+one line to `reviews/score_history.jsonl`, so the score trajectory stays
+readable after the fact.
 
 Blind-review hygiene: the draft carries no revision markers (no "v2",
 "revised", no changelog, no response-to-reviewers text), and the reviewer is
 never shown `reviews/`, `learnings/`, or a prior score. Those directories
 exist for the user and for the next iteration, not for the reviewer.
+
+## The measurement (stage 4)
+
+One measurement is three independent blind reviews, run as sub-agents
+spawned fresh for that iteration. The reviewers share no context: each
+sees the artifact and the evaluate skill's RUBRIC.md only, and none knows
+the others exist. The measurement value is the median of the three overall
+scores. A measurement is valid only with all three reviews; when a
+reviewer fails, relaunch that reviewer alone.
+
+Save each loop review as `reviews/review_NNN_rM.json` (M is 1 to 3). A
+manual single-pass review outside the loop keeps `reviews/review_NNN.json`.
+A loop iteration's `score_history.jsonl` line carries the iteration
+number, the three raw scores, the median, whether the revision was
+adopted, and the revision commit hash.
+
+## Commits and reverts (stage 4)
+
+The loop runs inside a git repository; `exactory-draft init` does not
+create one, so stage 4's setup runs `git init`, writes a `.gitignore` for
+LaTeX build artifacts (`*.aux`, `*.log`, `*.bbl`, `*.blg`, `*.out`,
+`*.pdf`), and commits the pre-loop state. Each iteration makes two
+commits:
+
+- the revision commit: files under `draft/` only, made before measuring;
+- the records commit: every other changed file, made after the logs are
+  written.
+
+`git revert` targets revision commits only. `reviews/`, `learnings/`, and
+`score_history.jsonl` are append-only and never reverted. After an
+interruption, working-tree changes that have no measurement record are
+reset to the last commit, and the iteration is redone.
