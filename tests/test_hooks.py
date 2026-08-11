@@ -17,7 +17,7 @@ _ADVISORY_SCRIPT_PATH = _PLUGIN_ROOT / "hooks" / "check_references_edit.py"
 
 _SUBMIT_CMD = "exactory submit --doi 10.5281/zenodo.1234567"
 _PRODUCTION_DEPOSIT_CMD = "exactory-draft deposit --production --publish"
-_VERIFY_CMD = "exactory-check verify --bib draft/references.bib"
+_VERIFY_CMD = "exactory-check lookup --bib draft/references.bib"
 
 _CLEAN_BIB_TEXT = """@article{doe2024,
   title = {A Real Paper},

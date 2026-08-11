@@ -95,8 +95,8 @@ class _CheckTestCase(unittest.TestCase):
                 self.assertEqual(caught.exception.code, expected_exit_code)
         return sink.getvalue()
 
-    def _verify(self, argv_tail: list[str], expected_exit_code: int | None) -> dict:
-        self._run_command(["verify", "--out", str(self.out_path), *argv_tail], expected_exit_code)
+    def _lookup(self, argv_tail: list[str], expected_exit_code: int | None) -> dict:
+        self._run_command(["lookup", "--out", str(self.out_path), *argv_tail], expected_exit_code)
         return json.loads(self.out_path.read_text())
 
 
@@ -121,7 +121,7 @@ class TestVerifyStatuses(_CheckTestCase):
     def test_fixture_bib_verifies_real_entries_and_blocks_the_invented_one(self) -> None:
         _check._open_url = _route_fixture_registry
         bib_path = self._write_bib(_FIXTURE_BIB_TEXT)
-        report = self._verify(["--bib", str(bib_path)], 1)
+        report = self._lookup(["--bib", str(bib_path)], 1)
         statuses = {entry["key"]: entry["status"] for entry in report["entries"]}
         self.assertEqual(statuses["example2024deterministic"], "verified")
         self.assertEqual(statuses["instance2023predicting"], "verified")
@@ -141,7 +141,7 @@ class TestVerifyStatuses(_CheckTestCase):
             "  doi={10.1234/exact.5678}\n"
             "}\n"
         )
-        report = self._verify(["--bib", str(bib_path)], 1)
+        report = self._lookup(["--bib", str(bib_path)], 1)
         self.assertEqual(report["entries"][0]["status"], "title_mismatch")
         self.assertEqual(report["counts"], {"verified": 0, "blocking": 1, "warning": 0})
 
@@ -155,7 +155,7 @@ class TestVerifyStatuses(_CheckTestCase):
             "  doi={10.1234/exact.5678}\n"
             "}\n"
         )
-        report = self._verify(["--bib", str(bib_path)], 1)
+        report = self._lookup(["--bib", str(bib_path)], 1)
         self.assertEqual(report["entries"][0]["status"], "author_mismatch")
         self.assertEqual(report["counts"], {"verified": 0, "blocking": 1, "warning": 0})
 
@@ -176,7 +176,7 @@ class TestVerifyStatuses(_CheckTestCase):
             "  doi={10.1234/exact.5678}\n"
             "}\n"
         )
-        report = self._verify(["--bib", str(bib_path)], None)
+        report = self._lookup(["--bib", str(bib_path)], None)
         statuses = [entry["status"] for entry in report["entries"]]
         self.assertEqual(statuses, ["verified", "year_mismatch"])
         self.assertEqual(report["counts"], {"verified": 1, "blocking": 0, "warning": 1})
@@ -185,7 +185,7 @@ class TestVerifyStatuses(_CheckTestCase):
     def test_network_failure_is_never_treated_as_fabrication(self) -> None:
         _check._open_url = _refuse_network
         bib_path = self._write_bib(_FIXTURE_BIB_TEXT)
-        report = self._verify(["--bib", str(bib_path)], 1)
+        report = self._lookup(["--bib", str(bib_path)], 1)
         statuses = {entry["status"] for entry in report["entries"]}
         self.assertEqual(statuses, {"network_error"})
         self.assertEqual(report["blocking"], 0)
@@ -201,7 +201,7 @@ class TestVerifyStatuses(_CheckTestCase):
             "  doi={10.9999/ghost}\n"
             "}\n"
         )
-        report = self._verify(["--bib", str(bib_path)], 1)
+        report = self._lookup(["--bib", str(bib_path)], 1)
         self.assertEqual(report["entries"][0]["status"], "not_found")
 
     def test_pmid_entry_verifies_via_pubmed(self) -> None:
@@ -214,12 +214,12 @@ class TestVerifyStatuses(_CheckTestCase):
             "  pmid={12345678}\n"
             "}\n"
         )
-        report = self._verify(["--bib", str(bib_path)], None)
+        report = self._lookup(["--bib", str(bib_path)], None)
         self.assertEqual(report["entries"][0]["status"], "verified")
 
     def test_missing_bib_file_is_a_usage_error(self) -> None:
         self._run_command(
-            ["verify", "--out", str(self.out_path), "--bib", str(self.scratch_dir / "absent.bib")],
+            ["lookup", "--out", str(self.out_path), "--bib", str(self.scratch_dir / "absent.bib")],
             2,
         )
 
@@ -228,7 +228,7 @@ class TestReportSchema(_CheckTestCase):
     def test_report_carries_exactly_the_contract_fields(self) -> None:
         _check._open_url = _route_fixture_registry
         bib_path = self._write_bib(_FIXTURE_BIB_TEXT)
-        report = self._verify(["--bib", str(bib_path)], 1)
+        report = self._lookup(["--bib", str(bib_path)], 1)
         self.assertEqual(
             set(report),
             {"version", "bib_sha256", "checked_at", "entries", "counts",
@@ -243,7 +243,7 @@ class TestReportSchema(_CheckTestCase):
     def test_bib_sha256_is_the_hash_of_the_exact_file_checked(self) -> None:
         _check._open_url = _route_fixture_registry
         bib_path = self._write_bib(_FIXTURE_BIB_TEXT)
-        report = self._verify(["--bib", str(bib_path)], 1)
+        report = self._lookup(["--bib", str(bib_path)], 1)
         self.assertEqual(report["bib_sha256"], hashlib.sha256(bib_path.read_bytes()).hexdigest())
         bib_path.write_text(_FIXTURE_BIB_TEXT + "\n% edited after the check\n")
         self.assertNotEqual(
@@ -259,7 +259,7 @@ class TestReportSchema(_CheckTestCase):
             return _route_fixture_registry(url, accept)
 
         _check._open_url = _route_and_edit_the_bib
-        report = self._verify(["--bib", str(bib_path)], 1)
+        report = self._lookup(["--bib", str(bib_path)], 1)
         self.assertEqual(report["bib_sha256"], original_digest)
 
 
@@ -267,7 +267,7 @@ class TestCacheRoundTrip(_CheckTestCase):
     def test_second_run_verifies_from_the_cache_when_offline(self) -> None:
         _check._open_url = _route_fixture_registry
         bib_path = self._write_bib(_FIXTURE_BIB_TEXT)
-        self._verify(["--bib", str(bib_path)], 1)
+        self._lookup(["--bib", str(bib_path)], 1)
 
         cache = json.loads((self.out_path.parent / "citation-cache.json").read_text())
         self.assertIn("doi:10.1234/exact.5678", cache)
@@ -279,7 +279,7 @@ class TestCacheRoundTrip(_CheckTestCase):
         # Offline, the cached entries still verify and the network failure on the
         # uncached one is a warning, not a blocking status, so the check passes.
         _check._open_url = _refuse_network
-        report = self._verify(["--bib", str(bib_path)], None)
+        report = self._lookup(["--bib", str(bib_path)], None)
         statuses = {entry["key"]: entry["status"] for entry in report["entries"]}
         self.assertEqual(statuses["example2024deterministic"], "verified")
         self.assertEqual(statuses["instance2023predicting"], "verified")
@@ -306,7 +306,7 @@ class TestRefsJsonInput(_CheckTestCase):
                 "bibliography": {"doi": None, "authors": [], "year": None},
             },
         ]))
-        report = self._verify(["--refs-json", str(refs_path)], None)
+        report = self._lookup(["--refs-json", str(refs_path)], None)
         self.assertEqual([entry["key"] for entry in report["entries"]], ["ref-1", "ref-2"])
         self.assertEqual(
             [entry["status"] for entry in report["entries"]], ["verified", "no_query"]
@@ -325,7 +325,7 @@ class TestRefsJsonInput(_CheckTestCase):
                 "bibliography": {"doi": None, "authors": [], "year": None},
             },
         ]))
-        report = self._verify(["--refs-json", str(refs_path)], 1)
+        report = self._lookup(["--refs-json", str(refs_path)], 1)
         self.assertTrue(report["nothing_verified"])
         self.assertEqual(report["blocking"], 0)
         self.assertFalse(report["ok"])
@@ -462,16 +462,16 @@ class TestGateSubcommand(_CheckTestCase):
         self.assertIn("references.bib", output)
         self.assertIn("exactory-check add", output)
 
-    def test_a_missing_report_fails_and_names_the_verify_command(self) -> None:
+    def test_a_missing_report_fails_and_names_the_lookup_command(self) -> None:
         self.bib_path.write_text(_FIXTURE_BIB_TEXT)
         output = self._gate(1)
-        self.assertIn("exactory-check verify --bib draft/references.bib", output)
+        self.assertIn("exactory-check lookup --bib draft/references.bib", output)
 
     def test_an_unreadable_report_fails(self) -> None:
         self.bib_path.write_text(_FIXTURE_BIB_TEXT)
         self.report_path.write_text("not json")
         output = self._gate(1)
-        self.assertIn("exactory-check verify --bib draft/references.bib", output)
+        self.assertIn("exactory-check lookup --bib draft/references.bib", output)
 
     def test_a_stale_report_hash_fails(self) -> None:
         self._write_passing_state()

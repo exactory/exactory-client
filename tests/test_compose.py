@@ -222,7 +222,7 @@ class PredictComposeTest(unittest.TestCase):
             with open(out, encoding="utf-8") as handle:
                 (claim,) = json.load(handle)["claims"]
             self.assertEqual(claim["dimension"], "impact")
-            self.assertEqual(claim["procedure"], "cohort_forecast")
+            self.assertEqual(claim["procedure"], "cohort_prediction")
             self.assertEqual(claim["rationale"], "Strong author record; rising subfield.")
             self.assertEqual(claim["sources"],
                              [{"url": "https://api.openalex.org/works?filter=example"}])

@@ -289,7 +289,7 @@ class TestProductionDepositGate(_DepositTestCase):
         stderr_text = self._deposit(
             ["--production", "--creator", "Shiroshita, Ryosuke"], expected_exit_code=1
         )
-        self.assertIn("exactory-check verify", stderr_text)
+        self.assertIn("exactory-check lookup", stderr_text)
         self.assertEqual(self.fake_api.requests, [])
 
     def test_sandbox_deposit_is_not_gated(self) -> None:
