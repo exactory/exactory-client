@@ -48,7 +48,12 @@ class TestPluginManifest(unittest.TestCase):
             "exactory-draft": f"exactory-draft/{version}",
             "exactory-predict": f"exactory-predict/{version}",
         }
-        bin_names = sorted(path.name for path in (_PLUGIN_ROOT / "bin").iterdir())
+        # Files only. CI compiles every bin before it runs the tests, and on Python 3.12
+        # that writes a `bin/__pycache__` directory, which is a build artifact and not a
+        # command this assertion is about.
+        bin_names = sorted(
+            path.name for path in (_PLUGIN_ROOT / "bin").iterdir() if path.is_file()
+        )
         self.assertEqual(bin_names, sorted(expected_ua_prefixes))
         for command_name, expected_ua_prefix in expected_ua_prefixes.items():
             with self.subTest(command=command_name):
