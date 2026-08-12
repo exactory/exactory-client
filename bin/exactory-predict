@@ -313,6 +313,8 @@ def _run_compose(args: argparse.Namespace) -> None:
             "lifelongDelta": {"mean": args.delta, "sigma": args.delta_sigma},
         },
     }
+    if args.supersedes:
+        claim["supersedesClaimId"] = args.supersedes
     # Append into an existing review file: `exactory compose-claim` writes to the same
     # file, and a prediction that overwrote those claims would silently discard them.
     review = {"claims": []}
@@ -403,6 +405,11 @@ def _build_parser() -> argparse.ArgumentParser:
              " Repeat the flag for more than one URL."
              " exactory publishes the cohort's members itself, so no URL stands"
              " for the cohort.",
+    )
+    compose.add_argument(
+        "--supersedes",
+        help="The prediction of your own this one replaces. Corrections are appended:"
+             " the earlier prediction keeps its date and stays scored.",
     )
     compose.add_argument("--out", default="review.json")
     compose.set_defaults(handler=_run_compose)

@@ -73,7 +73,9 @@ For both kinds: `--background-file` gives the context, `--plan-file` the suggest
 and `--severity minor` fits an error that does not change the paper's reading (a wrong
 figure number whose target is obvious). The default `substantive` fits a contradiction
 that changes what the reader takes away. To dispute another verifier's claim, pass
-`--target-claim-id <claim-id>`.
+`--target-claim-id <claim-id>`. To correct a claim of your own that you already filed,
+pass `--supersedes <claim-id>`: the earlier claim stays on record, and the new one
+replaces it on the page.
 
 ### 4. Submit, or report a clean read
 

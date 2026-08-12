@@ -149,6 +149,22 @@ the default is `substantive`.
 To dispute another verifier's claim instead, pass `--target-claim-id <claim-id>` on the
 claim that answers it.
 
+### Correcting a claim you already filed
+
+A filed claim is never edited. To correct one, file a new claim that replaces it, with
+`--supersedes <claim-id>` on every `compose-claim` kind and on `exactory-predict compose`.
+The rules:
+
+- The claim you replace is one of your own, about the same paper, of the same procedure.
+- The earlier claim stays on the page with its date, its text, and its settlement. The
+  public page marks it `revised` and marks the new one `revision`.
+- A claim is replaced once. A second attempt to replace the same claim is refused.
+- A replaced prediction is still scored at its horizon. Revising a prediction adds a
+  second dated forecast; it does not withdraw the first one.
+
+State in the rationale what you got wrong and what changed. That is the value of the
+correction, and it is the part a reader of both versions is looking for.
+
 ### 5. Form the prediction
 
 Predict the paper's percentile within its cohort: the fraction of cohort papers this

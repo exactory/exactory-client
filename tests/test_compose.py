@@ -66,6 +66,31 @@ class ComposeClaimTest(unittest.TestCase):
         self.assertNotIn("background", claim)
         self.assertNotIn("plan", claim)
 
+    def test_a_mechanical_claim_names_the_claim_it_supersedes(self):
+        _run(_exactory, [
+            "compose-claim", "cross-reference",
+            "--paper-locator", "Section 5",
+            "--referencing-text", "as shown in Figure 7, the loss diverges",
+            "--kind", "figure", "--label", "7",
+            "--supersedes", "6f1b2f0e-0e4b-4a3f-9a2c-7c1d5f4e8a90",
+            "--out", self.out,
+        ])
+
+        (claim,) = self._read_claims()
+        self.assertEqual(claim["supersedesClaimId"], "6f1b2f0e-0e4b-4a3f-9a2c-7c1d5f4e8a90")
+
+    def test_a_claim_that_supersedes_nothing_omits_the_field(self):
+        _run(_exactory, [
+            "compose-claim", "cross-reference",
+            "--paper-locator", "Section 5",
+            "--referencing-text", "as shown in Figure 7, the loss diverges",
+            "--kind", "figure", "--label", "7",
+            "--out", self.out,
+        ])
+
+        (claim,) = self._read_claims()
+        self.assertNotIn("supersedesClaimId", claim)
+
     def _write_text_file(self, name, text):
         path = os.path.join(self._tmp.name, name)
         with open(path, "w", encoding="utf-8") as handle:
@@ -231,6 +256,31 @@ class PredictComposeTest(unittest.TestCase):
             self.assertNotIn("background", claim)
             self.assertNotIn("plan", claim)
 
+    def test_compose_names_the_prediction_it_supersedes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cohort_path = os.path.join(tmp, "cohort.json")
+            rationale_path = os.path.join(tmp, "rationale.txt")
+            out = os.path.join(tmp, "review.json")
+            with open(cohort_path, "w", encoding="utf-8") as handle:
+                json.dump({"corpus": "arxiv"}, handle)
+            with open(rationale_path, "w", encoding="utf-8") as handle:
+                handle.write("The subfield cooled; the first prediction read it wrong.")
+
+            _run(_predict, [
+                "compose",
+                "--cohort-file", cohort_path,
+                "--initial-percentile", "0.6", "--initial-sigma", "0.8",
+                "--delta", "-0.4", "--delta-sigma", "0.6",
+                "--rationale-file", rationale_path,
+                "--supersedes", "6f1b2f0e-0e4b-4a3f-9a2c-7c1d5f4e8a90",
+                "--out", out,
+            ])
+
+            with open(out, encoding="utf-8") as handle:
+                (claim,) = json.load(handle)["claims"]
+            self.assertEqual(claim["supersedesClaimId"],
+                             "6f1b2f0e-0e4b-4a3f-9a2c-7c1d5f4e8a90")
+
     def test_compose_truncates_the_rationale_by_utf16_units(self):
         with tempfile.TemporaryDirectory() as tmp:
             cohort_path = os.path.join(tmp, "cohort.json")
@@ -327,6 +377,15 @@ class ComposeRubricScoreTest(unittest.TestCase):
         self.assertNotIn("severity", claim)
         self.assertNotIn("background", claim)
         self.assertNotIn("plan", claim)
+
+    def test_an_appraisal_names_the_appraisal_it_supersedes(self):
+        _run(_exactory, self._argv(**{
+            "--supersedes": "6f1b2f0e-0e4b-4a3f-9a2c-7c1d5f4e8a90",
+        }))
+
+        with open(self.out, encoding="utf-8") as handle:
+            (claim,) = json.load(handle)["claims"]
+        self.assertEqual(claim["supersedesClaimId"], "6f1b2f0e-0e4b-4a3f-9a2c-7c1d5f4e8a90")
 
     def test_refuses_a_rubric_the_registry_does_not_know(self):
         with self.assertRaises(SystemExit):

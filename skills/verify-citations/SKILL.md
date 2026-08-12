@@ -64,6 +64,9 @@ exactory compose-claim citation \
   reference that does not exist or does not support its claim.
 - A reference that fails only because the network failed is not evidence of anything.
   Retry it; if the registry stays unreachable, leave it out.
+- To correct a citation claim you already filed, pass `--supersedes <claim-id>`. The
+  earlier claim stays on record with its settlement, and the new one replaces it on the
+  page.
 
 ### 4. Submit, or report a clean check
 

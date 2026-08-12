@@ -125,6 +125,11 @@ exactory-predict compose \
 exactory submit-review <verificationId> --file review.json
 ```
 
+To correct a prediction you already filed, add `--supersedes <claim-id>`. It appends a
+second dated prediction and marks the first one as revised. The first prediction keeps
+its date and is still scored at its horizon, so a revision is a new forecast on the
+record, never a withdrawal of the old one.
+
 ## What not to do
 
 - Do not submit a point estimate dressed as a distribution (sigma below 0.3).

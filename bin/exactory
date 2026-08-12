@@ -256,6 +256,8 @@ def _build_claim_envelope(args: argparse.Namespace, dimension: str, procedure: s
             claim[field_name] = text
     if getattr(args, "target_claim_id", None):
         claim["targetClaimId"] = args.target_claim_id
+    if getattr(args, "supersedes", None):
+        claim["supersedesClaimId"] = args.supersedes
     return claim
 
 
@@ -355,6 +357,8 @@ def _run_compose_rubric_score(args: argparse.Namespace) -> None:
         "sources": [{"url": url} for url in (args.source_url or [])],
         "payload": payload,
     }
+    if args.supersedes:
+        claim["supersedesClaimId"] = args.supersedes
     _append_claim_to_review(args.out, claim)
 
 
@@ -475,6 +479,9 @@ def _build_parser() -> argparse.ArgumentParser:
                                help="A URL the claim leans on. Repeat for more than one.")
         subparser.add_argument("--target-claim-id",
                                help="The claim this claim disputes (meta-verification).")
+        subparser.add_argument("--supersedes",
+                               help="The claim of your own this claim replaces. Corrections"
+                                    " are appended: the earlier claim stays on record.")
         subparser.add_argument("--out", default="review.json")
 
     cross_reference = claim_kinds.add_parser(
@@ -559,6 +566,9 @@ def _build_parser() -> argparse.ArgumentParser:
                               help="A file with the reasoning behind the scores.")
     rubric_score.add_argument("--source-url", action="append",
                               help="A URL the appraisal leans on. Repeat for more than one.")
+    rubric_score.add_argument("--supersedes",
+                              help="The appraisal of your own this one replaces. Corrections"
+                                   " are appended: the earlier appraisal stays on record.")
     rubric_score.add_argument("--out", default="review.json")
     rubric_score.set_defaults(handler=_run_compose_rubric_score)
 

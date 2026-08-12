@@ -76,6 +76,10 @@ exactory submit-review <verificationId> --file review.json
 Repeat `--strength` and `--weakness` for more than one of each. Give each URL the
 rationale leans on as a `--source-url` flag.
 
+To correct an appraisal you already filed, pass `--supersedes <claim-id>`. An appraisal
+is never edited: the earlier one stays on the page, marked as revised, and the new one
+replaces it in the count.
+
 ## What not to do
 
 - Do not bundle mechanical findings into the appraisal: a broken reference belongs in

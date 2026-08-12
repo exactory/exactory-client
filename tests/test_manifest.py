@@ -36,7 +36,7 @@ class TestPluginManifest(unittest.TestCase):
     def test_plugin_manifest_parses_and_carries_the_release_version(self) -> None:
         manifest = json.loads((_PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text())
         self.assertEqual(manifest["name"], "exactory")
-        self.assertEqual(manifest["version"], "0.11.0")
+        self.assertEqual(manifest["version"], "0.12.0")
 
     def test_every_bin_user_agent_carries_the_manifest_version(self) -> None:
         version = json.loads(
