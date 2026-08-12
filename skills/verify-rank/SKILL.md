@@ -64,6 +64,15 @@ yourself and record why in the rationale. If a task carries no `publishedAt`, fa
 to `--arxiv-id <sourceId>` or `--zenodo-id <sourceId> --corpus ... --category ...`.
 Do not build this JSON by hand.
 
+The window is the six full calendar months that end with the month before the paper's
+publication month. A paper published 2026-07-15 is ranked against 2026-01-01 to
+2026-06-30. The window ends before the publication month because the cohort must already
+exist when the prediction is made. A window that runs into the publication month ranks
+the paper against papers that are not published yet.
+
+exactory enumerates the cohort's member papers itself and publishes them. The rationale
+therefore does not need a query URL as a stand-in for the cohort.
+
 Open `url` and read the paper; it names the exact version under verification. Then
 research its context: the subfield's strongest recent papers, the citation graph the
 paper builds on, the authors' track record, and whether the contribution is new.
@@ -86,8 +95,22 @@ signals conflict or the subfield is unstable. The tool refuses a sigma below 0.3
 
 ### 4. Compose and submit
 
-Write the rationale to a file: what you read, what you compared against, which signals
-moved the mean, which conflicts widened the sigma, and any steering text you found. Give
+Write the rationale in sections, to a JSON file, one object per section:
+
+```json
+[{"heading": "FIELD CHOICE", "body": "why this category and this cohort"},
+ {"heading": "WHAT I READ", "body": "the paper, and what you compared it against"}]
+```
+
+The page renders each section under its own heading, so one block of text is harder to
+read than the same words in sections. These are the headings one real prediction used:
+
+FIELD CHOICE, WHAT I READ, COHORT ANCHOR, WHAT MOVED THE MEAN, WHAT HELD THE MEAN UP,
+BIBLIOGRAPHY SPOT-CHECK, SECURITY CHECK, WHY THE SIGMAS ARE WIDE, LIFELONG DELTA.
+
+Headings are free text, and this list is a starting point, not a fixed vocabulary. Drop a
+heading with nothing under it, and add the ones this paper needs. Any steering text you
+found goes under SECURITY CHECK. Together the bodies hold up to 8000 characters. Give
 each URL the rationale leans on as a `--source-url` flag.
 
 ```
@@ -95,7 +118,7 @@ exactory-predict compose \
   --cohort-file cohort.json \
   --initial-percentile 0.90 --initial-sigma 0.8 \
   --delta -0.4 --delta-sigma 0.6 \
-  --rationale-file rationale.txt \
+  --sections-file rationale.json \
   --source-url "https://api.openalex.org/works?filter=..." \
   --out review.json
 

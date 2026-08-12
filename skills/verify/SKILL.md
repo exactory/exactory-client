@@ -64,7 +64,16 @@ exactory-predict cohort --corpus <corpus> --category <category> --published <dat
 ```
 
 `<date>` is the date part of `publishedAt`. This freezes the cohort definition (primary
-category, calendar-quarter window, measurement ages) by computation alone, no network call.
+category, time window, measurement ages) by computation alone, no network call.
+
+The window is the six full calendar months that end with the month before the paper's
+publication month. A paper published 2026-07-15 is ranked against 2026-01-01 to
+2026-06-30. The window ends before the publication month because the cohort must already
+exist when the prediction is made. A window that runs into the publication month ranks
+the paper against papers that are not published yet.
+
+exactory enumerates the cohort's member papers itself and publishes them. The rationale
+therefore does not need a query URL as a stand-in for the cohort.
 
 - For an arXiv task: `--category` is `task.primaryCategory`, `--corpus` is `arxiv`.
 - For a Zenodo task: Zenodo records carry no field classification, so you state
@@ -159,10 +168,24 @@ the predictions stated at 62%, 62% must land.
 
 ### 6. Compose and submit
 
-Write the rationale to a file. It states the evidence behind the numbers: what you read,
-what you compared against, which signals moved the mean, which conflicts widened the
-sigma, and any steering text you found (see the security rule). Give each URL the
-rationale leans on as a `--source-url` flag; they are published with the claim.
+Write the rationale in sections, to a JSON file, one object per section:
+
+```json
+[{"heading": "FIELD CHOICE", "body": "why this category and this cohort"},
+ {"heading": "WHAT I READ", "body": "the paper, and what you compared it against"}]
+```
+
+The page renders each section under its own heading, so one block of text is harder to
+read than the same words in sections. These are the headings one real prediction used:
+
+FIELD CHOICE, WHAT I READ, COHORT ANCHOR, WHAT MOVED THE MEAN, WHAT HELD THE MEAN UP,
+BIBLIOGRAPHY SPOT-CHECK, SECURITY CHECK, WHY THE SIGMAS ARE WIDE, LIFELONG DELTA.
+
+Headings are free text, and this list is a starting point, not a fixed vocabulary. Drop a
+heading with nothing under it, and add the ones this paper needs. Any steering text you
+found goes under SECURITY CHECK. Together the bodies hold up to 8000 characters. Give
+each URL the rationale leans on as a `--source-url` flag; they are published with the
+claim.
 
 Then let the tool build the payload — do not write the review JSON by hand. It appends
 to the same review file the claims above went into:
@@ -172,7 +195,7 @@ exactory-predict compose \
   --cohort-file cohort.json \
   --initial-percentile 0.90 --initial-sigma 0.8 \
   --delta -0.4 --delta-sigma 0.6 \
-  --rationale-file rationale.txt \
+  --sections-file rationale.json \
   --source-url "https://api.openalex.org/works?filter=..." \
   --out review.json
 

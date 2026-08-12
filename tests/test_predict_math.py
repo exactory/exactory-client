@@ -33,27 +33,46 @@ def _call_and_expect_exit(test_case: unittest.TestCase, function, *arguments) ->
     test_case.assertEqual(caught.exception.code, 1)
 
 
-class TestComputeQuarterWindow(unittest.TestCase):
-    def test_first_quarter(self) -> None:
+class TestComputeCohortWindow(unittest.TestCase):
+    def test_a_mid_month_publication(self) -> None:
         self.assertEqual(
-            _predict._compute_quarter_window("2026-02-14"), ("2026-01-01", "2026-03-31")
+            _predict._compute_cohort_window("2026-07-15"), ("2026-01-01", "2026-06-30")
         )
 
-    def test_second_quarter(self) -> None:
+    def test_the_first_of_the_month_gives_the_same_window(self) -> None:
         self.assertEqual(
-            _predict._compute_quarter_window("2026-04-01"), ("2026-04-01", "2026-06-30")
+            _predict._compute_cohort_window("2026-07-01"), ("2026-01-01", "2026-06-30")
         )
 
-    def test_third_quarter_from_a_full_timestamp(self) -> None:
+    def test_the_last_day_of_the_month_gives_the_same_window(self) -> None:
         self.assertEqual(
-            _predict._compute_quarter_window("2026-08-07T00:00:00Z"),
-            ("2026-07-01", "2026-09-30"),
+            _predict._compute_cohort_window("2026-07-31"), ("2026-01-01", "2026-06-30")
         )
 
-    def test_fourth_quarter(self) -> None:
+    def test_a_january_publication_crosses_the_year_boundary(self) -> None:
         self.assertEqual(
-            _predict._compute_quarter_window("2026-12-31"), ("2026-10-01", "2026-12-31")
+            _predict._compute_cohort_window("2026-01-10"), ("2025-07-01", "2025-12-31")
         )
+
+    def test_a_window_that_ends_in_a_leap_february(self) -> None:
+        self.assertEqual(
+            _predict._compute_cohort_window("2024-03-05"), ("2023-09-01", "2024-02-29")
+        )
+
+    def test_a_window_that_ends_in_a_common_february(self) -> None:
+        self.assertEqual(
+            _predict._compute_cohort_window("2026-03-05"), ("2025-09-01", "2026-02-28")
+        )
+
+    def test_a_full_timestamp_reads_as_its_date_part(self) -> None:
+        self.assertEqual(
+            _predict._compute_cohort_window("2026-08-07T00:00:00Z"),
+            ("2026-02-01", "2026-07-31"),
+        )
+
+    def test_the_window_never_reaches_the_publication_month(self) -> None:
+        _, window_end = _predict._compute_cohort_window("2026-07-15")
+        self.assertLess(window_end, "2026-07-01")
 
 
 class TestConvertPercentileToLogit(unittest.TestCase):

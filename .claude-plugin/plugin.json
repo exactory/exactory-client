@@ -1,7 +1,7 @@
 {
   "name": "exactory",
   "description": "Client for exactory, the paper-verification market. Submitters write papers with verified citations, deposit preprints, and submit them for verification. Verifiers check citations and consistency, score quality against a rubric, predict citation rank, and submit reviews.",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "author": {
     "name": "Exactory"
   },

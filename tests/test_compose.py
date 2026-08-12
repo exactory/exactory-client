@@ -331,3 +331,137 @@ class ComposeRubricScoreTest(unittest.TestCase):
     def test_refuses_a_rubric_the_registry_does_not_know(self):
         with self.assertRaises(SystemExit):
             _run(_exactory, self._argv(**{"--rubric": "my-own-rubric"}))
+
+
+class PredictComposeSectionsTest(unittest.TestCase):
+    """The sectioned rationale: exactory-predict compose --sections-file."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.out = os.path.join(self._tmp.name, "review.json")
+        self.cohort = os.path.join(self._tmp.name, "cohort.json")
+        with open(self.cohort, "w", encoding="utf-8") as handle:
+            json.dump({"corpus": "arxiv", "primaryCategory": "cs.MA",
+                       "windowStart": "2026-01-01", "windowEnd": "2026-06-30",
+                       "initialAgeMonths": 12, "lifelongAgeMonths": 60}, handle)
+
+    def _write_sections_file(self, sections):
+        path = os.path.join(self._tmp.name, "sections.json")
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(sections, handle)
+        return path
+
+    def _argv(self, sections_path):
+        return [
+            "compose",
+            "--cohort-file", self.cohort,
+            "--initial-percentile", "0.9", "--initial-sigma", "0.8",
+            "--delta", "-0.4", "--delta-sigma", "0.6",
+            "--sections-file", sections_path,
+            "--out", self.out,
+        ]
+
+    def _expect_exit_code(self, argv, code):
+        # Code 1 is the tool's own refusal, code 2 an argparse usage error. The
+        # distinction is what proves a bound is checked here and not by the parser.
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as caught:
+                _run(_predict, argv)
+        self.assertEqual(caught.exception.code, code)
+
+    def test_the_claim_carries_sections_instead_of_one_rationale(self):
+        path = self._write_sections_file([
+            {"heading": "FIELD CHOICE", "body": "cs.MA is the primary category."},
+            {"heading": "WHAT I READ", "body": "The paper and its two closest rivals."},
+        ])
+
+        _run(_predict, self._argv(path))
+
+        with open(self.out, encoding="utf-8") as handle:
+            (claim,) = json.load(handle)["claims"]
+        self.assertEqual(claim["rationaleSections"], [
+            {"heading": "FIELD CHOICE", "body": "cs.MA is the primary category."},
+            {"heading": "WHAT I READ", "body": "The paper and its two closest rivals."},
+        ])
+        self.assertNotIn("rationale", claim)
+
+    def test_the_two_rationale_flags_are_mutually_exclusive(self):
+        sections_path = self._write_sections_file(
+            [{"heading": "FIELD CHOICE", "body": "cs.MA is the primary category."}])
+        rationale_path = os.path.join(self._tmp.name, "rationale.txt")
+        with open(rationale_path, "w", encoding="utf-8") as handle:
+            handle.write("One block of reasoning.")
+
+        self._expect_exit_code(
+            self._argv(sections_path) + ["--rationale-file", rationale_path], 2)
+
+    def test_one_of_the_two_rationale_flags_is_required(self):
+        self._expect_exit_code([
+            "compose",
+            "--cohort-file", self.cohort,
+            "--initial-percentile", "0.9", "--initial-sigma", "0.8",
+            "--delta", "-0.4", "--delta-sigma", "0.6",
+            "--out", self.out,
+        ], 2)
+
+    def test_refuses_a_file_that_is_not_an_array_of_objects(self):
+        path = os.path.join(self._tmp.name, "sections.json")
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump({"heading": "FIELD CHOICE", "body": "One section, not a list."},
+                      handle)
+
+        self._expect_exit_code(self._argv(path), 1)
+
+    def test_refuses_an_empty_section_list(self):
+        self._expect_exit_code(self._argv(self._write_sections_file([])), 1)
+
+    def test_refuses_more_sections_than_the_contract_carries(self):
+        path = self._write_sections_file(
+            [{"heading": f"SECTION {index}", "body": "Evidence."} for index in range(21)])
+
+        self._expect_exit_code(self._argv(path), 1)
+
+    def test_refuses_a_section_with_no_body(self):
+        path = self._write_sections_file([{"heading": "FIELD CHOICE"}])
+
+        self._expect_exit_code(self._argv(path), 1)
+
+    def test_refuses_a_body_that_is_only_whitespace(self):
+        path = self._write_sections_file([{"heading": "FIELD CHOICE", "body": "  \n"}])
+
+        self._expect_exit_code(self._argv(path), 1)
+
+    def test_refuses_a_heading_longer_than_the_contract_allows(self):
+        path = self._write_sections_file([{"heading": "H" * 121, "body": "Evidence."}])
+
+        self._expect_exit_code(self._argv(path), 1)
+
+    def test_refuses_a_body_whose_utf16_length_passes_the_contract_bound(self):
+        # 2001 non-BMP characters are 4002 UTF-16 code units, the unit the server's
+        # zod .max(4000) counts, and 2001 Python code points.
+        path = self._write_sections_file(
+            [{"heading": "FIELD CHOICE", "body": "\U0001d465" * 2001}])
+
+        self._expect_exit_code(self._argv(path), 1)
+
+    def test_refuses_bodies_whose_total_utf16_length_passes_the_contract_bound(self):
+        # Each body is exactly 4000 UTF-16 units, so only the total (12000) is over.
+        path = self._write_sections_file(
+            [{"heading": f"SECTION {index}", "body": "\U0001d465" * 2000}
+             for index in range(3)])
+
+        self._expect_exit_code(self._argv(path), 1)
+
+    def test_sections_append_to_a_review_file_compose_claim_started(self):
+        with open(self.out, "w", encoding="utf-8") as handle:
+            json.dump({"claims": [{"dimension": "citation"}]}, handle)
+        path = self._write_sections_file(
+            [{"heading": "FIELD CHOICE", "body": "cs.MA is the primary category."}])
+
+        _run(_predict, self._argv(path))
+
+        with open(self.out, encoding="utf-8") as handle:
+            claims = json.load(handle)["claims"]
+        self.assertEqual(len(claims), 2)
+        self.assertEqual(claims[0], {"dimension": "citation"})

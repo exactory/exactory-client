@@ -20,6 +20,7 @@ import sys
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from datetime import date, timedelta
 from pathlib import Path
 
 _ARXIV_API_URL = "https://export.arxiv.org/api/query"
@@ -39,12 +40,25 @@ _USER_AGENT = f"exactory-predict/{_PLUGIN_VERSION}"
 _INITIAL_AGE_MONTHS = 12
 _LIFELONG_AGE_MONTHS = 60
 
+# The cohort spans this many full calendar months, and it ends before the paper's
+# own publication month, so the cohort already exists when the prediction is made
+# (plan 2026-08-11 D1, D2).
+_COHORT_WINDOW_MONTHS = 6
+
 # The verifier's own floor: a sigma below this states a certainty about citation
 # futures that no evidence supports.
 _SIGMA_FLOOR = 0.3
 _SIGMA_CEILING = 10.0
 _LOGIT_BOUND = 10.0
 _DELTA_BOUND = 20.0
+
+# The server's bounds on a rationale, in UTF-16 code units. A sectioned rationale
+# holds the same total text as a one-block one, so the client refuses a file the
+# server would reject at the boundary anyway.
+_MAX_SECTION_COUNT = 20
+_MAX_HEADING_UNITS = 120
+_MAX_BODY_UNITS = 4000
+_MAX_RATIONALE_UNITS = 8000
 
 _ATOM_NS = {"atom": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
 
@@ -54,15 +68,20 @@ def _exit_with_error(message: str, code: int = 1) -> None:
     sys.exit(code)
 
 
-def _compute_quarter_window(published: str) -> tuple[str, str]:
-    """Map an ISO date to its calendar quarter: the v1 cohort time window."""
+def _compute_cohort_window(published: str) -> tuple[str, str]:
+    """Map an ISO date to the six full calendar months that end with the month
+    before it. The rule has two implementations: the server recomputes it from the
+    paper it already holds and rejects a payload whose window disagrees, so this
+    one cannot drift away from it in silence."""
     year, month = int(published[0:4]), int(published[5:7])
-    quarter_start_month = 3 * ((month - 1) // 3) + 1
-    last_days = {1: "03-31", 4: "06-30", 7: "09-30", 10: "12-31"}
-    return (
-        f"{year}-{quarter_start_month:02d}-01",
-        f"{year}-{last_days[quarter_start_month]}",
+    # The day before the first of the publication month is the last day of the
+    # month before it, February and leap years included.
+    window_end = date(year, month, 1) - timedelta(days=1)
+    start_year, start_month_index = divmod(
+        12 * year + (month - 1) - _COHORT_WINDOW_MONTHS, 12
     )
+    window_start = date(start_year, start_month_index + 1, 1)
+    return window_start.isoformat(), window_end.isoformat()
 
 
 def _read_arxiv_cohort_inputs(arxiv_id: str) -> tuple[str, str]:
@@ -149,7 +168,7 @@ def _run_cohort(args: argparse.Namespace) -> None:
         corpus, category = args.corpus, args.category
         published = _read_zenodo_published_date(args.zenodo_id)
 
-    window_start, window_end = _compute_quarter_window(published)
+    window_start, window_end = _compute_cohort_window(published)
     json.dump(
         {
             "corpus": corpus,
@@ -202,6 +221,53 @@ def _truncate_to_utf16_units(text: str, limit: int) -> str:
     return text
 
 
+def _count_utf16_units(text: str) -> int:
+    """Length in UTF-16 code units, the unit the server's bounds count."""
+    return len(text.encode("utf-16-le")) // 2
+
+
+def _read_rationale_sections(path: str) -> list[dict]:
+    """Parse a JSON section list in the shape the claim payload carries:
+    [{heading, body}]. Same file convention as `exactory-check lookup --refs-json`."""
+    try:
+        with open(path, encoding="utf-8") as handle:
+            sections = json.load(handle)
+    except FileNotFoundError:
+        _exit_with_error(f"The file {path} does not exist.")
+    except json.JSONDecodeError as error:
+        _exit_with_error(f"The file {path} is not valid JSON. Cause: {error}")
+
+    if not isinstance(sections, list) or not all(
+        isinstance(section, dict) for section in sections
+    ):
+        _exit_with_error(f"The file {path} does not hold a JSON array of section"
+                         ' objects. Each object holds a "heading" and a "body".')
+    if not 1 <= len(sections) <= _MAX_SECTION_COUNT:
+        _exit_with_error(f"The file {path} holds {len(sections)} sections."
+                         f" Write 1 to {_MAX_SECTION_COUNT} sections.")
+
+    parsed_sections = []
+    for index, section in enumerate(sections, start=1):
+        heading, body = section.get("heading"), section.get("body")
+        if not isinstance(heading, str) or not isinstance(body, str):
+            _exit_with_error(f'Section {index} needs a "heading" string and a "body"'
+                             " string. Write both.")
+        heading, body = heading.strip(), body.strip()
+        if not 1 <= _count_utf16_units(heading) <= _MAX_HEADING_UNITS:
+            _exit_with_error(f"The heading of section {index} must hold 1 to"
+                             f" {_MAX_HEADING_UNITS} characters.")
+        if not 1 <= _count_utf16_units(body) <= _MAX_BODY_UNITS:
+            _exit_with_error(f"The body of section {index} must hold 1 to"
+                             f" {_MAX_BODY_UNITS} characters.")
+        parsed_sections.append({"heading": heading, "body": body})
+
+    total_units = sum(_count_utf16_units(part["body"]) for part in parsed_sections)
+    if total_units > _MAX_RATIONALE_UNITS:
+        _exit_with_error(f"The bodies hold {total_units} characters together, above the"
+                         f" limit of {_MAX_RATIONALE_UNITS}. Make the rationale shorter.")
+    return parsed_sections
+
+
 def _run_compose(args: argparse.Namespace) -> None:
     try:
         with open(args.cohort_file, encoding="utf-8") as handle:
@@ -211,13 +277,22 @@ def _run_compose(args: argparse.Namespace) -> None:
     except json.JSONDecodeError as error:
         _exit_with_error(f"The file {args.cohort_file} is not valid JSON. Cause: {error}")
 
-    try:
-        with open(args.rationale_file, encoding="utf-8") as handle:
-            rationale = handle.read().strip()
-    except FileNotFoundError:
-        _exit_with_error(f"The file {args.rationale_file} does not exist.")
-    if rationale == "":
-        _exit_with_error("The rationale file is empty. State the evidence behind the numbers.")
+    # One rationale shape per claim: sections render under their headings on the
+    # public page, one block of text renders as one paragraph (plan 2026-08-11 D5).
+    if args.sections_file:
+        rationale_field = "rationaleSections"
+        rationale_value = _read_rationale_sections(args.sections_file)
+    else:
+        try:
+            with open(args.rationale_file, encoding="utf-8") as handle:
+                text = handle.read().strip()
+        except FileNotFoundError:
+            _exit_with_error(f"The file {args.rationale_file} does not exist.")
+        if text == "":
+            _exit_with_error("The rationale file is empty."
+                             " State the evidence behind the numbers.")
+        rationale_field = "rationale"
+        rationale_value = _truncate_to_utf16_units(text, _MAX_RATIONALE_UNITS)
 
     _require_sigma_in_range("--initial-sigma", args.initial_sigma)
     _require_sigma_in_range("--delta-sigma", args.delta_sigma)
@@ -227,7 +302,7 @@ def _run_compose(args: argparse.Namespace) -> None:
     claim = {
         "dimension": "impact",
         "procedure": "cohort_prediction",
-        "rationale": _truncate_to_utf16_units(rationale, 8000),
+        rationale_field: rationale_value,
         "sources": [{"url": url} for url in (args.source_url or [])],
         "payload": {
             "cohort": cohort,
@@ -312,11 +387,22 @@ def _build_parser() -> argparse.ArgumentParser:
              " the paper loses rank after its start.",
     )
     compose.add_argument("--delta-sigma", type=float, required=True)
-    compose.add_argument("--rationale-file", required=True)
+    rationale_source = compose.add_mutually_exclusive_group(required=True)
+    rationale_source.add_argument(
+        "--rationale-file", help="A file with the reasoning as one block of text."
+    )
+    rationale_source.add_argument(
+        "--sections-file",
+        help="A JSON file with the reasoning in sections:"
+             ' [{"heading": "...", "body": "..."}]. The public page renders each'
+             " section under its own heading.",
+    )
     compose.add_argument(
         "--source-url", action="append",
-        help="A URL the rationale leans on, for example the cohort query."
-             " Repeat the flag for more than one URL.",
+        help="A URL the rationale leans on, for example a paper it compares against."
+             " Repeat the flag for more than one URL."
+             " exactory publishes the cohort's members itself, so no URL stands"
+             " for the cohort.",
     )
     compose.add_argument("--out", default="review.json")
     compose.set_defaults(handler=_run_compose)

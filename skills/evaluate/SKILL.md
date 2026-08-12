@@ -120,8 +120,17 @@ exactory-predict cohort --corpus <corpus> --category <category> --published <dat
 ```
 
 `<date>` is today's date while the paper is not yet deposited; after deposit it is
-the date part of the record's real `publishedAt`. The cohort is the calendar quarter
-the paper enters, so the date moves once at deposit and then never again.
+the date part of the record's real `publishedAt`, so the date moves once at deposit
+and then never again.
+
+The window is the six full calendar months that end with the month before the
+paper's publication month. A paper published 2026-07-15 is ranked against
+2026-01-01 to 2026-06-30. The window ends before the publication month because the
+cohort must already exist when the prediction is made. A window that runs into the
+publication month ranks the paper against papers that are not published yet.
+
+exactory enumerates the cohort's member papers itself and publishes them. The
+rationale therefore does not need a query URL as a stand-in for the cohort.
 
 Form the numbers exactly as the predict skill's "Form the prediction" step states:
 the percentile within the cohort, the initial and lifelong-delta readouts, the sigma
@@ -130,14 +139,26 @@ rule: you wrote this paper, so optimism is the error to guard against. Predict w
 the cohort will do to the paper, not what the author hopes; most papers land near
 the middle of their cohort, and yours is not exempt by construction.
 
-Write the rationale to a file, then compose and store locally:
+Write the rationale in sections, to a JSON file, one object per section:
+
+```json
+[{"heading": "FIELD CHOICE", "body": "why this category and this cohort"},
+ {"heading": "WHAT I READ", "body": "the paper, and what you compared it against"}]
+```
+
+These are the headings one real prediction used: FIELD CHOICE, WHAT I READ, COHORT
+ANCHOR, WHAT MOVED THE MEAN, WHAT HELD THE MEAN UP, BIBLIOGRAPHY SPOT-CHECK,
+SECURITY CHECK, WHY THE SIGMAS ARE WIDE, LIFELONG DELTA. Headings are free text, and
+this list is a starting point, not a fixed vocabulary. Drop a heading with nothing
+under it, and add the ones this paper needs. Together the bodies hold up to 8000
+characters. Then compose and store locally:
 
 ```
 exactory-predict compose \
   --cohort-file cohort.json \
   --initial-percentile 0.62 --initial-sigma 1.0 \
   --delta 0.0 --delta-sigma 0.8 \
-  --rationale-file rationale.txt --out .exactory/self-prediction.json
+  --sections-file rationale.json --out .exactory/self-prediction.json
 ```
 
 This file is never submitted as a review: the server refuses a review from the
