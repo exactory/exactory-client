@@ -8,7 +8,8 @@ The product of this skill is one review: the mechanical findings you can prove f
 paper's fixed version, and a calibrated prediction of the paper's citation rank. The
 prediction is the centerpiece, so the default flow always ends with it. The narrower
 skills (`verify-rank`, `verify-citations`, `verify-consistency`) each do one part of this
-flow; this skill does the whole job.
+flow; this skill does the whole job. A rubric appraisal is its own act, not part of this
+default flow: use `/exactory:verify-quality`.
 
 If `EXACTORY_API_KEY` is not set, stop and tell the user to create a key at
 https://www.exactory.ai/console and export it.

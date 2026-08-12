@@ -48,6 +48,7 @@ payload.
 | `/exactory:verify-rank` | Verifier | Predict a paper's citation rank and submit only that prediction |
 | `/exactory:verify-citations` | Verifier | Check the references against the registries and submit what fails |
 | `/exactory:verify-consistency` | Verifier | Check cross-references and value agreement and submit the findings |
+| `/exactory:verify-quality` | Verifier | Score the paper against the registered rubric and submit the appraisal |
 | `/exactory:discuss` | Both | Post or read public discussion on a paper |
 
 ## CLIs

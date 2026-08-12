@@ -319,6 +319,45 @@ def _run_compose_citation(args: argparse.Namespace) -> None:
     _append_claim_to_review(args.out, claim)
 
 
+# The rubric versions this client composes against. The server's registry is the
+# authority; a mismatched pair is rejected at the boundary, so this pin fails fast
+# client-side instead.
+_RUBRIC_VERSIONS = {"core": 1}
+
+
+def _run_compose_rubric_score(args: argparse.Namespace) -> None:
+    version = _RUBRIC_VERSIONS.get(args.rubric)
+    if version is None:
+        known = ", ".join(sorted(_RUBRIC_VERSIONS))
+        _exit_with_error(f"The rubric registry does not know '{args.rubric}'."
+                         f" Known rubrics: {known}.")
+    rationale = _read_claim_text_file(args.rationale_file, "rationale")
+    payload = {
+        "rubric": {"id": args.rubric, "version": version},
+        "summary": args.summary,
+        "strengths": args.strength,
+        "weaknesses": args.weakness,
+        "scores": {
+            "soundness": args.soundness,
+            "presentation": args.presentation,
+            "contribution": args.contribution,
+            "overall": args.overall,
+        },
+        "decision": args.decision,
+        "confidence": args.confidence,
+    }
+    # A score reports no gap: no severity, no background/plan, no meta target — the
+    # same envelope shape the prediction uses, with the rationale required.
+    claim = {
+        "dimension": "appraisal",
+        "procedure": "rubric_score",
+        "rationale": rationale,
+        "sources": [{"url": url} for url in (args.source_url or [])],
+        "payload": payload,
+    }
+    _append_claim_to_review(args.out, claim)
+
+
 def _run_discuss(args: argparse.Namespace) -> None:
     if args.body is not None:
         body = args.body
@@ -491,6 +530,37 @@ def _build_parser() -> argparse.ArgumentParser:
     citation.add_argument("--year", type=int)
     _add_envelope_flags(citation)
     citation.set_defaults(handler=_run_compose_citation)
+
+    rubric_score = claim_kinds.add_parser(
+        "rubric-score", allow_abbrev=False,
+        help="Score the paper against a registered rubric. The market records the"
+             " score; it does not adjudicate it."
+    )
+    rubric_score.add_argument("--rubric", default="core",
+                              help="The rubric id from the registry (default: core).")
+    rubric_score.add_argument("--summary", required=True,
+                              help="What the paper does and claims, in your own words.")
+    rubric_score.add_argument("--strength", action="append", required=True,
+                              help="One concrete strength. Repeat for more than one.")
+    rubric_score.add_argument("--weakness", action="append", required=True,
+                              help="One concrete, actionable weakness. Repeat for more.")
+    rubric_score.add_argument("--soundness", type=int, required=True,
+                              help="1-4.")
+    rubric_score.add_argument("--presentation", type=int, required=True,
+                              help="1-4.")
+    rubric_score.add_argument("--contribution", type=int, required=True,
+                              help="1-4.")
+    rubric_score.add_argument("--overall", type=int, required=True,
+                              help="1-10.")
+    rubric_score.add_argument("--decision", choices=["accept", "reject"], required=True)
+    rubric_score.add_argument("--confidence", type=int, required=True,
+                              help="1-5.")
+    rubric_score.add_argument("--rationale-file", required=True,
+                              help="A file with the reasoning behind the scores.")
+    rubric_score.add_argument("--source-url", action="append",
+                              help="A URL the appraisal leans on. Repeat for more than one.")
+    rubric_score.add_argument("--out", default="review.json")
+    rubric_score.set_defaults(handler=_run_compose_rubric_score)
 
     discuss = commands.add_parser(
         "discuss", allow_abbrev=False,
