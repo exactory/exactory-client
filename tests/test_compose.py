@@ -283,3 +283,51 @@ class PredictComposeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ComposeRubricScoreTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.out = os.path.join(self._tmp.name, "review.json")
+        self.rationale = os.path.join(self._tmp.name, "rationale.txt")
+        with open(self.rationale, "w", encoding="utf-8") as handle:
+            handle.write("Scores follow the weaknesses; the bound is not supported.\n")
+
+    def _argv(self, **overrides):
+        argv = [
+            "compose-claim", "rubric-score",
+            "--summary", "Trains a small model; claims a new bound.",
+            "--strength", "The ablation in Section 4 isolates the claimed effect.",
+            "--weakness", "Baselines run with unmatched budgets; rerun matched.",
+            "--soundness", "3", "--presentation", "3", "--contribution", "2",
+            "--overall", "5", "--decision", "reject", "--confidence", "4",
+            "--rationale-file", self.rationale,
+            "--out", self.out,
+        ]
+        for flag, value in overrides.items():
+            argv += [flag, value]
+        return argv
+
+    def test_composes_a_core_rubric_score_with_no_severity(self):
+        _run(_exactory, self._argv())
+
+        with open(self.out, encoding="utf-8") as handle:
+            (claim,) = json.load(handle)["claims"]
+        self.assertEqual(claim["dimension"], "appraisal")
+        self.assertEqual(claim["procedure"], "rubric_score")
+        self.assertEqual(claim["payload"]["rubric"], {"id": "core", "version": 1})
+        self.assertEqual(claim["payload"]["scores"],
+                         {"soundness": 3, "presentation": 3, "contribution": 2, "overall": 5})
+        self.assertEqual(claim["payload"]["decision"], "reject")
+        self.assertEqual(claim["payload"]["confidence"], 4)
+        self.assertEqual(
+            claim["rationale"],
+            "Scores follow the weaknesses; the bound is not supported.")
+        self.assertNotIn("severity", claim)
+        self.assertNotIn("background", claim)
+        self.assertNotIn("plan", claim)
+
+    def test_refuses_a_rubric_the_registry_does_not_know(self):
+        with self.assertRaises(SystemExit):
+            _run(_exactory, self._argv(**{"--rubric": "my-own-rubric"}))
