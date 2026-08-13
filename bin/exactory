@@ -161,6 +161,13 @@ def _run_paper(args: argparse.Namespace) -> None:
     _print_json(payload)
 
 
+def _run_suggestions(args: argparse.Namespace) -> None:
+    identifier = _resolve_paper_identifier(args.identifier)
+    payload, _ = _send_request(
+        "GET", "/api/v1/suggestions/" + urllib.parse.quote(identifier))
+    _print_json(payload)
+
+
 def _run_submit_review(args: argparse.Namespace) -> None:
     try:
         with open(args.file, encoding="utf-8") as handle:
@@ -223,6 +230,68 @@ def _truncate_to_utf16_units(text: str, limit: int) -> str:
         if units > limit:
             return text[:index]
     return text
+
+
+def _count_utf16_units(text: str) -> int:
+    """Length in UTF-16 code units, the unit the server's bounds count."""
+    return len(text.encode("utf-16-le")) // 2
+
+
+_SUGGESTION_FIELD_UNIT_BOUNDS = {
+    "title": 120,
+    "ground": 1000,
+    "action": 2000,
+    "expectedOutcome": 1000,
+}
+
+
+def _read_suggestions_file(path: str) -> dict:
+    """Parse the {continuous, drastic} suggestion pair every evaluative claim carries
+    (design 2026-08-11). Bounds mirror the server's contract in UTF-16 code units.
+    Duplicated across the binaries the way _truncate_to_utf16_units is: bin/ holds
+    exactly four executables, so a shared module is a file-layout change this
+    validator does not get to make."""
+    try:
+        with open(path, encoding="utf-8") as handle:
+            suggestions = json.load(handle)
+    except FileNotFoundError:
+        _exit_with_error(f"The file {path} does not exist.")
+    except json.JSONDecodeError as error:
+        _exit_with_error(f"The file {path} is not valid JSON. Cause: {error}")
+
+    if not isinstance(suggestions, dict):
+        _exit_with_error(f"The file {path} does not hold a JSON object with a"
+                         ' "continuous" and a "drastic" suggestion.')
+    unknown_slots = sorted(set(suggestions) - {"continuous", "drastic"})
+    if unknown_slots:
+        _exit_with_error(f"The file {path} carries an unknown key:"
+                         f" {', '.join(unknown_slots)}."
+                         ' Write exactly "continuous" and "drastic".')
+
+    parsed = {}
+    for slot in ("continuous", "drastic"):
+        entry = suggestions.get(slot)
+        if not isinstance(entry, dict):
+            _exit_with_error(f'The file {path} is missing the "{slot}" suggestion.'
+                             " Write both suggestions.")
+        unknown_fields = sorted(set(entry) - set(_SUGGESTION_FIELD_UNIT_BOUNDS))
+        if unknown_fields:
+            _exit_with_error(f'The "{slot}" suggestion carries an unknown key:'
+                             f" {', '.join(unknown_fields)}.")
+        parsed_entry = {}
+        for field_name, unit_bound in _SUGGESTION_FIELD_UNIT_BOUNDS.items():
+            value = entry.get(field_name)
+            if not isinstance(value, str) or value.strip() == "":
+                _exit_with_error(f'The "{slot}" suggestion is missing "{field_name}".'
+                                 " Write all four fields.")
+            value = value.strip()
+            if _count_utf16_units(value) > unit_bound:
+                _exit_with_error(f'The "{field_name}" of the "{slot}" suggestion is'
+                                 f" over the limit of {unit_bound} characters."
+                                 " Make it shorter.")
+            parsed_entry[field_name] = value
+        parsed[slot] = parsed_entry
+    return parsed
 
 
 def _read_claim_text_file(path: str | None, field_name: str) -> str | None:
@@ -354,6 +423,7 @@ def _run_compose_rubric_score(args: argparse.Namespace) -> None:
         "dimension": "appraisal",
         "procedure": "rubric_score",
         "rationale": rationale,
+        "suggestions": _read_suggestions_file(args.suggestions_file),
         "sources": [{"url": url} for url in (args.source_url or [])],
         "payload": payload,
     }
@@ -450,6 +520,13 @@ def _build_parser() -> argparse.ArgumentParser:
     paper = commands.add_parser("paper", allow_abbrev=False, help="Show a stored paper.")
     paper.add_argument("identifier", help="A DOI or an arXiv id.")
     paper.set_defaults(handler=_run_paper)
+
+    suggestions = commands.add_parser(
+        "suggestions", allow_abbrev=False,
+        help="List every next step the market has recorded against a paper."
+    )
+    suggestions.add_argument("identifier", help="A DOI or an arXiv id.")
+    suggestions.set_defaults(handler=_run_suggestions)
 
     submit_review = commands.add_parser(
         "submit-review", allow_abbrev=False,
@@ -564,6 +641,11 @@ def _build_parser() -> argparse.ArgumentParser:
                               help="1-5.")
     rubric_score.add_argument("--rationale-file", required=True,
                               help="A file with the reasoning behind the scores.")
+    rubric_score.add_argument(
+        "--suggestions-file", required=True,
+        help="A JSON file with the two next steps the appraisal proposes:"
+             ' {"continuous": {...}, "drastic": {...}}, each with a "title", a'
+             ' "ground", an "action", and an "expectedOutcome".')
     rubric_score.add_argument("--source-url", action="append",
                               help="A URL the appraisal leans on. Repeat for more than one.")
     rubric_score.add_argument("--supersedes",

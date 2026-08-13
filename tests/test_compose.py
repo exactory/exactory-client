@@ -35,6 +35,29 @@ def _run(module, argv):
         args.handler(args)
 
 
+_VALID_SUGGESTIONS = {
+    "continuous": {
+        "title": "Match the baseline compute budget",
+        "ground": "Section 4 runs the baselines at a quarter of the step count.",
+        "action": "Rerun every baseline at the proposed step count.",
+        "expectedOutcome": "The gain either survives at matched budgets or it does not.",
+    },
+    "drastic": {
+        "title": "Test the mechanism off the benchmark",
+        "ground": "Every result uses one synthetic suite the authors also wrote.",
+        "action": "Apply the method to a task with an independent generator.",
+        "expectedOutcome": "The failure mode names which part of the mechanism is real.",
+    },
+}
+
+
+def _write_valid_suggestions_file(dir_path):
+    path = os.path.join(dir_path, "suggestions.json")
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(_VALID_SUGGESTIONS, handle)
+    return path
+
+
 class ComposeClaimTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -240,6 +263,7 @@ class PredictComposeTest(unittest.TestCase):
                 "--initial-percentile", "0.9", "--initial-sigma", "0.8",
                 "--delta", "-0.4", "--delta-sigma", "0.6",
                 "--rationale-file", rationale_path,
+                "--suggestions-file", _write_valid_suggestions_file(tmp),
                 "--source-url", "https://api.openalex.org/works?filter=example",
                 "--out", out,
             ])
@@ -272,6 +296,7 @@ class PredictComposeTest(unittest.TestCase):
                 "--initial-percentile", "0.6", "--initial-sigma", "0.8",
                 "--delta", "-0.4", "--delta-sigma", "0.6",
                 "--rationale-file", rationale_path,
+                "--suggestions-file", _write_valid_suggestions_file(tmp),
                 "--supersedes", "6f1b2f0e-0e4b-4a3f-9a2c-7c1d5f4e8a90",
                 "--out", out,
             ])
@@ -297,6 +322,7 @@ class PredictComposeTest(unittest.TestCase):
                 "--initial-percentile", "0.9", "--initial-sigma", "0.8",
                 "--delta", "-0.4", "--delta-sigma", "0.6",
                 "--rationale-file", rationale_path,
+                "--suggestions-file", _write_valid_suggestions_file(tmp),
                 "--out", out,
             ])
 
@@ -322,6 +348,7 @@ class PredictComposeTest(unittest.TestCase):
                 "--initial-percentile", "0.9", "--initial-sigma", "0.8",
                 "--delta", "-0.4", "--delta-sigma", "0.6",
                 "--rationale-file", rationale_path,
+                "--suggestions-file", _write_valid_suggestions_file(tmp),
                 "--out", out,
             ])
 
@@ -333,22 +360,6 @@ class PredictComposeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
-_VALID_SUGGESTIONS = {
-    "continuous": {
-        "title": "Match the baseline compute budget",
-        "ground": "Section 4 runs the baselines at a quarter of the step count.",
-        "action": "Rerun every baseline at the proposed step count.",
-        "expectedOutcome": "The gain either survives at matched budgets or it does not.",
-    },
-    "drastic": {
-        "title": "Test the mechanism off the benchmark",
-        "ground": "Every result uses one synthetic suite the authors also wrote.",
-        "action": "Apply the method to a task with an independent generator.",
-        "expectedOutcome": "The failure mode names which part of the mechanism is real.",
-    },
-}
 
 
 class ComposeSuggestionsTest(unittest.TestCase):
@@ -477,6 +488,7 @@ class ComposeRubricScoreTest(unittest.TestCase):
         self.rationale = os.path.join(self._tmp.name, "rationale.txt")
         with open(self.rationale, "w", encoding="utf-8") as handle:
             handle.write("Scores follow the weaknesses; the bound is not supported.\n")
+        self.suggestions = _write_valid_suggestions_file(self._tmp.name)
 
     def _argv(self, **overrides):
         argv = [
@@ -487,6 +499,7 @@ class ComposeRubricScoreTest(unittest.TestCase):
             "--soundness", "3", "--presentation", "3", "--contribution", "2",
             "--overall", "5", "--decision", "reject", "--confidence", "4",
             "--rationale-file", self.rationale,
+            "--suggestions-file", self.suggestions,
             "--out", self.out,
         ]
         for flag, value in overrides.items():
@@ -538,6 +551,7 @@ class PredictComposeSectionsTest(unittest.TestCase):
             json.dump({"corpus": "arxiv", "primaryCategory": "cs.MA",
                        "windowStart": "2026-01-01", "windowEnd": "2026-06-30",
                        "initialAgeMonths": 12, "lifelongAgeMonths": 60}, handle)
+        self.suggestions = _write_valid_suggestions_file(self._tmp.name)
 
     def _write_sections_file(self, sections):
         path = os.path.join(self._tmp.name, "sections.json")
@@ -552,6 +566,7 @@ class PredictComposeSectionsTest(unittest.TestCase):
             "--initial-percentile", "0.9", "--initial-sigma", "0.8",
             "--delta", "-0.4", "--delta-sigma", "0.6",
             "--sections-file", sections_path,
+            "--suggestions-file", self.suggestions,
             "--out", self.out,
         ]
 
@@ -595,6 +610,7 @@ class PredictComposeSectionsTest(unittest.TestCase):
             "--cohort-file", self.cohort,
             "--initial-percentile", "0.9", "--initial-sigma", "0.8",
             "--delta", "-0.4", "--delta-sigma", "0.6",
+            "--suggestions-file", self.suggestions,
             "--out", self.out,
         ], 2)
 
