@@ -117,6 +117,20 @@ class TestPaperSubcommand(_TransportTestCase):
         self.assertEqual(self.requested_paths, ["/api/v1/papers/10.5281/zenodo.21381192"])
 
 
+class TestSuggestionsSubcommand(_TransportTestCase):
+    def test_a_bare_arxiv_id_maps_to_its_datacite_doi(self) -> None:
+        self.response_status = 200
+        self._run(["suggestions", "2301.00001"])
+        self.assertEqual(self.requested_paths,
+                         ["/api/v1/suggestions/10.48550/arxiv.2301.00001"])
+
+    def test_a_doi_passes_through_unchanged(self) -> None:
+        self.response_status = 200
+        self._run(["suggestions", "10.5281/zenodo.21381192"])
+        self.assertEqual(self.requested_paths,
+                         ["/api/v1/suggestions/10.5281/zenodo.21381192"])
+
+
 class TestTaskSubcommand(_TransportTestCase):
     def test_it_reads_one_task_by_verification_id(self) -> None:
         self._run(["task", "656c336e-e892-4c47-80d2-a71d022f4116"])

@@ -335,6 +335,140 @@ if __name__ == "__main__":
     unittest.main()
 
 
+_VALID_SUGGESTIONS = {
+    "continuous": {
+        "title": "Match the baseline compute budget",
+        "ground": "Section 4 runs the baselines at a quarter of the step count.",
+        "action": "Rerun every baseline at the proposed step count.",
+        "expectedOutcome": "The gain either survives at matched budgets or it does not.",
+    },
+    "drastic": {
+        "title": "Test the mechanism off the benchmark",
+        "ground": "Every result uses one synthetic suite the authors also wrote.",
+        "action": "Apply the method to a task with an independent generator.",
+        "expectedOutcome": "The failure mode names which part of the mechanism is real.",
+    },
+}
+
+
+class ComposeSuggestionsTest(unittest.TestCase):
+    """The suggestion pair both evaluative composers require (design 2026-08-11)."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.out = os.path.join(self._tmp.name, "review.json")
+        self.rationale = self._write_file("rationale.txt", "Evidence behind the numbers.")
+        self.cohort = self._write_file("cohort.json", json.dumps(
+            {"corpus": "arxiv", "primaryCategory": "cs.LG",
+             "windowStart": "2026-01-01", "windowEnd": "2026-06-30",
+             "initialAgeMonths": 6, "lifelongAgeMonths": 60}))
+
+    def _write_file(self, name, text):
+        path = os.path.join(self._tmp.name, name)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        return path
+
+    def _write_suggestions_file(self, suggestions):
+        return self._write_file("suggestions.json", json.dumps(suggestions))
+
+    def _rubric_argv(self, suggestions_path):
+        return [
+            "compose-claim", "rubric-score",
+            "--summary", "Trains a small model; claims a new bound.",
+            "--strength", "The ablation in Section 4 isolates the claimed effect.",
+            "--weakness", "Baselines run with unmatched budgets; rerun matched.",
+            "--soundness", "3", "--presentation", "3", "--contribution", "2",
+            "--overall", "5", "--decision", "reject", "--confidence", "4",
+            "--rationale-file", self.rationale,
+            "--suggestions-file", suggestions_path,
+            "--out", self.out,
+        ]
+
+    def _predict_argv(self, suggestions_path):
+        return [
+            "compose",
+            "--cohort-file", self.cohort,
+            "--initial-percentile", "0.9", "--initial-sigma", "0.8",
+            "--delta", "-0.4", "--delta-sigma", "0.6",
+            "--rationale-file", self.rationale,
+            "--suggestions-file", suggestions_path,
+            "--out", self.out,
+        ]
+
+    def _read_single_claim(self):
+        with open(self.out, encoding="utf-8") as handle:
+            (claim,) = json.load(handle)["claims"]
+        return claim
+
+    def _expect_exit_code(self, module, argv, code):
+        # Code 1 is the tool's own refusal, code 2 an argparse usage error. The
+        # distinction is what proves a bound is checked here and not by the parser.
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as caught:
+                _run(module, argv)
+        self.assertEqual(caught.exception.code, code)
+
+    def test_rubric_score_carries_the_suggestion_pair(self):
+        path = self._write_suggestions_file(_VALID_SUGGESTIONS)
+
+        _run(_exactory, self._rubric_argv(path))
+
+        self.assertEqual(self._read_single_claim()["suggestions"], _VALID_SUGGESTIONS)
+
+    def test_predict_compose_carries_the_suggestion_pair(self):
+        path = self._write_suggestions_file(_VALID_SUGGESTIONS)
+
+        _run(_predict, self._predict_argv(path))
+
+        self.assertEqual(self._read_single_claim()["suggestions"], _VALID_SUGGESTIONS)
+
+    def test_rubric_score_requires_the_suggestions_flag(self):
+        argv = self._rubric_argv("unused.json")
+        flag_index = argv.index("--suggestions-file")
+        del argv[flag_index:flag_index + 2]
+
+        self._expect_exit_code(_exactory, argv, 2)
+
+    def test_predict_compose_requires_the_suggestions_flag(self):
+        argv = self._predict_argv("unused.json")
+        flag_index = argv.index("--suggestions-file")
+        del argv[flag_index:flag_index + 2]
+
+        self._expect_exit_code(_predict, argv, 2)
+
+    def test_refuses_a_file_missing_the_drastic_suggestion(self):
+        path = self._write_suggestions_file(
+            {"continuous": _VALID_SUGGESTIONS["continuous"]})
+
+        self._expect_exit_code(_exactory, self._rubric_argv(path), 1)
+        self._expect_exit_code(_predict, self._predict_argv(path), 1)
+
+    def test_refuses_a_suggestion_missing_its_action(self):
+        continuous = dict(_VALID_SUGGESTIONS["continuous"])
+        del continuous["action"]
+        path = self._write_suggestions_file(
+            {"continuous": continuous, "drastic": _VALID_SUGGESTIONS["drastic"]})
+
+        self._expect_exit_code(_exactory, self._rubric_argv(path), 1)
+
+    def test_refuses_a_file_that_is_a_json_array(self):
+        path = self._write_suggestions_file(
+            [_VALID_SUGGESTIONS["continuous"], _VALID_SUGGESTIONS["drastic"]])
+
+        self._expect_exit_code(_exactory, self._rubric_argv(path), 1)
+
+    def test_refuses_a_title_whose_utf16_length_passes_the_contract_bound(self):
+        # 61 non-BMP characters are 122 UTF-16 code units, over the server's
+        # zod .max(120), and 61 Python code points.
+        drastic = dict(_VALID_SUGGESTIONS["drastic"], title="\U0001d465" * 61)
+        path = self._write_suggestions_file(
+            {"continuous": _VALID_SUGGESTIONS["continuous"], "drastic": drastic})
+
+        self._expect_exit_code(_predict, self._predict_argv(path), 1)
+
+
 class ComposeRubricScoreTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
