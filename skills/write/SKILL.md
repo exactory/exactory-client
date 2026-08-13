@@ -57,10 +57,15 @@ stay there.
    self-prediction is stated against it.
 3. Search the field: arXiv, OpenAlex, Crossref. When the environment has a
    `literature-review` skill, invoke it; it governs search method.
-4. Append one block to `research/literature.md` per search pass (format in
+4. Before fixing the scope, run `exactory suggestions <doi-or-arxiv-id>` on the
+   closest prior work. The market records a pair of next steps against every
+   evaluated paper; a recorded step that matches your hypothesis is evidence
+   the direction is wanted, and one that contradicts it is a finding to answer
+   in the framing.
+5. Append one block to `research/literature.md` per search pass (format in
    WORKSPACE.md). The verdict comes from the closed vocabulary
    `nothing-new | scooped | replicate-extend [cite] | contradicted | novel-confirmed`.
-5. Findings gate the plan. A `scooped` or `contradicted` framing is reworked
+6. Findings gate the plan. A `scooped` or `contradicted` framing is reworked
    before any drafting. An honest `replicate-extend` framing is a strength, not
    a failure.
 
