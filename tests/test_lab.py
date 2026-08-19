@@ -221,5 +221,77 @@ class TestDecide(_InsideWorkspaceTestCase):
         self.assertEqual(len(self.read_decision_lines()), 2)
 
 
+class TestRunLocal(_InsideWorkspaceTestCase):
+    def write_script(self, name: str, body: str) -> None:
+        (self.workspace / "experiment" / "code" / name).write_text(
+            body, encoding="utf-8"
+        )
+
+    def read_record(self, node: str) -> dict:
+        return json.loads(
+            (self.workspace / "experiment" / "results" / f"{node}.json")
+            .read_text(encoding="utf-8")
+        )
+
+    def test_run_captures_the_metrics_line(self) -> None:
+        self.write_script("n1.py", "import json\n"
+                                   "print(json.dumps({'metric': 0.83, 'loss': 0.1}))\n")
+        output = _run_lab_command(["run", "code/n1.py"], None, self)
+        record = json.loads(output.splitlines()[-1])
+        self.assertTrue(record["ok"])
+        self.assertFalse(record["is_buggy"])
+        self.assertEqual(record["returncode"], 0)
+        self.assertEqual(record["metric"], {"metric": 0.83, "loss": 0.1})
+        self.assertEqual(record["backend"], "local")
+        self.assertEqual(self.read_record("n1"), record)
+
+    def test_run_falls_back_to_the_results_file(self) -> None:
+        self.write_script("n2.py", "import json, pathlib\n"
+                                   "pathlib.Path('results/n2.json').write_text("
+                                   "json.dumps({'metric': 0.5}))\n")
+        output = _run_lab_command(["run", "code/n2.py"], None, self)
+        record = json.loads(output.splitlines()[-1])
+        self.assertTrue(record["ok"])
+        self.assertEqual(record["metric"], {"metric": 0.5})
+
+    def test_run_marks_a_timeout_as_buggy(self) -> None:
+        self.write_script("n3.py", "import time\ntime.sleep(5)\n")
+        output = _run_lab_command(["run", "code/n3.py", "--timeout", "0.2"], 1, self)
+        record = json.loads(output.splitlines()[-1])
+        self.assertTrue(record["timed_out"])
+        self.assertTrue(record["is_buggy"])
+        self.assertEqual(record["returncode"], -1)
+
+    def test_run_marks_a_crash_as_buggy_and_keeps_the_stderr_tail(self) -> None:
+        self.write_script("n4.py", "raise RuntimeError('boom')\n")
+        output = _run_lab_command(["run", "code/n4.py"], 1, self)
+        record = json.loads(output.splitlines()[-1])
+        self.assertTrue(record["is_buggy"])
+        self.assertIn("boom", record["stderr_tail"])
+
+    def test_run_writes_the_log_file(self) -> None:
+        self.write_script("n5.py", "print('hello')\n")
+        _run_lab_command(["run", "code/n5.py"], 1, self)
+        log_text = (self.workspace / "experiment" / "logs" / "n5.log").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("STDOUT", log_text)
+        self.assertIn("hello", log_text)
+
+    def test_run_passes_the_seed_through_the_environment(self) -> None:
+        self.write_script("n6.py", "import json, os\n"
+                                   "print(json.dumps({'metric': "
+                                   "int(os.environ['EXACTORY_LAB_SEED'])}))\n")
+        output = _run_lab_command(["run", "code/n6.py", "--seed", "7"], None, self)
+        record = json.loads(output.splitlines()[-1])
+        self.assertEqual(record["seed"], 7)
+        self.assertEqual(record["metric"], {"metric": 7})
+
+    def test_run_refuses_a_script_outside_the_experiment_directory(self) -> None:
+        (self.workspace / "outside.py").write_text("print('no')\n", encoding="utf-8")
+        output = _run_lab_command(["run", "../outside.py"], 2, self)
+        self.assertIn("experiment", output)
+
+
 if __name__ == "__main__":
     unittest.main()
