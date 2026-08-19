@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -211,6 +212,115 @@ def _run_decide(args: argparse.Namespace) -> None:
     print(json.dumps(entry, indent=2))
 
 
+def _parse_metric_from_stdout(stdout_text: str) -> dict | None:
+    metric = None
+    for line in stdout_text.splitlines():
+        stripped_line = line.strip()
+        if not (stripped_line.startswith("{") and stripped_line.endswith("}")):
+            continue
+        try:
+            candidate = json.loads(stripped_line)
+        except ValueError:
+            continue
+        if isinstance(candidate, dict) and "metric" in candidate:
+            metric = candidate
+    return metric
+
+
+def _write_run_log(experiment_dir: Path, node: str, command_line: str,
+                   returncode: int, duration_s: float,
+                   stdout_text: str, stderr_text: str) -> None:
+    log_path = experiment_dir / "logs" / f"{node}.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text(
+        f"$ {command_line}\n"
+        f"# cwd={experiment_dir}\n"
+        f"# rc={returncode} duration={duration_s}s\n"
+        f"\n----- STDOUT -----\n{stdout_text}"
+        f"\n----- STDERR -----\n{stderr_text}\n",
+        encoding="utf-8",
+    )
+
+
+def _build_run_record(node: str, backend: str, returncode: int, timed_out: bool,
+                      duration_s: float, metric: dict | None, seed: int | None,
+                      stderr_text: str) -> dict:
+    is_buggy = returncode != 0 or timed_out or metric is None
+    return {
+        "node": node,
+        "ok": not is_buggy,
+        "is_buggy": is_buggy,
+        "returncode": returncode,
+        "timed_out": timed_out,
+        "duration_s": duration_s,
+        "metric": metric,
+        "seed": seed,
+        "log": f"experiment/logs/{node}.log",
+        "stderr_tail": stderr_text[-800:],
+        "backend": backend,
+    }
+
+
+def _execute_local(workspace_dir: Path, script_path: Path, node: str,
+                   timeout: float, seed: int | None) -> dict:
+    experiment_dir = workspace_dir / "experiment"
+    env = os.environ.copy()
+    if seed is not None:
+        env["EXACTORY_LAB_SEED"] = str(seed)
+    start = time.monotonic()
+    timed_out = False
+    try:
+        completed = subprocess.run(
+            [sys.executable, str(script_path)],
+            cwd=str(experiment_dir), env=env,
+            capture_output=True, text=True, timeout=timeout,
+        )
+        returncode = completed.returncode
+        stdout_text = completed.stdout
+        stderr_text = completed.stderr
+    except subprocess.TimeoutExpired as error:
+        timed_out = True
+        returncode = -1
+        stdout_text = error.stdout or ""
+        stderr_text = (error.stderr or "") + f"\n[exactory-lab] timeout after {timeout}s"
+    duration_s = round(time.monotonic() - start, 3)
+    metric = _parse_metric_from_stdout(stdout_text)
+    if metric is None:
+        results_path = experiment_dir / "results" / f"{node}.json"
+        if results_path.is_file():
+            try:
+                metric = json.loads(results_path.read_text(encoding="utf-8"))
+            except ValueError:
+                metric = None
+    _write_run_log(experiment_dir, node, f"{sys.executable} {script_path}",
+                   returncode, duration_s, stdout_text, stderr_text)
+    return _build_run_record(node, "local", returncode, timed_out, duration_s,
+                             metric, seed, stderr_text)
+
+
+_BACKENDS = {"local": _execute_local}
+
+
+def _run_run(args: argparse.Namespace) -> None:
+    workspace_dir = _find_workspace()
+    experiment_dir = (workspace_dir / "experiment").resolve()
+    script_path = (experiment_dir / args.script).resolve()
+    if not script_path.is_file() or experiment_dir not in script_path.parents:
+        _exit_with_error(
+            f"The script must be an existing file under {experiment_dir}."
+            " Pass its path relative to experiment/, e.g. code/n3.py.", 2,
+        )
+    node = script_path.stem
+    record = _BACKENDS[args.backend](workspace_dir, script_path, node,
+                                     args.timeout, args.seed)
+    results_path = experiment_dir / "results" / f"{node}.json"
+    results_path.parent.mkdir(parents=True, exist_ok=True)
+    results_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(record))
+    if not record["ok"]:
+        raise SystemExit(1)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="exactory-lab",
@@ -262,6 +372,19 @@ def _build_parser() -> argparse.ArgumentParser:
     decide.add_argument("--evidence",
                         help="File or result the decision rests on.")
     decide.set_defaults(handler=_run_decide)
+
+    run = commands.add_parser("run", allow_abbrev=False,
+                              help="Execute one experiment script and record"
+                                   " its result.")
+    run.add_argument("script",
+                     help="Path relative to experiment/, e.g. code/n3.py.")
+    run.add_argument("--backend", choices=sorted(_BACKENDS), default="local",
+                     help="Compute backend that runs the script.")
+    run.add_argument("--timeout", type=float, default=1800.0,
+                     help="Seconds before the run is killed. Default: 1800.")
+    run.add_argument("--seed", type=int,
+                     help="Seed exported to the script as EXACTORY_LAB_SEED.")
+    run.set_defaults(handler=_run_run)
 
     return parser
 
