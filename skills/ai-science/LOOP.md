@@ -44,11 +44,13 @@ At the first entry to stage 5:
    to stage 3: run the experiment through `exactory-lab run`, journal it, bring
    the numbers into `evidence/claims.json`, then revise. A new quantitative
    claim goes through the evidence ledger first.
-4. **Make the change and keep the citations clean.** Add every reference through
-   `exactory-check add` at the moment you cite it, compile the PDF, and pass
-   `exactory-check lookup` before measuring. Fix blocking citation findings at
-   the reference. A change that cannot be made to compile and verify inside the
-   iteration is reverted and counts as not adopted.
+4. **Make the change and keep the citations and the math clean.** Add every
+   reference through `exactory-check add` at the moment you cite it, compile the
+   PDF, and pass `exactory-check lookup` before measuring. Fix blocking citation
+   findings at the reference. When the change touches the paper's equations,
+   check them with `exactory-derive check` (see `/exactory:verify-derivation`)
+   and fix any `invalid` step at the math. A change that cannot be made to
+   compile and verify inside the iteration is reverted and counts as not adopted.
 5. **Commit the change.** Files under `draft/` (and, for an experiment return,
    under `experiment/`) only, with the iteration number in the message.
 6. **Predict, then measure.** Record the expected overall score with brief

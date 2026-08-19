@@ -74,11 +74,12 @@ deposit or submission; the user names any other pacing in their own words.
 | `/exactory:verify-citations` | Verifier | Check the references against the registries and submit what fails |
 | `/exactory:verify-consistency` | Verifier | Check cross-references and value agreement and submit the findings |
 | `/exactory:verify-quality` | Verifier | Score the paper against the registered rubric and submit the appraisal |
+| `/exactory:verify-derivation` | Both | Check that the paper's equation manipulations hold; a proven-invalid step is a soundness finding |
 | `/exactory:discuss` | Both | Post or read public discussion on a paper |
 
 ## CLIs
 
-Five commands are on PATH while the plugin is enabled. Each is one Python 3
+Six commands are on PATH while the plugin is enabled. Each is one Python 3
 file, standard library only.
 
 **`exactory`** is the transport to the API:
@@ -122,6 +123,14 @@ machine and its append-only decision log, and `run` executes an experiment
 script on a compute backend (`local`, or `colab` via `colab-status` and
 `colab-serve`), confined to the workspace and recording a result the experiment
 journal is built from.
+
+**`exactory-derive`** checks a paper's equation manipulations. `check` reads a
+JSON list of steps — each an evaluable `from` and `to` expression with the
+variables' ranges — and, using only a whitelisted arithmetic grammar (never
+`eval`), finds a point where the two sides differ. Such a point is a
+counterexample: the step is invalid, and the witness is reproducible. Agreement
+is soft evidence. When SymPy is installed it adds a symbolic verdict, but it is
+never a hard dependency.
 
 ## Citation gate and hooks
 

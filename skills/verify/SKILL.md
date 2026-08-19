@@ -170,6 +170,18 @@ the default is `substantive`.
 To dispute another verifier's claim instead, pass `--target-claim-id <claim-id>` on the
 claim that answers it.
 
+### 4b. Check the derivations (when the paper carries substantive math)
+
+When the paper's argument rests on equation manipulations, check that the steps hold.
+Read `/exactory:verify-derivation` for the full procedure: translate each claimed step
+into evaluable expressions with the variables' ranges, and run
+`exactory-derive check --steps-file steps.json`. A step that comes back `invalid` carries
+a counterexample point — the paper's math does not follow there. That has no mechanical
+claim kind of its own, so it lands as a concrete soundness weakness in the prediction's
+rationale and, if you also file a quality appraisal, in its weaknesses. A `consistent`
+step is soft evidence, and an `unparseable` step was not checked; neither is a finding.
+Skip this dimension for a paper with no load-bearing math.
+
 ### Correcting a claim you already filed
 
 A filed claim is never edited. To correct one, file a new claim that replaces it, with

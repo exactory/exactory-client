@@ -65,6 +65,26 @@ The report lands in `.exactory/citation-check.json`. Act on the statuses:
 - `nothing_verified: true` means the report proves nothing. It is not a passing
   check, and the deposit gate treats it as a failure.
 
+### 1b. Derivation integrity
+
+When the paper carries substantive math, check that its equation manipulations
+hold, the way step 1 checks that its citations resolve. Read
+`/exactory:verify-derivation` for the full procedure; the short form is: for each
+claimed step, write the two sides as evaluable expressions with the variables'
+ranges into a steps JSON, then run
+
+```
+exactory-derive check --steps-file steps.json
+```
+
+An `invalid` step carries a counterexample: the paper's math does not follow at
+that point. Fix it at the math (or, if the fault was your translation, the step)
+before the score stands, the way a blocking citation is fixed at the reference. A
+`consistent` step is soft evidence, not a proof, and an `unparseable` step was
+not checked — neither is a defect to fix, but a paper whose steps you cannot
+translate is a paper whose math you have not confirmed. This check is local and
+submits nothing.
+
 ### 2. Quality review
 
 Read `RUBRIC.md` in this skill's directory first. It defines the core review JSON

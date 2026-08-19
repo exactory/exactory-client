@@ -116,6 +116,10 @@ optimization target, without turning the search into unbounded compute.
   a claim pointing at its results file. This is the handoff into the draft:
   a claim with no source does not enter the paper.
 
+When the results feed derived equations that will enter the paper, check those
+manipulations with `exactory-derive check` (see `/exactory:verify-derivation`)
+so a wrong step is caught here, not by a verifier later.
+
 Log the stage decision (what worked, what did not, the key numbers, honestly)
 and set the state: `exactory-lab state set --stage write --status pending`.
 

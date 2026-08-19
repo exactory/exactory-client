@@ -24,7 +24,13 @@ import sys
 import time
 from pathlib import Path
 
-_USER_AGENT = "exactory-derive/0.15.0"
+# The release version has one definition: the plugin manifest. Deriving the
+# User-Agent from it at boot keeps the two from drifting apart.
+_PLUGIN_VERSION = json.loads(
+    (Path(__file__).resolve().parent.parent / ".claude-plugin" / "plugin.json")
+    .read_text(encoding="utf-8")
+)["version"]
+_USER_AGENT = f"exactory-derive/{_PLUGIN_VERSION}"
 
 _DERIVATION_REPORT_PATH = Path(".exactory") / "derivation-check.json"
 
