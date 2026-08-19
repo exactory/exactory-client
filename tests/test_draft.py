@@ -76,6 +76,26 @@ class _FakeZenodoApi:
                 "conceptdoi": "10.5281/zenodo.4241",
                 "links": {"record_html": f"{base_url}/records/4242"},
             }
+        if method == "POST" and url.endswith("/deposit/depositions/4242/actions/newversion"):
+            return {"links": {"latest_draft": f"{base_url}/deposit/depositions/4343"}}
+        if method == "GET" and url.endswith("/deposit/depositions/4343"):
+            return {
+                "id": 4343,
+                "links": {
+                    "bucket": f"{base_url}/files/bucket-2",
+                    "html": f"{base_url}/deposit/4343",
+                },
+            }
+        if method == "PUT" and "/files/bucket-2/" in url:
+            return {}
+        if method == "PUT" and url.endswith("/deposit/depositions/4343"):
+            return {"metadata": {"prereserve_doi": {"doi": "10.5281/zenodo.4343"}}}
+        if method == "POST" and url.endswith("/deposit/depositions/4343/actions/publish"):
+            return {
+                "doi": "10.5281/zenodo.4343",
+                "conceptdoi": "10.5281/zenodo.4241",
+                "links": {"record_html": f"{base_url}/records/4343"},
+            }
         raise AssertionError(f"unexpected Zenodo request in test: {method} {url}")
 
 
@@ -321,6 +341,99 @@ class TestDepositPreconditions(_DepositTestCase):
         (self.workspace_dir / "draft" / "paper.pdf").unlink()
         stderr_text = self._deposit(["--creator", "Shiroshita, Ryosuke"], expected_exit_code=2)
         self.assertIn("--pdf", stderr_text)
+
+
+class TestInitLiteraturePreservation(unittest.TestCase):
+    def test_init_seeds_the_literature_log_only_when_absent(self) -> None:
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        workspace_dir = Path(scratch.name)
+        preserved_line = "## 2026-08-01T00:00Z - earlier pass\n"
+        (workspace_dir / "research").mkdir()
+        (workspace_dir / "research" / "literature.md").write_text(preserved_line)
+        _run_draft_command(
+            ["init", "--dir", str(workspace_dir),
+             "--title", "Cohort Percentiles", "--category", "cs.MA"],
+            None, self,
+        )
+        self.assertEqual(
+            (workspace_dir / "research" / "literature.md").read_text(),
+            preserved_line,
+        )
+
+
+class TestDepositState(_DepositTestCase):
+    def read_deposit_state(self) -> dict:
+        return json.loads(
+            (self.workspace_dir / ".exactory" / "deposit.json").read_text()
+        )
+
+    def test_deposit_records_the_deposition_in_the_workspace(self) -> None:
+        self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        state = self.read_deposit_state()
+        self.assertEqual(state["environment"], "sandbox")
+        self.assertEqual(state["deposition_id"], 4242)
+        self.assertIn("deposit/4242", state["draft_url"])
+        self.assertNotIn("doi", state)
+
+    def test_publish_adds_the_dois_to_the_deposit_state(self) -> None:
+        self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"])
+        state = self.read_deposit_state()
+        self.assertEqual(state["doi"], "10.5281/zenodo.4242")
+        self.assertEqual(state["concept_doi"], "10.5281/zenodo.4241")
+        self.assertIn("records/4242", state["record_url"])
+
+
+class TestNewVersion(_DepositTestCase):
+    def record_prior_deposit(self, environment: str = "sandbox") -> None:
+        (self.workspace_dir / ".exactory" / "deposit.json").write_text(json.dumps({
+            "environment": environment,
+            "deposition_id": 4242,
+            "draft_url": "https://sandbox.zenodo.org/deposit/4242",
+        }))
+
+    def test_new_version_reuses_the_stored_deposition(self) -> None:
+        self.record_prior_deposit()
+        self._deposit(["--new-version", "--creator", "Shiroshita, Ryosuke"])
+        requested = [(request.get_method(), request.full_url)
+                     for request in self.fake_api.requests]
+        self.assertEqual(
+            requested[0],
+            ("POST", "https://sandbox.zenodo.org/api/deposit/depositions/4242"
+                     "/actions/newversion"),
+        )
+        self.assertEqual(
+            requested[1],
+            ("GET", "https://sandbox.zenodo.org/api/deposit/depositions/4343"),
+        )
+        upload_urls = [url for method, url in requested
+                       if method == "PUT" and "/files/" in url]
+        self.assertEqual(
+            upload_urls,
+            ["https://sandbox.zenodo.org/api/files/bucket-2/paper.pdf"],
+        )
+        self.assertEqual(self.read_deposit_state()["deposition_id"], 4343)
+
+    def read_deposit_state(self) -> dict:
+        return json.loads(
+            (self.workspace_dir / ".exactory" / "deposit.json").read_text()
+        )
+
+    def test_new_version_refuses_an_environment_mismatch(self) -> None:
+        self.record_prior_deposit("production")
+        stderr_text = self._deposit(
+            ["--new-version", "--creator", "Shiroshita, Ryosuke"],
+            expected_exit_code=1,
+        )
+        self.assertIn("production", stderr_text)
+        self.assertEqual(self.fake_api.requests, [])
+
+    def test_new_version_without_a_stored_deposit_is_an_error(self) -> None:
+        stderr_text = self._deposit(
+            ["--new-version", "--creator", "Shiroshita, Ryosuke"],
+            expected_exit_code=1,
+        )
+        self.assertIn("deposit.json", stderr_text)
 
 
 if __name__ == "__main__":
