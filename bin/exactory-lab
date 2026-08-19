@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -261,9 +262,9 @@ def _build_run_record(node: str, backend: str, returncode: int, timed_out: bool,
     }
 
 
-def _execute_local(workspace_dir: Path, script_path: Path, node: str,
-                   timeout: float, seed: int | None) -> dict:
-    experiment_dir = workspace_dir / "experiment"
+def _execute_script_in(run_root: Path, script_path: Path, node: str,
+                       timeout: float, seed: int | None, backend: str) -> dict:
+    """Run the script with run_root as cwd; logs/ and results/ live under it."""
     env = os.environ.copy()
     if seed is not None:
         env["EXACTORY_LAB_SEED"] = str(seed)
@@ -272,7 +273,7 @@ def _execute_local(workspace_dir: Path, script_path: Path, node: str,
     try:
         completed = subprocess.run(
             [sys.executable, str(script_path)],
-            cwd=str(experiment_dir), env=env,
+            cwd=str(run_root), env=env,
             capture_output=True, text=True, timeout=timeout,
         )
         returncode = completed.returncode
@@ -286,19 +287,191 @@ def _execute_local(workspace_dir: Path, script_path: Path, node: str,
     duration_s = round(time.monotonic() - start, 3)
     metric = _parse_metric_from_stdout(stdout_text)
     if metric is None:
-        results_path = experiment_dir / "results" / f"{node}.json"
+        results_path = run_root / "results" / f"{node}.json"
         if results_path.is_file():
             try:
                 metric = json.loads(results_path.read_text(encoding="utf-8"))
             except ValueError:
                 metric = None
-    _write_run_log(experiment_dir, node, f"{sys.executable} {script_path}",
+    _write_run_log(run_root, node, f"{sys.executable} {script_path}",
                    returncode, duration_s, stdout_text, stderr_text)
-    return _build_run_record(node, "local", returncode, timed_out, duration_s,
+    return _build_run_record(node, backend, returncode, timed_out, duration_s,
                              metric, seed, stderr_text)
 
 
-_BACKENDS = {"local": _execute_local}
+def _execute_local(workspace_dir: Path, script_path: Path, node: str,
+                   timeout: float, seed: int | None) -> dict:
+    return _execute_script_in(workspace_dir / "experiment", script_path, node,
+                              timeout, seed, "local")
+
+
+# ------------------------------------------------------- the colab backend
+#
+# Compute only, never an LLM. The transport is one shared folder (a Google
+# Drive mirror): the client writes jobs/<id>/{code/, job.json, READY}, the
+# runner notebook claims a job with PROCESSED, executes it on the GPU
+# runtime, and writes results/<id>/{logs/, results/, plots/, DONE}. READY
+# and DONE are written last on their side of the handoff, and the runner
+# rewrites RUNNER_ALIVE as a heartbeat each poll.
+
+_RUNNER_ALIVE_FILE_NAME = "RUNNER_ALIVE"
+
+
+def _read_colab_sync_root() -> Path | None:
+    raw_dir = os.environ.get("EXACTORY_LAB_COLAB_DIR", "").strip()
+    return Path(raw_dir).expanduser() if raw_dir else None
+
+
+def _read_colab_interval(env_name: str, default_seconds: float) -> float:
+    try:
+        return float(os.environ.get(env_name, ""))
+    except ValueError:
+        return default_seconds
+
+
+def _is_runner_alive(sync_root: Path, max_age_seconds: float = 180.0) -> bool:
+    alive_path = sync_root / _RUNNER_ALIVE_FILE_NAME
+    try:
+        heartbeat = float(alive_path.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return False
+    return time.time() - heartbeat <= max_age_seconds
+
+
+def _build_colab_error_record(run_root: Path, node: str, seed: int | None,
+                              message: str) -> dict:
+    _write_run_log(run_root, node, "(colab backend)", -1, 0.0, "", message)
+    return _build_run_record(node, "colab", -1, False, 0.0, None, seed, message)
+
+
+def _execute_colab(workspace_dir: Path, script_path: Path, node: str,
+                   timeout: float, seed: int | None) -> dict:
+    experiment_dir = workspace_dir / "experiment"
+    sync_root = _read_colab_sync_root()
+    if sync_root is None or not sync_root.is_dir():
+        return _build_colab_error_record(
+            experiment_dir, node, seed,
+            "EXACTORY_LAB_COLAB_DIR is not set to an existing directory."
+            " Point it at the local mirror of the runner's Drive folder.",
+        )
+    slug = _load_study_state(workspace_dir)["slug"]
+    job_id = f"{slug}__{node}__{int(time.time())}"
+    job_dir = sync_root / "jobs" / job_id
+    shutil.copytree(experiment_dir / "code", job_dir / "code",
+                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    job = {
+        "job_id": job_id,
+        "slug": slug,
+        "node": node,
+        "script": str(script_path.relative_to(experiment_dir.resolve())),
+        "timeout": timeout,
+        "seed": seed,
+        "created": time.time(),
+    }
+    (job_dir / "job.json").write_text(json.dumps(job, indent=2) + "\n",
+                                      encoding="utf-8")
+    time.sleep(_read_colab_interval("EXACTORY_LAB_COLAB_SYNC_WAIT", 10.0))
+    (job_dir / "READY").write_text(str(time.time()), encoding="utf-8")
+
+    result_dir = sync_root / "results" / job_id
+    poll_seconds = _read_colab_interval("EXACTORY_LAB_COLAB_POLL", 10.0)
+    deadline = time.monotonic() + timeout + _read_colab_interval(
+        "EXACTORY_LAB_COLAB_WAIT", 1800.0
+    )
+    while not (result_dir / "DONE").is_file():
+        if time.monotonic() >= deadline:
+            message = f"The colab runner did not finish job {job_id} in time."
+            if not _is_runner_alive(sync_root):
+                message += (" No runner heartbeat: start colab_runner.ipynb"
+                            " on a GPU runtime, or run this node locally.")
+            return _build_colab_error_record(experiment_dir, node, seed, message)
+        time.sleep(poll_seconds)
+
+    for source_name, target_dir in (("logs", experiment_dir / "logs"),
+                                    ("results", experiment_dir / "results"),
+                                    ("plots", experiment_dir / "plots")):
+        source_dir = result_dir / source_name
+        if source_dir.is_dir():
+            target_dir.mkdir(parents=True, exist_ok=True)
+            for source_file in source_dir.iterdir():
+                shutil.copy2(source_file, target_dir / source_file.name)
+    record = json.loads(
+        (experiment_dir / "results" / f"{node}.json").read_text(encoding="utf-8")
+    )
+    record["backend"] = "colab"
+    record["log"] = f"experiment/logs/{node}.log"
+    return record
+
+
+def _process_colab_job(sync_root: Path, job_dir: Path) -> None:
+    job = json.loads((job_dir / "job.json").read_text(encoding="utf-8"))
+    work_dir = sync_root / "_work" / job["job_id"]
+    if work_dir.exists():
+        shutil.rmtree(work_dir)
+    shutil.copytree(job_dir / "code", work_dir / "code")
+    for dir_name in ("logs", "results", "plots"):
+        (work_dir / dir_name).mkdir(parents=True, exist_ok=True)
+    record = _execute_script_in(work_dir, work_dir / job["script"], job["node"],
+                                float(job["timeout"]), job["seed"], "colab")
+    (work_dir / "results" / f"{job['node']}.json").write_text(
+        json.dumps(record, indent=2) + "\n", encoding="utf-8"
+    )
+    result_dir = sync_root / "results" / job["job_id"]
+    for dir_name in ("logs", "results", "plots"):
+        target_dir = result_dir / dir_name
+        target_dir.mkdir(parents=True, exist_ok=True)
+        for source_file in (work_dir / dir_name).iterdir():
+            shutil.copy2(source_file, target_dir / source_file.name)
+    (result_dir / "DONE").write_text(str(time.time()), encoding="utf-8")
+
+
+def _serve_scan_once(sync_root: Path) -> bool:
+    """Claim and process the oldest unprocessed READY job. True if one ran."""
+    (sync_root / _RUNNER_ALIVE_FILE_NAME).write_text(str(time.time()),
+                                                     encoding="utf-8")
+    jobs_dir = sync_root / "jobs"
+    if not jobs_dir.is_dir():
+        return False
+    for ready_path in sorted(jobs_dir.glob("*/READY")):
+        job_dir = ready_path.parent
+        if (job_dir / "PROCESSED").exists():
+            continue
+        (job_dir / "PROCESSED").write_text(str(time.time()), encoding="utf-8")
+        _process_colab_job(sync_root, job_dir)
+        return True
+    return False
+
+
+def _require_colab_sync_root() -> Path:
+    sync_root = _read_colab_sync_root()
+    if sync_root is None or not sync_root.is_dir():
+        _exit_with_error(
+            "EXACTORY_LAB_COLAB_DIR is not set to an existing directory.", 2
+        )
+    return sync_root
+
+
+def _run_colab_status(args: argparse.Namespace) -> None:
+    sync_root = _require_colab_sync_root()
+    runner_alive = _is_runner_alive(sync_root, args.max_age)
+    print(json.dumps({"ok": True, "runner_alive": runner_alive,
+                      "sync_root": str(sync_root)}))
+    if not runner_alive:
+        raise SystemExit(1)
+
+
+def _run_colab_serve(args: argparse.Namespace) -> None:
+    sync_root = _require_colab_sync_root()
+    poll_seconds = args.poll or _read_colab_interval("EXACTORY_LAB_COLAB_POLL", 10.0)
+    while True:
+        processed = _serve_scan_once(sync_root)
+        if args.once:
+            return
+        if not processed:
+            time.sleep(poll_seconds)
+
+
+_BACKENDS = {"local": _execute_local, "colab": _execute_colab}
 
 
 def _run_run(args: argparse.Namespace) -> None:
@@ -385,6 +558,25 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--seed", type=int,
                      help="Seed exported to the script as EXACTORY_LAB_SEED.")
     run.set_defaults(handler=_run_run)
+
+    colab_status = commands.add_parser("colab-status", allow_abbrev=False,
+                                       help="Report whether a colab runner is"
+                                            " alive on the sync folder.")
+    colab_status.add_argument("--max-age", type=float, default=180.0,
+                              dest="max_age",
+                              help="Heartbeat age in seconds that still counts"
+                                   " as alive. Default: 180.")
+    colab_status.set_defaults(handler=_run_colab_status)
+
+    colab_serve = commands.add_parser("colab-serve", allow_abbrev=False,
+                                      help="Run the job loop the colab notebook"
+                                           " runs; useful as a local stand-in.")
+    colab_serve.add_argument("--once", action="store_true",
+                             help="Scan for one job, then exit.")
+    colab_serve.add_argument("--poll", type=float,
+                             help="Seconds between scans. Default:"
+                                  " EXACTORY_LAB_COLAB_POLL or 10.")
+    colab_serve.set_defaults(handler=_run_colab_serve)
 
     return parser
 
