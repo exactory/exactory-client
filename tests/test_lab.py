@@ -75,6 +75,15 @@ class _WorkspaceTestCase(unittest.TestCase):
         )
 
 
+class _InsideWorkspaceTestCase(_WorkspaceTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.init_workspace()
+        original_dir = os.getcwd()
+        os.chdir(self.workspace)
+        self.addCleanup(os.chdir, original_dir)
+
+
 class TestInit(_WorkspaceTestCase):
     def test_init_creates_the_study_layout(self) -> None:
         self.init_workspace()
@@ -130,6 +139,86 @@ class TestInit(_WorkspaceTestCase):
             ["init", "--dir", str(self.workspace), "--slug", "curvature"], 1, self
         )
         self.assertIn("already", output)
+
+
+class TestState(_InsideWorkspaceTestCase):
+    def test_show_prints_the_study_state(self) -> None:
+        output = _run_lab_command(["state", "show"], None, self)
+        self.assertEqual(json.loads(output)["slug"], "curvature")
+
+    def test_set_mutates_only_the_given_keys(self) -> None:
+        before = self.read_study_state()
+        _run_lab_command(["state", "set", "--stage", "cohort", "--status", "running"],
+                         None, self)
+        state = self.read_study_state()
+        self.assertEqual(state["stage"], "cohort")
+        self.assertEqual(state["status"], "running")
+        self.assertEqual(state["slug"], before["slug"])
+        self.assertTrue(state["autopilot"])
+
+    def test_set_refuses_an_unknown_stage(self) -> None:
+        with self.assertRaises(SystemExit) as caught:
+            _lab._build_parser().parse_args(["state", "set", "--stage", "escape"])
+        self.assertEqual(caught.exception.code, 2)
+
+    def test_set_switches_autopilot(self) -> None:
+        _run_lab_command(["state", "set", "--autopilot", "off"], None, self)
+        self.assertFalse(self.read_study_state()["autopilot"])
+        _run_lab_command(["state", "set", "--autopilot", "on"], None, self)
+        self.assertTrue(self.read_study_state()["autopilot"])
+
+    def test_set_parks_and_releases_the_waiting_marker(self) -> None:
+        _run_lab_command(["state", "set", "--waiting", "production-deposit"], None, self)
+        self.assertEqual(self.read_study_state()["waiting"], "production-deposit")
+        _run_lab_command(["state", "set", "--waiting", "none"], None, self)
+        self.assertIsNone(self.read_study_state()["waiting"])
+
+    def test_set_records_the_loop_policy(self) -> None:
+        _run_lab_command(
+            ["state", "set", "--loop-target", "8", "--loop-budget", "12",
+             "--loop-notes", "stop after experiments"], None, self,
+        )
+        self.assertEqual(
+            self.read_study_state()["loop"],
+            {"target": 8.0, "budget": 12, "notes": "stop after experiments"},
+        )
+
+    def test_state_outside_a_workspace_is_refused(self) -> None:
+        os.chdir(self._temp_dir.name)
+        _run_lab_command(["state", "show"], 2, self)
+
+
+class TestDecide(_InsideWorkspaceTestCase):
+    def read_decision_lines(self) -> list[dict]:
+        log_path = self.workspace / ".exactory" / "decisions.jsonl"
+        return [json.loads(line) for line in
+                log_path.read_text(encoding="utf-8").splitlines()]
+
+    def test_decide_appends_an_entry_with_the_current_stage(self) -> None:
+        _run_lab_command(["decide", "--decision", "cs.LG is the category",
+                          "--why", "the context names deep learning"], None, self)
+        entries = self.read_decision_lines()
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["stage"], "initiate")
+        self.assertEqual(entries[0]["decision"], "cs.LG is the category")
+        self.assertEqual(entries[0]["why"], "the context names deep learning")
+        self.assertIn("ts", entries[0])
+
+    def test_decide_takes_an_explicit_stage_and_evidence(self) -> None:
+        _run_lab_command(
+            ["decide", "--decision", "adopt node n3", "--why", "best metric",
+             "--stage", "experiment", "--evidence", "experiment/results/n3.json"],
+            None, self,
+        )
+        entry = self.read_decision_lines()[0]
+        self.assertEqual(entry["stage"], "experiment")
+        self.assertEqual(entry["evidence"], "experiment/results/n3.json")
+
+    def test_decide_appends_rather_than_overwrites(self) -> None:
+        for decision_number in range(2):
+            _run_lab_command(["decide", "--decision", f"decision {decision_number}",
+                              "--why", "because"], None, self)
+        self.assertEqual(len(self.read_decision_lines()), 2)
 
 
 if __name__ == "__main__":
