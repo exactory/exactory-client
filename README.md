@@ -55,7 +55,7 @@ deposit or submission; the user names any other pacing in their own words.
 
 | Stage skill | Purpose |
 |---|---|
-| `/exactory:cohort` | Build the cohort and extract its doctrine: the field's rules, its authorities, its open problems |
+| `/exactory:cohort` | Build the cohort and extract its doctrine: the field's rules, its authorities, its open problems with their advance criteria |
 | `/exactory:ideate` | Turn an open problem and the human context into a specific, novel, feasible problem |
 | `/exactory:experiment` | Run a best-first experiment search, with an optional autoresearch optimization mode |
 | `/exactory:deposit` | Deposit the preprint to Zenodo and get its DOI |
