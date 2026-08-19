@@ -169,6 +169,48 @@ def _run_init(args: argparse.Namespace) -> None:
           " or say to start from nothing.")
 
 
+def _run_state_show(args: argparse.Namespace) -> None:
+    workspace_dir = _find_workspace()
+    print(json.dumps(_load_study_state(workspace_dir), indent=2))
+
+
+def _run_state_set(args: argparse.Namespace) -> None:
+    workspace_dir = _find_workspace()
+    state = _load_study_state(workspace_dir)
+    if args.stage is not None:
+        state["stage"] = args.stage
+    if args.status is not None:
+        state["status"] = args.status
+    if args.autopilot is not None:
+        state["autopilot"] = args.autopilot == "on"
+    if args.waiting is not None:
+        state["waiting"] = None if args.waiting == "none" else args.waiting
+    if args.loop_target is not None:
+        state["loop"]["target"] = args.loop_target
+    if args.loop_budget is not None:
+        state["loop"]["budget"] = args.loop_budget
+    if args.loop_notes is not None:
+        state["loop"]["notes"] = args.loop_notes
+    _save_study_state(workspace_dir, state)
+    print(json.dumps(state, indent=2))
+
+
+def _run_decide(args: argparse.Namespace) -> None:
+    workspace_dir = _find_workspace()
+    stage = args.stage or _load_study_state(workspace_dir)["stage"]
+    entry = {
+        "ts": _format_timestamp(),
+        "stage": stage,
+        "decision": args.decision,
+        "why": args.why,
+        "evidence": args.evidence or "",
+    }
+    log_path = workspace_dir / ".exactory" / "decisions.jsonl"
+    with log_path.open("a", encoding="utf-8") as log_file:
+        log_file.write(json.dumps(entry) + "\n")
+    print(json.dumps(entry, indent=2))
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="exactory-lab",
@@ -184,6 +226,42 @@ def _build_parser() -> argparse.ArgumentParser:
     init.add_argument("--slug", required=True,
                       help="Short name of the study, used in job ids and records.")
     init.set_defaults(handler=_run_init)
+
+    state = commands.add_parser("state", allow_abbrev=False,
+                                help="Read or advance the study state machine.")
+    state_commands = state.add_subparsers(dest="state_command", required=True)
+    show = state_commands.add_parser("show", allow_abbrev=False,
+                                     help="Print the study state.")
+    show.set_defaults(handler=_run_state_show)
+    state_set = state_commands.add_parser("set", allow_abbrev=False,
+                                          help="Mutate the given study state keys.")
+    state_set.add_argument("--stage", choices=_STAGES,
+                           help="The stage the study is in.")
+    state_set.add_argument("--status",
+                           help="Free-form status word, e.g. pending, running, done.")
+    state_set.add_argument("--autopilot", choices=("on", "off"),
+                           help="Whether the loop advances without stopping.")
+    state_set.add_argument("--waiting",
+                           help="Park the run on a named wait; 'none' releases it.")
+    state_set.add_argument("--loop-target", type=float, dest="loop_target",
+                           help="Overall score that stops the improvement loop.")
+    state_set.add_argument("--loop-budget", type=int, dest="loop_budget",
+                           help="Iteration budget of the improvement loop.")
+    state_set.add_argument("--loop-notes", dest="loop_notes",
+                           help="The user's pacing policy, in their own words.")
+    state_set.set_defaults(handler=_run_state_set)
+
+    decide = commands.add_parser("decide", allow_abbrev=False,
+                                 help="Append one entry to the decision log.")
+    decide.add_argument("--decision", required=True,
+                        help="What was decided, in one sentence.")
+    decide.add_argument("--why", required=True,
+                        help="Why this over the alternatives.")
+    decide.add_argument("--stage", choices=_STAGES,
+                        help="Stage the decision belongs to. Default: the current one.")
+    decide.add_argument("--evidence",
+                        help="File or result the decision rests on.")
+    decide.set_defaults(handler=_run_decide)
 
     return parser
 
