@@ -40,6 +40,7 @@ _USER_AGENT = f"exactory-draft/{_PLUGIN_VERSION}"
 
 _WORKSPACE_DIR_NAMES = (".exactory", "draft", "evidence", "research", "reviews", "learnings")
 _DRAFT_STATE_PATH = Path(".exactory/draft.json")
+_DEPOSIT_STATE_PATH = Path(".exactory/deposit.json")
 
 _LITERATURE_HEADER = (
     "# Literature survey log\n"
@@ -69,9 +70,9 @@ def _run_init(args: argparse.Namespace) -> None:
              "category": args.category,
              "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
     state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
-    (workspace_dir / "research" / "literature.md").write_text(
-        _LITERATURE_HEADER, encoding="utf-8"
-    )
+    literature_path = workspace_dir / "research" / "literature.md"
+    if not literature_path.exists():
+        literature_path.write_text(_LITERATURE_HEADER, encoding="utf-8")
     print(f"Created the draft workspace in {workspace_dir.resolve()}.")
 
 
@@ -146,6 +147,44 @@ def _build_deposit_metadata(title: str, creators: list[str]) -> dict:
     }
 
 
+def _open_new_version_draft(base_url: str, environment: str, token: str) -> dict:
+    try:
+        prior = json.loads(_DEPOSIT_STATE_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        _exit_with_error(f"{_DEPOSIT_STATE_PATH} does not exist here."
+                         " Run a plain deposit first; --new-version revises it.")
+    except json.JSONDecodeError as error:
+        _exit_with_error(f"{_DEPOSIT_STATE_PATH} is not valid JSON. Cause: {error}")
+    if prior.get("environment") != environment:
+        _exit_with_error(
+            f"The stored deposit is on {prior.get('environment')}, not"
+            f" {environment}. Run --new-version against the same environment.")
+    created = _call_zenodo(
+        "POST",
+        f"{base_url}/deposit/depositions/{prior['deposition_id']}/actions/newversion",
+        token,
+    )
+    draft_url = created.get("links", {}).get("latest_draft", "")
+    if draft_url == "":
+        _exit_with_error("Zenodo returned no new-version draft link.")
+    return _call_zenodo("GET", draft_url, token)
+
+
+def _save_deposit_state(environment: str, deposition: dict,
+                        published: dict | None) -> None:
+    state = {
+        "environment": environment,
+        "deposition_id": deposition["id"],
+        "draft_url": deposition.get("links", {}).get("html", ""),
+    }
+    if published is not None:
+        state["doi"] = published.get("doi", "")
+        state["concept_doi"] = published.get("conceptdoi", "")
+        state["record_url"] = published.get("links", {}).get("record_html", "")
+    _DEPOSIT_STATE_PATH.write_text(json.dumps(state, indent=2) + "\n",
+                                   encoding="utf-8")
+
+
 def _run_deposit(args: argparse.Namespace) -> None:
     state = _load_draft_state()
     pdf_path = Path(args.pdf) if args.pdf else _find_newest_pdf()
@@ -172,7 +211,12 @@ def _run_deposit(args: argparse.Namespace) -> None:
             sys.exit(1)
 
     base_url = _PRODUCTION_API_URL if args.production else _SANDBOX_API_URL
-    deposition = _call_zenodo("POST", f"{base_url}/deposit/depositions", token, json_body={})
+    environment = "production" if args.production else "sandbox"
+    if args.new_version:
+        deposition = _open_new_version_draft(base_url, environment, token)
+    else:
+        deposition = _call_zenodo("POST", f"{base_url}/deposit/depositions", token,
+                                  json_body={})
     bucket_url = deposition["links"]["bucket"]
     _call_zenodo("PUT", f"{bucket_url}/{pdf_path.name}", token,
                  file_bytes=pdf_path.read_bytes())
@@ -189,10 +233,12 @@ def _run_deposit(args: argparse.Namespace) -> None:
         published = _call_zenodo(
             "POST", f"{base_url}/deposit/depositions/{deposition['id']}/actions/publish", token
         )
+        _save_deposit_state(environment, deposition, published)
         print(f"The record is published: {published.get('links', {}).get('record_html', '')}")
         print(f"Record DOI: {published.get('doi', '')}")
         print(f"Concept DOI: {published.get('conceptdoi', '')}")
     else:
+        _save_deposit_state(environment, deposition, None)
         print(f"The draft deposit is created. Review it at: {deposition['links'].get('html', '')}")
         print("Zenodo assigns the record DOI and the concept DOI when you publish the record.")
 
@@ -219,6 +265,10 @@ def _build_parser() -> argparse.ArgumentParser:
                          help="Use zenodo.org (default: sandbox.zenodo.org).")
     deposit.add_argument("--publish", action="store_true",
                          help="Publish the record (default: leave it as a draft).")
+    deposit.add_argument("--new-version", action="store_true", dest="new_version",
+                         help="Open a new version of the deposit recorded in"
+                              " .exactory/deposit.json instead of creating a"
+                              " fresh record.")
     deposit.add_argument("--confirm-publish", action="store_true",
                          help="Confirm a production publish. Add this flag only after"
                               " the user approves, because a published DOI is permanent.")
