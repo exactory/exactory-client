@@ -90,9 +90,10 @@ exists but does not say what the paper claims is a soundness finding.
 **During manual iteration, one blind pass is enough.** Write the core JSON
 to `reviews/review_NNN.json` and append its line to
 `reviews/score_history.jsonl` (both shapes are in RUBRIC.md). While the
-write skill's stage 4 optimization loop is active, measurement follows that
-skill instead: three independent blind reviews whose median is the
-measurement, recorded as the write skill's WORKSPACE.md states.
+Exactory AI Science improvement loop is active, measurement follows that loop
+instead: three independent blind reviews whose median is the measurement,
+recorded as the ai-science skill's LOOP.md and the write skill's WORKSPACE.md
+state.
 
 **Before deposit, run the dual-reviewer gate.** If the `santa-method` skill is
 installed, use it; the essential protocol is stated here in full either way. Launch

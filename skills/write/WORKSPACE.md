@@ -1,7 +1,10 @@
 # The draft workspace
 
 `exactory-draft init` creates this layout. Every path below is relative to the
-workspace root.
+workspace root. In a full Exactory AI Science study the workspace also carries
+the study layer (context, cohort, idea, experiment); that fuller layout is in
+the ai-science skill's STUDY.md. The measurement protocol and iteration cadence
+below are what the ai-science loop (LOOP.md) refers to.
 
 ```
 <workspace>/
@@ -80,13 +83,13 @@ One file per evaluation iteration, numbered from `iter_001.md`. Four parts:
 4. **Plan**: what the next iteration will try, and why.
 
 `iter_001.md` also records the improvement target and the iteration budget
-stated at stage 4 setup.
+stated at the loop's activation.
 
 After submission, when the market's independent prediction arrives, append it
 to the latest file next to the local self-prediction. That external readout is
 what the local predictions are calibrated against.
 
-## The iteration cadence (stage 4)
+## The iteration cadence (the improvement loop)
 
 At the start of each iteration:
 
@@ -109,7 +112,7 @@ Blind-review hygiene: the draft carries no revision markers (no "v2",
 never shown `reviews/`, `learnings/`, or a prior score. Those directories
 exist for the user and for the next iteration, not for the reviewer.
 
-## The measurement (stage 4)
+## The measurement (the improvement loop)
 
 One measurement is three independent blind reviews, run as sub-agents
 spawned fresh for that iteration. The reviewers share no context: each
@@ -124,13 +127,14 @@ A loop iteration's `score_history.jsonl` line carries the iteration
 number, the three raw scores, the median, whether the revision was
 adopted, and the revision commit hash.
 
-## Commits and reverts (stage 4)
+## Commits and reverts (the improvement loop)
 
-The loop runs inside a git repository; `exactory-draft init` does not
-create one, so stage 4's setup runs `git init`, writes a `.gitignore` for
-LaTeX build artifacts (`*.aux`, `*.log`, `*.bbl`, `*.blg`, `*.out`,
-`*.pdf`), and commits the pre-loop state. Each iteration makes two
-commits:
+The loop runs inside a git repository. In an ai-science study `exactory-lab
+init` created it at stage 0. A standalone draft workspace made only with
+`exactory-draft init` has no repository, so the loop's activation runs `git
+init`, writes a `.gitignore` for LaTeX build artifacts (`*.aux`, `*.log`,
+`*.bbl`, `*.blg`, `*.out`, `*.pdf`), and commits the pre-loop state. Each
+iteration makes two commits:
 
 - the revision commit: files under `draft/` only, made before measuring;
 - the records commit: every other changed file, made after the logs are
