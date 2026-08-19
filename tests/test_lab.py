@@ -98,7 +98,7 @@ class TestInit(_WorkspaceTestCase):
     def test_init_writes_the_context_readme(self) -> None:
         self.init_workspace()
         readme_text = (self.workspace / "context" / "README.md").read_text(encoding="utf-8")
-        self.assertIn("context", readme_text)
+        self.assertIn("Context intake", readme_text)
 
     def test_init_seeds_the_literature_log_only_when_absent(self) -> None:
         preserved_line = "## 2026-08-01T00:00Z - earlier pass\n"
