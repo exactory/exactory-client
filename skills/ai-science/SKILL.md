@@ -25,7 +25,7 @@ before stage 0.
 | Stage | Skill | Product |
 |------:|-------|---------|
 | 0. Initiate | this skill | the workspace, and the human context intake |
-| 1. Cohort | `/exactory:cohort` | `cohort/doctrine.md` — the field's rules and open problems |
+| 1. Cohort | `/exactory:cohort` | `cohort/doctrine.md` — the field's rules and open problems, each with its advance criterion |
 | 2. Ideate | `/exactory:ideate` | `idea/idea.md` — a specific problem and hypothesis |
 | 3. Experiment | `/exactory:experiment` | `experiment/` results, metrics, plots, journal |
 | 4. Write | `/exactory:write` | the compiled draft with registry-verified citations |

@@ -22,8 +22,10 @@ it.
 
 ## Inputs
 
-- `cohort/doctrine.md` — the open problems are the candidate sources; the
-  conventions tell you what the field will accept as a contribution.
+- `cohort/doctrine.md` — the open problems are the candidate sources, and each
+  problem's advance criterion states the result the field would count as a
+  major advance; the conventions tell you what the field will accept as a
+  contribution.
 - `context/` — the human's material and wishes.
 - The market's recorded next steps. Before fixing the problem, run
   `exactory suggestions <doi-or-arxiv-id>` on the closest prior work. Every
@@ -47,9 +49,11 @@ ambition.
 
 1. **State the hypothesis and the contribution**, each in one or two sentences.
    Draw the problem from the doctrine's open problems and the context; name
-   which open problem it answers.
+   which open problem it answers and where its result lands against that
+   problem's advance criterion.
 2. **Generate candidates.** Brainstorm several directions, including at least
-   one breakthrough swing, each with a short hypothesis.
+   one breakthrough swing aimed at an advance criterion, each with a short
+   hypothesis.
 3. **Check novelty.** For each candidate, search the field — arXiv, OpenAlex,
    Crossref — for the closest prior work, and judge whether the specific claim
    already exists. Parallelize with sub-agents: one `Explore` or general-purpose
@@ -80,8 +84,9 @@ ambition.
 ## Output to the user
 
 Present the candidates as a short ranked list — title, one-line hypothesis,
-novelty verdict, feasibility — recommend one, and name the open problem it
-answers. Under autopilot, take the recommended one forward and log the choice;
+novelty verdict, feasibility — recommend one, name the open problem it
+answers, and state where its result would land against that problem's advance
+criterion. Under autopilot, take the recommended one forward and log the choice;
 otherwise wait for the user's pick.
 
 ## What not to do
