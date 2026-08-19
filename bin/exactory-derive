@@ -1,0 +1,249 @@
+#!/usr/bin/env python3
+"""exactory-derive: check the validity of a paper's equation manipulations.
+
+The agent reads the paper and translates each claimed manipulation into two
+evaluable expression strings and the variables' ranges; this tool adjudicates
+whether the two sides are equal. A point where they differ is a counterexample:
+the step is invalid, and that is a hard, reproducible finding. Agreement across
+sampled points is soft evidence, not a proof. When SymPy is importable it adds a
+symbolic verdict on top, but it is never a hard dependency: the tool is Python 3
+standard library and runs without it.
+
+The expressions are untrusted (they trace to paper text), so evaluation is a
+whitelist walk over a parsed AST, never `eval`.
+"""
+
+from __future__ import annotations
+
+import argparse
+import ast
+import json
+import math
+import cmath
+import sys
+import time
+from pathlib import Path
+
+_USER_AGENT = "exactory-derive/0.15.0"
+
+_DERIVATION_REPORT_PATH = Path(".exactory") / "derivation-check.json"
+
+# The whitelist of callable names, bound to real math/cmath functions. Any name
+# not here, and any node type not handled in the walker, makes an expression
+# unsafe. This is the security boundary for untrusted expression strings.
+_ALLOWED_FUNCTIONS = {
+    name: getattr(math, name)
+    for name in ("sqrt", "exp", "log", "log2", "log10", "sin", "cos", "tan",
+                 "asin", "acos", "atan", "atan2", "sinh", "cosh", "tanh",
+                 "fabs", "floor", "ceil", "pow", "hypot", "gamma", "erf")
+}
+_ALLOWED_FUNCTIONS.update({
+    "abs": abs,
+    "csqrt": cmath.sqrt,
+    "cexp": cmath.exp,
+})
+_ALLOWED_CONSTANTS = {"pi": math.pi, "e": math.e, "tau": math.tau}
+
+_SAMPLE_COUNT_DEFAULT = 64
+_RELATIVE_TOLERANCE_DEFAULT = 1e-6
+_ABSOLUTE_TOLERANCE = 1e-9
+
+
+class UnsafeExpressionError(Exception):
+    """An expression fell outside the safe arithmetic grammar."""
+
+
+def _evaluate_expression(expression: str, values: dict) -> float:
+    try:
+        tree = ast.parse(expression, mode="eval")
+    except SyntaxError as error:
+        raise UnsafeExpressionError(f"cannot parse: {error}") from error
+    return _evaluate_node(tree.body, values)
+
+
+def _evaluate_node(node: ast.AST, values: dict) -> float:
+    if isinstance(node, ast.Constant):
+        if isinstance(node.value, bool) or not isinstance(node.value, (int, float)):
+            raise UnsafeExpressionError("only numeric constants are allowed")
+        return float(node.value)
+    if isinstance(node, ast.Name):
+        if node.id in values:
+            return values[node.id]
+        if node.id in _ALLOWED_CONSTANTS:
+            return _ALLOWED_CONSTANTS[node.id]
+        raise UnsafeExpressionError(f"unknown name: {node.id}")
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+        operand = _evaluate_node(node.operand, values)
+        return operand if isinstance(node.op, ast.UAdd) else -operand
+    if isinstance(node, ast.BinOp):
+        left = _evaluate_node(node.left, values)
+        right = _evaluate_node(node.right, values)
+        return _apply_binary_operator(node.op, left, right)
+    if isinstance(node, ast.Call):
+        if node.keywords or not isinstance(node.func, ast.Name):
+            raise UnsafeExpressionError("only positional calls to named functions")
+        function = _ALLOWED_FUNCTIONS.get(node.func.id)
+        if function is None:
+            raise UnsafeExpressionError(f"function not allowed: {node.func.id}")
+        arguments = [_evaluate_node(argument, values) for argument in node.args]
+        return float(function(*arguments))
+    raise UnsafeExpressionError(f"unsupported expression element: {type(node).__name__}")
+
+
+def _apply_binary_operator(operator: ast.operator, left: float, right: float) -> float:
+    if isinstance(operator, ast.Add):
+        return left + right
+    if isinstance(operator, ast.Sub):
+        return left - right
+    if isinstance(operator, ast.Mult):
+        return left * right
+    if isinstance(operator, ast.Div):
+        return left / right
+    if isinstance(operator, ast.FloorDiv):
+        return left // right
+    if isinstance(operator, ast.Mod):
+        return left % right
+    if isinstance(operator, ast.Pow):
+        return left ** right
+    raise UnsafeExpressionError(f"operator not allowed: {type(operator).__name__}")
+
+
+def _seed_for_step(label: str) -> int:
+    """A stable seed from the step, so a run is reproducible without Math.random."""
+    digest = 0
+    for character in label:
+        digest = (digest * 131 + ord(character)) & 0xFFFFFFFF
+    return digest or 1
+
+
+def _sample_points(variable_ranges: dict, sample_count: int, seed: int) -> list[dict]:
+    # A small deterministic linear-congruential generator, so the sampled points
+    # are identical across runs and platforms without seeding a global RNG.
+    state = seed
+    points = []
+    for _ in range(sample_count):
+        point = {}
+        for variable_name, bounds in variable_ranges.items():
+            state = (1103515245 * state + 12345) & 0x7FFFFFFF
+            fraction = state / 0x7FFFFFFF
+            low, high = float(bounds[0]), float(bounds[1])
+            point[variable_name] = low + fraction * (high - low)
+        points.append(point)
+    return points
+
+
+def _try_symbolic_zero(from_expression: str, to_expression: str,
+                       variable_names: list) -> bool | None:
+    """True/False if SymPy proves (non)equality; None if SymPy is absent or unsure."""
+    try:
+        import sympy
+    except Exception:
+        return None
+    try:
+        symbols = {name: sympy.Symbol(name) for name in variable_names}
+        local = {**symbols, "pi": sympy.pi, "e": sympy.E, "tau": 2 * sympy.pi}
+        difference = sympy.sympify(from_expression, locals=local) - \
+            sympy.sympify(to_expression, locals=local)
+        simplified = sympy.simplify(difference)
+        return bool(simplified == 0)
+    except Exception:
+        return None
+
+
+def _check_step(step: dict, sample_count: int, relative_tolerance: float) -> dict:
+    label = str(step.get("label", ""))
+    from_expression = str(step.get("from", ""))
+    to_expression = str(step.get("to", ""))
+    variable_ranges = step.get("vars") or {}
+    result = {"label": label, "status": "consistent", "witness": None, "detail": ""}
+
+    points = (_sample_points(variable_ranges, sample_count, _seed_for_step(label))
+              if variable_ranges else [{}])
+    try:
+        for point in points:
+            value_from = _evaluate_expression(from_expression, point)
+            value_to = _evaluate_expression(to_expression, point)
+            difference = abs(value_from - value_to)
+            scale = max(abs(value_from), abs(value_to), 1.0)
+            if difference > relative_tolerance * scale + _ABSOLUTE_TOLERANCE:
+                result["status"] = "invalid"
+                result["witness"] = {"point": point, "value_from": value_from,
+                                     "value_to": value_to}
+                result["detail"] = "the two sides differ at this point"
+                return result
+    except UnsafeExpressionError as error:
+        result["status"] = "unparseable"
+        result["detail"] = str(error)
+        return result
+    except (ValueError, ZeroDivisionError, OverflowError) as error:
+        result["status"] = "unparseable"
+        result["detail"] = f"evaluation failed: {error}"
+        return result
+
+    if not variable_ranges:
+        result["status"] = "no_vars_consistent"
+    symbolic = _try_symbolic_zero(from_expression, to_expression,
+                                  list(variable_ranges))
+    if symbolic is True:
+        result["status"] = "verified"
+        result["detail"] = "symbolically proven equal"
+    elif symbolic is False and result["status"] != "invalid":
+        result["detail"] = "sympy did not prove equality; numeric check agrees"
+    if result["status"] == "no_vars_consistent":
+        result["status"] = "verified" if symbolic is True else "consistent"
+    return result
+
+
+def _run_check(args: argparse.Namespace) -> None:
+    try:
+        steps = json.loads(Path(args.steps_file).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        print(f"Cannot read the steps file: {error}", file=sys.stderr)
+        raise SystemExit(2)
+    if not isinstance(steps, list):
+        print("The steps file must hold a JSON list of steps.", file=sys.stderr)
+        raise SystemExit(2)
+
+    checked = [_check_step(step, args.samples, args.tolerance) for step in steps]
+    counts = {status: sum(1 for step in checked if step["status"] == status)
+              for status in ("verified", "consistent", "invalid", "unparseable")}
+    report = {
+        "version": 1,
+        "checked_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "steps": checked,
+        "counts": counts,
+        "invalid": counts["invalid"],
+    }
+    workspace_report_path = Path(_DERIVATION_REPORT_PATH)
+    if workspace_report_path.parent.is_dir():
+        workspace_report_path.write_text(json.dumps(report, indent=2) + "\n",
+                                         encoding="utf-8")
+    print(json.dumps(report, indent=2))
+    raise SystemExit(1 if counts["invalid"] else 0)
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="exactory-derive",
+        description="Check the validity of a paper's equation manipulations.",
+    )
+    commands = parser.add_subparsers(dest="command", required=True)
+    check = commands.add_parser("check", allow_abbrev=False,
+                                help="Check each step in a steps JSON file.")
+    check.add_argument("--steps-file", required=True, dest="steps_file",
+                       help="A JSON list of steps: label, from, to, vars, constants.")
+    check.add_argument("--samples", type=int, default=_SAMPLE_COUNT_DEFAULT,
+                       help=f"Sample points per step. Default: {_SAMPLE_COUNT_DEFAULT}.")
+    check.add_argument("--tolerance", type=float, default=_RELATIVE_TOLERANCE_DEFAULT,
+                       help="Relative tolerance for the numeric comparison.")
+    check.set_defaults(handler=_run_check)
+    return parser
+
+
+def main() -> None:
+    args = _build_parser().parse_args()
+    args.handler(args)
+
+
+if __name__ == "__main__":
+    main()
