@@ -105,6 +105,13 @@ citation graph the paper builds on, the authors' track record, and whether the
 contribution is new. Title-and-abstract-only models already predict impact well; your
 edge over them is reading the paper.
 
+Read the cohort to the required depth: every cohort member's abstract, and the full
+text, figures and tables included, of the core papers and the authorities. The core
+papers are the members closest to this paper's question; the authorities are the works
+the cohort keeps citing, found from the members' reference lists, including classics
+outside the window. Record what you read under WHAT I READ. A prediction anchored on the
+cohort's abstracts alone is weaker than one anchored on having read the field.
+
 ### 3. Check the citations
 
 Sample the references that are load-bearing for the paper's main claims; a handful is

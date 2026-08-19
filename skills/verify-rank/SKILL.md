@@ -93,6 +93,12 @@ paper builds on, the authors' track record, and whether the contribution is new.
 Title-and-abstract-only models already predict impact well; your edge over them is
 reading the paper.
 
+Read the cohort to the required depth: every cohort member's abstract, and the full
+text, figures and tables included, of the core papers and the authorities. The core
+papers are the members closest to this paper's question; the authorities are the works
+the cohort keeps citing, found from the members' reference lists, including classics
+outside the window. Record what you read under WHAT I READ.
+
 ### 3. Form the prediction
 
 Predict the paper's percentile within its cohort: the fraction of cohort papers this

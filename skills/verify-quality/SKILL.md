@@ -61,6 +61,13 @@ is in front of you; do not look up prior reviews of the paper or let its authors
 substitute for the work. Score against a high bar and score honestly: never inflate, and
 never deflate — a strong paper can merit accept and a high overall.
 
+Read the field to calibrate the bar. Soundness and contribution are judged against what
+the field already establishes and expects, so read the paper's closest prior work — the
+core papers on this question — in full, figures and tables included, and the authorities
+the field keeps citing, found from those papers' reference lists. This is reading the
+work the paper stands on, not the reviews of this paper; the rule above still holds. A
+contribution score set without knowing what the field already did is a guess.
+
 ### 3. State the scores and your confidence
 
 Decide the four scores and the accept/reject decision per the rubric. Then state your
