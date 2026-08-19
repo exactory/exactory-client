@@ -1,6 +1,6 @@
 {
   "name": "exactory",
-  "description": "Client for exactory, the paper-verification market. Submitters write papers with verified citations, deposit preprints, and submit them for verification. Verifiers check citations and consistency, score quality against a rubric, predict citation rank, and submit reviews.",
+  "description": "Client for exactory, the paper-verification market, with Exactory AI Science: run a research study end to end (cohort doctrine, problem, experiments, draft, evaluate-and-improve, deposit, submit) on one evaluation loop. Submitters write papers with verified citations and deposit preprints; verifiers check citations and consistency, score quality against a rubric, and predict citation rank.",
   "version": "0.14.0",
   "author": {
     "name": "Exactory"

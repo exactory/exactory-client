@@ -36,11 +36,36 @@ export EXACTORY_API_KEY=<your key>
 The plugin never asks for the key in chat, and the key never appears in a
 payload.
 
+## Exactory AI Science
+
+`/exactory:ai-science` runs a research study end to end: build the cohort and
+its doctrine, set a problem, run experiments, draft, evaluate and improve until
+the quality saturates, deposit a preprint, and submit it for verification. It is
+one loop — the same evaluation a submitter rehearses in private is the one the
+market's verifiers run in public on the deposited record.
+
+The agent is the scientist: it sets the problem, writes and runs the experiment
+code, writes the paper, and judges it, with no external LLM keys. A study is one
+workspace, created by `exactory-lab init`; the loop reads `context/` at the
+start and at every improvement iteration, so the user drops material in as it
+runs. Experiments run on a pluggable compute layer (`local` by default, `colab`
+for GPU nodes — see [`colab/README.md`](colab/README.md)). By default the study
+runs end to end and stops only for the context grace phase and for production
+deposit or submission; the user names any other pacing in their own words.
+
+| Stage skill | Purpose |
+|---|---|
+| `/exactory:cohort` | Build the cohort and extract its doctrine: the field's rules, its authorities, its open problems |
+| `/exactory:ideate` | Turn an open problem and the human context into a specific, novel, feasible problem |
+| `/exactory:experiment` | Run a best-first experiment search, with an optional autoresearch optimization mode |
+| `/exactory:deposit` | Deposit the preprint to Zenodo and get its DOI |
+
 ## Skills
 
 | Skill | Persona | Purpose |
 |---|---|---|
-| `/exactory:write` | Submitter | Write a paper end to end: survey the field, draft with verified citations, self-evaluate, deposit, submit |
+| `/exactory:ai-science` | Submitter | Run a study end to end: cohort, problem, experiments, draft, improve, deposit, submit |
+| `/exactory:write` | Submitter | Draft the paper: evidence intake and doctrine-conforming sections with verified citations |
 | `/exactory:evaluate` | Both | Evaluate a paper locally: citation integrity, a structured quality review, and an impact self-prediction |
 | `/exactory:submit` | Submitter | Submit a paper for verification |
 | `/exactory:status` | Submitter | Read a verification's status and result |
@@ -53,7 +78,7 @@ payload.
 
 ## CLIs
 
-Four commands are on PATH while the plugin is enabled. Each is one Python 3
+Five commands are on PATH while the plugin is enabled. Each is one Python 3
 file, standard library only.
 
 **`exactory`** is the transport to the API:
@@ -86,9 +111,17 @@ and exits non-zero when the citation gate does not pass.
 **`exactory-draft`** manages the paper workspace. `init` creates the layout,
 and `deposit` sends the built PDF and sources to Zenodo. The sandbox API and
 draft state are the defaults. A production publish also needs the
-`--confirm-publish` flag, because a published DOI is permanent. The publish
-output prints the record DOI and the concept DOI, and `exactory submit` takes
-the concept DOI.
+`--confirm-publish` flag, because a published DOI is permanent. `--new-version`
+publishes a revised version of a record already deposited, keeping the concept
+DOI. The publish output prints the record DOI and the concept DOI, and
+`exactory submit` takes the concept DOI.
+
+**`exactory-lab`** owns an Exactory AI Science study. `init` creates the study
+workspace and its git repository, `state` and `decide` drive the study state
+machine and its append-only decision log, and `run` executes an experiment
+script on a compute backend (`local`, or `colab` via `colab-status` and
+`colab-serve`), confined to the workspace and recording a result the experiment
+journal is built from.
 
 ## Citation gate and hooks
 
