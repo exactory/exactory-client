@@ -314,7 +314,7 @@ class TestGuardExperimentExec(unittest.TestCase):
                 completed = self._run_guard(command, self.workspace)
                 decision = json.loads(completed.stdout)["hookSpecificOutput"]
                 self.assertEqual(decision["permissionDecision"], "deny")
-                self.assertIn("redesign", decision["permissionDecisionReason"])
+                self.assertIn("Redesign", decision["permissionDecisionReason"])
 
     def test_ordinary_experiment_commands_stay_neutral(self) -> None:
         for command in _BENIGN_COMMANDS:
