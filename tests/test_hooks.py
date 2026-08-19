@@ -335,5 +335,56 @@ class TestGuardExperimentExec(unittest.TestCase):
         self.assertEqual(completed.stdout, "")
 
 
+_DECISION_LOG_SCRIPT_PATH = _PLUGIN_ROOT / "hooks" / "enforce_decision_log.py"
+
+
+class TestEnforceDecisionLog(unittest.TestCase):
+    def setUp(self) -> None:
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        self.workspace = Path(scratch.name) / "study"
+        (self.workspace / ".exactory").mkdir(parents=True)
+        (self.workspace / ".exactory" / "study.json").write_text(
+            json.dumps({"version": 1, "slug": "s", "stage": "cohort",
+                        "status": "running"})
+        )
+
+    def log_decision(self, stage: str) -> None:
+        with (self.workspace / ".exactory" / "decisions.jsonl").open("a") as log_file:
+            log_file.write(json.dumps({"ts": "t", "stage": stage,
+                                       "decision": "d", "why": "w"}) + "\n")
+
+    def _run_gate(self, command: str) -> subprocess.CompletedProcess:
+        return _run_hook(_DECISION_LOG_SCRIPT_PATH, {
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "cwd": str(self.workspace),
+        })
+
+    def test_closing_a_stage_without_a_decision_is_denied(self) -> None:
+        completed = self._run_gate("exactory-lab state set --status done")
+        decision = json.loads(completed.stdout)["hookSpecificOutput"]
+        self.assertEqual(decision["permissionDecision"], "deny")
+        self.assertIn("decide", decision["permissionDecisionReason"])
+
+    def test_closing_a_stage_with_a_decision_passes(self) -> None:
+        self.log_decision("cohort")
+        completed = self._run_gate("exactory-lab state set --status done")
+        self.assertEqual(completed.stdout, "")
+
+    def test_an_explicit_stage_is_checked_against_its_own_decisions(self) -> None:
+        self.log_decision("cohort")
+        completed = self._run_gate("exactory-lab state set --stage ideate --status done")
+        decision = json.loads(completed.stdout)["hookSpecificOutput"]
+        self.assertEqual(decision["permissionDecision"], "deny")
+        self.assertIn("ideate", decision["permissionDecisionReason"])
+
+    def test_a_non_closing_command_stays_neutral(self) -> None:
+        self.assertEqual(self._run_gate("exactory-lab state set --status running").stdout, "")
+
+    def test_an_unrelated_command_stays_neutral(self) -> None:
+        self.assertEqual(self._run_gate("exactory-lab run code/n1.py").stdout, "")
+
+
 if __name__ == "__main__":
     unittest.main()
