@@ -386,5 +386,74 @@ class TestEnforceDecisionLog(unittest.TestCase):
         self.assertEqual(self._run_gate("exactory-lab run code/n1.py").stdout, "")
 
 
+_AUTOPILOT_SCRIPT_PATH = _PLUGIN_ROOT / "hooks" / "continue_autopilot.py"
+
+
+class TestContinueAutopilot(unittest.TestCase):
+    def setUp(self) -> None:
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        self.workspace = Path(scratch.name) / "study"
+        (self.workspace / ".exactory").mkdir(parents=True)
+
+    def write_state(self, **overrides) -> None:
+        state = {"version": 1, "slug": "s", "stage": "experiment",
+                 "status": "running", "autopilot": True, "waiting": None}
+        state.update(overrides)
+        (self.workspace / ".exactory" / "study.json").write_text(json.dumps(state))
+
+    def _run_stop(self) -> subprocess.CompletedProcess:
+        return _run_hook(_AUTOPILOT_SCRIPT_PATH, {
+            "cwd": str(self.workspace),
+            "stop_hook_active": False,
+        })
+
+    def read_counter(self) -> int:
+        return int((self.workspace / ".exactory" / "autopilot_count").read_text())
+
+    def test_a_running_autopilot_stage_blocks_the_stop(self) -> None:
+        self.write_state()
+        decision = json.loads(self._run_stop().stdout)
+        self.assertEqual(decision["decision"], "block")
+        self.assertEqual(self.read_counter(), 1)
+
+    def test_autopilot_off_allows_the_stop(self) -> None:
+        self.write_state(autopilot=False)
+        self.assertEqual(self._run_stop().stdout, "")
+
+    def test_a_completed_study_allows_the_stop(self) -> None:
+        self.write_state(stage="complete")
+        self.assertEqual(self._run_stop().stdout, "")
+
+    def test_a_parked_wait_allows_the_stop(self) -> None:
+        self.write_state(waiting="production-deposit")
+        self.assertEqual(self._run_stop().stdout, "")
+
+    def test_no_workspace_allows_the_stop(self) -> None:
+        completed = _run_hook(_AUTOPILOT_SCRIPT_PATH, {
+            "cwd": str(self.workspace.parent), "stop_hook_active": False,
+        })
+        self.assertEqual(completed.stdout, "")
+
+    def test_the_safety_cap_stops_and_resets(self) -> None:
+        self.write_state()
+        (self.workspace / ".exactory" / "autopilot_count").write_text("50")
+        decision = json.loads(self._run_stop().stdout)
+        self.assertEqual(decision["decision"], "block")
+        self.assertIn("cap", decision["reason"].lower())
+        self.assertEqual(self.read_counter(), 0)
+
+
+class TestHooksManifest(unittest.TestCase):
+    def test_hooks_json_wires_every_hook_script(self) -> None:
+        manifest = json.loads((_PLUGIN_ROOT / "hooks" / "hooks.json").read_text())
+        commands = json.dumps(manifest["hooks"])
+        for script_name in ("enforce_citation_check.py", "check_references_edit.py",
+                            "guard_experiment_exec.py", "enforce_decision_log.py",
+                            "continue_autopilot.py"):
+            self.assertIn(script_name, commands)
+        self.assertIn("Stop", manifest["hooks"])
+
+
 if __name__ == "__main__":
     unittest.main()
