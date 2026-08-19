@@ -293,5 +293,115 @@ class TestRunLocal(_InsideWorkspaceTestCase):
         self.assertIn("experiment", output)
 
 
+class TestColabBackend(_InsideWorkspaceTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.sync_root = Path(self._temp_dir.name) / "sync"
+        self.sync_root.mkdir()
+        patcher = unittest.mock.patch.dict(os.environ, {
+            "EXACTORY_LAB_COLAB_DIR": str(self.sync_root),
+            "EXACTORY_LAB_COLAB_SYNC_WAIT": "0",
+            "EXACTORY_LAB_COLAB_POLL": "0.05",
+            "EXACTORY_LAB_COLAB_WAIT": "0",
+        })
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def write_script(self, name: str, body: str) -> None:
+        (self.workspace / "experiment" / "code" / name).write_text(
+            body, encoding="utf-8"
+        )
+
+    def mark_runner_alive(self) -> None:
+        (self.sync_root / "RUNNER_ALIVE").write_text(str(time.time()),
+                                                     encoding="utf-8")
+
+    def test_missing_sync_root_yields_an_error_record(self) -> None:
+        self.write_script("n1.py", "print('x')\n")
+        del os.environ["EXACTORY_LAB_COLAB_DIR"]
+        output = _run_lab_command(["run", "code/n1.py", "--backend", "colab"], 1, self)
+        record = json.loads(output.splitlines()[-1])
+        self.assertFalse(record["ok"])
+        self.assertEqual(record["backend"], "colab")
+        self.assertIn("EXACTORY_LAB_COLAB_DIR", record["stderr_tail"])
+
+    def test_timeout_without_a_runner_reports_the_dead_heartbeat(self) -> None:
+        self.write_script("n2.py", "print('x')\n")
+        output = _run_lab_command(
+            ["run", "code/n2.py", "--backend", "colab", "--timeout", "0.2"], 1, self
+        )
+        record = json.loads(output.splitlines()[-1])
+        self.assertFalse(record["ok"])
+        self.assertIn("runner", record["stderr_tail"].lower())
+        job_dirs = list((self.sync_root / "jobs").iterdir())
+        self.assertEqual(len(job_dirs), 1)
+        job = json.loads((job_dirs[0] / "job.json").read_text(encoding="utf-8"))
+        self.assertEqual(job["node"], "n2")
+        self.assertEqual(job["script"], "code/n2.py")
+        self.assertTrue((job_dirs[0] / "READY").is_file())
+        self.assertTrue((job_dirs[0] / "code" / "n2.py").is_file())
+
+    def test_serve_scan_processes_one_job_and_writes_done_last(self) -> None:
+        job_dir = self.sync_root / "jobs" / "study__n3__1"
+        (job_dir / "code").mkdir(parents=True)
+        (job_dir / "code" / "n3.py").write_text(
+            "import json\nprint(json.dumps({'metric': 0.9}))\n", encoding="utf-8"
+        )
+        (job_dir / "job.json").write_text(json.dumps({
+            "job_id": "study__n3__1", "slug": "study", "node": "n3",
+            "script": "code/n3.py", "timeout": 30, "seed": None,
+            "created": time.time(),
+        }), encoding="utf-8")
+        (job_dir / "READY").write_text(str(time.time()), encoding="utf-8")
+        self.assertTrue(_lab._serve_scan_once(self.sync_root))
+        result_dir = self.sync_root / "results" / "study__n3__1"
+        self.assertTrue((result_dir / "DONE").is_file())
+        record = json.loads(
+            (result_dir / "results" / "n3.json").read_text(encoding="utf-8")
+        )
+        self.assertTrue(record["ok"])
+        self.assertEqual(record["metric"], {"metric": 0.9})
+        self.assertTrue((job_dir / "PROCESSED").is_file())
+        self.assertFalse(_lab._serve_scan_once(self.sync_root))
+
+    def test_round_trip_through_a_threaded_runner(self) -> None:
+        import threading
+
+        self.write_script("n4.py", "import json\nprint(json.dumps({'metric': 1.5}))\n")
+        self.mark_runner_alive()
+
+        def run_runner() -> None:
+            deadline = time.time() + 10
+            while time.time() < deadline:
+                if _lab._serve_scan_once(self.sync_root):
+                    return
+                time.sleep(0.02)
+
+        runner_thread = threading.Thread(target=run_runner, daemon=True)
+        runner_thread.start()
+        output = _run_lab_command(
+            ["run", "code/n4.py", "--backend", "colab", "--timeout", "10"], None, self
+        )
+        runner_thread.join(timeout=10)
+        record = json.loads(output.splitlines()[-1])
+        self.assertTrue(record["ok"])
+        self.assertEqual(record["backend"], "colab")
+        self.assertEqual(record["metric"], {"metric": 1.5})
+        pulled_record = json.loads(
+            (self.workspace / "experiment" / "results" / "n4.json")
+            .read_text(encoding="utf-8")
+        )
+        self.assertEqual(pulled_record, record)
+        self.assertTrue(
+            (self.workspace / "experiment" / "logs" / "n4.log").is_file()
+        )
+
+    def test_colab_status_reports_liveness(self) -> None:
+        _run_lab_command(["colab-status"], 1, self)
+        self.mark_runner_alive()
+        output = _run_lab_command(["colab-status"], None, self)
+        self.assertTrue(json.loads(output)["runner_alive"])
+
+
 if __name__ == "__main__":
     unittest.main()
