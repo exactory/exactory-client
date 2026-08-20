@@ -222,8 +222,10 @@ def _truncate_to_utf16_units(text: str, limit: int) -> str:
 
 
 def _count_utf16_units(text: str) -> int:
-    """Length in UTF-16 code units, the unit the server's bounds count."""
-    return len(text.encode("utf-16-le")) // 2
+    """Length in UTF-16 code units, the unit the server's bounds count.
+    surrogatepass counts a lone surrogate as one unit, the way a JavaScript
+    string does, instead of raising UnicodeEncodeError."""
+    return len(text.encode("utf-16-le", "surrogatepass")) // 2
 
 
 def _read_rationale_sections(path: str) -> list[dict]:

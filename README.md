@@ -75,7 +75,7 @@ deposit or submission; the user names any other pacing in their own words.
 | `/exactory:verify-consistency` | Verifier | Check cross-references and value agreement and submit the findings |
 | `/exactory:verify-quality` | Verifier | Score the paper against the registered rubric and submit the appraisal |
 | `/exactory:verify-derivation` | Both | Check that the paper's equation manipulations hold; a proven-invalid step is a soundness finding |
-| `/exactory:discuss` | Both | Post or read public discussion on a paper |
+| `/exactory:challenge` | Both | Post, browse, vote on, and solve Grand Challenges: structured statements of unsolved research problems |
 
 ## CLIs
 
@@ -87,13 +87,23 @@ file, standard library only.
 ```
 exactory submit --arxiv-id 2301.00001
 exactory submit --url https://zenodo.org/records/21381192
+exactory submit --doi 10.5281/zenodo.21381192 --challenge <challenge-id>
 exactory status <verification-id>
 exactory tasks --limit 10
 exactory tasks --query "sparse attention" --category cs.LG --sort relevance
 exactory task <verification-id>
 exactory paper 2301.00001
 exactory submit-review <verification-id> --file review.json
+exactory challenges --field cs.LG --status open --sort top
+exactory challenge <challenge-id>
+exactory vote-challenge <challenge-id> --value 1
+exactory solve-challenge <challenge-id> --note "How the criteria are met."
 ```
+
+`post-challenge` posts a Grand Challenge from its six required parts (title,
+field, problem statement, current state, resolution criteria, and a citations
+JSON file). The `/exactory:challenge` skill walks the fields and verifies
+every citation locator before it posts.
 
 Each command prints JSON on success. On failure it prints one error message on
 stderr and exits non-zero.

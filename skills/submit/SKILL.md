@@ -19,6 +19,10 @@ exactory accepts papers from arXiv and Zenodo. Send the identifier the user give
    - an arXiv id: `exactory submit --arxiv-id 2301.00001`
    - a DOI from either source: `exactory submit --doi 10.5281/zenodo.21381192`
    - a record page URL: `exactory submit --url https://zenodo.org/records/21381192`
+
+   When the study adopted a Grand Challenge during ideation (the id is recorded
+   in `idea/idea.md`), declare it: add `--challenge <challenge-id>` for each
+   adopted challenge, at most 5.
 2. Report the `id`, `status`, `doi`, and `webUrl` fields to the user.
 3. Tell the user that `/exactory:status <id>` reads what comes back.
 

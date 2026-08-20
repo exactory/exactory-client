@@ -1,4 +1,5 @@
-"""Tests for bin/exactory: identifier mapping, path encoding, and the citation gate."""
+"""Tests for bin/exactory: identifier mapping, path encoding, the citation gate,
+and the grand-challenge subcommands."""
 
 from __future__ import annotations
 
@@ -11,6 +12,7 @@ import json
 import os
 import tempfile
 import urllib.parse
+import urllib.request
 import unittest
 from pathlib import Path
 
@@ -70,6 +72,21 @@ def _write_passing_citation_report(workspace_dir: Path) -> None:
     )
 
 
+def _invoke_cli(test_case: unittest.TestCase, argv: list[str],
+                expected_exit_code: int | None = None) -> tuple[str, str]:
+    """Parse argv with the real parser and run its handler, capturing both streams."""
+    args = _transport._build_parser().parse_args(argv)
+    stdout_sink, stderr_sink = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(stdout_sink), contextlib.redirect_stderr(stderr_sink):
+        if expected_exit_code is None:
+            args.handler(args)
+        else:
+            with test_case.assertRaises(SystemExit) as caught:
+                args.handler(args)
+            test_case.assertEqual(caught.exception.code, expected_exit_code)
+    return stdout_sink.getvalue(), stderr_sink.getvalue()
+
+
 class _TransportTestCase(unittest.TestCase):
     """Shared plumbing: a scratch cwd and a recording _send_request patch."""
 
@@ -91,16 +108,63 @@ class _TransportTestCase(unittest.TestCase):
         _transport._send_request = _record_request
 
     def _run(self, argv: list[str], expected_exit_code: int | None = None) -> tuple[str, str]:
-        args = _transport._build_parser().parse_args(argv)
-        stdout_sink, stderr_sink = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(stdout_sink), contextlib.redirect_stderr(stderr_sink):
-            if expected_exit_code is None:
-                args.handler(args)
-            else:
-                with self.assertRaises(SystemExit) as caught:
-                    args.handler(args)
-                self.assertEqual(caught.exception.code, expected_exit_code)
-        return stdout_sink.getvalue(), stderr_sink.getvalue()
+        return _invoke_cli(self, argv, expected_exit_code)
+
+
+class _FakeResponse(io.BytesIO):
+    """The slice of http.client.HTTPResponse that _send_request touches."""
+
+    def __init__(self, body: bytes, status: int) -> None:
+        super().__init__(body)
+        self._status = status
+
+    def getcode(self) -> int:
+        return self._status
+
+
+class _UrlopenTransportTestCase(unittest.TestCase):
+    """Shared plumbing for the grand-challenge subcommands: a scratch cwd and a
+    stubbed urllib.request.urlopen, so the method, the full URL, the JSON body,
+    and the Authorization header are all asserted on the real request object."""
+
+    def setUp(self) -> None:
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        self.scratch_dir = Path(scratch.name)
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(self.scratch_dir)
+
+        saved_env = {key: os.environ.get(key)
+                     for key in ("EXACTORY_API_KEY", "EXACTORY_API_URL")}
+
+        def _restore_env() -> None:
+            for key, value in saved_env.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+        self.addCleanup(_restore_env)
+        os.environ["EXACTORY_API_KEY"] = "test-key"
+        os.environ["EXACTORY_API_URL"] = "https://api.test"
+
+        self.sent_requests: list[urllib.request.Request] = []
+        self.response_status = 200
+        self.addCleanup(setattr, urllib.request, "urlopen", urllib.request.urlopen)
+
+        def _fake_urlopen(request: urllib.request.Request,
+                          timeout: float | None = None) -> _FakeResponse:
+            self.sent_requests.append(request)
+            return _FakeResponse(b"{}", self.response_status)
+
+        urllib.request.urlopen = _fake_urlopen
+
+    def _run(self, argv: list[str], expected_exit_code: int | None = None) -> tuple[str, str]:
+        return _invoke_cli(self, argv, expected_exit_code)
+
+    def _single_request(self) -> urllib.request.Request:
+        self.assertEqual(len(self.sent_requests), 1)
+        return self.sent_requests[0]
 
 
 class TestPaperSubcommand(_TransportTestCase):
@@ -240,6 +304,301 @@ class TestParserStrictness(unittest.TestCase):
             with self.assertRaises(SystemExit) as caught:
                 _transport._build_parser().parse_args(["tasks", "--lim", "5"])
         self.assertEqual(caught.exception.code, 2)
+
+
+class TestChallengesSubcommand(_UrlopenTransportTestCase):
+    def test_it_lists_challenges_with_the_default_limit(self) -> None:
+        self._run(["challenges"])
+        request = self._single_request()
+        self.assertEqual(request.get_method(), "GET")
+        parsed = urllib.parse.urlparse(request.full_url)
+        self.assertEqual(parsed.path, "/api/v1/grand-challenges")
+        self.assertEqual(urllib.parse.parse_qs(parsed.query), {"limit": ["25"]})
+        self.assertEqual(request.get_header("Authorization"), "Bearer test-key")
+
+    def test_it_builds_the_filter_query_string(self) -> None:
+        self._run(["challenges", "--status", "all", "--field", "cs.LG",
+                   "--parent-id", "parent-1", "--paper-doi", "10.5281/zenodo.1",
+                   "--sort", "top", "--cursor", "abc", "--limit", "50"])
+        query = urllib.parse.parse_qs(
+            urllib.parse.urlparse(self._single_request().full_url).query)
+        self.assertEqual(query, {
+            "status": ["all"], "field": ["cs.LG"], "parentId": ["parent-1"],
+            "paperDoi": ["10.5281/zenodo.1"], "sort": ["top"],
+            "cursor": ["abc"], "limit": ["50"],
+        })
+
+    def test_a_bare_arxiv_paper_doi_maps_to_its_datacite_doi(self) -> None:
+        self._run(["challenges", "--paper-doi", "2301.00001"])
+        query = urllib.parse.parse_qs(
+            urllib.parse.urlparse(self._single_request().full_url).query)
+        self.assertEqual(query["paperDoi"], ["10.48550/arxiv.2301.00001"])
+
+    def test_an_unknown_status_value_is_rejected(self) -> None:
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as caught:
+                _transport._build_parser().parse_args(["challenges", "--status", "closed"])
+        self.assertEqual(caught.exception.code, 2)
+
+    def test_an_unknown_sort_value_is_rejected(self) -> None:
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as caught:
+                _transport._build_parser().parse_args(["challenges", "--sort", "best"])
+        self.assertEqual(caught.exception.code, 2)
+
+
+class TestChallengeSubcommand(_UrlopenTransportTestCase):
+    def test_it_reads_one_challenge_by_id(self) -> None:
+        self._run(["challenge", "656c336e-e892-4c47-80d2-a71d022f4116"])
+        request = self._single_request()
+        self.assertEqual(request.get_method(), "GET")
+        self.assertEqual(
+            urllib.parse.urlparse(request.full_url).path,
+            "/api/v1/grand-challenges/656c336e-e892-4c47-80d2-a71d022f4116",
+        )
+        self.assertEqual(request.get_header("Authorization"), "Bearer test-key")
+
+    def test_it_url_encodes_the_challenge_id(self) -> None:
+        self._run(["challenge", "../verifications?limit=1"])
+        self.assertEqual(
+            urllib.parse.urlparse(self._single_request().full_url).path,
+            "/api/v1/grand-challenges/..%2Fverifications%3Flimit%3D1",
+        )
+
+
+class TestPostChallengeSubcommand(_UrlopenTransportTestCase):
+    _CITATION_TEXT = ("Carol Instance and Dana Case. Predicting Citation Impact"
+                      " with Cohort Percentiles. 2023.")
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.citations_path = self.scratch_dir / "citations.json"
+        self.citations_path.write_text(json.dumps([
+            {"citation": self._CITATION_TEXT, "locator": "10.1234/exact.5678"},
+        ]))
+
+    def _post_argv(self, *, title: str = "Solve cohort percentile drift",
+                   problem_statement: str | None = None) -> list[str]:
+        return [
+            "post-challenge",
+            "--title", title,
+            "--field", "cs.LG",
+            "--problem-statement", problem_statement or ("p" * 200),
+            "--current-state", "c" * 100,
+            "--resolution-criteria", "r" * 50,
+            "--citations-file", str(self.citations_path),
+        ]
+
+    def test_it_posts_the_six_required_fields(self) -> None:
+        self.response_status = 201
+        self._run(self._post_argv())
+        request = self._single_request()
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(urllib.parse.urlparse(request.full_url).path,
+                         "/api/v1/grand-challenges")
+        self.assertEqual(request.get_header("Authorization"), "Bearer test-key")
+        body = json.loads(request.data.decode())
+        self.assertEqual(body, {
+            "title": "Solve cohort percentile drift",
+            "field": "cs.LG",
+            "problemStatement": "p" * 200,
+            "currentState": "c" * 100,
+            "resolutionCriteria": "r" * 50,
+            "citations": [{"citation": self._CITATION_TEXT,
+                           "locator": "10.1234/exact.5678"}],
+        })
+
+    def test_the_field_files_feed_the_body(self) -> None:
+        (self.scratch_dir / "problem.md").write_text("p" * 200 + "\n")
+        (self.scratch_dir / "state.md").write_text("c" * 100 + "\n")
+        (self.scratch_dir / "criteria.md").write_text("r" * 50 + "\n")
+        self._run([
+            "post-challenge",
+            "--title", "Solve cohort percentile drift",
+            "--field", "cs.LG",
+            "--problem-statement-file", str(self.scratch_dir / "problem.md"),
+            "--current-state-file", str(self.scratch_dir / "state.md"),
+            "--resolution-criteria-file", str(self.scratch_dir / "criteria.md"),
+            "--citations-file", str(self.citations_path),
+        ])
+        body = json.loads(self._single_request().data.decode())
+        self.assertEqual(body["problemStatement"], "p" * 200)
+        self.assertEqual(body["currentState"], "c" * 100)
+        self.assertEqual(body["resolutionCriteria"], "r" * 50)
+
+    def test_parent_and_paper_links_are_forwarded(self) -> None:
+        self._run(self._post_argv() + [
+            "--parent-id", "parent-1",
+            "--paper-doi", "10.5281/zenodo.1", "--paper-doi", "2301.00001",
+        ])
+        body = json.loads(self._single_request().data.decode())
+        self.assertEqual(body["parentId"], "parent-1")
+        self.assertEqual(body["paperDois"],
+                         ["10.5281/zenodo.1", "10.48550/arxiv.2301.00001"])
+
+    def test_a_short_title_is_refused_before_any_request(self) -> None:
+        self._run(self._post_argv(title="short"), expected_exit_code=1)
+        self.assertEqual(self.sent_requests, [])
+
+    def test_title_bounds_count_utf16_units(self) -> None:
+        # 101 non-BMP characters are 202 UTF-16 code units, over the 200 limit.
+        self._run(self._post_argv(title="\U0001f9ea" * 101), expected_exit_code=1)
+        self.assertEqual(self.sent_requests, [])
+
+    def test_a_short_problem_statement_is_refused(self) -> None:
+        self._run(self._post_argv(problem_statement="p" * 199), expected_exit_code=1)
+        self.assertEqual(self.sent_requests, [])
+
+    def test_a_bad_locator_is_refused(self) -> None:
+        self.citations_path.write_text(json.dumps([
+            {"citation": self._CITATION_TEXT, "locator": "not-a-locator"},
+        ]))
+        self._run(self._post_argv(), expected_exit_code=1)
+        self.assertEqual(self.sent_requests, [])
+
+    def test_an_https_locator_is_accepted(self) -> None:
+        self.citations_path.write_text(json.dumps([
+            {"citation": self._CITATION_TEXT,
+             "locator": "https://example.org/paper"},
+        ]))
+        self._run(self._post_argv())
+        body = json.loads(self._single_request().data.decode())
+        self.assertEqual(body["citations"][0]["locator"], "https://example.org/paper")
+
+    def test_every_arxiv_locator_style_the_server_accepts_is_accepted(self) -> None:
+        # The server accepts new-format ids, old-style ids, and the arXiv: prefix
+        # (apps/web schemas/grand-challenge.ts); the client mirror must not refuse
+        # a locator the contract allows.
+        for locator in ("2301.00001", "2301.00001v2", "arXiv:2301.00001",
+                        "hep-th/9901001", "hep-th/9901001v3", "math.GT/0309136"):
+            with self.subTest(locator=locator):
+                self.sent_requests.clear()
+                self.citations_path.write_text(json.dumps([
+                    {"citation": self._CITATION_TEXT, "locator": locator},
+                ]))
+                self._run(self._post_argv())
+                body = json.loads(self._single_request().data.decode())
+                self.assertEqual(body["citations"][0]["locator"], locator)
+
+    def test_a_lone_surrogate_in_a_citation_counts_as_one_utf16_unit(self) -> None:
+        # json.load turns a "\ud800" escape into a lone surrogate, and the
+        # server's zod bounds count it as one UTF-16 unit; the client mirror
+        # must count it the same way instead of raising UnicodeEncodeError.
+        self.citations_path.write_text(
+            '[{"citation": "0123456789\\ud800", "locator": "10.1234/exact.5678"}]')
+        self._run(self._post_argv())
+        body = json.loads(self._single_request().data.decode())
+        self.assertEqual(body["citations"][0]["citation"], "0123456789\ud800")
+
+    def test_an_empty_citations_list_is_refused(self) -> None:
+        self.citations_path.write_text("[]")
+        self._run(self._post_argv(), expected_exit_code=1)
+        self.assertEqual(self.sent_requests, [])
+
+    def test_a_citation_with_an_unknown_key_is_refused(self) -> None:
+        self.citations_path.write_text(json.dumps([
+            {"citation": self._CITATION_TEXT, "locator": "10.1234/exact.5678",
+             "note": "extra"},
+        ]))
+        self._run(self._post_argv(), expected_exit_code=1)
+        self.assertEqual(self.sent_requests, [])
+
+    def test_more_than_twenty_paper_dois_are_refused(self) -> None:
+        paper_flags = [flag for index in range(21)
+                       for flag in ("--paper-doi", f"10.5281/zenodo.{index}")]
+        self._run(self._post_argv() + paper_flags, expected_exit_code=1)
+        self.assertEqual(self.sent_requests, [])
+
+
+class TestVoteChallengeSubcommand(_UrlopenTransportTestCase):
+    def test_an_upvote_puts_value_one(self) -> None:
+        self._run(["vote-challenge", "chal-1", "--value", "1"])
+        request = self._single_request()
+        self.assertEqual(request.get_method(), "PUT")
+        self.assertEqual(urllib.parse.urlparse(request.full_url).path,
+                         "/api/v1/grand-challenges/chal-1/vote")
+        self.assertEqual(request.get_header("Authorization"), "Bearer test-key")
+        self.assertEqual(json.loads(request.data.decode()), {"value": 1})
+
+    def test_a_downvote_puts_value_minus_one(self) -> None:
+        self._run(["vote-challenge", "chal-1", "--value", "-1"])
+        request = self._single_request()
+        self.assertEqual(request.get_method(), "PUT")
+        self.assertEqual(json.loads(request.data.decode()), {"value": -1})
+
+    def test_value_zero_deletes_the_vote(self) -> None:
+        self._run(["vote-challenge", "chal-1", "--value", "0"])
+        request = self._single_request()
+        self.assertEqual(request.get_method(), "DELETE")
+        self.assertEqual(urllib.parse.urlparse(request.full_url).path,
+                         "/api/v1/grand-challenges/chal-1/vote")
+        self.assertIsNone(request.data)
+
+    def test_an_out_of_range_value_is_rejected(self) -> None:
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as caught:
+                _transport._build_parser().parse_args(
+                    ["vote-challenge", "chal-1", "--value", "2"])
+        self.assertEqual(caught.exception.code, 2)
+
+
+class TestSolveChallengeSubcommand(_UrlopenTransportTestCase):
+    def test_solving_sends_the_resolution_note(self) -> None:
+        note = "The linked paper meets every criterion."
+        self._run(["solve-challenge", "chal-1", "--note", note])
+        request = self._single_request()
+        self.assertEqual(request.get_method(), "PATCH")
+        self.assertEqual(urllib.parse.urlparse(request.full_url).path,
+                         "/api/v1/grand-challenges/chal-1")
+        self.assertEqual(request.get_header("Authorization"), "Bearer test-key")
+        self.assertEqual(json.loads(request.data.decode()),
+                         {"status": "solved", "resolutionNote": note})
+
+    def test_reopening_sends_status_open_without_a_note(self) -> None:
+        self._run(["solve-challenge", "chal-1", "--reopen"])
+        self.assertEqual(json.loads(self._single_request().data.decode()),
+                         {"status": "open"})
+
+    def test_a_short_note_is_refused_before_any_request(self) -> None:
+        self._run(["solve-challenge", "chal-1", "--note", "too short"],
+                  expected_exit_code=1)
+        self.assertEqual(self.sent_requests, [])
+
+    def test_note_and_reopen_together_are_rejected(self) -> None:
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as caught:
+                _transport._build_parser().parse_args(
+                    ["solve-challenge", "chal-1", "--note", "long enough note",
+                     "--reopen"])
+        self.assertEqual(caught.exception.code, 2)
+
+
+class TestSubmitChallengeDeclaration(_UrlopenTransportTestCase):
+    """The scratch cwd holds no draft workspace, so the citation gate is skipped."""
+
+    def test_challenges_join_the_submit_body(self) -> None:
+        self.response_status = 201
+        self._run(["submit", "--doi", "10.5281/zenodo.1",
+                   "--challenge", "id-1", "--challenge", "id-2"])
+        request = self._single_request()
+        self.assertEqual(urllib.parse.urlparse(request.full_url).path,
+                         "/api/v1/verifications")
+        self.assertEqual(json.loads(request.data.decode()),
+                         {"doi": "10.5281/zenodo.1",
+                          "grandChallengeIds": ["id-1", "id-2"]})
+
+    def test_submit_without_challenges_sends_no_challenge_key(self) -> None:
+        self.response_status = 201
+        self._run(["submit", "--doi", "10.5281/zenodo.1"])
+        self.assertEqual(json.loads(self._single_request().data.decode()),
+                         {"doi": "10.5281/zenodo.1"})
+
+    def test_more_than_five_challenges_are_refused(self) -> None:
+        challenge_flags = [flag for index in range(6)
+                           for flag in ("--challenge", f"id-{index}")]
+        self._run(["submit", "--doi", "10.5281/zenodo.1"] + challenge_flags,
+                  expected_exit_code=1)
+        self.assertEqual(self.sent_requests, [])
 
 
 if __name__ == "__main__":

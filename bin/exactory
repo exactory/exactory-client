@@ -118,6 +118,11 @@ def _run_submit(args: argparse.Namespace) -> None:
         body = {"doi": args.doi}
     else:
         body = {"url": args.url}
+    if args.challenge:
+        if len(args.challenge) > 5:
+            _exit_with_error(f"The command names {len(args.challenge)} challenges."
+                             " The limit is 5. Remove some.")
+        body["grandChallengeIds"] = args.challenge
     payload, status = _send_request("POST", "/api/v1/verifications", body)
     if status == 200:
         print("The server returned the existing open request for this paper.",
@@ -233,8 +238,10 @@ def _truncate_to_utf16_units(text: str, limit: int) -> str:
 
 
 def _count_utf16_units(text: str) -> int:
-    """Length in UTF-16 code units, the unit the server's bounds count."""
-    return len(text.encode("utf-16-le")) // 2
+    """Length in UTF-16 code units, the unit the server's bounds count.
+    surrogatepass counts a lone surrogate as one unit, the way a JavaScript
+    string does, instead of raising UnicodeEncodeError."""
+    return len(text.encode("utf-16-le", "surrogatepass")) // 2
 
 
 _SUGGESTION_FIELD_UNIT_BOUNDS = {
@@ -432,38 +439,170 @@ def _run_compose_rubric_score(args: argparse.Namespace) -> None:
     _append_claim_to_review(args.out, claim)
 
 
-def _run_discuss(args: argparse.Namespace) -> None:
-    if args.body is not None:
-        body = args.body
-    else:
-        try:
-            with open(args.body_file, encoding="utf-8") as handle:
-                body = handle.read().strip()
-        except FileNotFoundError:
-            _exit_with_error(f"The file {args.body_file} does not exist.")
-        if body == "":
-            _exit_with_error("The body file is empty. Write the discussion text first.")
-    discussion = {"body": body}
-    if args.claim_id:
-        discussion["targetClaimId"] = args.claim_id
-    if args.parent_id:
-        discussion["parentId"] = args.parent_id
-    doi = _resolve_paper_identifier(args.identifier)
+# ------------------------------------------------------- grand challenges
+#
+# Bounds mirror the server's contract in UTF-16 code units, the unit the server
+# counts, so a bad request fails fast without a network round trip.
+
+_DOI_LOCATOR_RE = re.compile(r"10\.\d{4,9}/\S+")
+# Mirrors the server's locator refinement: a new-format id (2301.00001), an
+# old-style id (hep-th/9901001), and the arXiv: prefix are all accepted.
+_ARXIV_LOCATOR_RE = re.compile(
+    r"(?:arxiv:)?(?:\d{4}\.\d{4,5}|[a-z-]+(?:\.[a-z]{2})?/\d{7})(?:v\d+)?",
+    re.IGNORECASE,
+)
+
+
+def _require_utf16_bounds(field_name: str, value: str,
+                          min_units: int, max_units: int) -> str:
+    value = value.strip()
+    units = _count_utf16_units(value)
+    if units < min_units:
+        _exit_with_error(f"The {field_name} is {units} characters long."
+                         f" The minimum is {min_units}. Make it longer.")
+    if units > max_units:
+        _exit_with_error(f"The {field_name} is {units} characters long."
+                         f" The limit is {max_units}. Make it shorter.")
+    return value
+
+
+def _read_inline_or_file_text(inline: str | None, path: str | None) -> str:
+    """One challenge field arrives inline or as a file; argparse enforces that
+    exactly one of the pair is set."""
+    if inline is not None:
+        return inline
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return handle.read()
+    except FileNotFoundError:
+        _exit_with_error(f"The file {path} does not exist.")
+    raise AssertionError("unreachable")
+
+
+def _is_challenge_locator(locator: str) -> bool:
+    """A locator an agent can resolve: a DOI, an arXiv id, or an https URL."""
+    return bool(_DOI_LOCATOR_RE.fullmatch(locator)
+                or _ARXIV_LOCATOR_RE.fullmatch(locator)
+                or (locator.startswith("https://") and len(locator) > len("https://")))
+
+
+def _read_challenge_citations_file(path: str) -> list[dict]:
+    """Parse the citations file: a JSON array of {citation, locator} entries."""
+    try:
+        with open(path, encoding="utf-8") as handle:
+            entries = json.load(handle)
+    except FileNotFoundError:
+        _exit_with_error(f"The file {path} does not exist.")
+    except json.JSONDecodeError as error:
+        _exit_with_error(f"The file {path} is not valid JSON. Cause: {error}."
+                         " Correct the file. Then run the command again.")
+    if not isinstance(entries, list) or not all(isinstance(e, dict) for e in entries):
+        _exit_with_error(f"The file {path} does not hold a JSON array of"
+                         ' {"citation", "locator"} objects.')
+    if not 1 <= len(entries) <= 50:
+        _exit_with_error(f"The file {path} holds {len(entries)} citations."
+                         " Give between 1 and 50.")
+    parsed = []
+    for index, entry in enumerate(entries, start=1):
+        unknown_keys = sorted(set(entry) - {"citation", "locator"})
+        if unknown_keys:
+            _exit_with_error(f"Citation {index} carries an unknown key:"
+                             f" {', '.join(unknown_keys)}."
+                             ' Write exactly "citation" and "locator".')
+        citation = entry.get("citation")
+        locator = entry.get("locator")
+        if not isinstance(citation, str) or not isinstance(locator, str):
+            _exit_with_error(f'Citation {index} is missing "citation" or "locator".'
+                             " Write both as strings.")
+        citation = _require_utf16_bounds(f"citation of entry {index}",
+                                         citation, 10, 1000)
+        locator = locator.strip()
+        if _count_utf16_units(locator) > 500:
+            _exit_with_error(f"The locator of entry {index} is over the limit of"
+                             " 500 characters. Make it shorter.")
+        if not _is_challenge_locator(locator):
+            _exit_with_error(f"The locator of entry {index} is not a DOI, an arXiv"
+                             " id, or an https URL. Correct it.")
+        parsed.append({"citation": citation, "locator": locator})
+    return parsed
+
+
+def _run_challenges(args: argparse.Namespace) -> None:
+    paper_doi = _resolve_paper_identifier(args.paper_doi) if args.paper_doi else None
+    query = {"limit": str(args.limit)}
+    optional_params = (
+        ("status", args.status), ("field", args.field),
+        ("parentId", args.parent_id), ("paperDoi", paper_doi),
+        ("sort", args.sort), ("cursor", args.cursor),
+    )
+    for key, value in optional_params:
+        if value:
+            query[key] = value
     payload, _ = _send_request(
-        "POST", "/api/v1/discussions/" + urllib.parse.quote(doi), discussion,
+        "GET", "/api/v1/grand-challenges?" + urllib.parse.urlencode(query))
+    _print_json(payload)
+
+
+def _run_challenge(args: argparse.Namespace) -> None:
+    payload, _ = _send_request(
+        "GET",
+        "/api/v1/grand-challenges/" + urllib.parse.quote(args.challenge_id, safe=""),
     )
     _print_json(payload)
 
 
-def _run_discussions(args: argparse.Namespace) -> None:
-    query = {"limit": str(args.limit)}
-    if args.cursor:
-        query["cursor"] = args.cursor
-    doi = _resolve_paper_identifier(args.identifier)
+def _run_post_challenge(args: argparse.Namespace) -> None:
+    body = {
+        "title": _require_utf16_bounds("title", args.title, 8, 200),
+        "field": _require_utf16_bounds("field", args.field, 2, 100),
+        "problemStatement": _require_utf16_bounds(
+            "problem statement",
+            _read_inline_or_file_text(args.problem_statement,
+                                      args.problem_statement_file),
+            200, 20000),
+        "currentState": _require_utf16_bounds(
+            "current state",
+            _read_inline_or_file_text(args.current_state, args.current_state_file),
+            100, 10000),
+        "resolutionCriteria": _require_utf16_bounds(
+            "resolution criteria",
+            _read_inline_or_file_text(args.resolution_criteria,
+                                      args.resolution_criteria_file),
+            50, 5000),
+        "citations": _read_challenge_citations_file(args.citations_file),
+    }
+    if args.parent_id:
+        body["parentId"] = args.parent_id
+    if args.paper_doi:
+        if len(args.paper_doi) > 20:
+            _exit_with_error(f"The command names {len(args.paper_doi)} papers."
+                             " The limit is 20. Remove some.")
+        body["paperDois"] = [_resolve_paper_identifier(doi) for doi in args.paper_doi]
+    payload, _ = _send_request("POST", "/api/v1/grand-challenges", body)
+    _print_json(payload)
+
+
+def _run_vote_challenge(args: argparse.Namespace) -> None:
+    path = ("/api/v1/grand-challenges/"
+            + urllib.parse.quote(args.challenge_id, safe="") + "/vote")
+    if args.value == 0:
+        payload, _ = _send_request("DELETE", path)
+    else:
+        payload, _ = _send_request("PUT", path, {"value": args.value})
+    _print_json(payload)
+
+
+def _run_solve_challenge(args: argparse.Namespace) -> None:
+    if args.reopen:
+        body = {"status": "open"}
+    else:
+        body = {"status": "solved",
+                "resolutionNote": _require_utf16_bounds("resolution note",
+                                                        args.note, 10, 5000)}
     payload, _ = _send_request(
-        "GET",
-        "/api/v1/discussions/" + urllib.parse.quote(doi) + "?"
-        + urllib.parse.urlencode(query),
+        "PATCH",
+        "/api/v1/grand-challenges/" + urllib.parse.quote(args.challenge_id, safe=""),
+        body,
     )
     _print_json(payload)
 
@@ -485,6 +624,9 @@ def _build_parser() -> argparse.ArgumentParser:
         "--url",
         help="A record URL, for example https://zenodo.org/records/21381192.",
     )
+    submit.add_argument("--challenge", action="append", metavar="CHALLENGE_ID",
+                        help="A Grand Challenge this paper drew on. Repeat for"
+                             " more than one, at most 5.")
     submit.set_defaults(handler=_run_submit)
 
     status = commands.add_parser("status", allow_abbrev=False,
@@ -654,25 +796,101 @@ def _build_parser() -> argparse.ArgumentParser:
     rubric_score.add_argument("--out", default="review.json")
     rubric_score.set_defaults(handler=_run_compose_rubric_score)
 
-    discuss = commands.add_parser(
-        "discuss", allow_abbrev=False,
-        help="Post a discussion on a paper. Discussions are never adjudicated."
+    challenges = commands.add_parser(
+        "challenges", allow_abbrev=False,
+        help="List Grand Challenges: structured statements of unsolved research"
+             " problems."
     )
-    discuss.add_argument("identifier", help="A DOI or an arXiv id.")
-    body_source = discuss.add_mutually_exclusive_group(required=True)
-    body_source.add_argument("--body", help="The discussion text.")
-    body_source.add_argument("--body-file", help="A file with the discussion text.")
-    discuss.add_argument("--claim-id", help="Anchor the discussion to this claim.")
-    discuss.add_argument("--parent-id", help="Reply under this discussion.")
-    discuss.set_defaults(handler=_run_discuss)
+    challenges.add_argument("--status", choices=["open", "solved", "all"],
+                            help="Only challenges with this status."
+                                 " The server default is open.")
+    challenges.add_argument("--field", help="Only challenges in this field.")
+    challenges.add_argument("--parent-id",
+                            help="Only child challenges of this challenge.")
+    challenges.add_argument("--paper-doi",
+                            help="Only challenges linked to this paper."
+                                 " A DOI or an arXiv id.")
+    challenges.add_argument("--sort", choices=["new", "top"],
+                            help="Result order. The server default is new.")
+    challenges.add_argument("--cursor", help="Opaque cursor from a previous page.")
+    challenges.add_argument("--limit", type=int, default=25)
+    challenges.set_defaults(handler=_run_challenges)
 
-    discussions = commands.add_parser(
-        "discussions", allow_abbrev=False, help="List a paper's discussions."
+    challenge = commands.add_parser(
+        "challenge", allow_abbrev=False,
+        help="Show one Grand Challenge with its children and linked papers."
     )
-    discussions.add_argument("identifier", help="A DOI or an arXiv id.")
-    discussions.add_argument("--cursor", help="Opaque cursor from a previous page.")
-    discussions.add_argument("--limit", type=int, default=50)
-    discussions.set_defaults(handler=_run_discussions)
+    challenge.add_argument("challenge_id")
+    challenge.set_defaults(handler=_run_challenge)
+
+    post_challenge = commands.add_parser(
+        "post-challenge", allow_abbrev=False,
+        help="Post a Grand Challenge. Verify that every citation locator"
+             " resolves first."
+    )
+    post_challenge.add_argument("--title", required=True,
+                                help="The challenge title, 8-200 characters.")
+    post_challenge.add_argument("--field", required=True,
+                                help="The discipline, for example cs.LG,"
+                                     " 2-100 characters.")
+    problem_statement = post_challenge.add_mutually_exclusive_group(required=True)
+    problem_statement.add_argument(
+        "--problem-statement",
+        help="What is unsolved and why a resolution is a big win,"
+             " 200-20000 characters.")
+    problem_statement.add_argument("--problem-statement-file",
+                                   help="A file with the problem statement.")
+    current_state = post_challenge.add_mutually_exclusive_group(required=True)
+    current_state.add_argument(
+        "--current-state",
+        help="Where the state of the art stands and why the problem stays open,"
+             " 100-10000 characters.")
+    current_state.add_argument("--current-state-file",
+                               help="A file with the current state.")
+    resolution_criteria = post_challenge.add_mutually_exclusive_group(required=True)
+    resolution_criteria.add_argument(
+        "--resolution-criteria",
+        help="What, concretely, makes this challenge solved, 50-5000 characters.")
+    resolution_criteria.add_argument("--resolution-criteria-file",
+                                     help="A file with the resolution criteria.")
+    post_challenge.add_argument(
+        "--citations-file", required=True,
+        help="A JSON file with the supporting literature: an array of 1-50"
+             ' {"citation", "locator"} objects. The locator is a DOI, an arXiv'
+             " id, or an https URL.")
+    post_challenge.add_argument("--parent-id",
+                                help="Post under this parent challenge.")
+    post_challenge.add_argument(
+        "--paper-doi", action="append",
+        help="Link a related paper already on exactory. A DOI or an arXiv id."
+             " Repeat for more than one, at most 20.")
+    post_challenge.set_defaults(handler=_run_post_challenge)
+
+    vote_challenge = commands.add_parser(
+        "vote-challenge", allow_abbrev=False,
+        help="Vote on a Grand Challenge, or clear your vote."
+    )
+    vote_challenge.add_argument("challenge_id")
+    vote_challenge.add_argument("--value", type=int, choices=[1, -1, 0],
+                                required=True,
+                                help="1 votes up. -1 votes down."
+                                     " 0 clears your vote.")
+    vote_challenge.set_defaults(handler=_run_vote_challenge)
+
+    solve_challenge = commands.add_parser(
+        "solve-challenge", allow_abbrev=False,
+        help="Mark a Grand Challenge solved, or reopen it."
+             " Only the author or an admin can do this."
+    )
+    solve_challenge.add_argument("challenge_id")
+    transition = solve_challenge.add_mutually_exclusive_group(required=True)
+    transition.add_argument("--note",
+                            help="How the resolution criteria are met,"
+                                 " 10-5000 characters. Marks the challenge solved.")
+    transition.add_argument("--reopen", action="store_true",
+                            help="Reopen the challenge. The server clears the"
+                                 " resolution note.")
+    solve_challenge.set_defaults(handler=_run_solve_challenge)
 
     return parser
 

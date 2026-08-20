@@ -26,6 +26,13 @@ it.
   problem's advance criterion states the result the field would count as a
   major advance; the conventions tell you what the field will accept as a
   contribution.
+- The market's open Grand Challenges. Run
+  `exactory challenges --field <field> --status open --sort top` and read the
+  results beside the doctrine's open problems: each challenge states an
+  unsolved problem and its resolution criteria, and the score ranks the
+  demand. A study that adopts a challenge records the challenge id in
+  `idea/idea.md` and carries it to the submit-time declaration
+  (`exactory submit ... --challenge <challenge-id>`).
 - `context/` — the human's material and wishes.
 - The market's recorded next steps. Before fixing the problem, run
   `exactory suggestions <doi-or-arxiv-id>` on the closest prior work. Every

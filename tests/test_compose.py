@@ -470,6 +470,19 @@ class ComposeSuggestionsTest(unittest.TestCase):
 
         self._expect_exit_code(_exactory, self._rubric_argv(path), 1)
 
+    def test_a_lone_surrogate_in_a_suggestion_counts_as_one_utf16_unit(self):
+        # json.load turns a "\udcff" escape into a lone surrogate, and the
+        # server's zod bounds count it as one UTF-16 unit; the client mirror
+        # must count it the same way instead of raising UnicodeEncodeError.
+        drastic = dict(_VALID_SUGGESTIONS["drastic"], title="Retrain \udcff")
+        suggestions = {"continuous": _VALID_SUGGESTIONS["continuous"],
+                       "drastic": drastic}
+        path = self._write_suggestions_file(suggestions)
+
+        _run(_predict, self._predict_argv(path))
+
+        self.assertEqual(self._read_single_claim()["suggestions"], suggestions)
+
     def test_refuses_a_title_whose_utf16_length_passes_the_contract_bound(self):
         # 61 non-BMP characters are 122 UTF-16 code units, over the server's
         # zod .max(120), and 61 Python code points.
