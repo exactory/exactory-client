@@ -7,15 +7,29 @@ description: Submit a paper to exactory for verification. Use when the user want
 The `exactory` command is on PATH while this plugin is enabled. It prints JSON on
 success. It prints an error message on stderr and exits non-zero on failure.
 
-If `EXACTORY_API_KEY` is not set, stop and tell the user: create an API key at
-https://www.exactory.ai/console, then export it as `EXACTORY_API_KEY`. Do not ask the
-user to paste the key into the chat.
+If `EXACTORY_API_KEY` is not set, the next step depends on where you are.
+
+- Inside a study workspace (a directory tree that holds `.exactory/study.json`), a
+  missing key ends this stage, never the study. Park the run:
+  `exactory-lab state set --waiting exactory-api-key`. Then tell the user that the
+  paper is deposited and citable, that nothing went to exactory, and that a key
+  continues from here.
+- Anywhere else, tell the user to create a key at https://www.exactory.ai/console and
+  export it as `EXACTORY_API_KEY`.
+
+Do not ask the user to paste the key into the chat.
 
 ## Procedure
 
-exactory accepts papers from arXiv and Zenodo. Send the identifier the user gives you.
+exactory accepts papers from arXiv and Zenodo.
 
-1. Run the command that matches what the user has:
+1. Find the identifier to send.
+   - The user named a paper: use that identifier.
+   - The user named none and you are in a study workspace: the paper is the one this
+     study deposited. Read `.exactory/deposit.json` and take `concept_doi`. That file
+     also carries `environment`. Submit a `production` record only. A `sandbox` record
+     is a test deposit. If the record is a sandbox one, deposit to production first.
+2. Run the command that matches the identifier:
    - an arXiv id: `exactory submit --arxiv-id 2301.00001`
    - a DOI from either source: `exactory submit --doi 10.5281/zenodo.21381192`
    - a record page URL: `exactory submit --url https://zenodo.org/records/21381192`
@@ -23,8 +37,8 @@ exactory accepts papers from arXiv and Zenodo. Send the identifier the user give
    When the study adopted a Grand Challenge during ideation (the id is recorded
    in `idea/idea.md`), declare it: add `--challenge <challenge-id>` for each
    adopted challenge, at most 5.
-2. Report the `id`, `status`, `doi`, and `webUrl` fields to the user.
-3. Tell the user that `/exactory:status <id>` reads what comes back.
+3. Report the `id`, `status`, `doi`, and `webUrl` fields to the user.
+4. Tell the user that `/exactory:status <id>` reads what comes back.
 
 The `doi` in the response names the paper across its versions, so it differs from a
 Zenodo version DOI that was sent. Report the DOI that came back.

@@ -405,5 +405,58 @@ class TestColabBackend(_InsideWorkspaceTestCase):
         self.assertTrue(json.loads(output)["runner_alive"])
 
 
+class TestKeys(unittest.TestCase):
+    """`keys` reports which credentials are present, so a stage can say what it can run."""
+
+    def read_keys_report(self) -> dict:
+        return json.loads(_run_lab_command(["keys"], None, self))
+
+    def test_keys_reports_every_credential_as_absent_when_none_is_set(self) -> None:
+        with unittest.mock.patch.dict(os.environ, {}, clear=True):
+            report = self.read_keys_report()
+        self.assertEqual(
+            sorted(report),
+            ["EXACTORY_API_KEY", "ZENODO_SANDBOX_TOKEN", "ZENODO_TOKEN"],
+        )
+        for name, credential in report.items():
+            with self.subTest(credential=name):
+                self.assertFalse(credential["set"])
+
+    def test_keys_reports_a_present_credential_without_printing_its_value(self) -> None:
+        secret_value = "sk-do-not-print-this"
+        with unittest.mock.patch.dict(
+            os.environ, {"EXACTORY_API_KEY": secret_value}, clear=True
+        ):
+            output = _run_lab_command(["keys"], None, self)
+        self.assertNotIn(secret_value, output)
+        report = json.loads(output)
+        self.assertTrue(report["EXACTORY_API_KEY"]["set"])
+        self.assertFalse(report["ZENODO_TOKEN"]["set"])
+
+    def test_keys_treats_a_blank_credential_as_absent(self) -> None:
+        with unittest.mock.patch.dict(
+            os.environ, {"EXACTORY_API_KEY": "   "}, clear=True
+        ):
+            report = self.read_keys_report()
+        self.assertFalse(report["EXACTORY_API_KEY"]["set"])
+
+    def test_keys_names_what_each_credential_unlocks_and_what_runs_without_it(self) -> None:
+        with unittest.mock.patch.dict(os.environ, {}, clear=True):
+            report = self.read_keys_report()
+        for name, credential in report.items():
+            with self.subTest(credential=name):
+                self.assertTrue(credential["unlocks"])
+                self.assertTrue(credential["without_it"])
+                self.assertTrue(credential["create_at"].startswith("https://"))
+
+    def test_keys_runs_outside_a_study_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch_dir:
+            original_dir = os.getcwd()
+            os.chdir(scratch_dir)
+            self.addCleanup(os.chdir, original_dir)
+            report = self.read_keys_report()
+        self.assertIn("EXACTORY_API_KEY", report)
+
+
 if __name__ == "__main__":
     unittest.main()

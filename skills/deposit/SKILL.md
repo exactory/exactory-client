@@ -22,8 +22,14 @@ PATH while this plugin is enabled.
   everything and park before production
   (`exactory-lab state set --waiting production-deposit`).
 - The Zenodo tokens are exported by the user, never pasted into chat. Sandbox
-  uses `ZENODO_SANDBOX_TOKEN`, production uses `ZENODO_TOKEN`. If the one you
-  need is not set, stop and tell the user to export it.
+  uses `ZENODO_SANDBOX_TOKEN`, production uses `ZENODO_TOKEN`. Run
+  `exactory-lab keys` to read which one is set.
+- A missing token ends this stage, never the study. The paper is already
+  finished at this point, so park the run instead of failing it:
+  `exactory-lab state set --waiting zenodo-token`. Then tell the user three
+  things: the paper is complete in the workspace, nothing was sent anywhere, and
+  the exact variable to export to continue. `exactory-lab keys` prints where to
+  create the token. Do not ask the user to paste the token into the chat.
 
 ## Procedure
 
@@ -70,6 +76,8 @@ user is taking it to the market, set the state:
 
 - Do not deposit to production or publish without the user's approval or a
   pre-authorizing invocation.
+- Do not treat a missing Zenodo token as a study failure. Park the run and
+  report the finished local paper.
 - Do not paste a Zenodo token into the chat; the user exports it.
 - Do not edit the citation report to pass the gate; fix the references.
 - Do not hand-write the deposit metadata; `exactory-draft` builds it.
