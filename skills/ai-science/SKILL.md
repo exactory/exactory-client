@@ -56,13 +56,19 @@ coordinates them and owns the loop between stages 3 and 5.
    `exactory-lab init --dir <path> --slug <slug>`, then change into it and stay
    there. `exactory-lab` and the hooks resolve the workspace from the current
    directory.
-2. The context grace phase. Tell the user the `context/` path and stop there.
+2. Announce what this environment can reach. Run `exactory-lab keys` and tell
+   the user, in one or two lines, which credentials are set and which stages
+   that leaves out. Writing a paper needs no credential, so this is an
+   announcement and never a stop: a missing key changes where the run ends, not
+   whether it starts. Say it once, here, so nobody learns at stage 6 that a
+   long run cannot deposit.
+3. The context grace phase. Tell the user the `context/` path and stop there.
    The user does one of three things, all first-class:
    - drops material into `context/` — notes, half-drafts, data, papers,
      constraints, wishes;
    - names locations for you to copy into `context/`;
    - says to start from nothing and let you pick the direction.
-3. When the user releases the stage (or the invocation already said to start
+4. When the user releases the stage (or the invocation already said to start
    from nothing), read everything under `context/`. Move evidence files under
    `evidence/`; papers found there become stage-0 blocks in
    `research/literature.md`. Write a short intake summary, log the stage
@@ -98,6 +104,15 @@ under autopilot, because both are irreversible or need the user's material:
 - **Production deposit and market submission** (stages 6 and 7), unless the
   invocation pre-authorized them ("run it all the way through submit").
 
+A missing credential is a third kind of stop, and it belongs to one stage
+rather than to the run. Stages 0 to 5 need no credential at all, so the study
+reaches a finished, evaluated paper on an empty environment. The stage that
+needs the key parks the run on a named wait (`zenodo-token`,
+`exactory-api-key`) and reports what the user holds: a complete paper in the
+workspace, and nothing sent anywhere. Announcing this at stage 0 is what keeps
+it from arriving as a surprise. Never ask for a key before the stage that
+spends it, and never end a run as a failure for the lack of one.
+
 The user names any other pacing in their own words at invocation ("check with
 me after ideation", "stop after experiments", "just get me to a deposited
 draft"). Record it: `exactory-lab state set --loop-notes "<their words>"`, and
@@ -118,6 +133,8 @@ Continue at the next step.
 
 - Do not skip the context grace phase unless the user chose to start from
   nothing.
+- Do not make a credential a precondition of the study. Announce at stage 0,
+  park at the stage that needs the key.
 - Do not deposit to production or submit without approval or a pre-authorizing
   invocation.
 - Do not route around the experiment guard; redesign the experiment instead.

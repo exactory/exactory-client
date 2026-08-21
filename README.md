@@ -26,6 +26,8 @@ updates. Your API key and workflow do not change.
 
 ## Set the API key
 
+The key is what the market commands use. Writing a paper does not need it.
+
 1. Create an API key at https://www.exactory.ai/console.
 2. Export it before you start Claude Code:
 
@@ -35,6 +37,20 @@ export EXACTORY_API_KEY=<your key>
 
 The plugin never asks for the key in chat, and the key never appears in a
 payload.
+
+`exactory-lab keys` prints which credentials this environment holds, what each
+one unlocks, and what a study still does without it. It never prints a value.
+
+## What runs without a key
+
+A study writes and evaluates a paper with no credential at all: the cohort, the
+problem, the experiments, the draft, the citation check, and the evaluation
+loop. Those stages read public sources that need no key (arXiv, Crossref,
+DataCite, OpenAlex, PubMed, Zenodo). Credentials gate the last two stages only.
+`ZENODO_TOKEN` deposits the preprint, and `EXACTORY_API_KEY` submits it. Without
+them the run reaches a finished paper in the workspace, parks there, and names
+the variable to export to go further. The paper goes nowhere until the key that
+sends it is set.
 
 ## Exactory AI Science
 
@@ -129,9 +145,10 @@ DOI. The publish output prints the record DOI and the concept DOI, and
 `exactory submit` takes the concept DOI.
 
 **`exactory-lab`** owns an Exactory AI Science study. `init` creates the study
-workspace and its git repository, `state` and `decide` drive the study state
-machine and its append-only decision log, and `run` executes an experiment
-script on a compute backend (`local`, or `colab` via `colab-status` and
+workspace and its git repository, `keys` reports which credentials the
+environment holds and what the study does without each one, `state` and
+`decide` drive the study state machine and its append-only decision log, and
+`run` executes an experiment script on a compute backend (`local`, or `colab` via `colab-status` and
 `colab-serve`), confined to the workspace and recording a result the experiment
 journal is built from.
 
