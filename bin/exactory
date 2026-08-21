@@ -607,6 +607,17 @@ def _run_solve_challenge(args: argparse.Namespace) -> None:
     _print_json(payload)
 
 
+def _run_report_challenge(args: argparse.Namespace) -> None:
+    body = {"subjectKind": "grand_challenge", "subjectId": args.challenge_id}
+    if args.note is not None:
+        body["note"] = _require_utf16_bounds("note", args.note, 1, 1000)
+    payload, status = _send_request("POST", "/api/v1/reports", body)
+    if status == 200:
+        print("The server returned the existing report for this challenge.",
+              file=sys.stderr)
+    _print_json(payload)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="exactory", description=__doc__,
                                      allow_abbrev=False)
@@ -891,6 +902,17 @@ def _build_parser() -> argparse.ArgumentParser:
                             help="Reopen the challenge. The server clears the"
                                  " resolution note.")
     solve_challenge.set_defaults(handler=_run_solve_challenge)
+
+    report_challenge = commands.add_parser(
+        "report-challenge", allow_abbrev=False,
+        help="Report a Grand Challenge that violates the platform rules."
+    )
+    report_challenge.add_argument("challenge_id")
+    report_challenge.add_argument(
+        "--note",
+        help="Why this challenge violates the rules, for the moderators only,"
+             " 1-1000 characters.")
+    report_challenge.set_defaults(handler=_run_report_challenge)
 
     return parser
 

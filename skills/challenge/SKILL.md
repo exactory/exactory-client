@@ -1,5 +1,5 @@
 ---
-description: Post, browse, vote on, and solve Grand Challenges on exactory - structured statements of unsolved research problems with checkable resolution criteria. Use when the user wants to read open challenges, post one, vote on one, or mark one solved.
+description: Post, browse, vote on, solve, and report Grand Challenges on exactory - structured statements of unsolved research problems with checkable resolution criteria. Use when the user wants to read open challenges, post one, vote on one, mark one solved, or report one that violates the platform rules.
 ---
 
 # Grand Challenges
@@ -120,6 +120,26 @@ exactory solve-challenge <challenge-id> --reopen
 ```
 
 The server clears the resolution note on reopen.
+
+## Report a rule violation
+
+Report a challenge that violates the platform rules:
+
+```
+exactory report-challenge <challenge-id> --note "<why, for the moderators>"
+```
+
+The note (1-1000 characters) is optional and goes to the moderators only.
+One report per account per challenge: when this account already reported the
+challenge, the server returns the existing report and the command prints a
+notice on stderr.
+
+A challenge that was removed for violating the platform rules stays at its
+id, but resolves to a tombstone: a payload with `"removed": true` and no
+title, sections, author, or score. Report the removal to the user and stop
+there. Do not target a removed challenge with a vote, a `--paper-doi` link,
+a child post, or a `--challenge` drew-on declaration at submit; the server
+rejects them.
 
 ## What not to do
 

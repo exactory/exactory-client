@@ -150,12 +150,13 @@ class _UrlopenTransportTestCase(unittest.TestCase):
 
         self.sent_requests: list[urllib.request.Request] = []
         self.response_status = 200
+        self.response_body = b"{}"
         self.addCleanup(setattr, urllib.request, "urlopen", urllib.request.urlopen)
 
         def _fake_urlopen(request: urllib.request.Request,
                           timeout: float | None = None) -> _FakeResponse:
             self.sent_requests.append(request)
-            return _FakeResponse(b"{}", self.response_status)
+            return _FakeResponse(self.response_body, self.response_status)
 
         urllib.request.urlopen = _fake_urlopen
 
@@ -334,6 +335,15 @@ class TestChallengesSubcommand(_UrlopenTransportTestCase):
             urllib.parse.urlparse(self._single_request().full_url).query)
         self.assertEqual(query["paperDoi"], ["10.48550/arxiv.2301.00001"])
 
+    def test_a_null_author_list_item_prints_the_server_json_unchanged(self) -> None:
+        # A deleted account leaves its challenges on record with null authorship.
+        listing = {"items": [{"id": "chal-1", "title": "Solve cohort percentile"
+                              " drift", "author": None, "score": 3}],
+                   "nextCursor": None}
+        self.response_body = json.dumps(listing).encode()
+        stdout_text, _ = self._run(["challenges"])
+        self.assertEqual(json.loads(stdout_text), listing)
+
     def test_an_unknown_status_value_is_rejected(self) -> None:
         with contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit) as caught:
@@ -364,6 +374,23 @@ class TestChallengeSubcommand(_UrlopenTransportTestCase):
             urllib.parse.urlparse(self._single_request().full_url).path,
             "/api/v1/grand-challenges/..%2Fverifications%3Flimit%3D1",
         )
+
+    def test_a_tombstone_detail_prints_the_server_json_unchanged(self) -> None:
+        # A removed challenge resolves to a tombstone: no title, sections,
+        # author, or score. The client prints the server JSON as is.
+        tombstone = {"id": "chal-1", "removed": True,
+                     "createdAt": "2026-08-01T00:00:00Z", "parentId": None}
+        self.response_body = json.dumps(tombstone).encode()
+        stdout_text, stderr_text = self._run(["challenge", "chal-1"])
+        self.assertEqual(json.loads(stdout_text), tombstone)
+        self.assertEqual(stderr_text, "")
+
+    def test_a_null_author_detail_prints_the_server_json_unchanged(self) -> None:
+        detail = {"id": "chal-1", "title": "Solve cohort percentile drift",
+                  "author": None, "score": 3, "children": [], "papers": []}
+        self.response_body = json.dumps(detail).encode()
+        stdout_text, _ = self._run(["challenge", "chal-1"])
+        self.assertEqual(json.loads(stdout_text), detail)
 
 
 class TestPostChallengeSubcommand(_UrlopenTransportTestCase):
@@ -571,6 +598,58 @@ class TestSolveChallengeSubcommand(_UrlopenTransportTestCase):
                     ["solve-challenge", "chal-1", "--note", "long enough note",
                      "--reopen"])
         self.assertEqual(caught.exception.code, 2)
+
+
+class TestReportChallengeSubcommand(_UrlopenTransportTestCase):
+    def test_it_posts_the_subject_without_a_note(self) -> None:
+        self.response_status = 201
+        self._run(["report-challenge", "chal-1"])
+        request = self._single_request()
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(urllib.parse.urlparse(request.full_url).path,
+                         "/api/v1/reports")
+        self.assertEqual(request.get_header("Authorization"), "Bearer test-key")
+        self.assertEqual(json.loads(request.data.decode()),
+                         {"subjectKind": "grand_challenge", "subjectId": "chal-1"})
+
+    def test_a_note_joins_the_body(self) -> None:
+        self.response_status = 201
+        self._run(["report-challenge", "chal-1",
+                   "--note", "The post is advertising, not a research problem."])
+        self.assertEqual(json.loads(self._single_request().data.decode()), {
+            "subjectKind": "grand_challenge",
+            "subjectId": "chal-1",
+            "note": "The post is advertising, not a research problem.",
+        })
+
+    def test_note_bounds_count_utf16_units(self) -> None:
+        # 501 non-BMP characters are 1002 UTF-16 code units, over the 1000 limit.
+        self._run(["report-challenge", "chal-1", "--note", "\U0001f9ea" * 501],
+                  expected_exit_code=1)
+        self.assertEqual(self.sent_requests, [])
+
+    def test_a_note_of_exactly_one_thousand_units_is_accepted(self) -> None:
+        self.response_status = 201
+        self._run(["report-challenge", "chal-1", "--note", "n" * 1000])
+        self.assertEqual(
+            json.loads(self._single_request().data.decode())["note"], "n" * 1000)
+
+    def test_a_whitespace_only_note_is_refused_before_any_request(self) -> None:
+        self._run(["report-challenge", "chal-1", "--note", "   "],
+                  expected_exit_code=1)
+        self.assertEqual(self.sent_requests, [])
+
+    def test_a_201_response_prints_no_stderr_notice(self) -> None:
+        self.response_status = 201
+        stdout_text, stderr_text = self._run(["report-challenge", "chal-1"])
+        self.assertEqual(stderr_text, "")
+        json.loads(stdout_text)  # stdout stays pure JSON
+
+    def test_a_200_response_notes_the_existing_report_on_stderr(self) -> None:
+        self.response_status = 200
+        stdout_text, stderr_text = self._run(["report-challenge", "chal-1"])
+        self.assertIn("existing report", stderr_text)
+        json.loads(stdout_text)
 
 
 class TestSubmitChallengeDeclaration(_UrlopenTransportTestCase):
