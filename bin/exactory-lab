@@ -43,6 +43,33 @@ _STAGES = (
     "complete",
 )
 
+# The credentials the study loop can use, and what the loop does without each one.
+# One home for this policy: stage 0 announces it, and the stages that need a key
+# read it here instead of restating it. Writing a paper needs no credential at
+# all, so a missing key never blocks a stage that comes before the one it gates.
+_CREDENTIALS = (
+    {
+        "name": "EXACTORY_API_KEY",
+        "unlocks": "the challenge and suggestion reads in stage 2, and stage 7 submit",
+        "without_it": "the study runs to a finished local paper, and sends nothing"
+                      " to exactory",
+        "create_at": "https://www.exactory.ai/console",
+    },
+    {
+        "name": "ZENODO_SANDBOX_TOKEN",
+        "unlocks": "the stage 6 test deposit to the Zenodo sandbox",
+        "without_it": "the draft stays in the workspace, and no test record is created",
+        "create_at": "https://sandbox.zenodo.org/account/settings/applications/tokens/new/",
+    },
+    {
+        "name": "ZENODO_TOKEN",
+        "unlocks": "the stage 6 production deposit, which mints the DOI stage 7 submits",
+        "without_it": "the draft stays in the workspace, no DOI is minted, and stage 7"
+                      " has nothing to submit",
+        "create_at": "https://zenodo.org/account/settings/applications/tokens/new/",
+    },
+)
+
 _STUDY_DIR_NAMES = (
     ".exactory",
     "context",
@@ -169,6 +196,20 @@ def _run_init(args: argparse.Namespace) -> None:
     print(f"Created the study workspace in {workspace_dir.resolve()}.")
     print("Stage 0 waits here: put the starting context into context/,"
           " or say to start from nothing.")
+
+
+def _run_keys(args: argparse.Namespace) -> None:
+    """Report which credentials are present. The values themselves are never read out."""
+    report = {
+        credential["name"]: {
+            "set": os.environ.get(credential["name"], "").strip() != "",
+            "unlocks": credential["unlocks"],
+            "without_it": credential["without_it"],
+            "create_at": credential["create_at"],
+        }
+        for credential in _CREDENTIALS
+    }
+    print(json.dumps(report, indent=2))
 
 
 def _run_state_show(args: argparse.Namespace) -> None:
@@ -509,6 +550,12 @@ def _build_parser() -> argparse.ArgumentParser:
     init.add_argument("--slug", required=True,
                       help="Short name of the study, used in job ids and records.")
     init.set_defaults(handler=_run_init)
+
+    keys = commands.add_parser(
+        "keys", allow_abbrev=False,
+        help="Report which credentials are set, and what the study does without each."
+    )
+    keys.set_defaults(handler=_run_keys)
 
     state = commands.add_parser("state", allow_abbrev=False,
                                 help="Read or advance the study state machine.")
