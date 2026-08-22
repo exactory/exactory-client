@@ -23,6 +23,9 @@ from pathlib import Path
 _DEFAULT_API_URL = "https://www.exactory.ai"
 _TIMEOUT_SECONDS = 30
 _BARE_ARXIV_ID_RE = re.compile(r"(\d{4}\.\d{4,5})(?:v\d+)?")
+# The server rejects more than this; the local check turns that into a message the
+# user reads before a request goes out. The server stays the authority.
+_MAX_DECLARED_CHALLENGES = 3
 
 # The release version has one definition: the plugin manifest. Deriving the
 # User-Agent from it at boot keeps the two from drifting apart.
@@ -119,9 +122,9 @@ def _run_submit(args: argparse.Namespace) -> None:
     else:
         body = {"url": args.url}
     if args.challenge:
-        if len(args.challenge) > 5:
+        if len(args.challenge) > _MAX_DECLARED_CHALLENGES:
             _exit_with_error(f"The command names {len(args.challenge)} challenges."
-                             " The limit is 5. Remove some.")
+                             f" The limit is {_MAX_DECLARED_CHALLENGES}. Remove some.")
         body["grandChallengeIds"] = args.challenge
     payload, status = _send_request("POST", "/api/v1/verifications", body)
     if status == 200:
@@ -399,7 +402,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     submit.add_argument("--challenge", action="append", metavar="CHALLENGE_ID",
                         help="A Grand Challenge this paper drew on. Repeat for"
-                             " more than one, at most 5.")
+                             " more than one, at most"
+                             f" {_MAX_DECLARED_CHALLENGES}.")
     submit.set_defaults(handler=_run_submit)
 
     status = commands.add_parser("status", allow_abbrev=False,
