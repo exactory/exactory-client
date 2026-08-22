@@ -117,7 +117,7 @@ optimization target, without turning the search into unbounded compute.
   a claim with no source does not enter the paper.
 
 When the results feed derived equations that will enter the paper, check those
-manipulations with `exactory-derive check` (see `/exactory:verify-derivation`)
+manipulations with `exactory-derive check`
 so a wrong step is caught here, not by a verifier later.
 
 Log the stage decision (what worked, what did not, the key numbers, honestly)

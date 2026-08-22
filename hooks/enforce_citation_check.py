@@ -5,8 +5,7 @@ The authoritative gate lives in the CLIs: `exactory submit` and `exactory-draft
 deposit --production` run `exactory-check gate` themselves before any network
 call. This hook is the second layer of the same rule, applied at the Bash
 boundary. It splits the command into shell tokens and intercepts an `exactory`
-token directly followed by a `submit` token (a next token of `submit-review` is
-a different subcommand and stays neutral), or an `exactory-draft` token with a
+token directly followed by a `submit` token, or an `exactory-draft` token with a
 later `deposit` token and a later `--production` flag (any unambiguous argparse
 abbreviation down to `--prod` counts). A command that names those operations
 but does not split as shell text is denied as unparseable, in and out of a

@@ -166,30 +166,13 @@ def _run_paper(args: argparse.Namespace) -> None:
     _print_json(payload)
 
 
-def _run_suggestions(args: argparse.Namespace) -> None:
-    identifier = _resolve_paper_identifier(args.identifier)
-    payload, _ = _send_request(
-        "GET", "/api/v1/suggestions/" + urllib.parse.quote(identifier))
-    _print_json(payload)
-
-
-def _run_submit_review(args: argparse.Namespace) -> None:
-    try:
-        with open(args.file, encoding="utf-8") as handle:
-            review = json.load(handle)
-    except FileNotFoundError:
-        _exit_with_error(f"The file {args.file} does not exist."
-                         " Make sure that the path is correct.")
-    except json.JSONDecodeError as error:
-        _exit_with_error(f"The file {args.file} is not valid JSON. Cause: {error}."
-                         " Correct the file. Then send it again.")
-    payload, _ = _send_request(
-        "POST",
-        "/api/v1/verifications/"
-        + urllib.parse.quote(args.verification_id, safe="")
-        + "/reviews",
-        review,
-    )
+def _run_vote(args: argparse.Namespace) -> None:
+    path = ("/api/v1/verifications/"
+            + urllib.parse.quote(args.verification_id, safe="") + "/vote")
+    if args.value == 0:
+        payload, _ = _send_request("DELETE", path)
+    else:
+        payload, _ = _send_request("PUT", path, {"value": args.value})
     _print_json(payload)
 
 
@@ -199,30 +182,6 @@ def _resolve_paper_identifier(identifier: str) -> str:
         # The server looks papers up by DOI; a bare arXiv id maps to its DataCite DOI.
         return "10.48550/arxiv." + match.group(1)
     return identifier
-
-
-def _read_review_file(path: str) -> dict:
-    if not os.path.exists(path):
-        return {"claims": []}
-    try:
-        with open(path, encoding="utf-8") as handle:
-            review = json.load(handle)
-    except json.JSONDecodeError as error:
-        _exit_with_error(f"The file {path} is not valid JSON. Cause: {error}."
-                         " Correct or delete the file. Then run the command again.")
-    if not isinstance(review, dict) or not isinstance(review.get("claims"), list):
-        _exit_with_error(f"The file {path} does not hold a review object with a claims list.")
-    return review
-
-
-def _append_claim_to_review(path: str, claim: dict) -> None:
-    review = _read_review_file(path)
-    review["claims"].append(claim)
-    with open(path, "w", encoding="utf-8") as handle:
-        json.dump(review, handle, indent=2)
-    count = len(review["claims"])
-    print(f"The file {path} now holds {count} claim(s)."
-          f" Submit with: exactory submit-review <verification-id> --file {path}")
 
 
 def _truncate_to_utf16_units(text: str, limit: int) -> str:
@@ -244,203 +203,6 @@ def _count_utf16_units(text: str) -> int:
     return len(text.encode("utf-16-le", "surrogatepass")) // 2
 
 
-_SUGGESTION_FIELD_UNIT_BOUNDS = {
-    "title": 120,
-    "ground": 1000,
-    "action": 2000,
-    "expectedOutcome": 1000,
-}
-
-
-def _read_suggestions_file(path: str) -> dict:
-    """Parse the {continuous, drastic} suggestion pair every evaluative claim carries
-    (design 2026-08-11). Bounds mirror the server's contract in UTF-16 code units.
-    Duplicated across the binaries the way _truncate_to_utf16_units is: bin/ holds
-    exactly four executables, so a shared module is a file-layout change this
-    validator does not get to make."""
-    try:
-        with open(path, encoding="utf-8") as handle:
-            suggestions = json.load(handle)
-    except FileNotFoundError:
-        _exit_with_error(f"The file {path} does not exist.")
-    except json.JSONDecodeError as error:
-        _exit_with_error(f"The file {path} is not valid JSON. Cause: {error}")
-
-    if not isinstance(suggestions, dict):
-        _exit_with_error(f"The file {path} does not hold a JSON object with a"
-                         ' "continuous" and a "drastic" suggestion.')
-    unknown_slots = sorted(set(suggestions) - {"continuous", "drastic"})
-    if unknown_slots:
-        _exit_with_error(f"The file {path} carries an unknown key:"
-                         f" {', '.join(unknown_slots)}."
-                         ' Write exactly "continuous" and "drastic".')
-
-    parsed = {}
-    for slot in ("continuous", "drastic"):
-        entry = suggestions.get(slot)
-        if not isinstance(entry, dict):
-            _exit_with_error(f'The file {path} is missing the "{slot}" suggestion.'
-                             " Write both suggestions.")
-        unknown_fields = sorted(set(entry) - set(_SUGGESTION_FIELD_UNIT_BOUNDS))
-        if unknown_fields:
-            _exit_with_error(f'The "{slot}" suggestion carries an unknown key:'
-                             f" {', '.join(unknown_fields)}.")
-        parsed_entry = {}
-        for field_name, unit_bound in _SUGGESTION_FIELD_UNIT_BOUNDS.items():
-            value = entry.get(field_name)
-            if not isinstance(value, str) or value.strip() == "":
-                _exit_with_error(f'The "{slot}" suggestion is missing "{field_name}".'
-                                 " Write all four fields.")
-            value = value.strip()
-            if _count_utf16_units(value) > unit_bound:
-                _exit_with_error(f'The "{field_name}" of the "{slot}" suggestion is'
-                                 f" over the limit of {unit_bound} characters."
-                                 " Make it shorter.")
-            parsed_entry[field_name] = value
-        parsed[slot] = parsed_entry
-    return parsed
-
-
-def _read_claim_text_file(path: str | None, field_name: str) -> str | None:
-    if path is None:
-        return None
-    try:
-        with open(path, encoding="utf-8") as handle:
-            text = handle.read().strip()
-    except FileNotFoundError:
-        _exit_with_error(f"The file {path} does not exist.")
-    if text == "":
-        _exit_with_error(f"The {field_name} file is empty."
-                         f" Write the {field_name}, or omit the flag.")
-    return _truncate_to_utf16_units(text, 8000)
-
-
-def _build_claim_envelope(args: argparse.Namespace, dimension: str, procedure: str,
-                          payload: dict) -> dict:
-    claim = {
-        "dimension": dimension,
-        "procedure": procedure,
-        "severity": args.severity,
-        "sources": [{"url": url} for url in (args.source_url or [])],
-        "payload": payload,
-    }
-    for field_name, path in (("rationale", args.rationale_file),
-                             ("background", args.background_file),
-                             ("plan", args.plan_file)):
-        text = _read_claim_text_file(path, field_name)
-        if text is not None:
-            claim[field_name] = text
-    if getattr(args, "target_claim_id", None):
-        claim["targetClaimId"] = args.target_claim_id
-    if getattr(args, "supersedes", None):
-        claim["supersedesClaimId"] = args.supersedes
-    return claim
-
-
-def _run_compose_cross_reference(args: argparse.Namespace) -> None:
-    payload = {
-        "paperLocator": args.paper_locator,
-        "referencingText": args.referencing_text,
-        "referencedKind": args.kind,
-        "referencedLabel": args.label,
-    }
-    claim = _build_claim_envelope(args, "consistency", "cross_reference_resolution", payload)
-    _append_claim_to_review(args.out, claim)
-
-
-def _run_compose_value_agreement(args: argparse.Namespace) -> None:
-    for name, quote, value_text in (("A", args.quote_a, args.value_text_a),
-                                    ("B", args.quote_b, args.value_text_b)):
-        if value_text not in quote:
-            _exit_with_error(f"--value-text-{name.lower()} must appear verbatim inside"
-                             f" --quote-{name.lower()}. Quote the paper exactly.")
-    if args.value_a == args.value_b:
-        _exit_with_error("The two values are equal. A value-agreement claim states a"
-                         " disagreement; with equal values there is nothing to verify.")
-    payload = {
-        "quantity": args.quantity,
-        "statementA": {"paperLocator": args.locator_a, "quote": args.quote_a,
-                       "valueText": args.value_text_a, "value": args.value_a},
-        "statementB": {"paperLocator": args.locator_b, "quote": args.quote_b,
-                       "valueText": args.value_text_b, "value": args.value_b},
-    }
-    claim = _build_claim_envelope(args, "consistency", "value_agreement", payload)
-    _append_claim_to_review(args.out, claim)
-
-
-def _run_compose_citation(args: argparse.Namespace) -> None:
-    handles = [args.doi, args.title, args.arxiv_id, args.pmid]
-    if args.finding == "not_found" and all(h is None for h in handles):
-        _exit_with_error("A not_found claim needs at least one checkable handle:"
-                         " --doi, --title, --arxiv-id, or --pmid.")
-    if args.finding != "not_found" and args.doi is None:
-        _exit_with_error(f"A {args.finding} claim is about a DOI's registry record."
-                         " Give the DOI with --doi.")
-    if args.finding == "title_mismatch" and args.title is None:
-        _exit_with_error("A title_mismatch claim needs --title, the title the paper printed.")
-    if args.finding == "author_mismatch" and not args.author:
-        _exit_with_error("An author_mismatch claim needs --author, the authors the paper"
-                         " printed. Repeat the flag for more than one author.")
-    payload = {
-        "referenceString": args.reference_string,
-        "bibliography": {
-            "doi": args.doi,
-            "title": args.title,
-            "arxivId": args.arxiv_id,
-            "pmid": args.pmid,
-            "authors": args.author or [],
-            "year": args.year,
-        },
-        "finding": args.finding,
-    }
-    claim = _build_claim_envelope(args, "citation", "registry_lookup", payload)
-    _append_claim_to_review(args.out, claim)
-
-
-# The rubric versions this client composes against. The server's registry is the
-# authority; a mismatched pair is rejected at the boundary, so this pin fails fast
-# client-side instead.
-_RUBRIC_VERSIONS = {"core": 1}
-
-
-def _run_compose_rubric_score(args: argparse.Namespace) -> None:
-    version = _RUBRIC_VERSIONS.get(args.rubric)
-    if version is None:
-        known = ", ".join(sorted(_RUBRIC_VERSIONS))
-        _exit_with_error(f"The rubric registry does not know '{args.rubric}'."
-                         f" Known rubrics: {known}.")
-    rationale = _read_claim_text_file(args.rationale_file, "rationale")
-    payload = {
-        "rubric": {"id": args.rubric, "version": version},
-        "summary": args.summary,
-        "strengths": args.strength,
-        "weaknesses": args.weakness,
-        "scores": {
-            "soundness": args.soundness,
-            "presentation": args.presentation,
-            "contribution": args.contribution,
-            "overall": args.overall,
-        },
-        "decision": args.decision,
-        "confidence": args.confidence,
-    }
-    # A score reports no gap: no severity, no background/plan, no meta target — the
-    # same envelope shape the prediction uses, with the rationale required.
-    claim = {
-        "dimension": "appraisal",
-        "procedure": "rubric_score",
-        "rationale": rationale,
-        "suggestions": _read_suggestions_file(args.suggestions_file),
-        "sources": [{"url": url} for url in (args.source_url or [])],
-        "payload": payload,
-    }
-    if args.supersedes:
-        claim["supersedesClaimId"] = args.supersedes
-    _append_claim_to_review(args.out, claim)
-
-
-# ------------------------------------------------------- grand challenges
-#
 # Bounds mirror the server's contract in UTF-16 code units, the unit the server
 # counts, so a bad request fails fast without a network round trip.
 
@@ -641,7 +403,7 @@ def _build_parser() -> argparse.ArgumentParser:
     submit.set_defaults(handler=_run_submit)
 
     status = commands.add_parser("status", allow_abbrev=False,
-                                 help="Show one verification with its claims.")
+                                 help="Show one verification with its vote tally.")
     status.add_argument("verification_id")
     status.set_defaults(handler=_run_status)
 
@@ -674,138 +436,15 @@ def _build_parser() -> argparse.ArgumentParser:
     paper.add_argument("identifier", help="A DOI or an arXiv id.")
     paper.set_defaults(handler=_run_paper)
 
-    suggestions = commands.add_parser(
-        "suggestions", allow_abbrev=False,
-        help="List every next step the market has recorded against a paper."
+    vote = commands.add_parser(
+        "vote", allow_abbrev=False,
+        help="Vote on a verification: is the paper sound? Or clear your vote."
     )
-    suggestions.add_argument("identifier", help="A DOI or an arXiv id.")
-    suggestions.set_defaults(handler=_run_suggestions)
-
-    submit_review = commands.add_parser(
-        "submit-review", allow_abbrev=False,
-        help="Submit a review payload for one verification."
-    )
-    submit_review.add_argument("verification_id")
-    submit_review.add_argument("--file", required=True, help="Path of the review JSON file.")
-    submit_review.set_defaults(handler=_run_submit_review)
-
-    compose = commands.add_parser(
-        "compose-claim", allow_abbrev=False,
-        help="Append one claim to a review file, so no claim JSON is written by hand."
-    )
-    claim_kinds = compose.add_subparsers(dest="claim_kind", required=True)
-
-    def _add_envelope_flags(subparser: argparse.ArgumentParser) -> None:
-        subparser.add_argument("--severity", choices=["substantive", "minor"],
-                               default="substantive")
-        subparser.add_argument("--rationale-file",
-                               help="A file with the natural-language reasoning.")
-        subparser.add_argument("--background-file",
-                               help="A file with context: where the finding sits in the"
-                                    " paper, and what the paper asserts there.")
-        subparser.add_argument("--plan-file",
-                               help="A file with the suggested next step or fix.")
-        subparser.add_argument("--source-url", action="append",
-                               help="A URL the claim leans on. Repeat for more than one.")
-        subparser.add_argument("--target-claim-id",
-                               help="The claim this claim disputes (meta-verification).")
-        subparser.add_argument("--supersedes",
-                               help="The claim of your own this claim replaces. Corrections"
-                                    " are appended: the earlier claim stays on record.")
-        subparser.add_argument("--out", default="review.json")
-
-    cross_reference = claim_kinds.add_parser(
-        "cross-reference", allow_abbrev=False,
-        help="The paper references a figure, table, or section that does not exist."
-    )
-    cross_reference.add_argument("--paper-locator", required=True,
-                                 help="Where the reference sits, for example 'Section 5'.")
-    cross_reference.add_argument("--referencing-text", required=True,
-                                 help="The referencing sentence, verbatim from the paper.")
-    cross_reference.add_argument(
-        "--kind", required=True,
-        choices=["figure", "table", "section", "appendix", "algorithm", "theorem", "lemma"])
-    cross_reference.add_argument("--label", required=True,
-                                 help="The number or letter as printed, for example 7 or B.")
-    _add_envelope_flags(cross_reference)
-    cross_reference.set_defaults(handler=_run_compose_cross_reference)
-
-    value_agreement = claim_kinds.add_parser(
-        "value-agreement", allow_abbrev=False,
-        help="The same quantity is stated with two different values."
-    )
-    value_agreement.add_argument("--quantity", required=True,
-                                 help="What both statements measure, in plain words.")
-    value_agreement.add_argument("--locator-a", required=True)
-    value_agreement.add_argument("--quote-a", required=True,
-                                 help="The first statement, verbatim from the paper.")
-    value_agreement.add_argument("--value-text-a", required=True,
-                                 help="The value exactly as it appears inside --quote-a.")
-    value_agreement.add_argument("--value-a", type=float, required=True)
-    value_agreement.add_argument("--locator-b", required=True)
-    value_agreement.add_argument("--quote-b", required=True)
-    value_agreement.add_argument("--value-text-b", required=True)
-    value_agreement.add_argument("--value-b", type=float, required=True)
-    _add_envelope_flags(value_agreement)
-    value_agreement.set_defaults(handler=_run_compose_value_agreement)
-
-    citation = claim_kinds.add_parser(
-        "citation", allow_abbrev=False,
-        help="A reference does not exist, does not resolve, or misstates its record."
-    )
-    citation.add_argument("--reference-string", required=True,
-                          help="The reference exactly as the paper prints it.")
-    citation.add_argument(
-        "--finding", required=True,
-        choices=["not_found", "unresolved", "title_mismatch", "author_mismatch"])
-    citation.add_argument("--doi")
-    citation.add_argument("--title")
-    citation.add_argument("--arxiv-id")
-    citation.add_argument("--pmid")
-    citation.add_argument("--author", action="append",
-                          help="One author as printed. Repeat for more than one.")
-    citation.add_argument("--year", type=int)
-    _add_envelope_flags(citation)
-    citation.set_defaults(handler=_run_compose_citation)
-
-    rubric_score = claim_kinds.add_parser(
-        "rubric-score", allow_abbrev=False,
-        help="Score the paper against a registered rubric. The market records the"
-             " score; it does not adjudicate it."
-    )
-    rubric_score.add_argument("--rubric", default="core",
-                              help="The rubric id from the registry (default: core).")
-    rubric_score.add_argument("--summary", required=True,
-                              help="What the paper does and claims, in your own words.")
-    rubric_score.add_argument("--strength", action="append", required=True,
-                              help="One concrete strength. Repeat for more than one.")
-    rubric_score.add_argument("--weakness", action="append", required=True,
-                              help="One concrete, actionable weakness. Repeat for more.")
-    rubric_score.add_argument("--soundness", type=int, required=True,
-                              help="1-4.")
-    rubric_score.add_argument("--presentation", type=int, required=True,
-                              help="1-4.")
-    rubric_score.add_argument("--contribution", type=int, required=True,
-                              help="1-4.")
-    rubric_score.add_argument("--overall", type=int, required=True,
-                              help="1-10.")
-    rubric_score.add_argument("--decision", choices=["accept", "reject"], required=True)
-    rubric_score.add_argument("--confidence", type=int, required=True,
-                              help="1-5.")
-    rubric_score.add_argument("--rationale-file", required=True,
-                              help="A file with the reasoning behind the scores.")
-    rubric_score.add_argument(
-        "--suggestions-file", required=True,
-        help="A JSON file with the two next steps the appraisal proposes:"
-             ' {"continuous": {...}, "drastic": {...}}, each with a "title", a'
-             ' "ground", an "action", and an "expectedOutcome".')
-    rubric_score.add_argument("--source-url", action="append",
-                              help="A URL the appraisal leans on. Repeat for more than one.")
-    rubric_score.add_argument("--supersedes",
-                              help="The appraisal of your own this one replaces. Corrections"
-                                   " are appended: the earlier appraisal stays on record.")
-    rubric_score.add_argument("--out", default="review.json")
-    rubric_score.set_defaults(handler=_run_compose_rubric_score)
+    vote.add_argument("verification_id")
+    vote.add_argument("--value", type=int, choices=[1, -1, 0], required=True,
+                      help="1 says the paper is sound. -1 says it is not."
+                           " 0 clears your vote.")
+    vote.set_defaults(handler=_run_vote)
 
     challenges = commands.add_parser(
         "challenges", allow_abbrev=False,

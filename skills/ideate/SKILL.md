@@ -35,7 +35,7 @@ it.
   (`exactory submit ... --challenge <challenge-id>`).
 - `context/` — the human's material and wishes.
 - The market's recorded next steps. Before fixing the problem, run
-  `exactory suggestions <doi-or-arxiv-id>` on the closest prior work. Every
+  `exactory challenges --paper-doi <doi-or-arxiv-id>` on the closest prior work. Every
   evaluated paper carries a pair of recorded next steps; one that matches your
   direction is evidence the field wants it, and one that contradicts it is a
   finding to answer in the framing.
@@ -88,7 +88,7 @@ ambition.
 6. **Create the draft layer.** The chosen problem fixes the title and the
    category:
    `exactory-draft init --title "<title>" --category <arxiv-category>`. The
-   category matches the cohort's, because the self-prediction and the draft's
+   category matches the cohort's, because the expected verdict and the draft's
    cohort are stated against it.
 7. Log the stage decision (the problem chosen and why, the closest prior work,
    the verdict) and set the state:
