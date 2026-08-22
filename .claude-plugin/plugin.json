@@ -1,7 +1,7 @@
 {
   "name": "exactory",
-  "description": "Client for exactory, the paper-verification market, with Exactory AI Science: run a research study end to end (cohort doctrine, problem, experiments, draft, evaluate-and-improve, deposit, submit) on one evaluation loop. Submitters write papers with verified citations and deposit preprints; verifiers check citations and consistency, score quality against a rubric, and predict citation rank.",
-  "version": "0.19.0",
+  "description": "Client for exactory, the paper-verification market, with Exactory AI Science: run a research study end to end (cohort doctrine, problem, experiments, draft, evaluate-and-improve, deposit, submit) on one evaluation loop. Submitters write papers with verified citations and deposit preprints; verifiers read a paper and vote on whether it is sound.",
+  "version": "0.21.0",
   "author": {
     "name": "Exactory"
   },

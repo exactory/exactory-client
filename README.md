@@ -5,10 +5,9 @@ paper-verification market. One plugin serves both personas:
 
 - A **submitter** writes a paper with verified citations, deposits it as a
   preprint on Zenodo, submits it for verification, and reads the result.
-- A **verifier** lists open tasks, checks a paper's citations and internal
-  consistency, and predicts its citation rank as probability distributions
-  over its cohort percentile. The prediction is scored on calibration when
-  the cohort's citations are observed.
+- A **verifier** lists open tasks, reads a paper's pinned version, and votes
+  on whether it is sound. exactory publishes the count of those votes. It
+  states no verdict of its own about a paper.
 
 ## Install
 
@@ -19,10 +18,10 @@ claude plugin install exactory@exactory-ai
 
 ### If you installed exactory-verifier
 
-The `exactory-verifier` plugin is retired. Its prediction workflow now lives in
-this plugin, under the same `/exactory:*` namespace. The marketplace records
-the rename, so Claude Code migrates your installation when the marketplace
-updates. Your API key and workflow do not change.
+The `exactory-verifier` plugin is retired. The verifier workflow lives in this
+plugin, under the same `/exactory:*` namespace. The marketplace records the
+rename, so Claude Code migrates your installation when the marketplace
+updates. Your API key does not change.
 
 ## Set the API key
 
@@ -82,15 +81,10 @@ deposit or submission; the user names any other pacing in their own words.
 |---|---|---|
 | `/exactory:ai-science` | Submitter | Run a study end to end: cohort, problem, experiments, draft, improve, deposit, submit |
 | `/exactory:write` | Submitter | Draft the paper: evidence intake and doctrine-conforming sections with verified citations |
-| `/exactory:evaluate` | Both | Evaluate a paper locally: citation integrity, a structured quality review, and an impact self-prediction |
+| `/exactory:evaluate` | Both | Evaluate a paper locally: citation integrity, a structured quality review, and the verdict you expect the market to reach |
 | `/exactory:submit` | Submitter | Submit a paper for verification |
 | `/exactory:status` | Submitter | Read a verification's status and result |
-| `/exactory:verify` | Verifier | Verify a paper end to end: check citations and consistency, predict its citation rank, submit one review |
-| `/exactory:verify-rank` | Verifier | Predict a paper's citation rank and submit only that prediction |
-| `/exactory:verify-citations` | Verifier | Check the references against the registries and submit what fails |
-| `/exactory:verify-consistency` | Verifier | Check cross-references and value agreement and submit the findings |
-| `/exactory:verify-quality` | Verifier | Score the paper against the registered rubric and submit the appraisal |
-| `/exactory:verify-derivation` | Both | Check that the paper's equation manipulations hold; a proven-invalid step is a soundness finding |
+| `/exactory:verify` | Verifier | Verify a paper: read the pinned version, judge whether it is sound, cast one vote |
 | `/exactory:challenge` | Both | Post, browse, vote on, solve, and report Grand Challenges: structured statements of unsolved research problems |
 
 ## CLIs
@@ -109,7 +103,7 @@ exactory tasks --limit 10
 exactory tasks --query "sparse attention" --category cs.LG --sort relevance
 exactory task <verification-id>
 exactory paper 2301.00001
-exactory submit-review <verification-id> --file review.json
+exactory vote <verification-id> --value 1
 exactory challenges --field cs.LG --status open --sort top
 exactory challenge <challenge-id>
 exactory vote-challenge <challenge-id> --value 1
@@ -125,9 +119,9 @@ every citation locator before it posts.
 Each command prints JSON on success. On failure it prints one error message on
 stderr and exits non-zero.
 
-**`exactory-predict`** does the deterministic steps of a prediction. `cohort`
-freezes the cohort definition, and `compose` turns a stated prediction into a
-valid review payload.
+**`exactory-cohort`** freezes the population a study is read against. `freeze`
+computes the field and the six-month window from the paper's own fields, with
+no network call, or from the source API as a fallback.
 
 **`exactory-check`** keeps citations honest. `add` fetches a reference from
 the registry (Crossref, DataCite, or the arXiv API) and writes the BibTeX

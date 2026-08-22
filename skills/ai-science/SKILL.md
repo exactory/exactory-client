@@ -6,7 +6,7 @@ description: Run a research study end to end on exactory - build a cohort and it
 
 This is the loop the whole product is built around. A paper is not written and
 then judged; writing *is* running the loop — draft, verify deterministically,
-score against the rubric, predict the impact, improve, and repeat until the
+score against the rubric, improve, and repeat until the
 paper survives it. Submitting opens that same loop to independent verifiers on
 an immutable, DOI-deposited record. You run the inner loop; the market runs the
 outer one.
@@ -14,7 +14,7 @@ outer one.
 You are the scientist. You set the problem, write and run the experiment code,
 write the paper, and judge it, using your own tools. No external LLM keys are
 involved. The tools are `exactory-lab`, `exactory-draft`, `exactory-check`,
-`exactory-predict`, and `exactory`, all on PATH while this plugin is enabled.
+`exactory-cohort`, and `exactory`, all on PATH while this plugin is enabled.
 
 The workspace layout and every file contract are in
 [STUDY.md](STUDY.md). The improvement loop is in [LOOP.md](LOOP.md). Read both

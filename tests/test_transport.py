@@ -98,11 +98,15 @@ class _TransportTestCase(unittest.TestCase):
         os.chdir(self.scratch_dir)
 
         self.requested_paths: list[str] = []
+        self.requested_methods: list[str] = []
+        self.request_bodies: list[dict | None] = []
         self.response_status = 201
         self.addCleanup(setattr, _transport, "_send_request", _transport._send_request)
 
         def _record_request(method: str, path: str, body: dict | None = None) -> tuple[dict, int]:
             self.requested_paths.append(path)
+            self.requested_methods.append(method)
+            self.request_bodies.append(body)
             return {}, self.response_status
 
         _transport._send_request = _record_request
@@ -182,18 +186,32 @@ class TestPaperSubcommand(_TransportTestCase):
         self.assertEqual(self.requested_paths, ["/api/v1/papers/10.5281/zenodo.21381192"])
 
 
-class TestSuggestionsSubcommand(_TransportTestCase):
-    def test_a_bare_arxiv_id_maps_to_its_datacite_doi(self) -> None:
-        self.response_status = 200
-        self._run(["suggestions", "2301.00001"])
-        self.assertEqual(self.requested_paths,
-                         ["/api/v1/suggestions/10.48550/arxiv.2301.00001"])
+class TestVoteSubcommand(_TransportTestCase):
+    def test_an_upvote_puts_the_value(self) -> None:
+        self._run(["vote", "656c336e-e892-4c47-80d2-a71d022f4116", "--value", "1"])
+        self.assertEqual(
+            self.requested_paths,
+            ["/api/v1/verifications/656c336e-e892-4c47-80d2-a71d022f4116/vote"],
+        )
+        self.assertEqual(self.requested_methods, ["PUT"])
+        self.assertEqual(self.request_bodies, [{"value": 1}])
 
-    def test_a_doi_passes_through_unchanged(self) -> None:
-        self.response_status = 200
-        self._run(["suggestions", "10.5281/zenodo.21381192"])
-        self.assertEqual(self.requested_paths,
-                         ["/api/v1/suggestions/10.5281/zenodo.21381192"])
+    def test_a_downvote_puts_the_negative_value(self) -> None:
+        self._run(["vote", "656c336e-e892-4c47-80d2-a71d022f4116", "--value", "-1"])
+        self.assertEqual(self.request_bodies, [{"value": -1}])
+
+    def test_a_zero_deletes_the_vote_with_no_body(self) -> None:
+        self._run(["vote", "656c336e-e892-4c47-80d2-a71d022f4116", "--value", "0"])
+        self.assertEqual(self.requested_methods, ["DELETE"])
+        self.assertEqual(self.request_bodies, [None])
+
+    def test_a_value_outside_the_three_choices_never_reaches_the_server(self) -> None:
+        parser = _transport._build_parser()
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                parser.parse_args(["vote", "656c336e-e892-4c47-80d2-a71d022f4116",
+                                   "--value", "2"])
+        self.assertEqual(self.requested_paths, [])
 
 
 class TestTaskSubcommand(_TransportTestCase):
@@ -217,12 +235,10 @@ class TestPathEncoding(_TransportTestCase):
             self.requested_paths, ["/api/v1/verifications/..%2Ftasks%3Flimit%3D1"]
         )
 
-    def test_submit_review_url_encodes_the_verification_id(self) -> None:
-        review_path = self.scratch_dir / "review.json"
-        review_path.write_text("{}")
-        self._run(["submit-review", "../tasks?x=1", "--file", str(review_path)])
+    def test_vote_url_encodes_the_verification_id(self) -> None:
+        self._run(["vote", "../tasks?x=1", "--value", "1"])
         self.assertEqual(
-            self.requested_paths, ["/api/v1/verifications/..%2Ftasks%3Fx%3D1/reviews"]
+            self.requested_paths, ["/api/v1/verifications/..%2Ftasks%3Fx%3D1/vote"]
         )
 
 

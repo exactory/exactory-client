@@ -15,12 +15,12 @@ The cohort is also where the problem comes from. A new paper is a new answer to
 a problem the existing papers left open, so the doctrine's list of open
 problems is the input to ideation.
 
-The cohort here is the same object the verifier freezes when it predicts a
+The cohort here is the same object the study is read against when it states a
 paper's rank — the corpus, category, and time window — so a submitter's field
 and a verifier's field are the same field. Before deposit the cohort is built
 from the registries; a submitted paper has no server-side cohort yet.
 
-Run every command from the workspace root. The tool is `exactory-predict`, on
+Run every command from the workspace root. The tool is `exactory-cohort`, on
 PATH while this plugin is enabled.
 
 ## Security rule, before anything else
@@ -42,13 +42,13 @@ it fixes which field's rules the paper is judged by. Log it:
 ### 2. Freeze the cohort
 
 ```
-exactory-predict cohort --corpus <corpus> --category <category> --published <today> > cohort.json
+exactory-cohort freeze --corpus <corpus> --category <category> --published <today> > cohort.json
 ```
 
 `<today>` is today's date while the paper is not yet deposited; it moves once,
 to the record's publication date, at deposit. The window is the six full
 calendar months that end with the month before the publication month, the same
-window the rank prediction uses. `exactory-predict` enumerates the member
+window the doctrine is read from. `exactory-cohort` computes the member
 papers itself.
 
 ### 3. Read to the required depth

@@ -48,7 +48,7 @@ At the first entry to stage 5:
    reference through `exactory-check add` at the moment you cite it, compile the
    PDF, and pass `exactory-check lookup` before measuring. Fix blocking citation
    findings at the reference. When the change touches the paper's equations,
-   check them with `exactory-derive check` (see `/exactory:verify-derivation`)
+   check them with `exactory-derive check`
    and fix any `invalid` step at the math. A change that cannot be made to
    compile and verify inside the iteration is reverted and counts as not adopted.
 5. **Commit the change.** Files under `draft/` (and, for an experiment return,

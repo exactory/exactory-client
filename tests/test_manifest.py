@@ -36,7 +36,7 @@ class TestPluginManifest(unittest.TestCase):
     def test_plugin_manifest_parses_and_carries_the_release_version(self) -> None:
         manifest = json.loads((_PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text())
         self.assertEqual(manifest["name"], "exactory")
-        self.assertEqual(manifest["version"], "0.19.0")
+        self.assertEqual(manifest["version"], "0.21.0")
 
     def test_every_bin_user_agent_carries_the_manifest_version(self) -> None:
         version = json.loads(
@@ -48,7 +48,7 @@ class TestPluginManifest(unittest.TestCase):
             "exactory-derive": f"exactory-derive/{version}",
             "exactory-draft": f"exactory-draft/{version}",
             "exactory-lab": f"exactory-lab/{version}",
-            "exactory-predict": f"exactory-predict/{version}",
+            "exactory-cohort": f"exactory-cohort/{version}",
         }
         # Files only. CI compiles every bin before it runs the tests, and on Python 3.12
         # that writes a `bin/__pycache__` directory, which is a build artifact and not a

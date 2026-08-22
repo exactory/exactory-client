@@ -85,9 +85,9 @@ One file per evaluation iteration, numbered from `iter_001.md`. Four parts:
 `iter_001.md` also records the improvement target and the iteration budget
 stated at the loop's activation.
 
-After submission, when the market's independent prediction arrives, append it
-to the latest file next to the local self-prediction. That external readout is
-what the local predictions are calibrated against.
+After submission, when the market's verifiers vote, append the count to the
+latest file next to the expected verdict. That external readout is what the
+local judgment is calibrated against.
 
 ## The iteration cadence (the improvement loop)
 

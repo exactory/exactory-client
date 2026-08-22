@@ -1,0 +1,245 @@
+#!/usr/bin/env python3
+"""exactory-cohort: freeze the population a study is read against.
+
+One command:
+  freeze - compute the cohort definition, from the paper's own fields (no network) or,
+           as a fallback, by reading the paper's source metadata
+
+The cohort is the field over the six full calendar months before the paper was
+published. This tool does the date arithmetic and the JSON, so no call site computes
+the window by hand.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import os
+import sys
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
+from datetime import date, timedelta
+from pathlib import Path
+
+_ARXIV_API_URL = "https://export.arxiv.org/api/query"
+_ZENODO_API_URL = "https://zenodo.org/api/records"
+_TIMEOUT_SECONDS = 30
+
+# The release version has one definition: the plugin manifest. Deriving the
+# User-Agent from it at boot keeps the two from drifting apart.
+_PLUGIN_VERSION = json.loads(
+    (Path(__file__).resolve().parent.parent / ".claude-plugin" / "plugin.json")
+    .read_text(encoding="utf-8")
+)["version"]
+_USER_AGENT = f"exactory-cohort/{_PLUGIN_VERSION}"
+
+# v1 provisional measurement ages (design 2026-08-06 §5). Frozen into every payload,
+# so a later per-field refinement changes future predictions only.
+
+# The cohort spans this many full calendar months, and it ends before the paper's
+# own publication month, so the cohort already exists when the prediction is made
+# (plan 2026-08-11 D1, D2).
+_COHORT_WINDOW_MONTHS = 6
+
+# The verifier's own floor: a sigma below this states a certainty about citation
+# futures that no evidence supports.
+_SIGMA_FLOOR = 0.3
+_SIGMA_CEILING = 10.0
+_LOGIT_BOUND = 10.0
+_DELTA_BOUND = 20.0
+
+# The server's bounds on a rationale, in UTF-16 code units. A sectioned rationale
+# holds the same total text as a one-block one, so the client refuses a file the
+# server would reject at the boundary anyway.
+_MAX_SECTION_COUNT = 20
+_MAX_HEADING_UNITS = 120
+_MAX_BODY_UNITS = 4000
+_MAX_RATIONALE_UNITS = 8000
+
+_ATOM_NS = {"atom": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
+
+
+def _exit_with_error(message: str, code: int = 1) -> None:
+    print(message, file=sys.stderr)
+    sys.exit(code)
+
+
+def _compute_cohort_window(published: str) -> tuple[str, str]:
+    """Map an ISO date to the six full calendar months that end with the month
+    before it. The rule has two implementations: the server recomputes it from the
+    paper it already holds and rejects a payload whose window disagrees, so this
+    one cannot drift away from it in silence."""
+    year, month = int(published[0:4]), int(published[5:7])
+    # The day before the first of the publication month is the last day of the
+    # month before it, February and leap years included.
+    window_end = date(year, month, 1) - timedelta(days=1)
+    start_year, start_month_index = divmod(
+        12 * year + (month - 1) - _COHORT_WINDOW_MONTHS, 12
+    )
+    window_start = date(start_year, start_month_index + 1, 1)
+    return window_start.isoformat(), window_end.isoformat()
+
+
+def _read_arxiv_cohort_inputs(arxiv_id: str) -> tuple[str, str]:
+    """Return the paper's primary category and publication date, both from arXiv."""
+    query = urllib.parse.urlencode({"id_list": arxiv_id})
+    request = urllib.request.Request(
+        f"{_ARXIV_API_URL}?{query}", headers={"User-Agent": _USER_AGENT}
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS) as response:
+            feed = ET.parse(response)
+    except OSError as error:
+        _exit_with_error(f"The client cannot reach the arXiv API. Cause: {error}."
+                         " Make sure that the network is available."
+                         " Then run the command again.")
+
+    entry = feed.find("atom:entry", _ATOM_NS)
+    category = None if entry is None else entry.find("arxiv:primary_category", _ATOM_NS)
+    published = None if entry is None else entry.findtext("atom:published", None, _ATOM_NS)
+    if entry is None or category is None or published is None:
+        _exit_with_error(f"The arXiv API returned no usable entry for id {arxiv_id}."
+                         " Make sure that the arXiv id is correct.")
+
+    return category.get("term"), published
+
+
+def _read_zenodo_published_date(record_id: str) -> str:
+    """Return the record's publication date. Zenodo carries no field classification."""
+    request = urllib.request.Request(
+        f"{_ZENODO_API_URL}/{record_id}", headers={"User-Agent": _USER_AGENT}
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS) as response:
+            record = json.load(response)
+    except OSError as error:
+        _exit_with_error(f"The client cannot reach the Zenodo API. Cause: {error}."
+                         " Make sure that the network is available."
+                         " Then run the command again.")
+
+    published = record.get("metadata", {}).get("publication_date")
+    if not published:
+        _exit_with_error(f"The Zenodo record {record_id} carries no publication date."
+                         " Pass --published together with --category and --corpus"
+                         " instead.")
+    return published
+
+
+def _run_freeze(args: argparse.Namespace) -> None:
+    # A paper is ranked against the canonical corpus of its field, whatever source it was
+    # submitted from (design 2026-08-06 §4). The task API now carries primaryCategory and
+    # publishedAt (arXiv) or a verifier-stated corpus/category and publishedAt (Zenodo)
+    # directly, so --published together with --category and --corpus computes the cohort
+    # with no network call. --arxiv-id and --zenodo-id remain as fallbacks that read the
+    # source API, for a task that predates those fields.
+    sources_given = sum(bool(value) for value in (args.published, args.arxiv_id, args.zenodo_id))
+    if sources_given == 0:
+        _exit_with_error(
+            "Pass a source: --published together with --category and --corpus,"
+            " --arxiv-id, or --zenodo-id."
+        )
+    if sources_given > 1:
+        _exit_with_error(
+            "Pass exactly one source: --published, --arxiv-id, or --zenodo-id."
+            " Combining them is ambiguous."
+        )
+
+    if args.published:
+        if not (args.category and args.corpus):
+            _exit_with_error(
+                "--published needs --category and --corpus together: this is the"
+                " direct-input path, computed with no network call."
+            )
+        corpus, category, published = args.corpus, args.category, args.published
+    elif args.arxiv_id:
+        category, published = _read_arxiv_cohort_inputs(args.arxiv_id)
+        corpus = args.corpus or "arxiv"
+        category = args.category or category
+    else:
+        if not (args.corpus and args.category):
+            _exit_with_error(
+                "A Zenodo paper needs --corpus and --category:"
+                " Zenodo records carry no field classification."
+            )
+        corpus, category = args.corpus, args.category
+        published = _read_zenodo_published_date(args.zenodo_id)
+
+    window_start, window_end = _compute_cohort_window(published)
+    json.dump(
+        {
+            "corpus": corpus,
+            "primaryCategory": category,
+            "windowStart": window_start,
+            "windowEnd": window_end,
+        },
+        sys.stdout,
+        indent=2,
+    )
+    print()
+
+
+def _truncate_to_utf16_units(text: str, limit: int) -> str:
+    """The server bounds claim text in UTF-16 code units (JavaScript string length),
+    where a non-BMP character counts as two. Truncating by Python code points would
+    pass text the server then rejects."""
+    units = 0
+    for index, char in enumerate(text):
+        units += 2 if ord(char) > 0xFFFF else 1
+        if units > limit:
+            return text[:index]
+    return text
+
+
+def _count_utf16_units(text: str) -> int:
+    """Length in UTF-16 code units, the unit the server's bounds count.
+    surrogatepass counts a lone surrogate as one unit, the way a JavaScript
+    string does, instead of raising UnicodeEncodeError."""
+    return len(text.encode("utf-16-le", "surrogatepass")) // 2
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="exactory-cohort", description=__doc__,
+                                     allow_abbrev=False)
+    commands = parser.add_subparsers(dest="command", required=True)
+
+    freeze = commands.add_parser(
+        "freeze", allow_abbrev=False,
+        help="Freeze the cohort definition, from the task's fields or a source API."
+    )
+    source = freeze.add_mutually_exclusive_group()
+    source.add_argument(
+        "--arxiv-id", help="For example 2301.00001. Fallback: calls the arXiv API."
+    )
+    source.add_argument(
+        "--zenodo-id", help="A Zenodo record id, for example 21381192. Fallback:"
+        " calls the Zenodo API."
+    )
+    freeze.add_argument(
+        "--published",
+        help="ISO date, for example 2026-07-15 (the task's publishedAt date part)."
+        " With --category and --corpus, computes the cohort with no network call.",
+    )
+    freeze.add_argument(
+        "--corpus",
+        help="The corpus the percentile is stated against, for example arxiv."
+        " Required with --published or --zenodo-id.",
+    )
+    freeze.add_argument(
+        "--category",
+        help="The field the paper is ranked within, for example cs.MA."
+        " Required with --published or --zenodo-id.",
+    )
+    freeze.set_defaults(handler=_run_freeze)
+
+    return parser
+
+
+def main() -> None:
+    args = _build_parser().parse_args()
+    args.handler(args)
+
+
+if __name__ == "__main__":
+    main()
