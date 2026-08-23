@@ -23,19 +23,30 @@ plugin, under the same `/exactory:*` namespace. The marketplace records the
 rename, so Claude Code migrates your installation when the marketplace
 updates. Your API key does not change.
 
-## Set the API key
+## Get the API key
 
 The key is what the market commands use. Writing a paper does not need it.
 
-1. Create an API key at https://www.exactory.ai/console.
-2. Export it before you start Claude Code:
+Say `/exactory:login` in a session, or run the two commands yourself:
 
 ```
-export EXACTORY_API_KEY=<your key>
+exactory login --email you@example.org
+exactory login --email you@example.org --code 123456
 ```
 
-The plugin never asks for the key in chat, and the key never appears in a
-payload.
+The first command sends a six-digit code to the address. The second one proves
+the address with the code and stores a key in `~/.config/exactory/credentials.json`
+(`$XDG_CONFIG_HOME` is honored), readable by you only. A new address becomes an
+account; an existing one gets one more key. When you use the code, you agree to the
+[Terms of Service](https://www.exactory.ai/policies/terms) and the
+[Privacy Policy](https://www.exactory.ai/policies/privacy).
+
+`EXACTORY_API_KEY`, when set, wins over the file. A key from
+https://www.exactory.ai/console/keys works there too. `exactory logout` removes
+the file; the key stays valid until you revoke it in the console.
+
+The plugin never asks for the key in chat, never prints it, and the key never
+appears in a payload.
 
 `exactory-lab keys` prints which credentials this environment holds, what each
 one unlocks, and what a study still does without it. It never prints a value.
@@ -79,6 +90,7 @@ deposit or submission; the user names any other pacing in their own words.
 
 | Skill | Persona | Purpose |
 |---|---|---|
+| `/exactory:login` | Both | Sign in or create an account with a code sent to your email, and store the API key locally |
 | `/exactory:ai-science` | Submitter | Run a study end to end: cohort, problem, experiments, draft, improve, deposit, submit |
 | `/exactory:write` | Submitter | Draft the paper: evidence intake and doctrine-conforming sections with verified citations |
 | `/exactory:evaluate` | Both | Evaluate a paper locally: citation integrity, a structured quality review, and the verdict you expect the market to reach |
@@ -95,6 +107,9 @@ file, standard library only.
 **`exactory`** is the transport to the API:
 
 ```
+exactory login --email you@example.org
+exactory login --email you@example.org --code 123456 --label "plugin on laptop"
+exactory logout
 exactory submit --arxiv-id 2301.00001
 exactory submit --url https://zenodo.org/records/21381192
 exactory submit --doi 10.5281/zenodo.21381192 --challenge <challenge-id>
@@ -176,7 +191,7 @@ do nothing.
 
 | Variable | Meaning | Default |
 |---|---|---|
-| `EXACTORY_API_KEY` | API key, sent as a Bearer token. Required for API commands. | none |
+| `EXACTORY_API_KEY` | API key, sent as a Bearer token. Optional: it wins over the file that `exactory login` writes. | none |
 | `EXACTORY_API_URL` | API base URL. | `https://www.exactory.ai` |
 | `EXACTORY_CONTACT_EMAIL` | Contact address that `exactory-check` adds to its registry requests. | none |
 | `ZENODO_SANDBOX_TOKEN` | Zenodo sandbox token, used for test deposits. | none |

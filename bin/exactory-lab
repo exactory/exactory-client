@@ -54,6 +54,8 @@ _CREDENTIALS = (
         "without_it": "the study runs to a finished local paper, and sends nothing"
                       " to exactory",
         "create_at": "https://www.exactory.ai/console",
+        # `exactory login` stores the key in a file; the variable is the other way in.
+        "login_command": "exactory login --email <your email>",
     },
     {
         "name": "ZENODO_SANDBOX_TOKEN",
@@ -198,17 +200,34 @@ def _run_init(args: argparse.Namespace) -> None:
           " or say to start from nothing.")
 
 
+def _stored_exactory_key_exists() -> bool:
+    """Whether `exactory login` left a key in the credentials file. The path logic is the
+    same as in bin/exactory, which owns the file; each command is one stdlib file."""
+    config_home = os.environ.get("XDG_CONFIG_HOME", "").strip()
+    base = Path(config_home) if config_home else Path.home() / ".config"
+    try:
+        stored = json.loads((base / "exactory" / "credentials.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(stored, dict) and str(stored.get("api_key", "")).strip() != ""
+
+
 def _run_keys(args: argparse.Namespace) -> None:
     """Report which credentials are present. The values themselves are never read out."""
-    report = {
-        credential["name"]: {
-            "set": os.environ.get(credential["name"], "").strip() != "",
+    report = {}
+    for credential in _CREDENTIALS:
+        is_set = os.environ.get(credential["name"], "").strip() != ""
+        if credential["name"] == "EXACTORY_API_KEY" and not is_set:
+            is_set = _stored_exactory_key_exists()
+        entry = {
+            "set": is_set,
             "unlocks": credential["unlocks"],
             "without_it": credential["without_it"],
             "create_at": credential["create_at"],
         }
-        for credential in _CREDENTIALS
-    }
+        if "login_command" in credential:
+            entry["login_command"] = credential["login_command"]
+        report[credential["name"]] = entry
     print(json.dumps(report, indent=2))
 
 

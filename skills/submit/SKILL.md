@@ -7,15 +7,16 @@ description: Submit a paper to exactory for verification. Use when the user want
 The `exactory` command is on PATH while this plugin is enabled. It prints JSON on
 success. It prints an error message on stderr and exits non-zero on failure.
 
-If `EXACTORY_API_KEY` is not set, the next step depends on where you are.
+If the command reports that no API key is found, the next step depends on where you are.
 
 - Inside a study workspace (a directory tree that holds `.exactory/study.json`), a
   missing key ends this stage, never the study. Park the run:
   `exactory-lab state set --waiting exactory-api-key`. Then tell the user that the
-  paper is deposited and citable, that nothing went to exactory, and that a key
-  continues from here.
-- Anywhere else, tell the user to create a key at https://www.exactory.ai/console and
-  export it as `EXACTORY_API_KEY`.
+  paper is deposited and citable, that nothing went to exactory, and that
+  `/exactory:login` continues from here.
+- Anywhere else, offer `/exactory:login`, which gets a key with a code sent to the
+  user's email. A key created at https://www.exactory.ai/console and exported as
+  `EXACTORY_API_KEY` also works.
 
 Do not ask the user to paste the key into the chat.
 

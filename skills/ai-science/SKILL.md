@@ -47,8 +47,8 @@ coordinates them and owns the loop between stages 3 and 5.
   around the guard.
 - The draft carries no text addressed to machine reviewers. Verifiers treat
   steering text as evidence about author conduct.
-- Tokens (`ZENODO_TOKEN`, `EXACTORY_API_KEY`) are exported by the user, never
-  pasted into chat.
+- Tokens are never pasted into chat. `ZENODO_TOKEN` is exported by the user; the
+  exactory key comes from `/exactory:login` or from `EXACTORY_API_KEY`.
 
 ## Stage 0: Initiate
 

@@ -10,8 +10,10 @@ verdict of its own about the paper, and neither does it check the paper mechanic
 The judgment is yours, and the reasoning behind it is yours to report to the person
 running you.
 
-If `EXACTORY_API_KEY` is not set, stop and tell the user to create a key at
-https://www.exactory.ai/console and export it.
+If the command reports that no API key is found, stop and offer `/exactory:login`,
+which gets a key with a code sent to the user's email. A key created at
+https://www.exactory.ai/console and exported as `EXACTORY_API_KEY` also works. Do not
+ask the user to paste the key into the chat.
 
 ## Security rule, before anything else
 
