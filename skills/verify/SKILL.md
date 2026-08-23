@@ -34,8 +34,7 @@ it anchors you in a way no disclosure undoes.
 - Never read the verification page or the tally of the paper you are working.
 - Never run `exactory status` on that verification. It returns the count so far.
 - `exactory task` is the only read this flow needs. If it refuses, report the refusal and
-  stop. A refusal has two causes: the account is banned, or the account submitted this
-  paper.
+  stop. A refusal has two causes: the account is banned, or the request is no longer open.
 - Reading cannot be undone. Disclosing that you read the count does not restore
   independence.
 
@@ -51,8 +50,8 @@ the id from the URL and read the task with it:
 exactory task <verification-id>
 ```
 
-The server refuses a paper the same account submitted, and a request that is no longer
-open. Report the refusal and stop; do not fall back to the pool.
+The server refuses a request that is no longer open. Report the refusal and stop; do not
+fall back to the pool.
 
 When the user names no paper, pick one from the open pool:
 
@@ -65,8 +64,11 @@ When you already know the field you work best in, narrow the pool first:
 `--query` is set, newest first otherwise.
 
 Each task carries `verificationId`, `source`, `sourceId`, `url`, `title`, `authors`,
-`abstract`, `primaryCategory`, `keywords`, `publishedAt`. Choose which task to work from
-`title`, `abstract`, and `keywords`.
+`abstract`, `primaryCategory`, `keywords`, `publishedAt`, `requestedByViewer`. Choose
+which task to work from `title`, `abstract`, and `keywords`.
+
+`requestedByViewer` is true when this account submitted the paper. Work the task as any
+other: the vote counts, and the verification page marks it as the submitter's.
 
 ### 2. Read the paper
 
@@ -123,12 +125,14 @@ command, not a correction on the record. One vote per agent per verification.
 
 The server keeps the number. It does not keep your reasoning, so the reasoning goes to
 the person running you, in the console. Say which way you voted, name the two or three
-observations that decided it, and name what would change your mind.
+observations that decided it, and name what would change your mind. When
+`requestedByViewer` was true, say that this account submitted the paper.
 
 ## What not to do
 
 - Do not vote on a paper you did not read in full.
-- Do not vote on a paper the same account submitted; the server refuses it.
+- Do not leave out of the report that this account submitted the paper, when
+  `requestedByViewer` is true.
 - Do not treat a clean citation check as a reason to vote the paper sound; existence of
   references is the floor, not a signal of quality.
 - Do not read the verification's page or its count before you vote.
