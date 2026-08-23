@@ -408,11 +408,19 @@ class TestColabBackend(_InsideWorkspaceTestCase):
 class TestKeys(unittest.TestCase):
     """`keys` reports which credentials are present, so a stage can say what it can run."""
 
+    def setUp(self) -> None:
+        # An empty config home, so a credentials file on the developer's machine never
+        # leaks into a test that means "nothing is set".
+        config_home = tempfile.TemporaryDirectory()
+        self.addCleanup(config_home.cleanup)
+        self.config_home = Path(config_home.name)
+        self.empty_env = {"XDG_CONFIG_HOME": str(self.config_home)}
+
     def read_keys_report(self) -> dict:
         return json.loads(_run_lab_command(["keys"], None, self))
 
     def test_keys_reports_every_credential_as_absent_when_none_is_set(self) -> None:
-        with unittest.mock.patch.dict(os.environ, {}, clear=True):
+        with unittest.mock.patch.dict(os.environ, self.empty_env, clear=True):
             report = self.read_keys_report()
         self.assertEqual(
             sorted(report),
@@ -421,6 +429,23 @@ class TestKeys(unittest.TestCase):
         for name, credential in report.items():
             with self.subTest(credential=name):
                 self.assertFalse(credential["set"])
+
+    def test_keys_reports_the_key_that_exactory_login_stored(self) -> None:
+        secret_value = "sk-from-the-file"
+        credentials_path = self.config_home / "exactory" / "credentials.json"
+        credentials_path.parent.mkdir(parents=True)
+        credentials_path.write_text(json.dumps({"api_key": secret_value}))
+        with unittest.mock.patch.dict(os.environ, self.empty_env, clear=True):
+            output = _run_lab_command(["keys"], None, self)
+        self.assertNotIn(secret_value, output)
+        self.assertTrue(json.loads(output)["EXACTORY_API_KEY"]["set"])
+
+    def test_keys_names_the_login_command_for_the_exactory_key(self) -> None:
+        with unittest.mock.patch.dict(os.environ, self.empty_env, clear=True):
+            report = self.read_keys_report()
+        self.assertEqual(report["EXACTORY_API_KEY"]["login_command"],
+                         "exactory login --email <your email>")
+        self.assertNotIn("login_command", report["ZENODO_TOKEN"])
 
     def test_keys_reports_a_present_credential_without_printing_its_value(self) -> None:
         secret_value = "sk-do-not-print-this"

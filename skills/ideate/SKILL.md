@@ -40,9 +40,9 @@ it.
   direction is evidence the field wants it, and one that contradicts it is a
   finding to answer in the framing.
 
-Both market reads need `EXACTORY_API_KEY`. They are evidence, not the source of
-the problem: the doctrine and `context/` are. If the key is not set, the two
-commands report it. Record in `idea/idea.md` that the market reads did not run,
+Both market reads need an API key (`exactory login`, or `EXACTORY_API_KEY`). They
+are evidence, not the source of the problem: the doctrine and `context/` are. If no
+key is found, the two commands report it. Record in `idea/idea.md` that the market reads did not run,
 and set the problem from the sources that remain. Do not stop the study for
 this, and do not ask the user for the key here.
 

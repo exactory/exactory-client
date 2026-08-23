@@ -11,6 +11,7 @@ import io
 import json
 import os
 import tempfile
+import urllib.error
 import urllib.parse
 import urllib.request
 import unittest
@@ -694,6 +695,152 @@ class TestSubmitChallengeDeclaration(_UrlopenTransportTestCase):
         self._run(["submit", "--doi", "10.5281/zenodo.1"] + challenge_flags,
                   expected_exit_code=1)
         self.assertEqual(self.sent_requests, [])
+
+
+class TestCredentials(unittest.TestCase):
+    """The key comes from the environment first, then from the credentials file."""
+
+    def setUp(self) -> None:
+        config_home = tempfile.TemporaryDirectory()
+        self.addCleanup(config_home.cleanup)
+        self.config_home = Path(config_home.name)
+        saved_env = {key: os.environ.get(key)
+                     for key in ("EXACTORY_API_KEY", "XDG_CONFIG_HOME")}
+
+        def _restore_env() -> None:
+            for key, value in saved_env.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+        self.addCleanup(_restore_env)
+        os.environ.pop("EXACTORY_API_KEY", None)
+        os.environ["XDG_CONFIG_HOME"] = str(self.config_home)
+
+    def test_the_environment_variable_wins(self) -> None:
+        _transport._save_api_key("file-key", "a@test.local", "laptop")
+        os.environ["EXACTORY_API_KEY"] = "env-key"
+        self.assertEqual(_transport._read_api_key(), "env-key")
+
+    def test_the_file_is_read_when_the_variable_is_unset(self) -> None:
+        _transport._save_api_key("file-key", "a@test.local", "laptop")
+        self.assertEqual(_transport._read_api_key(), "file-key")
+
+    def test_the_file_is_private_to_the_user(self) -> None:
+        path = _transport._save_api_key("file-key", "a@test.local", "laptop")
+        self.assertEqual(path, self.config_home / "exactory" / "credentials.json")
+        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(json.loads(path.read_text()),
+                         {"api_key": "file-key", "email": "a@test.local", "label": "laptop"})
+
+    def test_a_second_save_replaces_the_first(self) -> None:
+        _transport._save_api_key("first", "a@test.local", "laptop")
+        _transport._save_api_key("second", "a@test.local", "desk")
+        self.assertEqual(_transport._read_api_key(), "second")
+
+    def test_no_key_anywhere_reads_as_empty(self) -> None:
+        self.assertEqual(_transport._read_api_key(), "")
+
+    def test_a_damaged_file_reads_as_empty(self) -> None:
+        path = self.config_home / "exactory" / "credentials.json"
+        path.parent.mkdir(parents=True)
+        path.write_text("{not json")
+        self.assertEqual(_transport._read_api_key(), "")
+
+
+class TestLoginSubcommand(_UrlopenTransportTestCase):
+    """`login` is the one path that sends no key: the emailed code is the credential."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        os.environ.pop("EXACTORY_API_KEY", None)
+        saved_config_home = os.environ.get("XDG_CONFIG_HOME")
+        self.addCleanup(
+            lambda: os.environ.__setitem__("XDG_CONFIG_HOME", saved_config_home)
+            if saved_config_home is not None else os.environ.pop("XDG_CONFIG_HOME", None))
+        os.environ["XDG_CONFIG_HOME"] = str(self.scratch_dir)
+
+    def _fail_next_request(self, status: int, body: dict) -> None:
+        def _raise(request: urllib.request.Request,
+                   timeout: float | None = None) -> _FakeResponse:
+            self.sent_requests.append(request)
+            raise urllib.error.HTTPError(request.full_url, status, "refused", {},
+                                         io.BytesIO(json.dumps(body).encode()))
+        urllib.request.urlopen = _raise
+
+    def test_without_a_code_it_requests_one_and_sends_no_key(self) -> None:
+        self.response_status = 202
+        self.response_body = b'{"email": "a@test.local"}'
+        stdout, stderr = self._run(["login", "--email", "a@test.local"])
+        request = self._single_request()
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(request.full_url, "https://api.test/api/v1/email-codes")
+        self.assertIsNone(request.get_header("Authorization"))
+        self.assertEqual(json.loads(request.data), {"email": "a@test.local"})
+        self.assertEqual(json.loads(stdout), {"email": "a@test.local", "status": "code_sent"})
+        self.assertIn("Terms of Service", stderr)
+        self.assertIn("exactory login --email a@test.local --code", stderr)
+
+    def test_with_a_code_it_saves_the_key_and_never_prints_it(self) -> None:
+        self.response_status = 201
+        self.response_body = json.dumps({
+            "apiKey": "secret-key",
+            "key": {"id": "k1", "label": "laptop", "createdAt": "2026-08-23T00:00:00Z",
+                    "revokedAt": None},
+        }).encode()
+        stdout, stderr = self._run(["login", "--email", "a@test.local",
+                                    "--code", "123456", "--label", "laptop"])
+        request = self._single_request()
+        self.assertEqual(request.full_url, "https://api.test/api/v1/api-keys")
+        self.assertIsNone(request.get_header("Authorization"))
+        self.assertEqual(json.loads(request.data),
+                         {"email": "a@test.local", "code": "123456", "label": "laptop"})
+        self.assertNotIn("secret-key", stdout + stderr)
+        self.assertEqual(json.loads(stdout)["label"], "laptop")
+        self.assertEqual(json.loads(stdout)["saved_to"],
+                         str(self.scratch_dir / "exactory" / "credentials.json"))
+        self.assertEqual(_transport._read_api_key(), "secret-key")
+
+    def test_the_label_defaults_to_the_host_name(self) -> None:
+        self.response_status = 201
+        self.response_body = json.dumps({
+            "apiKey": "secret-key",
+            "key": {"id": "k1", "label": "plugin on box", "createdAt": "x", "revokedAt": None},
+        }).encode()
+        self._run(["login", "--email", "a@test.local", "--code", "123456"])
+        body = json.loads(self._single_request().data)
+        self.assertTrue(body["label"].startswith("plugin on "))
+
+    def test_a_wrong_code_names_the_login_command(self) -> None:
+        self._fail_next_request(401, {"error": "invalid_code"})
+        _, stderr = self._run(["login", "--email", "a@test.local", "--code", "000000"],
+                              expected_exit_code=1)
+        self.assertIn("exactory login --email", stderr)
+        self.assertNotIn("EXACTORY_API_KEY", stderr)
+        self.assertEqual(_transport._read_api_key(), "")
+
+    def test_a_rate_limit_says_to_wait(self) -> None:
+        self._fail_next_request(429, {"error": "rate_limited"})
+        _, stderr = self._run(["login", "--email", "a@test.local"], expected_exit_code=1)
+        self.assertIn("Wait", stderr)
+
+    def test_a_missing_key_elsewhere_names_the_login_command(self) -> None:
+        _, stderr = self._run(["tasks"], expected_exit_code=2)
+        self.assertIn("exactory login", stderr)
+        self.assertEqual(self.sent_requests, [])
+
+    def test_logout_removes_the_file_and_nothing_else(self) -> None:
+        path = _transport._save_api_key("file-key", "a@test.local", "laptop")
+        stdout, stderr = self._run(["logout"])
+        self.assertFalse(path.exists())
+        self.assertEqual(json.loads(stdout), {"removed": str(path)})
+        self.assertIn("console/keys", stderr)
+        self.assertEqual(self.sent_requests, [])
+
+    def test_logout_with_no_file_reports_nothing_removed(self) -> None:
+        stdout, _ = self._run(["logout"])
+        self.assertEqual(json.loads(stdout), {"removed": None})
 
 
 if __name__ == "__main__":
