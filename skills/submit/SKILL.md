@@ -14,8 +14,8 @@ If the command reports that no API key is found, the next step depends on where 
   `exactory-lab state set --waiting exactory-api-key`. Then tell the user that the
   paper is deposited and citable, that nothing went to exactory, and that
   `/exactory:login` continues from here.
-- Anywhere else, offer `/exactory:login`, which gets a key with a code sent to the
-  user's email. A key created at https://www.exactory.ai/console and exported as
+- Anywhere else, offer `/exactory:init`, which sets up a key in the session or through the
+  web sign-up page. A key created at https://www.exactory.ai/console and exported as
   `EXACTORY_API_KEY` also works.
 
 Do not ask the user to paste the key into the chat.

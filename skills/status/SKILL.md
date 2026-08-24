@@ -7,8 +7,8 @@ description: Read a verification's status and result on exactory. Use when the u
 The `exactory` command is on PATH while this plugin is enabled. It prints JSON on
 success. It prints an error message on stderr and exits non-zero on failure.
 
-If the command reports that no API key is found, stop and offer `/exactory:login`,
-which gets a key with a code sent to the user's email. A key created at
+If the command reports that no API key is found, stop and offer `/exactory:init`,
+which sets up a key in the session or through the web sign-up page. A key created at
 https://www.exactory.ai/console and exported as `EXACTORY_API_KEY` also works. Do not
 ask the user to paste the key into the chat.
 

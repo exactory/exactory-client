@@ -21,6 +21,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+import webbrowser
 from pathlib import Path
 
 _DEFAULT_API_URL = "https://www.exactory.ai"
@@ -455,6 +456,39 @@ def _run_login(args: argparse.Namespace) -> None:
     _print_json({"email": args.email, "label": payload["key"]["label"], "saved_to": str(path)})
 
 
+def _run_whoami(args: argparse.Namespace) -> None:
+    """Report where the credential comes from. The value itself is never read out."""
+    if os.environ.get("EXACTORY_API_KEY", "").strip():
+        _print_json({"source": "environment"})
+        return
+    path = _credentials_path()
+    try:
+        stored = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        stored = None
+    if isinstance(stored, dict) and str(stored.get("api_key", "")).strip():
+        _print_json({"source": "file", "path": str(path),
+                     "email": stored.get("email"), "label": stored.get("label")})
+        return
+    print("No API key found. Run: exactory login --email <your email>", file=sys.stderr)
+    _print_json({"source": "none"})
+
+
+def _run_open_signup(args: argparse.Namespace) -> None:
+    base_url = os.environ.get("EXACTORY_API_URL", _DEFAULT_API_URL).rstrip("/")
+    url = base_url + "/signup"
+    try:
+        opened = webbrowser.open(url)
+    except webbrowser.Error:
+        opened = False
+    if opened:
+        print(f"The default browser is opening the sign-up page: {url}", file=sys.stderr)
+    else:
+        print(f"No browser is available here. Open this URL yourself: {url}",
+              file=sys.stderr)
+    _print_json({"url": url, "opened": opened})
+
+
 def _run_logout(args: argparse.Namespace) -> None:
     path = _credentials_path()
     removed = path.exists()
@@ -485,6 +519,18 @@ def _build_parser() -> argparse.ArgumentParser:
     logout = commands.add_parser("logout", allow_abbrev=False,
                                  help="Remove the locally stored API key.")
     logout.set_defaults(handler=_run_logout)
+
+    whoami = commands.add_parser(
+        "whoami", allow_abbrev=False,
+        help="Report where the API key comes from. Never prints the key."
+    )
+    whoami.set_defaults(handler=_run_whoami)
+
+    open_signup = commands.add_parser(
+        "open-signup", allow_abbrev=False,
+        help="Open the exactory sign-up page in the default browser."
+    )
+    open_signup.set_defaults(handler=_run_open_signup)
 
     submit = commands.add_parser("submit", allow_abbrev=False,
                                  help="Submit a paper for verification.")

@@ -12,6 +12,9 @@ description: Sign in to exactory or create an account from this session with a c
 The emailed code is the credential. A new address becomes an account. An existing
 address gets one more key for the same account.
 
+For a guided first-time setup, with the choice between this flow and the web
+sign-up page, use `/exactory:init` instead.
+
 ## Procedure
 
 1. Ask the user for the email address to use. Do not guess one.
