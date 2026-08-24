@@ -45,8 +45,8 @@ account; an existing one gets one more key. When you use the code, you agree to 
 [Privacy Policy](https://www.exactory.ai/policies/privacy).
 
 `EXACTORY_API_KEY`, when set, wins over the file. A key from
-https://www.exactory.ai/console/keys works there too. `exactory logout` removes
-the file; the key stays valid until you revoke it in the console.
+https://www.exactory.ai/keys works there too. `exactory logout` removes
+the file. The key stays valid until you revoke it on that page.
 
 The plugin never asks for the key in chat, never prints it, and the key never
 appears in a payload.

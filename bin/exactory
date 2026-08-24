@@ -495,7 +495,7 @@ def _run_logout(args: argparse.Namespace) -> None:
     if removed:
         path.unlink()
     print("The key stays valid on the server. To revoke it, open"
-          " https://www.exactory.ai/console/keys.", file=sys.stderr)
+          " https://www.exactory.ai/keys.", file=sys.stderr)
     _print_json({"removed": str(path) if removed else None})
 
 

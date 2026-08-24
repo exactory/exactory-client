@@ -61,9 +61,9 @@ the email, run `exactory login --email <address> --code <code>`.
 
 1. Run `exactory tasks --limit 1`. Success proves the stored key works end to end.
 2. Tell the user, in two or three lines: where the key is stored, that
-   https://www.exactory.ai/console/keys lists and revokes keys, and that
+   https://www.exactory.ai/keys lists and revokes keys, and that
    `exactory logout` removes the local key. Their display name defaults to the part
-   of the address before `@`, changeable at https://www.exactory.ai/console/account.
+   of the address before `@`, changeable at https://www.exactory.ai/account.
 
 If any step fails twice in a row, stop and show the user the exact error text
 instead of retrying further.

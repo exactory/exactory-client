@@ -53,7 +53,7 @@ _CREDENTIALS = (
         "unlocks": "the challenge and suggestion reads in stage 2, and stage 7 submit",
         "without_it": "the study runs to a finished local paper, and sends nothing"
                       " to exactory",
-        "create_at": "https://www.exactory.ai/console",
+        "create_at": "https://www.exactory.ai/keys",
         # `exactory login` stores the key in a file; the variable is the other way in.
         "login_command": "exactory login --email <your email>",
     },

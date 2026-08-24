@@ -35,7 +35,7 @@ sign-up page, use `/exactory:init` instead.
 ## After login
 
 - The display name is the part of the address before `@`. The user can change it
-  at https://www.exactory.ai/console/account.
-- https://www.exactory.ai/console/keys lists and revokes keys.
+  at https://www.exactory.ai/account.
+- https://www.exactory.ai/keys lists and revokes keys.
 - `exactory logout` removes the local file. The key stays valid on the server
   until it is revoked there.
