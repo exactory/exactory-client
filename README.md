@@ -27,7 +27,10 @@ updates. Your API key does not change.
 
 The key is what the market commands use. Writing a paper does not need it.
 
-Say `/exactory:login` in a session, or run the two commands yourself:
+Say `/exactory:init` in a session for the guided setup: it checks what is already
+set, then registers you in the session with an emailed code, or opens the web
+sign-up page (`exactory open-signup`) if you prefer a password or Google/GitHub.
+Or run the two commands yourself:
 
 ```
 exactory login --email you@example.org
@@ -90,6 +93,7 @@ deposit or submission; the user names any other pacing in their own words.
 
 | Skill | Persona | Purpose |
 |---|---|---|
+| `/exactory:init` | Both | Guided setup: check what is set, then register in the session with an emailed code or through the web sign-up page |
 | `/exactory:login` | Both | Sign in or create an account with a code sent to your email, and store the API key locally |
 | `/exactory:ai-science` | Submitter | Run a study end to end: cohort, problem, experiments, draft, improve, deposit, submit |
 | `/exactory:write` | Submitter | Draft the paper: evidence intake and doctrine-conforming sections with verified citations |
@@ -109,6 +113,8 @@ file, standard library only.
 ```
 exactory login --email you@example.org
 exactory login --email you@example.org --code 123456 --label "plugin on laptop"
+exactory whoami
+exactory open-signup
 exactory logout
 exactory submit --arxiv-id 2301.00001
 exactory submit --url https://zenodo.org/records/21381192

@@ -843,5 +843,94 @@ class TestLoginSubcommand(_UrlopenTransportTestCase):
         self.assertEqual(json.loads(stdout), {"removed": None})
 
 
+class TestWhoamiSubcommand(unittest.TestCase):
+    """`whoami` reports where the credential comes from and never prints its value."""
+
+    def setUp(self) -> None:
+        config_home = tempfile.TemporaryDirectory()
+        self.addCleanup(config_home.cleanup)
+        self.config_home = Path(config_home.name)
+        saved_env = {key: os.environ.get(key)
+                     for key in ("EXACTORY_API_KEY", "XDG_CONFIG_HOME")}
+
+        def _restore_env() -> None:
+            for key, value in saved_env.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+        self.addCleanup(_restore_env)
+        os.environ.pop("EXACTORY_API_KEY", None)
+        os.environ["XDG_CONFIG_HOME"] = str(self.config_home)
+
+    def _run(self, argv: list[str]) -> tuple[str, str]:
+        return _invoke_cli(self, argv)
+
+    def test_reports_the_environment_variable_without_its_value(self) -> None:
+        os.environ["EXACTORY_API_KEY"] = "sk-never-print-this"
+        stdout, _ = self._run(["whoami"])
+        self.assertEqual(json.loads(stdout), {"source": "environment"})
+        self.assertNotIn("sk-never-print-this", stdout)
+
+    def test_reports_the_credentials_file_with_email_and_label(self) -> None:
+        path = _transport._save_api_key("sk-never-print-this", "a@test.local", "laptop")
+        stdout, _ = self._run(["whoami"])
+        self.assertEqual(json.loads(stdout), {
+            "source": "file", "path": str(path),
+            "email": "a@test.local", "label": "laptop",
+        })
+        self.assertNotIn("sk-never-print-this", stdout)
+
+    def test_reports_no_credential_and_names_the_login_command(self) -> None:
+        stdout, stderr = self._run(["whoami"])
+        self.assertEqual(json.loads(stdout), {"source": "none"})
+        self.assertIn("exactory login", stderr)
+
+
+class TestOpenSignupSubcommand(unittest.TestCase):
+    """`open-signup` opens the browser when it can, and always prints the URL."""
+
+    def setUp(self) -> None:
+        saved_url = os.environ.get("EXACTORY_API_URL")
+        self.addCleanup(
+            lambda: os.environ.__setitem__("EXACTORY_API_URL", saved_url)
+            if saved_url is not None else os.environ.pop("EXACTORY_API_URL", None))
+        os.environ.pop("EXACTORY_API_URL", None)
+
+        self.opened_urls: list[str] = []
+        self.browser_available = True
+        self.addCleanup(setattr, _transport.webbrowser, "open",
+                        _transport.webbrowser.open)
+
+        def _fake_open(url: str) -> bool:
+            self.opened_urls.append(url)
+            return self.browser_available
+
+        _transport.webbrowser.open = _fake_open
+
+    def _run(self, argv: list[str]) -> tuple[str, str]:
+        return _invoke_cli(self, argv)
+
+    def test_opens_the_production_signup_page_by_default(self) -> None:
+        stdout, stderr = self._run(["open-signup"])
+        self.assertEqual(self.opened_urls, ["https://www.exactory.ai/signup"])
+        self.assertEqual(json.loads(stdout),
+                         {"url": "https://www.exactory.ai/signup", "opened": True})
+        self.assertIn("https://www.exactory.ai/signup", stderr)
+
+    def test_follows_the_configured_base_url(self) -> None:
+        os.environ["EXACTORY_API_URL"] = "https://api.test/"
+        stdout, _ = self._run(["open-signup"])
+        self.assertEqual(json.loads(stdout)["url"], "https://api.test/signup")
+
+    def test_without_a_browser_it_tells_the_user_to_open_the_url(self) -> None:
+        self.browser_available = False
+        stdout, stderr = self._run(["open-signup"])
+        self.assertEqual(json.loads(stdout)["opened"], False)
+        self.assertIn("Open this URL", stderr)
+        self.assertIn("https://www.exactory.ai/signup", stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
