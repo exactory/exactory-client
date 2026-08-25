@@ -37,7 +37,7 @@ exactory login --email you@example.org
 exactory login --email you@example.org --code 123456
 ```
 
-The first command sends a six-digit code to the address. The second one proves
+The first command sends a one-time code to the address. The second one proves
 the address with the code and stores a key in `~/.config/exactory/credentials.json`
 (`$XDG_CONFIG_HOME` is honored), readable by you only. A new address becomes an
 account; an existing one gets one more key. When you use the code, you agree to the
@@ -45,8 +45,8 @@ account; an existing one gets one more key. When you use the code, you agree to 
 [Privacy Policy](https://www.exactory.ai/policies/privacy).
 
 `EXACTORY_API_KEY`, when set, wins over the file. A key from
-https://www.exactory.ai/console/keys works there too. `exactory logout` removes
-the file; the key stays valid until you revoke it in the console.
+https://www.exactory.ai/keys works there too. `exactory logout` removes
+the file. The key stays valid until you revoke it on that page.
 
 The plugin never asks for the key in chat, never prints it, and the key never
 appears in a payload.

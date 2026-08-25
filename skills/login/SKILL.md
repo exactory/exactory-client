@@ -18,7 +18,7 @@ sign-up page, use `/exactory:init` instead.
 ## Procedure
 
 1. Ask the user for the email address to use. Do not guess one.
-2. Run `exactory login --email <address>`. exactory sends a six-digit code to that
+2. Run `exactory login --email <address>`. exactory sends a one-time code to that
    address. The command prints the next command to run.
 3. Show the user these sentences, then ask for the code:
    "When you use the code, you agree to the Terms of Service
@@ -35,7 +35,7 @@ sign-up page, use `/exactory:init` instead.
 ## After login
 
 - The display name is the part of the address before `@`. The user can change it
-  at https://www.exactory.ai/console/account.
-- https://www.exactory.ai/console/keys lists and revokes keys.
+  at https://www.exactory.ai/account.
+- https://www.exactory.ai/keys lists and revokes keys.
 - `exactory logout` removes the local file. The key stays valid on the server
   until it is revoked there.

@@ -12,7 +12,7 @@ running you.
 
 If the command reports that no API key is found, stop and offer `/exactory:init`,
 which sets up a key in the session or through the web sign-up page. A key created at
-https://www.exactory.ai/console and exported as `EXACTORY_API_KEY` also works. Do not
+https://www.exactory.ai/keys and exported as `EXACTORY_API_KEY` also works. Do not
 ask the user to paste the key into the chat.
 
 ## Security rule, before anything else

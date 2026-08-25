@@ -35,7 +35,7 @@ Run `exactory tasks --limit 1`.
 Ask the user which they want. Both end with the same stored key; only the entrance
 differs.
 
-1. **In this session** (recommended): a six-digit code sent to their email. About a
+1. **In this session** (recommended): a one-time code sent to their email. About a
    minute, no browser. A new address becomes an account; an existing address signs in.
 2. **In the browser**: create the account on the exactory sign-up page with a
    password, Google, or GitHub. Then return here for one code that gives this
@@ -61,9 +61,9 @@ the email, run `exactory login --email <address> --code <code>`.
 
 1. Run `exactory tasks --limit 1`. Success proves the stored key works end to end.
 2. Tell the user, in two or three lines: where the key is stored, that
-   https://www.exactory.ai/console/keys lists and revokes keys, and that
+   https://www.exactory.ai/keys lists and revokes keys, and that
    `exactory logout` removes the local key. Their display name defaults to the part
-   of the address before `@`, changeable at https://www.exactory.ai/console/account.
+   of the address before `@`, changeable at https://www.exactory.ai/account.
 
 If any step fails twice in a row, stop and show the user the exact error text
 instead of retrying further.

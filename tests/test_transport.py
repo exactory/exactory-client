@@ -835,7 +835,7 @@ class TestLoginSubcommand(_UrlopenTransportTestCase):
         stdout, stderr = self._run(["logout"])
         self.assertFalse(path.exists())
         self.assertEqual(json.loads(stdout), {"removed": str(path)})
-        self.assertIn("console/keys", stderr)
+        self.assertIn("exactory.ai/keys", stderr)
         self.assertEqual(self.sent_requests, [])
 
     def test_logout_with_no_file_reports_nothing_removed(self) -> None:
