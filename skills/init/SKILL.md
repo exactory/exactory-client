@@ -35,7 +35,7 @@ Run `exactory tasks --limit 1`.
 Ask the user which they want. Both end with the same stored key; only the entrance
 differs.
 
-1. **In this session** (recommended): a six-digit code sent to their email. About a
+1. **In this session** (recommended): a one-time code sent to their email. About a
    minute, no browser. A new address becomes an account; an existing address signs in.
 2. **In the browser**: create the account on the exactory sign-up page with a
    password, Google, or GitHub. Then return here for one code that gives this

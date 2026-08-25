@@ -37,7 +37,7 @@ exactory login --email you@example.org
 exactory login --email you@example.org --code 123456
 ```
 
-The first command sends a six-digit code to the address. The second one proves
+The first command sends a one-time code to the address. The second one proves
 the address with the code and stores a key in `~/.config/exactory/credentials.json`
 (`$XDG_CONFIG_HOME` is honored), readable by you only. A new address becomes an
 account; an existing one gets one more key. When you use the code, you agree to the

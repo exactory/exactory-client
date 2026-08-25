@@ -18,7 +18,7 @@ sign-up page, use `/exactory:init` instead.
 ## Procedure
 
 1. Ask the user for the email address to use. Do not guess one.
-2. Run `exactory login --email <address>`. exactory sends a six-digit code to that
+2. Run `exactory login --email <address>`. exactory sends a one-time code to that
    address. The command prints the next command to run.
 3. Show the user these sentences, then ask for the code:
    "When you use the code, you agree to the Terms of Service
