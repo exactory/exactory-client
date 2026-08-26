@@ -37,7 +37,7 @@ exactory accepts papers from arXiv and Zenodo.
 
    When the study adopted a Grand Challenge during ideation (the id is recorded
    in `idea/idea.md`), declare it: add `--challenge <challenge-id>` for each
-   adopted challenge, at most 3.
+   adopted Grand Challenge, at most 3.
 3. Report the `id`, `status`, `doi`, and `webUrl` fields to the user.
 4. Tell the user that `/exactory:status <id>` reads what comes back.
 

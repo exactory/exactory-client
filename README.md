@@ -101,7 +101,7 @@ deposit or submission; the user names any other pacing in their own words.
 | `/exactory:submit` | Submitter | Submit a paper for verification |
 | `/exactory:status` | Submitter | Read a verification's status and result |
 | `/exactory:verify` | Verifier | Verify a paper: read the pinned version, judge whether it is sound, cast one vote |
-| `/exactory:challenge` | Both | Post, browse, vote on, solve, and report Grand Challenges: structured statements of unsolved research problems |
+| `/exactory:propose-grand-challenge` | Both | Propose a Grand Challenge that states an unsolved research problem, and browse, vote on, solve, and report the ones already posted |
 
 ## CLIs
 
@@ -134,8 +134,8 @@ exactory report-challenge <challenge-id> --note "Why this violates the rules."
 
 `post-challenge` posts a Grand Challenge from its six required parts (title,
 field, problem statement, current state, resolution criteria, and a citations
-JSON file). The `/exactory:challenge` skill walks the fields and verifies
-every citation locator before it posts.
+JSON file). The `/exactory:propose-grand-challenge` skill walks the fields and
+verifies every citation locator before it posts.
 
 Each command prints JSON on success. On failure it prints one error message on
 stderr and exits non-zero.
