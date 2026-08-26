@@ -50,7 +50,7 @@ _STAGES = (
 _CREDENTIALS = (
     {
         "name": "EXACTORY_API_KEY",
-        "unlocks": "the challenge and suggestion reads in stage 2, and stage 7 submit",
+        "unlocks": "the Grand Challenge and suggestion reads in stage 2, and stage 7 submit",
         "without_it": "the study runs to a finished local paper, and sends nothing"
                       " to exactory",
         "create_at": "https://www.exactory.ai/keys",

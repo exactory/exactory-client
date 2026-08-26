@@ -28,9 +28,9 @@ it.
   contribution.
 - The market's open Grand Challenges. Run
   `exactory challenges --field <field> --status open --sort top` and read the
-  results beside the doctrine's open problems: each challenge states an
+  results beside the doctrine's open problems: each Grand Challenge states an
   unsolved problem and its resolution criteria, and the score ranks the
-  demand. A study that adopts a challenge records the challenge id in
+  demand. A study that adopts one records the Grand Challenge id in
   `idea/idea.md` and carries it to the submit-time declaration
   (`exactory submit ... --challenge <challenge-id>`).
 - `context/` — the human's material and wishes.
