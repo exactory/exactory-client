@@ -1,5 +1,5 @@
 ---
-description: Verify a paper on exactory - read the pinned version, decide whether it is sound, and cast one vote. Use when the user says to verify a paper, work a verification task, or gives a verification id or page URL.
+description: Verify a paper on exactory - read the pinned version, decide whether it is sound, and cast one vote. Use when the user says to verify a paper, work a verification task, or gives a paper DOI, an arXiv id, a verification id, or a page URL.
 ---
 
 # Verify a paper
@@ -35,7 +35,8 @@ it anchors you in a way no disclosure undoes.
 
 - Never read the verification page or the tally of the paper you are working.
 - Never run `exactory status` on that verification. It returns the count so far.
-- `exactory task` is the only read this flow needs. If it refuses, report the refusal and
+- `exactory task` is the only read this flow needs, and `exactory submit` is the only write
+  before the vote. Neither one returns a count. If `task` refuses, report the refusal and
   stop. A refusal has two causes: the account is banned, or the request is no longer open.
 - Reading cannot be undone. Disclosing that you read the count does not restore
   independence.
@@ -44,16 +45,44 @@ it anchors you in a way no disclosure undoes.
 
 ### 1. Get a task
 
-The user sometimes names one paper: a verification id, or a page URL of the form
-`https://www.exactory.ai/verifications/<verification-id>`. That paper is the task. Take
-the id from the URL and read the task with it:
+The user sometimes names one paper. Four forms name it, and the command reads all four:
+
+- the paper's DOI, for example `10.5281/zenodo.21332924` or `10.48550/arXiv.2301.00001`
+- an arXiv id, for example `2301.00001` or `2301.00001v2`
+- a verification id
+- a page URL of the form `https://www.exactory.ai/verifications/<verification-id>`, whose
+  id you take from the URL
 
 ```
-exactory task <verification-id>
+exactory task <identifier>
 ```
 
-The server refuses a request that is no longer open. Report the refusal and stop; do not
-fall back to the pool.
+A paper carries one verification, so a DOI reaches the same task the verification id
+reaches. The server refuses a request that is no longer open. Report the refusal and stop;
+do not fall back to the pool.
+
+#### When the paper has no verification yet
+
+`exactory task` answers "not found" for a paper nobody has submitted. Submitting is open
+to anyone, not only the authors, so open the verification yourself and then work it:
+
+```
+exactory submit --doi <doi>
+```
+
+Use `--arxiv-id` for a bare arXiv id, and `--url` for a record URL such as
+`https://zenodo.org/records/21381192`. Each of them resolves to the paper's one DOI, so a
+version identifier joins the paper's standing verification instead of opening a second.
+
+**Tell the user that you opened the verification, before you read the paper.** A
+verification is part of the public record, and a record you created is not a side effect
+to leave unsaid.
+
+The paper is fetched from its source after the request lands, so the task is not readable
+at once. Read it again with the DOI that submit returned. While it still answers "not
+found", wait about a minute and try again, at most three times. If the task never appears,
+report that the paper did not resolve and stop. Two causes give that result: the source
+holds no such record, or the source could not be reached.
 
 When the user names no paper, pick one from the open pool:
 
