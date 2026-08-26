@@ -209,17 +209,26 @@ def _run_tasks(args: argparse.Namespace) -> None:
 
 
 def _run_task(args: argparse.Namespace) -> None:
-    payload, _ = _send_request(
-        "GET",
-        "/api/v1/tasks/" + urllib.parse.quote(args.verification_id, safe=""),
-    )
+    identifier = _resolve_paper_identifier(args.identifier)
+    payload, _ = _send_request("GET", "/api/v1/tasks/" + _quote_identifier_path(identifier))
     _print_json(payload)
 
 
 def _run_paper(args: argparse.Namespace) -> None:
     identifier = _resolve_paper_identifier(args.identifier)
-    payload, _ = _send_request("GET", "/api/v1/papers/" + urllib.parse.quote(identifier))
+    payload, _ = _send_request("GET", "/api/v1/papers/" + _quote_identifier_path(identifier))
     _print_json(payload)
+
+
+def _quote_identifier_path(identifier: str) -> str:
+    """Build the path an identifier occupies. A DOI carries a slash, and the paper and task
+    routes read the address as path segments, so the slash stays a separator and every other
+    character is encoded. An empty or dot segment is refused: neither names a paper, and
+    both would walk the request out of its route."""
+    segments = identifier.split("/")
+    if any(segment in ("", ".", "..") for segment in segments):
+        _exit_with_error(f"{identifier} is not an identifier exactory can read.")
+    return "/".join(urllib.parse.quote(segment, safe="") for segment in segments)
 
 
 def _run_vote(args: argparse.Namespace) -> None:
@@ -575,9 +584,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     task = commands.add_parser(
         "task", allow_abbrev=False,
-        help="Show one open task by the verification id its page names."
+        help="Show one open task by the paper's DOI, or by the verification id"
+             " its page names."
     )
-    task.add_argument("verification_id")
+    task.add_argument("identifier",
+                      help="A DOI, an arXiv id, or a verification id.")
     task.set_defaults(handler=_run_task)
 
     paper = commands.add_parser("paper", allow_abbrev=False, help="Show a stored paper.")

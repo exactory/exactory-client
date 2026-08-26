@@ -44,8 +44,11 @@ exactory accepts papers from arXiv and Zenodo.
 The `doi` in the response names the paper across its versions, so it differs from a
 Zenodo version DOI that was sent. Report the DOI that came back.
 
-On a repeat submit of the same paper, the command prints "The server returned the
-existing open request for this paper." Relay that line to the user.
+A paper carries one verification, whoever asks for it. So a submit of a paper somebody
+already submitted returns that standing request instead of opening a second one, and the
+command prints "The server returned the existing open request for this paper." Relay that
+line to the user. `/exactory:status` reads a request this account opened, so when the
+standing request belongs to another account, point the user at `webUrl` instead.
 
 Two failures need a different next step from the user:
 

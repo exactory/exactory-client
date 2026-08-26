@@ -224,11 +224,25 @@ class TestTaskSubcommand(_TransportTestCase):
 
 
 class TestPathEncoding(_TransportTestCase):
-    def test_task_url_encodes_the_verification_id(self) -> None:
-        self._run(["task", "../verifications?limit=1"])
+    def test_task_url_keeps_the_slash_a_doi_carries(self) -> None:
+        self._run(["task", "10.5281/zenodo.21332924"])
+        self.assertEqual(self.requested_paths, ["/api/v1/tasks/10.5281/zenodo.21332924"])
+
+    def test_task_url_encodes_every_character_but_the_slash(self) -> None:
+        self._run(["task", "10.5281/zenodo?limit=1"])
         self.assertEqual(
-            self.requested_paths, ["/api/v1/tasks/..%2Fverifications%3Flimit%3D1"]
+            self.requested_paths, ["/api/v1/tasks/10.5281/zenodo%3Flimit%3D1"]
         )
+
+    def test_task_refuses_a_dot_segment_before_a_request_goes_out(self) -> None:
+        _, stderr_text = self._run(["task", "../verifications"], expected_exit_code=1)
+        self.assertIn("is not an identifier", stderr_text)
+        self.assertEqual(self.requested_paths, [])
+
+    def test_paper_refuses_a_dot_segment_before_a_request_goes_out(self) -> None:
+        _, stderr_text = self._run(["paper", "../verifications"], expected_exit_code=1)
+        self.assertIn("is not an identifier", stderr_text)
+        self.assertEqual(self.requested_paths, [])
 
     def test_status_url_encodes_the_verification_id(self) -> None:
         self._run(["status", "../tasks?limit=1"])
