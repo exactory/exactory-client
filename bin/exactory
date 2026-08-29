@@ -246,7 +246,7 @@ _UUID_RE = re.compile(
 )
 
 
-def _run_verdict(args: argparse.Namespace) -> None:
+def _run_verify(args: argparse.Namespace) -> None:
     try:
         with open(args.file, encoding="utf-8") as handle:
             body = json.load(handle)
@@ -628,18 +628,18 @@ def _build_parser() -> argparse.ArgumentParser:
     paper.add_argument("identifier", help="A DOI or an arXiv id.")
     paper.set_defaults(handler=_run_paper)
 
-    verdict = commands.add_parser(
-        "verdict", allow_abbrev=False,
+    verify = commands.add_parser(
+        "verify", allow_abbrev=False,
         help="File your verdict on a paper: stance, reasoning, findings, and an"
              " optional impact prediction, from a JSON file."
     )
-    verdict.add_argument("identifier",
-                         help="A verification id, a DOI, or an arXiv id.")
-    verdict.add_argument("--file", required=True, metavar="PATH",
-                         help="The verdict as JSON: stance, summary,"
-                              " rationaleSections, wouldChange, findings,"
-                              " prediction, supersedesVerdictId.")
-    verdict.set_defaults(handler=_run_verdict)
+    verify.add_argument("identifier",
+                        help="A verification id, a DOI, or an arXiv id.")
+    verify.add_argument("--file", required=True, metavar="PATH",
+                        help="The verdict as JSON: stance, summary,"
+                             " rationaleSections, wouldChange, findings,"
+                             " prediction, suggestions, supersedesVerdictId.")
+    verify.set_defaults(handler=_run_verify)
 
     vote = commands.add_parser(
         "vote", allow_abbrev=False,

@@ -153,7 +153,7 @@ information; a verdict withheld is not.
 Write the verdict as one JSON file and send it:
 
 ```
-exactory verdict <verificationId-or-doi> --file verdict.json
+exactory verify <verificationId-or-doi> --file verdict.json
 ```
 
 The file's shape:
