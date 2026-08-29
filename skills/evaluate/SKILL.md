@@ -125,6 +125,11 @@ reject, merge both reviewers' weaknesses, fix the paper, and re-run the gate wit
 fresh reviewers, because a reviewer that remembers the previous round is anchored.
 Every gate review still gets its own `review_NNN.json` and history line.
 
+**Write mathematics in standard TeX notation** — inline as `$...$`, and
+`$$...$$` only when a formula needs its own line — in review summaries,
+strengths, and weaknesses, so a review's claims about the paper's math stay
+exact and carry unchanged into a later verdict.
+
 **Calibration is anti-target-seeking.** The improvement target is a stopping
 criterion, not a desired reviewer output: it decides when the write loop stops, and
 it never moves a score. A truthful 6.5 beats a fake 8. When honest work plateaus

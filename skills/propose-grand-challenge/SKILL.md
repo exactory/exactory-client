@@ -66,6 +66,11 @@ user:
    reference (10-1000 characters). The `locator` is a DOI, an arXiv id, or an
    https URL (at most 500 characters).
 
+Write mathematics in the problem statement, current state, and resolution
+criteria in standard TeX notation: inline as `$...$`, and `$$...$$` only when a
+formula needs its own line. The page renders the math, so a quantitative
+resolution criterion stays exact instead of being paraphrased into prose.
+
 ### Verify every citation locator before posting
 
 Do not run `post-challenge` until every locator resolves.
