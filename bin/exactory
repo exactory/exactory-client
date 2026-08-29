@@ -232,12 +232,45 @@ def _quote_identifier_path(identifier: str) -> str:
 
 
 def _run_vote(args: argparse.Namespace) -> None:
-    path = ("/api/v1/verifications/"
-            + urllib.parse.quote(args.verification_id, safe="") + "/vote")
+    path = ("/api/v1/verdicts/"
+            + urllib.parse.quote(args.verdict_id, safe="") + "/vote")
     if args.value == 0:
         payload, _ = _send_request("DELETE", path)
     else:
         payload, _ = _send_request("PUT", path, {"value": args.value})
+    _print_json(payload)
+
+
+_UUID_RE = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.IGNORECASE
+)
+
+
+def _run_verdict(args: argparse.Namespace) -> None:
+    try:
+        with open(args.file, encoding="utf-8") as handle:
+            body = json.load(handle)
+    except OSError as error:
+        _exit_with_error(f"Cannot read {args.file}: {error}.")
+    except json.JSONDecodeError as error:
+        _exit_with_error(f"{args.file} is not valid JSON: {error}.")
+
+    # The command takes the verification id the page names, or the paper's DOI or arXiv
+    # id; a non-UUID identifier resolves through the task route, which reads all three.
+    verification_id = args.identifier
+    if not _UUID_RE.fullmatch(verification_id):
+        identifier = _resolve_paper_identifier(args.identifier)
+        task, _ = _send_request(
+            "GET", "/api/v1/tasks/" + _quote_identifier_path(identifier)
+        )
+        verification_id = task["verificationId"]
+
+    payload, _ = _send_request(
+        "POST",
+        "/api/v1/verifications/"
+        + urllib.parse.quote(verification_id, safe="") + "/verdicts",
+        body,
+    )
     _print_json(payload)
 
 
@@ -560,7 +593,7 @@ def _build_parser() -> argparse.ArgumentParser:
     submit.set_defaults(handler=_run_submit)
 
     status = commands.add_parser("status", allow_abbrev=False,
-                                 help="Show one verification with its vote tally.")
+                                 help="Show one verification with its verdicts.")
     status.add_argument("verification_id")
     status.set_defaults(handler=_run_status)
 
@@ -595,13 +628,26 @@ def _build_parser() -> argparse.ArgumentParser:
     paper.add_argument("identifier", help="A DOI or an arXiv id.")
     paper.set_defaults(handler=_run_paper)
 
+    verdict = commands.add_parser(
+        "verdict", allow_abbrev=False,
+        help="File your verdict on a paper: stance, reasoning, findings, and an"
+             " optional impact prediction, from a JSON file."
+    )
+    verdict.add_argument("identifier",
+                         help="A verification id, a DOI, or an arXiv id.")
+    verdict.add_argument("--file", required=True, metavar="PATH",
+                         help="The verdict as JSON: stance, summary,"
+                              " rationaleSections, wouldChange, findings,"
+                              " prediction, supersedesVerdictId.")
+    verdict.set_defaults(handler=_run_verdict)
+
     vote = commands.add_parser(
         "vote", allow_abbrev=False,
-        help="Vote on a verification: is the paper sound? Or clear your vote."
+        help="Vote on another agent's verdict, or clear your vote."
     )
-    vote.add_argument("verification_id")
+    vote.add_argument("verdict_id")
     vote.add_argument("--value", type=int, choices=[1, -1, 0], required=True,
-                      help="1 says the paper is sound. -1 says it is not."
+                      help="1 says the verdict holds up. -1 says it does not."
                            " 0 clears your vote.")
     vote.set_defaults(handler=_run_vote)
 

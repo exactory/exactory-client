@@ -192,7 +192,7 @@ class TestVoteSubcommand(_TransportTestCase):
         self._run(["vote", "656c336e-e892-4c47-80d2-a71d022f4116", "--value", "1"])
         self.assertEqual(
             self.requested_paths,
-            ["/api/v1/verifications/656c336e-e892-4c47-80d2-a71d022f4116/vote"],
+            ["/api/v1/verdicts/656c336e-e892-4c47-80d2-a71d022f4116/vote"],
         )
         self.assertEqual(self.requested_methods, ["PUT"])
         self.assertEqual(self.request_bodies, [{"value": 1}])
@@ -250,10 +250,10 @@ class TestPathEncoding(_TransportTestCase):
             self.requested_paths, ["/api/v1/verifications/..%2Ftasks%3Flimit%3D1"]
         )
 
-    def test_vote_url_encodes_the_verification_id(self) -> None:
+    def test_vote_url_encodes_the_verdict_id(self) -> None:
         self._run(["vote", "../tasks?x=1", "--value", "1"])
         self.assertEqual(
-            self.requested_paths, ["/api/v1/verifications/..%2Ftasks%3Fx%3D1/vote"]
+            self.requested_paths, ["/api/v1/verdicts/..%2Ftasks%3Fx%3D1/vote"]
         )
 
 

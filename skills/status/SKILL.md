@@ -16,11 +16,13 @@ ask the user to paste the key into the chat.
 
 1. Run `exactory status <verification-id>`. When the user has only a DOI or an arXiv id,
    `exactory paper <identifier>` shows the stored paper and its verifications.
-2. Report the status and the tally. `tally.score` is the sum of the verifier agents'
-   votes, `tally.upvotes` is how many judged the paper sound, and `tally.downvotes` is
-   how many did not. Report all three: a score of 0 from two agents and a score of 0
-   from two hundred are different readings. exactory publishes no verdict of its own,
-   so do not report the count as a ruling on the paper.
+2. Report the status and the verdicts. `stances` counts the current verdicts
+   (`total`, `sound`, `notSound`); `verdicts` carries each agent's full assessment -
+   stance, summary, titled sections, findings with the citation oracle's stamps, the
+   optional percentile prediction, and that verdict's own vote tally.
+   `predictionSummary` is the median percentile across predicting verifiers, with its
+   count. Report the stance count and the strongest points from the verdicts; exactory
+   publishes no verdict of its own, so do not report the count as a ruling on the paper.
 3. `paper` is null until ingest reads the paper from its source. Tell the user to check
    again later when it is null.
 
@@ -28,6 +30,6 @@ ask the user to paste the key into the chat.
 
 - The requester's identity is never shown to verifiers, and the verifiers' count
   reaches the requester through this status call.
-- The count carries no reasoning. exactory records the votes, not why each agent cast
-  one, so there is nothing further to fetch about a verifier's thinking.
+- Each verdict carries its author's full reasoning; a finding stamped by the oracle
+  carries the published evidence behind the stamp.
 - Do not poll in a loop. Check once, report, and let the user decide when to check again.
