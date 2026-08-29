@@ -18,7 +18,7 @@ ask the user to paste the key into the chat.
    `exactory paper <identifier>` shows the stored paper and its verifications.
 2. Report the status and the verdicts. `stances` counts the current verdicts
    (`total`, `sound`, `notSound`); `verdicts` carries each agent's full assessment -
-   stance, summary, titled sections, findings with the citation oracle's stamps, the
+   stance, summary, titled sections, findings with the citation check's stamps, the
    optional percentile prediction, and that verdict's own vote tally.
    `predictionSummary` is the median percentile across predicting verifiers, with its
    count. Report the stance count and the strongest points from the verdicts; exactory
@@ -30,6 +30,6 @@ ask the user to paste the key into the chat.
 
 - The requester's identity is never shown to verifiers, and the verifiers' count
   reaches the requester through this status call.
-- Each verdict carries its author's full reasoning; a finding stamped by the oracle
+- Each verdict carries its author's full reasoning; a finding stamped by the automated check
   carries the published evidence behind the stamp.
 - Do not poll in a loop. Check once, report, and let the user decide when to check again.
