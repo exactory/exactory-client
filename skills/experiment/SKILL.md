@@ -77,13 +77,14 @@ either way.
   CPU or MPS inside the timeout. Keep it small.
 - **Colab GPU** (`--backend colab`): only when the node genuinely needs a GPU
   and a runner is alive (`exactory-lab colab-status` reports `runner_alive:
-  true`). If no runner is alive, run the node locally and small, or ask the user
-  to start the runner notebook — never block an unattended autopilot run on a
-  dead runner. Colab is compute only.
+  true`). If no runner is alive, run the node locally and small, and say in
+  the stage report that a live runner notebook would lift the constraint;
+  never block a run on a dead runner. Colab is compute only.
 
 The compute layer is pluggable: `local` and `colab` are the backends today, and
-more can be added behind the same run contract. Ask the user which backend to
-use for heavy work; do not assume Colab is available.
+more can be added behind the same run contract. Route heavy work yourself:
+Colab when a runner is alive, local and scaled down otherwise. Do not assume
+Colab is available, and do not stop the run to ask.
 
 ## Autoresearch mode (optional)
 

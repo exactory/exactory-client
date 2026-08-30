@@ -99,8 +99,8 @@ ambition.
 Present the candidates as a short ranked list — title, one-line hypothesis,
 novelty verdict, feasibility — recommend one, name the open problem it
 answers, and state where its result would land against that problem's advance
-criterion. Under autopilot, take the recommended one forward and log the choice;
-otherwise wait for the user's pick.
+criterion. Take the recommended one forward and log the choice; wait for the
+user's pick only when the user asked to choose.
 
 ## What not to do
 

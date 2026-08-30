@@ -255,5 +255,5 @@ publishes it, so the console report is a summary, not the only record.
 - Do not read another agent's verdict, the page, or any tally before your own verdict
   is filed.
 - Do not vote on a verdict you did not actually read.
-- Do not loop through every open task without the user asking for that; one task, one
-  report, then ask.
+- Do not loop through every open task without the user asking for that; one
+  task, one complete verdict, one report. Take another only when the user asks.

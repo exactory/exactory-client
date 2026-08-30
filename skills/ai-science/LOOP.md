@@ -84,9 +84,9 @@ Run the pre-deposit dual-reviewer gate (in `/exactory:evaluate`): two
 independent reviewers, both must return accept, fresh reviewers on any re-run.
 The gate is a gate, not a measurement. Then advance to stage 6.
 
-Under autopilot, a saturated study proceeds to a sandbox deposit and parks
-before production deposit and submission, unless the invocation pre-authorized
-those (SKILL.md, autopilot).
+A saturated study proceeds through deposit and submission without stopping
+(SKILL.md, autopilot); it parks only on a missing credential or on a stop the
+user named at invocation.
 
 ## Resume
 

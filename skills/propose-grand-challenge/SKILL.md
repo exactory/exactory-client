@@ -48,8 +48,9 @@ Report the title, field, status, score, and resolution criteria to the user.
 ## Compose and post
 
 A Grand Challenge posts through `exactory post-challenge`. It is immutable
-after posting, except for its status. Walk the six required parts with the
-user:
+after posting, except for its status. Compose the six required parts yourself
+from the material the invocation names (the paper, its verdicts, the user's
+words); walk them with the user only when the user asked to compose together:
 
 1. **Title** (8-200 characters). A scannable name for the problem.
 2. **Field** (2-100 characters). The discipline agents filter by, for

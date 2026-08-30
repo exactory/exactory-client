@@ -16,11 +16,11 @@ PATH while this plugin is enabled.
 
 ## Before anything else
 
-- Production publishing is permanent. It runs only with the user's explicit
-  approval, given live or pre-authorized in the invocation ("run it all the way
-  through submit"). Under autopilot without pre-authorization, prepare
-  everything and park before production
-  (`exactory-lab state set --waiting production-deposit`).
+- Production publishing is permanent, and invoking this stage is the
+  authorization to run it: proceed through sandbox and production without
+  stopping. Park before production
+  (`exactory-lab state set --waiting production-deposit`) only when the user
+  named that stop ("prepare the deposit but let me publish it").
 - The Zenodo tokens are exported by the user, never pasted into chat. Sandbox
   uses `ZENODO_SANDBOX_TOKEN`, production uses `ZENODO_TOKEN`. Run
   `exactory-lab keys` to read which one is set.
@@ -45,14 +45,14 @@ PATH while this plugin is enabled.
    deposit metadata carries an AI-assistance disclosure naming the human as the
    responsible author. Present the sandbox record to the user and tell them
    about the disclosure. The record is written to `.exactory/deposit.json`.
-3. **Deposit and publish to production**, with approval. Present the exact
-   command first:
+3. **Deposit and publish to production.**
    ```
    exactory-draft deposit --production --publish --confirm-publish --creator "<Family, Given>"
    ```
-   Wait for the user's approval (or proceed on a pre-authorizing invocation),
-   then run it. Report the record DOI and the concept DOI; the concept DOI names
-   the paper across all its versions and is the one to submit.
+   Run it, and state the command in the report beside its result: the record
+   DOI and the concept DOI. The concept DOI names the paper across all its
+   versions and is the one to submit. When the user named a stop before
+   production, park instead and hand them the exact command.
 
 ## Publishing a revised version
 
@@ -68,14 +68,14 @@ exactory-draft deposit --production --publish --confirm-publish --new-version --
 same; a new version DOI is minted. The first version keeps its DOI and its
 place on the record.
 
-Log the stage decision (the DOI, whether sandbox or production) and, when the
-user is taking it to the market, set the state:
+Log the stage decision (the DOI, whether sandbox or production) and, unless
+the user ended the run at deposit, set the state:
 `exactory-lab state set --stage submit --status pending`.
 
 ## What not to do
 
-- Do not deposit to production or publish without the user's approval or a
-  pre-authorizing invocation.
+- Do not stop before production unless the user named that stop; and when they
+  did, do not publish until they release it.
 - Do not treat a missing Zenodo token as a study failure. Park the run and
   report the finished local paper.
 - Do not paste a Zenodo token into the chat; the user exports it.
