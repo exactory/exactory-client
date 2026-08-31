@@ -52,13 +52,6 @@ class _FakeZenodoApi:
 
     def __init__(self) -> None:
         self.requests = []
-        self._uploaded_names = {"bucket-1": [], "bucket-2": []}
-
-    def _list_file_entries(self, bucket_name: str) -> list[dict]:
-        """Return the bucket's files newest-first, the adversarial order:
-        the paper sorts first only if the client sends an explicit sort."""
-        return [{"id": f"file-{name}", "filename": name}
-                for name in reversed(self._uploaded_names[bucket_name])]
 
     def __call__(self, request):
         self.requests.append(request)
@@ -74,11 +67,11 @@ class _FakeZenodoApi:
                 },
             }
         if method == "PUT" and "/files/bucket-1/" in url:
-            self._uploaded_names["bucket-1"].append(url.rsplit("/", 1)[1])
             return {}
-        if method == "GET" and url.endswith("/deposit/depositions/4242"):
-            return {"id": 4242, "files": self._list_file_entries("bucket-1")}
-        if method == "PUT" and url.endswith("/deposit/depositions/4242/files"):
+        if method == "GET" and url.endswith("/records/4242/draft"):
+            return {"metadata": {"title": "Cohort Percentiles"},
+                    "files": {"enabled": True}}
+        if method == "PUT" and url.endswith("/records/4242/draft"):
             return {}
         if method == "PUT" and url.endswith("/deposit/depositions/4242"):
             return {"metadata": {"prereserve_doi": {"doi": "10.5281/zenodo.4242"}}}
@@ -93,16 +86,17 @@ class _FakeZenodoApi:
         if method == "GET" and url.endswith("/deposit/depositions/4343"):
             return {
                 "id": 4343,
-                "files": self._list_file_entries("bucket-2"),
                 "links": {
                     "bucket": f"{base_url}/files/bucket-2",
                     "html": f"{base_url}/deposit/4343",
                 },
             }
         if method == "PUT" and "/files/bucket-2/" in url:
-            self._uploaded_names["bucket-2"].append(url.rsplit("/", 1)[1])
             return {}
-        if method == "PUT" and url.endswith("/deposit/depositions/4343/files"):
+        if method == "GET" and url.endswith("/records/4343/draft"):
+            return {"metadata": {"title": "Cohort Percentiles"},
+                    "files": {"enabled": True}}
+        if method == "PUT" and url.endswith("/records/4343/draft"):
             return {}
         if method == "PUT" and url.endswith("/deposit/depositions/4343"):
             return {"metadata": {"prereserve_doi": {"doi": "10.5281/zenodo.4343"}}}
@@ -300,27 +294,37 @@ class TestDeposit(_DepositTestCase):
         ]
         self.assertEqual(upload_urls, ["https://sandbox.zenodo.org/api/files/bucket-1/paper.pdf"])
 
-    def test_the_paper_sorts_first_when_sources_accompany_it(self) -> None:
-        sources_path = self.workspace_dir / "sources.zip"
-        sources_path.write_bytes(b"PK fake zip")
-        self._deposit(["--creator", "Shiroshita, Ryosuke", "--sources", str(sources_path)])
-        sort_request = next(
+    def test_every_deposit_marks_the_paper_as_the_default_preview(self) -> None:
+        self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        read_request = next(
+            request for request in self.fake_api.requests
+            if request.get_method() == "GET"
+            and request.full_url.endswith("/records/4242/draft")
+        )
+        self.assertEqual(read_request.get_header("Accept"),
+                         "application/vnd.inveniordm.v1+json")
+        write_request = next(
             request for request in self.fake_api.requests
             if request.get_method() == "PUT"
-            and request.full_url.endswith("/deposit/depositions/4242/files")
+            and request.full_url.endswith("/records/4242/draft")
         )
-        self.assertEqual(
-            json.loads(sort_request.data.decode()),
-            [{"id": "file-paper.pdf"}, {"id": "file-sources.zip"}],
-        )
+        document = json.loads(write_request.data.decode())
+        self.assertEqual(document["files"]["default_preview"], "paper.pdf")
+        # The whole draft document goes back, so the PUT replaces nothing else.
+        self.assertEqual(document["metadata"], {"title": "Cohort Percentiles"})
 
-    def test_a_single_file_deposit_sends_no_sort_request(self) -> None:
-        self._deposit(["--creator", "Shiroshita, Ryosuke"])
-        sort_urls = [
+    def test_a_tarball_keeps_its_archive_suffix_in_the_supplementary_name(self) -> None:
+        sources_path = self.workspace_dir / "code.tar.gz"
+        sources_path.write_bytes(b"fake tarball")
+        self._deposit(["--creator", "Shiroshita, Ryosuke", "--sources", str(sources_path)])
+        upload_urls = [
             request.full_url for request in self.fake_api.requests
-            if request.full_url.endswith("/deposit/depositions/4242/files")
+            if request.get_method() == "PUT" and "/files/bucket-1/" in request.full_url
         ]
-        self.assertEqual(sort_urls, [])
+        self.assertIn(
+            "https://sandbox.zenodo.org/api/files/bucket-1/supplementary-sources.tar.gz",
+            upload_urls,
+        )
 
     def test_deposit_uploads_the_newest_pdf(self) -> None:
         older_pdf = self.workspace_dir / "draft" / "old.pdf"
@@ -334,7 +338,7 @@ class TestDeposit(_DepositTestCase):
         ]
         self.assertEqual(upload_urls, ["https://sandbox.zenodo.org/api/files/bucket-1/paper.pdf"])
 
-    def test_sources_archive_is_uploaded_when_given(self) -> None:
+    def test_sources_archive_uploads_under_the_supplementary_name(self) -> None:
         sources_path = self.workspace_dir / "sources.zip"
         sources_path.write_bytes(b"PK fake zip")
         self._deposit(["--creator", "Shiroshita, Ryosuke", "--sources", str(sources_path)])
@@ -342,7 +346,12 @@ class TestDeposit(_DepositTestCase):
             request.full_url for request in self.fake_api.requests
             if request.get_method() == "PUT" and "/files/bucket-1/" in request.full_url
         ]
-        self.assertIn("https://sandbox.zenodo.org/api/files/bucket-1/sources.zip", upload_urls)
+        # 'supplementary' sorts after 'paper', so the paper stays first in the
+        # record's alphabetical file list.
+        self.assertIn(
+            "https://sandbox.zenodo.org/api/files/bucket-1/supplementary-sources.zip",
+            upload_urls,
+        )
 
     def test_deposit_stays_a_draft_by_default_and_prints_the_deposition_url(self) -> None:
         stdout_text = self._deposit(["--creator", "Shiroshita, Ryosuke"])

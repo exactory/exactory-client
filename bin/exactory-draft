@@ -55,8 +55,12 @@ _AI_DISCLOSURE_TEMPLATE = (
 )
 
 # The paper always lands on Zenodo under this name, whatever the local build
-# called it, so every record presents the same face.
+# called it, so every record presents the same face. The sources archive gets
+# the supplementary stem because Zenodo lists a record's files by name:
+# 'supplementary' sorts after 'paper', keeping the paper on top.
 _PAPER_UPLOAD_NAME = "paper.pdf"
+_SOURCES_UPLOAD_STEM = "supplementary-sources"
+_RDM_JSON_MEDIA_TYPE = "application/vnd.inveniordm.v1+json"
 
 def _exit_with_error(message: str, code: int = 1) -> None:
     print(message, file=sys.stderr)
@@ -104,8 +108,11 @@ def _open_url(request: urllib.request.Request) -> dict:
 
 def _call_zenodo(method: str, url: str, token: str,
                  json_body: dict | list | None = None,
-                 file_bytes: bytes | None = None) -> dict:
+                 file_bytes: bytes | None = None,
+                 accept: str | None = None) -> dict:
     headers = {"Authorization": f"Bearer {token}", "User-Agent": _USER_AGENT}
+    if accept is not None:
+        headers["Accept"] = accept
     data = None
     if json_body is not None:
         data = json.dumps(json_body).encode()
@@ -169,19 +176,24 @@ def _build_deposit_metadata(title: str, creators: list[str], abstract_text: str)
     }
 
 
-def _sort_paper_first(base_url: str, deposition_id: int, token: str) -> None:
-    """Move the paper to the top of the record's file list. Zenodo lists the
-    files in this order and previews the first one, per the sort endpoint at
-    https://developers.zenodo.org."""
-    deposition = _call_zenodo("GET", f"{base_url}/deposit/depositions/{deposition_id}",
-                              token)
-    file_entries = deposition.get("files", [])
-    if len(file_entries) < 2:
-        return
-    ordered_entries = sorted(file_entries,
-                             key=lambda entry: entry["filename"] != _PAPER_UPLOAD_NAME)
-    _call_zenodo("PUT", f"{base_url}/deposit/depositions/{deposition_id}/files", token,
-                 json_body=[{"id": entry["id"]} for entry in ordered_entries])
+def _name_sources_upload(sources_path: Path) -> str:
+    for tar_suffix in (".tar.gz", ".tar.bz2", ".tar.xz"):
+        if sources_path.name.endswith(tar_suffix):
+            return _SOURCES_UPLOAD_STEM + tar_suffix
+    return _SOURCES_UPLOAD_STEM + sources_path.suffix
+
+
+def _mark_paper_as_preview(base_url: str, record_id: int, token: str) -> None:
+    """Make the paper the record's previewed file. The RDM draft document is
+    the working surface for this: the file-sort endpoint that
+    https://developers.zenodo.org still documents answers HTTP 405 on
+    zenodo.org (verified 2026-08-30). The PUT replaces the whole draft
+    document, so the fetched document goes back with only default_preview
+    added."""
+    draft_url = f"{base_url}/records/{record_id}/draft"
+    document = _call_zenodo("GET", draft_url, token, accept=_RDM_JSON_MEDIA_TYPE)
+    document.setdefault("files", {})["default_preview"] = _PAPER_UPLOAD_NAME
+    _call_zenodo("PUT", draft_url, token, json_body=document)
 
 
 def _open_new_version_draft(base_url: str, environment: str, token: str) -> dict:
@@ -259,12 +271,12 @@ def _run_deposit(args: argparse.Namespace) -> None:
     _call_zenodo("PUT", f"{bucket_url}/{_PAPER_UPLOAD_NAME}", token,
                  file_bytes=pdf_path.read_bytes())
     if sources_path is not None:
-        _call_zenodo("PUT", f"{bucket_url}/{sources_path.name}", token,
+        _call_zenodo("PUT", f"{bucket_url}/{_name_sources_upload(sources_path)}", token,
                      file_bytes=sources_path.read_bytes())
-    _sort_paper_first(base_url, deposition["id"], token)
     metadata = _build_deposit_metadata(state["title"], args.creator, abstract_text)
     _call_zenodo("PUT", f"{base_url}/deposit/depositions/{deposition['id']}",
                  token, json_body={"metadata": metadata})
+    _mark_paper_as_preview(base_url, deposition["id"], token)
 
     if args.publish:
         # Per https://developers.zenodo.org, doi is present only on published
