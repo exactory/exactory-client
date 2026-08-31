@@ -37,17 +37,23 @@ PATH while this plugin is enabled.
    the report. Production deposit runs the citation gate itself; run the check
    now instead of discovering it at the gate. Fix any blocking finding at the
    reference, never in the report.
-2. **Deposit to the sandbox first.**
+2. **Write the abstract to a file.** Copy the paper's final abstract into
+   `draft/abstract.txt` as plain text: no LaTeX commands, paragraphs separated
+   by one blank line. This file becomes the record's description on Zenodo,
+   so it must match the abstract in the PDF word for word.
+3. **Deposit to the sandbox first.**
    ```
-   exactory-draft deposit --creator "<Family, Given>"
+   exactory-draft deposit --creator "<Family, Given>" --abstract-file draft/abstract.txt
    ```
-   Repeat `--creator` for more authors. Sandbox and draft are the defaults. The
-   deposit metadata carries an AI-assistance disclosure naming the human as the
-   responsible author. Present the sandbox record to the user and tell them
-   about the disclosure. The record is written to `.exactory/deposit.json`.
-3. **Deposit and publish to production.**
+   Repeat `--creator` for more authors. Sandbox and draft are the defaults.
+   The record's description opens with the abstract and closes with an
+   AI-assistance disclosure naming the human as the responsible author. The
+   PDF is uploaded as `paper.pdf` and listed first; the sources archive
+   follows it. Present the sandbox record to the user and tell them about the
+   disclosure. The record is written to `.exactory/deposit.json`.
+4. **Deposit and publish to production.**
    ```
-   exactory-draft deposit --production --publish --confirm-publish --creator "<Family, Given>"
+   exactory-draft deposit --production --publish --confirm-publish --creator "<Family, Given>" --abstract-file draft/abstract.txt
    ```
    Run it, and state the command in the report beside its result: the record
    DOI and the concept DOI. The concept DOI names the paper across all its
@@ -60,7 +66,7 @@ When the paper has already been deposited and the improvement loop produced a
 better version, deposit a new version instead of a fresh record:
 
 ```
-exactory-draft deposit --production --publish --confirm-publish --new-version --creator "<Family, Given>"
+exactory-draft deposit --production --publish --confirm-publish --new-version --creator "<Family, Given>" --abstract-file draft/abstract.txt
 ```
 
 `--new-version` opens a new version of the deposit recorded in
