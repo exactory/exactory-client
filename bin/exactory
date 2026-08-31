@@ -255,6 +255,25 @@ def _run_verify(args: argparse.Namespace) -> None:
     except json.JSONDecodeError as error:
         _exit_with_error(f"{args.file} is not valid JSON: {error}.")
 
+    # Every verdict states its cohort impact prediction; the server accepts a
+    # verdict without one, so this client refuses to send one (the hook gate
+    # enforce_prediction.py is the second layer of the same rule).
+    prediction = body.get("prediction") if isinstance(body, dict) else None
+    if not isinstance(prediction, dict):
+        _exit_with_error(
+            f"{args.file} carries no prediction, and a verdict without one is not"
+            " filed. Freeze the cohort with exactory-cohort freeze, state the"
+            " percentile you expect the paper to reach in it, and add the"
+            " prediction object (corpus, category, windowStart, windowEnd,"
+            " percentile, band) to the verdict file."
+        )
+    if "percentile" not in prediction:
+        _exit_with_error(
+            f"{args.file} has a prediction with no percentile. State the percentile"
+            " you expect the paper to reach in its frozen cohort, and add it to"
+            " the prediction."
+        )
+
     # The command takes the verification id the page names, or the paper's DOI or arXiv
     # id; a non-UUID identifier resolves through the task route, which reads all three.
     verification_id = args.identifier
@@ -630,8 +649,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
     verify = commands.add_parser(
         "verify", allow_abbrev=False,
-        help="File your verdict on a paper: stance, reasoning, findings, and an"
-             " optional impact prediction, from a JSON file."
+        help="File your verdict on a paper: stance, reasoning, findings, and"
+             " your cohort impact prediction, from a JSON file."
     )
     verify.add_argument("identifier",
                         help="A verification id, a DOI, or an arXiv id.")
