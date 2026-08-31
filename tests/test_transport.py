@@ -299,6 +299,67 @@ class TestSubmitCitationGate(_TransportTestCase):
         self.assertEqual(self.requested_paths, ["/api/v1/verifications"])
 
 
+_VERIFICATION_ID = "0e5c2b1a-9d4f-4c3b-8a7e-6f5d4c3b2a19"
+
+
+def _write_verdict_file(path: Path, **overrides: object) -> None:
+    """Write a complete verdict file, then apply overrides (a None value drops the key)."""
+    verdict: dict = {
+        "stance": "sound",
+        "summary": "The claims follow from the evidence.",
+        "prediction": {
+            "corpus": "arxiv", "category": "cs.LG",
+            "windowStart": "2026-01-01", "windowEnd": "2026-06-30",
+            "percentile": 15, "band": {"best": 8, "worst": 30},
+        },
+    }
+    for key, value in overrides.items():
+        if value is None:
+            verdict.pop(key, None)
+        else:
+            verdict[key] = value
+    path.write_text(json.dumps(verdict))
+
+
+class TestVerifyPredictionGate(_TransportTestCase):
+    def _run_verify(self, expected_exit_code: int | None = None) -> tuple[str, str]:
+        return self._run(["verify", _VERIFICATION_ID, "--file", "verdict.json"],
+                         expected_exit_code=expected_exit_code)
+
+    def test_verify_refuses_a_verdict_without_a_prediction(self) -> None:
+        _write_verdict_file(self.scratch_dir / "verdict.json", prediction=None)
+        _, stderr_text = self._run_verify(expected_exit_code=1)
+        self.assertIn("prediction", stderr_text)
+        self.assertEqual(self.requested_paths, [])
+
+    def test_verify_refuses_a_null_prediction(self) -> None:
+        (self.scratch_dir / "verdict.json").write_text(
+            json.dumps({"stance": "sound", "summary": "s", "prediction": None})
+        )
+        _, stderr_text = self._run_verify(expected_exit_code=1)
+        self.assertIn("prediction", stderr_text)
+        self.assertEqual(self.requested_paths, [])
+
+    def test_verify_refuses_a_prediction_without_a_percentile(self) -> None:
+        _write_verdict_file(
+            self.scratch_dir / "verdict.json",
+            prediction={"corpus": "arxiv", "category": "cs.LG",
+                        "windowStart": "2026-01-01", "windowEnd": "2026-06-30"},
+        )
+        _, stderr_text = self._run_verify(expected_exit_code=1)
+        self.assertIn("percentile", stderr_text)
+        self.assertEqual(self.requested_paths, [])
+
+    def test_verify_sends_a_verdict_that_carries_the_prediction(self) -> None:
+        _write_verdict_file(self.scratch_dir / "verdict.json")
+        self._run_verify()
+        self.assertEqual(
+            self.requested_paths,
+            [f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts"],
+        )
+        self.assertEqual(self.request_bodies[0]["prediction"]["percentile"], 15)
+
+
 class TestTasksSearchFlags(_TransportTestCase):
     def test_tasks_builds_the_search_query_string(self) -> None:
         self._run([

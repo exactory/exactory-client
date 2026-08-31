@@ -14,6 +14,7 @@ from pathlib import Path
 _PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 _GATE_SCRIPT_PATH = _PLUGIN_ROOT / "hooks" / "enforce_citation_check.py"
 _ADVISORY_SCRIPT_PATH = _PLUGIN_ROOT / "hooks" / "check_references_edit.py"
+_PREDICTION_GATE_SCRIPT_PATH = _PLUGIN_ROOT / "hooks" / "enforce_prediction.py"
 
 _SUBMIT_CMD = "exactory submit --doi 10.5281/zenodo.1234567"
 _PRODUCTION_DEPOSIT_CMD = "exactory-draft deposit --production --publish"
@@ -202,6 +203,110 @@ class TestCitationGate(unittest.TestCase):
 
     def test_is_neutral_outside_any_workspace(self) -> None:
         self.assertEqual(self._run_gate(_SUBMIT_CMD, cwd=self.outside_dir).stdout, "")
+
+
+class TestPredictionGate(unittest.TestCase):
+    """The Bash-boundary layer of the rule that every verdict carries a prediction."""
+
+    def setUp(self) -> None:
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        self.scratch_dir = Path(scratch.name)
+
+    def _write_verdict(self, verdict: dict, name: str = "verdict.json") -> None:
+        (self.scratch_dir / name).write_text(json.dumps(verdict))
+
+    def _complete_verdict(self) -> dict:
+        return {
+            "stance": "sound",
+            "summary": "The claims follow from the evidence.",
+            "prediction": {
+                "corpus": "arxiv", "category": "cs.LG",
+                "windowStart": "2026-01-01", "windowEnd": "2026-06-30",
+                "percentile": 15, "band": {"best": 8, "worst": 30},
+            },
+        }
+
+    def _run_gate(self, command: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
+        payload = {
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "cwd": str(cwd or self.scratch_dir),
+        }
+        return _run_hook(_PREDICTION_GATE_SCRIPT_PATH, payload)
+
+    def _read_denial_reason(self, proc: subprocess.CompletedProcess) -> str:
+        decision = json.loads(proc.stdout)["hookSpecificOutput"]
+        self.assertEqual(decision["hookEventName"], "PreToolUse")
+        self.assertEqual(decision["permissionDecision"], "deny")
+        return decision["permissionDecisionReason"]
+
+    def test_denies_a_verdict_without_a_prediction(self) -> None:
+        verdict = self._complete_verdict()
+        del verdict["prediction"]
+        self._write_verdict(verdict)
+        reason = self._read_denial_reason(
+            self._run_gate("exactory verify 10.5281/zenodo.1 --file verdict.json")
+        )
+        self.assertIn("prediction", reason)
+
+    def test_denies_a_null_prediction(self) -> None:
+        verdict = self._complete_verdict()
+        verdict["prediction"] = None
+        self._write_verdict(verdict)
+        reason = self._read_denial_reason(
+            self._run_gate("exactory verify 10.5281/zenodo.1 --file verdict.json")
+        )
+        self.assertIn("prediction", reason)
+
+    def test_denies_a_prediction_without_a_percentile(self) -> None:
+        verdict = self._complete_verdict()
+        del verdict["prediction"]["percentile"]
+        self._write_verdict(verdict)
+        reason = self._read_denial_reason(
+            self._run_gate("exactory verify 10.5281/zenodo.1 --file verdict.json")
+        )
+        self.assertIn("percentile", reason)
+
+    def test_allows_a_verdict_that_carries_the_prediction(self) -> None:
+        self._write_verdict(self._complete_verdict())
+        proc = self._run_gate("exactory verify 10.5281/zenodo.1 --file verdict.json")
+        self.assertEqual(proc.stdout, "")
+
+    def test_reads_the_equals_form_of_the_file_flag(self) -> None:
+        verdict = self._complete_verdict()
+        del verdict["prediction"]
+        self._write_verdict(verdict)
+        reason = self._read_denial_reason(
+            self._run_gate("exactory verify 10.5281/zenodo.1 --file=verdict.json")
+        )
+        self.assertIn("prediction", reason)
+
+    def test_resolves_a_relative_path_against_the_payload_cwd(self) -> None:
+        nested = self.scratch_dir / "work"
+        nested.mkdir()
+        verdict = self._complete_verdict()
+        del verdict["prediction"]
+        (nested / "verdict.json").write_text(json.dumps(verdict))
+        reason = self._read_denial_reason(
+            self._run_gate("exactory verify 10.5281/zenodo.1 --file verdict.json",
+                           cwd=nested)
+        )
+        self.assertIn("prediction", reason)
+
+    def test_denies_an_unparseable_command_that_names_exactory_verify(self) -> None:
+        reason = self._read_denial_reason(self._run_gate('exactory verify "broken'))
+        self.assertIn("parse", reason)
+
+    def test_is_neutral_for_an_unrelated_exactory_command(self) -> None:
+        self.assertEqual(self._run_gate("exactory tasks --limit 10").stdout, "")
+
+    def test_is_neutral_for_a_safe_command(self) -> None:
+        self.assertEqual(self._run_gate("git status").stdout, "")
+
+    def test_is_neutral_when_the_file_does_not_exist(self) -> None:
+        proc = self._run_gate("exactory verify 10.5281/zenodo.1 --file missing.json")
+        self.assertEqual(proc.stdout, "")
 
 
 class TestReferencesAdvisory(unittest.TestCase):
@@ -450,7 +555,7 @@ class TestHooksManifest(unittest.TestCase):
         commands = json.dumps(manifest["hooks"])
         for script_name in ("enforce_citation_check.py", "check_references_edit.py",
                             "guard_experiment_exec.py", "enforce_decision_log.py",
-                            "continue_autopilot.py"):
+                            "continue_autopilot.py", "enforce_prediction.py"):
             self.assertIn(script_name, commands)
         self.assertIn("Stop", manifest["hooks"])
 
