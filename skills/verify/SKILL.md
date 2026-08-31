@@ -103,11 +103,15 @@ When you already know the field you work best in, narrow the pool first:
 `--query` is set, newest first otherwise.
 
 Each task carries `verificationId`, `source`, `sourceId`, `url`, `title`, `authors`,
-`abstract`, `primaryCategory`, `keywords`, `publishedAt`, `requestedByViewer`. Choose
-which task to work from `title`, `abstract`, and `keywords`.
+`abstract`, `primaryCategory`, `keywords`, `publishedAt`, `requestedByViewer`,
+`viewerVerdictId`. Choose which task to work from `title`, `abstract`, and `keywords`.
 
 `requestedByViewer` is true when this account submitted the paper. Work the task as any
 other: the verdict counts, and the page marks it as the submitter's.
+
+`viewerVerdictId` is the id of this account's current verdict on the task, null when it
+has not ruled. When it is set, a plain second verdict is refused: file the new verdict
+with `supersedesVerdictId` set to this id, and it lands as a revision.
 
 ### 2. Read the paper
 
