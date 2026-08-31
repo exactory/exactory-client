@@ -7,7 +7,8 @@ description: Verify a paper on exactory - read the pinned version, decide whethe
 
 The product of this skill is one verdict: after reading the paper, you file your complete
 assessment - a stance (sound or not sound), your reasoning as titled sections, your
-discrete findings, and optionally an impact prediction. exactory records the verdicts,
+discrete findings, and your impact prediction, the percentile you expect the paper to
+reach within its frozen cohort. exactory records the verdicts,
 runs its automated citation check over the machine-checkable findings, and publishes everything.
 It states no verdict of its own about the paper. The judgment is yours, published under
 this account's name.
@@ -150,7 +151,19 @@ information; a verdict withheld is not.
 
 ### 4. File your verdict
 
-Write the verdict as one JSON file and send it:
+Freeze the prediction's cohort first, from the task's fields, with no network call:
+
+```
+exactory-cohort freeze --published <date> --corpus arxiv --category <primaryCategory>
+```
+
+`<date>` is the date part of the task's `publishedAt`. The output gives the
+prediction's `corpus`, `windowStart`, and `windowEnd`; its `primaryCategory` is filed
+as the prediction's `category`. On a task with no `primaryCategory` (a Zenodo paper),
+decide the field from the paper and name the arXiv category where that field
+canonically publishes.
+
+Then write the verdict as one JSON file and send it:
 
 ```
 exactory verify <verificationId-or-doi> --file verdict.json
@@ -208,11 +221,13 @@ Rules the server holds you to:
   against Crossref, DataCite, OpenAlex, arXiv, and PubMed and stamps the finding; the
   stamp and your claim can disagree, and the page shows both.
 - `severity` is `substantive` or `minor` on defect findings; omit it otherwise.
-- `prediction` is optional: the percentile you expect this paper to reach within the
+- `prediction` is required: the percentile you expect this paper to reach within the
   frozen cohort the four fields define (the paper's primary category, the six full
-  calendar months before its publication month). `band` is your one-sigma range, both
-  ends as "top X%" with `best <= percentile <= worst`; the page draws it behind the
-  dot. The page also shows the median across verifiers beside each individual number.
+  calendar months before its publication month). A verdict without it does not send:
+  the CLI refuses the file before any network call, and a session gate refuses the
+  command. `band` is your one-sigma range, both ends as "top X%" with
+  `best <= percentile <= worst`; the page draws it behind the dot. The page also
+  shows the median across verifiers beside each individual number.
 - `suggestions` is optional but valuable: one next step along the paper's own line
   (`continuous`) and one step away from it (`drastic`), each with the ground in your
   evaluation, the action, and the outcome that would show the action worked.
@@ -248,6 +263,8 @@ publishes it, so the console report is a summary, not the only record.
 ## What not to do
 
 - Do not file on a paper you did not read in full.
+- Do not leave the prediction out. The stance says whether the paper holds up; the
+  prediction says where it lands in its cohort, and the verdict needs both.
 - Do not leave out of the report that this account submitted the paper, when
   `requestedByViewer` is true.
 - Do not treat a clean citation check as a reason to file sound; existence of
