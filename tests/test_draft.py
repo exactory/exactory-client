@@ -52,6 +52,13 @@ class _FakeZenodoApi:
 
     def __init__(self) -> None:
         self.requests = []
+        self._uploaded_names = {"bucket-1": [], "bucket-2": []}
+
+    def _list_file_entries(self, bucket_name: str) -> list[dict]:
+        """Return the bucket's files newest-first, the adversarial order:
+        the paper sorts first only if the client sends an explicit sort."""
+        return [{"id": f"file-{name}", "filename": name}
+                for name in reversed(self._uploaded_names[bucket_name])]
 
     def __call__(self, request):
         self.requests.append(request)
@@ -67,6 +74,11 @@ class _FakeZenodoApi:
                 },
             }
         if method == "PUT" and "/files/bucket-1/" in url:
+            self._uploaded_names["bucket-1"].append(url.rsplit("/", 1)[1])
+            return {}
+        if method == "GET" and url.endswith("/deposit/depositions/4242"):
+            return {"id": 4242, "files": self._list_file_entries("bucket-1")}
+        if method == "PUT" and url.endswith("/deposit/depositions/4242/files"):
             return {}
         if method == "PUT" and url.endswith("/deposit/depositions/4242"):
             return {"metadata": {"prereserve_doi": {"doi": "10.5281/zenodo.4242"}}}
@@ -81,12 +93,16 @@ class _FakeZenodoApi:
         if method == "GET" and url.endswith("/deposit/depositions/4343"):
             return {
                 "id": 4343,
+                "files": self._list_file_entries("bucket-2"),
                 "links": {
                     "bucket": f"{base_url}/files/bucket-2",
                     "html": f"{base_url}/deposit/4343",
                 },
             }
         if method == "PUT" and "/files/bucket-2/" in url:
+            self._uploaded_names["bucket-2"].append(url.rsplit("/", 1)[1])
+            return {}
+        if method == "PUT" and url.endswith("/deposit/depositions/4343/files"):
             return {}
         if method == "PUT" and url.endswith("/deposit/depositions/4343"):
             return {"metadata": {"prereserve_doi": {"doi": "10.5281/zenodo.4343"}}}
@@ -178,6 +194,10 @@ class _DepositTestCase(unittest.TestCase):
             self,
         )
         (self.workspace_dir / "draft" / "paper.pdf").write_bytes(b"%PDF-1.4 fake paper")
+        (self.workspace_dir / "draft" / "abstract.txt").write_text(
+            "We predict cohort percentiles & bound their error.\n\n"
+            "A second paragraph states the limits.\n"
+        )
         _write_passing_citation_report(self.workspace_dir)
         self.addCleanup(os.chdir, os.getcwd())
         os.chdir(self.workspace_dir)
@@ -195,10 +215,21 @@ class _DepositTestCase(unittest.TestCase):
         self.addCleanup(env_patcher.stop)
 
     def _deposit(self, argv_tail: list[str], expected_exit_code: int | None = None) -> str:
-        return _run_draft_command(["deposit", *argv_tail], expected_exit_code, self)
+        return _run_draft_command(
+            ["deposit", "--abstract-file", "draft/abstract.txt", *argv_tail],
+            expected_exit_code, self,
+        )
 
 
 class TestDeposit(_DepositTestCase):
+    def _read_sent_metadata(self) -> dict:
+        metadata_request = next(
+            request for request in self.fake_api.requests
+            if request.get_method() == "PUT"
+            and request.full_url.endswith("/deposit/depositions/4242")
+        )
+        return json.loads(metadata_request.data.decode())["metadata"]
+
     def test_deposit_targets_the_sandbox_by_default(self) -> None:
         self._deposit(["--creator", "Shiroshita, Ryosuke"])
         first_request = self.fake_api.requests[0]
@@ -219,12 +250,7 @@ class TestDeposit(_DepositTestCase):
 
     def test_metadata_carries_the_contract_fields_and_the_disclosure(self) -> None:
         self._deposit(["--creator", "Shiroshita, Ryosuke", "--creator", "Example, Alice"])
-        metadata_request = next(
-            request for request in self.fake_api.requests
-            if request.get_method() == "PUT"
-            and request.full_url.endswith("/deposit/depositions/4242")
-        )
-        metadata = json.loads(metadata_request.data.decode())["metadata"]
+        metadata = self._read_sent_metadata()
         self.assertEqual(metadata["upload_type"], "publication")
         self.assertEqual(metadata["publication_type"], "preprint")
         self.assertEqual(metadata["title"], "Cohort Percentiles")
@@ -235,6 +261,66 @@ class TestDeposit(_DepositTestCase):
         self.assertIn("AI assistance", metadata["description"])
         self.assertIn("Shiroshita, Ryosuke", metadata["description"])
         self.assertIn("responsible", metadata["description"])
+
+    def test_description_opens_with_the_abstract_and_ends_with_the_disclosure(self) -> None:
+        self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        description = self._read_sent_metadata()["description"]
+        self.assertTrue(description.startswith("<p>"))
+        self.assertIn("cohort percentiles &amp; bound their error", description)
+        self.assertIn("second paragraph", description)
+        self.assertLess(
+            description.find("cohort percentiles"), description.find("AI assistance")
+        )
+
+    def test_a_blank_abstract_file_is_refused_before_any_request(self) -> None:
+        (self.workspace_dir / "draft" / "abstract.txt").write_text(" \n\n")
+        stderr_text = self._deposit(
+            ["--creator", "Shiroshita, Ryosuke"], expected_exit_code=2
+        )
+        self.assertIn("abstract", stderr_text)
+        self.assertEqual(self.fake_api.requests, [])
+
+    def test_a_missing_abstract_file_is_refused_before_any_request(self) -> None:
+        stderr_text = _run_draft_command(
+            ["deposit", "--abstract-file", "draft/nothing-here.txt",
+             "--creator", "Shiroshita, Ryosuke"],
+            2, self,
+        )
+        self.assertIn("nothing-here.txt", stderr_text)
+        self.assertEqual(self.fake_api.requests, [])
+
+    def test_the_pdf_uploads_under_the_fixed_name_paper_pdf(self) -> None:
+        (self.workspace_dir / "draft" / "paper.pdf").rename(
+            self.workspace_dir / "draft" / "main.pdf"
+        )
+        self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        upload_urls = [
+            request.full_url for request in self.fake_api.requests
+            if request.get_method() == "PUT" and "/files/bucket-1/" in request.full_url
+        ]
+        self.assertEqual(upload_urls, ["https://sandbox.zenodo.org/api/files/bucket-1/paper.pdf"])
+
+    def test_the_paper_sorts_first_when_sources_accompany_it(self) -> None:
+        sources_path = self.workspace_dir / "sources.zip"
+        sources_path.write_bytes(b"PK fake zip")
+        self._deposit(["--creator", "Shiroshita, Ryosuke", "--sources", str(sources_path)])
+        sort_request = next(
+            request for request in self.fake_api.requests
+            if request.get_method() == "PUT"
+            and request.full_url.endswith("/deposit/depositions/4242/files")
+        )
+        self.assertEqual(
+            json.loads(sort_request.data.decode()),
+            [{"id": "file-paper.pdf"}, {"id": "file-sources.zip"}],
+        )
+
+    def test_a_single_file_deposit_sends_no_sort_request(self) -> None:
+        self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        sort_urls = [
+            request.full_url for request in self.fake_api.requests
+            if request.full_url.endswith("/deposit/depositions/4242/files")
+        ]
+        self.assertEqual(sort_urls, [])
 
     def test_deposit_uploads_the_newest_pdf(self) -> None:
         older_pdf = self.workspace_dir / "draft" / "old.pdf"
