@@ -17,6 +17,7 @@ standard library only.
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 import subprocess
@@ -52,6 +53,10 @@ _AI_DISCLOSURE_TEMPLATE = (
     "This preprint was prepared with AI assistance. The human author, {author},"
     " reviewed the full content and is responsible for it."
 )
+
+# The paper always lands on Zenodo under this name, whatever the local build
+# called it, so every record presents the same face.
+_PAPER_UPLOAD_NAME = "paper.pdf"
 
 def _exit_with_error(message: str, code: int = 1) -> None:
     print(message, file=sys.stderr)
@@ -97,7 +102,8 @@ def _open_url(request: urllib.request.Request) -> dict:
     raise AssertionError("unreachable")
 
 
-def _call_zenodo(method: str, url: str, token: str, json_body: dict | None = None,
+def _call_zenodo(method: str, url: str, token: str,
+                 json_body: dict | list | None = None,
                  file_bytes: bytes | None = None) -> dict:
     headers = {"Authorization": f"Bearer {token}", "User-Agent": _USER_AGENT}
     data = None
@@ -137,14 +143,45 @@ def _find_newest_pdf() -> Path:
     return pdf_paths[-1]
 
 
-def _build_deposit_metadata(title: str, creators: list[str]) -> dict:
+def _read_abstract_text(path: Path) -> str:
+    if not path.exists():
+        _exit_with_error(f"The file {path} does not exist."
+                         " Write the paper's abstract into it as plain text.", 2)
+    abstract_text = path.read_text(encoding="utf-8").strip()
+    if abstract_text == "":
+        _exit_with_error(f"The abstract file {path} is empty."
+                         " Write the paper's abstract into it as plain text.", 2)
+    return abstract_text
+
+
+def _build_deposit_metadata(title: str, creators: list[str], abstract_text: str) -> dict:
+    # Zenodo renders the description as HTML. The abstract paragraphs come
+    # first, the AI disclosure closes the description as its own paragraph.
+    paragraph_texts = [" ".join(block.split()) for block in abstract_text.split("\n\n")]
+    paragraph_texts = [text for text in paragraph_texts if text != ""]
+    paragraph_texts.append(_AI_DISCLOSURE_TEMPLATE.format(author=creators[0]))
     return {
         "upload_type": "publication",
         "publication_type": "preprint",
         "title": title,
         "creators": [{"name": creator_name} for creator_name in creators],
-        "description": _AI_DISCLOSURE_TEMPLATE.format(author=creators[0]),
+        "description": "".join(f"<p>{html.escape(text)}</p>" for text in paragraph_texts),
     }
+
+
+def _sort_paper_first(base_url: str, deposition_id: int, token: str) -> None:
+    """Move the paper to the top of the record's file list. Zenodo lists the
+    files in this order and previews the first one, per the sort endpoint at
+    https://developers.zenodo.org."""
+    deposition = _call_zenodo("GET", f"{base_url}/deposit/depositions/{deposition_id}",
+                              token)
+    file_entries = deposition.get("files", [])
+    if len(file_entries) < 2:
+        return
+    ordered_entries = sorted(file_entries,
+                             key=lambda entry: entry["filename"] != _PAPER_UPLOAD_NAME)
+    _call_zenodo("PUT", f"{base_url}/deposit/depositions/{deposition_id}/files", token,
+                 json_body=[{"id": entry["id"]} for entry in ordered_entries])
 
 
 def _open_new_version_draft(base_url: str, environment: str, token: str) -> dict:
@@ -193,6 +230,7 @@ def _run_deposit(args: argparse.Namespace) -> None:
     sources_path = Path(args.sources) if args.sources else None
     if sources_path is not None and not sources_path.exists():
         _exit_with_error(f"The file {sources_path} does not exist.", 2)
+    abstract_text = _read_abstract_text(Path(args.abstract_file))
     token = _read_zenodo_token(args.production)
     if args.publish and args.production and not args.confirm_publish:
         _exit_with_error("A production publish is permanent. Get the user's approval"
@@ -218,12 +256,13 @@ def _run_deposit(args: argparse.Namespace) -> None:
         deposition = _call_zenodo("POST", f"{base_url}/deposit/depositions", token,
                                   json_body={})
     bucket_url = deposition["links"]["bucket"]
-    _call_zenodo("PUT", f"{bucket_url}/{pdf_path.name}", token,
+    _call_zenodo("PUT", f"{bucket_url}/{_PAPER_UPLOAD_NAME}", token,
                  file_bytes=pdf_path.read_bytes())
     if sources_path is not None:
         _call_zenodo("PUT", f"{bucket_url}/{sources_path.name}", token,
                      file_bytes=sources_path.read_bytes())
-    metadata = _build_deposit_metadata(state["title"], args.creator)
+    _sort_paper_first(base_url, deposition["id"], token)
+    metadata = _build_deposit_metadata(state["title"], args.creator, abstract_text)
     _call_zenodo("PUT", f"{base_url}/deposit/depositions/{deposition['id']}",
                  token, json_body={"metadata": metadata})
 
@@ -273,7 +312,11 @@ def _build_parser() -> argparse.ArgumentParser:
                          help="Confirm a production publish. Add this flag only after"
                               " the user approves, because a published DOI is permanent.")
     deposit.add_argument("--pdf",
-                         help="Path of the PDF (default: the newest .pdf under draft/).")
+                         help="Path of the PDF (default: the newest .pdf under draft/)."
+                              " It is uploaded as paper.pdf.")
+    deposit.add_argument("--abstract-file", required=True, dest="abstract_file",
+                         help="Path of a plain-text file holding the paper's abstract."
+                              " It opens the record's description on Zenodo.")
     deposit.add_argument("--sources",
                          help="Path of an optional sources archive (zip or tarball) to attach.")
     deposit.add_argument("--creator", action="append", required=True,
