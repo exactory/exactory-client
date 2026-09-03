@@ -1,5 +1,5 @@
 {
-  "description": "Exactory AI Science hooks: blocking PreToolUse gates on submission and production deposit, on filing a verdict without its cohort impact prediction, on catastrophic experiment shell, and on closing a stage without a logged decision; an advisory PostToolUse check on references edits; a PostToolUse recorder that notes when an agent writes the paper's LaTeX source; and a Stop hook that keeps an autopilot study moving.",
+  "description": "Exactory AI Science hooks: blocking PreToolUse gates on submission and production deposit, on filing a verdict without its cohort impact prediction, on catastrophic experiment shell, and on closing a stage without a logged decision; an advisory PostToolUse check on references edits; a PostToolUse recorder that notes when an agent writes the paper's LaTeX source; and a Stop hook that keeps an autopilot study moving. Math-solver hooks: blocking PreToolUse gates on editing the files the attack harness writes (by Write, Edit, or a shell write), on writing a unit before the cash-out started, and on drafting a unit before its check; and a Stop hook that keeps an open attack moving.",
   "hooks": {
     "PreToolUse": [
       {
@@ -23,6 +23,26 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/enforce_decision_log.py\"",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/guard_attack_files.py\"",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/guard_attack_files.py\"",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/enforce_unit_flow.py\"",
             "timeout": 15
           }
         ]
@@ -56,6 +76,11 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/continue_autopilot.py\"",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/continue_attack.py\"",
             "timeout": 15
           }
         ]
