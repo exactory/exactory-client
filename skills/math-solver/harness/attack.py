@@ -35,8 +35,9 @@ COSTS = (
     "obligations",      # the move adds statements that must themselves be proved
 )
 STRATEGY_FRONT_KEYS = ("name", "component", "description", "entries", "precedes", "excludes", "costs")
-# A declared cost that contradicts what the attack requires is not a penalty; the
-# strategy is not a candidate at all.
+# A declared cost is what a move under the strategy can take away, not what every
+# move does, so it never drops the strategy. `journal add` refuses the move that
+# pays one of these against the quadruple field it contradicts.
 COST_GATES = (
     ("constructivity", "mode", "construction"),
     ("implication", "direction", "false"),

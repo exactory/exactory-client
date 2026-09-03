@@ -51,9 +51,9 @@ found.
 |---|---|
 | `init <slug>` | creates `attack/<slug>/` with `problem.json` (shape keys set to `"unknown"`), empty `novelty.md` and `journal.jsonl`, and `study/`, `deterministic/`, and `units/`; refuses to overwrite |
 | `check-problem <slug>` | validates `problem.json`: every key present, no empty strings, `direction` and `mode` from the allowed sets; prints `problem.json: ok` |
-| `plan <slug>` | validates `preconditions.json` against the strategy files and `problem.json`, drops the strategies whose declared cost contradicts the quadruple, writes `compositions.json`, prints the shortlist (at most 20); refuses to run while `study/problem.md` is missing or empty |
+| `plan <slug>` | validates `preconditions.json` against the strategy files and `problem.json`, enumerates compositions over every strategy whose verdict is not `no`, writes `compositions.json`, prints the shortlist (at most 20); refuses to run while `study/problem.md` is missing or empty |
 | `rank <slug>` | validates `ranking.json` against the current shortlist and prints the order the solver chose |
-| `journal add <slug> --json '<move>'` | validates the move's fields, its `composition` against `ranking.json`, its `costs_paid` against the vocabulary, and the budget, appends it, prints the budget state; refuses a move whose `study/<strategy>.md` is missing or empty |
+| `journal add <slug> --json '<move>'` | validates the move's fields, its `composition` against `ranking.json`, its `costs_paid` against the vocabulary and against the quadruple, and the budget, appends it, prints the budget state; refuses a move whose `study/<strategy>.md` is missing or empty |
 | `budget <slug>` | prints moves used in this pass and overall, passes used, and whether a stall is due |
 | `fail <slug> <strategy>` | sets the strategy's verdict to `no` with a `note` and a `failed_after_move` stamp, then runs `plan` |
 | `verify lean <slug> <step-dir>` | in `deterministic/<step-dir>/`: `lake build`, then `#print axioms` on the theorem named in `step.json`; writes `result.json` |

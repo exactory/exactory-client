@@ -139,9 +139,9 @@ strategies joined by `+` and survives a re-plan; a rank does not.
 |---|---|
 | `init <slug>` | creates the workspace with empty files and the shape keys pre-filled with `"unknown"` |
 | `check-problem <slug>` | validates `problem.json`: every key present, no empty strings, quadruple values from the allowed sets |
-| `plan <slug>` | validates `preconditions.json` against the strategy files, drops the strategies whose declared cost contradicts the quadruple and prints each exclusion the scan had not already ruled out, enumerates compositions under the rules in `../strategies/README.md`, writes `compositions.json`, prints the shortlist |
+| `plan <slug>` | validates `preconditions.json` against the strategy files, enumerates compositions under the rules in `../strategies/README.md` over every strategy whose verdict is not no, writes `compositions.json`, prints the shortlist |
 | `rank <slug>` | validates `ranking.json`: it orders exactly the current shortlist, each row citing a `problem.json` field or a cost, and prints the order |
-| `journal add <slug> --json '<move>'` | validates the move against the schema and the current budget, appends it, prints the budget state |
+| `journal add <slug> --json '<move>'` | validates the move against the schema, refuses a `costs_paid` entry the quadruple forbids, checks the current budget, appends it, prints the budget state |
 | `budget <slug>` | prints moves used in this pass and overall, passes used, and whether a stall is due (three consecutive failure signals, pass exhausted, or hard cap) |
 | `fail <slug> <strategy>` | sets the strategy's verdict to no with a note, stamps the journal length as `failed_after_move`, re-runs `plan` |
 | `verify lean <slug> <step-dir>` | runs `lake build`, then reads `#print axioms` for the named theorem: the standard axioms give status `pass`, a native evaluation axiom gives `evidence`, `sorryAx` or a custom axiom gives `fail`; writes `result.json` with the status, the axioms list, and the reason |
@@ -159,7 +159,9 @@ strategy leaves the attack free to run the next composition.
 Read every `../strategies/*.md` front matter (name, component, precedes,
 excludes, costs); a file missing a key, or naming a cost outside the
 vocabulary, is refused with one line. Candidates are the strategies with
-verdict yes or unknown whose declared costs the quadruple allows.
+verdict yes or unknown. A declared cost never removes one here; it is
+what a move under the strategy can take away, not what every move does,
+and `journal add` refuses the move that pays it.
 Enumerate ordered selections of length 1 to 4 without repetition; keep a
 selection when it contains at most one unknown, violates no `excludes`
 pair, and for every pair (A before B in the selection) B does not list A
