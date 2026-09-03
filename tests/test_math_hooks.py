@@ -20,6 +20,8 @@ _PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 _GUARD_SCRIPT_PATH = _PLUGIN_ROOT / "hooks" / "guard_attack_files.py"
 _UNIT_FLOW_SCRIPT_PATH = _PLUGIN_ROOT / "hooks" / "enforce_unit_flow.py"
 _CONTINUE_SCRIPT_PATH = _PLUGIN_ROOT / "hooks" / "continue_attack.py"
+_ACTIVITY_SCRIPT_PATH = _PLUGIN_ROOT / "hooks" / "record_attack_activity.py"
+_RESUME_SCRIPT_PATH = _PLUGIN_ROOT / "hooks" / "resume_attack.py"
 
 _UNIT_RECORD = {
     "statement": "For every n the bound holds.",
@@ -86,11 +88,19 @@ class TestGuardAttackFiles(unittest.TestCase):
         reason = _read_denial_reason(self, self._run_file_tool(str(self.workspace / "journal.jsonl")))
         self.assertIn("journal add", reason)
 
-    def test_denies_an_edit_to_the_compositions(self) -> None:
+    def test_denies_an_edit_to_the_openings(self) -> None:
         reason = _read_denial_reason(
-            self, self._run_file_tool(str(self.workspace / "compositions.json"), tool="Edit")
+            self, self._run_file_tool(str(self.workspace / "openings.json"), tool="Edit")
         )
         self.assertIn("plan", reason)
+
+    def test_denies_a_write_to_the_tasks_and_to_the_activity_log(self) -> None:
+        tasks_reason = _read_denial_reason(self, self._run_file_tool(str(self.workspace / "tasks.json")))
+        self.assertIn("task", tasks_reason)
+        activity_reason = _read_denial_reason(
+            self, self._run_file_tool(str(self.workspace / "activity.jsonl"))
+        )
+        self.assertIn("activity", activity_reason)
 
     def test_denies_a_write_to_a_result_file(self) -> None:
         path = self.workspace / "deterministic" / "enumeration-run-1" / "result.json"
@@ -142,7 +152,7 @@ class TestGuardAttackFiles(unittest.TestCase):
 
     def test_denies_tee_copy_move_and_sed_in_place(self) -> None:
         for command in (
-            "cat new.json | tee attack/sample/compositions.json",
+            "cat new.json | tee attack/sample/openings.json",
             "cp new.json attack/sample/journal.jsonl",
             "mv new.json %s" % (self.workspace / "units" / "FINISHED.json"),
             "sed -i '' 's/false/true/' attack/sample/journal.jsonl",
@@ -155,7 +165,7 @@ class TestGuardAttackFiles(unittest.TestCase):
         for command in (
             "cat attack/sample/journal.jsonl",
             "grep -c closes attack/sample/journal.jsonl",
-            "python3 -m json.tool attack/sample/compositions.json",
+            "python3 -m json.tool attack/sample/openings.json",
             "exactory-math journal add sample --json '{\"move\": 1}'",
             "ls attack/sample/units",
         ):
@@ -269,6 +279,10 @@ class TestContinueAttack(unittest.TestCase):
         self.assertIn("2 moves", reason)
         self.assertIn("inventory written", reason)
 
+    def test_the_reason_carries_the_next_step_the_harness_reports(self) -> None:
+        reason = json.loads(self._run_stop().stdout)["reason"]
+        self.assertIn("next: fill problem.json and run check-problem", reason)
+
     def test_finds_the_workspace_from_a_subdirectory(self) -> None:
         decision = json.loads(self._run_stop(self.workspace / "deterministic").stdout)
         self.assertEqual(decision["decision"], "block")
@@ -285,6 +299,125 @@ class TestContinueAttack(unittest.TestCase):
         self.assertEqual(decision["decision"], "block")
         self.assertIn("cap", decision["reason"].lower())
         self.assertEqual(self.read_counter(), 0)
+
+
+class TestRecordAttackActivity(unittest.TestCase):
+    """The autosave: every tool call that touched an attack workspace lands in its
+    activity.jsonl, so a resumed session sees what the previous one was doing."""
+
+    def setUp(self) -> None:
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        self.root = Path(scratch.name) / "work"
+        self.workspace = _build_attack(self.root)
+
+    def _run(self, tool_name: str, tool_input: dict) -> subprocess.CompletedProcess:
+        return _run_hook(_ACTIVITY_SCRIPT_PATH, {
+            "tool_name": tool_name,
+            "tool_input": tool_input,
+            "tool_response": {"success": True},
+            "cwd": str(self.root),
+        })
+
+    def read_log(self) -> list:
+        path = self.workspace / "activity.jsonl"
+        if not path.exists():
+            return []
+        return [json.loads(line) for line in path.read_text().splitlines()]
+
+    def test_a_write_inside_the_workspace_is_recorded(self) -> None:
+        completed = self._run("Write", {"file_path": str(self.workspace / "deterministic" / "run-1" / "check.sh")})
+        self.assertEqual(completed.stdout, "")
+        entries = self.read_log()
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["tool"], "Write")
+        self.assertEqual(entries[0]["target"], "deterministic/run-1/check.sh")
+        self.assertRegex(entries[0]["at"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+
+    def test_an_edit_with_a_relative_path_is_recorded(self) -> None:
+        self._run("Edit", {"file_path": "attack/sample/problem.json"})
+        self.assertEqual(self.read_log()[0]["target"], "problem.json")
+
+    def test_a_harness_command_is_recorded_under_its_slug(self) -> None:
+        self._run("Bash", {"command": "exactory-math journal add sample --json '{\"move\": 1}'"})
+        entries = self.read_log()
+        self.assertEqual(entries[0]["tool"], "Bash")
+        self.assertEqual(entries[0]["target"], "exactory-math journal add sample")
+
+    def test_a_shell_command_naming_a_workspace_path_is_recorded(self) -> None:
+        self._run("Bash", {"command": "cat attack/sample/study/problem.md"})
+        self.assertEqual(self.read_log()[0]["target"], "cat attack/sample/study/problem.md")
+
+    def test_a_long_command_is_cut(self) -> None:
+        self._run("Bash", {"command": "python3 attack/sample/deterministic/run-1/search.py " + "x" * 300})
+        self.assertLessEqual(len(self.read_log()[0]["target"]), 160)
+
+    def test_a_tool_call_outside_the_workspace_is_not_recorded(self) -> None:
+        self._run("Write", {"file_path": str(self.root / "notes.md")})
+        self._run("Bash", {"command": "ls"})
+        self.assertEqual(self.read_log(), [])
+
+    def test_the_log_keeps_the_last_two_hundred_entries(self) -> None:
+        for number in range(205):
+            self._run("Write", {"file_path": str(self.workspace / ("file-%d.md" % number))})
+        entries = self.read_log()
+        self.assertEqual(len(entries), 200)
+        self.assertEqual(entries[-1]["target"], "file-204.md")
+        self.assertEqual(entries[0]["target"], "file-5.md")
+
+
+class TestResumeAttack(unittest.TestCase):
+    """At session start, an open attack under the working directory is reported with
+    the harness's status, so the session resumes it instead of starting over."""
+
+    def setUp(self) -> None:
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        self.root = Path(scratch.name) / "work"
+        self.workspace = _build_attack(self.root)
+        self.elsewhere = Path(scratch.name) / "elsewhere"
+        self.elsewhere.mkdir()
+
+    def _run_start(self, cwd: Path | None = None, source: str = "startup") -> subprocess.CompletedProcess:
+        return _run_hook(_RESUME_SCRIPT_PATH, {
+            "cwd": str(cwd or self.root),
+            "source": source,
+            "hook_event_name": "SessionStart",
+        })
+
+    def _read_context(self, proc: subprocess.CompletedProcess) -> str:
+        output = json.loads(proc.stdout)["hookSpecificOutput"]
+        self.assertEqual(output["hookEventName"], "SessionStart")
+        return output["additionalContext"]
+
+    def test_an_open_attack_is_reported_with_its_status(self) -> None:
+        context = self._read_context(self._run_start())
+        self.assertIn("attack/sample", context)
+        self.assertIn("stage 2 (set the problem)", context)
+        self.assertIn("next: fill problem.json and run check-problem", context)
+        self.assertIn("/exactory:math-solver", context)
+
+    def test_the_context_says_to_resume_and_not_to_restart(self) -> None:
+        context = self._read_context(self._run_start())
+        self.assertIn("resume", context.lower())
+        self.assertIn("stage 0", context)
+
+    def test_a_finished_attack_is_silent(self) -> None:
+        (self.workspace / "units" / "FINISHED.json").write_text(json.dumps({"outcome": "cashed-out", "units": []}))
+        self.assertEqual(self._run_start().stdout, "")
+
+    def test_no_workspace_is_silent(self) -> None:
+        self.assertEqual(self._run_start(self.elsewhere).stdout, "")
+
+    def test_every_open_attack_is_reported(self) -> None:
+        _build_attack(self.root, "second")
+        context = self._read_context(self._run_start())
+        self.assertIn("attack/sample", context)
+        self.assertIn("attack/second", context)
+
+    def test_a_compaction_reports_it_too(self) -> None:
+        context = self._read_context(self._run_start(source="compact"))
+        self.assertIn("attack/sample", context)
 
 
 if __name__ == "__main__":
