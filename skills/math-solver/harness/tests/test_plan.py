@@ -58,7 +58,7 @@ class PlanTest(WorkspaceTest):
         status, out, err = self.plan(make_preconditions(ALL_YES))
         self.assertEqual((status, out), (1, ""))
         self.assertEqual(err, "study/problem.md: missing or empty; write the problem-level study (STUDY.md) before plan\n")
-        self.assertFalse((self.workspace / "compositions.json").exists())
+        self.assertFalse((self.workspace / "openings.json").exists())
 
     def test_refuses_to_run_when_the_problem_study_is_empty(self):
         write_study(self.workspace, "problem", " \n")
@@ -66,67 +66,59 @@ class PlanTest(WorkspaceTest):
         self.assertEqual(status, 1)
         self.assertEqual(err, "study/problem.md: missing or empty; write the problem-level study (STUDY.md) before plan\n")
 
-    def test_writes_the_ranked_compositions(self):
+    def test_writes_the_openings(self):
         status, out, err = self.plan(make_preconditions(ALL_YES))
         self.assertEqual((status, err), (0, ""))
-        written = self.read_json("compositions.json")
+        written = self.read_json("openings.json")
         self.assertEqual(written["generated_from"], "preconditions.json")
-        self.assertEqual(len(written["compositions"]), 20)
+        self.assertEqual(len(written["openings"]), 5)
         self.assertEqual(
-            written["compositions"][0],
+            written["openings"][0],
             {
                 "rank": 1,
-                "id": "attack-the-negative-side+ladder-the-parameter"
-                      "+reduce-to-a-finite-computation+solve-the-model-world-first",
-                "strategies": [
-                    "attack-the-negative-side",
-                    "ladder-the-parameter",
-                    "reduce-to-a-finite-computation",
-                    "solve-the-model-world-first",
-                ],
-                "yes": 4,
-                "unknown": 0,
-                "components": ["direction", "mode", "stage", "statement"],
-                "costs": ["bound_quality", "constructivity", "object"],
-                "assumption": None,
+                "strategy": "attack-the-negative-side",
+                "verdict": "yes",
+                "component": "direction",
+                "costs": [],
             },
         )
 
-    def test_prints_one_line_per_composition_in_rank_order(self):
+    def test_prints_one_line_per_opening_in_rank_order(self):
         verdicts = dict(ALL_YES, **{"reduce-to-a-finite-computation": "no", "prove-the-barrier-first": "no"})
         status, out, err = self.plan(make_preconditions(verdicts))
         self.assertEqual(
-            out.splitlines()[:2],
+            out.splitlines(),
             [
-                "1. attack-the-negative-side -> ladder-the-parameter -> solve-the-model-world-first"
-                "  yes=3 unknown=0 components=direction,stage,statement",
-                "2. attack-the-negative-side -> solve-the-model-world-first -> ladder-the-parameter"
-                "  yes=3 unknown=0 components=direction,stage,statement",
+                "1. attack-the-negative-side  verdict=yes component=direction costs=none",
+                "2. ladder-the-parameter  verdict=yes component=statement costs=bound_quality",
+                "3. solve-the-model-world-first  verdict=yes component=stage costs=object",
             ],
         )
 
-    def test_names_the_assumption_on_the_printed_line(self):
+    def test_an_unknown_verdict_ranks_after_every_yes(self):
         verdicts = {name: "no" for name in ALL_YES}
-        verdicts["ladder-the-parameter"] = "yes"
         verdicts["solve-the-model-world-first"] = "unknown"
+        verdicts["ladder-the-parameter"] = "yes"
         status, out, err = self.plan(make_preconditions(verdicts))
         self.assertEqual(
-            out.splitlines()[0],
-            "1. ladder-the-parameter -> solve-the-model-world-first"
-            "  yes=1 unknown=1 components=stage,statement assumption=solve-the-model-world-first",
+            out.splitlines(),
+            [
+                "1. ladder-the-parameter  verdict=yes component=statement costs=bound_quality",
+                "2. solve-the-model-world-first  verdict=unknown component=stage costs=object",
+            ],
         )
 
     def test_says_so_when_nothing_is_admissible(self):
         status, out, err = self.plan(make_preconditions({name: "no" for name in ALL_YES}))
-        self.assertEqual((status, out), (0, "no admissible composition\n"))
-        self.assertEqual(self.read_json("compositions.json")["compositions"], [])
+        self.assertEqual((status, out), (0, "no admissible opening\n"))
+        self.assertEqual(self.read_json("openings.json")["openings"], [])
 
     def test_rejects_a_missing_strategy(self):
         preconditions = make_preconditions(ALL_YES)
         del preconditions["prove-the-barrier-first"]
         status, out, err = self.plan(preconditions)
         self.assertEqual((status, err), (1, "preconditions.json: missing strategy prove-the-barrier-first\n"))
-        self.assertFalse((self.workspace / "compositions.json").exists())
+        self.assertFalse((self.workspace / "openings.json").exists())
 
     def test_rejects_a_name_with_no_strategy_file(self):
         preconditions = make_preconditions(ALL_YES)

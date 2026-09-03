@@ -3,19 +3,19 @@ from tests.support import WorkspaceTest, make_move, write_journal
 
 class StallTest(WorkspaceTest):
     def plan_nothing(self):
-        """A plan that emitted no composition, which is one of the three rules that start the cash-out."""
+        """A plan that admitted no opening, which is one of the rules that start the cash-out."""
         self.write_json(
-            "compositions.json",
-            {"generated_from": "preconditions.json", "problem_digest": "0" * 64, "compositions": []},
+            "openings.json",
+            {"generated_from": "preconditions.json", "problem_digest": "0" * 64, "openings": []},
         )
 
     def plan_some(self, count):
         self.write_json(
-            "compositions.json",
+            "openings.json",
             {
                 "generated_from": "preconditions.json",
                 "problem_digest": "0" * 64,
-                "compositions": [{"id": "composition-%d" % n} for n in range(count)],
+                "openings": [{"strategy": "strategy-%d" % n} for n in range(count)],
             },
         )
 
@@ -46,6 +46,8 @@ class StallTest(WorkspaceTest):
             "strategy's Failure signal names. Convert each into a unit under\n"
             "CASHOUT.md or discard it.\n"
             "\n"
+            "Walk: attack-the-negative-side -> solve-the-model-world-first -> attack-the-negative-side.\n"
+            "\n"
             "## attack-the-negative-side\n"
             "\n"
             "- move 1 (pass 1, test-strengthenings-by-counterexample): a bound one rung higher\n"
@@ -64,7 +66,7 @@ class StallTest(WorkspaceTest):
         self.assertEqual((status, out), (1, ""))
         self.assertEqual(
             err,
-            "stall: no rule started the cash-out (stall due: no; 2 compositions planned); continue at stage 5\n",
+            "stall: no rule started the cash-out (stall due: no; 2 openings admitted); continue at stage 5\n",
         )
         self.assertFalse((self.workspace / "units" / "INVENTORY.md").exists())
 
@@ -84,15 +86,22 @@ class StallTest(WorkspaceTest):
             "wrote units/INVENTORY.md (3 moves, 3 ended in a failure signal); rule: 3 consecutive failure signals\n",
         )
 
-    def test_accepts_when_the_plan_emitted_no_composition(self):
+    def test_accepts_when_the_plan_admitted_no_opening(self):
         self.plan_nothing()
         write_journal(self.workspace, [make_move(1)])
         status, out, err = self.run_cli("stall", self.slug)
         self.assertEqual((status, err), (0, ""))
         self.assertEqual(
             out,
-            "wrote units/INVENTORY.md (1 moves, 0 ended in a failure signal); rule: no admissible composition\n",
+            "wrote units/INVENTORY.md (1 moves, 0 ended in a failure signal); rule: no admissible opening\n",
         )
+
+    def test_an_empty_journal_has_no_walk_line(self):
+        self.plan_nothing()
+        self.run_cli("stall", self.slug)
+        text = (self.workspace / "units" / "INVENTORY.md").read_text()
+        self.assertNotIn("Walk:", text)
+        self.assertTrue(text.endswith("No move is journalled.\n"))
 
     def test_names_what_each_move_paid_and_sums_the_ledger(self):
         self.plan_nothing()
@@ -105,6 +114,7 @@ class StallTest(WorkspaceTest):
         )
         self.run_cli("stall", self.slug)
         text = (self.workspace / "units" / "INVENTORY.md").read_text()
+        self.assertIn("Walk: attack-the-negative-side.\n", text)
         self.assertIn("Costs paid across the attack: effectivity, object.\n", text)
         self.assertIn(
             "- move 2 (pass 1, test-strengthenings-by-counterexample,"

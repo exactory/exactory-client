@@ -96,7 +96,7 @@ deposit or submission; the user names any other pacing in their own words.
 | `/exactory:init` | Both | Guided setup: check what is set, then register in the session with an emailed code or through the web sign-up page |
 | `/exactory:login` | Both | Sign in or create an account with a code sent to your email, and store the API key locally |
 | `/exactory:ai-science` | Submitter | Run a study end to end: cohort, problem, experiments, draft, improve, deposit, submit |
-| `/exactory:math-solver` | Submitter | Attack a stated mathematical proposition: set the problem, check novelty, plan strategy compositions, run the moves under a fixed budget, and cash out what stands |
+| `/exactory:math-solver` | Submitter | Attack a stated mathematical proposition: set the problem, check novelty, walk the admitted strategies under a fixed budget, cash out what stands, and resume an open attack from its record |
 | `/exactory:write` | Submitter | Draft the paper: evidence intake and doctrine-conforming sections with verified citations |
 | `/exactory:evaluate` | Both | Evaluate a paper locally: citation integrity, a structured quality review, and the verdict you expect the market to reach |
 | `/exactory:submit` | Submitter | Submit a paper for verification |
@@ -180,30 +180,47 @@ never a hard dependency.
 from whatever directory the user works in. It owns the attack workspace under
 `attack/<slug>/`: `init` creates it; `check-problem`, `plan`, `rank`, and
 `check-unit` validate what the solver writes into it; `journal add` appends one
-move after checking that it is where the attack stands (the composition the
-order gives, the strategy that composition has reached, an entry that strategy
-dispatches, a trigger read from a settled shape field, the steps it ran with
-their results, and the move budget); `budget` prints that budget's state;
-`fail` ends a strategy and re-plans; `stall` writes the cash-out inventory once
-a cash-out rule holds, and refuses before; `verify` runs a deterministic step's
-check; `check-unit` reads a unit's evidence and ledger against its form and
-stamps the unit it accepted; and `finish` closes the workspace once every unit
-is checked, drafted, and evaluated. `skill-dir` prints the directory that holds
-the skill's own strategies and entries, which the solver reads as it works.
+move after checking that it is where the attack stands (the walk opens with the
+first strategy of the solver's ranking and grows one admissible step at a time,
+each step citing the record; the entry is one the strategy dispatches; the
+trigger is read from a settled shape field; the steps it ran have results; the
+move budget holds); `budget` prints that budget's state; `fail` ends a strategy
+and re-plans; `stall` writes the cash-out inventory once a cash-out rule holds,
+and refuses before; `verify` runs a deterministic step's check; `check-unit`
+reads a unit's evidence and ledger against its form and stamps the unit it
+accepted; `finish` closes the workspace once every unit is checked, drafted,
+and evaluated; `task` keeps the action list; and `status` prints where the
+attack stands and the next step, derived from the record. `skill-dir` prints
+the directory that holds the skill's own strategies and entries, which the
+solver reads as it works.
 
-Three hooks hold the attack workspace to that flow. Outside an attack
+A session can end before an attack does. The record is the save: every
+harness command writes its file the moment it accepts, and five hooks hold
+the workspace to the flow and carry it across sessions. Outside an attack
 workspace they do nothing.
 
 - **Harness files.** A Write, an Edit, or a shell write to a file the harness
-  writes (`journal.jsonl`, `compositions.json`, a step's `result.json`, a
-  unit's `check-unit.json`, `units/FINISHED.json`) is denied, and the denial
-  names the harness command that writes it.
+  or a hook writes (`journal.jsonl`, `openings.json`, `tasks.json`,
+  `activity.jsonl`, a step's `result.json`, a unit's `check-unit.json`,
+  `units/FINISHED.json`) is denied, and the denial names the command that
+  writes it.
 - **Unit flow.** A write under `units/<n>/` is denied until `stall` wrote the
   inventory, and a `draft.md` or `evaluation.md` is denied until `check-unit`
   stamped the unit as it stands.
+- **Activity.** After every Write, Edit, or Bash call that touched an attack
+  workspace, one line goes to its `activity.jsonl`: the time, the tool, and
+  the file or command. `status` shows the last three, so a resumed session
+  sees what the previous one was doing when it stopped.
+- **Resume.** At session start (a new session, a resume, a clear, or a
+  compaction), every open attack under the working directory is reported
+  with its `status`, and the session is told to resume the skill at its
+  stage 0 instead of starting over. The same happens when the user asks to
+  resume or restart an attack: the skill runs `exactory-math status <slug>`
+  and continues from the `next:` line.
 - **Continue.** The session does not stop while an attack under the working
   directory has no `units/FINISHED.json`; the block names every open attack
-  with its state. `EXACTORY_ATTACK_MAX` (default 40) caps the advances.
+  with its state and the next step. `EXACTORY_ATTACK_MAX` (default 40) caps
+  the advances.
 
 ## Citation gate and hooks
 

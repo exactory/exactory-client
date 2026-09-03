@@ -2,9 +2,8 @@
 """Deterministic harness for an attack workspace. The contract is SPEC.md."""
 
 import argparse
-import collections
+import datetime
 import hashlib
-import itertools
 import json
 import os
 import re
@@ -16,9 +15,6 @@ MOVES_PER_PASS = 8
 PASS_COUNT = 3
 MOVE_HARD_CAP = 24
 STALL_AFTER_CONSECUTIVE_FAILURES = 3
-
-COMPOSITION_MAX_LENGTH = 4
-COMPOSITION_LIMIT = 20
 
 DEFAULT_STRATEGIES_DIR = Path(__file__).resolve().parent.parent / "strategies"
 DEFAULT_ATTACK_ROOT = Path("attack")
@@ -132,77 +128,29 @@ def parse_front_matter_value(value):
     return value
 
 
-def enumerate_compositions(front_matters, verdicts, quadruple):
-    """Rank every admissible ordered selection of the strategies the scan admits.
+def list_openings(front_matters, verdicts):
+    """The strategies the scan admits, one row each: verdict yes before unknown, then
+    name order. The solver ranks them, the attack opens at the first of the ranking,
+    and the walk grows from there under the rules `journal add` enforces.
 
     A declared cost is what a move under the strategy can take away, not what every
     move does, so it never drops the strategy here. `journal add` refuses the move
     that pays a cost the attack cannot afford.
     """
-    candidates = sorted(name for name, verdict in verdicts.items() if verdict != "no")
-    admissible = [
-        chosen
-        for length in range(1, COMPOSITION_MAX_LENGTH + 1)
-        for chosen in itertools.permutations(candidates, length)
-        if is_admissible(chosen, front_matters, verdicts)
-    ]
-    admissible.sort(key=lambda chosen: composition_sort_key(chosen, front_matters, verdicts))
+    admitted = sorted(
+        (name for name, verdict in verdicts.items() if verdict != "no"),
+        key=lambda name: (verdicts[name] != "yes", name),
+    )
     return [
-        describe_composition(rank, chosen, front_matters, verdicts)
-        for rank, chosen in enumerate(spread_over_leaders(admissible), start=1)
+        {
+            "rank": rank,
+            "strategy": name,
+            "verdict": verdicts[name],
+            "component": front_matters[name]["component"],
+            "costs": sorted(front_matters[name]["costs"]),
+        }
+        for rank, name in enumerate(admitted, start=1)
     ]
-
-
-def spread_over_leaders(admissible):
-    """Which compositions survive the cap, in rank order.
-
-    Taken by round: the best composition led by each strategy, then the second
-    best led by each, and so on. At equal rank the sort key ends in the names, so
-    a plain cut leaves the alphabetically first leader holding every slot and the
-    other candidates unreachable through a list the solver takes in rank order.
-    A list that fits under the cap is returned unchanged.
-    """
-    led = collections.Counter()
-    rounds = []
-    for position, chosen in enumerate(admissible):
-        rounds.append((led[chosen[0]], position, chosen))
-        led[chosen[0]] += 1
-    kept = sorted(rounds)[:COMPOSITION_LIMIT]
-    return [chosen for _, position, chosen in sorted(kept, key=lambda row: row[1])]
-
-
-def is_admissible(chosen, front_matters, verdicts):
-    if sum(verdicts[name] == "unknown" for name in chosen) > 1:
-        return False
-    for earlier, later in itertools.combinations(chosen, 2):
-        if later in front_matters[earlier]["excludes"] or earlier in front_matters[later]["excludes"]:
-            return False
-        if earlier in front_matters[later]["precedes"]:
-            return False
-    return True
-
-
-def composition_sort_key(chosen, front_matters, verdicts):
-    yes_count = sum(verdicts[name] == "yes" for name in chosen)
-    return (-yes_count, -len(distinct_components(chosen, front_matters)), chosen)
-
-
-def distinct_components(chosen, front_matters):
-    return sorted({front_matters[name]["component"] for name in chosen})
-
-
-def describe_composition(rank, chosen, front_matters, verdicts):
-    unknowns = [name for name in chosen if verdicts[name] == "unknown"]
-    return {
-        "rank": rank,
-        "id": "+".join(chosen),
-        "strategies": list(chosen),
-        "yes": len(chosen) - len(unknowns),
-        "unknown": len(unknowns),
-        "components": distinct_components(chosen, front_matters),
-        "costs": sorted({cost for name in chosen for cost in front_matters[name].get("costs", ())}),
-        "assumption": unknowns[0] if unknowns else None,
-    }
 
 
 def run_init(args):
@@ -300,18 +248,20 @@ def run_plan(args):
     defects = list(find_precondition_defects(preconditions, front_matters, problem, requirements))
     if defects:
         raise ValidationError(defects)
-    verdicts = {name: record["verdict"] for name, record in preconditions.items()}
-    quadruple = problem["quadruple"]
-    compositions = enumerate_compositions(front_matters, verdicts, quadruple)
+    openings = list_openings(front_matters, read_verdicts(preconditions))
     write_json(
-        workspace / "compositions.json",
+        workspace / "openings.json",
         {
             "generated_from": "preconditions.json",
             "problem_digest": compute_problem_digest(problem),
-            "compositions": compositions,
+            "openings": openings,
         },
     )
-    print_compositions(compositions)
+    print_openings(openings)
+
+
+def read_verdicts(preconditions):
+    return {name: record["verdict"] for name, record in preconditions.items()}
 
 
 def compute_problem_digest(problem):
@@ -450,27 +400,16 @@ def has_field(problem, dotted_path):
     return read_field(problem, dotted_path) is not MISSING_FIELD
 
 
-def print_compositions(compositions):
-    if not compositions:
-        print("no admissible composition")
-    for composition in compositions:
-        print(format_composition(composition))
+def print_openings(openings):
+    if not openings:
+        print("no admissible opening")
+    for row in openings:
+        print("%d. %s  verdict=%s component=%s costs=%s" % (
+            row["rank"], row["strategy"], row["verdict"], row["component"], ",".join(row["costs"]) or "none"
+        ))
 
 
-def format_composition(composition):
-    line = "%d. %s  yes=%d unknown=%d components=%s" % (
-        composition["rank"],
-        " -> ".join(composition["strategies"]),
-        composition["yes"],
-        composition["unknown"],
-        ",".join(composition["components"]),
-    )
-    if composition["assumption"]:
-        line += " assumption=%s" % composition["assumption"]
-    return line
-
-
-RANKING_ROW_KEYS = ("composition", "cites", "reason")
+RANKING_ROW_KEYS = ("strategy", "cites", "reason")
 
 
 def run_rank(args):
@@ -479,29 +418,30 @@ def run_rank(args):
     if defects:
         raise ValidationError(defects)
     for position, row in enumerate(read_json(workspace / "ranking.json")["order"], start=1):
-        print("%d. %s" % (position, row["composition"]))
+        print("%d. %s" % (position, row["strategy"]))
 
 
 def find_ranking_defects(workspace):
-    """ranking.json orders exactly the compositions the current plan emitted, each row citing what it read."""
+    """ranking.json orders exactly the openings the current plan admitted, each row citing what it read."""
     order = read_json(workspace / "ranking.json").get("order")
     problem = read_json(workspace / "problem.json")
-    emitted = [row["id"] for row in read_json(workspace / "compositions.json")["compositions"]]
+    openings = read_json(workspace / "openings.json")["openings"]
+    admitted = [row["strategy"] for row in openings]
     if not isinstance(order, list):
         yield "ranking.json: order is not a list"
         return
-    costs = {row["id"]: row["costs"] for row in read_json(workspace / "compositions.json")["compositions"]}
+    costs = {row["strategy"]: row["costs"] for row in openings}
     ordered = []
     for position, row in enumerate(order, start=1):
-        yield from find_ranking_row_defects(position, row, emitted, problem, ordered, costs)
+        yield from find_ranking_row_defects(position, row, admitted, problem, ordered, costs)
         if isinstance(row, dict):
-            ordered.append(row.get("composition"))
-    for identifier in emitted:
-        if identifier not in ordered:
-            yield "ranking.json: composition %s is not ordered" % identifier
+            ordered.append(row.get("strategy"))
+    for name in admitted:
+        if name not in ordered:
+            yield "ranking.json: strategy %s is not ordered" % name
 
 
-def find_ranking_row_defects(position, row, emitted, problem, ordered, costs):
+def find_ranking_row_defects(position, row, admitted, problem, ordered, costs):
     label = "ranking.json row %d" % position
     if not isinstance(row, dict):
         yield "%s: not an object" % label
@@ -510,20 +450,26 @@ def find_ranking_row_defects(position, row, emitted, problem, ordered, costs):
     if missing:
         yield "%s: missing %s" % (label, ", ".join(missing))
         return
-    identifier = row["composition"]
-    if identifier not in emitted:
-        yield "ranking.json: %s is not in compositions.json" % identifier
-    elif identifier in ordered:
-        yield "ranking.json: %s is ordered twice" % identifier
+    name = row["strategy"]
+    if name not in admitted:
+        yield "ranking.json: %s is not in openings.json" % name
+    elif name in ordered:
+        yield "ranking.json: %s is ordered twice" % name
     yield from check_text(row["reason"], "%s: reason" % label)
     if not is_str_list(row["cites"]) or not row["cites"]:
         yield "%s: cites nothing" % label
         return
-    for citation in row["cites"]:
+    yield from find_citation_defects(row["cites"], problem, name, costs.get(name, ()), label + ":")
+
+
+def find_citation_defects(citations, problem, strategy, declared, subject):
+    """Every citation is a problem.json field, or a cost the strategy declares. `subject`
+    heads the message: the ranking row, or the move's step_cites field."""
+    for citation in citations:
         if not is_citation(citation, problem):
-            yield "%s: cites %s, which is not a problem.json field or a cost" % (label, citation)
-        elif citation.startswith("cost:") and citation[len("cost:"):] not in costs.get(identifier, ()):
-            yield "%s: cites %s, which no strategy of that composition declares" % (label, citation)
+            yield "%s cites %s, which is not a problem.json field or a cost" % (subject, citation)
+        elif citation.startswith("cost:") and citation[len("cost:"):] not in declared:
+            yield "%s cites %s, which %s does not declare" % (subject, citation, strategy)
 
 
 def is_citation(citation, problem):
@@ -553,12 +499,7 @@ def run_journal_add(args):
         or list(find_step_defects(move["steps"], workspace))
         or list(find_closing_defects(move, problem["quadruple"]))
         or list(find_problem_change_defects(move, moves, budget, workspace, problem))
-        or list(find_ranking_defects(workspace))
-        or list(
-            find_move_flow_defects(
-                move, moves, read_ordered_ids(workspace), load_strategies(args.strategies), problem
-            )
-        )
+        or list(find_move_flow_defects(move, moves, workspace, load_strategies(args.strategies), problem))
         or list(find_budget_defects(move, budget))
     )
     if defects:
@@ -592,7 +533,7 @@ def find_problem_change_defects(move, moves, budget, workspace, problem):
     """`problem_changed` says whether problem.json moved since the last move (or since
     plan), and a new pass runs on a plan made over the problem as it now stands."""
     digest = compute_problem_digest(problem)
-    planned = read_json(workspace / "compositions.json")["problem_digest"]
+    planned = read_json(workspace / "openings.json")["problem_digest"]
     if moves and "problem_digest" in moves[-1]:
         baseline, since = moves[-1]["problem_digest"], "move %d" % moves[-1]["move"]
     else:
@@ -604,8 +545,8 @@ def find_problem_change_defects(move, moves, budget, workspace, problem):
         )
     if moves and move["pass"] > budget["pass"] and digest != planned:
         yield (
-            "move: problem.json changed in pass %d, and compositions.json predates the change;"
-            " run plan and rank before pass %d" % (budget["pass"], move["pass"])
+            "move: problem.json changed in pass %d, and openings.json predates the change;"
+            " run plan before pass %d" % (budget["pass"], move["pass"])
         )
 
 
@@ -618,28 +559,88 @@ def find_move_cost_defects(move, quadruple):
     ]
 
 
-def read_ordered_ids(workspace):
-    return [row["composition"] for row in read_json(workspace / "ranking.json")["order"]]
-
-
-def find_move_flow_defects(move, moves, ordered_ids, front_matters, problem):
-    """The move sits where the attack stands: in the composition the order gives, under the
-    strategy that composition has reached, applying an entry the strategy dispatches, where
-    the entry's trigger matched a shape field that carries a value."""
-    identifier = move["composition"]
-    if identifier not in ordered_ids:
-        yield "move: composition %s is not in ranking.json" % identifier
+def find_move_flow_defects(move, moves, workspace, front_matters, problem):
+    """The move sits where the attack stands: under an admitted strategy, applying an entry
+    it dispatches, where the entry's trigger matched a shape field that carries a value; and
+    it opens the walk, continues its current strategy, or steps into another one."""
+    strategy = move["strategy"]
+    verdicts = read_verdicts(read_json(workspace / "preconditions.json"))
+    if strategy not in verdicts:
+        yield "move: strategy %s has no precondition record" % strategy
         return
-    strategies = identifier.split("+")
-    if move["strategy"] not in strategies:
-        yield "move: strategy %s is not in composition %s" % (move["strategy"], identifier)
+    if verdicts[strategy] == "no":
+        yield "move: strategy %s has verdict no" % strategy
         return
-    if move["entry"] not in front_matters[move["strategy"]]["entries"]:
-        yield "move: entry %s is not dispatched by %s" % (move["entry"], move["strategy"])
+    if move["entry"] not in front_matters[strategy]["entries"]:
+        yield "move: entry %s is not dispatched by %s" % (move["entry"], strategy)
     yield from find_trigger_defects(move["trigger_features"], problem)
-    executed = {past["strategy"] for past in moves}
-    yield from find_composition_order_defects(identifier, moves, ordered_ids, executed)
-    yield from find_strategy_order_defects(move["strategy"], strategies, identifier, moves, executed)
+    if not moves:
+        yield from find_opening_defects(move, workspace)
+    elif strategy == moves[-1]["strategy"]:
+        yield from find_continuation_defects(move, moves[-1])
+    else:
+        yield from find_walk_step_defects(move, moves, front_matters, verdicts, problem)
+
+
+def find_opening_defects(move, workspace):
+    """The first move opens the attack with the first strategy of the ranking, which is
+    where the opening is justified; the walk is that one strategy."""
+    ranking_defects = list(find_ranking_defects(workspace))
+    if ranking_defects:
+        yield from ranking_defects
+        return
+    first = read_json(workspace / "ranking.json")["order"][0]["strategy"]
+    if move["strategy"] != first:
+        yield "move: the attack opens with %s, the first strategy of ranking.json" % first
+    if move["walk"] != move["strategy"]:
+        yield "move: walk must be %s" % move["strategy"]
+    if move["step_cites"]:
+        yield "move: step_cites is not empty; the opening is justified in ranking.json"
+
+
+def find_continuation_defects(move, last):
+    """A move under the strategy of the previous move keeps the walk and cites nothing new."""
+    if move["walk"] != last["walk"]:
+        yield "move: walk must be %s" % last["walk"]
+    if move["step_cites"]:
+        yield "move: step_cites is not empty; the move continues %s" % move["strategy"]
+
+
+def find_walk_step_defects(move, moves, front_matters, verdicts, problem):
+    """A step into another strategy extends the walk by it, cites what put it next, and is
+    admissible beside every strategy that has run: at most one assumption in the walk, no
+    excluded pair, and nothing that had to come before a strategy already run."""
+    strategy = move["strategy"]
+    expected = "%s+%s" % (moves[-1]["walk"], strategy)
+    if move["walk"] != expected:
+        yield "move: walk must be %s" % expected
+    if not move["step_cites"]:
+        yield "move: step_cites is empty; a step into %s cites the fields and costs that put it next" % strategy
+    else:
+        yield from find_citation_defects(
+            move["step_cites"], problem, strategy, front_matters[strategy]["costs"], "move: step_cites"
+        )
+    walked = list_walk(moves)
+    distinct = walked if strategy in walked else walked + [strategy]
+    unknowns = [name for name in dict.fromkeys(distinct) if verdicts[name] == "unknown"]
+    if len(unknowns) > 1:
+        yield "move: the walk would rest on two assumptions, %s and %s" % (unknowns[0], unknowns[1])
+    for earlier in dict.fromkeys(walked):
+        if earlier == strategy:
+            continue
+        if strategy in front_matters[earlier]["excludes"] or earlier in front_matters[strategy]["excludes"]:
+            yield "move: %s and %s exclude each other, and %s has run" % (strategy, earlier, earlier)
+        if earlier in front_matters[strategy]["precedes"]:
+            yield "move: %s precedes %s, which has already run" % (strategy, earlier)
+
+
+def list_walk(moves):
+    """The strategies the attack ran, in order, consecutive repeats merged."""
+    walk = []
+    for move in moves:
+        if not walk or walk[-1] != move["strategy"]:
+            walk.append(move["strategy"])
+    return walk
 
 
 def find_trigger_defects(features, problem):
@@ -651,38 +652,6 @@ def find_trigger_defects(features, problem):
             yield "move: trigger_features cites %s, which is not a problem.json field" % feature
         elif value == "unknown":
             yield "move: trigger_features cites %s, whose value is unknown" % feature
-
-
-def find_composition_order_defects(identifier, moves, ordered_ids, executed):
-    """The move continues the previous move's composition, or starts the first ordered
-    composition that carries a strategy with no move yet."""
-    current = []
-    if moves and moves[-1]["composition"] in ordered_ids:
-        current.append(moves[-1]["composition"])
-    first_open = next(
-        (candidate for candidate in ordered_ids if not executed.issuperset(candidate.split("+"))),
-        None,
-    )
-    if first_open is not None and first_open not in current:
-        current.append(first_open)
-    if identifier not in current:
-        yield "move: composition %s is not the current one; the order gives %s" % (
-            identifier, " or ".join(current) or "nothing"
-        )
-
-
-def find_strategy_order_defects(strategy, strategies, identifier, moves, executed):
-    """Within a composition the strategies run in its order, each once every strategy
-    before it has a move; a composition never returns to a strategy it has left."""
-    index = strategies.index(strategy)
-    reached = [past["strategy"] for past in moves if past["composition"] == identifier]
-    if reached and strategies.index(reached[-1]) > index:
-        yield "move: composition %s has moved on from %s to %s" % (identifier, strategy, reached[-1])
-    for earlier in strategies[:index]:
-        if earlier not in executed:
-            yield "move: composition %s reaches %s after %s, which has no move yet" % (
-                identifier, strategy, earlier
-            )
 
 
 def read_failure_window_start(workspace):
@@ -732,7 +701,8 @@ def is_str_list(value):
 MOVE_FIELDS = {
     "move": ("int", is_int),
     "pass": ("int", is_int),
-    "composition": ("str", is_str),
+    "walk": ("str", is_str),
+    "step_cites": ("a list of str", is_str_list),
     "costs_paid": ("a list of str", is_str_list),
     "strategy": ("str", is_str),
     "entry": ("str", is_str),
@@ -847,28 +817,28 @@ def run_stall(args):
 
 def find_cash_out_rule(workspace, moves):
     """The rule that started the cash-out: a stall fell due (a closing move makes one),
-    or the plan emitted no composition. None while the attack is open."""
+    or the plan admitted no opening. None while the attack is open."""
     budget = compute_budget(moves, read_failure_window_start(workspace))
     if budget["stall_reason"]:
         return budget["stall_reason"]
-    if count_planned_compositions(workspace) == 0:
-        return "no admissible composition"
+    if count_admitted_openings(workspace) == 0:
+        return "no admissible opening"
     return None
 
 
-def count_planned_compositions(workspace):
-    """How many compositions the current plan emitted; None before plan has run."""
-    path = workspace / "compositions.json"
+def count_admitted_openings(workspace):
+    """How many strategies the current plan admitted; None before plan has run."""
+    path = workspace / "openings.json"
     if not path.exists():
         return None
-    return len(read_json(path)["compositions"])
+    return len(read_json(path)["openings"])
 
 
 def describe_plan(workspace):
-    planned = count_planned_compositions(workspace)
-    if planned is None:
+    admitted = count_admitted_openings(workspace)
+    if admitted is None:
         return "no plan yet"
-    return "%d compositions planned" % planned
+    return "%d openings admitted" % admitted
 
 
 def format_inventory(slug, moves):
@@ -879,6 +849,9 @@ def format_inventory(slug, moves):
         "strategy's Failure signal names. Convert each into a unit under\n"
         "CASHOUT.md or discard it.\n" % slug
     ]
+    walk = list_walk(moves)
+    if walk:
+        sections.append("Walk: %s.\n" % " -> ".join(walk))
     paid = sorted({cost for move in moves for cost in move["costs_paid"]})
     if paid:
         sections.append("Costs paid across the attack: %s.\n" % ", ".join(paid))
@@ -993,6 +966,260 @@ def find_finished_unit_defects(workspace, number):
 
 def digest_file(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+# --- tasks: the action list inside a stage, which the record alone does not say ---
+
+
+def run_task_add(args):
+    workspace = args.attack_root / args.slug
+    text = " ".join(args.text).strip()
+    if not text:
+        raise ValidationError(["task: text is empty"])
+    tasks = read_tasks(workspace)
+    number = max((task["id"] for task in tasks), default=0) + 1
+    tasks.append({
+        "id": number,
+        "text": text,
+        "status": "open",
+        "added_at": now_stamp(),
+        "added_after_move": len(read_journal(workspace)),
+        "done_at": None,
+        "done_after_move": None,
+    })
+    write_tasks(workspace, tasks)
+    print("task %d added" % number)
+
+
+def run_task_done(args):
+    workspace = args.attack_root / args.slug
+    tasks = read_tasks(workspace)
+    task = next((task for task in tasks if task["id"] == args.id), None)
+    if task is None:
+        raise ValidationError(["tasks.json: no task %d" % args.id])
+    if task["status"] == "done":
+        raise ValidationError(["tasks.json: task %d is already done" % args.id])
+    task.update(status="done", done_at=now_stamp(), done_after_move=len(read_journal(workspace)))
+    write_tasks(workspace, tasks)
+    print("task %d done" % args.id)
+
+
+def run_task_list(args):
+    tasks = read_tasks(args.attack_root / args.slug)
+    if not tasks:
+        print("no task")
+    for task in tasks:
+        print(format_task(task))
+
+
+def format_task(task):
+    return "[%s] %d. %s" % ("x" if task["status"] == "done" else " ", task["id"], task["text"])
+
+
+def read_tasks(workspace):
+    path = workspace / "tasks.json"
+    if not path.exists():
+        return []
+    return read_json(path)["tasks"]
+
+
+def write_tasks(workspace, tasks):
+    write_json(workspace / "tasks.json", {"tasks": tasks})
+
+
+def now_stamp():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# --- status: where the attack stands, derived from the record ---
+
+ACTIVITY_SHOWN = 3
+
+
+def run_status(args):
+    for line in describe_status(args.attack_root / args.slug, args.slug):
+        print(line)
+
+
+def describe_status(workspace, slug):
+    """The lines `status` prints, each one a fact read from the workspace, ending with the next step."""
+    problem_defects = list(find_problem_defects(read_json(workspace / "problem.json")))
+    moves = read_journal(workspace)
+    budget = compute_budget(moves, read_failure_window_start(workspace))
+    openings = read_openings(workspace)
+    ranking = describe_ranking(workspace) if openings is not None else None
+    units = [describe_unit(workspace / "units" / str(number), number) for number in list_unit_numbers(workspace)]
+    finished_path = workspace / "units" / "FINISHED.json"
+    stage, next_step = decide_stage(
+        workspace, problem_defects, moves, budget, openings, ranking, units, finished_path
+    )
+    lines = [
+        "attack/%s: %s" % (slug, stage),
+        "problem: ok" if not problem_defects else "problem: not set (%s)" % problem_defects[0],
+        "study: problem.md %s; novelty.md %s" % (
+            "present" if has_text(workspace / "study" / "problem.md") else "missing",
+            describe_novelty(workspace / "novelty.md"),
+        ),
+        "plan: not run" if openings is None else "plan: %d openings admitted" % len(openings),
+    ]
+    if ranking is not None:
+        lines.append("ranking: %s" % ranking)
+    lines.append(describe_walk(moves))
+    lines.append(
+        "budget: moves this pass %d/%d, overall %d/%d, passes %d/%d, stall due: %s" % (
+            budget["moves_in_pass"], MOVES_PER_PASS, budget["moves_total"], MOVE_HARD_CAP,
+            budget["pass"], PASS_COUNT, describe_stall(budget),
+        )
+    )
+    lines.append(
+        "cash-out: inventory %s; %s; finished: %s" % (
+            "written" if (workspace / "units" / "INVENTORY.md").exists() else "not written",
+            describe_units(units),
+            "yes" if finished_path.exists() else "no",
+        )
+    )
+    lines.extend(describe_tasks(read_tasks(workspace)))
+    lines.extend(describe_activity(read_activity(workspace)))
+    lines.append("next: %s" % next_step)
+    return lines
+
+
+def decide_stage(workspace, problem_defects, moves, budget, openings, ranking, units, finished_path):
+    """(the stage the record is at, the next step), read in the order the stages complete."""
+    if finished_path.exists():
+        return "finished (%s)" % read_json(finished_path)["outcome"], "nothing; the attack is finished"
+    if (workspace / "units" / "INVENTORY.md").exists():
+        if not units:
+            return "stage 7 (cash out)", "convert the inventory into units under CASHOUT.md, or run finish with none"
+        needs = [unit["needs"] for unit in units if unit["needs"]]
+        return "stage 8 (write)", "; ".join(needs) + "; then finish" if needs else "run finish"
+    rule = find_cash_out_rule(workspace, moves)
+    if rule is not None and (moves or openings is not None):
+        return "stage 7 (cash out)", "run stall; the rule is %s" % rule
+    if moves:
+        current = moves[-1]["strategy"]
+        return "stage 5 (attack)", (
+            "continue %s with its next move, step into another admitted strategy, or fail %s"
+            " if its failure signal fired" % (current, current)
+        )
+    if openings is not None:
+        if ranking == "ok":
+            first = read_json(workspace / "ranking.json")["order"][0]["strategy"]
+            return "stage 5 (attack)", (
+                "open the attack with %s: write study/%s.md, then journal add its first move" % (first, first)
+            )
+        return "stage 4 (precondition scan)", "write ranking.json over the openings and run rank"
+    if problem_defects:
+        return "stage 2 (set the problem)", "fill problem.json and run check-problem"
+    if (workspace / "preconditions.json").exists():
+        return "stage 4 (precondition scan)", "run plan"
+    if has_text(workspace / "study" / "problem.md"):
+        return "stage 4 (precondition scan)", "write preconditions.json and run plan"
+    return "stage 3 (study and novelty check)", (
+        "write study/problem.md and novelty.md, then preconditions.json, and run plan"
+    )
+
+
+def read_openings(workspace):
+    path = workspace / "openings.json"
+    if not path.exists():
+        return None
+    return read_json(path)["openings"]
+
+
+def describe_ranking(workspace):
+    if not (workspace / "ranking.json").exists():
+        return "missing"
+    defects = list(find_ranking_defects(workspace))
+    return "ok" if not defects else "stale (%s)" % defects[0]
+
+
+def describe_novelty(path):
+    if not path.exists():
+        return "missing"
+    return "present" if path.read_text().strip() else "empty"
+
+
+def has_text(path):
+    return path.exists() and bool(path.read_text().strip())
+
+
+def describe_walk(moves):
+    if not moves:
+        return "walk: none yet"
+    return "walk: %s (%d moves, last move %d in pass %d)" % (
+        " -> ".join(list_walk(moves)), len(moves), moves[-1]["move"], moves[-1]["pass"]
+    )
+
+
+def describe_stall(budget):
+    return "yes (%s)" % budget["stall_reason"] if budget["stall_reason"] else "no"
+
+
+def describe_unit(unit_dir, number):
+    """What the unit still needs before finish, the first missing thing only."""
+    stamp_path = unit_dir / UNIT_STAMP_FILE
+    unit_path = unit_dir / "unit.json"
+    checked = (
+        unit_path.exists() and stamp_path.exists()
+        and read_json(stamp_path).get("unit_sha256") == digest_file(unit_path)
+    )
+    if not checked:
+        return {"state": "unchecked", "needs": "check-unit %d" % number}
+    if not has_text(unit_dir / UNIT_DRAFT_FILE):
+        return {"state": "undrafted", "needs": "write units/%d/%s" % (number, UNIT_DRAFT_FILE)}
+    if not has_text(unit_dir / UNIT_EVALUATION_FILE):
+        return {"state": "unevaluated", "needs": "write units/%d/%s" % (number, UNIT_EVALUATION_FILE)}
+    return {"state": "complete", "needs": None}
+
+
+def describe_units(units):
+    if not units:
+        return "0 units"
+    counts = [
+        "%d %s" % (sum(unit["state"] == state for unit in units), state)
+        for state in ("unchecked", "undrafted", "unevaluated")
+        if any(unit["state"] == state for unit in units)
+    ]
+    noun = "unit" if len(units) == 1 else "units"
+    return "%d %s (%s)" % (len(units), noun, ", ".join(counts) if counts else "complete")
+
+
+def describe_tasks(tasks):
+    if not tasks:
+        return ["tasks: none"]
+    open_tasks = [task for task in tasks if task["status"] == "open"]
+    lines = ["tasks: %d open, %d done" % (len(open_tasks), len(tasks) - len(open_tasks))]
+    lines.extend("  " + format_task(task) for task in open_tasks)
+    return lines
+
+
+def read_activity(workspace):
+    """The activity log the plugin's hook appends to; a line it cannot parse is skipped."""
+    path = workspace / "activity.jsonl"
+    if not path.exists():
+        return []
+    entries = []
+    for line in path.read_text().splitlines():
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(entry, dict):
+            entries.append(entry)
+    return entries
+
+
+def describe_activity(entries):
+    if not entries:
+        return ["activity: none recorded"]
+    shown = entries[-ACTIVITY_SHOWN:]
+    lines = ["activity: last %d of %d" % (len(shown), len(entries))]
+    lines.extend(
+        "  %s %s %s" % (entry.get("at", "?"), entry.get("tool", "?"), entry.get("target", "?"))
+        for entry in shown
+    )
+    return lines
 
 
 def find_form_defects(unit, workspace):
@@ -1242,7 +1469,7 @@ def build_parser():
     check_problem.add_argument("slug")
     check_problem.set_defaults(run=run_check_problem)
 
-    plan = commands.add_parser("plan", help="validate preconditions.json and rank compositions")
+    plan = commands.add_parser("plan", help="validate preconditions.json and list the openings")
     plan.add_argument("slug")
     plan.set_defaults(run=run_plan)
 
@@ -1278,6 +1505,24 @@ def build_parser():
     finish = commands.add_parser("finish", help="close the workspace once every unit is checked, drafted, and evaluated")
     finish.add_argument("slug")
     finish.set_defaults(run=run_finish)
+
+    status = commands.add_parser("status", help="where the attack stands, and the next step")
+    status.add_argument("slug")
+    status.set_defaults(run=run_status)
+
+    task = commands.add_parser("task", help="the action list in tasks.json")
+    task_commands = task.add_subparsers(dest="task_command", required=True)
+    task_add = task_commands.add_parser("add", help="append an open task")
+    task_add.add_argument("slug")
+    task_add.add_argument("text", nargs="+")
+    task_add.set_defaults(run=run_task_add)
+    task_done = task_commands.add_parser("done", help="mark a task done")
+    task_done.add_argument("slug")
+    task_done.add_argument("id", type=int)
+    task_done.set_defaults(run=run_task_done)
+    task_list = task_commands.add_parser("list", help="print every task")
+    task_list.add_argument("slug")
+    task_list.set_defaults(run=run_task_list)
 
     verify = commands.add_parser("verify", help="run a deterministic step's check")
     verify_commands = verify.add_subparsers(dest="verify_command", required=True)

@@ -1,13 +1,14 @@
-"""The flow rules `journal add` enforces beyond the schema: the strategy belongs to
-the composition and dispatches the entry, the trigger names shape fields that
-carry a value, and the compositions and their strategies are taken in the
-order the ranking gives."""
+"""The flow rules `journal add` enforces beyond the schema: the strategy is admitted
+and dispatches the entry, the trigger names shape fields that carry a value, and
+the walk opens at the first strategy of the ranking and grows one admissible step
+at a time, each step citing the record."""
 
 import hashlib
 import json
 
 from tests.support import (
-    RANK_ONE,
+    ALL_YES,
+    OPENING,
     WorkspaceTest,
     make_move,
     prepare_plan,
@@ -34,11 +35,12 @@ class JournalRulesTest(WorkspaceTest):
     def add(self, move):
         return self.run_cli("journal", "add", self.slug, "--json", json.dumps(move))
 
-    def move_under(self, number, strategy, **overrides):
-        return make_move(number, strategy=strategy, entry=ENTRY_OF[strategy], **overrides)
-
-    def ordered_ids(self):
-        return [row["composition"] for row in self.read_json("ranking.json")["order"]]
+    def step(self, number, strategy, walk, cites=("shape.target_quantity",), **overrides):
+        """A move that enters `strategy`, extending the walk to `walk`."""
+        return make_move(
+            number, strategy=strategy, entry=ENTRY_OF[strategy], walk=walk,
+            step_cites=list(cites), **overrides,
+        )
 
     def set_shape(self, **values):
         problem = self.read_json("problem.json")
@@ -47,11 +49,10 @@ class JournalRulesTest(WorkspaceTest):
 
     # The strategy and the entry
 
-    def test_rejects_a_strategy_outside_the_composition(self):
-        self.assertEqual(
-            self.add(self.move_under(1, "prove-the-barrier-first"))[2],
-            "move: strategy prove-the-barrier-first is not in composition %s\n" % RANK_ONE,
-        )
+    def test_rejects_a_strategy_whose_verdict_is_no(self):
+        self.add(make_move(1))
+        self.run_cli("fail", self.slug, OPENING)
+        self.assertEqual(self.add(make_move(2))[2], "move: strategy %s has verdict no\n" % OPENING)
 
     def test_rejects_an_entry_the_strategy_does_not_dispatch(self):
         self.assertEqual(
@@ -80,63 +81,142 @@ class JournalRulesTest(WorkspaceTest):
             "move: trigger_features cites shape.target_quantity, whose value is unknown\n",
         )
 
-    # The order of strategies within a composition
+    # The opening
 
-    def test_rejects_a_first_move_under_a_later_strategy_of_the_composition(self):
+    def test_the_attack_opens_with_the_first_strategy_of_the_ranking(self):
         self.assertEqual(
-            self.add(self.move_under(1, "ladder-the-parameter"))[2],
-            "move: composition %s reaches ladder-the-parameter after attack-the-negative-side, which has no move yet\n" % RANK_ONE,
+            self.add(self.step(1, "ladder-the-parameter", "ladder-the-parameter", cites=()))[2],
+            "move: the attack opens with attack-the-negative-side, the first strategy of ranking.json\n",
         )
 
-    def test_accepts_the_next_strategy_once_the_one_before_it_has_a_move(self):
-        self.assertEqual(self.add(make_move(1))[0], 0)
-        self.assertEqual(self.add(self.move_under(2, "ladder-the-parameter"))[0], 0)
-
-    def test_rejects_a_return_to_an_earlier_strategy_of_the_composition(self):
-        self.add(make_move(1))
-        self.add(self.move_under(2, "ladder-the-parameter"))
-        self.assertEqual(
-            self.add(make_move(3))[2],
-            "move: composition %s has moved on from attack-the-negative-side to ladder-the-parameter\n" % RANK_ONE,
-        )
-
-    # The order of compositions
-
-    def test_rejects_a_first_move_under_a_composition_that_is_not_first_in_the_order(self):
-        second = self.ordered_ids()[1]
-        move = self.move_under(1, second.split("+")[0], composition=second)
-        self.assertEqual(
-            self.add(move)[2],
-            "move: composition %s is not the current one; the order gives %s\n" % (second, RANK_ONE),
-        )
-
-    def test_accepts_continuing_the_previous_composition_after_the_order_changes(self):
-        self.add(make_move(1))
+    def test_the_opening_follows_the_order_the_solver_wrote(self):
         ranking = self.read_json("ranking.json")
         ranking["order"].reverse()
         self.write_json("ranking.json", ranking)
-        self.assertEqual(self.add(make_move(2))[0], 0)
+        first = ranking["order"][0]["strategy"]
+        self.assertEqual(self.add(self.step(1, first, first, cites=()))[0], 0)
 
-    def test_moves_on_to_the_first_composition_with_a_strategy_not_yet_executed(self):
-        executed = RANK_ONE.split("+")
-        for number, strategy in enumerate(executed, start=1):
-            self.assertEqual(self.add(self.move_under(number, strategy))[0], 0)
-        ordered = self.ordered_ids()
-        first_open = next(
-            identifier for identifier in ordered
-            if any(strategy not in executed for strategy in identifier.split("+"))
-        )
-        closed = next(
-            identifier for identifier in ordered
-            if identifier != RANK_ONE and all(strategy in executed for strategy in identifier.split("+"))
-        )
-        refused = self.move_under(5, closed.split("+")[0], composition=closed)
+    def test_rejects_step_cites_on_the_opening_move(self):
         self.assertEqual(
-            self.add(refused)[2],
-            "move: composition %s is not the current one; the order gives %s or %s\n" % (closed, RANK_ONE, first_open),
+            self.add(make_move(1, step_cites=["shape.objects"]))[2],
+            "move: step_cites is not empty; the opening is justified in ranking.json\n",
         )
-        next_strategy = next(strategy for strategy in first_open.split("+") if strategy not in executed)
-        self.assertEqual(self.add(self.move_under(5, next_strategy, composition=first_open))[0], 0)
+
+    # The walk
+
+    def test_the_walk_is_the_strategy_on_the_opening_move(self):
+        self.assertEqual(
+            self.add(make_move(1, walk="attack-the-negative-side+ladder-the-parameter"))[2],
+            "move: walk must be attack-the-negative-side\n",
+        )
+
+    def test_a_move_continuing_the_strategy_keeps_the_walk(self):
+        self.add(make_move(1))
+        self.assertEqual(self.add(make_move(2))[0], 0)
+        self.assertEqual(
+            self.add(make_move(3, walk="attack-the-negative-side+attack-the-negative-side"))[2],
+            "move: walk must be attack-the-negative-side\n",
+        )
+
+    def test_rejects_step_cites_while_continuing_a_strategy(self):
+        self.add(make_move(1))
+        self.assertEqual(
+            self.add(make_move(2, step_cites=["shape.objects"]))[2],
+            "move: step_cites is not empty; the move continues attack-the-negative-side\n",
+        )
+
+    def test_entering_a_strategy_extends_the_walk(self):
+        self.add(make_move(1))
+        walk = "attack-the-negative-side+ladder-the-parameter"
+        status, out, err = self.add(self.step(2, "ladder-the-parameter", walk))
+        self.assertEqual((status, err), (0, ""))
+        lines = (self.workspace / "journal.jsonl").read_text().splitlines()
+        self.assertEqual(json.loads(lines[1])["walk"], walk)
+
+    def test_rejects_a_step_whose_walk_does_not_extend_the_previous_one(self):
+        self.add(make_move(1))
+        self.assertEqual(
+            self.add(self.step(2, "ladder-the-parameter", "ladder-the-parameter"))[2],
+            "move: walk must be attack-the-negative-side+ladder-the-parameter\n",
+        )
+
+    def test_a_walk_may_return_to_a_strategy_it_left(self):
+        self.add(make_move(1))
+        self.add(self.step(2, "ladder-the-parameter", "attack-the-negative-side+ladder-the-parameter"))
+        walk = "attack-the-negative-side+ladder-the-parameter+attack-the-negative-side"
+        self.assertEqual(self.add(self.step(3, OPENING, walk))[0], 0)
+
+    def test_the_ranking_is_read_for_the_opening_only(self):
+        self.add(make_move(1))
+        self.write_json("ranking.json", {"generated_from": "openings.json", "order": []})
+        self.assertEqual(self.add(make_move(2))[0], 0)
+        walk = "attack-the-negative-side+ladder-the-parameter"
+        self.assertEqual(self.add(self.step(3, "ladder-the-parameter", walk))[0], 0)
+
+    # What a step cites
+
+    def test_rejects_a_step_that_cites_nothing(self):
+        self.add(make_move(1))
+        walk = "attack-the-negative-side+ladder-the-parameter"
+        self.assertEqual(
+            self.add(self.step(2, "ladder-the-parameter", walk, cites=()))[2],
+            "move: step_cites is empty; a step into ladder-the-parameter cites the fields and costs that put it next\n",
+        )
+
+    def test_rejects_a_step_citation_that_names_no_field_and_no_cost(self):
+        self.add(make_move(1))
+        walk = "attack-the-negative-side+ladder-the-parameter"
+        self.assertEqual(
+            self.add(self.step(2, "ladder-the-parameter", walk, cites=("shape.nope",)))[2],
+            "move: step_cites cites shape.nope, which is not a problem.json field or a cost\n",
+        )
+
+    def test_a_step_may_cite_a_cost_the_strategy_declares_and_no_other(self):
+        self.add(make_move(1))
+        walk = "attack-the-negative-side+ladder-the-parameter"
+        self.assertEqual(
+            self.add(self.step(2, "ladder-the-parameter", walk, cites=("cost:axioms",)))[2],
+            "move: step_cites cites cost:axioms, which ladder-the-parameter does not declare\n",
+        )
+        self.assertEqual(self.add(self.step(2, "ladder-the-parameter", walk, cites=("cost:bound_quality",)))[0], 0)
+
+    # Admissibility of a step
+
+    def test_rejects_a_step_into_a_strategy_the_walk_excludes(self):
+        """attack-the-negative-side lists prove-the-barrier-first under excludes in the fixture."""
+        self.add(make_move(1))
+        walk = "attack-the-negative-side+prove-the-barrier-first"
+        self.assertEqual(
+            self.add(self.step(2, "prove-the-barrier-first", walk))[2],
+            "move: prove-the-barrier-first and attack-the-negative-side exclude each other, and attack-the-negative-side has run\n",
+        )
+
+    def test_rejects_a_step_that_must_come_before_a_strategy_that_ran(self):
+        """ladder-the-parameter lists reduce-to-a-finite-computation under precedes in the fixture."""
+        self.add(make_move(1))
+        self.add(self.step(2, "reduce-to-a-finite-computation", "attack-the-negative-side+reduce-to-a-finite-computation"))
+        walk = "attack-the-negative-side+reduce-to-a-finite-computation+ladder-the-parameter"
+        self.assertEqual(
+            self.add(self.step(3, "ladder-the-parameter", walk))[2],
+            "move: ladder-the-parameter precedes reduce-to-a-finite-computation, which has already run\n",
+        )
+
+    def test_accepts_the_order_precedes_asks_for(self):
+        self.add(make_move(1))
+        self.add(self.step(2, "ladder-the-parameter", "attack-the-negative-side+ladder-the-parameter"))
+        walk = "attack-the-negative-side+ladder-the-parameter+reduce-to-a-finite-computation"
+        self.assertEqual(self.add(self.step(3, "reduce-to-a-finite-computation", walk))[0], 0)
+
+    def test_rejects_a_second_assumption_in_the_walk(self):
+        verdicts = dict(ALL_YES, **{"ladder-the-parameter": "unknown", "solve-the-model-world-first": "unknown"})
+        prepare_plan(self, verdicts)
+        self.add(make_move(1))
+        self.add(self.step(2, "ladder-the-parameter", "attack-the-negative-side+ladder-the-parameter"))
+        walk = "attack-the-negative-side+ladder-the-parameter+solve-the-model-world-first"
+        self.assertEqual(
+            self.add(self.step(3, "solve-the-model-world-first", walk))[2],
+            "move: the walk would rest on two assumptions, ladder-the-parameter and solve-the-model-world-first\n",
+        )
 
 
 def digest_of(problem):
@@ -256,10 +336,9 @@ class JournalRecordTest(WorkspaceTest):
         self.add(make_move(2, problem_changed=True))
         self.assertEqual(
             self.add(make_move(3, 2))[2],
-            "move: problem.json changed in pass 1, and compositions.json predates the change; run plan and rank before pass 2\n",
+            "move: problem.json changed in pass 1, and openings.json predates the change; run plan before pass 2\n",
         )
         self.assertEqual(self.run_cli("plan", self.slug)[0], 0)
-        write_ranking(self)
         self.assertEqual(self.add(make_move(3, 2))[0], 0)
 
     def test_a_new_pass_after_an_unchanged_pass_needs_no_plan(self):

@@ -26,9 +26,10 @@ class FailTest(WorkspaceTest):
         record = self.read_json("preconditions.json")["ladder-the-parameter"]
         self.assertEqual(record["verdict"], "no")
         self.assertEqual(record["note"], "set to no by fail: the strategy ended in its failure signal")
-        for composition in self.read_json("compositions.json")["compositions"]:
-            self.assertNotIn("ladder-the-parameter", composition["strategies"])
-        self.assertTrue(out.startswith("1. attack-the-negative-side -> reduce-to-a-finite-computation"), out)
+        openings = [row["strategy"] for row in self.read_json("openings.json")["openings"]]
+        self.assertNotIn("ladder-the-parameter", openings)
+        self.assertTrue(out.startswith("1. attack-the-negative-side  verdict=yes"), out)
+        self.assertNotIn("ladder-the-parameter", out)
 
     def test_rejects_a_strategy_absent_from_the_preconditions(self):
         status, out, err = self.run_cli("fail", self.slug, "no-such-strategy")
@@ -40,17 +41,22 @@ class FailTest(WorkspaceTest):
         self.assertEqual(self.run_cli("fail", self.slug, "ladder-the-parameter")[0], 0)
         self.assertIn("stall due: no", self.run_cli("budget", self.slug)[1])
         write_study(self.workspace, "reduce-to-a-finite-computation")
-        write_ranking(self)
-        rank_one = self.read_json("compositions.json")["compositions"][0]
-        self.assertEqual(rank_one["strategies"][:2], ["attack-the-negative-side", "reduce-to-a-finite-computation"])
         move = make_move(
             4,
             strategy="reduce-to-a-finite-computation",
             entry="reduce-to-finite-witnesses",
-            composition=rank_one["id"],
+            walk="attack-the-negative-side+reduce-to-a-finite-computation",
+            step_cites=["shape.finite_certificates"],
         )
         status, out, err = self.run_cli("journal", "add", self.slug, "--json", json.dumps(move))
         self.assertEqual((status, err), (0, ""))
+
+    def test_a_failed_strategy_takes_no_further_move(self):
+        write_journal(self.workspace, [make_move(1), make_move(2, failed=True)])
+        self.run_cli("fail", self.slug, "attack-the-negative-side")
+        write_study(self.workspace, "attack-the-negative-side")
+        status, out, err = self.run_cli("journal", "add", self.slug, "--json", json.dumps(make_move(3)))
+        self.assertEqual((status, err), (1, "move: strategy attack-the-negative-side has verdict no\n"))
 
     def test_a_move_is_refused_until_the_ranking_covers_the_new_plan(self):
         """`fail` re-plans, so the ranking written over the old plan no longer holds."""

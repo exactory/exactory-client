@@ -2,8 +2,8 @@ from tests.support import ALL_YES, WorkspaceTest, make_preconditions, make_probl
 
 
 class RankTest(WorkspaceTest):
-    """The plan says which compositions are admissible; the solver says in what order
-    to take them, and every row cites what it read."""
+    """The plan says which strategies are admitted as openings; the solver says in
+    what order it would open with them, and every row cites what it read."""
 
     def setUp(self):
         super().setUp()
@@ -12,18 +12,18 @@ class RankTest(WorkspaceTest):
         self.write_json("preconditions.json", make_preconditions(ALL_YES))
         self.run_cli("plan", self.slug)
 
-    def ids(self):
-        return [row["id"] for row in self.read_json("compositions.json")["compositions"]]
+    def openings(self):
+        return [row["strategy"] for row in self.read_json("openings.json")["openings"]]
 
     def rank(self):
         return self.run_cli("rank", self.slug)
 
-    def test_accepts_a_ranking_over_every_composition(self):
+    def test_accepts_a_ranking_over_every_opening(self):
         write_ranking(self)
         status, out, err = self.rank()
         self.assertEqual((status, err), (0, ""))
-        self.assertEqual(out.splitlines()[0], "1. %s" % self.ids()[0])
-        self.assertEqual(len(out.splitlines()), len(self.ids()))
+        self.assertEqual(out.splitlines()[0], "1. %s" % self.openings()[0])
+        self.assertEqual(len(out.splitlines()), len(self.openings()))
 
     def test_accepts_an_order_the_plan_did_not_choose(self):
         write_ranking(self)
@@ -32,30 +32,28 @@ class RankTest(WorkspaceTest):
         self.write_json("ranking.json", ranking)
         status, out, err = self.rank()
         self.assertEqual((status, err), (0, ""))
-        self.assertEqual(out.splitlines()[0], "1. %s" % self.ids()[-1])
+        self.assertEqual(out.splitlines()[0], "1. %s" % self.openings()[-1])
 
-    def test_rejects_a_ranking_that_leaves_a_composition_out(self):
+    def test_rejects_a_ranking_that_leaves_an_opening_out(self):
         write_ranking(self)
         ranking = self.read_json("ranking.json")
-        dropped = ranking["order"].pop()["composition"]
+        dropped = ranking["order"].pop()["strategy"]
         self.write_json("ranking.json", ranking)
-        self.assertEqual(self.rank()[2], "ranking.json: composition %s is not ordered\n" % dropped)
+        self.assertEqual(self.rank()[2], "ranking.json: strategy %s is not ordered\n" % dropped)
 
-    def test_rejects_a_composition_the_plan_did_not_emit(self):
+    def test_rejects_a_strategy_the_plan_did_not_admit(self):
         write_ranking(self)
         ranking = self.read_json("ranking.json")
-        ranking["order"][0]["composition"] = "made+up"
+        ranking["order"][0]["strategy"] = "made-up"
         self.write_json("ranking.json", ranking)
-        err = self.rank()[2]
-        self.assertIn("ranking.json: made+up is not in compositions.json\n", err)
+        self.assertIn("ranking.json: made-up is not in openings.json\n", self.rank()[2])
 
-    def test_rejects_a_repeated_composition(self):
+    def test_rejects_a_repeated_strategy(self):
         write_ranking(self)
         ranking = self.read_json("ranking.json")
-        ranking["order"][1]["composition"] = ranking["order"][0]["composition"]
+        ranking["order"][1]["strategy"] = ranking["order"][0]["strategy"]
         self.write_json("ranking.json", ranking)
-        err = self.rank()[2]
-        self.assertIn("is ordered twice", err)
+        self.assertIn("is ordered twice", self.rank()[2])
 
     def test_rejects_a_row_with_no_reason(self):
         write_ranking(self)
@@ -85,18 +83,20 @@ class RankTest(WorkspaceTest):
         write_ranking(self, cites=("cost:elegance",))
         self.assertIn("cites cost:elegance, which is not a problem.json field or a cost", self.rank()[2])
 
-    def cite_on_first_row(self, citation):
+    def cite_on_the_ladder_row(self, citation):
+        """ladder-the-parameter declares bound_quality in the fixture and nothing else."""
         write_ranking(self)
         ranking = self.read_json("ranking.json")
-        ranking["order"][0]["cites"] = [citation]
+        row = next(row for row in ranking["order"] if row["strategy"] == "ladder-the-parameter")
+        row["cites"] = [citation]
         self.write_json("ranking.json", ranking)
         return self.rank()
 
-    def test_accepts_a_cost_the_composition_may_pay(self):
-        self.assertEqual(self.cite_on_first_row("cost:constructivity")[0], 0)
+    def test_accepts_a_cost_the_strategy_declares(self):
+        self.assertEqual(self.cite_on_the_ladder_row("cost:bound_quality")[0], 0)
 
-    def test_rejects_a_cost_no_strategy_of_that_composition_declares(self):
+    def test_rejects_a_cost_the_strategy_does_not_declare(self):
         self.assertEqual(
-            self.cite_on_first_row("cost:axioms")[2],
-            "ranking.json row 1: cites cost:axioms, which no strategy of that composition declares\n",
+            self.cite_on_the_ladder_row("cost:axioms")[2],
+            "ranking.json row 2: cites cost:axioms, which ladder-the-parameter does not declare\n",
         )

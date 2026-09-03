@@ -1,7 +1,6 @@
 import json
 
 from tests.support import (
-    RANK_ONE,
     WorkspaceTest,
     make_move,
     prepare_plan,
@@ -94,14 +93,14 @@ class JournalAddTest(WorkspaceTest):
         write_journal(self.workspace, [make_move(1), make_move(2, 2)] + [make_move(n, 3) for n in range(3, 11)])
         self.assertEqual(self.add(make_move(11, 3))[2], "move: stall is due (last pass spent)\n")
 
-    def test_rejects_a_composition_the_ranking_does_not_carry(self):
+    def test_rejects_a_walk_that_is_not_the_one_the_journal_gives(self):
         self.assertEqual(
-            self.add(make_move(1, composition="ladder-the-parameter+nowhere"))[2],
-            "move: composition ladder-the-parameter+nowhere is not in ranking.json\n",
+            self.add(make_move(1, walk="ladder-the-parameter+nowhere"))[2],
+            "move: walk must be attack-the-negative-side\n",
         )
 
-    def test_rejects_a_move_while_the_ranking_does_not_cover_the_current_plan(self):
-        self.write_json("ranking.json", {"generated_from": "compositions.json", "order": []})
+    def test_rejects_the_opening_move_while_the_ranking_does_not_cover_the_current_plan(self):
+        self.write_json("ranking.json", {"generated_from": "openings.json", "order": []})
         status, out, err = self.add(make_move(1))
         self.assertEqual((status, out), (1, ""))
         self.assertTrue(err.startswith("ranking.json:"), err)

@@ -34,8 +34,9 @@ From the plugin root:
 python3 -m unittest discover -s skills/math-solver/harness/tests -t skills/math-solver/harness
 ```
 
-197 tests, one module per command or pure function, plus
-`tests/test_journal_rules.py` for the flow rules `journal add` enforces. The strategy files
+223 tests, one module per command or pure function, plus
+`tests/test_journal_rules.py` for the flow rules `journal add` enforces.
+The strategy files
 they read are the fixtures under `tests/fixtures/strategies/` (five
 strategies, one `precedes` and one `excludes` relation, plus two files
 without front matter that the loader skips). The verification tests put
@@ -52,16 +53,18 @@ found.
 |---|---|
 | `init <slug>` | creates `attack/<slug>/` with `problem.json` (shape keys set to `"unknown"`), empty `novelty.md` and `journal.jsonl`, and `study/`, `deterministic/`, and `units/`; refuses to overwrite |
 | `check-problem <slug>` | validates `problem.json`: every key present, no empty strings, `direction` and `mode` from the allowed sets; prints `problem.json: ok` |
-| `plan <slug>` | validates `preconditions.json` against the strategy files and `problem.json`, enumerates compositions over every strategy whose verdict is not `no`, writes `compositions.json`, prints the shortlist (at most 20); refuses to run while `study/problem.md` is missing or empty |
-| `rank <slug>` | validates `ranking.json` against the current shortlist and prints the order the solver chose |
-| `journal add <slug> --json '<move>'` | validates the move's fields, `problem.json`, the study record, the costs against the quadruple, the steps it ran, a closing move's direction and mode, the `problem_changed` flag against the problem digest, the ranking against the plan, the composition and the strategy against the order, the entry against the strategy, the trigger against the shape fields, and the budget (the flow rules in `SPEC.md`); appends it with the problem digest and prints the budget state |
+| `plan <slug>` | validates `preconditions.json` against the strategy files and `problem.json`, writes `openings.json` with every strategy whose verdict is not `no` (yes before unknown, name order within, each with its component and declared costs), prints them; refuses to run while `study/problem.md` is missing or empty |
+| `rank <slug>` | validates `ranking.json` against the openings (every one exactly once, each row citing a `problem.json` field or a cost the strategy declares) and prints the order the solver chose |
+| `journal add <slug> --json '<move>'` | validates the move's fields, `problem.json`, the study record, the costs against the quadruple, the steps it ran, a closing move's direction and mode, the `problem_changed` flag against the problem digest, the strategy's verdict, the entry against the strategy, the trigger against the shape fields, the walk (the opening against the ranking, a step against the walk rules with its `step_cites`), and the budget (the flow rules in `SPEC.md`); appends it with the problem digest and prints the budget state |
 | `budget <slug>` | prints moves used in this pass and overall, passes used, and whether a stall is due |
 | `fail <slug> <strategy>` | sets the strategy's verdict to `no` with a `note` and a `failed_after_move` stamp, then runs `plan` |
 | `verify lean <slug> <step-dir>` | in `deterministic/<step-dir>/`: `lake build`, then `#print axioms` on the theorem named in `step.json`; writes `result.json` |
 | `verify certificate <slug> <step-dir>` | runs `deterministic/<step-dir>/check.sh`, refusing it when it is not executable, and writes `result.json` with `status` `pass` on exit 0 and `fail` otherwise, the exit status, and the first 20 output lines |
-| `stall <slug>` | refuses while no cash-out rule holds; otherwise writes `units/INVENTORY.md`: every move, grouped by strategy, marking the ones whose failure signal fired, the one that closed the attack, and what each paid, with the whole ledger summed at the top, and names the rule |
+| `stall <slug>` | refuses while no cash-out rule holds; otherwise writes `units/INVENTORY.md`: the walk, then every move grouped by strategy, marking the ones whose failure signal fired, the one that closed the attack, and what each paid, with the whole ledger summed at the top, and names the rule |
 | `check-unit <slug> <n>` | refuses before the inventory exists; validates `units/<n>/unit.json`: `statement`, `form`, `evidence` (a path relative to the workspace that exists, with a `result.json` when it is a deterministic run), `novelty`, `moves` (journal move numbers), `costs` (the ledger the evidence carries), and the form against the evidence and the ledger; writes `units/<n>/check-unit.json` on success |
 | `finish <slug>` | refuses while any unit lacks a matching stamp, a `draft.md`, or an `evaluation.md`; writes `units/FINISHED.json`. With no move and no inventory, records the stage 3 exit |
+| `status <slug>` | prints where the attack stands, derived from the record, ending with the `next:` line a resumed session continues from |
+| `task add <slug> <text>`, `task done <slug> <id>`, `task list <slug>` | the action list in `tasks.json`, each change stamped with the time and the move count |
 
 Budget constants at the top of the file: 8 moves per pass, 3 passes,
 24 moves hard cap, stall after 3 consecutive failure signals. A stall is
@@ -94,17 +97,21 @@ Points where the spec left a choice, and what the code does:
   kebab-case, the four standalone units (`counterexample`, `algorithm`,
   `formalisation`, `formal-proof-write-up`), and `full-proof` and
   `second-proof`.
-- The "current composition" a move may name is the previous move's, when
-  the ranking still orders it, or the first composition of the order that
-  carries a strategy with no move yet. Both are allowed at once, so a
-  composition that ended short can be continued or left. A composition
-  whose strategies all have moves is never entered.
+- The walk is read from the journal: consecutive moves under one strategy
+  are one step of it, and a move under a different strategy from the
+  previous move is a step into that strategy, whatever the strategy's
+  history in the walk. The ranking is read on the first move only; a
+  re-plan mid-walk rewrites `openings.json` and leaves the walk where it
+  stands, so `rank` need not run again unless the attack has not opened.
 - `problem_changed` is judged against a digest, so a move that rewrote
   `problem.json` to the same content counts as unchanged, and a move that
   touched only whitespace inside a value counts as changed.
 - `finish` accepts a workspace with no unit after the inventory (nothing
   survived the claim test) and records it as cashed out with an empty
   list.
+- `status` derives the stage from the files alone and never from
+  `tasks.json` or `activity.jsonl`, which it only reports, so a stale task
+  cannot move the stage.
 
 ## An end-to-end run
 
@@ -124,15 +131,31 @@ created attack/parity-of-consecutive-product
 $ exactory-math check-problem parity-of-consecutive-product
 problem.json: ok
 [exit 0]
+$ exactory-math status parity-of-consecutive-product
+attack/parity-of-consecutive-product: stage 3 (study and novelty check)
+problem: ok
+study: problem.md missing; novelty.md empty
+plan: not run
+walk: none yet
+budget: moves this pass 0/8, overall 0/24, passes 0/3, stall due: no
+cash-out: inventory not written; 0 units; finished: no
+tasks: none
+activity: none recorded
+next: write study/problem.md and novelty.md, then preconditions.json, and run plan
+[exit 0]
 $ exactory-math plan parity-of-consecutive-product
-1. reduce-to-a-finite-computation -> verify-formally-with-lean4  yes=2 unknown=0 components=mode
-2. reduce-to-a-finite-computation  yes=1 unknown=0 components=mode
-3. verify-formally-with-lean4  yes=1 unknown=0 components=mode
+1. reduce-to-a-finite-computation  verdict=yes component=mode costs=axioms,bound_quality,effectivity,implication,object,obligations
+2. verify-formally-with-lean4  verdict=yes component=mode costs=axioms,object,obligations
 [exit 0]
 $ exactory-math rank parity-of-consecutive-product
-1. reduce-to-a-finite-computation+verify-formally-with-lean4
-2. reduce-to-a-finite-computation
-3. verify-formally-with-lean4
+1. reduce-to-a-finite-computation
+2. verify-formally-with-lean4
+[exit 0]
+$ exactory-math task add parity-of-consecutive-product reduce the claim to the two residues mod 2
+task 1 added
+[exit 0]
+$ exactory-math task add parity-of-consecutive-product check both residues by an enumeration run
+task 2 added
 [exit 0]
 $ exactory-math journal add parity-of-consecutive-product --json '{...}'
 moves this pass: 1/8
@@ -140,8 +163,11 @@ moves overall: 1/24
 passes used: 1/3
 stall due: no
 [exit 0]
+$ exactory-math task done parity-of-consecutive-product 1
+task 1 done
+[exit 0]
 $ exactory-math stall parity-of-consecutive-product
-stall: no rule started the cash-out (stall due: no; 3 compositions planned); continue at stage 5
+stall: no rule started the cash-out (stall due: no; 2 openings admitted); continue at stage 5
 [exit 1]
 $ exactory-math verify certificate parity-of-consecutive-product enumeration-run-1
 pass: check.sh exited 0
@@ -151,6 +177,22 @@ moves this pass: 2/8
 moves overall: 2/24
 passes used: 1/3
 stall due: yes (the attack closed at move 2)
+[exit 0]
+$ exactory-math task done parity-of-consecutive-product 2
+task 2 done
+[exit 0]
+$ exactory-math status parity-of-consecutive-product
+attack/parity-of-consecutive-product: stage 7 (cash out)
+problem: ok
+study: problem.md present; novelty.md present
+plan: 2 openings admitted
+ranking: ok
+walk: reduce-to-a-finite-computation -> verify-formally-with-lean4 (2 moves, last move 2 in pass 1)
+budget: moves this pass 2/8, overall 2/24, passes 1/3, stall due: yes (the attack closed at move 2)
+cash-out: inventory not written; 0 units; finished: no
+tasks: 0 open, 2 done
+activity: none recorded
+next: run stall; the rule is the attack closed at move 2
 [exit 0]
 $ exactory-math stall parity-of-consecutive-product
 wrote units/INVENTORY.md (2 moves, 0 ended in a failure signal); rule: the attack closed at move 2
@@ -166,21 +208,28 @@ units/1/unit.json: ok
 $ exactory-math finish parity-of-consecutive-product
 finished parity-of-consecutive-product: 1 unit stands
 [exit 0]
-$ cat attack/parity-of-consecutive-product/units/FINISHED.json
-{
-  "outcome": "cashed-out",
-  "units": [
-    1
-  ]
-}
+$ exactory-math status parity-of-consecutive-product
+attack/parity-of-consecutive-product: finished (cashed-out)
+problem: ok
+study: problem.md present; novelty.md present
+plan: 2 openings admitted
+ranking: ok
+walk: reduce-to-a-finite-computation -> verify-formally-with-lean4 (2 moves, last move 2 in pass 1)
+budget: moves this pass 2/8, overall 2/24, passes 1/3, stall due: yes (the attack closed at move 2)
+cash-out: inventory written; 1 unit (complete); finished: yes
+tasks: 0 open, 2 done
+activity: none recorded
+next: nothing; the attack is finished
+[exit 0]
 ```
 
 The `preconditions.json` used gave `reduce-to-a-finite-computation` and
 `verify-formally-with-lean4` the verdict `yes` and every other strategy
-`no`, so the plan holds the three compositions the `precedes` relation
-between those two allows. Move 1 ran under the first strategy of the
-rank-one composition with `steps` empty; move 2 named
-`enumeration-run-1`, which `verify certificate` had passed, and carried
-`closes` true, which is what made the second `stall` accept. The first
-`stall` and the first `finish` show the refusals, with every problem
-listed at once.
+`no`, so the plan admits those two openings. Move 1 opened the walk under
+the first of the ranking with `steps` empty; move 2 stepped into the
+second strategy, with `walk` extended by it and `step_cites` naming two
+shape fields, named `enumeration-run-1`, which `verify certificate` had
+passed, and carried `closes` true, which is what made the second `stall`
+accept. The first `stall` and the first `finish` show the refusals, with
+every problem listed at once. `activity` stays "none recorded" because
+the plugin's hook, not the harness, writes that log.

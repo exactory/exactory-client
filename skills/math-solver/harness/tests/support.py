@@ -95,20 +95,18 @@ ALL_YES = {
 }
 
 
-RANK_ONE = (
-    "attack-the-negative-side+ladder-the-parameter"
-    "+reduce-to-a-finite-computation+solve-the-model-world-first"
-)
+OPENING = "attack-the-negative-side"
 
 
 def make_move(move, pass_number=1, failed=False, **overrides):
-    """A move under the first strategy of the rank-one composition, which is where an attack starts."""
+    """A move under the opening strategy, which is where an attack starts: the first
+    strategy of the ranking, and with every fixture verdict yes that is the first by name."""
     record = {
         "move": move,
         "pass": pass_number,
-        "composition": RANK_ONE,
+        "walk": OPENING,
         "costs_paid": [],
-        "strategy": "attack-the-negative-side",
+        "strategy": OPENING,
         "entry": "test-strengthenings-by-counterexample",
         "trigger_features": ["shape.target_quantity"],
         "action": "tested the strengthening on small instances",
@@ -117,6 +115,7 @@ def make_move(move, pass_number=1, failed=False, **overrides):
         "failure_signal_fired": failed,
         "problem_changed": False,
         "closes": False,
+        "step_cites": [],
     }
     record.update(overrides)
     return record
@@ -127,12 +126,12 @@ def write_journal(workspace, moves):
 
 
 def write_ranking(test, cites=("shape.objects",)):
-    """A ranking over every composition the current plan emitted, in the plan's own order."""
+    """A ranking over every opening the current plan emitted, in the plan's own order."""
     order = [
-        {"composition": row["id"], "cites": list(cites), "reason": "the record supports this order"}
-        for row in test.read_json("compositions.json")["compositions"]
+        {"strategy": row["strategy"], "cites": list(cites), "reason": "the record supports this order"}
+        for row in test.read_json("openings.json")["openings"]
     ]
-    test.write_json("ranking.json", {"generated_from": "compositions.json", "order": order})
+    test.write_json("ranking.json", {"generated_from": "openings.json", "order": order})
 
 
 def prepare_plan(test, verdicts=None):
