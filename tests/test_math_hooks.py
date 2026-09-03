@@ -94,6 +94,10 @@ class TestGuardAttackFiles(unittest.TestCase):
         )
         self.assertIn("plan", reason)
 
+    def test_denies_a_write_to_the_parent_link(self) -> None:
+        reason = _read_denial_reason(self, self._run_file_tool(str(self.workspace / "parent.json")))
+        self.assertIn("init", reason)
+
     def test_denies_a_write_to_the_tasks_and_to_the_activity_log(self) -> None:
         tasks_reason = _read_denial_reason(self, self._run_file_tool(str(self.workspace / "tasks.json")))
         self.assertIn("task", tasks_reason)

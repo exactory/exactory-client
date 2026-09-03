@@ -24,6 +24,7 @@ from pathlib import Path
 _OWNED_FILES = (
     (re.compile(r"^journal\.jsonl$"), "exactory-math journal add <slug> --json '<move>'"),
     (re.compile(r"^openings\.json$"), "exactory-math plan <slug>"),
+    (re.compile(r"^parent\.json$"), "exactory-math init <slug> --from <parent>, when the workspace is created"),
     (re.compile(r"^tasks\.json$"), "exactory-math task add <slug> <text>, or task done <slug> <id>"),
     (re.compile(r"^activity\.jsonl$"), "nothing by hand: the plugin's activity hook appends it after every tool call"),
     (re.compile(r"^deterministic/[^/]+/result\.json$"), "exactory-math verify lean|certificate <slug> <step-dir>"),

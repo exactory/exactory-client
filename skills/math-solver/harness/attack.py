@@ -68,6 +68,7 @@ EXHIBITING_FORMS = ("algorithm", "counterexample")
 UNIT_STAMP_FILE = "check-unit.json"
 UNIT_DRAFT_FILE = "draft.md"
 UNIT_EVALUATION_FILE = "evaluation.md"
+PARENT_FILE = "parent.json"
 
 FAIL_NOTE = "set to no by fail: the strategy ended in its failure signal"
 
@@ -157,13 +158,54 @@ def run_init(args):
     workspace = args.attack_root / args.slug
     if workspace.exists():
         raise ValidationError(["workspace already exists: %s" % workspace])
+    link = None
+    if args.parent is not None:
+        defects = list(find_parent_defects(args.attack_root, args.parent))
+        if defects:
+            raise ValidationError(defects)
+        link = {
+            "parent": args.parent,
+            "opened_after_move": len(read_journal(args.attack_root / args.parent)),
+        }
     (workspace / "deterministic").mkdir(parents=True)
     (workspace / "units").mkdir()
     (workspace / "study").mkdir()
     (workspace / "novelty.md").write_text("")
     (workspace / "journal.jsonl").write_text("")
     write_json(workspace / "problem.json", build_problem_skeleton())
-    print("created %s" % workspace)
+    if link is None:
+        print("created %s" % workspace)
+        return
+    write_json(workspace / PARENT_FILE, link)
+    print("created %s (child of %s, opened after move %d)" % (workspace, link["parent"], link["opened_after_move"]))
+
+
+def find_parent_defects(attack_root, parent):
+    """A child opens under an open attack that is not itself a child."""
+    parent_workspace = attack_root / parent
+    if not (parent_workspace / "problem.json").exists():
+        yield "no workspace for parent %s; a child opens under an open attack" % parent
+        return
+    if (parent_workspace / "units" / "FINISHED.json").exists():
+        yield "parent %s is finished; a child opens under an open attack" % parent
+    grandparent = read_parent(parent_workspace)
+    if grandparent is not None:
+        yield "parent %s is itself a child of %s; a child opens no child" % (parent, grandparent["parent"])
+
+
+def read_parent(workspace):
+    """The link a child carries, or None for an attack that is nobody's child."""
+    path = workspace / PARENT_FILE
+    return read_json(path) if path.exists() else None
+
+
+def list_children(attack_root, slug):
+    """The workspaces under the attack root whose parent link names `slug`, by name."""
+    return [
+        workspace
+        for workspace in sorted(attack_root.iterdir())
+        if workspace.is_dir() and (read_parent(workspace) or {}).get("parent") == slug
+    ]
 
 
 def build_problem_skeleton():
@@ -919,14 +961,23 @@ def run_finish(args):
         print("finished %s: the statement is in the literature; novelty.md records where" % args.slug)
         return
     numbers = list_unit_numbers(workspace)
-    defects = list(find_inventory_defects(workspace, "finish")) or [
-        defect for number in numbers for defect in find_finished_unit_defects(workspace, number)
-    ]
+    defects = (
+        list(find_inventory_defects(workspace, "finish"))
+        or [defect for number in numbers for defect in find_finished_unit_defects(workspace, number)]
+        or list(find_open_child_defects(args.attack_root, args.slug))
+    )
     if defects:
         raise ValidationError(defects)
     write_json(finished_path, {"outcome": "cashed-out", "units": numbers})
     standing = "1 unit stands" if len(numbers) == 1 else "%d units stand" % len(numbers)
     print("finished %s: %s" % (args.slug, standing))
+
+
+def find_open_child_defects(attack_root, slug):
+    """A parent finishes after its children, so the state of every hypothesis it opened is settled."""
+    for child in list_children(attack_root, slug):
+        if not (child / "units" / "FINISHED.json").exists():
+            yield "attack/%s: not finished; a parent finishes after its children" % child.name
 
 
 def find_stage_three_exit_defects(workspace):
@@ -1037,11 +1088,11 @@ ACTIVITY_SHOWN = 3
 
 
 def run_status(args):
-    for line in describe_status(args.attack_root / args.slug, args.slug):
+    for line in describe_status(args.attack_root / args.slug, args.slug, args.attack_root):
         print(line)
 
 
-def describe_status(workspace, slug):
+def describe_status(workspace, slug, attack_root):
     """The lines `status` prints, each one a fact read from the workspace, ending with the next step."""
     problem_defects = list(find_problem_defects(read_json(workspace / "problem.json")))
     moves = read_journal(workspace)
@@ -1053,8 +1104,9 @@ def describe_status(workspace, slug):
     stage, next_step = decide_stage(
         workspace, problem_defects, moves, budget, openings, ranking, units, finished_path
     )
-    lines = [
-        "attack/%s: %s" % (slug, stage),
+    lines = ["attack/%s: %s" % (slug, stage)]
+    lines.extend(describe_links(workspace, slug, attack_root))
+    lines += [
         "problem: ok" if not problem_defects else "problem: not set (%s)" % problem_defects[0],
         "study: problem.md %s; novelty.md %s" % (
             "present" if has_text(workspace / "study" / "problem.md") else "missing",
@@ -1118,6 +1170,27 @@ def decide_stage(workspace, problem_defects, moves, budget, openings, ranking, u
     return "stage 3 (study and novelty check)", (
         "write study/problem.md and novelty.md, then preconditions.json, and run plan"
     )
+
+
+def describe_links(workspace, slug, attack_root):
+    """The parent line of a child and the children line of a parent; nothing for an attack with neither."""
+    lines = []
+    link = read_parent(workspace)
+    if link is not None:
+        lines.append("parent: attack/%s (opened after move %d)" % (link["parent"], link["opened_after_move"]))
+    children = list_children(attack_root, slug)
+    if children:
+        lines.append("children: " + ", ".join(
+            "attack/%s (%s)" % (child.name, describe_child_state(child)) for child in children
+        ))
+    return lines
+
+
+def describe_child_state(child):
+    finished_path = child / "units" / "FINISHED.json"
+    if not finished_path.exists():
+        return "open"
+    return "finished: %s" % read_json(finished_path)["outcome"]
 
 
 def read_openings(workspace):
@@ -1463,6 +1536,10 @@ def build_parser():
 
     init = commands.add_parser("init", help="create the workspace")
     init.add_argument("slug")
+    init.add_argument(
+        "--from", dest="parent", metavar="PARENT",
+        help="open the workspace as a child of PARENT, an open attack; its claim is a hypothesis of the parent's",
+    )
     init.set_defaults(run=run_init)
 
     check_problem = commands.add_parser("check-problem", help="validate problem.json")
