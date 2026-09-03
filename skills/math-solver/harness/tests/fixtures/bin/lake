@@ -1,0 +1,26 @@
+#!/bin/sh
+# Fake lake for the harness tests. Behaviour comes from the environment:
+#   FAKE_LAKE_LOG          file that receives "$PWD $*" per call, then the checked file
+#   FAKE_LAKE_BUILD_STATUS exit status of `lake build` (default 0)
+#   FAKE_LAKE_LEAN_STATUS  exit status of `lake env lean <file>` (default 0)
+#   FAKE_LAKE_AXIOMS       comma-separated axioms to report; empty reports none
+echo "$PWD $*" >> "$FAKE_LAKE_LOG"
+case "$1" in
+  build)
+    echo "Build completed successfully."
+    exit "${FAKE_LAKE_BUILD_STATUS:-0}"
+    ;;
+  env)
+    cat "$3" >> "$FAKE_LAKE_LOG"
+    if [ "${FAKE_LAKE_LEAN_STATUS:-0}" != 0 ]; then
+      echo "$3:1:0: error: unknown identifier"
+      exit "$FAKE_LAKE_LEAN_STATUS"
+    fi
+    name=$(sed -n 's/^#print axioms //p' "$3")
+    if [ -z "$FAKE_LAKE_AXIOMS" ]; then
+      echo "'$name' does not depend on any axioms"
+    else
+      echo "'$name' depends on axioms: [$FAKE_LAKE_AXIOMS]"
+    fi
+    ;;
+esac

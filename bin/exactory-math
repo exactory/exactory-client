@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+"""exactory-math: run the harness of the math-solver skill.
+
+Two things the skill needs from a working directory that is not its own:
+
+  <command> ... - run the harness (`skills/math-solver/harness/attack.py`)
+                  with these arguments; workspaces stay under `attack/<slug>/`
+                  in the current directory
+  skill-dir     - print the directory that holds the skill's own files, the
+                  strategies, the entries, the study contract, and the sources
+
+The harness resolves its strategy directory from its own location, so this
+command loads the file in place instead of copying it.
+"""
+
+from __future__ import annotations
+
+import importlib.machinery
+import importlib.util
+import sys
+from pathlib import Path
+
+_SKILL_DIR = Path(__file__).resolve().parent.parent / "skills" / "math-solver"
+_HARNESS_PATH = _SKILL_DIR / "harness" / "attack.py"
+_SKILL_DIR_HELP = "  skill-dir             print the directory that holds the skill's own files"
+
+
+def _load_harness():
+    loader = importlib.machinery.SourceFileLoader("attack", str(_HARNESS_PATH))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+    return module
+
+
+def main(argv: list[str]) -> int:
+    if "skill-dir" in argv[1:]:
+        print(_SKILL_DIR)
+        return 0
+    harness = _load_harness()
+    if argv[1:] in (["-h"], ["--help"]):
+        print(harness.build_parser().format_help().rstrip())
+        print("\nthis command adds one more:")
+        print(_SKILL_DIR_HELP)
+        return 0
+    return harness.main(argv[1:])
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

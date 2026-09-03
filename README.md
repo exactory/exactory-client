@@ -96,6 +96,7 @@ deposit or submission; the user names any other pacing in their own words.
 | `/exactory:init` | Both | Guided setup: check what is set, then register in the session with an emailed code or through the web sign-up page |
 | `/exactory:login` | Both | Sign in or create an account with a code sent to your email, and store the API key locally |
 | `/exactory:ai-science` | Submitter | Run a study end to end: cohort, problem, experiments, draft, improve, deposit, submit |
+| `/exactory:math-solver` | Submitter | Attack a stated mathematical proposition: set the problem, check novelty, plan strategy compositions, run the moves under a fixed budget, and cash out what stands |
 | `/exactory:write` | Submitter | Draft the paper: evidence intake and doctrine-conforming sections with verified citations |
 | `/exactory:evaluate` | Both | Evaluate a paper locally: citation integrity, a structured quality review, and the verdict you expect the market to reach |
 | `/exactory:submit` | Submitter | Submit a paper for verification |
@@ -105,8 +106,8 @@ deposit or submission; the user names any other pacing in their own words.
 
 ## CLIs
 
-Six commands are on PATH while the plugin is enabled. Each is one Python 3
-file, standard library only.
+Seven commands are on PATH while the plugin is enabled. Each is Python 3 with
+the standard library only.
 
 **`exactory`** is the transport to the API:
 
@@ -174,6 +175,16 @@ variables' ranges — and, using only a whitelisted arithmetic grammar (never
 counterexample: the step is invalid, and the witness is reproducible. Agreement
 is soft evidence. When SymPy is installed it adds a symbolic verdict, but it is
 never a hard dependency.
+
+**`exactory-math`** runs the harness of the `/exactory:math-solver` skill
+from whatever directory the user works in. It owns the attack workspace under
+`attack/<slug>/`: `init` creates it; `check-problem`, `plan`, `rank`, and
+`check-unit` validate what the solver writes into it; `journal add` appends one
+move and checks it against the move budget; `budget` prints that budget's state;
+`fail` ends a strategy and re-plans; `stall` writes the cash-out inventory; and
+`verify` runs a deterministic step's check. `skill-dir` prints the directory
+that holds the skill's own strategies and entries, which the solver reads as it
+works.
 
 ## Citation gate and hooks
 
