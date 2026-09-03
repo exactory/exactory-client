@@ -1,6 +1,7 @@
 ---
 name: diagonalise-against-every-candidate-under-a-guessing-principle
 move_class: construct
+costs: [axioms, constructivity]
 ---
 
 ## Trigger

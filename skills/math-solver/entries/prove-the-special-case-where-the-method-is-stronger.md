@@ -1,6 +1,7 @@
 ---
 name: prove-the-special-case-where-the-method-is-stronger
 move_class: reduce
+costs: [object, obligations]
 ---
 
 ## Trigger

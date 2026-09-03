@@ -1,6 +1,7 @@
 ---
 name: split-into-components-with-explicit-interfaces
 move_class: decompose
+costs: [bound_quality, object, obligations]
 ---
 
 ## Trigger

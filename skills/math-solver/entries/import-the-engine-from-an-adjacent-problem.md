@@ -1,6 +1,7 @@
 ---
 name: import-the-engine-from-an-adjacent-problem
 move_class: transfer
+costs: [bound_quality, effectivity, obligations]
 ---
 
 ## Trigger

@@ -1,6 +1,7 @@
 ---
 name: make-the-bound-explicit-then-attack-the-lossiest-step
 move_class: bound
+costs: []
 ---
 
 ## Trigger

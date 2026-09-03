@@ -1,6 +1,7 @@
 ---
 name: reduce-to-finite-witnesses
 move_class: reduce
+costs: [effectivity, object, obligations]
 ---
 
 ## Trigger

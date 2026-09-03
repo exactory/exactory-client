@@ -1,6 +1,7 @@
 ---
 name: vary-the-side-parameter-the-construction-fixed
 move_class: construct
+costs: [object]
 ---
 
 ## Trigger

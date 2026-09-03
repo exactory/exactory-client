@@ -1,6 +1,7 @@
 ---
 name: embed-the-object-in-a-family-and-move-along-it
 move_class: reformulate
+costs: [implication, object, obligations]
 ---
 
 ## Trigger

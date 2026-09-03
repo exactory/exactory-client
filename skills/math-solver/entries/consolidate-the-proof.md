@@ -1,6 +1,7 @@
 ---
 name: consolidate-the-proof
 move_class: reformulate
+costs: []
 ---
 
 ## Trigger

@@ -1,6 +1,7 @@
 ---
 name: bound-failure-by-random-restriction-and-encoding
 move_class: bound
+costs: [obligations]
 ---
 
 ## Trigger

@@ -1,6 +1,7 @@
 ---
 name: export-the-lemma-to-sibling-problems
 move_class: transfer
+costs: []
 ---
 
 ## Trigger

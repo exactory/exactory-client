@@ -1,6 +1,7 @@
 ---
 name: enumerate-small-cases-to-locate-the-threshold
 move_class: compute
+costs: [bound_quality, object]
 ---
 
 ## Trigger

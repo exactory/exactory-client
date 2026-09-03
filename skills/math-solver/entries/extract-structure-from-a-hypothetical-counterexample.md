@@ -1,6 +1,7 @@
 ---
 name: extract-structure-from-a-hypothetical-counterexample
 move_class: reduce
+costs: [object, obligations]
 ---
 
 ## Trigger

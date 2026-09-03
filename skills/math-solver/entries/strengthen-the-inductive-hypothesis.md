@@ -1,6 +1,7 @@
 ---
 name: strengthen-the-inductive-hypothesis
 move_class: bound
+costs: [obligations]
 ---
 
 ## Trigger

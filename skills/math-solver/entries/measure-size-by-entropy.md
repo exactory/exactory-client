@@ -1,6 +1,7 @@
 ---
 name: measure-size-by-entropy
 move_class: reformulate
+costs: [bound_quality]
 ---
 
 ## Trigger

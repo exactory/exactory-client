@@ -1,6 +1,7 @@
 ---
 name: modify-the-problem-inside-the-methods-invariance
 move_class: obstruct
+costs: [axioms, constructivity, object, obligations]
 ---
 
 ## Trigger

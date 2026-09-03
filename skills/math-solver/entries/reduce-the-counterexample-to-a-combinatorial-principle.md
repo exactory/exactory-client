@@ -1,6 +1,7 @@
 ---
 name: reduce-the-counterexample-to-a-combinatorial-principle
 move_class: reduce
+costs: [axioms, implication, obligations]
 ---
 
 ## Trigger

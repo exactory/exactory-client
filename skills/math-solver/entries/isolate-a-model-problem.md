@@ -1,6 +1,7 @@
 ---
 name: isolate-a-model-problem
 move_class: reformulate
+costs: [object, obligations]
 ---
 
 ## Trigger

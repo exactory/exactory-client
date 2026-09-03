@@ -1,6 +1,7 @@
 ---
 name: test-independence-under-two-opposite-axioms
 move_class: obstruct
+costs: [axioms, object, obligations]
 ---
 
 ## Trigger

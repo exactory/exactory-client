@@ -1,6 +1,7 @@
 ---
 name: choose-the-auxiliary-weight-or-certificate
 move_class: bound
+costs: [bound_quality, obligations]
 ---
 
 ## Trigger

@@ -1,6 +1,7 @@
 ---
 name: reduce-dependent-events-to-pairwise-overlaps
 move_class: reduce
+costs: [object, obligations]
 ---
 
 ## Trigger

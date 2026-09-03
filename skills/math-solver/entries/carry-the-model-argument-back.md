@@ -1,6 +1,7 @@
 ---
 name: carry-the-model-argument-back
 move_class: transfer
+costs: [bound_quality, effectivity, obligations]
 ---
 
 ## Trigger

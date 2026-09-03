@@ -1,6 +1,7 @@
 ---
 name: seed-and-amplify
 move_class: construct
+costs: [obligations]
 ---
 
 ## Trigger

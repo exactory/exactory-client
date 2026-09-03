@@ -1,6 +1,7 @@
 ---
 name: reduce-existence-to-one-algebraic-obstruction
 move_class: reduce
+costs: [constructivity, obligations]
 ---
 
 ## Trigger

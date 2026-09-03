@@ -1,6 +1,7 @@
 ---
 name: certify-the-finite-residue-by-computation
 move_class: compute
+costs: [axioms, object]
 ---
 
 ## Trigger

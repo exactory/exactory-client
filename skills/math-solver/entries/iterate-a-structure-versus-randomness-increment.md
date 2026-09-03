@@ -1,6 +1,7 @@
 ---
 name: iterate-a-structure-versus-randomness-increment
 move_class: bound
+costs: [bound_quality, implication, object, obligations]
 ---
 
 ## Trigger

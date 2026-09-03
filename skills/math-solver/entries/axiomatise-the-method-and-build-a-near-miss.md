@@ -1,6 +1,7 @@
 ---
 name: axiomatise-the-method-and-build-a-near-miss
 move_class: obstruct
+costs: [axioms, constructivity, object, obligations]
 ---
 
 ## Trigger

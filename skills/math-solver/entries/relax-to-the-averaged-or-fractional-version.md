@@ -1,6 +1,7 @@
 ---
 name: relax-to-the-averaged-or-fractional-version
 move_class: reduce
+costs: [bound_quality, effectivity, object, obligations]
 ---
 
 ## Trigger

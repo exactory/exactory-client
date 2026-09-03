@@ -1,6 +1,7 @@
 ---
 name: prove-the-subcritical-or-asymptotic-version-first
 move_class: reduce
+costs: [bound_quality, effectivity, object, obligations]
 ---
 
 ## Trigger

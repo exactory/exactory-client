@@ -1,6 +1,7 @@
 ---
 name: iterate-the-construction-and-bookkeep-every-candidate
 move_class: construct
+costs: [axioms, constructivity, object, obligations]
 ---
 
 ## Trigger

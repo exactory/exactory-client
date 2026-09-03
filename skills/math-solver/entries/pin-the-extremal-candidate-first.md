@@ -1,6 +1,7 @@
 ---
 name: pin-the-extremal-candidate-first
 move_class: construct
+costs: [bound_quality]
 ---
 
 ## Trigger

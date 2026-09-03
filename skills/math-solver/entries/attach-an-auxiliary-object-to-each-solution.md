@@ -1,6 +1,7 @@
 ---
 name: attach-an-auxiliary-object-to-each-solution
 move_class: reformulate
+costs: [effectivity, obligations]
 ---
 
 ## Trigger

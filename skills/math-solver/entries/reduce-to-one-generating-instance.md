@@ -1,6 +1,7 @@
 ---
 name: reduce-to-one-generating-instance
 move_class: reduce
+costs: [axioms, implication, obligations]
 ---
 
 ## Trigger

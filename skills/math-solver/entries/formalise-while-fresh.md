@@ -1,6 +1,7 @@
 ---
 name: formalise-while-fresh
 move_class: compute
+costs: [axioms, object, obligations]
 ---
 
 ## Trigger

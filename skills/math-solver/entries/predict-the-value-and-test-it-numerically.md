@@ -1,6 +1,7 @@
 ---
 name: predict-the-value-and-test-it-numerically
 move_class: compute
+costs: []
 ---
 
 ## Trigger

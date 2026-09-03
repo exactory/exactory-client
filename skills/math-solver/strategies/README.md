@@ -18,8 +18,13 @@ the attempt itself.
 ## What a move costs
 
 A move buys progress with something. What it spends is a property of the
-strategy, not of the problem, so each strategy declares it once. The
-vocabulary is fixed and the harness code owns it.
+tool, not of the problem: each entry declares under `costs` in its front
+matter what one application of it can take away, the same set whichever
+strategy dispatches it. A strategy declares under its own `costs` at
+least the union over the entries it dispatches, plus what its framing
+adds at a step (a rung, an image, a model in place of the claim), and
+its What it moves section says which cost is paid at which step and why.
+The vocabulary is fixed and the harness code owns it.
 
 | cost | what the move gives up |
 |---|---|
@@ -73,9 +78,9 @@ statement proved is no longer the one the attack started from.
 
 Each strategy is one file in this directory with the shape below. The
 harness (`../SKILL.md`) runs every strategy's precondition procedure
-against the problem record, composes the strategies whose preconditions
-hold, and executes a composition strategy by strategy, each strategy
-dispatching its entries under the move loop.
+against the problem record, admits the strategies whose preconditions
+hold, and walks them one after another, each strategy dispatching its
+entries under the move loop.
 
 ## The shape of a strategy file
 
@@ -141,39 +146,36 @@ matter of `../SKILL.md` instead.
 ## Composition
 
 A solution is a composition of strategies, not a single method chosen
-from memory. The harness does not choose a strategy; it chooses a
-composition, and the
-precondition table is what prunes the space. The rules the harness code
-applies:
+from memory. The composition of an attack is its walk: the strategies it
+runs, in order, each handed the output of the one before. The harness
+does not choose a strategy; the precondition table prunes the space, and
+the solver walks it one step at a time, reading the record as it stands.
+The rules the harness code applies:
 
-- A composition has one to four distinct strategies.
-- Every strategy in it has precondition verdict yes, except that one
-  strategy with verdict unknown is allowed and the composition is marked
-  as resting on an assumption.
-- When strategy A lists B under `precedes`, A comes before B in any
-  composition containing both. When A lists B under `excludes`, no
-  composition contains both.
-- Compositions are ranked by the number of yes verdicts, then by the
-  number of distinct components they span, then by name order. The
-  harness takes them in rank order and moves to the next when the
-  current one ends in a failure signal, after setting the failed
-  strategy's verdict to no.
-- The printed list is capped, and the cap is filled by round over the
-  leading strategy: the best composition led by each strategy, then the
-  second best led by each, and so on, printed in rank order. Every
-  strategy the scan admits leads a composition the solver can reach.
-- Every row carries what its strategies may spend, the union of their
-  declared costs, so the solver weighs the order from one file and a row
-  cannot cite a cost its own composition never declares.
-- What the plan emits is the shortlist, not the order of execution. The
-  solver then writes `ranking.json`: the same compositions, in the order
-  it will take them, each row citing the fields of the problem record and
-  the costs that put it there. `rank` refuses a ranking that is not
-  exactly the current shortlist, or a row that cites nothing. The order is
-  the solver's judgement, because what a cost is worth depends on the
-  problem: giving up effectivity is fatal when the target is an explicit
-  constant and harmless when it is finiteness. A fixed weight for each
-  cost would be wrong for one of those two.
+- The plan admits every strategy whose verdict is not no, and prints them
+  as the openings: verdict yes before unknown, name order within, each
+  with its component and its declared costs.
+- The solver writes `ranking.json`: the same strategies, in the order it
+  would open with them, each row citing the fields of the problem record
+  and the costs that put it there. `rank` refuses a ranking that is not
+  exactly the openings, or a row that cites nothing. The attack opens
+  with the first of the order, and the ranking is not read after that.
+  The order is the solver's judgement, because what a cost is worth
+  depends on the problem: giving up effectivity is fatal when the target
+  is an explicit constant and harmless when it is finiteness. A fixed
+  weight for each cost would be wrong for one of those two.
+- Each later step is the solver's choice among the admitted strategies,
+  made when the current strategy ends and cited on the move that enters
+  the new one (`step_cites`: the fields and the declared costs that put
+  it next). A walk may return to a strategy it ran before, and it has no
+  length cap; the move budget bounds it.
+- Every strategy in the walk has verdict yes, except that one strategy
+  with verdict unknown is allowed and the walk rests on that assumption.
+- When strategy A lists B under `precedes`, A comes before B in any walk
+  containing both, so A cannot enter once B has run. When A lists B under
+  `excludes`, no walk contains both.
+- A strategy whose failure signal fired has verdict no (`fail`) and takes
+  no further move; the walk steps past it.
 
 The precondition column of the table is where the decision procedure
 lives. Enumerating strategies has limited value; pruning them has all of

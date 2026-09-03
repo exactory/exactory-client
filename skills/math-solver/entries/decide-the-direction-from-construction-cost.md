@@ -1,6 +1,7 @@
 ---
 name: decide-the-direction-from-construction-cost
 move_class: reformulate
+costs: [object]
 ---
 
 ## Trigger

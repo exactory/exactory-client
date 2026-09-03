@@ -1,6 +1,7 @@
 ---
 name: condition-on-the-one-missing-input
 move_class: reduce
+costs: [axioms, bound_quality, object, obligations]
 ---
 
 ## Trigger

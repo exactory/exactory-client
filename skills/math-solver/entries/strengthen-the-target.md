@@ -1,6 +1,7 @@
 ---
 name: strengthen-the-target
 move_class: reformulate
+costs: [implication, object, obligations]
 ---
 
 ## Trigger

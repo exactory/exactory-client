@@ -1,6 +1,7 @@
 ---
 name: average-a-local-inequality-over-neighbourhoods
 move_class: reduce
+costs: [effectivity, implication, object, obligations]
 ---
 
 ## Trigger

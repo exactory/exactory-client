@@ -1,6 +1,7 @@
 ---
 name: change-the-ambient-space
 move_class: reformulate
+costs: [bound_quality, implication, object]
 ---
 
 ## Trigger

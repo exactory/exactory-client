@@ -1,6 +1,7 @@
 ---
 name: adjoin-the-wanted-object-by-generic-approximation
 move_class: construct
+costs: [axioms, constructivity, object]
 ---
 
 ## Trigger

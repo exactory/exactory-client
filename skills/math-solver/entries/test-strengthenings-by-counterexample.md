@@ -1,6 +1,7 @@
 ---
 name: test-strengthenings-by-counterexample
 move_class: construct
+costs: [object]
 ---
 
 ## Trigger

@@ -1,6 +1,7 @@
 ---
 name: optimise-the-certificate-family-numerically
 move_class: compute
+costs: [bound_quality, obligations]
 ---
 
 ## Trigger

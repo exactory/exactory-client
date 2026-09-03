@@ -1,6 +1,7 @@
 ---
 name: revive-the-abandoned-route
 move_class: reformulate
+costs: []
 ---
 
 ## Trigger

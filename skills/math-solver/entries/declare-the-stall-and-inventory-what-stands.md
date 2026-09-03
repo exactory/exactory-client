@@ -1,6 +1,7 @@
 ---
 name: declare-the-stall-and-inventory-what-stands
 move_class: stall
+costs: []
 ---
 
 ## Trigger
@@ -27,4 +28,4 @@ No statement survives the self-check, because every candidate is known or trivia
 
 ## Typical cash-out
 
-Every publication form, according to the unit; survey or problem paper for the residue.
+Every form in the norms document, according to the unit; survey or problem paper for the residue.

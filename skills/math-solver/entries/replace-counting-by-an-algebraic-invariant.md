@@ -1,6 +1,7 @@
 ---
 name: replace-counting-by-an-algebraic-invariant
 move_class: bound
+costs: [bound_quality, implication, object]
 ---
 
 ## Trigger
