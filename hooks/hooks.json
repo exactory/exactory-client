@@ -1,5 +1,5 @@
 {
-  "description": "Exactory AI Science hooks: blocking PreToolUse gates on submission and production deposit, on filing a verdict without its cohort impact prediction, on catastrophic experiment shell, and on closing a stage without a logged decision; an advisory PostToolUse check on references edits; a PostToolUse recorder that notes when an agent writes the paper's LaTeX source; and a Stop hook that keeps an autopilot study moving. Math-solver hooks: blocking PreToolUse gates on editing the files the attack harness writes (by Write, Edit, or a shell write), on writing a unit before the cash-out started, and on drafting a unit before its check; and a Stop hook that keeps an open attack moving.",
+  "description": "Exactory AI Science hooks: blocking PreToolUse gates on submission and production deposit, on filing a verdict without its cohort impact prediction, on catastrophic experiment shell, and on closing a stage without a logged decision; an advisory PostToolUse check on references edits; a PostToolUse recorder that notes when an agent writes the paper's LaTeX source; and a Stop hook that keeps an autopilot study moving. Math-solver hooks: blocking PreToolUse gates on editing the files the attack harness and the hooks write (by Write, Edit, or a shell write), on writing a unit before the cash-out started, and on drafting a unit before its check; a PostToolUse recorder that appends every tool call that touched an attack workspace to its activity log; a SessionStart hook that reports every open attack with its status so the session resumes it; and a Stop hook that keeps an open attack moving.",
   "hooks": {
     "PreToolUse": [
       {
@@ -66,6 +66,27 @@
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/record_paper_authorship.py\"",
             "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/record_attack_activity.py\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/resume_attack.py\"",
+            "timeout": 30
           }
         ]
       }

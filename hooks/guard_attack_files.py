@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """PreToolUse gate: the files the math-solver harness writes are written by it alone.
 
-An attack workspace is `attack/<slug>/`, laid out by `exactory-math init`. Five
-of its files are the record the harness validates as it writes them:
-`journal.jsonl` (`journal add`), `compositions.json` (`plan`),
-`deterministic/<step>/result.json` (`verify`), `units/<n>/check-unit.json`
-(`check-unit`), and `units/FINISHED.json` (`finish`). This hook denies a Write or
-an Edit to any of them, and a Bash command that writes to one through a
-redirect, `tee`, `cp`, `mv`, `rm`, `truncate`, `dd`, or `sed -i`. Reading them is
-untouched. Any other file, any other tool, and any internal error are silent:
-exit 0, no output.
+An attack workspace is `attack/<slug>/`, laid out by `exactory-math init`. Seven
+of its files are the record the harness and the hooks write themselves:
+`journal.jsonl` (`journal add`), `openings.json` (`plan`), `tasks.json`
+(`task`), `activity.jsonl` (the activity hook), `deterministic/<step>/result.json`
+(`verify`), `units/<n>/check-unit.json` (`check-unit`), and `units/FINISHED.json`
+(`finish`). This hook denies a Write or an Edit to any of them, and a Bash
+command that writes to one through a redirect, `tee`, `cp`, `mv`, `rm`,
+`truncate`, `dd`, or `sed -i`. Reading them is untouched. Any other file, any
+other tool, and any internal error are silent: exit 0, no output.
 """
 
 from __future__ import annotations
@@ -23,7 +23,9 @@ from pathlib import Path
 # The path within the workspace, and the harness command that writes it.
 _OWNED_FILES = (
     (re.compile(r"^journal\.jsonl$"), "exactory-math journal add <slug> --json '<move>'"),
-    (re.compile(r"^compositions\.json$"), "exactory-math plan <slug>"),
+    (re.compile(r"^openings\.json$"), "exactory-math plan <slug>"),
+    (re.compile(r"^tasks\.json$"), "exactory-math task add <slug> <text>, or task done <slug> <id>"),
+    (re.compile(r"^activity\.jsonl$"), "nothing by hand: the plugin's activity hook appends it after every tool call"),
     (re.compile(r"^deterministic/[^/]+/result\.json$"), "exactory-math verify lean|certificate <slug> <step-dir>"),
     (re.compile(r"^units/\d+/check-unit\.json$"), "exactory-math check-unit <slug> <n>"),
     (re.compile(r"^units/FINISHED\.json$"), "exactory-math finish <slug>"),

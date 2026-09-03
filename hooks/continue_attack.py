@@ -12,11 +12,29 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
 _COUNTER_NAME = ".continue_count"
 _MAX_ADVANCES = int(os.environ.get("EXACTORY_ATTACK_MAX", "40"))
+_HARNESS_LAUNCHER = Path(__file__).resolve().parent.parent / "bin" / "exactory-math"
+
+
+def _read_next_step(attack_root: Path, slug: str) -> str | None:
+    """The `next:` line of `exactory-math status`, or None when the harness cannot say."""
+    try:
+        completed = subprocess.run(
+            [sys.executable, str(_HARNESS_LAUNCHER), "--attack-root", str(attack_root), "status", slug],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if completed.returncode != 0:
+        return None
+    return next((line for line in completed.stdout.splitlines() if line.startswith("next:")), None)
 
 
 def _block(reason: str) -> None:
@@ -79,12 +97,14 @@ def main() -> None:
         f"attack/{workspace.name} is not finished ({_describe(workspace)})"
         for workspace in open_workspaces
     )
+    next_step = _read_next_step(attack_root, first.name)
+    guidance = f" The harness says: {next_step}." if next_step else ""
     _block(
-        f"[math-solver advance {count + 1}/{_MAX_ADVANCES}] {standing}. Continue the"
-        " attack from where its record stands, at the next stage of the math-solver"
-        f" skill, and run `exactory-math finish {first.name}` when every unit is"
-        " checked, drafted, and evaluated (or, at the stage 3 exit, once novelty.md"
-        " records where the statement is solved)."
+        f"[math-solver advance {count + 1}/{_MAX_ADVANCES}] {standing}.{guidance} Continue the"
+        " attack from where its record stands (`exactory-math status <slug>`), at that"
+        f" stage of the math-solver skill, and run `exactory-math finish {first.name}` when"
+        " every unit is checked, drafted, and evaluated (or, at the stage 3 exit, once"
+        " novelty.md records where the statement is solved)."
     )
 
 
