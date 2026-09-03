@@ -9,6 +9,8 @@ import importlib.util
 import io
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -139,6 +141,37 @@ def _write_passing_citation_report(workspace_dir: Path) -> None:
     )
 
 
+# The two disclosures, spelled out here so a change to either wording fails a
+# test instead of reaching a permanent Zenodo record. Every deposit test names
+# "Shiroshita, Ryosuke" first, so that is the author each sentence carries.
+_WRITTEN_BY_EXACTORY_SENTENCE = (
+    "This preprint was written by exactory.ai (https://www.exactory.ai), an AI"
+    " research system. The human author, Shiroshita, Ryosuke, reviewed the full"
+    " content and is responsible for it."
+)
+_DEPOSITED_THROUGH_EXACTORY_SENTENCE = (
+    "This preprint was prepared with AI assistance and deposited through"
+    " exactory.ai (https://www.exactory.ai). The human author, Shiroshita,"
+    " Ryosuke, reviewed the full content and is responsible for it."
+)
+
+# The keyword the record carries with the first disclosure, spelled out here
+# for the same reason.
+_WRITTEN_BY_EXACTORY_KEYWORD = "Written by exactory.ai"
+
+_AGENT_WROTE_THE_PAPER_RECORD_TEXT = json.dumps({"written_by_exactory": True})
+_AUTHORSHIP_RECORDER_SCRIPT_PATH = _PLUGIN_ROOT / "hooks" / "record_paper_authorship.py"
+
+
+def _write_authorship_record(workspace_dir: Path, record_text: str) -> None:
+    """Write .exactory/authorship.json, the record the record_paper_authorship
+    hook writes when an agent writes a LaTeX source under draft/. It takes the
+    file's text, so a malformed record is as easy to set up as a valid one."""
+    (workspace_dir / ".exactory" / "authorship.json").write_text(
+        record_text, encoding="utf-8"
+    )
+
+
 class TestInit(unittest.TestCase):
     def setUp(self) -> None:
         scratch = tempfile.TemporaryDirectory()
@@ -252,9 +285,9 @@ class TestDeposit(_DepositTestCase):
             metadata["creators"],
             [{"name": "Shiroshita, Ryosuke"}, {"name": "Example, Alice"}],
         )
-        self.assertIn("AI assistance", metadata["description"])
-        self.assertIn("Shiroshita, Ryosuke", metadata["description"])
-        self.assertIn("responsible", metadata["description"])
+        # This workspace holds no authorship record, so the disclosure states
+        # only that the deposit went through exactory.ai.
+        self.assertIn(_DEPOSITED_THROUGH_EXACTORY_SENTENCE, metadata["description"])
 
     def test_description_opens_with_the_abstract_and_ends_with_the_disclosure(self) -> None:
         self._deposit(["--creator", "Shiroshita, Ryosuke"])
@@ -263,8 +296,121 @@ class TestDeposit(_DepositTestCase):
         self.assertIn("cohort percentiles &amp; bound their error", description)
         self.assertIn("second paragraph", description)
         self.assertLess(
-            description.find("cohort percentiles"), description.find("AI assistance")
+            description.find("second paragraph"),
+            description.find(_DEPOSITED_THROUGH_EXACTORY_SENTENCE),
         )
+        self.assertTrue(description.endswith("responsible for it.</p>"))
+
+    def _assert_claims_only_the_deposit(self, metadata: dict) -> None:
+        """Assert the record says nothing about who wrote the paper. The gate
+        selects the disclosure and the keyword together, so every doubtful
+        input is checked on both."""
+        self.assertIn(_DEPOSITED_THROUGH_EXACTORY_SENTENCE, metadata["description"])
+        self.assertNotIn("written by exactory.ai", metadata["description"])
+        self.assertNotIn("keywords", metadata)
+
+    def test_a_recorded_agent_write_names_exactory_as_the_writer(self) -> None:
+        _write_authorship_record(self.workspace_dir, _AGENT_WROTE_THE_PAPER_RECORD_TEXT)
+        self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        metadata = self._read_sent_metadata()
+        description = metadata["description"]
+        self.assertIn(_WRITTEN_BY_EXACTORY_SENTENCE, description)
+        self.assertNotIn("AI assistance", description)
+        # assertEqual rather than assertIn, so a second keyword added to the
+        # record fails this test.
+        self.assertEqual(metadata["keywords"], [_WRITTEN_BY_EXACTORY_KEYWORD])
+        # The disclosure still closes the description, after the abstract.
+        self.assertLess(
+            description.find("second paragraph"),
+            description.find(_WRITTEN_BY_EXACTORY_SENTENCE),
+        )
+        self.assertTrue(description.endswith("responsible for it.</p>"))
+
+    def test_the_record_the_hook_writes_is_the_record_this_command_reads(self) -> None:
+        """Run the real hook on a paper source, then deposit. The hook and this
+        command name the same file and the same key from two files, so a rename
+        on one side alone lands here instead of in a Zenodo record."""
+        paper_source_path = self.workspace_dir / "draft" / "paper.tex"
+        paper_source_path.write_text("\\section{Results}\n")
+        subprocess.run(
+            [sys.executable, str(_AUTHORSHIP_RECORDER_SCRIPT_PATH)],
+            input=json.dumps({
+                "tool_name": "Write",
+                "tool_input": {"file_path": str(paper_source_path)},
+                "cwd": str(self.workspace_dir),
+            }),
+            text=True, capture_output=True, check=True,
+        )
+        self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        metadata = self._read_sent_metadata()
+        self.assertIn(_WRITTEN_BY_EXACTORY_SENTENCE, metadata["description"])
+        self.assertEqual(metadata["keywords"], [_WRITTEN_BY_EXACTORY_KEYWORD])
+
+    def test_a_workspace_without_an_authorship_record_claims_only_the_deposit(self) -> None:
+        self.assertFalse((self.workspace_dir / ".exactory" / "authorship.json").exists())
+        self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        self._assert_claims_only_the_deposit(self._read_sent_metadata())
+
+    def test_an_authorship_record_turned_off_claims_only_the_deposit(self) -> None:
+        # The value decides, not the file's presence, so a person who sets the
+        # record to false turns the claim off.
+        _write_authorship_record(self.workspace_dir,
+                                 json.dumps({"written_by_exactory": False}))
+        self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        self._assert_claims_only_the_deposit(self._read_sent_metadata())
+
+    def test_an_authorship_record_without_the_key_claims_only_the_deposit(self) -> None:
+        _write_authorship_record(self.workspace_dir, json.dumps({"version": 1}))
+        self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        self._assert_claims_only_the_deposit(self._read_sent_metadata())
+
+    def test_a_truthy_non_boolean_authorship_value_claims_only_the_deposit(self) -> None:
+        # 1 is truthy and it also equals True, so this value fails both a
+        # truthiness read and an == True read. Only "is True" answers False.
+        _write_authorship_record(self.workspace_dir, json.dumps({"written_by_exactory": 1}))
+        self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        self._assert_claims_only_the_deposit(self._read_sent_metadata())
+
+    def test_an_authorship_record_of_the_wrong_type_claims_only_the_deposit(self) -> None:
+        _write_authorship_record(self.workspace_dir, json.dumps(["written_by_exactory"]))
+        self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        self._assert_claims_only_the_deposit(self._read_sent_metadata())
+
+    def test_a_malformed_authorship_record_claims_only_the_deposit(self) -> None:
+        _write_authorship_record(self.workspace_dir, "this file is not JSON at all")
+        self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        self._assert_claims_only_the_deposit(self._read_sent_metadata())
+
+    def test_an_unreadable_authorship_record_claims_only_the_deposit(self) -> None:
+        # A directory on the record's path makes the read raise, and a read
+        # that raises answers the same way every other doubtful input does.
+        (self.workspace_dir / ".exactory" / "authorship.json").mkdir()
+        self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        self._assert_claims_only_the_deposit(self._read_sent_metadata())
+
+    def _write_pdf_outside_the_workspace(self) -> Path:
+        """Write a PDF in a directory of its own, outside this workspace."""
+        outside_scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(outside_scratch.cleanup)
+        outside_pdf_path = Path(outside_scratch.name) / "paper.pdf"
+        outside_pdf_path.write_bytes(b"%PDF-1.4 fake paper from elsewhere")
+        return outside_pdf_path
+
+    def test_a_pdf_from_outside_the_draft_tree_claims_only_the_deposit(self) -> None:
+        # The record attests for this workspace, not for a file --pdf points
+        # at somewhere else on disk.
+        _write_authorship_record(self.workspace_dir, _AGENT_WROTE_THE_PAPER_RECORD_TEXT)
+        self._deposit(["--creator", "Shiroshita, Ryosuke",
+                       "--pdf", str(self._write_pdf_outside_the_workspace())])
+        self._assert_claims_only_the_deposit(self._read_sent_metadata())
+
+    def test_a_pdf_symlinked_out_of_the_draft_tree_claims_only_the_deposit(self) -> None:
+        _write_authorship_record(self.workspace_dir, _AGENT_WROTE_THE_PAPER_RECORD_TEXT)
+        paper_path = self.workspace_dir / "draft" / "paper.pdf"
+        paper_path.unlink()
+        paper_path.symlink_to(self._write_pdf_outside_the_workspace())
+        self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        self._assert_claims_only_the_deposit(self._read_sent_metadata())
 
     def test_a_blank_abstract_file_is_refused_before_any_request(self) -> None:
         (self.workspace_dir / "draft" / "abstract.txt").write_text(" \n\n")
@@ -513,6 +659,19 @@ class TestNewVersion(_DepositTestCase):
         return json.loads(
             (self.workspace_dir / ".exactory" / "deposit.json").read_text()
         )
+
+    def test_new_version_states_the_same_authorship_as_a_first_deposit(self) -> None:
+        self.record_prior_deposit()
+        _write_authorship_record(self.workspace_dir, _AGENT_WROTE_THE_PAPER_RECORD_TEXT)
+        self._deposit(["--new-version", "--creator", "Shiroshita, Ryosuke"])
+        metadata_request = next(
+            request for request in self.fake_api.requests
+            if request.get_method() == "PUT"
+            and request.full_url.endswith("/deposit/depositions/4343")
+        )
+        metadata = json.loads(metadata_request.data.decode())["metadata"]
+        self.assertIn(_WRITTEN_BY_EXACTORY_SENTENCE, metadata["description"])
+        self.assertEqual(metadata["keywords"], [_WRITTEN_BY_EXACTORY_KEYWORD])
 
     def test_new_version_refuses_an_environment_mismatch(self) -> None:
         self.record_prior_deposit("production")

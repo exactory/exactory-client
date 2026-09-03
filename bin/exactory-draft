@@ -42,6 +42,8 @@ _USER_AGENT = f"exactory-draft/{_PLUGIN_VERSION}"
 _WORKSPACE_DIR_NAMES = (".exactory", "draft", "evidence", "research", "reviews", "learnings")
 _DRAFT_STATE_PATH = Path(".exactory/draft.json")
 _DEPOSIT_STATE_PATH = Path(".exactory/deposit.json")
+_AUTHORSHIP_STATE_PATH = Path(".exactory/authorship.json")
+_DRAFT_DIR_PATH = Path("draft")
 
 _LITERATURE_HEADER = (
     "# Literature survey log\n"
@@ -49,10 +51,26 @@ _LITERATURE_HEADER = (
     " Queries, Found, Verdict, Impact.\n"
 )
 
-_AI_DISCLOSURE_TEMPLATE = (
-    "This preprint was prepared with AI assistance. The human author, {author},"
+# Two disclosures, because the two claims rest on different evidence. The
+# first names exactory.ai as the writer, and only this workspace's own record
+# that an agent wrote the paper selects it. The second states what this
+# command itself did, which holds for every deposit.
+_WRITTEN_BY_EXACTORY_DISCLOSURE_TEMPLATE = (
+    "This preprint was written by exactory.ai (https://www.exactory.ai), an AI"
+    " research system. The human author, {author}, reviewed the full content"
+    " and is responsible for it."
+)
+_DEPOSITED_THROUGH_EXACTORY_DISCLOSURE_TEMPLATE = (
+    "This preprint was prepared with AI assistance and deposited through"
+    " exactory.ai (https://www.exactory.ai). The human author, {author},"
     " reviewed the full content and is responsible for it."
 )
+
+# One keyword, sent only with the disclosure that names exactory.ai as the
+# writer, because it rests on the same evidence. The keyword answers "did
+# exactory write this paper?", and a deposit this command only carried is not
+# an answer to that question, so it sends no keyword.
+_WRITTEN_BY_EXACTORY_KEYWORD = "Written by exactory.ai"
 
 # The paper always lands on Zenodo under this name, whatever the local build
 # called it, so every record presents the same face. The sources archive gets
@@ -144,7 +162,8 @@ def _load_draft_state() -> dict:
 
 
 def _find_newest_pdf() -> Path:
-    pdf_paths = sorted(Path("draft").rglob("*.pdf"), key=lambda path: path.stat().st_mtime)
+    pdf_paths = sorted(_DRAFT_DIR_PATH.rglob("*.pdf"),
+                       key=lambda path: path.stat().st_mtime)
     if not pdf_paths:
         _exit_with_error("There is no PDF under draft/. Build the paper first, or pass --pdf.", 2)
     return pdf_paths[-1]
@@ -161,19 +180,47 @@ def _read_abstract_text(path: Path) -> str:
     return abstract_text
 
 
-def _build_deposit_metadata(title: str, creators: list[str], abstract_text: str) -> dict:
+def _has_exactory_authorship_evidence(pdf_path: Path) -> bool:
+    """Answer whether this workspace records that an agent wrote the paper
+    being deposited: the PDF comes from the draft tree, and
+    .exactory/authorship.json reads "written_by_exactory": true. The
+    record_paper_authorship hook writes that file when an agent writes a LaTeX
+    source under draft/, so the record comes from the act of writing itself.
+    The decision log cannot serve as that record, because it holds what an
+    agent chose to log rather than what an agent wrote. The value decides, not
+    the file's presence, so a person who sets it to false turns the claim off.
+    Every doubtful input answers False, so the disclosure that names
+    exactory.ai as the writer stays off a paper this workspace has no record
+    of writing."""
+    if not pdf_path.resolve().is_relative_to(_DRAFT_DIR_PATH.resolve()):
+        return False
+    try:
+        state = json.loads(_AUTHORSHIP_STATE_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(state, dict) and state.get("written_by_exactory") is True
+
+
+def _build_deposit_metadata(title: str, creators: list[str], abstract_text: str,
+                            has_exactory_authorship_evidence: bool) -> dict:
     # Zenodo renders the description as HTML. The abstract paragraphs come
-    # first, the AI disclosure closes the description as its own paragraph.
+    # first, the disclosure closes the description as its own paragraph.
     paragraph_texts = [" ".join(block.split()) for block in abstract_text.split("\n\n")]
     paragraph_texts = [text for text in paragraph_texts if text != ""]
-    paragraph_texts.append(_AI_DISCLOSURE_TEMPLATE.format(author=creators[0]))
-    return {
+    disclosure_template = (_WRITTEN_BY_EXACTORY_DISCLOSURE_TEMPLATE
+                           if has_exactory_authorship_evidence
+                           else _DEPOSITED_THROUGH_EXACTORY_DISCLOSURE_TEMPLATE)
+    paragraph_texts.append(disclosure_template.format(author=creators[0]))
+    metadata = {
         "upload_type": "publication",
         "publication_type": "preprint",
         "title": title,
         "creators": [{"name": creator_name} for creator_name in creators],
         "description": "".join(f"<p>{html.escape(text)}</p>" for text in paragraph_texts),
     }
+    if has_exactory_authorship_evidence:
+        metadata["keywords"] = [_WRITTEN_BY_EXACTORY_KEYWORD]
+    return metadata
 
 
 def _name_sources_upload(sources_path: Path) -> str:
@@ -243,6 +290,7 @@ def _run_deposit(args: argparse.Namespace) -> None:
     if sources_path is not None and not sources_path.exists():
         _exit_with_error(f"The file {sources_path} does not exist.", 2)
     abstract_text = _read_abstract_text(Path(args.abstract_file))
+    has_exactory_authorship_evidence = _has_exactory_authorship_evidence(pdf_path)
     token = _read_zenodo_token(args.production)
     if args.publish and args.production and not args.confirm_publish:
         _exit_with_error("A production publish is permanent. Get the user's approval"
@@ -273,7 +321,8 @@ def _run_deposit(args: argparse.Namespace) -> None:
     if sources_path is not None:
         _call_zenodo("PUT", f"{bucket_url}/{_name_sources_upload(sources_path)}", token,
                      file_bytes=sources_path.read_bytes())
-    metadata = _build_deposit_metadata(state["title"], args.creator, abstract_text)
+    metadata = _build_deposit_metadata(state["title"], args.creator, abstract_text,
+                                       has_exactory_authorship_evidence)
     _call_zenodo("PUT", f"{base_url}/deposit/depositions/{deposition['id']}",
                  token, json_body={"metadata": metadata})
     _mark_paper_as_preview(base_url, deposition["id"], token)

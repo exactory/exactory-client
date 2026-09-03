@@ -45,8 +45,11 @@ _DENY_RULES = [
     (r"\bkillall\b|\bpkill\s+-9\b|\bkill\s+-9\s+-1\b", "broad process kill"),
     (r"\.claude/(settings(\.local)?\.json|hooks/)",
      "modifying Claude Code config or hooks"),
-    (r"(>|>>|\btee\b)[^\n]*\.exactory/(study\.json|decisions\.jsonl|"
-     r"citation-check\.json)", "overwriting a study state or report file through the shell"),
+    # The whole .exactory directory, not a list of the files in it: the CLI
+    # and the hooks own every file there, and a list of names goes stale each
+    # time the workspace gains a state file.
+    (r"(>|>>|\btee\b)[^\n]*\.exactory/",
+     "writing a workspace state file through the shell"),
     (r"\bchmod\s+-R?\s*0?777\b", "world-writable chmod 777"),
 ]
 _COMPILED_DENY_RULES = [(re.compile(pattern, re.IGNORECASE), reason)

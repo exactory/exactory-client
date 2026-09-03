@@ -84,35 +84,6 @@ def _write_report(workspace: Path, **overrides: object) -> None:
     (workspace / ".exactory" / "citation-check.json").write_text(json.dumps(report))
 
 
-class TestHooksManifest(unittest.TestCase):
-    def setUp(self) -> None:
-        self.config = json.loads((_PLUGIN_ROOT / "hooks" / "hooks.json").read_text())
-
-    def test_every_command_points_at_an_existing_script_under_the_plugin_root(self) -> None:
-        commands = [
-            hook["command"]
-            for matchers in self.config["hooks"].values()
-            for matcher in matchers
-            for hook in matcher["hooks"]
-        ]
-        self.assertEqual(len(commands), 2)
-        for command in commands:
-            with self.subTest(command=command):
-                match = re.search(r'\$\{CLAUDE_PLUGIN_ROOT\}/([^"]+)', command)
-                self.assertIsNotNone(match)
-                self.assertTrue((_PLUGIN_ROOT / match.group(1)).is_file())
-
-    def test_gate_and_advisory_are_wired_to_the_designed_events(self) -> None:
-        gate_matcher = self.config["hooks"]["PreToolUse"][0]
-        self.assertEqual(gate_matcher["matcher"], "Bash")
-        self.assertIn("enforce_citation_check.py", gate_matcher["hooks"][0]["command"])
-        self.assertEqual(gate_matcher["hooks"][0]["timeout"], 20)
-        advisory_matcher = self.config["hooks"]["PostToolUse"][0]
-        self.assertEqual(advisory_matcher["matcher"], "Write|Edit")
-        self.assertIn("check_references_edit.py", advisory_matcher["hooks"][0]["command"])
-        self.assertEqual(advisory_matcher["hooks"][0]["timeout"], 15)
-
-
 class TestCitationGate(unittest.TestCase):
     def setUp(self) -> None:
         scratch = tempfile.TemporaryDirectory()
@@ -365,6 +336,139 @@ class TestReferencesAdvisory(unittest.TestCase):
         self.assertEqual(self._run_advisory(tex_path).stdout, "")
 
 
+_AUTHORSHIP_RECORDER_SCRIPT_PATH = _PLUGIN_ROOT / "hooks" / "record_paper_authorship.py"
+
+# The record the hook writes.
+_AGENT_WROTE_THE_PAPER_RECORD = {"written_by_exactory": True}
+
+
+class TestAuthorshipRecorder(unittest.TestCase):
+    def setUp(self) -> None:
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        self.workspace = _build_workspace(Path(scratch.name) / "paper")
+        self.outside_dir = Path(scratch.name) / "elsewhere"
+        self.outside_dir.mkdir()
+        self.record_path = self.workspace / ".exactory" / "authorship.json"
+
+    def _run_recorder(self, file_path: object, tool_name: str = "Write",
+                      cwd: Path | None = None) -> subprocess.CompletedProcess:
+        payload = {
+            "tool_name": tool_name,
+            "tool_input": {"file_path": file_path},
+            "cwd": str(cwd or self.workspace),
+        }
+        return _run_hook(_AUTHORSHIP_RECORDER_SCRIPT_PATH, payload)
+
+    def _write_paper_source(self, relative_name: str = "paper.tex") -> Path:
+        source_path = self.workspace / "draft" / relative_name
+        source_path.parent.mkdir(parents=True, exist_ok=True)
+        source_path.write_text("\\section{Results}\n")
+        return source_path
+
+    def _assert_records_authorship(self, proc: subprocess.CompletedProcess) -> None:
+        self.assertEqual(proc.stdout, "")
+        self.assertEqual(json.loads(self.record_path.read_text()),
+                         _AGENT_WROTE_THE_PAPER_RECORD)
+
+    def _assert_records_nothing(self, proc: subprocess.CompletedProcess) -> None:
+        self.assertEqual(proc.stdout, "")
+        self.assertFalse(self.record_path.exists())
+
+    def test_records_a_paper_source_written_under_draft(self) -> None:
+        self._assert_records_authorship(self._run_recorder(str(self._write_paper_source())))
+
+    def test_records_a_paper_source_in_a_subdirectory_of_draft(self) -> None:
+        source_path = self._write_paper_source("sections/introduction.tex")
+        self._assert_records_authorship(self._run_recorder(str(source_path)))
+
+    def test_records_a_relative_path_resolved_against_the_cwd(self) -> None:
+        self._write_paper_source()
+        self._assert_records_authorship(self._run_recorder("draft/paper.tex"))
+
+    def test_records_nothing_for_a_source_outside_the_draft_tree(self) -> None:
+        notes_path = self.workspace / "research" / "notes.tex"
+        notes_path.parent.mkdir()
+        notes_path.write_text("\\section{Notes}\n")
+        self._assert_records_nothing(self._run_recorder(str(notes_path)))
+
+    def test_records_nothing_for_a_source_under_another_directory_named_draft(self) -> None:
+        # The paper lives in the workspace's own draft/ tree, so a path
+        # component named draft somewhere else does not answer for it.
+        figure_path = self.workspace / "experiment" / "draft" / "figure.tex"
+        figure_path.parent.mkdir(parents=True)
+        figure_path.write_text("\\begin{tikzpicture}\\end{tikzpicture}\n")
+        self._assert_records_nothing(self._run_recorder(str(figure_path)))
+
+    def test_records_nothing_for_the_abstract_the_deposit_stage_writes(self) -> None:
+        abstract_path = self.workspace / "draft" / "abstract.txt"
+        abstract_path.write_text("We predict cohort percentiles.\n")
+        self._assert_records_nothing(self._run_recorder(str(abstract_path)))
+
+    def test_records_nothing_for_a_references_file(self) -> None:
+        self._assert_records_nothing(
+            self._run_recorder(str(self.workspace / "draft" / "references.bib"))
+        )
+
+    def test_records_nothing_for_a_backup_of_a_paper_source(self) -> None:
+        backup_path = self.workspace / "draft" / "paper.tex.bak"
+        backup_path.write_text("\\section{Results}\n")
+        self._assert_records_nothing(self._run_recorder(str(backup_path)))
+
+    def test_records_nothing_outside_a_draft_workspace(self) -> None:
+        source_path = self.outside_dir / "paper.tex"
+        source_path.write_text("\\section{Results}\n")
+        self._assert_records_nothing(
+            self._run_recorder(str(source_path), cwd=self.outside_dir)
+        )
+
+    def test_records_nothing_for_any_tool_but_a_whole_file_write(self) -> None:
+        # Edit is the load-bearing name in this list. It also lands when an
+        # agent changes one line of a paper a person wrote, so it is no
+        # evidence that an agent wrote the paper.
+        source_path = self._write_paper_source()
+        for tool_name in ("Edit", "Bash", "Read", "NotebookEdit"):
+            with self.subTest(tool_name=tool_name):
+                self._assert_records_nothing(
+                    self._run_recorder(str(source_path), tool_name=tool_name)
+                )
+
+    def test_leaves_an_existing_record_alone(self) -> None:
+        kept_text = json.dumps({"written_by_exactory": True, "note": "kept"})
+        self.record_path.write_text(kept_text)
+        proc = self._run_recorder(str(self._write_paper_source()))
+        self.assertEqual(proc.stdout, "")
+        self.assertEqual(self.record_path.read_text(), kept_text)
+
+    def test_records_again_after_a_person_turns_the_record_off(self) -> None:
+        self.record_path.write_text(json.dumps({"written_by_exactory": False}))
+        self._assert_records_authorship(self._run_recorder(str(self._write_paper_source())))
+
+    def test_records_nothing_on_a_malformed_payload(self) -> None:
+        self._write_paper_source()
+        malformed_payloads = (
+            {},
+            {"tool_name": "Write"},
+            {"tool_name": "Write", "tool_input": None},
+            {"tool_name": "Write", "tool_input": {"file_path": 17}},
+            {"tool_name": None, "tool_input": {"file_path": "draft/paper.tex"}},
+        )
+        for payload in malformed_payloads:
+            with self.subTest(payload=payload):
+                proc = _run_hook(_AUTHORSHIP_RECORDER_SCRIPT_PATH,
+                                 {"cwd": str(self.workspace), **payload})
+                self._assert_records_nothing(proc)
+
+    def test_stays_silent_when_the_record_cannot_be_written(self) -> None:
+        # A directory sitting on the record's path fails the write for every
+        # user, so this holds as root too. The hook still exits 0: it records
+        # what it can and never breaks the session.
+        self.record_path.mkdir()
+        proc = self._run_recorder(str(self._write_paper_source()))
+        self.assertEqual(proc.stdout, "")
+        self.assertEqual(list(self.record_path.iterdir()), [])
+
+
 _GUARD_SCRIPT_PATH = _PLUGIN_ROOT / "hooks" / "guard_experiment_exec.py"
 
 _GUARDED_COMMANDS = (
@@ -382,6 +486,8 @@ _GUARDED_COMMANDS = (
     "echo '{}' > .claude/settings.json",
     "chmod -R 777 .",
     "echo '{}' > .exactory/citation-check.json",
+    "echo '{\"written_by_exactory\": true}' > .exactory/authorship.json",
+    "cat template.json | tee .exactory/draft.json",
 )
 
 _BENIGN_COMMANDS = (
@@ -390,6 +496,7 @@ _BENIGN_COMMANDS = (
     "python3 -m pip install numpy",
     "rm experiment/code/old.py",
     "git commit -m 'iteration 3'",
+    "grep stage .exactory/study.json > experiment/logs/stage.txt",
 )
 
 
@@ -550,14 +657,56 @@ class TestContinueAutopilot(unittest.TestCase):
 
 
 class TestHooksManifest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.config = json.loads((_PLUGIN_ROOT / "hooks" / "hooks.json").read_text())
+        self.commands = [
+            hook["command"]
+            for matchers in self.config["hooks"].values()
+            for matcher in matchers
+            for hook in matcher["hooks"]
+        ]
+
+    def _read_wired_script_paths(self) -> set:
+        """The plugin-root-relative script path of every declared command."""
+        script_paths = set()
+        for command in self.commands:
+            match = re.search(r'\$\{CLAUDE_PLUGIN_ROOT\}/([^"]+)', command)
+            self.assertIsNotNone(match, command)
+            script_paths.add(match.group(1))
+        return script_paths
+
+    def test_every_command_points_at_an_existing_script_under_the_plugin_root(self) -> None:
+        self.assertTrue(self.commands)
+        for script_path in self._read_wired_script_paths():
+            with self.subTest(script=script_path):
+                self.assertTrue((_PLUGIN_ROOT / script_path).is_file())
+
     def test_hooks_json_wires_every_hook_script(self) -> None:
-        manifest = json.loads((_PLUGIN_ROOT / "hooks" / "hooks.json").read_text())
-        commands = json.dumps(manifest["hooks"])
-        for script_name in ("enforce_citation_check.py", "check_references_edit.py",
-                            "guard_experiment_exec.py", "enforce_decision_log.py",
-                            "continue_autopilot.py", "enforce_prediction.py"):
-            self.assertIn(script_name, commands)
-        self.assertIn("Stop", manifest["hooks"])
+        self.assertEqual(
+            self._read_wired_script_paths(),
+            {f"hooks/{path.name}" for path in (_PLUGIN_ROOT / "hooks").glob("*.py")},
+        )
+        self.assertIn("Stop", self.config["hooks"])
+
+    def test_each_hook_is_wired_to_its_designed_event_and_matcher(self) -> None:
+        gate_matcher = self.config["hooks"]["PreToolUse"][0]
+        self.assertEqual(gate_matcher["matcher"], "Bash")
+        self.assertIn("enforce_citation_check.py", gate_matcher["hooks"][0]["command"])
+        self.assertEqual(gate_matcher["hooks"][0]["timeout"], 20)
+        # "Write|Edit" is an exact list of two tool names only because it holds
+        # no regex character. Any added dot or anchor turns the whole string
+        # into an unanchored pattern, where "Edit" also matches "NotebookEdit".
+        advisory_matcher = self.config["hooks"]["PostToolUse"][0]
+        self.assertEqual(advisory_matcher["matcher"], "Write|Edit")
+        self.assertIn("check_references_edit.py", advisory_matcher["hooks"][0]["command"])
+        self.assertEqual(advisory_matcher["hooks"][0]["timeout"], 15)
+        # The recorder has its own matcher, and it names Write alone: an Edit
+        # also lands on a paper a person wrote, so it is no evidence of
+        # authorship.
+        recorder_matcher = self.config["hooks"]["PostToolUse"][1]
+        self.assertEqual(recorder_matcher["matcher"], "Write")
+        self.assertIn("record_paper_authorship.py", recorder_matcher["hooks"][0]["command"])
+        self.assertEqual(recorder_matcher["hooks"][0]["timeout"], 15)
 
 
 if __name__ == "__main__":

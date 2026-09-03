@@ -46,11 +46,17 @@ PATH while this plugin is enabled.
    exactory-draft deposit --creator "<Family, Given>" --abstract-file draft/abstract.txt
    ```
    Repeat `--creator` for more authors. Sandbox and draft are the defaults.
-   The record's description opens with the abstract and closes with an
-   AI-assistance disclosure naming the human as the responsible author. The
-   PDF is uploaded as `paper.pdf` and listed first; the sources archive
-   follows it. Present the sandbox record to the user and tell them about the
-   disclosure. The record is written to `.exactory/deposit.json`.
+   The record's description opens with the abstract and closes with a
+   disclosure naming the human as the responsible author. There are two
+   disclosures, and the command picks between them: it names exactory.ai as
+   the paper's writer when the PDF comes from this workspace's `draft/` tree
+   and `.exactory/authorship.json` reads `written_by_exactory` true, which
+   the plugin writes when an agent writes a LaTeX source under `draft/`, and
+   otherwise it states only that the paper was prepared with AI assistance
+   and deposited through exactory.ai. The PDF is uploaded as `paper.pdf` and
+   listed first; the sources archive follows it. Present the sandbox record
+   to the user, and read the disclosure back to them from the record, never
+   from memory. The record is written to `.exactory/deposit.json`.
 4. **Deposit and publish to production.**
    ```
    exactory-draft deposit --production --publish --confirm-publish --creator "<Family, Given>" --abstract-file draft/abstract.txt

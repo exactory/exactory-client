@@ -1,5 +1,5 @@
 {
-  "description": "Exactory AI Science hooks: blocking PreToolUse gates on submission and production deposit, on filing a verdict without its cohort impact prediction, on catastrophic experiment shell, and on closing a stage without a logged decision; an advisory PostToolUse check on references edits; and a Stop hook that keeps an autopilot study moving.",
+  "description": "Exactory AI Science hooks: blocking PreToolUse gates on submission and production deposit, on filing a verdict without its cohort impact prediction, on catastrophic experiment shell, and on closing a stage without a logged decision; an advisory PostToolUse check on references edits; a PostToolUse recorder that notes when an agent writes the paper's LaTeX source; and a Stop hook that keeps an autopilot study moving.",
   "hooks": {
     "PreToolUse": [
       {
@@ -35,6 +35,16 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/check_references_edit.py\"",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/record_paper_authorship.py\"",
             "timeout": 15
           }
         ]
