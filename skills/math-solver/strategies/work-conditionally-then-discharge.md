@@ -109,7 +109,8 @@ it moves no quadruple component.
 ## Common mistakes
 
 - The hypothesis assumed, never journalled as a decision. Check: step
-  2's journal line and `compositions.json` name it.
+  2's journal line names it, and the second record opened at step 3
+  carries `parent.json` naming this one.
 - The full hypothesis assumed when the proof uses less. Check: step 3's
   form is weaker, or the record says why not.
 - The discharge tried by the method that left the input missing. Check:

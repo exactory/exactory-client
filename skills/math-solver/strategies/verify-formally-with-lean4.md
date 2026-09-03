@@ -109,7 +109,7 @@ Follows `reduce-to-a-finite-computation`, whose finite instances are step
 undischarged hypothesis becomes an argument of the final theorem, and
 `attack-the-negative-side` with a finite witness. Precedes nothing: no
 strategy moves a certified statement further, so it closes the
-composition. Excludes nothing: a mode change follows any earlier change.
+walk. Excludes nothing: a mode change follows any earlier change.
 
 ## Common mistakes
 

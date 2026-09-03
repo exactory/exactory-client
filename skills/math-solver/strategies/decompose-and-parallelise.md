@@ -71,8 +71,8 @@ barrier row; a yes for question 5 marks step 4's numerical row.
 6. Encode the interface theorem of a closed component whose proof is long
    or computer-dependent, when question 6 is yes and `preconditions.json`
    records verdict yes for `verify-formally-with-lean4`. At any other
-   verdict, hand the interface theorem to that strategy in a later
-   composition and go to step 7. Entry: formalise-while-fresh. Output: the
+   verdict, hand the interface theorem to that strategy at a later step
+   of the walk and go to step 7. Entry: formalise-while-fresh. Output: the
    machine-checked interface theorem and its blueprint.
 7. Recombine: recompute the bound and the ledger. Entry:
    split-into-components-with-explicit-interfaces, step 4. Return to step

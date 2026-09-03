@@ -1,6 +1,6 @@
 # Lean 4 reference for the formal check
 
-The toolchain facts behind `verify-formally-with-lean4.md` and the harness's
+The toolchain facts behind `../verify-formally-with-lean4.md` and the harness's
 `verify lean` command. Every statement about the tools cites the official
 page it was read from; the URLs are collected at the end. Read on
 2026-09-01, when `latest` in the reference manual served version

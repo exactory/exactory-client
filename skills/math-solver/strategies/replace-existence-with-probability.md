@@ -69,8 +69,8 @@ step 4, both to step 1's constraints.
    parameter unusually often, and state the model problem it leaves.
    Dispatches reduce-dependent-events-to-pairwise-overlaps, step 3, then
    isolate-a-model-problem, steps 1 and 2. Output: the model
-   statement, to `solve-the-model-world-first` when the composition
-   holds it; the enemy, to step 6.
+   statement, to `solve-the-model-world-first` when the walk steps
+   into it; the enemy, to step 6.
 6. Weight (parameter branch). Write step 3's overlap sum as a
    functional of a weight on the support, exhibit the weight the problem
    supplies (uniform when the pointwise bound holds), and bound the sum.
