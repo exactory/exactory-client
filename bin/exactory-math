@@ -34,7 +34,7 @@ def _load_harness():
 
 
 def main(argv: list[str]) -> int:
-    if "skill-dir" in argv[1:]:
+    if argv[1:] == ["skill-dir"]:
         print(_SKILL_DIR)
         return 0
     harness = _load_harness()
