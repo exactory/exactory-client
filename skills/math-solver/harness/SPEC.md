@@ -20,6 +20,7 @@ Written test-first.
 | file | written by | validated by |
 |---|---|---|
 | `problem.json` | agent (stage 2) | `check-problem`; `journal add` on every move |
+| `parent.json` | harness (`init --from`) | `finish` on the parent refuses while the child is open |
 | `novelty.md` | agent (stage 3) | `finish` at the stage 3 exit requires it non-empty; `check-unit` requires a non-empty `novelty` field on each unit |
 | `study/problem.md`, `study/<strategy>.md` | agent (stage 3, and step 1 of each strategy) | `journal add` refuses a move under a strategy whose `study/<strategy>.md` is missing or empty; `plan` refuses to run without `study/problem.md` |
 | `preconditions.json` | agent (stage 4) | `plan`; `journal add` reads the verdicts |
@@ -35,9 +36,17 @@ Written test-first.
 | `units/FINISHED.json` | harness (`finish`) | |
 
 The files the harness and the hooks write (`openings.json`,
-`journal.jsonl`, `tasks.json`, `activity.jsonl`, `result.json`,
-`check-unit.json`, `FINISHED.json`) are written by their commands only;
-the plugin's hooks refuse an edit to them from any other tool.
+`journal.jsonl`, `tasks.json`, `activity.jsonl`, `parent.json`,
+`result.json`, `check-unit.json`, `FINISHED.json`) are written by their
+commands only; the plugin's hooks refuse an edit to them from any other
+tool.
+
+A child attack is a workspace opened with `init <child> --from <parent>`:
+its `parent.json` is `{"parent": "<slug>", "opened_after_move": n}`,
+`n` the parent's move count at the time. The parent must exist, be
+unfinished, and be nobody's child. The parent's children are found by
+scanning the attack root for links that name it; nothing is duplicated
+into the parent.
 
 ## Formats
 
@@ -216,7 +225,7 @@ signals since the last `fail`.
 
 | command | does |
 |---|---|
-| `init <slug>` | creates the workspace with empty files and the shape keys pre-filled with `"unknown"` |
+| `init <slug> [--from <parent>]` | creates the workspace with empty files and the shape keys pre-filled with `"unknown"`; with `--from`, as a child of an open attack that is nobody's child, writing `parent.json` |
 | `check-problem <slug>` | validates `problem.json`: every key present, no empty strings, quadruple values from the allowed sets |
 | `plan <slug>` | validates `preconditions.json` against the strategy files, writes `openings.json` with every strategy whose verdict is not no, prints them |
 | `rank <slug>` | validates `ranking.json`: it orders exactly the current openings, each row citing a `problem.json` field or a cost the strategy declares, and prints the order |
@@ -227,8 +236,8 @@ signals since the last `fail`.
 | `verify certificate <slug> <step-dir>` | runs the step's `check.sh` (the independent checker the agent wrote), which must be executable, and writes `result.json` with `status` `pass` when it exits 0 and `fail` otherwise, the exit status, and the first lines of output |
 | `stall <slug>` | refuses while no cash-out rule holds (a stall is due, or the plan admitted no opening); otherwise writes the inventory skeleton (`units/INVENTORY.md`): the walk, then every journal move grouped by strategy, marking the ones whose failure signal fired and the one that closed the attack, and names the rule |
 | `check-unit <slug> <n>` | refuses before the inventory exists; validates that `units/<n>/unit.json` has statement, form (one of the seven publication forms plus `full-proof` and `second-proof`), evidence path that exists (with a `result.json` when it is a deterministic run), novelty record, journal move numbers, and `costs`, the ledger its evidence carries; refuses a form the evidence or the ledger rules out (a run that did not pass is evidence; a closing form carries neither `object` nor `obligations`; `algorithm` and `counterexample` carry no `constructivity`); writes `check-unit.json` with the digest of the record on success and removes any stamp first |
-| `finish <slug>` | refuses before the inventory exists, and while any `units/<n>/` lacks a stamp matching its `unit.json`, a non-empty `draft.md`, or a non-empty `evaluation.md`; writes `units/FINISHED.json` with the unit numbers. With no move and no inventory it is the stage 3 exit: it needs a non-empty `study/problem.md` and `novelty.md` and records the outcome `solved-in-literature` |
-| `status <slug>` | prints where the attack stands, derived from the record: the stage, the problem, the study, the plan, the ranking, the walk, the budget, the cash-out state with what each unit still needs, the open tasks, the last three activity entries, and the next step |
+| `finish <slug>` | refuses before the inventory exists, while any `units/<n>/` lacks a stamp matching its `unit.json`, a non-empty `draft.md`, or a non-empty `evaluation.md`, and while any child attack is open; writes `units/FINISHED.json` with the unit numbers. With no move and no inventory it is the stage 3 exit: it needs a non-empty `study/problem.md` and `novelty.md` and records the outcome `solved-in-literature` |
+| `status <slug>` | prints where the attack stands, derived from the record: the stage, the parent or the children when there are any, the problem, the study, the plan, the ranking, the walk, the budget, the cash-out state with what each unit still needs, the open tasks, the last three activity entries, and the next step |
 | `task add <slug> <text>` | appends an open task to `tasks.json`, numbered, stamped with the time and the move count |
 | `task done <slug> <id>` | marks the task done, stamped the same way; refuses an unknown id and a task already done |
 | `task list <slug>` | prints every task as `[ ]` or `[x]` |

@@ -51,7 +51,7 @@ found.
 
 | command | does |
 |---|---|
-| `init <slug>` | creates `attack/<slug>/` with `problem.json` (shape keys set to `"unknown"`), empty `novelty.md` and `journal.jsonl`, and `study/`, `deterministic/`, and `units/`; refuses to overwrite |
+| `init <slug> [--from <parent>]` | creates `attack/<slug>/` with `problem.json` (shape keys set to `"unknown"`), empty `novelty.md` and `journal.jsonl`, and `study/`, `deterministic/`, and `units/`; refuses to overwrite. With `--from`, opens it as a child of an open attack that is nobody's child, writing `parent.json` |
 | `check-problem <slug>` | validates `problem.json`: every key present, no empty strings, `direction` and `mode` from the allowed sets; prints `problem.json: ok` |
 | `plan <slug>` | validates `preconditions.json` against the strategy files and `problem.json`, writes `openings.json` with every strategy whose verdict is not `no` (yes before unknown, name order within, each with its component and declared costs), prints them; refuses to run while `study/problem.md` is missing or empty |
 | `rank <slug>` | validates `ranking.json` against the openings (every one exactly once, each row citing a `problem.json` field or a cost the strategy declares) and prints the order the solver chose |
@@ -62,8 +62,8 @@ found.
 | `verify certificate <slug> <step-dir>` | runs `deterministic/<step-dir>/check.sh`, refusing it when it is not executable, and writes `result.json` with `status` `pass` on exit 0 and `fail` otherwise, the exit status, and the first 20 output lines |
 | `stall <slug>` | refuses while no cash-out rule holds; otherwise writes `units/INVENTORY.md`: the walk, then every move grouped by strategy, marking the ones whose failure signal fired, the one that closed the attack, and what each paid, with the whole ledger summed at the top, and names the rule |
 | `check-unit <slug> <n>` | refuses before the inventory exists; validates `units/<n>/unit.json`: `statement`, `form`, `evidence` (a path relative to the workspace that exists, with a `result.json` when it is a deterministic run), `novelty`, `moves` (journal move numbers), `costs` (the ledger the evidence carries), and the form against the evidence and the ledger; writes `units/<n>/check-unit.json` on success |
-| `finish <slug>` | refuses while any unit lacks a matching stamp, a `draft.md`, or an `evaluation.md`; writes `units/FINISHED.json`. With no move and no inventory, records the stage 3 exit |
-| `status <slug>` | prints where the attack stands, derived from the record, ending with the `next:` line a resumed session continues from |
+| `finish <slug>` | refuses while any unit lacks a matching stamp, a `draft.md`, or an `evaluation.md`, and while a child attack is open; writes `units/FINISHED.json`. With no move and no inventory, records the stage 3 exit |
+| `status <slug>` | prints where the attack stands, derived from the record, with the parent or the children when there are any, ending with the `next:` line a resumed session continues from |
 | `task add <slug> <text>`, `task done <slug> <id>`, `task list <slug>` | the action list in `tasks.json`, each change stamped with the time and the move count |
 
 Budget constants at the top of the file: 8 moves per pass, 3 passes,

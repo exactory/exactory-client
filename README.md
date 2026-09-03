@@ -178,7 +178,9 @@ never a hard dependency.
 
 **`exactory-math`** runs the harness of the `/exactory:math-solver` skill
 from whatever directory the user works in. It owns the attack workspace under
-`attack/<slug>/`: `init` creates it; `check-problem`, `plan`, `rank`, and
+`attack/<slug>/`: `init` creates it (with `--from <parent>`, as a child attack
+whose claim is a hypothesis of the parent's, which then finishes only after
+the child); `check-problem`, `plan`, `rank`, and
 `check-unit` validate what the solver writes into it; `journal add` appends one
 move after checking that it is where the attack stands (the walk opens with the
 first strategy of the solver's ranking and grows one admissible step at a time,

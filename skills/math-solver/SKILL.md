@@ -110,6 +110,10 @@ The composition of the attack is its walk: the strategies it runs, in order, one
 3. Read the strategy's Failure signal after every move under it. When it fires, the strategy ends: run `fail <slug> <strategy>`, which sets its verdict to no with a note and re-runs `plan`, so the strategy takes no further move and no later step returns to it. Then step into the next strategy. The outputs of the strategies already run stand in the journal and feed the next one.
 4. When the strategy's plan reaches its last step with its output, hand the output to the next strategy, as the strategy's Composes with section states, and step into it: the first move under it carries the walk extended by it and `step_cites`. When the output is the claim proved or refuted, the attack has closed: go to Closing below.
 
+### A second record
+
+A plan step that opens a second record, with a hypothesis of the current claim as its claim, opens it as a child attack: run `init <child-slug> --from <slug>`. The harness writes `parent.json` into the child, naming the parent and the move count at which it was opened, and refuses a parent that is finished or is itself a child, so a record opens at most one level of children. The move that opened the child names the child's slug in its `output`. The child runs the same stages under its own budget, from its own `problem.json`; `status` on either side shows the link. The parent's `finish` refuses while a child is open, so the state of every hypothesis it opened is settled before the parent's units are declared: a child that closed with a proof discharges the parent's conditional unit into a full proof; a child that stalled leaves it conditional, with the child's inventory as what the hypothesis still needs.
+
 ### The move loop
 
 One move is one application of one entry.
