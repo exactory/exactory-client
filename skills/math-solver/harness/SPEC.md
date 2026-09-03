@@ -24,9 +24,17 @@ Written test-first.
 | `preconditions.json` | agent (stage 4) | `plan` |
 | `compositions.json` | harness (`plan`) | |
 | `ranking.json` | agent (stage 4b) | `rank`; `journal add` refuses a move while it does not order exactly the current shortlist |
-| `journal.jsonl` | harness (`journal add`) | schema on write |
-| `deterministic/<step>-<n>/` | agent, checked by harness | `verify` |
-| `units/<n>/` | agent (stage 7) | `check-unit` |
+| `journal.jsonl` | harness (`journal add`) | schema and flow rules on write |
+| `deterministic/<step>-<n>/` | agent, checked by harness | `verify`, which writes `result.json` there |
+| `units/INVENTORY.md` | harness skeleton (`stall`), agent below it (stage 7) | `check-unit` and `finish` refuse to run without it |
+| `units/<n>/unit.json` | agent (stage 7) | `check-unit`, which writes `units/<n>/check-unit.json` when it passes |
+| `units/<n>/draft.md`, `units/<n>/evaluation.md` | agent (stage 8) | `finish` |
+| `units/FINISHED.json` | harness (`finish`) | |
+
+The files the harness writes (`compositions.json`, `journal.jsonl`,
+`result.json`, `check-unit.json`, `FINISHED.json`) are written by their
+commands only; the plugin's hooks refuse an edit to them from any other
+tool.
 
 ## Formats
 
@@ -97,6 +105,7 @@ carries only the keys `verdict`, `answers`, `note`, and
 ```json
 {
   "generated_from": "preconditions.json",
+  "problem_digest": "sha256 of problem.json as plan read it",
   "compositions": [
     {"rank": 1, "id": "<strategy>+<strategy>", "strategies": ["...", "..."],
      "yes": 2, "unknown": 0,
@@ -104,6 +113,10 @@ carries only the keys `verdict`, `answers`, `note`, and
   ]
 }
 ```
+
+`problem_digest` is the SHA-256 of `problem.json` serialised with sorted
+keys and no whitespace. `journal add` compares it with the digest of the
+problem as it stands when a new pass starts.
 
 `ranking.json`, written by the agent over the shortlist `plan` emitted:
 
@@ -125,13 +138,52 @@ and nothing else does. A citation is a dotted path that exists in
 
 ```json
 {"move": 7, "pass": 1, "composition": "<strategy>+<strategy>", "strategy": "...", "entry": "...",
- "trigger_features": ["shape.quantifiers"], "action": "...", "output": "...",
- "costs_paid": ["object"], "failure_signal_fired": false, "problem_changed": false}
+ "trigger_features": ["shape.quantifiers"], "action": "...", "steps": ["enumeration-run-1"],
+ "output": "...", "costs_paid": ["object"], "failure_signal_fired": false,
+ "problem_changed": false, "closes": false,
+ "problem_digest": "sha256 of problem.json as the move left it"}
 ```
 
-`composition` is the id of a composition the ranking orders, which is the
-strategies joined by `+` and survives a re-plan; a rank does not.
+The agent supplies every field but `problem_digest`, which `journal add`
+computes and appends; a move that carries it is refused as an unknown
+field. `composition` is the id of a composition the ranking orders, which
+is the strategies joined by `+` and survives a re-plan; a rank does not.
 `costs_paid` holds what this move gave up, from the cost vocabulary.
+`steps` names the directories under `deterministic/` the move ran, each of
+which holds a `result.json`. `closes` marks the move whose output is a
+proof of the claim or a counterexample to it.
+
+## Flow rules
+
+`journal add` refuses a move unless all of these hold, in this order:
+
+1. The schema: every field present, none unknown, each of its type,
+   every cost in the vocabulary.
+2. `problem.json` passes `check-problem`.
+3. `study/<strategy>.md` exists and is non-empty.
+4. No cost paid contradicts the quadruple under `COST_GATES`.
+5. Every step named exists under `deterministic/` and holds a
+   `result.json`.
+6. A closing move finds `quadruple.direction` and `quadruple.mode`
+   decided.
+7. `problem_changed` equals whether the digest of `problem.json` differs
+   from the previous move's digest (or, for the first move, from the
+   digest `plan` recorded); and the first move of a new pass finds
+   `compositions.json` written over the problem as it now stands.
+8. `ranking.json` orders exactly the current shortlist.
+9. The composition is in the ranking; the strategy is in the composition;
+   the entry is one the strategy's front matter lists; `trigger_features`
+   is non-empty and names `problem.json` fields whose value is not
+   `unknown`; the composition is the current one (the previous move's,
+   or the first of the order carrying a strategy with no move yet); every
+   strategy before this one in the composition has a move; and the
+   composition has not moved past this strategy.
+10. The budget: the move number is the next, the pass is the current or
+    the next, the pass is not spent, and no stall is due.
+
+The stall reasons, in the order checked: the last move closed the attack;
+24 moves used; the last pass spent; three consecutive fired failure
+signals since the last `fail`.
 
 ## Commands
 
@@ -141,13 +193,14 @@ strategies joined by `+` and survives a re-plan; a rank does not.
 | `check-problem <slug>` | validates `problem.json`: every key present, no empty strings, quadruple values from the allowed sets |
 | `plan <slug>` | validates `preconditions.json` against the strategy files, enumerates compositions under the rules in `../strategies/README.md` over every strategy whose verdict is not no, writes `compositions.json`, prints the shortlist |
 | `rank <slug>` | validates `ranking.json`: it orders exactly the current shortlist, each row citing a `problem.json` field or a cost, and prints the order |
-| `journal add <slug> --json '<move>'` | validates the move against the schema, refuses a `costs_paid` entry the quadruple forbids, checks the current budget, appends it, prints the budget state |
-| `budget <slug>` | prints moves used in this pass and overall, passes used, and whether a stall is due (three consecutive failure signals, pass exhausted, or hard cap) |
+| `journal add <slug> --json '<move>'` | validates the move under the flow rules above, appends it with the problem digest, prints the budget state |
+| `budget <slug>` | prints moves used in this pass and overall, passes used, and whether a stall is due (a closing move, hard cap, last pass spent, or three consecutive failure signals) |
 | `fail <slug> <strategy>` | sets the strategy's verdict to no with a note, stamps the journal length as `failed_after_move`, re-runs `plan` |
 | `verify lean <slug> <step-dir>` | runs `lake build`, then reads `#print axioms` for the named theorem: the standard axioms give status `pass`, a native evaluation axiom gives `evidence`, `sorryAx` or a custom axiom gives `fail`; writes `result.json` with the status, the axioms list, and the reason |
 | `verify certificate <slug> <step-dir>` | runs the step's `check.sh` (the independent checker the agent wrote), which must be executable, and writes `result.json` with `status` `pass` when it exits 0 and `fail` otherwise, the exit status, and the first lines of output |
-| `stall <slug>` | writes the inventory skeleton (`units/INVENTORY.md`) listing every journal move, grouped by strategy, marking the ones whose failure signal fired, for the cash-out stage |
-| `check-unit <slug> <n>` | validates that `units/<n>/unit.json` has statement, form (one of the seven publication forms plus `full-proof` and `second-proof`), evidence path that exists, novelty record, journal move numbers, and `costs`, the ledger its evidence carries |
+| `stall <slug>` | refuses while no cash-out rule holds (a stall is due, or the plan emitted no composition); otherwise writes the inventory skeleton (`units/INVENTORY.md`) listing every journal move, grouped by strategy, marking the ones whose failure signal fired and the one that closed the attack, and names the rule |
+| `check-unit <slug> <n>` | refuses before the inventory exists; validates that `units/<n>/unit.json` has statement, form (one of the seven publication forms plus `full-proof` and `second-proof`), evidence path that exists (with a `result.json` when it is a deterministic run), novelty record, journal move numbers, and `costs`, the ledger its evidence carries; refuses a form the evidence or the ledger rules out (a run that did not pass is evidence; a closing form carries neither `object` nor `obligations`; `algorithm` and `counterexample` carry no `constructivity`); writes `check-unit.json` with the digest of the record on success and removes any stamp first |
+| `finish <slug>` | refuses before the inventory exists, and while any `units/<n>/` lacks a stamp matching its `unit.json`, a non-empty `draft.md`, or a non-empty `evaluation.md`; writes `units/FINISHED.json` with the unit numbers. With no move and no inventory it is the stage 3 exit: it needs a non-empty `study/problem.md` and `novelty.md` and records the outcome `solved-in-literature` |
 
 Budget constants live at the top of the file: 8 moves per pass, 3
 passes, 24 moves hard cap, stall after 3 consecutive failure signals.

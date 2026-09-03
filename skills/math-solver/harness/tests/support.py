@@ -35,7 +35,7 @@ def make_problem():
             "direction": "true",
             "mode": "existence",
         },
-        "shape": {key: "unknown" for key in attack.SHAPE_KEYS},
+        "shape": {key: "read from the statement" for key in attack.SHAPE_KEYS},
         "known": ["Bertrand's postulate, Chebyshev 1852"],
     }
 
@@ -102,18 +102,21 @@ RANK_ONE = (
 
 
 def make_move(move, pass_number=1, failed=False, **overrides):
+    """A move under the first strategy of the rank-one composition, which is where an attack starts."""
     record = {
         "move": move,
         "pass": pass_number,
         "composition": RANK_ONE,
         "costs_paid": [],
-        "strategy": "ladder-the-parameter",
-        "entry": "embed-the-object-in-a-family-and-move-along-it",
+        "strategy": "attack-the-negative-side",
+        "entry": "test-strengthenings-by-counterexample",
         "trigger_features": ["shape.target_quantity"],
-        "action": "moved one rung",
-        "output": "a bound one rung higher",
+        "action": "tested the strengthening on small instances",
+        "steps": [],
+        "output": "the strengthening holds on every instance searched",
         "failure_signal_fired": failed,
         "problem_changed": False,
+        "closes": False,
     }
     record.update(overrides)
     return record

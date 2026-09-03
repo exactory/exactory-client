@@ -39,13 +39,15 @@ class FailTest(WorkspaceTest):
         self.assertIn("stall due: yes", self.run_cli("budget", self.slug)[1])
         self.assertEqual(self.run_cli("fail", self.slug, "ladder-the-parameter")[0], 0)
         self.assertIn("stall due: no", self.run_cli("budget", self.slug)[1])
-        write_study(self.workspace, "solve-the-model-world-first")
+        write_study(self.workspace, "reduce-to-a-finite-computation")
         write_ranking(self)
+        rank_one = self.read_json("compositions.json")["compositions"][0]
+        self.assertEqual(rank_one["strategies"][:2], ["attack-the-negative-side", "reduce-to-a-finite-computation"])
         move = make_move(
             4,
-            strategy="solve-the-model-world-first",
-            entry="isolate-a-model-problem",
-            composition=self.read_json("compositions.json")["compositions"][0]["id"],
+            strategy="reduce-to-a-finite-computation",
+            entry="reduce-to-finite-witnesses",
+            composition=rank_one["id"],
         )
         status, out, err = self.run_cli("journal", "add", self.slug, "--json", json.dumps(move))
         self.assertEqual((status, err), (0, ""))

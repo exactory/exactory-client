@@ -14,7 +14,7 @@ from tests.support import (
 class JournalAddTest(WorkspaceTest):
     def setUp(self):
         super().setUp()
-        write_study(self.workspace, "ladder-the-parameter")
+        write_study(self.workspace, "attack-the-negative-side")
         prepare_plan(self)
 
     def add(self, move):
@@ -24,21 +24,23 @@ class JournalAddTest(WorkspaceTest):
         return (self.workspace / "journal.jsonl").read_text().splitlines()
 
     def test_refuses_a_move_whose_strategy_has_no_study_record(self):
-        (self.workspace / "study" / "ladder-the-parameter.md").unlink()
+        (self.workspace / "study" / "attack-the-negative-side.md").unlink()
         status, out, err = self.add(make_move(1))
         self.assertEqual((status, out), (1, ""))
-        self.assertEqual(err, "study/ladder-the-parameter.md: missing or empty; write the strategy's study (STUDY.md) before its first move\n")
+        self.assertEqual(err, "study/attack-the-negative-side.md: missing or empty; write the strategy's study (STUDY.md) before its first move\n")
         self.assertEqual(self.journal_lines(), [])
 
     def test_refuses_a_move_whose_strategy_study_is_empty(self):
-        write_study(self.workspace, "ladder-the-parameter", "\n")
-        self.assertEqual(self.add(make_move(1))[2], "study/ladder-the-parameter.md: missing or empty; write the strategy's study (STUDY.md) before its first move\n")
+        write_study(self.workspace, "attack-the-negative-side", "\n")
+        self.assertEqual(self.add(make_move(1))[2], "study/attack-the-negative-side.md: missing or empty; write the strategy's study (STUDY.md) before its first move\n")
 
     def test_appends_the_move_and_prints_the_budget(self):
         status, out, err = self.add(make_move(1))
         self.assertEqual((status, err), (0, ""))
         self.assertEqual(out, "moves this pass: 1/8\nmoves overall: 1/24\npasses used: 1/3\nstall due: no\n")
-        self.assertEqual([json.loads(line) for line in self.journal_lines()], [make_move(1)])
+        lines = [json.loads(line) for line in self.journal_lines()]
+        self.assertEqual(len(lines[0].pop("problem_digest")), 64)
+        self.assertEqual(lines, [make_move(1)])
 
     def test_appends_a_second_move_after_the_first(self):
         self.add(make_move(1))

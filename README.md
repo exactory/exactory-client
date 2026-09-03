@@ -180,11 +180,30 @@ never a hard dependency.
 from whatever directory the user works in. It owns the attack workspace under
 `attack/<slug>/`: `init` creates it; `check-problem`, `plan`, `rank`, and
 `check-unit` validate what the solver writes into it; `journal add` appends one
-move and checks it against the move budget; `budget` prints that budget's state;
-`fail` ends a strategy and re-plans; `stall` writes the cash-out inventory; and
-`verify` runs a deterministic step's check. `skill-dir` prints the directory
-that holds the skill's own strategies and entries, which the solver reads as it
-works.
+move after checking that it is where the attack stands (the composition the
+order gives, the strategy that composition has reached, an entry that strategy
+dispatches, a trigger read from a settled shape field, the steps it ran with
+their results, and the move budget); `budget` prints that budget's state;
+`fail` ends a strategy and re-plans; `stall` writes the cash-out inventory once
+a cash-out rule holds, and refuses before; `verify` runs a deterministic step's
+check; `check-unit` reads a unit's evidence and ledger against its form and
+stamps the unit it accepted; and `finish` closes the workspace once every unit
+is checked, drafted, and evaluated. `skill-dir` prints the directory that holds
+the skill's own strategies and entries, which the solver reads as it works.
+
+Three hooks hold the attack workspace to that flow. Outside an attack
+workspace they do nothing.
+
+- **Harness files.** A Write, an Edit, or a shell write to a file the harness
+  writes (`journal.jsonl`, `compositions.json`, a step's `result.json`, a
+  unit's `check-unit.json`, `units/FINISHED.json`) is denied, and the denial
+  names the harness command that writes it.
+- **Unit flow.** A write under `units/<n>/` is denied until `stall` wrote the
+  inventory, and a `draft.md` or `evaluation.md` is denied until `check-unit`
+  stamped the unit as it stands.
+- **Continue.** The session does not stop while an attack under the working
+  directory has no `units/FINISHED.json`; the block names every open attack
+  with its state. `EXACTORY_ATTACK_MAX` (default 40) caps the advances.
 
 ## Citation gate and hooks
 

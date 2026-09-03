@@ -34,7 +34,8 @@ From the plugin root:
 python3 -m unittest discover -s skills/math-solver/harness/tests -t skills/math-solver/harness
 ```
 
-144 tests, one module per command or pure function. The strategy files
+197 tests, one module per command or pure function, plus
+`tests/test_journal_rules.py` for the flow rules `journal add` enforces. The strategy files
 they read are the fixtures under `tests/fixtures/strategies/` (five
 strategies, one `precedes` and one `excludes` relation, plus two files
 without front matter that the loader skips). The verification tests put
@@ -53,21 +54,22 @@ found.
 | `check-problem <slug>` | validates `problem.json`: every key present, no empty strings, `direction` and `mode` from the allowed sets; prints `problem.json: ok` |
 | `plan <slug>` | validates `preconditions.json` against the strategy files and `problem.json`, enumerates compositions over every strategy whose verdict is not `no`, writes `compositions.json`, prints the shortlist (at most 20); refuses to run while `study/problem.md` is missing or empty |
 | `rank <slug>` | validates `ranking.json` against the current shortlist and prints the order the solver chose |
-| `journal add <slug> --json '<move>'` | validates the move's fields, its `composition` against `ranking.json`, its `costs_paid` against the vocabulary and against the quadruple, and the budget, appends it, prints the budget state; refuses a move whose `study/<strategy>.md` is missing or empty |
+| `journal add <slug> --json '<move>'` | validates the move's fields, `problem.json`, the study record, the costs against the quadruple, the steps it ran, a closing move's direction and mode, the `problem_changed` flag against the problem digest, the ranking against the plan, the composition and the strategy against the order, the entry against the strategy, the trigger against the shape fields, and the budget (the flow rules in `SPEC.md`); appends it with the problem digest and prints the budget state |
 | `budget <slug>` | prints moves used in this pass and overall, passes used, and whether a stall is due |
 | `fail <slug> <strategy>` | sets the strategy's verdict to `no` with a `note` and a `failed_after_move` stamp, then runs `plan` |
 | `verify lean <slug> <step-dir>` | in `deterministic/<step-dir>/`: `lake build`, then `#print axioms` on the theorem named in `step.json`; writes `result.json` |
 | `verify certificate <slug> <step-dir>` | runs `deterministic/<step-dir>/check.sh`, refusing it when it is not executable, and writes `result.json` with `status` `pass` on exit 0 and `fail` otherwise, the exit status, and the first 20 output lines |
-| `stall <slug>` | writes `units/INVENTORY.md`: every move, grouped by strategy, marking the ones whose failure signal fired and what each paid, with the whole ledger summed at the top |
-| `check-unit <slug> <n>` | validates `units/<n>/unit.json`: `statement`, `form`, `evidence` (a path relative to the workspace that exists), `novelty`, `moves` (journal move numbers), `costs` (the ledger the evidence carries) |
+| `stall <slug>` | refuses while no cash-out rule holds; otherwise writes `units/INVENTORY.md`: every move, grouped by strategy, marking the ones whose failure signal fired, the one that closed the attack, and what each paid, with the whole ledger summed at the top, and names the rule |
+| `check-unit <slug> <n>` | refuses before the inventory exists; validates `units/<n>/unit.json`: `statement`, `form`, `evidence` (a path relative to the workspace that exists, with a `result.json` when it is a deterministic run), `novelty`, `moves` (journal move numbers), `costs` (the ledger the evidence carries), and the form against the evidence and the ledger; writes `units/<n>/check-unit.json` on success |
+| `finish <slug>` | refuses while any unit lacks a matching stamp, a `draft.md`, or an `evaluation.md`; writes `units/FINISHED.json`. With no move and no inventory, records the stage 3 exit |
 
 Budget constants at the top of the file: 8 moves per pass, 3 passes,
 24 moves hard cap, stall after 3 consecutive failure signals. A stall is
-due when the last three moves since the last `fail` all fired their
-failure signal, when pass 3 has used its 8 moves, or when 24 moves are
-used; `journal add` rejects
-a move while a stall is due, and rejects a move in a pass that has used
-its 8 moves (the next move starts the next pass).
+due when a move closed the attack, when the last three moves since the
+last `fail` all fired their failure signal, when pass 3 has used its 8
+moves, or when 24 moves are used; `journal add` rejects a move while a
+stall is due, and rejects a move in a pass that has used its 8 moves (the
+next move starts the next pass).
 
 Points where the spec left a choice, and what the code does:
 
@@ -92,13 +94,28 @@ Points where the spec left a choice, and what the code does:
   kebab-case, the four standalone units (`counterexample`, `algorithm`,
   `formalisation`, `formal-proof-write-up`), and `full-proof` and
   `second-proof`.
+- The "current composition" a move may name is the previous move's, when
+  the ranking still orders it, or the first composition of the order that
+  carries a strategy with no move yet. Both are allowed at once, so a
+  composition that ended short can be continued or left. A composition
+  whose strategies all have moves is never entered.
+- `problem_changed` is judged against a digest, so a move that rewrote
+  `problem.json` to the same content counts as unchanged, and a move that
+  touched only whitespace inside a value counts as changed.
+- `finish` accepts a workspace with no unit after the inventory (nothing
+  survived the claim test) and records it as cashed out with an empty
+  list.
 
 ## An end-to-end run
 
-Recorded on 2026-09-01 against `../strategies/`, which then held one
-strategy file (`verify-formally-with-lean4.md`), from a scratch directory.
-`problem.json` and `preconditions.json` were written by hand between the
-commands; the `[exit n]` lines are the exit statuses.
+Recorded on 2026-09-02 against the fifteen strategy files under
+`../strategies/`, with `--attack-root` pointing at a scratch directory
+(its absolute path is shortened to `attack/` below). The files the agent
+owns (`problem.json`, the study records, `preconditions.json`,
+`ranking.json`, the step's `check.sh`, `unit.json`, `draft.md`,
+`evaluation.md`) were written between the commands; the `[exit n]` lines
+are the exit statuses. The claim is a textbook exercise, chosen so the
+run exercises every command and not the mathematics.
 
 ```
 $ exactory-math init parity-of-consecutive-product
@@ -108,42 +125,62 @@ $ exactory-math check-problem parity-of-consecutive-product
 problem.json: ok
 [exit 0]
 $ exactory-math plan parity-of-consecutive-product
-1. verify-formally-with-lean4  yes=0 unknown=1 components=mode assumption=verify-formally-with-lean4
+1. reduce-to-a-finite-computation -> verify-formally-with-lean4  yes=2 unknown=0 components=mode
+2. reduce-to-a-finite-computation  yes=1 unknown=0 components=mode
+3. verify-formally-with-lean4  yes=1 unknown=0 components=mode
 [exit 0]
-$ exactory-math journal add parity-of-consecutive-product --json '{"move": 1, "pass": 1, ...}'
+$ exactory-math rank parity-of-consecutive-product
+1. reduce-to-a-finite-computation+verify-formally-with-lean4
+2. reduce-to-a-finite-computation
+3. verify-formally-with-lean4
+[exit 0]
+$ exactory-math journal add parity-of-consecutive-product --json '{...}'
 moves this pass: 1/8
 moves overall: 1/24
 passes used: 1/3
 stall due: no
 [exit 0]
-$ exactory-math journal add parity-of-consecutive-product --json '{"move": 2, "pass": 1, ...}'
-moves this pass: 2/8
-moves overall: 2/24
-passes used: 1/3
-stall due: no
+$ exactory-math stall parity-of-consecutive-product
+stall: no rule started the cash-out (stall due: no; 3 compositions planned); continue at stage 5
+[exit 1]
+$ exactory-math verify certificate parity-of-consecutive-product enumeration-run-1
+pass: check.sh exited 0
 [exit 0]
-$ exactory-math budget parity-of-consecutive-product
+$ exactory-math journal add parity-of-consecutive-product --json '{...}'
 moves this pass: 2/8
 moves overall: 2/24
 passes used: 1/3
-stall due: no
+stall due: yes (the attack closed at move 2)
 [exit 0]
 $ exactory-math stall parity-of-consecutive-product
-wrote units/INVENTORY.md (2 moves stand)
+wrote units/INVENTORY.md (2 moves, 0 ended in a failure signal); rule: the attack closed at move 2
 [exit 0]
-$ cat attack/parity-of-consecutive-product/units/INVENTORY.md
-# Inventory: parity-of-consecutive-product
-
-Every journal move whose output stands, grouped by strategy. Convert each
-into a unit under CASHOUT.md or discard it.
-
-## verify-formally-with-lean4
-
-- move 1 (pass 1, formalise-while-fresh): blueprint with explicit hypotheses per lemma
-- move 2 (pass 1, certify-the-finite-residue-by-computation): formal-check-1 laid out; not yet run
+$ exactory-math finish parity-of-consecutive-product
+units/1: not checked; run check-unit
+units/1/draft.md: missing or empty
+units/1/evaluation.md: missing or empty
+[exit 1]
+$ exactory-math check-unit parity-of-consecutive-product 1
+units/1/unit.json: ok
+[exit 0]
+$ exactory-math finish parity-of-consecutive-product
+finished parity-of-consecutive-product: 1 unit stands
+[exit 0]
+$ cat attack/parity-of-consecutive-product/units/FINISHED.json
+{
+  "outcome": "cashed-out",
+  "units": [
+    1
+  ]
+}
 ```
 
-The `preconditions.json` used gave `verify-formally-with-lean4` the
-verdict `unknown` (questions 1, 2, 3, 5 answered `yes`, question 4
-`unknown`), so the one composition rests on an assumption, as the
-`plan` line shows.
+The `preconditions.json` used gave `reduce-to-a-finite-computation` and
+`verify-formally-with-lean4` the verdict `yes` and every other strategy
+`no`, so the plan holds the three compositions the `precedes` relation
+between those two allows. Move 1 ran under the first strategy of the
+rank-one composition with `steps` empty; move 2 named
+`enumeration-run-1`, which `verify certificate` had passed, and carried
+`closes` true, which is what made the second `stall` accept. The first
+`stall` and the first `finish` show the refusals, with every problem
+listed at once.

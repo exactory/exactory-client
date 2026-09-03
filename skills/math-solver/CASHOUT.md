@@ -13,7 +13,7 @@ A unit is the directory `units/<n>/` in the attack workspace. Its `unit.json` ho
 5. `moves`: the journal move numbers that produced it.
 6. `costs`: the ledger the evidence carries, the `costs_paid` of those moves summed, from the cost vocabulary in `strategies/README.md`.
 
-Beside `unit.json` the directory holds the position note (on the path to the target or off to the side, and the prior best result it improves, with its reference) and the journal excerpt (the moves under `moves`, copied from `journal.jsonl`, with their failure signals).
+Beside `unit.json` the directory holds the position note (on the path to the target or off to the side, and the prior best result it improves, with its reference) and the journal excerpt (the moves under `moves`, copied from `journal.jsonl`, with their failure signals). `check-unit` writes `check-unit.json` there when the record passes, the digest of the `unit.json` it checked; stage 8 adds `draft.md` and `evaluation.md`; `finish` refuses a unit without all three, or whose `unit.json` changed after its check.
 
 The form labels `check-unit` accepts: `conditional-or-special-case`, `quantitative-improvement`, `reduction-or-equivalence`, `barrier`, `counterexample-or-computational-evidence`, `new-machinery`, `survey-or-problem-paper` (the seven publication forms, numbered 1 to 7 in this order), `counterexample`, `algorithm`, `formalisation`, `formal-proof-write-up` (the standalone units), and `full-proof` and `second-proof` (the closing forms).
 

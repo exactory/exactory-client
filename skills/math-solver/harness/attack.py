@@ -3,6 +3,7 @@
 
 import argparse
 import collections
+import hashlib
 import itertools
 import json
 import os
@@ -61,6 +62,16 @@ UNIT_FORMS = (
     "full-proof",
     "second-proof",
 )
+
+# The forms the ledger and the evidence constrain (CASHOUT.md): a run that did not pass
+# makes the unit evidence; a closing form owes nothing and proves the claim itself; a
+# form that exhibits the object cannot rest on a non-constructive argument.
+EVIDENCE_FORM = "counterexample-or-computational-evidence"
+CLOSING_FORMS = ("full-proof", "second-proof")
+EXHIBITING_FORMS = ("algorithm", "counterexample")
+UNIT_STAMP_FILE = "check-unit.json"
+UNIT_DRAFT_FILE = "draft.md"
+UNIT_EVALUATION_FILE = "evaluation.md"
 
 FAIL_NOTE = "set to no by fail: the strategy ended in its failure signal"
 
@@ -294,9 +305,19 @@ def run_plan(args):
     compositions = enumerate_compositions(front_matters, verdicts, quadruple)
     write_json(
         workspace / "compositions.json",
-        {"generated_from": "preconditions.json", "compositions": compositions},
+        {
+            "generated_from": "preconditions.json",
+            "problem_digest": compute_problem_digest(problem),
+            "compositions": compositions,
+        },
     )
     print_compositions(compositions)
+
+
+def compute_problem_digest(problem):
+    """The digest of problem.json as it stands, so a later command can tell whether it moved."""
+    canonical = json.dumps(problem, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
 
 
 def load_strategies(directory):
@@ -413,13 +434,20 @@ def find_missing_keys(record, keys):
     return [key for key in keys if key not in record]
 
 
-def has_field(problem, dotted_path):
-    record = problem
+MISSING_FIELD = object()
+
+
+def read_field(record, dotted_path):
+    """The value at a dotted path into a JSON record, or MISSING_FIELD."""
     for part in dotted_path.split("."):
         if not isinstance(record, dict) or part not in record:
-            return False
+            return MISSING_FIELD
         record = record[part]
-    return True
+    return record
+
+
+def has_field(problem, dotted_path):
+    return read_field(problem, dotted_path) is not MISSING_FIELD
 
 
 def print_compositions(compositions):
@@ -515,19 +543,70 @@ def run_journal_add(args):
     move = parse_move_json(args.json)
     moves = read_journal(workspace)
     window_start = read_failure_window_start(workspace)
+    problem = read_json(workspace / "problem.json")
+    budget = compute_budget(moves, window_start)
     defects = (
         list(find_move_defects(move))
+        or list(find_problem_defects(problem))
         or find_study_defects(workspace, move["strategy"], "the strategy's study", "its first move")
-        or find_move_cost_defects(move, read_json(workspace / "problem.json")["quadruple"])
+        or find_move_cost_defects(move, problem["quadruple"])
+        or list(find_step_defects(move["steps"], workspace))
+        or list(find_closing_defects(move, problem["quadruple"]))
+        or list(find_problem_change_defects(move, moves, budget, workspace, problem))
         or list(find_ranking_defects(workspace))
-        or find_move_ranking_defects(move, workspace)
-        or list(find_budget_defects(move, compute_budget(moves, window_start)))
+        or list(
+            find_move_flow_defects(
+                move, moves, read_ordered_ids(workspace), load_strategies(args.strategies), problem
+            )
+        )
+        or list(find_budget_defects(move, budget))
     )
     if defects:
         raise ValidationError(defects)
+    line = dict(move, problem_digest=compute_problem_digest(problem))
     with (workspace / "journal.jsonl").open("a") as journal:
-        journal.write(json.dumps(move) + "\n")
-    print_budget(compute_budget(moves + [move], window_start))
+        journal.write(json.dumps(line) + "\n")
+    print_budget(compute_budget(moves + [line], window_start))
+
+
+def find_step_defects(steps, workspace):
+    """Every deterministic step the move names has run and been verified."""
+    for name in steps:
+        step_dir = workspace / "deterministic" / name
+        if not step_dir.is_dir():
+            yield "move: steps names deterministic/%s, which does not exist" % name
+        elif not (step_dir / "result.json").exists():
+            yield "move: steps names deterministic/%s, which has no result.json; run verify first" % name
+
+
+def find_closing_defects(move, quadruple):
+    """A move that closes the attack finds the direction and the mode decided."""
+    if not move["closes"]:
+        return
+    for key in ("direction", "mode"):
+        if quadruple[key] == "undecided":
+            yield "move: closes, and quadruple.%s is undecided" % key
+
+
+def find_problem_change_defects(move, moves, budget, workspace, problem):
+    """`problem_changed` says whether problem.json moved since the last move (or since
+    plan), and a new pass runs on a plan made over the problem as it now stands."""
+    digest = compute_problem_digest(problem)
+    planned = read_json(workspace / "compositions.json")["problem_digest"]
+    if moves and "problem_digest" in moves[-1]:
+        baseline, since = moves[-1]["problem_digest"], "move %d" % moves[-1]["move"]
+    else:
+        baseline, since = planned, "plan"
+    changed = digest != baseline
+    if move["problem_changed"] != changed:
+        yield "move: problem_changed is %s, and problem.json %s since %s" % (
+            str(move["problem_changed"]).lower(), "changed" if changed else "is unchanged", since
+        )
+    if moves and move["pass"] > budget["pass"] and digest != planned:
+        yield (
+            "move: problem.json changed in pass %d, and compositions.json predates the change;"
+            " run plan and rank before pass %d" % (budget["pass"], move["pass"])
+        )
 
 
 def find_move_cost_defects(move, quadruple):
@@ -539,12 +618,71 @@ def find_move_cost_defects(move, quadruple):
     ]
 
 
-def find_move_ranking_defects(move, workspace):
-    """The move belongs to a composition the current ranking orders."""
-    ordered = {row["composition"] for row in read_json(workspace / "ranking.json")["order"]}
-    if move["composition"] in ordered:
-        return []
-    return ["move: composition %s is not in ranking.json" % move["composition"]]
+def read_ordered_ids(workspace):
+    return [row["composition"] for row in read_json(workspace / "ranking.json")["order"]]
+
+
+def find_move_flow_defects(move, moves, ordered_ids, front_matters, problem):
+    """The move sits where the attack stands: in the composition the order gives, under the
+    strategy that composition has reached, applying an entry the strategy dispatches, where
+    the entry's trigger matched a shape field that carries a value."""
+    identifier = move["composition"]
+    if identifier not in ordered_ids:
+        yield "move: composition %s is not in ranking.json" % identifier
+        return
+    strategies = identifier.split("+")
+    if move["strategy"] not in strategies:
+        yield "move: strategy %s is not in composition %s" % (move["strategy"], identifier)
+        return
+    if move["entry"] not in front_matters[move["strategy"]]["entries"]:
+        yield "move: entry %s is not dispatched by %s" % (move["entry"], move["strategy"])
+    yield from find_trigger_defects(move["trigger_features"], problem)
+    executed = {past["strategy"] for past in moves}
+    yield from find_composition_order_defects(identifier, moves, ordered_ids, executed)
+    yield from find_strategy_order_defects(move["strategy"], strategies, identifier, moves, executed)
+
+
+def find_trigger_defects(features, problem):
+    if not features:
+        yield "move: trigger_features is empty; a move exists only where the entry's trigger matches a shape field"
+    for feature in features:
+        value = read_field(problem, feature)
+        if value is MISSING_FIELD:
+            yield "move: trigger_features cites %s, which is not a problem.json field" % feature
+        elif value == "unknown":
+            yield "move: trigger_features cites %s, whose value is unknown" % feature
+
+
+def find_composition_order_defects(identifier, moves, ordered_ids, executed):
+    """The move continues the previous move's composition, or starts the first ordered
+    composition that carries a strategy with no move yet."""
+    current = []
+    if moves and moves[-1]["composition"] in ordered_ids:
+        current.append(moves[-1]["composition"])
+    first_open = next(
+        (candidate for candidate in ordered_ids if not executed.issuperset(candidate.split("+"))),
+        None,
+    )
+    if first_open is not None and first_open not in current:
+        current.append(first_open)
+    if identifier not in current:
+        yield "move: composition %s is not the current one; the order gives %s" % (
+            identifier, " or ".join(current) or "nothing"
+        )
+
+
+def find_strategy_order_defects(strategy, strategies, identifier, moves, executed):
+    """Within a composition the strategies run in its order, each once every strategy
+    before it has a move; a composition never returns to a strategy it has left."""
+    index = strategies.index(strategy)
+    reached = [past["strategy"] for past in moves if past["composition"] == identifier]
+    if reached and strategies.index(reached[-1]) > index:
+        yield "move: composition %s has moved on from %s to %s" % (identifier, strategy, reached[-1])
+    for earlier in strategies[:index]:
+        if earlier not in executed:
+            yield "move: composition %s reaches %s after %s, which has no move yet" % (
+                identifier, strategy, earlier
+            )
 
 
 def read_failure_window_start(workspace):
@@ -600,9 +738,11 @@ MOVE_FIELDS = {
     "entry": ("str", is_str),
     "trigger_features": ("a list of str", is_str_list),
     "action": ("str", is_str),
+    "steps": ("a list of str", is_str_list),
     "output": ("str", is_str),
     "failure_signal_fired": ("bool", is_bool),
     "problem_changed": ("bool", is_bool),
+    "closes": ("bool", is_bool),
 }
 
 
@@ -654,6 +794,8 @@ def compute_budget(moves, window_start=0):
 
 
 def find_stall_reason(moves, current_pass, moves_in_pass, window_start=0):
+    if moves and moves[-1]["closes"]:
+        return "the attack closed at move %d" % moves[-1]["move"]
     if len(moves) >= MOVE_HARD_CAP:
         return "hard cap of %d moves reached" % MOVE_HARD_CAP
     if current_pass >= PASS_COUNT and moves_in_pass >= MOVES_PER_PASS:
@@ -689,9 +831,44 @@ def run_fail(args):
 def run_stall(args):
     workspace = args.attack_root / args.slug
     moves = read_journal(workspace)
+    rule = find_cash_out_rule(workspace, moves)
+    if rule is None:
+        raise ValidationError([
+            "stall: no rule started the cash-out (stall due: no; %s); continue at stage 5"
+            % describe_plan(workspace)
+        ])
     (workspace / "units" / "INVENTORY.md").write_text(format_inventory(args.slug, moves))
     fired = sum(move["failure_signal_fired"] for move in moves)
-    print("wrote units/INVENTORY.md (%d moves, %d ended in a failure signal)" % (len(moves), fired))
+    print(
+        "wrote units/INVENTORY.md (%d moves, %d ended in a failure signal); rule: %s"
+        % (len(moves), fired, rule)
+    )
+
+
+def find_cash_out_rule(workspace, moves):
+    """The rule that started the cash-out: a stall fell due (a closing move makes one),
+    or the plan emitted no composition. None while the attack is open."""
+    budget = compute_budget(moves, read_failure_window_start(workspace))
+    if budget["stall_reason"]:
+        return budget["stall_reason"]
+    if count_planned_compositions(workspace) == 0:
+        return "no admissible composition"
+    return None
+
+
+def count_planned_compositions(workspace):
+    """How many compositions the current plan emitted; None before plan has run."""
+    path = workspace / "compositions.json"
+    if not path.exists():
+        return None
+    return len(read_json(path)["compositions"])
+
+
+def describe_plan(workspace):
+    planned = count_planned_compositions(workspace)
+    if planned is None:
+        return "no plan yet"
+    return "%d compositions planned" % planned
 
 
 def format_inventory(slug, moves):
@@ -717,6 +894,8 @@ def format_move_line(move):
     marks = []
     if move["failure_signal_fired"]:
         marks.append("failure signal fired")
+    if move["closes"]:
+        marks.append("closed the attack")
     if move["costs_paid"]:
         marks.append("paid " + join_with_and(move["costs_paid"]))
     return "- move %d (pass %d, %s): %s\n" % (
@@ -733,12 +912,111 @@ def join_with_and(items):
 
 def run_check_unit(args):
     workspace = args.attack_root / args.slug
-    unit = read_json(workspace / "units" / args.unit / "unit.json")
+    unit_dir = workspace / "units" / args.unit
+    stamp_path = unit_dir / UNIT_STAMP_FILE
+    if stamp_path.exists():
+        stamp_path.unlink()
+    unit = read_json(unit_dir / "unit.json")
     moves = read_journal(workspace)
-    defects = list(find_unit_defects(unit, workspace, moves))
+    defects = (
+        list(find_inventory_defects(workspace, "check-unit"))
+        or list(find_unit_defects(unit, workspace, moves))
+        or list(find_form_defects(unit, workspace))
+    )
     if defects:
         raise ValidationError(defects)
+    write_json(stamp_path, {"unit_sha256": digest_file(unit_dir / "unit.json")})
     print("units/%s/unit.json: ok" % args.unit)
+
+
+def find_inventory_defects(workspace, command):
+    """The cash-out has started: stall wrote the inventory."""
+    if not (workspace / "units" / "INVENTORY.md").exists():
+        yield "units/INVENTORY.md: missing; run stall before %s" % command
+
+
+def run_finish(args):
+    workspace = args.attack_root / args.slug
+    finished_path = workspace / "units" / "FINISHED.json"
+    if not read_journal(workspace) and not (workspace / "units" / "INVENTORY.md").exists():
+        defects = list(find_stage_three_exit_defects(workspace))
+        if defects:
+            raise ValidationError(defects)
+        write_json(finished_path, {"outcome": "solved-in-literature", "units": []})
+        print("finished %s: the statement is in the literature; novelty.md records where" % args.slug)
+        return
+    numbers = list_unit_numbers(workspace)
+    defects = list(find_inventory_defects(workspace, "finish")) or [
+        defect for number in numbers for defect in find_finished_unit_defects(workspace, number)
+    ]
+    if defects:
+        raise ValidationError(defects)
+    write_json(finished_path, {"outcome": "cashed-out", "units": numbers})
+    standing = "1 unit stands" if len(numbers) == 1 else "%d units stand" % len(numbers)
+    print("finished %s: %s" % (args.slug, standing))
+
+
+def find_stage_three_exit_defects(workspace):
+    """An attack that ends at stage 3 has a problem study and a novelty record that
+    says where the statement is solved."""
+    yield from find_study_defects(workspace, "problem", "the problem-level study", "finish")
+    novelty_path = workspace / "novelty.md"
+    if not novelty_path.exists() or not novelty_path.read_text().strip():
+        yield "novelty.md: empty; the stage 3 exit records where the statement is solved"
+
+
+def list_unit_numbers(workspace):
+    """The units under units/: every directory named by a number, in that order."""
+    return sorted(
+        int(path.name)
+        for path in (workspace / "units").iterdir()
+        if path.is_dir() and path.name.isdigit()
+    )
+
+
+def find_finished_unit_defects(workspace, number):
+    """A finished unit was checked as it now stands, and carries its draft and the draft's evaluation."""
+    unit_dir = workspace / "units" / str(number)
+    label = "units/%d" % number
+    stamp_path = unit_dir / UNIT_STAMP_FILE
+    if not (unit_dir / "unit.json").exists():
+        yield "%s/unit.json: missing" % label
+    elif not stamp_path.exists():
+        yield "%s: not checked; run check-unit" % label
+    elif read_json(stamp_path)["unit_sha256"] != digest_file(unit_dir / "unit.json"):
+        yield "%s: unit.json changed after check-unit; run it again" % label
+    for name in (UNIT_DRAFT_FILE, UNIT_EVALUATION_FILE):
+        path = unit_dir / name
+        if not path.exists() or not path.read_text().strip():
+            yield "%s/%s: missing or empty" % (label, name)
+
+
+def digest_file(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def find_form_defects(unit, workspace):
+    """What the evidence and the ledger decide about the form, as CASHOUT.md states it."""
+    form, evidence, costs = unit["form"], unit["evidence"], unit["costs"]
+    if evidence.startswith("deterministic/"):
+        status = read_json(workspace / evidence / "result.json")["status"]
+        if status != "pass" and form != EVIDENCE_FORM:
+            yield (
+                "form: %s rests on %s with status %s; a run that did not pass is evidence,"
+                " and the form is %s" % (form, evidence, status, EVIDENCE_FORM)
+            )
+    if form in CLOSING_FORMS and "object" in costs:
+        yield (
+            "form: %s carries object; a proof of the claim itself pays no object, so this is a"
+            " conditional-or-special-case unit plus a reduction-or-equivalence unit" % form
+        )
+    if form in CLOSING_FORMS and "obligations" in costs:
+        yield (
+            "form: %s carries obligations; a proof that still owes a statement is a"
+            " conditional-or-special-case unit" % form
+        )
+    if form in EXHIBITING_FORMS and "constructivity" in costs:
+        yield "form: %s carries constructivity; the evidence does not exhibit the object" % form
 
 
 def find_unit_defects(unit, workspace, moves):
@@ -790,6 +1068,8 @@ def find_evidence_defects(evidence, workspace):
         yield from text_defects
     elif not (workspace / evidence).exists():
         yield "evidence: %s does not exist" % evidence
+    elif evidence.startswith("deterministic/") and not (workspace / evidence / "result.json").exists():
+        yield "evidence: %s has no result.json; run verify first" % evidence
 
 
 def find_unit_move_defects(numbers, journal_moves):
@@ -994,6 +1274,10 @@ def build_parser():
     check_unit.add_argument("slug")
     check_unit.add_argument("unit", metavar="n")
     check_unit.set_defaults(run=run_check_unit)
+
+    finish = commands.add_parser("finish", help="close the workspace once every unit is checked, drafted, and evaluated")
+    finish.add_argument("slug")
+    finish.set_defaults(run=run_finish)
 
     verify = commands.add_parser("verify", help="run a deterministic step's check")
     verify_commands = verify.add_subparsers(dest="verify_command", required=True)
