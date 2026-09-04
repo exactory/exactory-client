@@ -118,6 +118,11 @@ class TestCodexHooks(unittest.TestCase):
                            "*** Add File: attack/sample/units/1/draft.md\n+draft")
         self.assert_denied(self.run_hook("enforce_unit_flow.py", patch), "check-unit")
 
+    def test_batch_unit_check_only_applies_inside_an_attack(self):
+        patch = self.patch("*** Add File: examples/unit.json\n+{}\n"
+                           "*** Add File: examples/draft.md\n+draft")
+        self.assertIsNone(self.run_hook("enforce_unit_flow.py", patch))
+
     def test_bash_still_reaches_shared_submission_gate(self):
         (self.root / ".exactory").mkdir()
         (self.root / ".exactory/draft.json").write_text("{}")
@@ -143,6 +148,37 @@ class TestCodexHooks(unittest.TestCase):
         rows = (self.attack / "activity.jsonl").read_text().splitlines()
         self.assertEqual(len(rows), 1)
         self.assertEqual(json.loads(rows[0])["target"], "notes.md")
+
+    def test_deleted_paper_is_not_recorded_as_authored(self):
+        (self.root / ".exactory").mkdir()
+        (self.root / ".exactory/draft.json").write_text("{}")
+        patch = self.patch("*** Delete File: draft/paper.tex")
+        self.run_hook("record_paper_authorship.py", patch, "PostToolUse")
+        self.assertFalse((self.root / ".exactory/authorship.json").exists())
+
+    def test_multiple_bibliographies_keep_all_advisories(self):
+        (self.root / ".exactory").mkdir()
+        (self.root / ".exactory/draft.json").write_text("{}")
+        (self.root / "one.bib").write_text("@article{one, title={One}}")
+        (self.root / "two.bib").write_text("@article{two, title={Two}}")
+        patch = self.patch("*** Update File: one.bib\n@@\n+x\n"
+                           "*** Update File: two.bib\n@@\n+y")
+        output = self.run_hook("check_references_edit.py", patch, "PostToolUse")
+        context = output["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("one.bib", context)
+        self.assertIn("two.bib", context)
+
+    def test_non_file_tool_is_neutral(self):
+        self.assertIsNone(self.run_hook("guard_attack_files.py", "", tool="WebSearch"))
+
+    def test_empty_file_header_is_denied(self):
+        self.assert_denied(self.run_hook("guard_attack_files.py", self.patch("*** Add File: \n+x")), "path")
+
+    def test_unknown_hook_cannot_execute_a_path_outside_the_hook_directory(self):
+        proc = subprocess.run([sys.executable, str(ROOT / "codex/hook.py"), "../bin/exactory"],
+                              input="{}", capture_output=True, text=True, timeout=10)
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("Unknown shared hook", proc.stderr)
 
     def test_stop_and_resume_use_shared_hooks(self):
         output = self.run_hook("continue_attack.py", "", "Stop", "")
