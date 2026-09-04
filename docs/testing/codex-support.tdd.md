@@ -34,6 +34,7 @@ branch is later squash-merged.
 | Guarantee | Command | Result |
 |---|---|---|
 | Existing client behavior has a passing baseline | `python3 -m unittest discover -s tests` before implementation | 338 tests, OK |
+| Existing and new tests pass together after the final adapter fixes | `python3 -m unittest discover -s tests -v` | 364 tests, OK |
 | Existing math harness has a passing baseline | `python3 -m unittest discover -s skills/math-solver/harness/tests -t skills/math-solver/harness` | 230 tests, OK |
 | File guards check add, update, delete, move, multiple files, absolute paths, spaces, and malformed input | `python3 -m unittest discover -s tests -p test_codex.py` | 26 tests, OK |
 | Citation, unit-flow, authorship, activity, stop, and resume handlers still run through the adapter | Same Codex test command; subprocesses execute the actual shared handlers | PASS |
