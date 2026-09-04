@@ -18,18 +18,25 @@ def parse_patch_targets(command: str) -> list[tuple[str, str]]:
     if not lines or lines[0] != "*** Begin Patch" or lines[-1] != "*** End Patch":
         raise ValueError("Invalid apply_patch envelope")
     targets = []
-    for line in lines[1:-1]:
+    in_update = False
+    for raw_line in lines[1:-1]:
+        # Codex trims both ends between files, but only the end in an Update
+        # hunk: a leading space there denotes file content, not a header.
+        line = raw_line.rstrip() if in_update else raw_line.strip()
         for prefix, operation in (
             ("*** Add File: ", "Write"),
             ("*** Update File: ", "Edit"),
             ("*** Delete File: ", "Delete"),
-            ("*** Move to: ", "Write"),
+            ("*** Move to: ", "Edit"),
         ):
+            if line == prefix.rstrip():
+                raise ValueError("Empty apply_patch path")
             if line.startswith(prefix):
                 path = line[len(prefix):]
                 if not path.strip():
                     raise ValueError("Empty apply_patch path")
                 targets.append((path, operation))
+                in_update = operation == "Edit"
                 break
     if not targets:
         raise ValueError("The patch has no file targets")
@@ -58,7 +65,14 @@ def build_file_payloads(payload: dict, script_name: str) -> list[dict]:
     resolved = {(cwd / path).resolve() for path, _ in targets}
     if script_name == "enforce_unit_flow.py":
         for path in resolved:
-            if path.name in ("draft.md", "evaluation.md") and path.parent / "unit.json" in resolved:
+            workspace = path.parent.parent.parent
+            is_attack_unit = (
+                path.parent.name.isdigit() and path.parent.parent.name == "units"
+                and workspace.parent.name == "attack"
+                and (workspace / "problem.json").is_file()
+            )
+            if (is_attack_unit and path.name in ("draft.md", "evaluation.md")
+                    and path.parent / "unit.json" in resolved):
                 raise ValueError(
                     "Run check-unit after editing unit.json, then write the draft in a separate patch"
                 )
@@ -67,7 +81,7 @@ def build_file_payloads(payload: dict, script_name: str) -> list[dict]:
         {**payload, "tool_name": "Write" if operation == "Write" else "Edit",
          "tool_input": {"file_path": path}}
         for path, operation in targets
-        if is_pre or operation != "Delete"
+        if is_pre or operation != "Delete" or script_name == "record_attack_activity.py"
     ]
 
 

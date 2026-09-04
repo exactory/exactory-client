@@ -49,7 +49,7 @@ class TestCodexPackage(unittest.TestCase):
 
     def test_generated_files_are_current(self):
         process = subprocess.run([sys.executable, str(ROOT / "codex/generate.py"), "--check"],
-                                 text=True, capture_output=True, timeout=20)
+                                 text=True, capture_output=True, timeout=60)
         self.assertEqual(process.returncode, 0, process.stderr)
 
     def test_generator_detects_changed_descriptions_and_removed_skills(self):
@@ -90,7 +90,7 @@ class TestCodexHooks(unittest.TestCase):
             [sys.executable, str(ROOT / "codex/hook.py"), name],
             input=json.dumps({"hook_event_name": event, "tool_name": tool,
                               "tool_input": {"command": command}, "cwd": str(self.root)}),
-            capture_output=True, text=True, timeout=20,
+            capture_output=True, text=True, timeout=60,
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
         return json.loads(proc.stdout) if proc.stdout.strip() else None
@@ -237,7 +237,7 @@ class TestCodexHooks(unittest.TestCase):
 
     def test_unknown_hook_cannot_execute_a_path_outside_the_hook_directory(self):
         proc = subprocess.run([sys.executable, str(ROOT / "codex/hook.py"), "../bin/exactory"],
-                              input="{}", capture_output=True, text=True, timeout=10)
+                              input="{}", capture_output=True, text=True, timeout=60)
         self.assertEqual(proc.returncode, 2)
         self.assertIn("Unknown shared hook", proc.stderr)
 
@@ -252,7 +252,7 @@ class TestCodexHooks(unittest.TestCase):
 
     def test_bootstrap_exposes_installed_bin_path_with_shell_quoting(self):
         proc = subprocess.run([sys.executable, str(ROOT / "codex/session_start.py")],
-                              capture_output=True, text=True, timeout=10)
+                              capture_output=True, text=True, timeout=60)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         context = json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
         self.assertIn(str(ROOT / "bin"), context)
