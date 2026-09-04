@@ -2,13 +2,16 @@
 from __future__ import annotations
 
 import hashlib
+import contextlib
+import io
 import json
-import os
 from pathlib import Path
+import runpy
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -43,6 +46,33 @@ class TestCodexPackage(unittest.TestCase):
             self.assertCountEqual(actual, expected)
         self.assertIn("apply_patch", json.dumps(adapted["PreToolUse"]))
         self.assertIn("apply_patch", json.dumps(adapted["PostToolUse"]))
+
+    def test_generated_files_are_current(self):
+        process = subprocess.run([sys.executable, str(ROOT / "codex/generate.py"), "--check"],
+                                 text=True, capture_output=True, timeout=20)
+        self.assertEqual(process.returncode, 0, process.stderr)
+
+    def test_generator_detects_changed_descriptions_and_removed_skills(self):
+        namespace = runpy.run_path(str(ROOT / "codex/generate.py"))
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            (root / "skills/sample").mkdir(parents=True)
+            (root / "hooks").mkdir()
+            source = root / "skills/sample/SKILL.md"
+            source.write_text("---\ndescription: Sample workflow\n---\nBody stays shared.\n")
+            (root / "hooks/hooks.json").write_bytes((ROOT / "hooks/hooks.json").read_bytes())
+            with patch.dict(namespace["main"].__globals__, {"ROOT": root}):
+                with patch.object(sys, "argv", ["generate.py"]):
+                    self.assertEqual(namespace["main"](), 0)
+                with patch.object(sys, "argv", ["generate.py", "--check"]):
+                    self.assertEqual(namespace["main"](), 0)
+                    source.write_text("---\ndescription: Changed workflow\n---\nBody stays shared.\n")
+                    with contextlib.redirect_stderr(io.StringIO()):
+                        self.assertEqual(namespace["main"](), 1)
+                source.unlink()
+                with patch.object(sys, "argv", ["generate.py", "--check"]):
+                    with contextlib.redirect_stderr(io.StringIO()):
+                        self.assertEqual(namespace["main"](), 1)
 
 
 class TestCodexHooks(unittest.TestCase):
@@ -97,6 +127,21 @@ class TestCodexHooks(unittest.TestCase):
         (other / "problem.json").write_text("{}")
         self.assert_denied(self.run_hook("guard_attack_files.py", self.patch(
             f"*** Add File: {other}/tasks.json\n+{{}}")), "harness")
+
+    def test_header_whitespace_cannot_bypass_record_protection(self):
+        for body in (
+            "*** Delete File: attack/sample/journal.jsonl ",
+            "*** Add File: notes.md\n+safe\n  *** Delete File: attack/sample/journal.jsonl",
+            "*** Update File: notes.md\n*** Move to: attack/sample/tasks.json \n@@\n+x",
+        ):
+            with self.subTest(body=body):
+                output = self.run_hook("guard_attack_files.py", self.patch(body))
+                self.assertIsNotNone(output)
+                self.assertEqual(output["hookSpecificOutput"]["permissionDecision"], "deny")
+
+    def test_header_like_update_context_remains_content(self):
+        patch_text = self.patch("*** Update File: notes.md\n@@\n *** Delete File: attack/sample/journal.jsonl\n+x")
+        self.assertIsNone(self.run_hook("guard_attack_files.py", patch_text))
 
     def test_unit_flow_reuses_existing_cashout_and_check_gates(self):
         patch = self.patch("*** Add File: attack/sample/units/1/draft.md\n+draft")
@@ -155,6 +200,22 @@ class TestCodexHooks(unittest.TestCase):
         patch = self.patch("*** Delete File: draft/paper.tex")
         self.run_hook("record_paper_authorship.py", patch, "PostToolUse")
         self.assertFalse((self.root / ".exactory/authorship.json").exists())
+
+    def test_renaming_a_human_paper_does_not_claim_authorship(self):
+        (self.root / ".exactory").mkdir()
+        (self.root / ".exactory/draft.json").write_text("{}")
+        (self.root / "draft").mkdir()
+        (self.root / "draft/renamed.tex").write_text("Human paper")
+        patch_text = self.patch("*** Update File: draft/human.tex\n*** Move to: draft/renamed.tex\n@@\n Human paper")
+        self.run_hook("record_paper_authorship.py", patch_text, "PostToolUse")
+        self.assertFalse((self.root / ".exactory/authorship.json").exists())
+
+    def test_deleting_attack_notes_records_the_activity(self):
+        patch_text = self.patch("*** Delete File: attack/sample/notes.md")
+        self.run_hook("record_attack_activity.py", patch_text, "PostToolUse")
+        rows = (self.attack / "activity.jsonl").read_text().splitlines()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(json.loads(rows[0])["target"], "notes.md")
 
     def test_multiple_bibliographies_keep_all_advisories(self):
         (self.root / ".exactory").mkdir()
