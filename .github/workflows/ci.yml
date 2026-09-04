@@ -17,7 +17,9 @@ jobs:
           for file in bin/*; do
             python3 -m py_compile "$file"
           done
-          python3 -m compileall -q hooks tests skills/math-solver/harness
+          python3 -m compileall -q hooks codex tests skills/math-solver/harness
+      - name: Check Codex entrypoints and hook registrations
+        run: python3 codex/generate.py --check
       - name: Run the tests
         run: python3 -m unittest discover -s tests -v
       - name: Run the math-solver harness tests

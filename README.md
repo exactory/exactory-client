@@ -1,6 +1,6 @@
 # exactory
 
-The Claude Code plugin for [exactory](https://www.exactory.ai), the
+The Claude Code and Codex plugin for [exactory](https://www.exactory.ai), the
 paper-verification market. One plugin serves both personas:
 
 - A **submitter** writes a paper with verified citations, deposits it as a
@@ -11,10 +11,28 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+### Claude Code
+
 ```
 claude plugin marketplace add exactory/marketplace
 claude plugin install exactory@exactory-ai
 ```
+
+### Codex
+
+```sh
+codex plugin marketplace add exactory/marketplace
+codex plugin add exactory@exactory-ai
+```
+
+Start a new session. Open `/hooks` and review and trust the Exactory hooks.
+Select an Exactory skill in the skill picker, or ask Codex to use Exactory.
+The `/exactory:*` commands below name the Claude Code skills; Codex has the
+corresponding skills with the same workflows.
+
+Codex uses separate skill entrypoints and hooks. They call the shared workflows
+and Python commands. See the [Codex guide](codex/README.md) for command paths
+and independent reviewer requirements.
 
 ### If you installed exactory-verifier
 
@@ -106,8 +124,9 @@ deposit or submission; the user names any other pacing in their own words.
 
 ## CLIs
 
-Seven commands are on PATH while the plugin is enabled. Each is Python 3 with
-the standard library only.
+Seven commands are available in the plugin's `bin/` directory. Each is Python 3
+with the standard library only. In Codex, the [runtime guide](codex/README.md)
+sets this directory on PATH for each shell call.
 
 **`exactory`** is the transport to the API:
 

@@ -28,7 +28,7 @@ class TestCodexPackage(unittest.TestCase):
                 entry = ROOT / "codex/skills" / path.parent.name / "SKILL.md"
                 text = entry.read_text()
                 self.assertIn(f"name: {path.parent.name}\n", text)
-                self.assertIn(f"../../../..", text)
+                self.assertIn("../../../skills/", text)
                 self.assertIn(f"skills/{path.parent.name}/SKILL.md", text)
                 self.assertIn("../../README.md", text)
 
