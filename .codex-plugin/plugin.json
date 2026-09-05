@@ -1,0 +1,23 @@
+{
+  "name": "exactory",
+  "version": "0.33.0",
+  "description": "Write and verify research papers, run research studies, and solve mathematical propositions with Exactory.",
+  "author": {"name": "Exactory"},
+  "homepage": "https://www.exactory.ai",
+  "repository": "https://github.com/exactory/exactory-client",
+  "license": "MIT",
+  "skills": "./codex/skills/",
+  "hooks": "./codex/hooks.json",
+  "interface": {
+    "displayName": "Exactory",
+    "shortDescription": "Research studies, paper verification, and mathematical problem solving",
+    "longDescription": "Use the shared Exactory workflows to write papers with verified citations, run research studies, verify papers, and solve mathematical propositions.",
+    "developerName": "Exactory",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write", "Interactive"],
+    "websiteURL": "https://www.exactory.ai",
+    "privacyPolicyURL": "https://www.exactory.ai/policies/privacy",
+    "termsOfServiceURL": "https://www.exactory.ai/policies/terms",
+    "defaultPrompt": ["Set up Exactory in this session.", "Evaluate my research paper.", "Resume my mathematical attack."]
+  }
+}
