@@ -9,6 +9,7 @@ import os
 import py_compile
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 _PLUGIN_ROOT = Path(__file__).resolve().parent.parent
@@ -89,6 +90,26 @@ class TestSkillLayout(unittest.TestCase):
 
 
 class TestExecutableSources(unittest.TestCase):
+    def test_math_stop_deadlines_allow_the_status_lookup_to_finish(self) -> None:
+        spec = importlib.util.spec_from_file_location(
+            "manifest_continue_attack", _PLUGIN_ROOT / "hooks/continue_attack.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with mock.patch.object(module.subprocess, "run") as status:
+            status.return_value.returncode = 0
+            status.return_value.stdout = "next: continue\n"
+            module._read_next_step(Path("attack"), "sample")
+        lookup_timeout = status.call_args.kwargs["timeout"]
+        for config_path in ("hooks/hooks.json", "codex/hooks.json"):
+            with self.subTest(host_config=config_path):
+                config = json.loads((_PLUGIN_ROOT / config_path).read_text())
+                handlers = [handler for group in config["hooks"]["Stop"]
+                            for handler in group["hooks"]
+                            if "continue_attack.py" in handler["command"]]
+                self.assertEqual(len(handlers), 1)
+                self.assertGreater(handlers[0]["timeout"], lookup_timeout)
+
     def test_every_bin_command_has_a_shebang_and_compiles(self) -> None:
         bin_files = sorted(path for path in (_PLUGIN_ROOT / "bin").iterdir() if path.is_file())
         self.assertTrue(bin_files)
