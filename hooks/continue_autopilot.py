@@ -17,6 +17,7 @@ from pathlib import Path
 
 _STUDY_STATE_PATH = Path(".exactory") / "study.json"
 _COUNTER_PATH = Path(".exactory") / "autopilot_count"
+_PAUSED_COUNT = -1
 _MAX_ADVANCES = int(os.environ.get("EXACTORY_AUTOPILOT_MAX", "50"))
 
 
@@ -60,8 +61,14 @@ def main() -> None:
         count = int(counter_path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         count = 0
+    # Keep the pause across automatic stops and compaction. Only a new user
+    # turn (including the first turn after resume) receives another budget.
+    if count == _PAUSED_COUNT:
+        if payload.get("stop_hook_active") is not False:
+            sys.exit(0)
+        count = 0
     if count >= _MAX_ADVANCES:
-        counter_path.write_text("0", encoding="utf-8")
+        counter_path.write_text(str(_PAUSED_COUNT), encoding="utf-8")
         _block(
             f"[ai-science] Reached the {_MAX_ADVANCES}-advance safety cap for"
             f" study '{state.get('slug')}'. Pausing. Summarize progress for the"

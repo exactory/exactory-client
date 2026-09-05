@@ -15,7 +15,7 @@ SHARED_HOOKS = Path(__file__).resolve().parent.parent / "hooks"
 def parse_patch_targets(command: str) -> list[tuple[str, str]]:
     """Read file headers, including both ends of a move, without applying edits."""
     lines = command.strip().splitlines()
-    if not lines or lines[0] != "*** Begin Patch" or lines[-1] != "*** End Patch":
+    if not lines or lines[0].strip() != "*** Begin Patch" or lines[-1].strip() != "*** End Patch":
         raise ValueError("Invalid apply_patch envelope")
     targets = []
     in_update = False

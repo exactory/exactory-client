@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 _COUNTER_NAME = ".continue_count"
+_PAUSED_COUNT = -1
 _MAX_ADVANCES = int(os.environ.get("EXACTORY_ATTACK_MAX", "40"))
 _HARNESS_LAUNCHER = Path(__file__).resolve().parent.parent / "bin" / "exactory-math"
 
@@ -85,8 +86,14 @@ def main() -> None:
         count = int(counter_path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         count = 0
+    # Keep the pause across automatic stops and compaction. Only a new user
+    # turn (including the first turn after resume) receives another budget.
+    if count == _PAUSED_COUNT:
+        if payload.get("stop_hook_active") is not False:
+            sys.exit(0)
+        count = 0
     if count >= _MAX_ADVANCES:
-        counter_path.write_text("0", encoding="utf-8")
+        counter_path.write_text(str(_PAUSED_COUNT), encoding="utf-8")
         _block(
             f"[math-solver] Reached the {_MAX_ADVANCES}-advance safety cap for"
             f" attack/{first.name}. Pausing. Summarize where the attack stands and"

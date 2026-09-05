@@ -297,12 +297,11 @@ class TestContinueAttack(unittest.TestCase):
         self.assertIn("attack/sample", reason)
         self.assertIn("attack/second", reason)
 
-    def test_the_safety_cap_stops_and_resets(self) -> None:
+    def test_the_safety_cap_requests_a_summary(self) -> None:
         (self.workspace / ".continue_count").write_text("40")
         decision = json.loads(self._run_stop().stdout)
         self.assertEqual(decision["decision"], "block")
         self.assertIn("cap", decision["reason"].lower())
-        self.assertEqual(self.read_counter(), 0)
 
 
 class TestRecordAttackActivity(unittest.TestCase):

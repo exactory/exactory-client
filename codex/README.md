@@ -3,6 +3,9 @@
 The Codex entrypoints use the same workflows, commands, and checks as Claude Code.
 The shared instructions stay under `skills/`. The commands stay under `bin/`.
 
+Use Python 3.9 or later for the commands. The improvement loop also needs Git.
+Paper workflows that compile a PDF need a LaTeX compiler.
+
 ## Run a skill
 
 1. Read the shared `SKILL.md` linked from the Codex entrypoint.
@@ -35,6 +38,8 @@ Use the path of this installed copy. Do not assume a fixed cache location.
 When a workflow requires independent reviewers, confirm that the session has
 agent tools. If those tools are unavailable, report that requirement before
 the review stage. Do not substitute a self-review for an independent review.
+When `spawn_agent` supports `fork_turns`, set `fork_turns: "none"` for those
+reviewers and supply only the prescribed review material.
 
 ## Enable the checks
 
@@ -48,8 +53,9 @@ Codex file events. Shell, session-start, and stop events use the shared handlers
 
 The CLI checks on citation integrity and submission also run within the commands.
 Hook checks cover supported tool calls; the host's sandbox and permissions still
-control access. Keep production deposit and submission approvals from the shared
-workflow.
+control access. Preserve the shared workflow's authorization and pacing rules.
+Invoking a study or deposit authorizes its completion, including production
+steps. Pause at the stops the user names and when required credentials are absent.
 
 ## Maintain the Codex entrypoints
 
