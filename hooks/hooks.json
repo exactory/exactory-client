@@ -102,7 +102,7 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/continue_attack.py\"",
-            "timeout": 15
+            "timeout": 30
           }
         ]
       }
