@@ -121,6 +121,14 @@ class TestCodexHooks(unittest.TestCase):
         patch = self.patch("*** Add File: notes.md\n+*** Delete File: attack/sample/journal.jsonl")
         self.assertIsNone(self.run_hook("guard_attack_files.py", patch))
 
+    def test_safe_patch_with_envelope_whitespace_is_allowed(self):
+        patch = "*** Begin Patch \n*** Add File: notes.md\n+safe\n *** End Patch"
+        self.assertIsNone(self.run_hook("guard_attack_files.py", patch))
+
+    def test_envelope_whitespace_still_checks_protected_files(self):
+        patch = "*** Begin Patch \n*** Delete File: attack/sample/journal.jsonl\n *** End Patch"
+        self.assert_denied(self.run_hook("guard_attack_files.py", patch), "harness")
+
     def test_paths_with_spaces_and_absolute_paths_are_checked(self):
         other = self.root / "attack/space name"
         other.mkdir()
@@ -248,7 +256,13 @@ class TestCodexHooks(unittest.TestCase):
         self.assertIn("sample", output["hookSpecificOutput"]["additionalContext"])
 
     def test_malformed_patch_is_explicitly_denied(self):
-        self.assert_denied(self.run_hook("guard_attack_files.py", "not a patch"), "patch")
+        for patch in (
+            "not a patch",
+            "*** Begin Patch extra\n*** Add File: notes.md\n+safe\n *** End Patch",
+            "*** Begin Patch \n*** Add File: notes.md\n+safe\n *** End Patch extra",
+        ):
+            with self.subTest(patch=patch):
+                self.assert_denied(self.run_hook("guard_attack_files.py", patch), "patch")
 
     def test_bootstrap_exposes_installed_bin_path_with_shell_quoting(self):
         proc = subprocess.run([sys.executable, str(ROOT / "codex/session_start.py")],
