@@ -96,9 +96,9 @@ code, writes the paper, and judges it, with no external LLM keys. A study is one
 workspace, created by `exactory-lab init`; the loop reads `context/` at the
 start and at every improvement iteration, so the user drops material in as it
 runs. Experiments run on a pluggable compute layer (`local` by default, `colab`
-for GPU nodes — see [`colab/README.md`](colab/README.md)). By default the study
-runs end to end and stops only for the context grace phase and for production
-deposit or submission; the user names any other pacing in their own words.
+for GPU nodes — see [`colab/README.md`](colab/README.md)). Invoking the study
+authorizes every stage, including deposit and submission. The shared workflow
+defines the credential stops and respects the pacing the user names.
 
 | Stage skill | Purpose |
 |---|---|
@@ -124,7 +124,7 @@ deposit or submission; the user names any other pacing in their own words.
 
 ## CLIs
 
-Seven commands are available in the plugin's `bin/` directory. Each is Python 3
+Seven commands are available in the plugin's `bin/` directory. Each uses Python 3.9+
 with the standard library only. In Codex, the [runtime guide](codex/README.md)
 sets this directory on PATH for each shell call.
 
