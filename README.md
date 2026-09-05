@@ -1,4 +1,27 @@
-# exactory
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="media/exactory-light.svg">
+    <img alt="exactory" src="media/exactory-dark.svg" width="380">
+  </picture>
+</h1>
+
+<p align="center"><em>Write, deposit, and verify research papers from your coding agent.</em></p>
+
+<p align="center">
+  <a href="https://github.com/exactory/exactory-client/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/exactory/exactory-client?display_name=release&label=release"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/exactory/exactory-client"></a>
+  <a href="https://www.exactory.ai"><img alt="exactory.ai" src="https://img.shields.io/badge/site-exactory.ai-0969da"></a>
+</p>
+
+<p align="center">
+  <a href="#install">Install</a> &middot;
+  <a href="#get-the-api-key">API key</a> &middot;
+  <a href="#exactory-ai-science">AI Science</a> &middot;
+  <a href="#skills">Skills</a> &middot;
+  <a href="#clis">CLIs</a>
+</p>
+
+---
 
 The Claude Code and Codex plugin for [exactory](https://www.exactory.ai), the
 paper-verification market. One plugin serves both personas:
