@@ -647,13 +647,12 @@ class TestContinueAutopilot(unittest.TestCase):
         })
         self.assertEqual(completed.stdout, "")
 
-    def test_the_safety_cap_stops_and_resets(self) -> None:
+    def test_the_safety_cap_requests_a_summary(self) -> None:
         self.write_state()
         (self.workspace / ".exactory" / "autopilot_count").write_text("50")
         decision = json.loads(self._run_stop().stdout)
         self.assertEqual(decision["decision"], "block")
         self.assertIn("cap", decision["reason"].lower())
-        self.assertEqual(self.read_counter(), 0)
 
 
 class TestHooksManifest(unittest.TestCase):
