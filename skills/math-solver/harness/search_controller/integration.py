@@ -1,5 +1,6 @@
 """Native harness admission guards and journal reconciliation."""
 
+from contextlib import contextmanager
 import fcntl
 import json
 import os
@@ -15,6 +16,28 @@ from .execution_state import account_for_work
 
 
 MUTATIONS = {"plan", "rank", "journal", "verify", "fail", "stall", "check-unit", "finish"}
+
+
+@contextmanager
+def task_write_guard(args):
+    """Serialize task maintenance with native snapshot creation and reconciliation."""
+    from .service import Controller
+    if args.command != "task" or args.task_command not in {"add", "done"}:
+        yield
+        return
+    controller = Controller(args.attack_root, args.strategies)
+    if not controller.store.tree_path.exists():
+        yield
+        return
+    # Hold the transaction lock through the read, edit, and write of tasks.json.
+    # A check outside this lock could race with a newly recorded native intent.
+    with controller.store._writer_lock():
+        state = controller.status()
+        s.require(not state["service"]["native_intents"],
+                  "A native operation requires reconciliation of its original intent", "recovery_required")
+        s.require(not state["service"]["pending_effect_ids"],
+                  "Recover pending filesystem initialization before task maintenance", "recovery_required")
+        yield
 
 
 def guard_legacy(controller, command, slug, details):

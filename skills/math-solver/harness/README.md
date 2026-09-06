@@ -32,6 +32,19 @@ workspaces and native children; do not call `init --from` after admission.
 
 Validation problems go to stderr, one line each, with exit status 1.
 
+Stop a dependent command sequence after any nonzero exit. In shell batches,
+join dependent invocations with `&&` or check each exit status explicitly.
+After `recovery_required` or `recovery_conflict`, preserve the workspace and
+follow the recovery procedure in `../SEARCH.md` before editing inputs or retrying.
+
+`ranking.json` must be an object containing an `order` array, with every admitted
+opening exactly once. Other top-level JSON types are validation failures.
+In a managed root, `task add` and `task done` refuse while a native intent or
+filesystem initialization is pending. Their check and task write hold the same
+transaction lock used to capture native snapshots. `task list` and `status`
+remain available. Task maintenance does not consume research budget or require
+a new move, and remains available after local finish when recovery is clear.
+
 ## Test
 
 From the plugin root:

@@ -465,7 +465,11 @@ def run_rank(args):
 
 def find_ranking_defects(workspace):
     """ranking.json orders exactly the openings the current plan admitted, each row citing what it read."""
-    order = read_json(workspace / "ranking.json").get("order")
+    ranking = read_json(workspace / "ranking.json")
+    if not isinstance(ranking, dict):
+        yield "ranking.json: not an object"
+        return
+    order = ranking.get("order")
     problem = read_json(workspace / "problem.json")
     openings = read_json(workspace / "openings.json")["openings"]
     admitted = [row["strategy"] for row in openings]
@@ -1587,11 +1591,12 @@ def main(argv=None):
     context = None
     try:
         args = build_parser().parse_args(argv)
-        from search_controller.integration import before_legacy, after_legacy
-        context = before_legacy(args)
-        outcome = args.run(args) or 0
-        after_legacy(context, outcome)
-        return outcome
+        from search_controller.integration import before_legacy, after_legacy, task_write_guard
+        with task_write_guard(args):
+            context = before_legacy(args)
+            outcome = args.run(args) or 0
+            after_legacy(context, outcome)
+            return outcome
     except SearchError as error:
         print_error(error)
         return 1
