@@ -131,25 +131,26 @@ def discover(payload, paths=None):
                 roots.setdefault(canonical, None)
                 direct.add(canonical)
             pointer = parent / ".exactory/math-search.json"
+            explicit_registration = pointer in paths or pointer.with_suffix(".lock") in paths
             if not pointer.exists() and not pointer.is_symlink():
                 continue
             if pointer.parent.is_symlink():
-                if parent != cwd and pointer not in paths:
+                if parent != cwd and not explicit_registration:
                     continue
                 raise ManagedError("Discovery directory is a symlink; recover registration")
             try:
                 value = read_json(pointer)
             except (OSError, ValueError):
-                if parent != cwd and pointer not in paths:
+                if parent != cwd and not explicit_registration:
                     continue
                 raise
             if (not isinstance(value, dict) or set(value) != {"schema_version", "roots", "sessions"}
                     or type(value["schema_version"]) is not int or value["schema_version"] != 1
                     or not isinstance(value["roots"], list) or not isinstance(value["sessions"], dict)):
-                if parent != cwd and pointer not in paths:
+                if parent != cwd and not explicit_registration:
                     continue
                 raise ManagedError("Malformed discovery registry; recover registration")
-            applicable = parent == cwd or pointer in paths or any(
+            applicable = parent == cwd or explicit_registration or any(
                 isinstance(item, dict) and isinstance(item.get("path"), str)
                 and any(contains(Path(item["path"]), path) for path in [cwd, *paths])
                 for item in value["roots"])
@@ -294,11 +295,12 @@ def guard(payload):
             return None
         if not tokens:
             return None
-        writing = any(token in {">", ">>", "tee", "cp", "mv", "rm", "truncate", "dd"} for token in tokens) or (
-            "sed" in tokens and any(token.startswith("-i") for token in tokens))
         executable = Path(tokens[0]).name
         if executable in {"python", "python3"} and len(tokens) > 1 and Path(tokens[1]).name in {"exactory-math", "attack.py"}:
             executable = "exactory-math"
+        writing = (executable in {"tee", "cp", "mv", "rm", "truncate", "dd"}
+                   or any(token in {">", ">>", ">|"} for token in tokens)
+                   or (executable == "sed" and any(token.startswith("-i") for token in tokens[1:])))
         simple = not any(token in {";", "&&", "||", "|", "&", "<<", "<<<"} for token in tokens)
         supported = {"exactory-math", "attack.py", "cat", "ls", "rg", "grep", "head", "tail", "wc", "pwd",
                      "printf", "echo", "tee", "cp", "mv", "rm", "truncate", "dd", "sed"}
@@ -306,8 +308,9 @@ def guard(payload):
             return "Unsupported managed shell operation; use a direct supported command or controller search run"
     if writing:
         for path in paths:
-            if any(path == pointer or path == pointer.parent or contains(path, pointer) for pointer in found["registries"]):
-                return "Discovery pointers are owned by search init/focus/resume; use the controller command"
+            if any(path in {pointer, pointer.with_suffix(".lock")} or contains(path, pointer)
+                   for pointer in found["registries"]):
+                return "Discovery pointers and locks are owned by search init/focus/resume; use the controller command"
             for root in relevant:
                 if not contains(root, path):
                     continue

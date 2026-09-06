@@ -157,6 +157,43 @@ class MathSearchHookTests(unittest.TestCase):
         self.denied(self.hook("guard_attack_files.py", "PreToolUse", tool_name="exec_command",
             tool_input={"cmd": "printf '{}' > journal.jsonl", "workdir": str(self.root / "attempt")}))
 
+    def test_absolute_write_executables_and_clobber_redirect_are_denied(self):
+        # These strings are hook inputs only, never executed by a shell.
+        commands = ("/bin/rm .search/tree.json", "/bin/mv .search/tree.json notes.json",
+                    "/bin/cp notes.json .search/tree.json", "/usr/bin/tee .search/tree.json",
+                    "/usr/bin/truncate -s 0 .search/tree.json", "/bin/dd of=.search/tree.json",
+                    "/usr/bin/sed -i '' .search/tree.json", "printf '{}' >| .search/tree.json")
+        for host in ("claude", "codex"):
+            for command in commands:
+                with self.subTest(host=host, command=command):
+                    self.denied(self.hook("guard_attack_files.py", "PreToolUse", host=host,
+                        tool_name="exec_command", tool_input={"cmd": command, "workdir": str(self.root)}))
+            for command in ("/bin/cat .search/tree.json", "printf '%s' 'rm' .search/tree.json"):
+                with self.subTest(host=host, read_only=command):
+                    self.assertIsNone(self.hook("guard_attack_files.py", "PreToolUse", host=host,
+                        tool_name="exec_command", tool_input={"cmd": command, "workdir": str(self.root)}))
+
+    def test_discovery_lock_cannot_be_written_replaced_moved_or_deleted(self):
+        lock = self.workspace / ".exactory/math-search.lock"
+        before = (lock.stat().st_ino, lock.read_bytes())
+        for tool in ("Write", "Edit", "Delete"):
+            with self.subTest(tool=tool):
+                self.denied(self.hook("guard_attack_files.py", "PreToolUse", tool_name=tool,
+                    tool_input={"file_path": str(lock)}))
+        for command in ("rm ../.exactory/math-search.lock", "printf x >| ../.exactory/math-search.lock",
+                        "cp notes ../.exactory/math-search.lock", "mv notes ../.exactory/math-search.lock",
+                        "mv ../.exactory/math-search.lock notes"):
+            with self.subTest(command=command):
+                self.denied(self.hook("guard_attack_files.py", "PreToolUse", tool_name="exec_command",
+                    tool_input={"cmd": command, "workdir": str(self.root)}))
+        sibling = self.workspace / "unrelated"
+        sibling.mkdir()
+        self.denied(self.hook("guard_attack_files.py", "PreToolUse", cwd=str(sibling), tool_name="Delete",
+            tool_input={"file_path": str(lock)}))
+        self.assertIsNone(self.hook("guard_attack_files.py", "PreToolUse", tool_name="exec_command",
+            tool_input={"cmd": "/bin/cat ../.exactory/math-search.lock", "workdir": str(self.root)}))
+        self.assertEqual((lock.stat().st_ino, lock.read_bytes()), before)
+
     def test_failed_custom_root_tool_does_not_record_successful_activity(self):
         self.hook("record_attack_activity.py", "PostToolUse", tool_name="exec_command",
             tool_input={"cmd": "cat study/problem.md", "workdir": str(self.root / "attempt")}, tool_response={"exit_code": 1})

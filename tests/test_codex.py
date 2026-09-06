@@ -126,6 +126,17 @@ class TestCodexHooks(unittest.TestCase):
         patch = self.patch("*** Add File: notes.md\n+*** Delete File: attack/sample/journal.jsonl")
         self.assertIsNone(self.run_hook("guard_attack_files.py", patch))
 
+    def test_patch_operations_protect_the_managed_discovery_lock(self):
+        from test_math_search_hooks import managed_objective
+        managed_objective(self.root / "managed", host="codex")
+        for body in ("*** Add File: .exactory/math-search.lock\n+replacement",
+                     "*** Update File: .exactory/math-search.lock\n@@\n+replacement",
+                     "*** Delete File: .exactory/math-search.lock",
+                     "*** Update File: notes.md\n*** Move to: .exactory/math-search.lock\n@@\n+x",
+                     "*** Update File: .exactory/math-search.lock\n*** Move to: notes.md\n@@\n+x"):
+            with self.subTest(body=body):
+                self.assert_denied(self.run_hook("guard_attack_files.py", self.patch(body)), "Discovery")
+
     def test_safe_patch_with_envelope_whitespace_is_allowed(self):
         patch = "*** Begin Patch \n*** Add File: notes.md\n+safe\n *** End Patch"
         self.assertIsNone(self.run_hook("guard_attack_files.py", patch))
