@@ -44,6 +44,7 @@ is `skills/math-solver/harness/search_controller/`.
 | `execution.py` | Metered processes, launcher ownership, and execution recovery |
 | `execution_state.py` | Pure move/run reservations, command-unit accounting, and lifecycle transitions |
 | `integration.py` | Existing harness admission guards, journal intents, stage/finish and verifier integration |
+| `discovery.py` | Pointer-only workspace registration, session routing intents and safe publication |
 | `hooks/math_search.py` | Shared host discovery, normalization, controller invocation, protected-path decisions |
 | `skills/math-solver/SEARCH.md` | Operational search workflow and JSON contract examples |
 
@@ -423,11 +424,15 @@ def test_unadmitted_verify_never_launches_checker(self):
 Files: create `hooks/math_search.py`; modify the five math hooks, `hooks/hooks.json`,
 `codex/hook.py`, `codex/generate.py`, generated hook registration;
 modify `tests/test_math_hooks.py`, `test_stop_cap.py`, `test_codex.py`;
-create `tests/test_math_search_hooks.py`.
+create `tests/test_math_search_hooks.py`. Add `search_controller/discovery.py` and
+focused controller discovery tests; extend `cli.py`, `scheduler.py`, `service.py`,
+`model.py` and `SEARCH.md` only for the routing, focus and observation contracts below.
 
 Interfaces: `math_search.py` supplies normalized operations, registered-root/focus
 discovery, protected-path classification, and one bounded controller invocation.
-It consumes only the JSON Controller status/next/hook-stop contracts from earlier tasks.
+It consumes the JSON Controller status/next/hook-stop contracts. Narrow controller
+extensions provide pointer publication and authoritative session checks; hooks do
+not import mutable service internals or implement a second scheduler.
 
 - [ ] Write RED hook subprocess tests for custom root, ambiguous focus, root-open
   with all local FINISHED files, unsupported managed payload, malformed controller
@@ -436,7 +441,7 @@ It consumes only the JSON Controller status/next/hook-stop contracts from earlie
 ```python
 def test_branch_switch_does_not_rearm_stop_allowance(self):
     self.exhaust_continuation_on("node-a")
-    self.focus_node("node-b")
+    self.select_admitted_alternative("node-b")
     decision = self.stop_event(stop_hook_active=False)
     self.assertNotEqual(decision.get("decision"), "block")
     self.assertEqual(self.objective_control()["status"], "paused")
@@ -445,13 +450,76 @@ def test_branch_switch_does_not_rearm_stop_allowance(self):
 - [ ] Implement pointer-only workspace discovery and explicit session focus. Outside
   registered roots preserve unrelated workflows. Within recognized managed mutations,
   corrupt/unsupported state fails closed with recovery guidance.
+  Use `<workspace>/.exactory/math-search.json`, a closed versioned record with
+  `schema_version`, `roots`, and `sessions`. Root identities include canonical path,
+  objective ID and contract digest, because objective IDs repeat across roots.
+  Host-qualified session entries carry a generation and a target root/focus request;
+  cleared targets retain tombstone generations. Store no claims, budgets, nodes,
+  pause flags or cached scheduling decisions in this pointer file.
+  Discover exact registrations and `.search/tree.json` markers through ancestors of
+  event cwd, effective shell workdir and explicit targets, without recursive scans
+  or alphabetical selection. A custom root outside a workspace can identify itself
+  from a node cwd; its authoritative focus record still requires a matching session.
+  Missing or conflicting session/root bindings request a handoff, never implicit
+  selection. Unrelated unregistered work remains unaffected.
+- [ ] Keep one authoritative automatic-continuation owner in `control.focus_record`,
+  preserving the existing `control.focus` enum. Bind host-qualified session identity
+  and focus request ID. Other sessions may inspect or perform ordinary validated
+  collaborative CLI work, but do not inherit automatic continuation. Focus changes
+  neither mathematical branch selection nor allowance. The branch-switch regression
+  uses genuinely admitted scheduler operations, not an invented focus node selector.
+  Explicit operator resume uses existing authorization checks and updates the owner;
+  hooks never issue resume or fabricate missing host identity.
+- [ ] Add optional `--workspace-root` routing to init/focus/resume. By default,
+  registration writes only to the canonical controller root's direct parent.
+  An explicit argument authorizes only that exact workspace directory. Init registers
+  identity without creating a session owner; focus/resume publish after their
+  authoritative transaction commits. Never select a write destination by scanning
+  ancestors. Reject symlinked registration paths and revalidate containment.
+- [ ] Record a closed typed `discovery_recorded` operation only for init/focus/resume,
+  in the original immutable transaction. Pin canonical routing arguments, root
+  identity, request ID, session when applicable, exact expected previous pointer
+  including absence/tombstone generation, and desired entry. Include canonical
+  routing inputs in command identity. Keep routing intents separate from pending
+  filesystem initialization effects, so failed publication cannot block fresh focus.
+  New requests read the expected pointer under its lock, release that lock, then
+  commit. Identical replays use the original pinned intent, not current pointer
+  contents; changed routing under an existing ID returns `request_id_conflict`.
+  Publish with controller-then-registry lock order, never the reverse and never two
+  controller locks together. Session publication checks current owner first, then
+  compare-and-set against the pinned prior entry. An already-equal desired entry is
+  idempotent only after the owner check. Preserve unrelated roots and sessions.
+  Test A committing without publication, B publishing another focus, and A replaying:
+  A cannot overwrite B, whether B names the same or a different objective. Include
+  changed workspace arguments, clear/tombstone ABA, concurrent registration and
+  publication interruption. Report committed-but-unpublished operations accurately;
+  stale intents require fresh explicit focus, not an unconditional replay promise.
 - [ ] Route Resume to one read-only status/next call and Stop to one internal hook-stop
   transaction. Record cap and one-summary state durably. Missing IDs count conservatively;
   false/missing stop_hook_active never asserts user authorization. Explicit operator
   resume is required when host provenance cannot be authenticated.
+  Resume uses a narrow read-only session validation input with `search next --json`;
+  it neither refreshes durable facts nor repairs registration. Stop uses a fresh
+  transaction request ID and separately normalized host delivery ID, so duplicate
+  accounting still recalculates the next action. Omit expected revision only in the
+  internal hook-stop CLI path, which reads it and invokes the validated service in
+  the same subprocess. Concurrent revision conflicts return explicitly without
+  unlimited retries; ordinary public mutations retain required revisions.
+  Inside that transaction, validate focus and derive changed `node_facts_recorded`
+  through `integration.observe_node` before `control_recorded`, replaying into the
+  prospective state before deciding. Native/journal intents retain reconciliation
+  precedence. Enforce the existing 256-operation bound with explicit recovery
+  guidance, not silently omitted nodes. Read-only status/next remain read-only;
+  PostToolUse activity remains advisory and cannot grant proof credit.
 - [ ] Protect controller files, blobs/artifacts, and generated views through supported
   patch and shell events. Do not pretend to parse arbitrary shell or JavaScript.
   Clearly document any unobservable wrapper boundary instead of claiming enforcement.
+  Include discovery pointers and custom-root native records. Normalize supported
+  direct exec_command/cmd/workdir forms and the documented PATH bootstrap before
+  direct Exactory commands. Preserve patch add/update/move/delete protection and
+  combined unit/draft sequencing. Unsupported payloads visibly targeting managed
+  paths fail closed with specific direct-call guidance. A nested operation the host
+  never exposes remains an explicitly documented observability boundary.
 - [ ] Run hook/client suites and Codex subprocess coverage, regenerate hook entries,
   self-review, and commit. Use observed payload fixtures or explicitly label synthetic
   ones; no claim of an unrun live host smoke.
