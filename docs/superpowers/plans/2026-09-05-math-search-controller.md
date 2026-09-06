@@ -659,6 +659,17 @@ def test_unclassified_result_cannot_launch_again(self):
   prefix/tail route does not suffice. Existing claim/assumption/policy/freshness
   checks apply to all imported basis acceptances. Review must cover completeness
   of the encoding for the exact claim, not only the parameter bounds.
+  Common basis fields are `kind`, `deduction_digest`, `dependencies`,
+  `completeness_acceptance_id`, `bound_acceptance_id`; finite_residue additionally
+  has `reduction_acceptance_id`. Each dependency pins `acceptance_id`,
+  `acceptance_digest`, `claim_digest`. Referenced acceptance IDs occur in that list.
+  Proof-producing bounded encodings require both completeness and bound receipts;
+  diagnostic/standalone/counterexample purposes may leave those IDs null under their
+  actual reviewed basis. The residue receipt is an accepted proof of the exact root
+  route bridge, not a nonclosing reduction result. Other unresolved premises must
+  have explicit finite scope under the reviewed reduction; named/unbounded missing
+  premises are refused. Do not require all other finite residue cases to be proved
+  before admitting this case. Independent review still checks scope correctness.
 - [ ] Preflight has exact fields `uncertainty`, `inspected_evidence`,
   `already_determined`, `cheapest_sufficient_check`, and `failure_signal`.
   Evidence is a list of immutable digests and already_determined is boolean.
@@ -681,6 +692,9 @@ def test_unclassified_result_cannot_launch_again(self):
   automatic resume, reclassified historical output or overwritten review follows.
   New execution on an unamended historical finite node must fail closed with this
   recovery route; old journals, root contracts and proposal/review digests remain.
+  Amendment spec is `{proposal_digest, computation, review, inputs}` and its review
+  subject is `{node_id, proposal_digest, computation}`. Bind every contract artifact
+  and basis dependency through the existing immutable audit path.
 - [ ] Pin the effective computation digest in each new finite run and validate it
   both at the service boundary and pure reservation replay. Native verification
   under a finite node cannot bypass the contract; analytical verification of an
@@ -692,6 +706,17 @@ def test_unclassified_result_cannot_launch_again(self):
   `proof_candidate`, and `counterexample_candidate`. Interpretation supplies no
   proof acceptance or permission itself. Timeout/cancel/UNKNOWN interpretations
   cannot claim a decided theorem. Do not parse arbitrary stdout to guess a verdict.
+  Exact interpretation spec fields are `result_digest`, `computation_digest`,
+  `outcome`, `inconclusive_reason`, `classification`, `root_decision`,
+  `remaining_obligation_ids`, `next_action`; the positional run ID is also pinned
+  in the immutable subject. Exactly one of outcome/inconclusive_reason is non-null.
+  root_decision is `{kind, reason}`, with kind `undecided`, `proof_candidate` or
+  `counterexample_candidate` and nonempty reason explaining the actual route effect.
+  Enforce candidate/classification consistency. Diagnostic and audit-only work
+  cannot claim a theorem candidate. Failed/inconclusive runs remain undecided.
+  Historical run reservations without computation_digest remain replayable only
+  under their old finite admission shape; fresh public reservations include it
+  and cannot use that compatibility path to bypass the gate.
 - [ ] After reconciling an actual finite run, expose `interpret_run` before another
   mathematical launch across the objective. Preserve pause and live-work ownership
   precedence and allow required journal acknowledgement/reconciliation. Require
