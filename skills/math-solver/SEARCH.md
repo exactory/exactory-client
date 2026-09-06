@@ -1021,6 +1021,15 @@ does not make that history known. An arbitrary adoption_basis on a research
 account cannot unblock it. Revalidation and reviewed changed inputs use the same
 current account and remaining allowance, never fresh counters.
 
+If an equivalent managed verification already belongs to another account lineage,
+adoption with requested verification atomically refuses with
+`managed_verification_amendment_required`. Error details contain `node_id` and
+the complete `current_account`, resolving superseded account IDs to the current
+segment. Use an ordinary reviewed verification amendment on that existing account,
+subject to its remaining allowance and history checks. Adoption does not silently
+merge the lineages, clear unknown history, or create another first-verification
+allowance. The refused command commits neither its import nor its allowance.
+
 `service.imports` retains original records. `service.import_versions` appends
 reviewed same-path amendments, preserving exact claim, target, native/logical
 lineage and original history. Shortening/changing the preserved journal, editing

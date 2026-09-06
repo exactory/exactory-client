@@ -1,5 +1,6 @@
 """Explicit historical imports preserve bytes and never manufacture proof."""
 
+import copy
 import hashlib
 import json
 import shutil
@@ -236,6 +237,68 @@ class AdoptionTests(SearchCLIWorkspace, unittest.TestCase):
                               "basis_checkpoint_digest": digest(progress), "justification": "Attempt to leave verification-only scope"}
         with self.assertRaises(SearchError):
             choose_account(state, proposed, "obligation-000001")
+
+    def managed_verification_state(self):
+        self.create_legacy()
+        self.initialize()
+        proposed = self.prepared_proposal()
+        proposed["proposal"].update(role="verification", attack_slug="managed-verification")
+        self.search("propose", proposed, revision=1)
+        self.search("review", {"proposal_id": "proposal-000001", "review": review(proposed["proposal"]), "inputs": []}, revision=2)
+        self.search("admit", {}, target="proposal-000001", revision=3)
+        return self.search("status")
+
+    def assert_mixed_adoption_preserves_recorded_account(self, state, account_id):
+        from search_controller.adoption import build_import
+        from search_controller.errors import SearchError
+        from search_controller.model import apply_event
+        from search_controller.storage import Store
+        spec = self.verification_spec()
+        imported = build_import(self.root, state, spec["mappings"][0], Store(self.root / ".search"))
+        allowance = dict(spec["mappings"][0]["verification"], import_id="import-000001")
+        # Task 5 owns reservation events. These counters represent its future
+        # persisted predecessor state; no production mutation API is bypassed.
+        account = state["accounts"][account_id]
+        account.update(used_moves=7, used_runs=9, reserved_moves=1, reserved_runs=2,
+                       historical_usage="unknown", historical_moves=None, historical_runs=None)
+        state["totals"].update(used_moves=7, used_runs=9, reserved_moves=1, reserved_runs=2,
+                               historical_usage="unknown")
+        before = copy.deepcopy(state)
+        event = {"sequence": state["revision"] + 1, "request_id": "mixed-adoption", "kind": "service_operation",
+                 "payload": {"command": "adopt", "target": None, "spec_digest": digest(spec), "effects": [],
+                             "operations": [{"kind": "legacy_imported", "payload": imported},
+                                            {"kind": "adoption_allowance_recorded", "payload": allowance}]}}
+        with self.assertRaises(SearchError) as caught:
+            apply_event(state, event)
+        self.assertEqual(caught.exception.code, "managed_verification_amendment_required")
+        self.assertEqual(caught.exception.details["current_account"], before["accounts"][account_id])
+        self.assertEqual(state, before)
+
+    def test_first_legacy_adoption_refuses_a_fresh_allowance_over_managed_verification(self):
+        self.managed_verification_state()
+        before = (self.root / ".search" / "tree.json").read_bytes()
+        result = self.search("adopt", self.verification_spec(), revision=4, success=False)
+        self.assertEqual(result["error"]["code"], "managed_verification_amendment_required")
+        self.assertEqual(result["error"]["details"]["current_account"]["id"], "account-000001")
+        self.assertEqual((self.root / ".search" / "tree.json").read_bytes(), before)
+
+    def test_first_legacy_adoption_preserves_managed_used_reserved_and_unknown_history(self):
+        self.assert_mixed_adoption_preserves_recorded_account(self.managed_verification_state(), "account-000001")
+
+    def test_first_legacy_adoption_resolves_a_superseded_managed_account_before_refusal(self):
+        from tests.search_fixtures import proposal
+        from tests.test_search_proof import accepted, admitted
+        state = accepted(self.managed_verification_state(), "obligation-000001")
+        checkpoint = state["checkpoints"]["checkpoint-000001"]
+        renewed = proposal()
+        renewed.update(role="verification", attack_slug="managed-renewal", method="formal-recheck")
+        renewed["studies"]["strategies"] = [{"method": "formal-recheck", "digest": "5" * 64}]
+        renewed["budget"] = {"mode": "renew", "account_id": "account-000001", "basis_checkpoint_id": checkpoint["id"],
+                             "basis_checkpoint_digest": digest(checkpoint), "justification": "Use accepted progress in the new verified method"}
+        state = admitted(state, renewed)
+        self.assertEqual(state["nodes"]["node-000001"]["account_id"], "account-000001")
+        self.assertEqual(state["accounts"]["account-000002"]["predecessor_account_id"], "account-000001")
+        self.assert_mixed_adoption_preserves_recorded_account(state, "account-000002")
 
 
 if __name__ == "__main__":

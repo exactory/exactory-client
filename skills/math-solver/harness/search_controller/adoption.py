@@ -6,6 +6,7 @@ from pathlib import Path
 
 from . import schema as s
 from .admission import allocate, reference, record_proposal, record_review, admit_proposal, _current_account
+from .errors import SearchError
 from .proof import validate_review
 from .storage import safe_path, _strict_json
 
@@ -171,6 +172,14 @@ def record_allowance(state, payload):
     s.require(author["actor_id"] != reviewer["actor_id"] and author["attestation_id"] != reviewer["attestation_id"],
               "Verification author cannot approve its allowance", "review_not_independent")
     current = _current_account(state, imported["account_id"])
+    for node in state["nodes"].values():
+        if node["role"] != "verification" or s.claim_identity(node["claim"]) != s.claim_identity(proposal["claim"]):
+            continue
+        managed = _current_account(state, node["account_id"])
+        if managed["lineage_owner"] != current["lineage_owner"]:
+            raise SearchError("managed_verification_amendment_required",
+                              "Equivalent managed verification already exists; use an ordinary reviewed verification amendment on its current account",
+                              {"node_id": node["id"], "current_account": copy.deepcopy(managed)})
     if current.get("adoption_basis") is None:
         aid = allocate(state, "account")
         known = current["historical_usage"] == "known"
