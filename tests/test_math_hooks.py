@@ -245,63 +245,44 @@ class TestEnforceUnitFlow(unittest.TestCase):
 
 
 class TestContinueAttack(unittest.TestCase):
-    def setUp(self) -> None:
+    def setUp(self):
+        from test_math_search_hooks import managed_objective
         scratch = tempfile.TemporaryDirectory()
         self.addCleanup(scratch.cleanup)
-        self.root = Path(scratch.name) / "work"
-        self.workspace = _build_attack(self.root)
-        self.elsewhere = Path(scratch.name) / "elsewhere"
-        self.elsewhere.mkdir()
+        self.root = Path(scratch.name).resolve()
+        self.controller = managed_objective(self.root / "attack")
+        self.workspace = self.root / "attack/attempt"
 
-    def _run_stop(self, cwd: Path | None = None) -> subprocess.CompletedProcess:
+    def _run_stop(self, cwd=None):
         return _run_hook(_CONTINUE_SCRIPT_PATH, {
-            "cwd": str(cwd or self.root),
-            "stop_hook_active": False,
-        })
+            "cwd": str(cwd or self.root), "session_id": "session",
+            "hook_event_name": "Stop", "stop_hook_active": False})
 
-    def read_counter(self) -> int:
-        return int((self.workspace / ".continue_count").read_text())
+    def test_admitted_objective_blocks_with_current_controller_action(self):
+        result = json.loads(self._run_stop().stdout)
+        self.assertEqual(result["decision"], "block")
+        self.assertIn("execute_node", result["reason"])
+        self.assertEqual(self.controller.status()["control"]["stop_count"], 1)
 
-    def test_an_open_attack_blocks_the_stop(self) -> None:
-        decision = json.loads(self._run_stop().stdout)
-        self.assertEqual(decision["decision"], "block")
-        self.assertIn("attack/sample", decision["reason"])
-        self.assertIn("exactory-math finish sample", decision["reason"])
-        self.assertEqual(self.read_counter(), 1)
+    def test_unmanaged_skeleton_is_not_persistent_authorization(self):
+        with tempfile.TemporaryDirectory() as directory:
+            unrelated = Path(directory)
+            _build_attack(unrelated)
+            self.assertEqual(self._run_stop(unrelated / "attack/sample").stdout, "")
 
-    def test_a_finished_attack_allows_the_stop(self) -> None:
-        (self.workspace / "units" / "FINISHED.json").write_text(json.dumps({"outcome": "cashed-out", "units": []}))
-        self.assertEqual(self._run_stop().stdout, "")
+    def test_finds_the_workspace_from_a_subdirectory(self):
+        result = json.loads(self._run_stop(self.workspace / "deterministic").stdout)
+        self.assertEqual(result["decision"], "block")
 
-    def test_no_workspace_allows_the_stop(self) -> None:
-        self.assertEqual(self._run_stop(self.elsewhere).stdout, "")
+    def test_local_finished_file_does_not_close_objective(self):
+        (self.workspace / "units/FINISHED.json").write_text('{"units":[]}')
+        self.assertEqual(json.loads(self._run_stop().stdout)["decision"], "block")
+        self.assertEqual(self.controller.status()["proof_status"], "open")
 
-    def test_the_reason_reports_where_the_attack_stands(self) -> None:
-        (self.workspace / "journal.jsonl").write_text('{"move": 1}\n{"move": 2}\n')
-        (self.workspace / "units" / "INVENTORY.md").write_text("# Inventory\n")
-        reason = json.loads(self._run_stop().stdout)["reason"]
-        self.assertIn("2 moves", reason)
-        self.assertIn("inventory written", reason)
-
-    def test_the_reason_carries_the_next_step_the_harness_reports(self) -> None:
-        reason = json.loads(self._run_stop().stdout)["reason"]
-        self.assertIn("next: fill problem.json and run check-problem", reason)
-
-    def test_finds_the_workspace_from_a_subdirectory(self) -> None:
-        decision = json.loads(self._run_stop(self.workspace / "deterministic").stdout)
-        self.assertEqual(decision["decision"], "block")
-
-    def test_names_every_open_attack(self) -> None:
-        _build_attack(self.root, "second")
-        reason = json.loads(self._run_stop().stdout)["reason"]
-        self.assertIn("attack/sample", reason)
-        self.assertIn("attack/second", reason)
-
-    def test_the_safety_cap_requests_a_summary(self) -> None:
-        (self.workspace / ".continue_count").write_text("40")
-        decision = json.loads(self._run_stop().stdout)
-        self.assertEqual(decision["decision"], "block")
-        self.assertIn("cap", decision["reason"].lower())
+    def test_legacy_counter_never_overrides_objective_allowance(self):
+        (self.workspace / ".continue_count").write_text("-1")
+        self.assertEqual(json.loads(self._run_stop().stdout)["decision"], "block")
+        self.assertEqual(self.controller.status()["control"]["stop_count"], 1)
 
 
 class TestRecordAttackActivity(unittest.TestCase):
@@ -370,57 +351,40 @@ class TestRecordAttackActivity(unittest.TestCase):
 
 
 class TestResumeAttack(unittest.TestCase):
-    """At session start, an open attack under the working directory is reported with
-    the harness's status, so the session resumes it instead of starting over."""
-
-    def setUp(self) -> None:
+    def setUp(self):
+        from test_math_search_hooks import managed_objective
         scratch = tempfile.TemporaryDirectory()
         self.addCleanup(scratch.cleanup)
-        self.root = Path(scratch.name) / "work"
-        self.workspace = _build_attack(self.root)
-        self.elsewhere = Path(scratch.name) / "elsewhere"
-        self.elsewhere.mkdir()
+        self.root = Path(scratch.name).resolve()
+        self.controller = managed_objective(self.root / "attack")
 
-    def _run_start(self, cwd: Path | None = None, source: str = "startup") -> subprocess.CompletedProcess:
+    def _start(self, source="startup"):
         return _run_hook(_RESUME_SCRIPT_PATH, {
-            "cwd": str(cwd or self.root),
-            "source": source,
-            "hook_event_name": "SessionStart",
-        })
+            "cwd": str(self.root), "session_id": "session", "source": source,
+            "hook_event_name": "SessionStart"})
 
-    def _read_context(self, proc: subprocess.CompletedProcess) -> str:
-        output = json.loads(proc.stdout)["hookSpecificOutput"]
+    def test_reports_one_controller_action_without_writing_state(self):
+        before = self.controller.store.tree_path.read_bytes()
+        output = json.loads(self._start().stdout)["hookSpecificOutput"]
         self.assertEqual(output["hookEventName"], "SessionStart")
-        return output["additionalContext"]
+        self.assertIn("execute_node", output["additionalContext"])
+        self.assertIn("stage 0", output["additionalContext"])
+        self.assertEqual(self.controller.store.tree_path.read_bytes(), before)
 
-    def test_an_open_attack_is_reported_with_its_status(self) -> None:
-        context = self._read_context(self._run_start())
-        self.assertIn("attack/sample", context)
-        self.assertIn("stage 2 (set the problem)", context)
-        self.assertIn("next: fill problem.json and run check-problem", context)
-        self.assertIn("/exactory:math-solver", context)
+    def test_compaction_preserves_a_durable_pause(self):
+        self.controller.command("pause", {"reason": "Explicit user pause"}, 5, "pause")
+        before = self.controller.store.tree_path.read_bytes()
+        for source in ("compact", "resume", "startup"):
+            output = json.loads(self._start(source).stdout)
+            self.assertIn("paused", output["hookSpecificOutput"]["additionalContext"])
+        self.assertEqual(self.controller.store.tree_path.read_bytes(), before)
 
-    def test_the_context_says_to_resume_and_not_to_restart(self) -> None:
-        context = self._read_context(self._run_start())
-        self.assertIn("resume", context.lower())
-        self.assertIn("stage 0", context)
-
-    def test_a_finished_attack_is_silent(self) -> None:
-        (self.workspace / "units" / "FINISHED.json").write_text(json.dumps({"outcome": "cashed-out", "units": []}))
-        self.assertEqual(self._run_start().stdout, "")
-
-    def test_no_workspace_is_silent(self) -> None:
-        self.assertEqual(self._run_start(self.elsewhere).stdout, "")
-
-    def test_every_open_attack_is_reported(self) -> None:
-        _build_attack(self.root, "second")
-        context = self._read_context(self._run_start())
-        self.assertIn("attack/sample", context)
-        self.assertIn("attack/second", context)
-
-    def test_a_compaction_reports_it_too(self) -> None:
-        context = self._read_context(self._run_start(source="compact"))
-        self.assertIn("attack/sample", context)
+    def test_unmanaged_attack_does_not_create_session_focus(self):
+        unrelated = self.root / "unmanaged"
+        _build_attack(unrelated)
+        output = _run_hook(_RESUME_SCRIPT_PATH, {
+            "cwd": str(unrelated / "attack/sample"), "hook_event_name": "SessionStart"})
+        self.assertEqual(output.stdout, "")
 
 
 if __name__ == "__main__":

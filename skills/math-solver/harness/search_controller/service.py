@@ -43,11 +43,16 @@ class Controller:
         return {"source": "operator", "actor_id": "search-controller",
                 "attestation_id": "filesystem-audit:" + operation}
 
-    def command(self, name, spec, expected_revision, request_id, target=None):
+    def command(self, name, spec, expected_revision, request_id, target=None, *, workspace_root=None, hook_session=None):
         s.require(isinstance(spec, dict), "Command spec must be an object")
         if name in {"status", "next"}:
-            s.closed(spec, "")
+            s.require(set(spec) <= {"session_id", "focus_request_id", "objective_id", "contract_digest"}, "Unknown read-only validation field")
             state = self.status()
+            self._validate_routing_identity(state, spec)
+            if spec.get("session_id") is not None:
+                from .discovery import validate_session
+                if not validate_session(state, spec["session_id"], spec.get("focus_request_id")):
+                    return {"kind": "handoff", "reason": "Explicit matching session focus is required; run search focus"}
             return state if name == "status" else next_action(state)
         s.integer(expected_revision)
         s.text(request_id)
@@ -55,18 +60,34 @@ class Controller:
             s.require(target is None, "This command has no positional target")
         elif name != "checkpoint":
             s.text(target)
-        identity = {"command": name, "target": target, "spec_digest": s.digest(spec)}
+        routing = None
+        if name in {"init", "focus", "resume"}:
+            from .discovery import prepare
+            if name == "init":
+                s.closed(spec, "contract")
+                initial_state(spec["contract"], "objective-000001")
+            elif name == "focus":
+                s.closed(spec, "focus provenance session_id")
+            routing = prepare(self, name, spec, request_id, workspace_root)
+        else:
+            s.require(workspace_root is None, "Workspace routing is only available for init/focus/resume")
+        identity_spec = {"spec": spec, "routing": routing} if routing is not None else spec
+        if hook_session is not None:
+            s.require(name == "hook-stop", "Session mutation validation is only available for hook-stop")
+            identity_spec = {"spec": identity_spec, "hook_session": hook_session}
+        identity = {"command": name, "target": target, "spec_digest": s.digest(identity_spec)}
         built = []
         def build(document, content):
             built.append(True)
-            return self._build(name, spec, target, identity, document, content)
+            return self._build(name, spec, target, identity, document, content, routing, hook_session)
         if name == "init":
             s.closed(spec, "contract")
             s.require(target is None and expected_revision == 0, "Initialization requires revision zero")
             contract = spec["contract"]
             initial_state(contract, "objective-000001")
-            payload = dict(identity, operations=[], effects=[])
+            payload = dict(identity, operations=[{"kind": "discovery_recorded", "payload": routing}], effects=[])
             event = {"sequence": 1, "request_id": request_id, "kind": "service_operation", "payload": payload}
+            apply_event(initial_state(contract, "objective-000001"), event)
             self.store.initialize(contract, "objective-000001", event)
         else:
             event = self.store.append_operation(identity, expected_revision, request_id,
@@ -89,19 +110,38 @@ class Controller:
             manual = safe_path(self.root, "SEARCH_TREE.md")
             if name != "init" or not manual.exists():
                 render(self.root, state)
+            if routing is not None:
+                from .discovery import publish
+                try:
+                    publish(self, routing)
+                except (OSError, SearchError) as error:
+                    raise SearchError("discovery_unpublished", "Controller command committed but discovery was not published; "
+                        "inspect the conflict and use a fresh explicit focus if superseded", {"request_id": request_id,
+                        "revision": event["sequence"], "reason": str(error)}) from error
         old = replay(dict(document, events=document["events"][:event["sequence"]]))
         response = {"objective_id": old["objective_id"], "revision": old["revision"],
                     "proof_status": old["proof_status"], "command": name}
         if name == "hook-stop":
+            from .discovery import validate_session
             prior = old["control"]["stop_decision"]
             action = next_action(state)
             response["decision"] = ({"kind": "continue", "action": action}
-                if prior["kind"] == "continue" and action["kind"] not in {"paused", "resolved", "handoff", "blocked"}
+                if prior["kind"] == "continue" and action["kind"] not in {"paused", "resolved", "handoff", "blocked", "execution_pending"}
                 else prior if built and event["sequence"] == state["revision"] else {"kind": "allow_stop"})
+            if not validate_session(state, spec.get("session_id"), (hook_session or {}).get("focus_request_id")):
+                response["decision"] = {"kind": "allow_stop"}
             response["current_revision"] = state["revision"]
         return response
 
-    def _build(self, name, spec, target, identity, document, content):
+    @staticmethod
+    def _validate_routing_identity(state, validation):
+        for key in ("session_id", "focus_request_id", "objective_id", "contract_digest"):
+            s.optional_text(validation.get(key))
+        for key in ("objective_id", "contract_digest"):
+            s.require(validation.get(key) is None or validation[key] == state[key],
+                      "Registered objective identity changed; recover discovery", "discovery_conflict")
+
+    def _build(self, name, spec, target, identity, document, content, routing=None, hook_session=None):
         state = replay(document)
         s.require(not state["service"]["native_intents"] or name in {"reconcile", "pause", "focus", "hook-stop", "audit", "render"},
                   "Reconcile the original native intent before another controller mutation", "recovery_required")
@@ -185,7 +225,32 @@ class Controller:
             emit("proposal_admitted", {"proposal_id": target})
         elif name in {"pause", "resume", "focus", "hook-stop"}:
             s.require("action" not in spec, "Control action is selected by the command")
-            emit("control_recorded", dict(spec, action=name.replace("-", "_")))
+            if name == "hook-stop":
+                s.require(not state["service"]["native_intents"],
+                          "Reconcile the original native operation before automatic continuation", "recovery_required")
+                from .discovery import validate_session
+                validation = hook_session or {}
+                self._validate_routing_identity(state, validation)
+                s.require(validate_session(state, spec.get("session_id"), validation.get("focus_request_id")),
+                          "Explicit matching session focus is required; run search focus", "focus_required")
+                if not state["service"]["legacy_intents"] and not state["control"]["pending_moves"]:
+                    from .integration import observe_node
+                    from .model import EVENT_HANDLERS
+                    prospective = copy.deepcopy(state)
+                    for node in list(prospective["nodes"].values()):
+                        if node["proposal_id"] is None:
+                            continue
+                        facts = observe_node(self, prospective, node, content)
+                        old_facts = prospective["control"]["node_facts"].get(node["id"], {})
+                        if facts != {key: old_facts.get(key) for key in facts}:
+                            s.require(len(operations) < 255,
+                                      "Too many changed local observations; recover through bounded native reconciliation", "recovery_required")
+                            emit("node_facts_recorded", {"facts": facts})
+                            EVENT_HANDLERS["node_facts_recorded"](prospective, {"facts": facts})
+            control_spec = {key: value for key, value in spec.items() if name != "focus" or key != "session_id"}
+            emit("control_recorded", dict(control_spec, action=name.replace("-", "_")))
+            if routing is not None:
+                emit("discovery_recorded", routing)
         elif name == "checkpoint":
             s.closed(spec, "checkpoint inputs")
             checkpoint = copy.deepcopy(spec["checkpoint"])

@@ -3,7 +3,17 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${PLUGIN_ROOT}/codex/hook.py\" guard_attack_files.py",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|exec_command",
         "hooks": [
           {
             "type": "command",
@@ -24,22 +34,12 @@
             "type": "command",
             "command": "python3 \"${PLUGIN_ROOT}/codex/hook.py\" enforce_decision_log.py",
             "timeout": 15
-          },
-          {
-            "type": "command",
-            "command": "python3 \"${PLUGIN_ROOT}/codex/hook.py\" guard_attack_files.py",
-            "timeout": 15
           }
         ]
       },
       {
         "matcher": "Write|Edit|apply_patch",
         "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"${PLUGIN_ROOT}/codex/hook.py\" guard_attack_files.py",
-            "timeout": 15
-          },
           {
             "type": "command",
             "command": "python3 \"${PLUGIN_ROOT}/codex/hook.py\" enforce_unit_flow.py",
@@ -70,7 +70,7 @@
         ]
       },
       {
-        "matcher": "Write|Edit|Bash|apply_patch",
+        "matcher": "Write|Edit|Bash|exec_command|apply_patch",
         "hooks": [
           {
             "type": "command",

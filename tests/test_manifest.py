@@ -92,14 +92,14 @@ class TestSkillLayout(unittest.TestCase):
 class TestExecutableSources(unittest.TestCase):
     def test_math_stop_deadlines_allow_the_status_lookup_to_finish(self) -> None:
         spec = importlib.util.spec_from_file_location(
-            "manifest_continue_attack", _PLUGIN_ROOT / "hooks/continue_attack.py"
+            "manifest_math_search", _PLUGIN_ROOT / "hooks/math_search.py"
         )
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         with mock.patch.object(module.subprocess, "run") as status:
             status.return_value.returncode = 0
-            status.return_value.stdout = "next: continue\n"
-            module._read_next_step(Path("attack"), "sample")
+            status.return_value.stdout = '{"kind":"execute_node","node_id":"sample"}'
+            module.controller_call(Path("attack"), "next", session="codex:session")
         lookup_timeout = status.call_args.kwargs["timeout"]
         for config_path in ("hooks/hooks.json", "codex/hooks.json"):
             with self.subTest(host_config=config_path):

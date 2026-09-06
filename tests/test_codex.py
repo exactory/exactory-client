@@ -46,6 +46,11 @@ class TestCodexPackage(unittest.TestCase):
             self.assertCountEqual(actual, expected)
         self.assertIn("apply_patch", json.dumps(adapted["PreToolUse"]))
         self.assertIn("apply_patch", json.dumps(adapted["PostToolUse"]))
+        for config in (original, adapted):
+            guards = [group for group in config["PreToolUse"] if any("guard_attack_files.py" in hook["command"] for hook in group["hooks"])]
+            self.assertEqual(len(guards), 1)
+            self.assertEqual(guards[0].get("matcher"), "*")
+            self.assertIn("exec_command", json.dumps(config["PostToolUse"]))
 
     def test_generated_files_are_current(self):
         process = subprocess.run([sys.executable, str(ROOT / "codex/generate.py"), "--check"],
@@ -89,7 +94,7 @@ class TestCodexHooks(unittest.TestCase):
         proc = subprocess.run(
             [sys.executable, str(ROOT / "codex/hook.py"), name],
             input=json.dumps({"hook_event_name": event, "tool_name": tool,
-                              "tool_input": {"command": command}, "cwd": str(self.root)}),
+                              "tool_input": {"command": command}, "cwd": str(self.root), "session_id": "session"}),
             capture_output=True, text=True, timeout=60,
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
@@ -250,10 +255,12 @@ class TestCodexHooks(unittest.TestCase):
         self.assertIn("Unknown shared hook", proc.stderr)
 
     def test_stop_and_resume_use_shared_hooks(self):
+        from test_math_search_hooks import managed_objective
+        managed_objective(self.root / "custom", host="codex")
         output = self.run_hook("continue_attack.py", "", "Stop", "")
         self.assertEqual(output["decision"], "block")
         output = self.run_hook("resume_attack.py", "", "SessionStart", "")
-        self.assertIn("sample", output["hookSpecificOutput"]["additionalContext"])
+        self.assertIn("execute_node", output["hookSpecificOutput"]["additionalContext"])
 
     def test_malformed_patch_is_explicitly_denied(self):
         for patch in (

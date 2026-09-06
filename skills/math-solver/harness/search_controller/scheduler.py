@@ -11,7 +11,7 @@ from .proof import acceptance_closure, obligation_support, root_support
 def initial_control():
     return {"nonprogress_replans": 0, "progress_fingerprints": [], "stop_count": 0,
             "stop_deliveries": {}, "summary_issued": False, "stop_decision": {"kind": "allow_stop"},
-            "pause_reason": None, "focus": "focused", "state_error": None,
+            "pause_reason": None, "focus": "focused", "focus_record": None, "state_error": None,
             "active_node_id": None, "retreat_node_id": None, "pending_moves": [],
             "node_facts": {}, "selected_routes": {}, "closure": None,
             "main_external_block": None, "side_interval": None, "resume_record": None,
@@ -234,10 +234,10 @@ def record_control(state, payload):
         if delivery is not None and delivery in control["stop_deliveries"]:
             prior = control["stop_deliveries"][delivery]
             control["stop_decision"] = ({"kind": "continue", "action": upcoming}
-                                        if prior["kind"] == "continue" and upcoming["kind"] not in {"paused", "resolved", "handoff", "blocked"}
+                                        if prior["kind"] == "continue" and upcoming["kind"] not in {"paused", "resolved", "handoff", "blocked", "execution_pending"}
                                         else {"kind": "allow_stop"})
             return
-        if upcoming["kind"] in {"paused", "resolved", "handoff", "blocked"}:
+        if upcoming["kind"] in {"paused", "resolved", "handoff", "blocked", "execution_pending"}:
             decision = {"kind": "allow_stop"}
         else:
             control["stop_count"] += 1

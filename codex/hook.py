@@ -10,6 +10,9 @@ import runpy
 import sys
 
 SHARED_HOOKS = Path(__file__).resolve().parent.parent / "hooks"
+if str(SHARED_HOOKS) not in sys.path:
+    sys.path.insert(0, str(SHARED_HOOKS))
+from math_search import normalize, workspace_for
 
 
 def parse_patch_targets(command: str) -> list[tuple[str, str]]:
@@ -68,8 +71,7 @@ def build_file_payloads(payload: dict, script_name: str) -> list[dict]:
             workspace = path.parent.parent.parent
             is_attack_unit = (
                 path.parent.name.isdigit() and path.parent.parent.name == "units"
-                and workspace.parent.name == "attack"
-                and (workspace / "problem.json").is_file()
+                and workspace_for(path) == workspace
             )
             if (is_attack_unit and path.name in ("draft.md", "evaluation.md")
                     and path.parent / "unit.json" in resolved):
@@ -89,7 +91,7 @@ def main() -> None:
     script_name = sys.argv[1]
     if script_name not in {path.name for path in SHARED_HOOKS.glob("*.py")}:
         raise ValueError("Unknown shared hook")
-    payload = json.load(sys.stdin)
+    payload = normalize({**json.load(sys.stdin), "_math_host": "codex"})
     try:
         inputs = (build_file_payloads(payload, script_name)
                   if payload.get("tool_name") == "apply_patch" else [payload])

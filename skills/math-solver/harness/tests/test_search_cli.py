@@ -9,7 +9,7 @@ import sys
 import tempfile
 import unittest
 
-from tests.search_fixtures import contract, proposal, review
+from tests.search_fixtures import contract, proposal, review, provenance
 
 
 CLI = Path(__file__).resolve().parents[4] / "bin" / "exactory-math"
@@ -126,11 +126,12 @@ class SearchCLITests(SearchCLIWorkspace, unittest.TestCase):
 
     def test_duplicate_stop_returns_current_control_with_one_charge(self):
         self.admit()
-        stop = {"delivery_id": "delivery-one", "session_id": "session-one", "turn_id": "turn-one", "stop_hook_active": False}
-        first = self.search("hook-stop", stop, revision=4, request="stop-one")
+        self.search("focus", {"focus": "focused", "session_id": "codex:session-one", "provenance": provenance("operator")}, revision=4)
+        stop = {"delivery_id": "delivery-one", "session_id": "codex:session-one", "turn_id": "turn-one", "stop_hook_active": False}
+        first = self.search("hook-stop", stop, revision=5, request="stop-one")
         self.assertEqual(first["decision"]["kind"], "continue")
-        self.search("pause", {"reason": "User requested a pause"}, revision=5)
-        repeated = self.search("hook-stop", stop, revision=4, request="stop-one")
+        self.search("pause", {"reason": "User requested a pause"}, revision=6)
+        repeated = self.search("hook-stop", stop, revision=5, request="stop-one")
         self.assertEqual(repeated["decision"], {"kind": "allow_stop"})
         self.assertEqual(self.search("status")["control"]["stop_count"], 1)
 
@@ -159,11 +160,12 @@ class SearchCLITests(SearchCLIWorkspace, unittest.TestCase):
         from search_controller.service import Controller
         self.admit()
         controller = Controller(self.root)
+        controller.command("focus", {"focus": "focused", "session_id": "codex:session", "provenance": provenance("operator")}, 4, "focus")
         for number in range(40):
-            spec = {"delivery_id": "delivery-%d" % number, "session_id": None, "turn_id": None, "stop_hook_active": None}
-            response = controller.command("hook-stop", spec, 4 + number, "stop-%d" % number)
+            spec = {"delivery_id": "delivery-%d" % number, "session_id": "codex:session", "turn_id": None, "stop_hook_active": None}
+            response = controller.command("hook-stop", spec, 5 + number, "stop-%d" % number)
         self.assertEqual(response["decision"]["kind"], "summary_then_stop")
-        response = controller.command("hook-stop", spec, 43, "stop-39")
+        response = controller.command("hook-stop", spec, 44, "stop-39")
         self.assertEqual(response["decision"], {"kind": "allow_stop"})
         self.assertEqual(controller.status()["control"]["stop_count"], 40)
 

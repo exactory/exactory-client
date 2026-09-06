@@ -946,6 +946,10 @@ The 40th request durably pauses and issues one `summary_then_stop`. Later calls,
 including replay of a formerly continuing delivery after pause, permit stopping.
 Neither missing metadata nor `stop_hook_active: false` creates new authorization.
 Pause, unrelated/ambiguous focus, resolution and genuine blockers permit handoff.
+Waiting on a live or unresolved owned workload (`execution_pending`) also permits
+stopping. It does not request another research move, spend a Stop count, or rearm
+the allowance. Pending native effects require reconciliation before local files
+can count as successful observations.
 Delivery replay is objective-local; the host must normalize delivery identity
 without reusing one identifier for distinct observed deliveries.
 
@@ -986,7 +990,7 @@ a current account or a rerun. Stable creation IDs break otherwise equal choices.
 
 Derived control fields are `nonprogress_replans`, `progress_fingerprints`,
 `stop_count`, `stop_deliveries` (delivery ID to original accounting decision), `summary_issued`,
-`stop_decision`, `pause_reason`, `focus`, `state_error`, `active_node_id`,
+`stop_decision`, `pause_reason`, `focus`, `focus_record`, `state_error`, `active_node_id`,
 `retreat_node_id`, `pending_moves`, `node_facts`, `selected_routes`, `closure`,
 `main_external_block`, `side_interval`, `resume_record`, `resume_ids`,
 `side_instruction_ids`, and `retreats`. All live in the single replayed state.
@@ -1002,12 +1006,12 @@ reducer; they are not public flags and Task 3 does not invent executor events.
 
 `Controller(root: Path, strategies_dir=None)` takes the attack root. Its storage
 is `Store(root / ".search")`. The service exports
-`command(name, spec, expected_revision, request_id, target=None)`,
+`command(name, spec, expected_revision, request_id, target=None, *, workspace_root=None, hook_session=None)`,
 `status(full_audit=False)`, and `guard_legacy(command, slug, details)`.
 `cli.install_parser(commands, strategies_default)` installs the nested `search`
 parser while retaining global `--attack-root` and `--strategies` placement.
 
-Every mutation requires `--expected-revision N --request-id ID`. Specs are read
+Public mutations require `--expected-revision N --request-id ID`. Specs are read
 with `--spec FILE`. `--json` and human-readable output contain the same JSON
 decision; human output is indented. Errors are JSON on stderr:
 `{"error":{"code":Text,"message":Text,"details":JSON|null}}`, with exit 1.
@@ -1030,7 +1034,8 @@ Public command specs are closed records:
 | adopt | `{mappings: [ImportMapping], inputs: [Input]}` |
 | retreat ID | `Retreat` without `node_id` |
 | replan | The documented `replan_recorded` payload |
-| focus, pause, resume, hook-stop | The respective `ControlInput` without `action` |
+| focus | `{focus: "focused"|"ambiguous"|"unrelated", provenance: Provenance, session_id: Text}` |
+| pause, resume, hook-stop | The respective `ControlInput` without `action` |
 | audit, render, status, next | `{}`; no spec file |
 
 `status` and `next` are read-only and need no revision or request ID.
@@ -1064,6 +1069,96 @@ completion always inspect the full accepted dependency closure. A failed final
 delivery audit conservatively invalidates its contributing acceptance support and
 the recorded closure, retaining all history. None of these audits runs a compiler,
 checker, Lean, shell script or mathematical job.
+
+### Workspace discovery and session ownership
+
+`init`, `focus`, and `resume` accept optional `--workspace-root DIRECTORY`. The
+default is the canonical attack root's direct parent, for both CLI and service
+calls. An explicit directory authorizes writes only there. Registration never
+chooses a destination by searching ancestors, and symlinked registration paths
+are rejected. The pointer file is `<workspace>/.exactory/math-search.json`:
+
+```text
+{schema_version: 1,
+ roots: [{path: AbsolutePath, objective_id: ID, contract_digest: SHA256}],
+ sessions: {HostSession: {generation: SHA256,
+   target: {root: RootIdentity, focus_request_id: Text} | null}}}
+```
+
+Host sessions are `codex:<session-id>` or `claude:<session-id>`. Cleared targets
+retain a generation tombstone. The registry contains no claims, nodes, budgets,
+pause flags, or scheduling decisions. Initialization registers identity but no
+session. Authoritative ownership lives in `control.focus_record`, initially null,
+then `{session_id, request_id}`. Only that session with a matching published pointer
+may request automatic continuation, including public `hook-stop` calls. Other
+sessions can inspect the objective and perform ordinary validated collaborative
+CLI work. Focus does not select a mathematical branch or renew any allowance.
+Explicit authorized resume updates the owner using the existing resume checks.
+
+Each registration command commits a closed typed `discovery_recorded` operation
+alongside its authoritative change. `service.discovery_intents` retains canonical
+routing inputs, root identity, command digest, request/session identities, exact
+expected prior session entry (including absence or tombstone), and desired entry.
+Changing `--workspace-root` under the same request ID is `request_id_conflict`.
+Replays reuse the immutable original intent, not a new reading of the pointer.
+New requests briefly read the expected pointer under the registry lock and release
+it before taking the controller lock. Publication holds the controller lock, then
+the single registry lock, validates the current owner, and compare-and-sets the
+expected entry or accepts the already-equal desired entry. It never takes two
+controller locks together and preserves unrelated registrations. Atomic publication
+uses file and directory fsync. These intents are separate from pending native
+initialization effects, so a failed publication does not prevent fresh focus.
+
+A committed transaction whose pointer could not publish returns
+`discovery_unpublished` with its committed revision and request ID. If a later
+focus supersedes it, replay cannot replace the later pointer, even across
+objectives. Recover stale publication with a fresh explicit focus command; an old
+replay is not guaranteed to repair every registration failure.
+
+### Hook lifecycle and supported host boundary
+
+The shared math hook adapter discovers exact registered roots and `.search/tree.json`
+markers through ancestors of event cwd, effective shell workdir, and explicit
+targets. It does not recursively scan or choose an alphabetically first root.
+Unrelated ancestor registrations do not make unrelated paths managed. A root
+outside its registration workspace can be found from its own node cwd; the
+controller still verifies its owner against the original workspace pointer.
+Missing, cleared, or conflicting bindings request explicit handoff.
+
+SessionStart/Resume makes one bounded read-only `search next --json` call with
+optional `--session-id`, `--focus-request-id`, `--objective-id`, and
+`--contract-digest` validation inputs, also accepted by `status`. It does not
+refresh facts, repair pointers, or resume execution. Pause therefore survives
+status-only questions, retrospective requests, compaction, and session resume
+without transcript interpretation. Hooks never infer user authorization.
+
+Stop makes one bounded `search hook-stop --internal` call. Only this internal CLI
+route may omit the expected revision; it reads the revision and invokes the
+validated service in that process. A fresh transaction request ID is separate
+from the optional host delivery ID. Concurrent revision conflicts return recovery
+guidance without unlimited retry. Before control accounting, the service derives
+changed local observations through `integration.observe_node`, replays them into
+the prospective state, then derives the decision. Unchanged observations do not
+add operations. Native and journal intents retain recovery precedence, and the
+256-operation bound is enforced with an explicit recovery error. Advisory activity
+logs cannot grant proof credit. Newly managed-node shell activity records only a
+relative target or native command name and slug, not raw shell arguments; existing
+unmanaged advisory formatting and authoritative controlled-run argv are unchanged.
+The 40th continuation requests one summary; later
+Stop calls permit stopping until explicit operator resume, even with absent or
+false `stop_hook_active` and after an admitted alternative or replan.
+
+Reported direct `Bash` and `exec_command` (`command` or `cmd`, with `workdir`)
+operations and the documented `export PATH=...:$PATH` bootstrap are normalized.
+Supported patch add/update/delete/move operations protect `.search` snapshots and
+artifacts, generated `SEARCH_TREE.md`/`LINEAGE.md`, discovery pointers, and native
+records under custom roots. Combined unit/draft sequencing remains enforced.
+Read-only file references and command-like prose are not write authorization.
+Recognized managed mutations with corrupt state or unsupported visible shell or
+wrapper payloads fail closed with direct-call recovery guidance. The adapter does
+not parse arbitrary shell programs or JavaScript. Nested operations that the host
+never reports remain an observability boundary, not an enforced sandbox. Tests use
+synthetic host payloads; they do not establish a live host smoke result.
 
 Ordinary and adoption admission audit their checkpoint anchors, inherited manifest
 closures, accepted renewal bases and transitive acceptance dependencies inside

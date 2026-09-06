@@ -19,6 +19,7 @@ import re
 import shlex
 import sys
 from pathlib import Path
+from math_search import guard, normalize, workspace_for
 
 # The path within the workspace, and the harness command that writes it.
 _OWNED_FILES = (
@@ -55,10 +56,7 @@ def _resolve(raw: str, cwd: Path) -> Path:
 def _find_workspace(path: Path) -> Path | None:
     """The attack workspace holding `path`: an ancestor under a directory named
     `attack` that carries the `problem.json` `init` wrote."""
-    for directory in path.parents:
-        if directory.parent.name == "attack" and (directory / "problem.json").is_file():
-            return directory
-    return None
+    return workspace_for(path)
 
 
 def _find_owner(path: Path) -> tuple[str, str] | None:
@@ -95,7 +93,13 @@ def _find_shell_write_target(command: str, cwd: Path) -> tuple[str, str] | None:
 
 
 def main() -> None:
-    payload = json.load(sys.stdin)
+    payload = normalize(json.load(sys.stdin))
+    try:
+        reason = guard(payload)
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        _deny("[math-solver] Recovery required before this managed operation: " + str(error))
+    if reason is not None:
+        _deny("[math-solver] " + reason)
     tool_name = payload.get("tool_name")
     tool_input = payload.get("tool_input") or {}
     cwd = Path(payload.get("cwd") or ".").resolve()
