@@ -11,6 +11,12 @@ costs: [bound_quality, obligations]
 
 ## Action
 
+Before launching a process, admit the exact truncated family and parameter domain,
+with saved-evidence preflight and a producer-before-launch independent-checker plan,
+under `../SEARCH.md#computation-admission-and-mandatory-interpretation`. Route each
+terminal result through interpretation and separate certification; the numerical
+optimum is not a proved bound.
+
 1. Truncate the family to a finite-dimensional ansatz and solve the optimisation as a numerical optimisation run across the whole parameter range (every dimension, every tuple size, every admissible exponent).
 2. Where the numerical bound touches the known construction to many digits, conjecture exactness there and name those cases as the targets; where it stays visibly above, record the gap as the family's ceiling at that parameter.
 3. Compute the optimiser to high precision and extract its structural data by a symbolic computation run: its roots, its sign pattern, the rational or algebraic coefficients with the certificate that identifies them, the constants at the interfaces.

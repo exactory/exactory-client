@@ -58,7 +58,9 @@ first when both, step 1's route when neither.
    rigidity assessment; the value to step 3.
 3. Seed and amplify. Dispatches seed-and-amplify, with
    enumerate-small-cases-to-locate-the-threshold as one enumeration
-   run: the amplification lemma; the smallest parameter carrying
+   run admitted for its exact bounded seed domain under
+   `../SEARCH.md#computation-admission-and-mandatory-interpretation`: the
+   amplification lemma; the smallest parameter carrying
    positive excess, over step 2's value when it ran, else by action 2;
    the run; an independent check; the amplified object. Output: the
    object or family with its quantity, to step 7.
@@ -124,6 +126,8 @@ mode move follows any other change.
   6's field, or the study's route.
 - The seed search before the amplification lemma. Check: the lemma
   precedes the run in the record.
+- The small seed domain treated as automatic permission. Check: its reviewed
+  necessity and outcome map bind the analytical amplification route before launch.
 - An entry dispatched before the study record exists. Check:
   `journal add` refuses a move whose `study/make-the-proof-constructive.md` is missing
   or empty (`../harness/README.md`).

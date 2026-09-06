@@ -12,10 +12,10 @@ costs: [bound_quality, object, obligations]
 ## Action
 
 1. State each interface as a numerical inequality: component A delivers parameter x; component B needs x at least y.
-2. Optimise each component separately, computer-assisted where the component is an optimisation, and in the open where many hands help.
+2. Optimise each component separately. When a component becomes another record, route it through the reviewed decomposition or proposal interfaces in `../SEARCH.md#reviewed-decomposition-and-criteria`, preserving the exact interface obligation, shared bridge, account and logical lineage. For computer-assisted work, also use the finite computation contract before launching the process.
 3. Isolate the hardest component (the hardest local configuration, the hardest prime, the diagonal case) and give it a dedicated proof, or drop it while keeping the others.
 4. Recombine and recompute the final bound; keep a ledger of which component now dominates.
-5. When the whole attack has stalled, treat each component as a separate publishable unit.
+5. When the whole attack has stalled, treat a component as a separate publishable unit only if it has a contributing accepted obligation or independently reviewed standalone significance; local separation alone grants neither status.
 
 ## Output form
 

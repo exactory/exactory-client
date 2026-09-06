@@ -64,6 +64,9 @@ independent is giving up, open on question 7's yes.
 4. Settle question 2's side up the parameter from question 4's value, or
    the study's settled range on a no. Entry:
    enumerate-small-cases-to-locate-the-threshold, at most four moves.
+   Before a process runs, use the last settled parameter as the proposed
+   domain boundary and the documented tool failure as the stopping condition
+   in `../SEARCH.md#computation-admission-and-mandatory-interpretation`.
    Output: exact values or a threshold, a seed object, a finite-range
    exclusion. Giving up ends here; the next strategy takes the infinite
    statement.
@@ -115,6 +118,8 @@ composes with any direction or mode move.
 
 - Small parameters reported with no equivalence lemma. Check: the step 3
   move precedes any enumeration move in the journal.
+- A finite prefix treated as evidence for the infinite statement without its
+  uniform bridge. Check: the interpretation keeps the infinite obligation open.
 - The direction chosen by computation cost or recent results. Check: the
   step 2 move's action cites `shape.known_bounds` and names the direction.
 - A compactness step under a mode that rejects it, or one implication

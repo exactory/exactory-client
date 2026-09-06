@@ -1,5 +1,22 @@
 # Mathematical search controller JSON contract
 
+This file is the single schema and command authority for managed mathematical
+search. `SKILL.md`, strategies, entries, and harness notes link here instead of
+restating closed records. A fresh objective starts with `search init`, and every
+new node starts with `search propose`, independent `search review`, and
+`search admit`. Local native files preserve the mathematical walk but do not
+replace the controller's original objective, accepted-evidence graph, or resource
+accounts.
+
+The early 0.34.0 interface documented here includes reviewed admission, durable
+pause and explicit resume, controlled deadlines, frozen input/result/delivery
+identity audits, and the computation and interpretation contracts below. It does
+not yet include immediate cancellation of an owned workload, full local
+snapshot-byte or elapsed-time accounting, typed local-package or literature
+receipts, or an automatic parent progress report. A status read never resumes a
+paused objective. Local `finish`, a literature hit, a terminal run, and a native
+journal `closes` flag are recorded facts, not root acceptance.
+
 ## Computation admission and mandatory interpretation
 
 New finite proposals use proposal `schema_version: 2` with one additional field,
@@ -1197,6 +1214,11 @@ Public command specs are closed records:
 | propose | `{proposal: Proposal, inputs: [Input]}` |
 | review | `{proposal_id: ID, review: Review, inputs: [Input]}` |
 | admit ID | `{}`; `--spec` may be omitted |
+| begin ID | The `begin NODE --spec FILE` record under [Metered execution and native integration](#metered-execution-and-native-integration) |
+| run ID | The tagged `run NODE --spec FILE` record under [Metered execution and native integration](#metered-execution-and-native-integration) |
+| reconcile | `{}`; no spec file |
+| amend-computation ID | The amendment record under [Computation admission and mandatory interpretation](#computation-admission-and-mandatory-interpretation) |
+| interpret ID | The interpretation record under [Computation admission and mandatory interpretation](#computation-admission-and-mandatory-interpretation) |
 | checkpoint [ID] | `{checkpoint: PublicCheckpoint, inputs: [Input]}` |
 | accept ID | `{obligation_id: ID|null, outcome: Outcome, dependency_ids: [ID], route_bindings: [RouteBinding], review: ResultReview, inputs: [Input]}` |
 | complete | `{subject: ClosureSubject, review: ResultReview, inputs: [Input]}` |
@@ -1208,6 +1230,21 @@ Public command specs are closed records:
 | audit, render, status, next | `{}`; no spec file |
 
 `status` and `next` are read-only and need no revision or request ID.
+Every other public command uses the current `--expected-revision` and a unique
+`--request-id`; `admit` and the read-only commands are the only entries above
+whose `--spec` can be omitted. Place `--attack-root` before `search`. For example:
+
+```sh
+exactory-math --attack-root attack search propose --spec proposal.json \
+  --expected-revision 1 --request-id propose-root --json
+exactory-math --attack-root attack search admit proposal-000001 \
+  --expected-revision 3 --request-id admit-root --json
+exactory-math --attack-root attack search status --json
+exactory-math --attack-root attack search next --json
+```
+
+The proposal's normal limits are explicit values, not omitted defaults:
+`{"max_moves":24,"max_runs":24,"timeout_seconds":300,"workers":1}`.
 `PublicCheckpoint` is `CheckpointInput` without `verification_status`; the service
 sets `pending`. Local checkpoints require their positional node ID and an
 acknowledged reserved journal receipt. External checkpoints have no positional

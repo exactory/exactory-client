@@ -57,7 +57,11 @@ barrier row; a yes for question 5 marks step 4's numerical row.
    make-the-bound-explicit-then-attack-the-lossiest-step. Output: the
    explicit bound and the loss ledger; the dominant row opens step 4.
 4. Work the components in parallel, each with its own journalled moves
-   and budget; a component bounded through a free auxiliary object
+   and inherited or reviewed budget account. Route genuinely separate
+   investigations through the reviewed decomposition or proposal records in
+   `../SEARCH.md#reviewed-decomposition-and-criteria`, with exact interface
+   obligations and a shared recombination bridge; do not infer native parentage
+   from the word "component". A component bounded through a free auxiliary object
    dispatches choose-the-auxiliary-weight-or-certificate, then
    optimise-the-certificate-family-numerically. Entry:
    split-into-components-with-explicit-interfaces, step 2. Output: per
@@ -124,6 +128,9 @@ hypothesis). Excludes nothing: the quadruple stays.
   parameter and a value on both sides.
 - A numerical optimum reported as a value. Check: proved, or the row is
   labelled form 5.
+- Separate components treated as fresh unreviewed budgets. Check: each admitted
+  node preserves its logical lineage and account, and recombination uses an exact
+  accepted bridge rather than component labels.
 - An entry dispatched before the study record exists. Check:
   `journal add` refuses a move whose `study/decompose-and-parallelise.md` is missing
   or empty (`../harness/README.md`).

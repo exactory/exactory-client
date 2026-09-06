@@ -45,13 +45,24 @@ question 5 opens its optimisation, question 6 picks step 5's tools.
 
 ## Plan
 
+Every launched process in this plan first needs the reviewed version 2 contract in
+`../SEARCH.md#computation-admission-and-mandatory-interpretation`. Translate the
+mathematical residue into its exact basis and finite domain, compare saved evidence,
+state why the run can change the route or stands independently, map every outcome to
+its next action, and give the stopping condition and bounded producer/checker plan.
+Cheap execution, an existing encoder, or a checker is not an admission reason. A
+necessary diagnostic remains allowed. A prefix with an unresolved infinite or named
+tail is not a finite reduction.
+
 1. Study how the statement was finitised and computed before, on
    problems of this shape, under `../STUDY.md`, producing
    `study/reduce-to-a-finite-computation.md`. Settle before step 2: the
    last value settled by computation, with the encoder and solver that
    settled it; whether each certificate had an independent checker; the
    residue in print and where its completeness argument stopped.
-   Output: the last settled value, solvers, and routes not to duplicate.
+   Output: the last settled value, solvers, and routes not to duplicate;
+   these become the proposal's inspected evidence and cheapest-sufficient-check
+   preflight, not permission to run.
 2. Write the residue. Entry, by residue kind: reduce-to-finite-witnesses
    for a parameter range; average-a-local-inequality-over-neighbourhoods
    for local configurations; certify-the-finite-residue-by-computation,
@@ -71,7 +82,8 @@ question 5 opens its optimisation, question 6 picks step 5's tools.
    is yes; certify-the-finite-residue-by-computation, steps 1 and 3,
    otherwise. Output: certified values, the optimum per parameter, or
    inequalities on compact ranges.
-5. Certify. Entry: certify-the-finite-residue-by-computation as
+5. Certify. Design the independent checker and its expected cost before the
+   producer launches. Entry: certify-the-finite-residue-by-computation as
    `certified special-case check`. Question 6 yes: its steps 2 and 5,
    standard solvers and the proof assistant; otherwise its step 4, a
    pipeline whose every phase emits a checkable proof. Output: the
@@ -124,6 +136,9 @@ earlier statement, stage, or direction change.
 - Evidence reported as proof: a numerical optimum, a self-checked
   certificate. Check: the unit is form 5 until the run's `README.md`
   names the independent checker and the trusted base.
+- A low-value prefix extended because it is easy. Check: admission names the
+  unresolved obligation or independently significant theorem that the exact
+  domain decides, and refuses when saved evidence already determines it.
 - An entry dispatched before the study record exists. Check:
   `journal add` refuses a move whose `study/reduce-to-a-finite-computation.md` is missing
   or empty (`../harness/README.md`).

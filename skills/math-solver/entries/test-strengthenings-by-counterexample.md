@@ -12,9 +12,9 @@ costs: [object]
 ## Action
 
 1. List the natural strengthenings and relaxations of the target, each with the hypothesis it drops or the parameter it changes.
-2. For each, search small instances for a counterexample, by hand or by solver; for a statement about the solutions of an equation, reduce the equation to a finite-dimensional function of the candidate counterexample's parameters (a centre and a scale) and perturb a strict local extremum of that function into a solution.
+2. For each, search small instances for a counterexample, by hand or by solver. Hand search stays in the move; a solver process first needs the exact tested statement, finite domain, counterexample purpose, outcomes and stopping rule admitted under `../SEARCH.md#computation-admission-and-mandatory-interpretation`. For a statement about the solutions of an equation, reduce the equation to a finite-dimensional function of the candidate counterexample's parameters (a centre and a scale) and perturb a strict local extremum of that function into a solution.
 3. When one is found, record which hypothesis it exploits. This fixes the boundary of what remains open and names the hypothesis that any proof must use.
-4. Publish the counterexample when it refutes a statement that had been conjectured or that was in use as a route.
+4. Publish the counterexample when it refutes a statement that had been conjectured or that was in use as a route, after exact verification and acceptance. A no-hit computable range remains evidence and does not settle the target.
 
 ## Output form
 

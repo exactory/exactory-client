@@ -336,8 +336,14 @@ attempts per lemma.
 
 ## 7. The step directory
 
-The harness runs the formal check in `attack/<slug>/deterministic/formal-check-<n>/`
-(`../../harness/SPEC.md`). The directory is a Lake package:
+The editable logical step lives in
+`attack/<slug>/deterministic/formal-check-<n>/` (`../../harness/SPEC.md`).
+For a managed objective, an independent input review binds the exact logical
+project, source modes, environment, dependencies, requested declaration, requested
+type, installed toolchain inventory and generated inspection source. The controller
+then executes immutable input and build snapshots under one bounded workload; see
+`../../SEARCH.md#metered-execution-and-native-integration`. The editable directory
+is a Lake package:
 
 ```
 formal-check-<n>/
@@ -346,18 +352,23 @@ formal-check-<n>/
   lake-manifest.json    # written by the first lake build; committed
   .gitignore            # /.lake
   Main.lean             # or the file named in step.json; the sources
-  step.json             # {"theorem": "<name>", "file": "<file>.lean"}
+  step.json             # theorem, requested_type, optional file, environment and dependencies
+  verification-review.json # independent review of the exact frozen-input subject
   README.md             # what the run decided, per the skill's stage 4
   result.json           # written by the harness, never by hand
 ```
 
-`step.json` names the theorem the harness checks and the file that
-declares it; `file` defaults to `Main.lean`. The harness runs `lake build`
-in the directory, then the axiom check of section 4 on the named theorem,
-and writes `result.json` recording pass or fail and the printed axiom list;
-the decision rule is the one in section 4. A step with no `result.json`
-has not run. The fixture `../../harness/fixtures/lean-smoke/` is the
-smallest such directory and is what the harness's tests run against.
+`step.json` names `theorem` and its exact `requested_type`; `file` defaults to
+`Main.lean`. It may also declare `environment`, `external_dependencies`, and a
+complete `dependency_enumeration`. After the controller freezes and reviews these
+inputs, it runs `lake build` and the generated correspondence and axiom inspection
+under one 300-second workload with one worker. Both commands must exit successfully.
+The result records the complete printed type, the requested-type correspondence,
+both axiom lists, exact source and toolchain provenance, and captured outputs.
+Pretty-printed type equality alone is not a general equivalence proof. A terminal
+result is computational evidence until exact claim correspondence, dependencies
+and policy are independently accepted. The fixture
+`../../harness/fixtures/lean-smoke/` is the smallest test project.
 
 ## 8. Encoding a lemma chain
 

@@ -24,6 +24,12 @@ global options, given before the command:
 `exactory-math skill-dir` prints the directory that holds the skill's own
 files: the strategies, the entries, the study contract, and the sources.
 
+Fresh objectives use `exactory-math --attack-root DIR search ...`. The exact
+controller schemas, command specs, revision/request-ID rules, frozen execution,
+evidence acceptance, and root closure are in `../SEARCH.md`. The native commands
+below operate inside an admitted node. Reviewed `search admit` creates managed
+workspaces and native children; do not call `init --from` after admission.
+
 Validation problems go to stderr, one line each, with exit status 1.
 
 ## Test
@@ -51,18 +57,18 @@ found.
 
 | command | does |
 |---|---|
-| `init <slug> [--from <parent>]` | creates `attack/<slug>/` with `problem.json` (shape keys set to `"unknown"`), empty `novelty.md` and `journal.jsonl`, and `study/`, `deterministic/`, and `units/`; refuses to overwrite. With `--from`, opens it as a child of an open attack that is nobody's child, writing `parent.json` |
+| `init <slug> [--from <parent>]` | creates an unmanaged historical-style workspace. Managed workspaces and approved native children are created by reviewed `search admit`; legacy `init --from` refuses inside a managed root with migration guidance |
 | `check-problem <slug>` | validates `problem.json`: every key present, no empty strings, `direction` and `mode` from the allowed sets; prints `problem.json: ok` |
 | `plan <slug>` | validates `preconditions.json` against the strategy files and `problem.json`, writes `openings.json` with every strategy whose verdict is not `no` (yes before unknown, name order within, each with its component and declared costs), prints them; refuses to run while `study/problem.md` is missing or empty |
 | `rank <slug>` | validates `ranking.json` against the openings (every one exactly once, each row citing a `problem.json` field or a cost the strategy declares) and prints the order the solver chose |
-| `journal add <slug> --json '<move>'` | validates the move's fields, `problem.json`, the study record, the costs against the quadruple, the steps it ran, a closing move's direction and mode, the `problem_changed` flag against the problem digest, the strategy's verdict, the entry against the strategy, the trigger against the shape fields, the walk (the opening against the ranking, a step against the walk rules with its `step_cites`), and the budget (the flow rules in `SPEC.md`); appends it with the problem digest and prints the budget state |
+| `journal add <slug> --json '<move>'` | validates and appends the native move. Managed work first reserves its exact strategy, entry, pass, triggers and citations with `search begin`; the controller acknowledges the exact appended prefix |
 | `budget <slug>` | prints moves used in this pass and overall, passes used, and whether a stall is due |
 | `fail <slug> <strategy>` | sets the strategy's verdict to `no` with a `note` and a `failed_after_move` stamp, then runs `plan` |
-| `verify lean <slug> <step-dir>` | in `deterministic/<step-dir>/`: `lake build`, then `#print axioms` on the theorem named in `step.json`; writes `result.json` |
-| `verify certificate <slug> <step-dir>` | runs `deterministic/<step-dir>/check.sh`, refusing it when it is not executable, and writes `result.json` with `status` `pass` on exit 0 and `fail` otherwise, the exit status, and the first 20 output lines |
+| `verify lean <slug> <step-dir>` | after exact input review, routes the requested declaration and type through the controller's frozen bounded build and inspection; writes native `result.json`, which remains evidence until controller interpretation, audit and acceptance |
+| `verify certificate <slug> <step-dir>` | after exact input review, routes the independent checker through the controller's frozen bounded executor; writes native `result.json`, which remains evidence until controller interpretation, completeness review and acceptance |
 | `stall <slug>` | refuses while no cash-out rule holds; otherwise writes `units/INVENTORY.md`: the walk, then every move grouped by strategy, marking the ones whose failure signal fired, the one that closed the attack, and what each paid, with the whole ledger summed at the top, and names the rule |
 | `check-unit <slug> <n>` | refuses before the inventory exists; validates `units/<n>/unit.json`: `statement`, `form`, `evidence` (a path relative to the workspace that exists, with a `result.json` when it is a deterministic run), `novelty`, `moves` (journal move numbers), `costs` (the ledger the evidence carries), and the form against the evidence and the ledger; writes `units/<n>/check-unit.json` on success |
-| `finish <slug>` | refuses while any unit lacks a matching stamp, a `draft.md`, or an `evaluation.md`, and while a child attack is open; writes `units/FINISHED.json`. With no move and no inventory, records the stage 3 exit |
+| `finish <slug>` | refuses while any unit lacks a matching stamp, a `draft.md`, or an `evaluation.md`, and while a child attack is open; writes `units/FINISHED.json`. With no move and no inventory, records the local stage 3 literature exit. Local finish does not close the controller objective |
 | `status <slug>` | prints where the attack stands, derived from the record, with the parent or the children when there are any, ending with the `next:` line a resumed session continues from |
 | `task add <slug> <text>`, `task done <slug> <id>`, `task list <slug>` | the action list in `tasks.json`, each change stamped with the time and the move count |
 
@@ -113,9 +119,11 @@ Points where the spec left a choice, and what the code does:
   `tasks.json` or `activity.jsonl`, which it only reports, so a stale task
   cannot move the stage.
 
-## An end-to-end run
+## A native harness run
 
-Recorded on 2026-09-02 against the fifteen strategy files under
+This historical unmanaged example demonstrates the native file and stage contract;
+it is not the fresh managed-objective admission or proof-acceptance route. Recorded
+on 2026-09-02 against the fifteen strategy files under
 `../strategies/`, with `--attack-root` pointing at a scratch directory
 (its absolute path is shortened to `attack/` below). The files the agent
 owns (`problem.json`, the study records, `preconditions.json`,

@@ -15,6 +15,12 @@ A unit is the directory `units/<n>/` in the attack workspace. Its `unit.json` ho
 
 Beside `unit.json` the directory holds the position note (on the path to the target or off to the side, and the prior best result it improves, with its reference) and the journal excerpt (the moves under `moves`, copied from `journal.jsonl`, with their failure signals). `check-unit` writes `check-unit.json` there when the record passes, the digest of the `unit.json` it checked; stage 8 adds `draft.md` and `evaluation.md`; `finish` refuses a unit without all three, or whose `unit.json` changed after its check.
 
+These are native local checks. They do not accept controller evidence or close the
+original objective. A result contributes to an obligation only through the exact
+checkpoint, independent result review, manifest and policy audit, and acceptance
+in `SEARCH.md#checkpoints-and-accepted-results`. A locally finished package enters
+root completion only through `SEARCH.md#final-closure-and-local-delivery`.
+
 The form labels `check-unit` accepts: `conditional-or-special-case`, `quantitative-improvement`, `reduction-or-equivalence`, `barrier`, `counterexample-or-computational-evidence`, `new-machinery`, `survey-or-problem-paper` (the seven publication forms, numbered 1 to 7 in this order), `counterexample`, `algorithm`, `formalisation`, `formal-proof-write-up` (the standalone units), and `full-proof` and `second-proof` (the closing forms).
 
 ## The claim test
@@ -78,6 +84,13 @@ Sources: test-strengthenings-by-counterexample; seed-and-amplify (a counterexamp
 
 The unit gives the object or the data, the independent verification, the exact statement refuted or supported, the range searched, and what is needed to reproduce it (code and inputs). When the unit is evidence rather than proof, it also explains why the conjecture is interesting, what prior work led to it, what follows from it, which special cases are provable, and how to reproduce the experiments. A single counterexample is a standalone unit.
 
+A controlled run is evidence-only until its terminal result is interpreted and its
+exact evidence is independently accepted under `SEARCH.md#computation-admission-and-mandatory-interpretation`.
+Successful exit, a native `result.json` status, or a journal `closes` flag is not
+acceptance. A computational theorem-level unit needs either an admitted objective
+obligation or the controller's separately reviewed standalone significance. A
+necessary diagnostic may be cited as evidence but does not become a theorem unit.
+
 ### Form 6 - New machinery
 
 Sources: export-the-lemma-to-sibling-problems (a lemma with generic hypotheses); the substitutes from carry-the-model-argument-back; the weight family from choose-the-auxiliary-weight-or-certificate; the encoding lemma from bound-failure-by-random-restriction-and-encoding; the pipeline from certify-the-finite-residue-by-computation; measure-size-by-entropy; the preservation class and iteration scheme from iterate-the-construction-and-bookkeep-every-candidate; the principle stated as an axiom from reduce-the-counterexample-to-a-combinatorial-principle; the finer invariant from reduce-existence-to-one-algebraic-obstruction.
@@ -92,13 +105,13 @@ The unit contains the problem-shape record, every route with where it stops and 
 
 ### Full proof
 
-Source: the closing of the attack (a move whose output is a proof of the claim, or a counterexample to it that decides the claim), with consolidate-the-proof and formalise-while-fresh as the sources of what the unit contains beyond a partial form.
+Source: the local closing of the attack (a move whose output is a proof of the admitted node claim, or a counterexample to it that decides that claim), with consolidate-the-proof and formalise-while-fresh as the sources of what the unit contains beyond a partial form. `full-proof` is a local form label; only accepted support for the exact original claim and successful `search complete` close the root.
 
 The unit contains, beyond what every unit contains:
 
 1. The complete argument, from the claim to its conclusion, with every lemma stated and proved in the text or cited with a reference.
-2. Every deterministic run the argument depends on, as the step directory with its code, inputs, outputs, `README.md`, and `result.json` with status `pass`. A run with any other status makes the unit a counterexample-or-computational-evidence unit, not a full proof.
-3. The independent verification where one exists: the formal check's axiom list from `verify lean`, or the second implementation's agreement from a certified special-case check, or the independent checker's output from `verify certificate`.
+2. Every deterministic run the argument depends on, as the exact frozen input and terminal output records accepted by the controller, plus the native step directory with its code, inputs, outputs, `README.md`, and `result.json`. A terminal run without accepted policy and completeness evidence makes the unit a counterexample-or-computational-evidence unit, not a full proof.
+3. The independent verification: the formal check's requested declaration, requested type, toolchain inventory, inspection source, axiom lists and review; or the independent certificate checker, coverage argument, output and review. The verification schemas are in `SEARCH.md#immutable-evidence-manifests`.
 4. The consolidation record from consolidate-the-proof (`units/consolidation.md`): the steps marked as unexplained, what replaced each, the rewritten proof with each step's role visible, and the general statement the proof proves.
 5. The formalisation record from formalise-while-fresh when it ran: the blueprint, the checked theorem stated exactly with its constants, and the errors found with which were gaps and which were slips.
 6. The direction decided (`true` or `false`) and the mode the proof is in (`existence`, `construction`, `computation`, or `certificate`), as `problem.json` records them at closing.

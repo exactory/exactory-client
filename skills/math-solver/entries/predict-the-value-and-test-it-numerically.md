@@ -11,6 +11,11 @@ costs: []
 
 ## Action
 
+Each actual enumeration, optimisation, or counterexample process is a reviewed
+bounded diagnostic under `../SEARCH.md#computation-admission-and-mandatory-interpretation`.
+Its preflight compares saved evidence and states which declared outcome changes the
+next proof action. Prediction, agreement, correction, and no hit remain evidence.
+
 1. Derive the prediction and state its assumptions: which events are treated as independent, which lower-order terms are dropped.
 2. Compute the actual quantity for many instances, as an enumeration run when the instances are finite and exact and as a numerical optimisation run when the quantity is an optimum, and compare.
 3. On a systematic discrepancy, locate the dependence the heuristic missed (a containment between the fields or events treated as independent, a correlation) and publish the corrected conjecture with its correction factor.

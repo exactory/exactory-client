@@ -12,7 +12,7 @@ costs: [axioms, object, obligations]
 ## Action
 
 1. Write a human-readable blueprint whose lemma structure matches the intended formal development, and link each lemma to its formal counterpart.
-2. Formalise in a proof assistant as a formal check per lemma, distributing lemmas across contributors; track the dependency graph until every node's formal check passes.
+2. Formalise in a proof assistant as a formal check per lemma, distributing lemmas across contributors. Admit each bounded check and route its exact declaration, requested type, source, dependencies, environment and toolchain through `../SEARCH.md#metered-execution-and-native-integration`; track the dependency graph until every node has a controlled terminal result, interpretation, and accepted policy review. Passing local nodes alone do not prove the dependency graph or root.
 3. Correct the errors found, and record which were gaps and which were slips.
 4. State the formalised theorem exactly, with its numerical constants.
 

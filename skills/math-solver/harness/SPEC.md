@@ -13,6 +13,20 @@ Tests: `tests/`, run from the plugin root with
 `python3 -m unittest discover -s skills/math-solver/harness/tests -t skills/math-solver/harness`.
 Written test-first.
 
+## Managed objective boundary
+
+This document specifies the native per-node record. Fresh mathematical objectives
+are owned by the search controller whose closed schemas and public commands are in
+`../SEARCH.md`. Reviewed `search admit` creates each managed native workspace. When
+a proposal has `native_parent`, that same admission creates `parent.json`; legacy
+`init --from` refuses inside a managed objective and must not be run again.
+
+Before a managed `journal add`, `search begin` reserves the exact move. Managed
+generic computations use `search run`; managed legacy certificate and Lean
+verification commands route through the same frozen executor after an independent
+input review. Native journal bytes, `result.json`, unit stamps, and `FINISHED.json`
+remain unchanged local facts. None is controller acceptance or root completion.
+
 ## Workspace
 
 `attack/<slug>/` holds:
@@ -20,7 +34,7 @@ Written test-first.
 | file | written by | validated by |
 |---|---|---|
 | `problem.json` | agent (stage 2) | `check-problem`; `journal add` on every move |
-| `parent.json` | harness (`init --from`) | `finish` on the parent refuses while the child is open |
+| `parent.json` | harness, through reviewed controller admission for managed work | `finish` on the parent refuses while the child is open |
 | `novelty.md` | agent (stage 3) | `finish` at the stage 3 exit requires it non-empty; `check-unit` requires a non-empty `novelty` field on each unit |
 | `study/problem.md`, `study/<strategy>.md` | agent (stage 3, and step 1 of each strategy) | `journal add` refuses a move under a strategy whose `study/<strategy>.md` is missing or empty; `plan` refuses to run without `study/problem.md` |
 | `preconditions.json` | agent (stage 4) | `plan`; `journal add` reads the verdicts |
@@ -41,7 +55,7 @@ The files the harness and the hooks write (`openings.json`,
 commands only; the plugin's hooks refuse an edit to them from any other
 tool.
 
-A child attack is a workspace opened with `init <child> --from <parent>`:
+A native child record has the same format whether historical or managed:
 its `parent.json` is `{"parent": "<slug>", "opened_after_move": n}`,
 `n` the parent's move count at the time. The parent must exist, be
 unfinished, and be nobody's child. The parent's children are found by
@@ -225,18 +239,18 @@ signals since the last `fail`.
 
 | command | does |
 |---|---|
-| `init <slug> [--from <parent>]` | creates the workspace with empty files and the shape keys pre-filled with `"unknown"`; with `--from`, as a child of an open attack that is nobody's child, writing `parent.json` |
+| `init <slug> [--from <parent>]` | creates an unmanaged historical-style workspace. In a managed controller root, use reviewed `search admit`; it creates the workspace and, for an approved `native_parent`, writes `parent.json`, while legacy `init --from` refuses with migration guidance |
 | `check-problem <slug>` | validates `problem.json`: every key present, no empty strings, quadruple values from the allowed sets |
 | `plan <slug>` | validates `preconditions.json` against the strategy files, writes `openings.json` with every strategy whose verdict is not no, prints them |
 | `rank <slug>` | validates `ranking.json`: it orders exactly the current openings, each row citing a `problem.json` field or a cost the strategy declares, and prints the order |
-| `journal add <slug> --json '<move>'` | validates the move under the flow rules above, appends it with the problem digest, prints the budget state |
+| `journal add <slug> --json '<move>'` | validates and appends the native move. Managed work first reserves the exact move with `search begin`; the controller acknowledges the resulting exact journal prefix |
 | `budget <slug>` | prints moves used in this pass and overall, passes used, and whether a stall is due (a closing move, hard cap, last pass spent, or three consecutive failure signals) |
 | `fail <slug> <strategy>` | sets the strategy's verdict to no with a note, stamps the journal length as `failed_after_move`, re-runs `plan` |
-| `verify lean <slug> <step-dir>` | runs `lake build`, then reads `#print axioms` for the named theorem: the standard axioms give status `pass`, a native evaluation axiom gives `evidence`, `sorryAx` or a custom axiom gives `fail`; writes `result.json` with the status, the axioms list, and the reason |
-| `verify certificate <slug> <step-dir>` | runs the step's `check.sh` (the independent checker the agent wrote), which must be executable, and writes `result.json` with `status` `pass` when it exits 0 and `fail` otherwise, the exit status, and the first lines of output |
+| `verify lean <slug> <step-dir>` | after managed input review, routes the exact requested declaration and type through the frozen controller executor, runs the bounded build and independent axiom inspection, and publishes `result.json`; local pass is evidence pending policy audit and acceptance |
+| `verify certificate <slug> <step-dir>` | after managed input review, routes the executable checker and complete declared inputs through the frozen controller executor and publishes `result.json`; local pass is evidence pending completeness review and acceptance |
 | `stall <slug>` | refuses while no cash-out rule holds (a stall is due, or the plan admitted no opening); otherwise writes the inventory skeleton (`units/INVENTORY.md`): the walk, then every journal move grouped by strategy, marking the ones whose failure signal fired and the one that closed the attack, and names the rule |
 | `check-unit <slug> <n>` | refuses before the inventory exists; validates that `units/<n>/unit.json` has statement, form (one of the seven publication forms plus `full-proof` and `second-proof`), evidence path that exists (with a `result.json` when it is a deterministic run), novelty record, journal move numbers, and `costs`, the ledger its evidence carries; refuses a form the evidence or the ledger rules out (a run that did not pass is evidence; a closing form carries neither `object` nor `obligations`; `algorithm` and `counterexample` carry no `constructivity`); writes `check-unit.json` with the digest of the record on success and removes any stamp first |
-| `finish <slug>` | refuses before the inventory exists, while any `units/<n>/` lacks a stamp matching its `unit.json`, a non-empty `draft.md`, or a non-empty `evaluation.md`, and while any child attack is open; writes `units/FINISHED.json` with the unit numbers. With no move and no inventory it is the stage 3 exit: it needs a non-empty `study/problem.md` and `novelty.md` and records the outcome `solved-in-literature` |
+| `finish <slug>` | refuses before the inventory exists, while any `units/<n>/` lacks a stamp matching its `unit.json`, a non-empty `draft.md`, or a non-empty `evaluation.md`, and while any child attack is open; writes `units/FINISHED.json` with the unit numbers. With no move and no inventory it is the stage 3 exit: it needs a non-empty `study/problem.md` and `novelty.md` and records the local outcome `solved-in-literature`. Neither form closes the controller root |
 | `status <slug>` | prints where the attack stands, derived from the record: the stage, the parent or the children when there are any, the problem, the study, the plan, the ranking, the walk, the budget, the cash-out state with what each unit still needs, the open tasks, the last three activity entries, and the next step |
 | `task add <slug> <text>` | appends an open task to `tasks.json`, numbered, stamped with the time and the move count |
 | `task done <slug> <id>` | marks the task done, stamped the same way; refuses an unknown id and a task already done |

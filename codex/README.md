@@ -25,6 +25,21 @@ exactory whoami
 Use the path of this installed copy. Do not assume a fixed cache location.
 `exactory-math skill-dir` returns the shared math-solver directory.
 
+For a fresh math-solver objective, use the shared workflow's reviewed controller
+path: `search init`, `propose`, independent `review`, and `admit`. Every mutating
+controller command uses the current expected revision and a unique request ID;
+`search status` and `search next` are read-only. Do not create a managed child with
+legacy `init --from` after admission. Reserve moves before execution, and use the
+controlled frozen run or native verification route described in the shared
+`SEARCH.md`. A local finish, literature hit, run result, or journal close is not
+root acceptance.
+
+The current early-release interface has durable pause and controlled deadlines,
+but no immediate owned-job cancellation, typed local-package/literature receipts,
+or automatic parent progress report. Do not invent those commands or infer that a
+status read resumes work. Hooks enforce only operations the host reports; nested
+unreported wrappers and internal solver calls remain outside that boundary.
+
 ## Tool conventions
 
 | Shared instruction | Codex action |

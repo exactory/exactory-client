@@ -55,7 +55,9 @@ none is no; no otherwise. Questions 4 and 5 pick step 4's entry; question
    in steps 3 to 5.
 3. Rung by auxiliary object, when the loss is a free choice. Entries:
    choose-the-auxiliary-weight-or-certificate, then
-   optimise-the-certificate-family-numerically. Output: the target bounded
+   optimise-the-certificate-family-numerically. Before numerical execution,
+   admit the exact rung and bounded parameter domain through
+   `../SEARCH.md#computation-admission-and-mandatory-interpretation`. Output: the target bounded
    by the functional at the exhibited object, and the numerical optimum
    with its conjecturally sharp cases; the proved bound is the rung.
 4. Rung by relaxation. Entry: relax-to-the-averaged-or-fractional-version
@@ -125,6 +127,8 @@ component.
   the next starts.
 - A numerical optimum reported as the bound. Check: the constant is
   proved, or the unit is labelled form 5.
+- A rung's numerical output treated as the recombined theorem. Check: the
+  interpretation leaves the interface and passage obligations explicit.
 - An entry dispatched before the study record exists. Check:
   `journal add` refuses a move whose `study/ladder-the-parameter.md` is missing
   or empty (`../harness/README.md`).
