@@ -466,6 +466,85 @@ class AdmissionTests(unittest.TestCase):
             self.approved(value, state)
         self.assertEqual(caught.exception.code, "budget_exhausted")
 
+    def second_renewal(self, state, method="third-method", account_id="account-000002"):
+        value = self.renewal(state)
+        fresh = copy.deepcopy(state["checkpoints"]["checkpoint-000001"])
+        fresh.update(id="checkpoint-000002", evidence_digests=["b" * 64],
+                     origin={"kind": "external_result", "source": "New exact obstruction theorem"})
+        state["checkpoints"][fresh["id"]] = fresh
+        state["acceptances"]["acceptance-000002"] = {
+            "checkpoint_id": fresh["id"], "checkpoint_digest": digest(fresh), "status": "accepted"}
+        value.update(attack_slug="third", method=method, logical_predecessor="node-000002", inherited_evidence=fresh["evidence_digests"][:])
+        value["studies"]["strategies"][0]["method"] = method
+        value["anchor"].update(checkpoint_id=fresh["id"], digest=digest(fresh))
+        value["budget"].update(account_id=account_id, basis_checkpoint_id=fresh["id"],
+                               basis_checkpoint_digest=digest(fresh))
+        return value
+
+    def two_account_lineage(self, first_moves=24):
+        state = self.approved()
+        state["accounts"]["account-000001"].update(used_moves=first_moves, used_runs=7)
+        state = self.approved(self.renewal(state), state)
+        state["accounts"]["account-000002"].update(used_moves=24, used_runs=11)
+        return state
+
+    def test_explicit_superseded_account_cannot_renew_and_lose_later_usage(self):
+        state = self.two_account_lineage()
+        value = self.second_renewal(state, method="spectral-reduction", account_id="account-000001")
+        before = copy.deepcopy(state)
+        with self.assertRaises(SearchError) as caught:
+            self.approved(value, state)
+        self.assertEqual(caught.exception.code, "account_superseded")
+        self.assertEqual(state, before)
+
+    def test_current_segment_renewal_retains_all_lineage_usage(self):
+        state = self.two_account_lineage()
+        state = self.approved(self.second_renewal(state), state)
+        account = state["accounts"]["account-000003"]
+        self.assertEqual(account["historical_moves"], 48)
+        self.assertEqual(account["historical_runs"], 18)
+        self.assertEqual(account["predecessor_account_id"], "account-000002")
+        self.assertEqual(account["lineage_owner"], "account-000001")
+
+    def test_current_renewal_cannot_recycle_a_method_from_an_earlier_segment(self):
+        state = self.two_account_lineage()
+        value = self.second_renewal(state, method="induction")
+        with self.assertRaises(SearchError) as caught:
+            self.approved(value, state)
+        self.assertEqual(caught.exception.code, "budget_exhausted")
+
+    def test_superseded_account_cannot_inherit_or_continue_unused_allowance(self):
+        for relation in ["main", "continuation"]:
+            state = self.two_account_lineage(first_moves=10)
+            value = successor(state)
+            value.update(attack_slug="old-unused-allowance", relationship=relation)
+            value["budget"].update(mode="inherit", account_id="account-000001")
+            with self.subTest(relation=relation):
+                with self.assertRaises(SearchError) as caught:
+                    self.approved(value, state)
+                self.assertEqual(caught.exception.code, "account_superseded")
+
+    def test_any_pending_lineage_reservation_blocks_renewal(self):
+        for field in ["reserved_moves", "reserved_runs"]:
+            state = self.two_account_lineage()
+            state["accounts"]["account-000001"][field] = 1
+            with self.subTest(field=field):
+                with self.assertRaises(SearchError) as caught:
+                    self.approved(self.second_renewal(state), state)
+                self.assertEqual(caught.exception.code, "budget_exhausted")
+
+    def test_execution_account_guard_rejects_superseded_node_account(self):
+        from search_controller import admission
+        guard = getattr(admission, "require_current_account", None)
+        self.assertIsNotNone(guard, "Execution needs a state-aware current-account guard")
+        state = self.two_account_lineage(first_moves=10)
+        before = copy.deepcopy(state)
+        with self.assertRaises(SearchError) as caught:
+            guard(state, "account-000001")
+        self.assertEqual(caught.exception.code, "account_superseded")
+        self.assertEqual(guard(state, "account-000002")["id"], "account-000002")
+        self.assertEqual(state, before)
+
 
 if __name__ == "__main__":
     unittest.main()

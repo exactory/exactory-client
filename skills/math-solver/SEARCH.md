@@ -321,15 +321,23 @@ the first account ID, and renewal preserves its predecessor's counters.
 `budget.mode: new` has null account and checkpoint bindings; it still reuses an
 account if a target, structurally equivalent claim, or declared equivalent node
 already has one. `inherit` requires an account and null checkpoint bindings.
-It cannot increase that account's limits. Continuation uses the exact predecessor
-account. Structural identity normalizes assumption order, case-set order, and
+It cannot increase that account's limits. Only the unique current segment of a
+lineage can receive new admissions or resource reservations. Explicitly choosing a
+superseded account fails with `account_superseded`, even if it has unused allowance.
+Continuation uses the exact predecessor account, which must still be current;
+it cannot switch to a different segment. Structural identity normalizes assumption
+order, case-set order, and
 equivalent integer endpoint representations; general semantic equivalence is a
 required review finding. A copied obligation or renamed directory grants no credit.
 
 `renew` requires an existing account, a checkpoint ID and its digest, and the
-independent renewal finding. The method must differ from prior methods in the
-account, the attempt cannot be a continuation or declared equivalent copy, and
-pending reservations must first be reconciled. Qualifying progress is an existing
+independent renewal finding. Its selected account must be the current segment, and
+the method must differ from prior methods throughout that account lineage. The
+attempt cannot be a continuation or declared equivalent copy, and pending
+reservations anywhere in the lineage must first be reconciled. The next segment
+retains the current segment's historical totals plus its cumulative usage, so no
+intermediate allowance segment can disappear from the new history.
+Qualifying progress is an existing
 checkpoint whose `kind` is `proof`, `reduction`, or `obstruction`, joined to an
 internal acceptance with matching `checkpoint_id`, matching `checkpoint_digest`,
 and `status: accepted`. A `hypothesis` never qualifies. Exact external results may
@@ -339,14 +347,29 @@ cannot reuse the same checkpoint to renew repeatedly, including a copy whose onl
 change is its controller ID. New accounts receive a
 finite local allowance and retain historical usage, including unknown history.
 
-`qualifying_progress(state, checkpoint_id, expected_digest)` and
-`remaining_allowance(account)` are pure admission helpers. The latter returns
+`qualifying_progress(state, checkpoint_id, expected_digest)`,
+`require_current_account(state, account_id)`, and `remaining_allowance(account)`
+are pure admission helpers. `require_current_account` returns the existing current
+account without modifying state, rejects a superseded segment with
+`account_superseded`, and rejects an ambiguous lineage with `corrupt_state`.
+`remaining_allowance` returns
 `{"moves": remaining, "runs": remaining}` and raises `usage_unknown` for an
 unknown account without reviewed renewal. A renewal basis must remain accepted
 when it supports subsequent admission. The service must freshness-audit the
 checkpoint's complete dependency closure before consumption and invalidate stale
 acceptance status. A public `verified: true` flag never establishes this fact.
 Task 3 owns checkpoint/acceptance events; Task 5 owns actual reservation counters.
+
+Before every new move or run reservation, Task 5 must invoke
+`require_current_account` on the node's account inside the locked reducer
+transaction, then check its remaining allowance. Account-local subtraction alone
+cannot establish permission: an earlier admitted node can retain a historical
+account with unused allowance after renewal. New work must not charge that account
+after its usage has been inherited. This guard applies to new admissions and new
+resource reservations only. Reconciliation retains its original reservation and
+account IDs, charges previously reserved work consistently, and never launches
+replacement work as part of reconciliation. Reading or accepting valid immutable
+evidence from an older segment remains allowed and does not require a rerun.
 
 `totals` starts with zero `used_moves`, `used_runs`, `reserved_moves`, and
 `reserved_runs`, and `historical_usage: known`. Adoption must mark unknown imported

@@ -233,6 +233,18 @@ def remaining_allowance(account):
             "runs": account["max_runs"] - account["used_runs"] - account["reserved_runs"]}
 
 
+def require_current_account(state, account_id):
+    """Reject new work on historical allowance segments, even if unused."""
+    account = reference(state["accounts"], account_id, "budget account")
+    lineage = {key: item for key, item in state["accounts"].items()
+               if item["lineage_owner"] == account["lineage_owner"]}
+    predecessors = {item["predecessor_account_id"] for item in lineage.values()}
+    current = set(lineage) - predecessors
+    s.require(len(current) == 1, "Budget lineage has no unique current segment", "corrupt_state")
+    s.require(account_id in current, "Budget account has a renewed successor", "account_superseded")
+    return account
+
+
 def choose_account(state, proposal, target):
     budget = proposal["budget"]
     candidates = []
@@ -247,13 +259,16 @@ def choose_account(state, proposal, target):
         reference(state["accounts"], budget["account_id"], "budget account")
         s.require(not candidates or budget["account_id"] in candidates, "Budget account is unrelated to this investigation")
         candidates.insert(0, budget["account_id"])
-    account = state["accounts"][candidates[0]] if candidates else None
+    account = require_current_account(state, candidates[0]) if candidates else None
     renewal = budget["mode"] == "renew"
     if renewal:
         s.require(account is not None and qualifying_progress(state, budget["basis_checkpoint_id"], budget["basis_checkpoint_digest"]),
                   "Renewal needs accepted progress or relevant accepted external evidence", "budget_exhausted")
         s.require(proposal["relationship"] != "continuation", "Continuation cannot reset an account", "budget_exhausted")
-        s.require(account["reserved_moves"] == 0 and account["reserved_runs"] == 0,
+        lineage = {key: item for key, item in state["accounts"].items()
+                   if item["lineage_owner"] == account["lineage_owner"]}
+        s.require(all(item["reserved_moves"] == 0 and item["reserved_runs"] == 0
+                      for item in lineage.values()),
                   "Pending reservations must be reconciled before renewal", "budget_exhausted")
         basis = progress_identity(state["checkpoints"][budget["basis_checkpoint_id"]])
         for previous in state["accounts"].values():
@@ -263,7 +278,7 @@ def choose_account(state, proposal, target):
                           "The same progress cannot renew a lineage twice", "budget_exhausted")
         for node in state["nodes"].values():
             old = state["proposals"][node["proposal_id"]]["record"]
-            if node["account_id"] == account["id"]:
+            if node["account_id"] in lineage:
                 s.require(old["method"] != proposal["method"] and node["id"] not in proposal["equivalent_node_ids"],
                           "An identical attempt cannot renew through renaming", "budget_exhausted")
     if account is not None and not renewal:
