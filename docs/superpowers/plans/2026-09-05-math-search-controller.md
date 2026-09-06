@@ -342,6 +342,16 @@ def test_unadmitted_verify_never_launches_checker(self):
   analytical-to-generic and native wrong-claim/domain refusal, and both legitimate
   finite-command and native-verification paths. Disclose the semantic code/input
   review trust boundary instead of claiming that labels establish mathematical use.
+  Before native reservation/launch, require an independent input-bound `ResultReview`
+  over the closed subject `{node_id, task, spec_without_input_review}` and the exact
+  claim. The subject binds the full native run spec and derived protocol, using
+  stable logical paths rather than a new physical run directory. Unchanged retries
+  reuse that review but consume new allowance; changed inputs, dependencies or
+  environment require a new input-bound review, not another significance review.
+  Legacy verify reads `verification-review.json`; search run accepts `input_review`.
+  Preserve the review immutably outside its own subject/snapshot to avoid circular
+  hashing. Do not exclude an actual executable dependency under that metadata rule.
+  Test absent, mismatched, self-authored and stale-input reviews before launch.
 - [ ] One Lean verification workload reserves two command units atomically under one
   run ID, one for build and one for inspection. Certificate and generic command
   workloads reserve one. The Lean commands share the admitted total wall timeout
@@ -364,6 +374,15 @@ def test_unadmitted_verify_never_launches_checker(self):
   check-unit/finish while permitting provisional problem formulation and read-only
   legacy inspection. Preserve all current cash-out conditions and strengthen every
   finish path's native-child and terminal checks. Never add a legacy execution flag.
+- [ ] For non-journal native mutations, record a native-operation intent with exact
+  relevant pre-state and original args, then acknowledge exact post-state after
+  native success. Reconcile only an established effect, not mere file presence.
+  Ambiguity blocks new mutations with the original command/intent and file conflicts
+  identified. Explicit replay of the original non-mathematical command may recover
+  only under its pinned inputs and permitted effects; preserve intervening edits.
+  Reuse native derivations/validators without duplicating their semantics, and never
+  rerun a mathematical job as recovery. Test crashes before/after writes, duplicate
+  acknowledgement and conflicting edits.
 - [ ] Adjust existing workflow fixtures to create truly admitted states; pure legacy
   parser tests can stay pure. Do not weaken assertions or suppress gate findings.
   Use test-only helpers, not production testing modes.
