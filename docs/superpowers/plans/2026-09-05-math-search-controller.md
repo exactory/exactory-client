@@ -334,6 +334,14 @@ def test_unadmitted_verify_never_launches_checker(self):
   checks cannot derive, and derives the next move number. Later journal acknowledgement
   must match that reservation. No new per-retry significance review is required;
   a changed admitted purpose, domain or allowance requires reviewed amendment.
+  A generic command requires an admitted finite task and its reviewed necessity/
+  outcome map; a plain analytical `proof` task is insufficient. Native certificate/
+  Lean verification may use a proof task only for produced artifacts of its exact
+  admitted claim through a reserved legal entry and derived verifier protocol.
+  A native tag permits neither arbitrary argv nor a changed purpose/domain. Test
+  analytical-to-generic and native wrong-claim/domain refusal, and both legitimate
+  finite-command and native-verification paths. Disclose the semantic code/input
+  review trust boundary instead of claiming that labels establish mathematical use.
 - [ ] One Lean verification workload reserves two command units atomically under one
   run ID, one for build and one for inspection. Certificate and generic command
   workloads reserve one. The Lean commands share the admitted total wall timeout
