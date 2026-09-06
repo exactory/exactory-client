@@ -1,6 +1,7 @@
 """Crash-safe storage for search-controller events and immutable evidence."""
 
 import contextlib
+import copy
 import errno
 import hashlib
 import json
@@ -187,9 +188,9 @@ def _validate_document(document: Any) -> Dict[str, Any]:
             raise SearchError("corrupt_state", "event request_id is not unique")
         request_ids.add(request_id)
     try:
-        canonical_bytes(document["contract"])
+        canonical_bytes(document)
     except SearchError as error:
-        raise SearchError("corrupt_state", "contract is not valid JSON") from error
+        raise SearchError("corrupt_state", "document is not valid JSON") from error
     return document
 
 
@@ -285,7 +286,7 @@ class Store:
                 "payload": _strict_json(payload_bytes, "invalid_json"),
             }
             if validate is not None:
-                validate(document, candidate)
+                validate(copy.deepcopy(document), copy.deepcopy(candidate))
             _validate_event(candidate, revision + 1)
             new_document = {
                 "schema_version": document["schema_version"],

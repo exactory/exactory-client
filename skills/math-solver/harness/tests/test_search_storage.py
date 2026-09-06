@@ -3,10 +3,12 @@ import json
 import multiprocessing
 from pathlib import Path
 import tempfile
+import time
 import unittest
 from unittest import mock
 
 from search_controller import SearchError, Store, canonical_bytes, safe_path
+import search_controller.storage as storage_module
 
 
 def _append_worker(root, value, ready, start, results):
@@ -18,6 +20,13 @@ def _append_worker(root, value, ready, start, results):
         results.put(("committed", event["payload"]["value"]))
     except SearchError as error:
         results.put((error.code, value))
+
+
+def _hold_lock(lock_path, ready, release):
+    with open(lock_path, "a+b") as stream:
+        storage_module.fcntl.flock(stream.fileno(), storage_module.fcntl.LOCK_EX)
+        ready.put(True)
+        release.wait(timeout=10)
 
 
 class SearchStorageTests(unittest.TestCase):
@@ -166,6 +175,43 @@ class SearchStorageTests(unittest.TestCase):
         )
         self.assertEqual(tree_path.read_bytes(), old_bytes)
 
+    def test_validator_mutations_cannot_change_committed_state_or_candidate(self):
+        store = self.initialized_store()
+        first = store.append("record", {"value": 1}, 0, "request-one")
+
+        def mutate(document, candidate):
+            document["objective_id"] = "rewritten-objective"
+            document["contract"]["claim"] = "rewritten-claim"
+            document["events"][0]["request_id"] = "rewritten-request"
+            document["events"][0]["kind"] = "rewritten-kind"
+            document["events"][0]["payload"]["value"] = 999
+            candidate["request_id"] = "rewritten-candidate-request"
+            candidate["kind"] = "rewritten-candidate-kind"
+            candidate["payload"]["value"] = 999
+
+        second = store.append(
+            "record", {"value": 2}, 1, "request-two", validate=mutate
+        )
+
+        self.assertEqual(
+            second,
+            {
+                "sequence": 2,
+                "request_id": "request-two",
+                "kind": "record",
+                "payload": {"value": 2},
+            },
+        )
+        self.assertEqual(
+            store.read(),
+            {
+                "schema_version": 1,
+                "objective_id": "objective-a",
+                "contract": {"claim": "A"},
+                "events": [first, second],
+            },
+        )
+
     def test_interrupted_replace_preserves_exact_old_document_bytes(self):
         store = self.initialized_store()
         tree_path = self.root / "tree.json"
@@ -205,6 +251,39 @@ class SearchStorageTests(unittest.TestCase):
         events = Store(self.root).read()["events"]
         self.assertEqual(len(events), 1)
         self.assertIn(events[0]["payload"]["value"], (1, 2))
+
+    def test_writer_lock_times_out_without_changing_committed_bytes(self):
+        if storage_module.fcntl is None:
+            self.skipTest("fcntl is unavailable")
+        store = self.initialized_store()
+        tree_path = self.root / "tree.json"
+        old_bytes = tree_path.read_bytes()
+        context = multiprocessing.get_context("spawn")
+        ready = context.Queue()
+        release = context.Event()
+        process = context.Process(
+            target=_hold_lock,
+            args=(str(self.root / "tree.lock"), ready, release),
+        )
+        process.start()
+        try:
+            self.assertTrue(ready.get(timeout=10))
+            started = time.monotonic()
+            with mock.patch.object(storage_module, "LOCK_TIMEOUT_SECONDS", 0.05):
+                with mock.patch.object(storage_module, "LOCK_RETRY_SECONDS", 0.005):
+                    self.assert_error_code(
+                        "lock_timeout",
+                        lambda: store.append(
+                            "record", {"value": 1}, 0, "request-one"
+                        ),
+                    )
+            elapsed = time.monotonic() - started
+        finally:
+            release.set()
+            process.join(timeout=10)
+        self.assertEqual(process.exitcode, 0)
+        self.assertLess(elapsed, 1.0)
+        self.assertEqual(tree_path.read_bytes(), old_bytes)
 
     def test_read_rejects_duplicate_keys_and_nonfinite_numbers(self):
         store = self.initialized_store()
@@ -281,6 +360,31 @@ class SearchStorageTests(unittest.TestCase):
         for document in malformed:
             with self.subTest(document=document):
                 (self.root / "tree.json").write_bytes(canonical_bytes(document))
+                self.assert_error_code("corrupt_state", store.read)
+
+    def test_read_rejects_unencodable_metadata_strings(self):
+        store = self.initialized_store()
+        for field in ("objective_id", "request_id", "kind"):
+            document = {
+                "schema_version": 1,
+                "objective_id": "objective-a",
+                "contract": {"claim": "A"},
+                "events": [
+                    {
+                        "sequence": 1,
+                        "request_id": "request-one",
+                        "kind": "record",
+                        "payload": {"value": 1},
+                    }
+                ],
+            }
+            if field == "objective_id":
+                document[field] = "\ud800"
+            else:
+                document["events"][0][field] = "\ud800"
+            with self.subTest(field=field):
+                raw = json.dumps(document, ensure_ascii=True).encode("utf-8")
+                (self.root / "tree.json").write_bytes(raw)
                 self.assert_error_code("corrupt_state", store.read)
 
     def test_append_rejects_malformed_inputs_without_modifying_document(self):
