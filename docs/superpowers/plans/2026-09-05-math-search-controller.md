@@ -383,6 +383,12 @@ def test_unadmitted_verify_never_launches_checker(self):
   check-unit/finish while permitting provisional problem formulation and read-only
   legacy inspection. Preserve all current cash-out conditions and strengthen every
   finish path's native-child and terminal checks. Never add a legacy execution flag.
+  Child creation uses reviewed `search admit` with `native_parent`, preserving
+  `parent.json`, the depth-one rule, opening move count and native finish checks.
+  Legacy `init --from` returns `admission_required` with this concrete migration
+  route; it cannot both require prior admission and recreate its already initialized
+  directory. Provisional `init` without `--from` remains supported. Document this
+  intentional creation-entrypoint compatibility change for 0.34.0.
 - [ ] For non-journal native mutations, record a native-operation intent with exact
   relevant pre-state and original args, then acknowledge exact post-state after
   native success. Reconcile only an established effect, not mere file presence.
@@ -392,6 +398,11 @@ def test_unadmitted_verify_never_launches_checker(self):
   Reuse native derivations/validators without duplicating their semantics, and never
   rerun a mathematical job as recovery. Test crashes before/after writes, duplicate
   acknowledgement and conflicting edits.
+  A caught native validation failure may also have a durable, explicitly failed
+  receipt bound to its exact post-state and permitted output changes, for example
+  removal of a stale check-unit stamp. Acknowledge that known failure without
+  asserting success or local completion. Missing receipts remain ambiguous; file
+  presence or absence cannot substitute for a recorded invocation outcome.
 - [ ] Adjust existing workflow fixtures to create truly admitted states; pure legacy
   parser tests can stay pure. Do not weaken assertions or suppress gate findings.
   Use test-only helpers, not production testing modes.
