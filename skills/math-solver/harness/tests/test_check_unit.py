@@ -1,15 +1,16 @@
 import hashlib
 import json
 
-from tests.support import WorkspaceTest, make_move, write_journal
+from tests.support import AdmittedWorkspaceTest, make_move, write_journal, prepare_plan
 
 EVIDENCE_FORM = "counterexample-or-computational-evidence"
 
 
-class CheckUnitTest(WorkspaceTest):
+class CheckUnitTest(AdmittedWorkspaceTest):
     def setUp(self):
         super().setUp()
-        write_journal(self.workspace, [make_move(1), make_move(2)])
+        prepare_plan(self)
+        self.history = [make_move(1), make_move(2)]
         (self.workspace / "units" / "INVENTORY.md").write_text("# Inventory: sample\n")
         self.unit_dir = self.workspace / "units" / "1"
         self.unit_dir.mkdir()
@@ -28,6 +29,7 @@ class CheckUnitTest(WorkspaceTest):
         return unit
 
     def check(self, unit):
+        write_journal(self.workspace, self.history)
         self.write_json("units/1/unit.json", unit)
         return self.run_cli("check-unit", self.slug, "1")
 
@@ -38,7 +40,10 @@ class CheckUnitTest(WorkspaceTest):
             (run_dir / "result.json").write_text(json.dumps(result))
 
     def pay(self, *costs):
-        write_journal(self.workspace, [make_move(1, costs_paid=list(costs)), make_move(2)])
+        if (self.workspace / "journal.jsonl").read_text():
+            self.tearDown()
+            self.setUp()
+        self.history = [make_move(1, costs_paid=list(costs)), make_move(2)]
 
     def test_accepts_a_complete_unit(self):
         self.assertEqual(self.check(self.make_unit()), (0, "units/1/unit.json: ok\n", ""))
@@ -150,17 +155,11 @@ class CheckUnitTest(WorkspaceTest):
         )
 
     def test_the_ledger_is_the_sum_over_the_moves_the_unit_lists(self):
-        write_journal(
-            self.workspace,
-            [make_move(1, costs_paid=["object"]), make_move(2, costs_paid=["object", "axioms"])],
-        )
+        self.history = [make_move(1, costs_paid=["object"]), make_move(2, costs_paid=["object", "axioms"])]
         self.assertEqual(self.check(self.make_unit(costs=["axioms", "object"]))[0], 0)
 
     def test_rejects_a_ledger_that_drops_a_cost_a_listed_move_paid(self):
-        write_journal(
-            self.workspace,
-            [make_move(1, costs_paid=["object"]), make_move(2, costs_paid=["axioms"])],
-        )
+        self.history = [make_move(1, costs_paid=["object"]), make_move(2, costs_paid=["axioms"])]
         self.assertEqual(
             self.check(self.make_unit(costs=["object"]))[2],
             "costs: moves 1, 2 paid axioms, object\n",

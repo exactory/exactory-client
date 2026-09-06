@@ -2,7 +2,7 @@ import json
 
 from tests.support import (
     ALL_YES,
-    WorkspaceTest,
+    AdmittedWorkspaceTest,
     make_move,
     make_preconditions,
     make_problem,
@@ -12,13 +12,14 @@ from tests.support import (
 )
 
 
-class FailTest(WorkspaceTest):
+class FailTest(AdmittedWorkspaceTest):
     def setUp(self):
         super().setUp()
         self.write_json("problem.json", make_problem())
         write_study(self.workspace, "problem")
         self.write_json("preconditions.json", make_preconditions(ALL_YES))
         self.run_cli("plan", self.slug)
+        write_ranking(self)
 
     def test_sets_the_verdict_to_no_with_a_note_and_replans(self):
         status, out, err = self.run_cli("fail", self.slug, "ladder-the-parameter")

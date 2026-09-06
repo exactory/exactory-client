@@ -64,6 +64,93 @@ class WorkspaceTest(unittest.TestCase):
         return json.loads((self.workspace / name).read_text())
 
 
+def admit_existing_workspace(attack_root, slug="sample", problem=None):
+    """Admit a genuine native fixture without creating its plan or ranking."""
+    import hashlib
+    from search_controller.service import Controller
+    from tests.search_fixtures import contract, proposal, review, digest
+    controller = Controller(attack_root, FIXTURE_STRATEGIES)
+    if controller.store.tree_path.exists():
+        return controller
+    workspace = attack_root / slug
+    problem = make_problem() if problem is None else problem
+    (workspace / "problem.json").write_text(json.dumps(problem))
+    write_study(workspace, "problem")
+    (workspace / "novelty.md").write_text("This native validation fixture makes no novelty claim.\n")
+    original = contract()
+    original["original_claim"].update(statement=problem["claim"], quantifiers="The exact quantifiers of the supplied native fixture",
+                                      scope={"kind": "named", "name": "native fixture domain"})
+    original["root_attack_slug"] = slug
+    candidate = proposal()
+    candidate.update(attack_slug=slug, claim=original["original_claim"], method=OPENING)
+    candidate["anchor"]["digest"] = digest(original)
+    candidate["studies"]["strategies"] = []
+    inputs = []
+    for name, relative in [("problem", "study/problem.md"), ("novelty", "novelty.md")] + [(name, "study/" + name + ".md") for name in ALL_YES]:
+        path = workspace / relative
+        if not path.exists() or not path.read_text().strip():
+            write_study(workspace, name)
+        value = hashlib.sha256(path.read_bytes()).hexdigest()
+        inputs.append({"path": slug + "/" + relative, "digest": value, "kind": "artifact"})
+        if name in {"problem", "novelty"}:
+            candidate["studies"][name] = value
+        else:
+            candidate["studies"]["strategies"].append({"method": name, "digest": value})
+    controller.command("init", {"contract": original}, 0, "initialize")
+    controller.command("propose", {"proposal": candidate, "inputs": inputs}, 1, "proposal")
+    controller.command("review", {"proposal_id": "proposal-000001", "review": review(candidate), "inputs": []}, 2, "review")
+    controller.command("admit", {}, 3, "admit", "proposal-000001")
+    return controller
+
+
+def reserved_journal(argv, attack_root):
+    """Check native input rules read-only, then reserve before a valid append."""
+    from search_controller.errors import SearchError
+    from search_controller.service import Controller
+    args = attack.build_parser().parse_args(["--strategies", str(FIXTURE_STRATEGIES), "--attack-root", str(attack_root)] + list(argv))
+    try:
+        line = attack.validated_journal_line(args)
+        controller = Controller(attack_root, FIXTURE_STRATEGIES)
+        state = controller.status()
+        node = next(node for node in state["nodes"].values() if node["attack_slug"] == args.slug)
+        if not state["control"]["pending_moves"]:
+            spec = {key: line[key] for key in ["strategy", "entry", "pass", "trigger_features", "step_cites"]}
+            controller.command("begin", spec, state["revision"], "fixture-begin-{}-{}".format(node["id"], line["move"]), node["id"])
+    except attack.ValidationError as error:
+        return 1, "", "".join(problem + "\n" for problem in error.problems)
+    except SearchError as error:
+        return 1, "", json.dumps({"error": {"code": error.code, "message": error.message, "details": error.details}}) + "\n"
+    return run(argv, attack_root)
+
+
+class AdmittedWorkspaceTest(WorkspaceTest):
+    def setUp(self):
+        super().setUp()
+        self.controller = admit_existing_workspace(self.attack_root, self.slug)
+
+    def run_cli(self, *argv):
+        if list(argv[:2]) == ["journal", "add"]:
+            return reserved_journal(argv, self.attack_root)
+        return run(argv, self.attack_root)
+
+
+def admit_native_child(controller, slug="hypothesis", parent_slug="sample"):
+    """Create a child only through the reviewed controller filesystem effect."""
+    import copy
+    from tests.search_fixtures import review
+    from tests.search_execution_support import invoke
+    state = controller.status()
+    parent = next(node for node in state["nodes"].values() if node["attack_slug"] == parent_slug)
+    candidate = copy.deepcopy(state["proposals"][parent["proposal_id"]]["record"])
+    candidate.update(attack_slug=slug, native_parent=parent["id"])
+    number = state["next_ids"]["proposal"]
+    identity = "proposal-{:06d}".format(number)
+    invoke(controller, "propose", {"proposal": candidate, "inputs": []}, None)
+    invoke(controller, "review", {"proposal_id": identity, "review": review(candidate), "inputs": []}, None)
+    invoke(controller, "admit", {}, identity)
+    return controller.root / slug
+
+
 # Questions 1 and 2 of every fixture strategy are required, question 3 is optional.
 ANSWERS_FOR_VERDICT = {
     "yes": ["yes", "yes", "yes"],
@@ -122,6 +209,18 @@ def make_move(move, pass_number=1, failed=False, **overrides):
 
 
 def write_journal(workspace, moves):
+    if (workspace.parent / ".search/tree.json").exists():
+        existing = attack.read_journal(workspace)
+        for actual, expected in zip(existing, moves):
+            if {key: value for key, value in actual.items() if key != "problem_digest"} != expected:
+                raise AssertionError("A controlled fixture must not rewrite an acknowledged journal prefix")
+        if len(existing) > len(moves):
+            raise AssertionError("A controlled fixture must not truncate its journal")
+        for move in moves[len(existing):]:
+            status, out, err = reserved_journal(["journal", "add", workspace.name, "--json", json.dumps(move)], workspace.parent)
+            if status:
+                raise AssertionError(err)
+        return
     (workspace / "journal.jsonl").write_text("".join(json.dumps(m) + "\n" for m in moves))
 
 
@@ -139,13 +238,16 @@ def prepare_plan(test, verdicts=None):
     test.write_json("problem.json", make_problem())
     write_study(test.workspace, "problem")
     test.write_json("preconditions.json", make_preconditions(verdicts or ALL_YES))
+    admit_existing_workspace(test.attack_root, test.slug)
     test.run_cli("plan", test.slug)
     write_ranking(test)
 
 
-def write_study(workspace, name, text="queries: one per first-tier source\n"):
+def write_study(workspace, name, text=None):
     """A study record the harness accepts; name is "problem" or a strategy name."""
     (workspace / "study").mkdir(exist_ok=True)
+    if text is None:
+        text = "queries: one per first-tier source for " + name + "\n"
     (workspace / "study" / ("%s.md" % name)).write_text(text)
 
 
@@ -159,6 +261,8 @@ class StepTest(WorkspaceTest):
 
     def setUp(self):
         super().setUp()
+        from tests.search_execution_support import admit_workspace
+        self.controller = admit_workspace(self.attack_root, self.slug)
         self.step_dir = self.workspace / "deterministic" / self.step_name
         self.step_dir.mkdir()
         self.log = self.attack_root / "lake.log"
@@ -180,3 +284,27 @@ class StepTest(WorkspaceTest):
 
     def read_result(self):
         return json.loads((self.step_dir / "result.json").read_text())
+
+    def prepare_verification(self, kind, step_name=None):
+        from tests.search_execution_support import begin_spec, invoke, review_native_inputs
+        step_name = step_name or self.step_name
+        if not self.controller.status()["control"]["pending_moves"]:
+            invoke(self.controller, "begin", begin_spec())
+        step = self.workspace / "deterministic" / step_name
+        description = step / "step.json"
+        if description.exists():
+            value = json.loads(description.read_text())
+            value.setdefault("requested_type", "True")
+            value["environment"] = {key: text for key, text in os.environ.items() if key.startswith("FAKE_LAKE_")}
+            value["environment"]["PATH"] = os.environ["PATH"]
+            description.write_text(json.dumps(value))
+        try:
+            review_native_inputs(self.controller, self.slug, step_name, kind)
+        except (attack.ValidationError, FileNotFoundError):
+            # Invalid-project tests exercise the same native preflight directly.
+            pass
+
+    def run_cli(self, *argv):
+        if argv and argv[0] == "verify":
+            self.prepare_verification(argv[1], argv[3])
+        return super().run_cli(*argv)

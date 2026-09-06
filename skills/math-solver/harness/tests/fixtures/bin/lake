@@ -16,11 +16,15 @@ case "$1" in
       echo "$3:1:0: error: unknown identifier"
       exit "$FAKE_LAKE_LEAN_STATUS"
     fi
-    name=$(sed -n 's/^#print axioms //p' "$3")
+    name=$(sed -n 's/^#check @//p' "$3")
+    echo EXACTORY_TYPE_BEGIN
+    echo "$name : ${FAKE_LAKE_PRINTED_TYPE:-True}"
+    echo EXACTORY_TYPE_END
     if [ -z "$FAKE_LAKE_AXIOMS" ]; then
       echo "'$name' does not depend on any axioms"
     else
       echo "'$name' depends on axioms: [$FAKE_LAKE_AXIOMS]"
     fi
+    echo "'exactory_correspondence' depends on axioms: [${FAKE_LAKE_CORRESPONDENCE_AXIOMS:-$FAKE_LAKE_AXIOMS}]"
     ;;
 esac

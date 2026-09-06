@@ -111,14 +111,14 @@ class SearchCLITests(SearchCLIWorkspace, unittest.TestCase):
         self.assertEqual(journal.stat().st_mtime_ns, before)
         self.assertEqual(self.search("status")["revision"], 4)
 
-    def test_missing_execution_capability_never_succeeds(self):
+    def test_execution_requires_closed_specs_and_reconcile_is_available(self):
         self.initialize()
-        for command in ["begin", "run", "reconcile"]:
-            result = self.search(command, {} if command != "reconcile" else None,
-                                 target="node-000001" if command != "reconcile" else None,
+        for command in ["begin", "run"]:
+            result = self.search(command, {}, target="node-000001",
                                  revision=1, success=False)
-            self.assertEqual(result["error"]["code"], "capability_unavailable")
+            self.assertEqual(result["error"]["code"], "invalid_record")
         self.assertEqual(self.search("status")["revision"], 1)
+        self.assertEqual(self.search("reconcile", revision=1)["revision"], 2)
 
     def test_unknown_command_is_structured(self):
         result = self.search("arbitrary-event", {}, success=False)
@@ -145,7 +145,7 @@ class SearchCLITests(SearchCLIWorkspace, unittest.TestCase):
         result = subprocess.run([sys.executable, str(CLI), "--attack-root", str(self.root),
                                  "verify", "certificate", "attempt", "fake"], capture_output=True, text=True, env=environment)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('"code": "capability_unavailable"', result.stderr)
+        self.assertIn('"code": "reservation_required"', result.stderr)
         self.assertFalse((step / "result.json").exists())
         self.assertFalse((step / "proof-job-ran").exists())
 

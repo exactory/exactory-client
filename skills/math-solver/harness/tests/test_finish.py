@@ -3,12 +3,13 @@ evaluated, and the record says so in units/FINISHED.json."""
 
 import json
 
-from tests.support import WorkspaceTest, make_move, write_journal, write_study
+from tests.support import AdmittedWorkspaceTest, make_move, write_journal, write_study, prepare_plan
 
 
-class FinishTest(WorkspaceTest):
+class FinishTest(AdmittedWorkspaceTest):
     def setUp(self):
         super().setUp()
+        prepare_plan(self)
         write_journal(self.workspace, [make_move(1)])
         (self.workspace / "units" / "INVENTORY.md").write_text("# Inventory: sample\n")
         self.unit_dir = self.workspace / "units" / "1"
@@ -91,14 +92,13 @@ class FinishTest(WorkspaceTest):
         )
 
 
-class FinishAtStageThreeTest(WorkspaceTest):
+class FinishAtStageThreeTest(AdmittedWorkspaceTest):
     """The attack that ends at stage 3, because the statement is in the literature,
     finishes on the study and the novelty record alone."""
 
     def setUp(self):
         super().setUp()
         write_study(self.workspace, "problem")
-        (self.workspace / "novelty.md").write_text("2026-09-01 arXiv: solved, see the record\n")
 
     def test_records_the_exit(self):
         status, out, err = self.run_cli("finish", self.slug)
@@ -121,6 +121,7 @@ class FinishAtStageThreeTest(WorkspaceTest):
         )
 
     def test_an_attack_with_moves_is_not_a_stage_three_exit(self):
+        prepare_plan(self)
         write_journal(self.workspace, [make_move(1)])
         self.assertEqual(
             self.run_cli("finish", self.slug)[2],

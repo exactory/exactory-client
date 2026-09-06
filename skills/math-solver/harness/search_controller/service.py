@@ -27,6 +27,8 @@ class Controller:
         if pending:
             state["control"]["state_error"] = "Filesystem initialization is pending; replay its original command or run search render"
         state["freshness"] = {"status": "unchecked", "failures": {}}
+        from .execution import process_observations
+        state["process_observations"] = process_observations(state)
         if full_audit:
             failures = audit_state(self.root, state, self.store)
             state["freshness"] = {"status": "failed" if failures else "fresh", "failures": failures}
@@ -47,11 +49,9 @@ class Controller:
             s.closed(spec, "")
             state = self.status()
             return state if name == "status" else next_action(state)
-        if name in {"begin", "run", "reconcile"}:
-            raise SearchError("capability_unavailable", "Execution and intent recovery require Task 5")
         s.integer(expected_revision)
         s.text(request_id)
-        if name not in {"admit", "accept", "retreat", "checkpoint"}:
+        if name not in {"admit", "accept", "retreat", "checkpoint", "begin", "run"}:
             s.require(target is None, "This command has no positional target")
         elif name != "checkpoint":
             s.text(target)
@@ -72,6 +72,16 @@ class Controller:
             event = self.store.append_operation(identity, expected_revision, request_id,
                 build,
                 lambda document, candidate: apply_event(replay(document), candidate))
+        if name == "run" and built:
+            from .execution import launch
+            state = replay(self.store.read())
+            run_id = event["payload"]["operations"][0]["payload"]["run"]["id"]
+            launch(self, state["runs"][run_id])
+        elif name == "reconcile":
+            from .execution import reconcile_runs
+            from .integration import recover_journal_effects
+            reconcile_runs(self)
+            recover_journal_effects(self)
         with self.store._writer_lock():
             document = self.store.read()
             state = replay(document)
@@ -93,6 +103,8 @@ class Controller:
 
     def _build(self, name, spec, target, identity, document, content):
         state = replay(document)
+        s.require(not state["service"]["native_intents"] or name in {"reconcile", "pause", "focus", "hook-stop", "audit", "render"},
+                  "Reconcile the original native intent before another controller mutation", "recovery_required")
         if name != "render":
             s.require(all(safe_path(self.store.root, "effect-" + s.digest(effect) + ".json").exists()
                           for effect in state["service"]["effects"]),
@@ -100,7 +112,18 @@ class Controller:
         operations, effects = [], []
         def emit(kind, value):
             operations.append({"kind": kind, "payload": value})
-        if name == "adopt":
+        if name == "begin":
+            from .integration import build_begin
+            emit("move_reserved", {"reservation": build_begin(self, state, spec, target, content)})
+        elif name == "run":
+            from .execution import build_run
+            emit("run_reserved", {"run": build_run(self, state, spec, target, content)})
+        elif name == "reconcile":
+            from .integration import reconcile_journals, reconcile_native_intents
+            s.closed(spec, "")
+            reconcile_journals(self, state, content, emit)
+            reconcile_native_intents(self, state, content, emit)
+        elif name == "adopt":
             from .adoption import build_import, record_import, record_import_version, record_allowance
             s.closed(spec, "mappings inputs")
             import_inputs(self.root, spec["inputs"], content)
@@ -227,6 +250,15 @@ class Controller:
                                               "provenance": self.provenance("audit")})
         else:
             raise SearchError("invalid_command", "Unknown search command: " + name)
+        if name in {"checkpoint", "accept", "reconcile"}:
+            from .model import EVENT_HANDLERS
+            from .integration import observe_node
+            prospective = copy.deepcopy(state)
+            for operation in operations:
+                EVENT_HANDLERS[operation["kind"]](prospective, operation["payload"])
+            for node in prospective["nodes"].values():
+                if node["proposal_id"] is not None:
+                    emit("node_facts_recorded", {"facts": observe_node(self, prospective, node, content)})
         paths = {"SEARCH_TREE.md"} | {n["attack_slug"] + "/LINEAGE.md" for n in state["nodes"].values()}
         if name == "admit":
             paths.add(proposal["attack_slug"] + "/LINEAGE.md")
@@ -298,25 +330,5 @@ class Controller:
             replace_text(marker, canonical_bytes(effect).decode("utf-8"))
 
     def guard_legacy(self, command, slug, details):
-        s.slug(slug)
-        safe_path(self.root, slug)
-        if details.get("parent") is not None:
-            s.slug(details["parent"])
-            safe_path(self.root, details["parent"])
-        for field in ["step_dir", "unit"]:
-            if details.get(field) is not None:
-                safe_path(self.root, slug + "/" + details[field])
-        if not self.store.tree_path.exists():
-            return
-        state = replay(self.store.read())
-        if command == "init":
-            return
-        node = next((n for n in state["nodes"].values() if n["attack_slug"] == slug), None)
-        if command in {"plan", "rank", "journal", "verify", "fail", "stall", "check-unit", "finish"}:
-            s.require(not self.status()["service"]["pending_effect_ids"], "Recover pending filesystem initialization before legacy work", "recovery_required")
-            s.require(node is not None, "Initialize or adopt and admit this attack before research", "admission_required")
-            s.require(node["proposal_id"] is not None, "Historical imports are read-only; use a reviewed verification prerequisite", "admission_required")
-            s.require(node["status"] != "finished" and not safe_path(self.root, slug + "/units/FINISHED.json").exists(),
-                      "A locally finished attack cannot receive new research mutations", "terminal_attack")
-            if command in {"journal", "verify"}:
-                raise SearchError("capability_unavailable", "Managed execution requires the Task 5 reservation boundary")
+        from .integration import guard_legacy
+        return guard_legacy(self, command, slug, details)

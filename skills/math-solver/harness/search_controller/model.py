@@ -7,23 +7,31 @@ from .admission import EVENT_HANDLERS as ADMISSION_HANDLERS, obligation_record
 from .proof import EVENT_HANDLERS as PROOF_HANDLERS
 from .scheduler import EVENT_HANDLERS as SCHEDULER_HANDLERS, initial_control
 from .adoption import EVENT_HANDLERS as ADOPTION_HANDLERS
+from .execution_state import EVENT_HANDLERS as EXECUTION_HANDLERS
 
 
-EVENT_HANDLERS = dict(ADMISSION_HANDLERS, **PROOF_HANDLERS, **SCHEDULER_HANDLERS, **ADOPTION_HANDLERS)
+EVENT_HANDLERS = dict(ADMISSION_HANDLERS, **PROOF_HANDLERS, **SCHEDULER_HANDLERS, **ADOPTION_HANDLERS, **EXECUTION_HANDLERS)
 
 
 def service_operation(state, payload):
     """Replay only typed facts emitted by the filesystem service boundary."""
     s.closed(payload, "command target spec_digest operations effects")
+    s.require(not state["service"]["native_intents"] or payload["command"] in {"reconcile", "pause", "focus", "hook-stop", "audit", "render"},
+              "Native intent requires reconciliation", "recovery_required")
     allowed = {
         "init": set(), "render": set(), "propose": {"proposal_recorded"},
         "adopt": {"legacy_imported", "legacy_import_version_recorded", "adoption_allowance_recorded"},
         "review": {"review_recorded"}, "admit": {"proposal_admitted"},
-        "checkpoint": {"checkpoint_recorded"}, "accept": {"result_accepted"},
+        "checkpoint": {"checkpoint_recorded", "node_facts_recorded"}, "accept": {"result_accepted", "node_facts_recorded"},
         "complete": {"objective_completed"}, "audit": {"evidence_invalidated"},
         "retreat": {"node_retreated"}, "replan": {"replan_recorded"},
         "focus": {"control_recorded"}, "pause": {"control_recorded"},
         "resume": {"control_recorded"}, "hook-stop": {"control_recorded"},
+        "begin": {"move_reserved"},
+        "run": {"run_reserved"}, "execution-launch": {"run_launched"},
+        "legacy-journal": {"journal_intended"},
+        "legacy-native": {"native_intended"},
+        "reconcile": {"journal_acknowledged", "node_facts_recorded", "run_finished", "native_acknowledged"},
     }
     s.choice(payload["command"], allowed)
     s.optional_text(payload["target"])
@@ -64,7 +72,8 @@ def initial_state(contract, objective_id):
         "next_ids": {kind: 2 if kind == "obligation" else 1 for kind in kinds},
         "proof_status": "open", "execution_status": "needs_replan", "publication_status": [],
         "requests": {},
-        "service": {"effects": [], "imports": {}, "import_versions": [], "journal_receipts": {}, "adoption_allowances": []},
+        "service": {"effects": [], "imports": {}, "import_versions": [], "journal_receipts": {}, "adoption_allowances": [],
+                    "moves": {}, "legacy_intents": {}, "native_intents": {}, "native_receipts": {}},
     }
 
 

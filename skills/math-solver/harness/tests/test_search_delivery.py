@@ -78,6 +78,28 @@ class DeliveryTests(SearchCLIWorkspace, unittest.TestCase):
         with self.assertRaises(SearchError):
             evidence.audit_local_delivery(self.root, state, delivery, store)
 
+    def test_refreshed_native_result_cannot_replace_the_accepted_run_result(self):
+        from search_controller import evidence
+        delivery, workspace, store = self.delivery()
+        state = self.search("status")
+        result = workspace / "units/1/result.json"
+        result.write_text('{"status":"pass","exit_status":0}')
+        accepted_digest = store.put_artifact(result.read_bytes())
+        manifest = {"artifacts": [], "dependencies": [], "verification": {"run_id": "run-000001"}}
+        state["runs"]["run-000001"] = {"legacy_result": {"path": "attempt/units/1/result.json", "digest": accepted_digest},
+                                           "legacy_inspection": None}
+        state["checkpoints"]["checkpoint-000001"] = {"origin": {"node_id": "node-000001"}, "evidence_digests": [store.put_blob(manifest)]}
+        state["acceptances"]["acceptance-000001"] = {"status": "accepted", "checkpoint_id": "checkpoint-000001"}
+        package = store.get_blob(delivery["checked_unit_digests"][0])
+        package["files"].append({"path": "units/1/result.json", "digest": accepted_digest})
+        delivery["checked_unit_digests"] = [store.put_blob(package)]
+        evidence.audit_local_delivery(self.root, state, delivery, store)
+        result.write_text('{"status":"pass","output_head":["a different run"]}')
+        package["files"][-1]["digest"] = store.put_artifact(result.read_bytes())
+        delivery["checked_unit_digests"] = [store.put_blob(package)]
+        with self.assertRaises(SearchError):
+            evidence.audit_local_delivery(self.root, state, delivery, store)
+
     def assert_accepted_input_cannot_be_replaced(self, role, transitive=False):
         from search_controller import evidence
         delivery, workspace, store = self.delivery()

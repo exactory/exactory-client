@@ -35,7 +35,9 @@ class VerifyCertificateTest(StepTest):
     def test_runs_the_checker_in_the_step_directory(self):
         self.write_check_script("pwd\n")
         self.verify()
-        self.assertEqual(self.read_result()["output_head"], [str(self.step_dir.resolve())])
+        cwd = self.controller.status()["runs"]["run-000001"]["cwd"]
+        self.assertEqual(self.read_result()["output_head"], [cwd])
+        self.assertNotEqual(cwd, str(self.step_dir.resolve()))
 
     def test_keeps_only_the_first_twenty_lines(self):
         self.write_check_script("i=0\nwhile [ $i -lt 30 ]; do echo line $i; i=$((i+1)); done\n")
@@ -60,6 +62,7 @@ class RelativeAttackRootTest(StepTest):
     def test_runs_the_checker_from_a_relative_attack_root(self):
         self.write_step_file("check.sh", "#!/bin/sh\necho ok\n")
         os.chmod(self.step_dir / "check.sh", 0o755)
+        self.prepare_verification("certificate")
         here = os.getcwd()
         os.chdir(self.attack_root.parent)
         self.addCleanup(os.chdir, here)

@@ -1,34 +1,27 @@
-from tests.support import WorkspaceTest, make_move, write_journal
+from tests.support import AdmittedWorkspaceTest, ALL_YES, make_move, write_journal, prepare_plan
 
 
-class StallTest(WorkspaceTest):
+class StallTest(AdmittedWorkspaceTest):
     def plan_nothing(self):
         """A plan that admitted no opening, which is one of the rules that start the cash-out."""
-        self.write_json(
-            "openings.json",
-            {"generated_from": "preconditions.json", "problem_digest": "0" * 64, "openings": []},
-        )
+        prepare_plan(self, {name: "no" for name in ALL_YES})
 
     def plan_some(self, count):
-        self.write_json(
-            "openings.json",
-            {
-                "generated_from": "preconditions.json",
-                "problem_digest": "0" * 64,
-                "openings": [{"strategy": "strategy-%d" % n} for n in range(count)],
-            },
-        )
+        prepare_plan(self, {name: "yes" if index < count else "no" for index, name in enumerate(sorted(ALL_YES))})
 
     def test_lists_every_move_grouped_by_strategy_and_marks_the_fired_signals(self):
         """A move whose failure signal fired leaves what the strategy's Failure
         signal names, so the inventory carries it beside the rest."""
+        prepare_plan(self)
         write_journal(
             self.workspace,
             [
                 make_move(1, output="a bound one rung higher"),
                 make_move(2, failed=True, output="no rung reachable"),
-                make_move(3, strategy="solve-the-model-world-first", entry="isolate-a-model-problem", output="the model theorem"),
-                make_move(4, closes=True, output="the next rung"),
+                make_move(3, strategy="solve-the-model-world-first", entry="isolate-a-model-problem", output="the model theorem",
+                          walk="attack-the-negative-side+solve-the-model-world-first", step_cites=["shape.target_quantity"]),
+                make_move(4, closes=True, output="the next rung",
+                          walk="attack-the-negative-side+solve-the-model-world-first+attack-the-negative-side", step_cites=["shape.target_quantity"]),
             ],
         )
         status, out, err = self.run_cli("stall", self.slug)
@@ -78,6 +71,7 @@ class StallTest(WorkspaceTest):
         )
 
     def test_accepts_when_a_stall_is_due_and_names_the_rule(self):
+        prepare_plan(self)
         write_journal(self.workspace, [make_move(n, failed=True) for n in range(1, 4)])
         status, out, err = self.run_cli("stall", self.slug)
         self.assertEqual((status, err), (0, ""))
@@ -87,8 +81,9 @@ class StallTest(WorkspaceTest):
         )
 
     def test_accepts_when_the_plan_admitted_no_opening(self):
-        self.plan_nothing()
+        prepare_plan(self)
         write_journal(self.workspace, [make_move(1)])
+        self.plan_nothing()
         status, out, err = self.run_cli("stall", self.slug)
         self.assertEqual((status, err), (0, ""))
         self.assertEqual(
@@ -104,7 +99,7 @@ class StallTest(WorkspaceTest):
         self.assertTrue(text.endswith("No move is journalled.\n"))
 
     def test_names_what_each_move_paid_and_sums_the_ledger(self):
-        self.plan_nothing()
+        prepare_plan(self)
         write_journal(
             self.workspace,
             [
@@ -112,6 +107,7 @@ class StallTest(WorkspaceTest):
                 make_move(2, costs_paid=["object", "effectivity"], output="the bound, non-effective"),
             ],
         )
+        self.plan_nothing()
         self.run_cli("stall", self.slug)
         text = (self.workspace / "units" / "INVENTORY.md").read_text()
         self.assertIn("Walk: attack-the-negative-side.\n", text)

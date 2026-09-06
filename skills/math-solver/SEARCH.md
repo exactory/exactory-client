@@ -1,10 +1,193 @@
 # Mathematical search controller JSON contract
 
-This document defines the executable Task 2 through Task 4 interfaces for the persistent search
-controller. It does not authorize execution, publish results, or replace the
+## Metered execution and native integration
+
+The four-field document and event envelopes below remain unchanged. Execution
+events are typed operations inside the existing `service_operation` payload.
+`execution_state.py` is pure; `execution.py` owns process I/O; `integration.py`
+owns native guards, intent reconciliation, and stage observations. Existing
+`evidence.py` owns input freezing and provenance auditing.
+
+The closed public execution specs are:
+
+```text
+begin NODE --spec FILE:
+  {strategy: Text, entry: Text, pass: Int[1,3],
+   trigger_features: [Text], step_cites: [Text]}
+reconcile:
+  {} (the CLI takes no --spec)
+run NODE --spec FILE:
+  Common plus exactly one tagged variant below
+Common = {kind: "command"|"certificate"|"lean", step_dir: RelativeStepName,
+  artifacts: [{path: RelativeAttackRootPath, digest: Digest, role: ArtifactRole}],
+  external_dependencies: [{path: AbsolutePath, digest: Digest}],
+  environment: {NonsecretEnvironmentKey: String}, dependency_enumeration: Text,
+  timeout_seconds: PositiveInt, expected_outputs: [RelativeOutputPath]}
+command adds {argv: [Text]}
+certificate adds {input_review: ResultReview}
+lean adds {input_review: ResultReview, requested_declaration: Text,
+  requested_type: Text, toolchain_inventory_digest: Digest,
+  inspection_source_digest: Digest}
+```
+
+All mutations retain expected-revision and request-ID checks. Begin derives the
+next move number and legal walk from the actual native record. Studies, admitted
+strategy, claim, pass and native flow limits must match. A move is not an
+unmetered planning token: its eventual journal line must bind exactly that entry,
+pass, walk, triggers, citations, problem digest, and prior journal bytes. The
+native journal schema remains unchanged, including its derived problem digest.
+
+Generic commands require an admitted finite task and its reviewed necessity,
+complete input domain, outcomes and stopping condition. An analytical proof
+admission does not authorize arbitrary computation. The controller binds the
+actual task and inputs but cannot infer arbitrary code's mathematical purpose
+from filenames or labels. Domain completeness and semantic correspondence remain
+independent review responsibilities. Generic success never creates certificate
+or kernel verification status.
+
+Before native reservation, an independent `ResultReview` must approve exactly
+`{node_id, task, spec_without_input_review}` and the node's claim digest. The
+reviewer must differ from the proposal author. Native argv is derived, not caller
+supplied: certificate uses `/bin/sh check.sh`; Lean uses the resolved installed
+Lake executable for `build`, then `env lean axioms-check.lean`. The subject uses
+logical project paths and freezes that protocol's generated source. A matching
+claim digest alone does not establish correspondence. Changed source, environment,
+dependency inventory or verifier source needs a new input-bound review. Unchanged
+retries can reuse the review, with a fresh charged run reservation each time.
+
+Legacy verify reads `verification-review.json`. Its `step.json` may declare
+`environment`, `external_dependencies`, `dependency_enumeration`, and (for Lean)
+must declare `theorem` and `requested_type`, with optional `file`. The review is
+stored immutably outside its own snapshot. Native `result.json`, `inspection.log`
+and generated `axioms-check.lean` are output metadata, not frozen source inputs.
+This exclusion does not authorize omitting actual checker dependencies. All other
+local project files outside caches must be enumerated. Native PATH and resolved
+verifier binaries are pinned. Environment values may be empty strings, but never
+contain NUL; credential-like keys and loader/Python injection variables are refused.
+The executor supplies bounded thread settings and does not inherit credentials.
+
+The default limits remain eight moves per pass, three passes, 24 moves overall,
+24 command units, 300 seconds per workload and one compute worker. Native and
+generic paths share the same current-account transaction checks. A certificate or
+generic workload reserves one command unit. A Lean workload reserves two units
+atomically under one run ID. Build and inspection share one wall-time deadline.
+A durably failed build releases only the inspection unit proven never started.
+Uncertain crashes retain all reserved charges and prevent replacement. Rejected
+preflight spends nothing. `len(runs)` counts workloads, not consumed command units.
+
+The closed execution operation payloads are:
+
+```text
+move_reserved: {reservation: MoveReservation}
+MoveReservation = {id, node_id, account_id, move, pass, strategy, entry, walk,
+  trigger_features, step_cites, problem_digest, journal_prefix_digest}
+journal_intended: {reservation_id, before_digest, after_digest, problem_digest}
+journal_acknowledged: {node_id, move, reservation_id,
+  journal_prefix_digest, problem_digest}
+run_reserved: {run: RunReservation}
+RunReservation = {id, node_id, account_id, reservation_id, kind, input_digest,
+  spec_digest, task, cwd, snapshot_root, output_root, commands, timeout_seconds,
+  environment, threads, expected_outputs, dependency_enumeration,
+  executable_bindings, reserved_units, token, requested_declaration,
+  requested_type_digest, toolchain_digest, toolchain_inventory_digest,
+  inspection_source_digest, publication_prestate}
+executable_bindings = [{path: AbsolutePath, digest: Digest}]
+publication_prestate = [{path: RelativeAttackRootPath, digest: Digest|null}]
+run_launched: {run_id, token, identity: {pid, process_group, start_identity, token}}
+run_finished: {run_id, token, status: "terminal"|"indeterminate",
+  started_units, charged_units, result_digest, termination,
+  legacy_result: PathDigest|null, legacy_inspection: PathDigest|null,
+  outputs: [PathDigest], inspection: Inspection|null}
+PathDigest = {path, digest}
+Inspection = {printed_type_digest, source_digest,
+  declaration_axioms: [Text], correspondence_axioms: [Text]}
+```
+
+The authoritative run adds `status: reserved`, `identity: null`, zero started and
+charged units, and null result/termination on reservation, then retains lifecycle
+facts. Native-only metadata is null for generic runs. Existing frozen-input and
+terminal verification result formats below are unchanged. A generic result is
+`{schema_version: 1, kind: "command", run_id, claim_digest, input_digest, commands}`;
+it is execution evidence only. Each command retains exact argv, exit code and
+immutable stdout/stderr digests. Streams and each expected output are bounded to
+1 MiB. Expected outputs are written beneath `EXACTORY_OUTPUT_DIR`, separately from
+the build directory.
+
+The executor creates immutable input and separate working/build and output
+directories beneath `.search/runs/RUN`. A launcher acquires its ownership lock,
+persists PID/process-group/start identity and a random token, then waits on a pipe.
+The controller durably acknowledges that identity before sending the token that
+permits mathematical execution. Every attempted command gets a durable started
+marker. The launcher records bounded outputs and a terminal token-bound receipt.
+Reconciliation commits that original result exactly once. No marker means an
+uncertain charged run, not permission to retry. Recovery does not signal an
+uncertain PID and never reruns the job. Timeouts terminate only an owned live
+child process group; uncertain descendants block replacement.
+
+Shared external dependencies remain an explicitly trusted read-only boundary,
+not an OS-hermetic sandbox. Installed Lean files have a content-addressed
+provenance inventory `{root: AbsolutePath, files: [{path: RelativePath, digest}]}`.
+Exact membership and hashes are checked before launch, between the two commands,
+after execution and during full acceptance/completion audits. The existing pinned
+installation is resolved without downloading or asking elan to select another
+toolchain. The controller does not install software or change trust settings.
+
+Lean inspection captures the complete original printed type between unique
+delimiters. It generates the named `exactory_correspondence` theorem of the
+requested source type and records both that theorem's and the original theorem's
+axioms. A successful expected-type assignment can insert coercions; checking only
+the original theorem misses their dependencies. Both axiom records must satisfy
+policy. The requested type digest remains in the existing terminal record; the
+complete printed type, generated source and both axiom lists remain run provenance.
+Pretty-printed text equality is not a general type-equivalence proof.
+
+Native results and the complete Lean inspection stdout are published once at
+their recorded project paths. Recovery checks the pinned previous or exact target
+bytes before writing; intervening edits cause `recovery_conflict`. Final checked
+packages must include the exact accepted result and inspection versions as well
+as accepted input versions across the manifest closure. A refreshed package cannot
+substitute another run's plausible result. Conflicting accepted path versions are
+reported explicitly.
+
+Native non-journal operations use `native_intended` with exactly
+`{id,node_id,command,args_digest,pre_digest,output_paths}`. The pinned pre/post
+snapshot blob is `{files:[{path,digest}]}` and the args blob contains the original
+native parsed arguments except its Python callable. Native success writes a
+durable receipt before acknowledgement. `native_acknowledged` is exactly
+`{id,outcome:"succeeded"|"unchanged",post_digest}` or
+`{id,outcome:"failed",post_digest,diagnostics:[Text]}`. A caught validation failure
+may record permitted changes such as removing a stale unit stamp without claiming
+success. Missing receipts are not inferred from file presence or absence. A
+conflict preserves the user's files and reports the original intent and command.
+Unresolved native intents block new research mutations. Reconcile does not replay
+an unknown native operation or duplicate a prior acknowledgement.
+
+Guarded legacy mutations require admission; journal and verify also require the
+current reserved move. Provisional `init` without a parent and read-only native
+inspection remain available. In 0.34.0, `init CHILD --from PARENT` intentionally
+returns `admission_required` and directs callers to reviewed propose/review/admit
+with `native_parent`. Only that controller effect creates a native child. The
+existing parent.json schema, depth-one rule, opened-after-move count and both
+finish paths' child checks remain unchanged.
+
+Native observations retain cash-out stages, actual local finish, failure and
+stagnation facts. Exact controlled producer receipts/results request verification,
+snapshot or acceptance without conferring proof credit. Checkpoint and acceptance
+transactions refresh those observations. A same-claim historical checkpoint with
+another move, run or input snapshot cannot advance the current result frontier.
+Begin may service an exact verification frontier, but not a snapshot/acceptance
+frontier. Local finish is separate from root proof closure. Bounded read-only
+status adds `process_observations` with live, terminal, pending_reconciliation or
+indeterminate per run. A recorded active/launched state is not proof of liveness;
+only current launcher ownership establishes live. Evidence freshness remains
+unchecked unless an explicit full audit has succeeded.
+
+This document defines the executable Task 2 through Task 5 interfaces for the persistent search
+controller. It does not publish results or replace the
 existing math-solver workflow. Checkpoints, proof acceptance, and scheduling are
 pure logic. Task 4 implements the filesystem service, CLI, adoption and generated
-views. Execution, reservation reconciliation and host adapters remain subsequent tasks.
+views. Task 5 adds metered execution, reservation reconciliation and native guards.
+Host adapters remain subsequent tasks.
 
 ## Pure model and storage integration
 
@@ -799,8 +982,8 @@ decision; human output is indented. Errors are JSON on stderr:
 `{"error":{"code":Text,"message":Text,"details":JSON|null}}`, with exit 1.
 Unknown commands, unknown fields, unsafe paths, stale revisions and conflicting
 request IDs fail without committing a prefix. There is no arbitrary-event command.
-`begin`, `run` and `reconcile` currently return `capability_unavailable`. They do
-not reserve work, launch anything, or claim successful reconciliation.
+`begin` reserves a legal native entry, `run` executes a bounded admitted workload,
+and `reconcile` recovers original recorded effects without rerunning a mathematical job.
 
 Public command specs are closed records:
 

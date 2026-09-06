@@ -1,7 +1,7 @@
-from tests.support import ALL_YES, WorkspaceTest, make_preconditions, make_problem, write_study
+from tests.support import ALL_YES, AdmittedWorkspaceTest, make_preconditions, make_problem, write_study
 
 
-class PlanTest(WorkspaceTest):
+class PlanTest(AdmittedWorkspaceTest):
     def setUp(self):
         super().setUp()
         self.write_json("problem.json", make_problem())

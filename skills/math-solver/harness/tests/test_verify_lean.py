@@ -22,12 +22,36 @@ class VerifyLeanTest(StepTest):
         self.assertEqual(result["axioms"], ["propext", "Classical.choice", "Quot.sound"])
         self.assertIsNone(result["reason"])
 
+    def test_rejects_a_custom_axiom_in_requested_type_correspondence(self):
+        self.set_env(FAKE_LAKE_CORRESPONDENCE_AXIOMS="false_axiom")
+        status, out, err = self.verify()
+        self.assertEqual(status, 1)
+        self.assertIn("false_axiom", out)
+
+    def test_records_a_complete_multiline_printed_type(self):
+        self.set_env(FAKE_LAKE_PRINTED_TYPE="∀ (n : Nat),\n  n = n")
+        self.assertEqual(self.verify()[0], 0)
+        run = self.controller.status()["runs"]["run-000001"]
+        printed = self.controller.store.get_artifact(run["inspection"]["printed_type_digest"])
+        self.assertEqual(printed, "my_theorem : ∀ (n : Nat),\n  n = n".encode())
+
+    def test_failed_build_releases_only_the_never_started_inspection_unit(self):
+        self.set_env(FAKE_LAKE_BUILD_STATUS="1")
+        self.assertEqual(self.verify()[0], 1)
+        run = self.controller.status()["runs"]["run-000001"]
+        self.assertEqual((run["reserved_units"], run["started_units"], run["charged_units"]), (2, 1, 1))
+        self.assertEqual(self.controller.status()["totals"]["reserved_runs"], 0)
+
     def test_builds_in_the_step_directory_then_prints_the_axioms_from_a_temporary_file(self):
         self.verify()
         log = self.log.read_text().splitlines()
-        self.assertEqual(log[0], "%s build" % self.step_dir.resolve())
-        self.assertEqual(log[1], "%s env lean axioms-check.lean" % self.step_dir.resolve())
-        self.assertEqual(log[2:4], ["import Main", "#print axioms my_theorem"])
+        cwd = self.controller.status()["runs"]["run-000001"]["cwd"]
+        self.assertNotEqual(cwd, str(self.step_dir.resolve()))
+        self.assertEqual(log[0], "%s build" % cwd)
+        self.assertEqual(log[1], "%s env lean axioms-check.lean" % cwd)
+        self.assertEqual(log[2:], ["import Main", '#eval IO.println "EXACTORY_TYPE_BEGIN"', "#check @my_theorem",
+                                  '#eval IO.println "EXACTORY_TYPE_END"', "theorem exactory_correspondence : True := @my_theorem",
+                                  "#print axioms my_theorem", "#print axioms exactory_correspondence"])
         self.assertFalse((self.step_dir / "axioms-check.lean").exists())
 
     def test_imports_the_module_named_in_step_json(self):
@@ -63,7 +87,7 @@ class VerifyLeanTest(StepTest):
     def test_fails_when_lean_prints_no_axioms_line(self):
         self.set_env(FAKE_LAKE_LEAN_STATUS="1")
         status, out, err = self.verify()
-        self.assertEqual((status, out), (1, "fail: no axioms line in the lean output\n"))
+        self.assertEqual((status, out), (1, "fail: Lean inspection failed\n"))
         self.assertEqual(self.read_result()["output_head"], ["axioms-check.lean:1:0: error: unknown identifier"])
 
     def test_rejects_a_missing_step_directory(self):

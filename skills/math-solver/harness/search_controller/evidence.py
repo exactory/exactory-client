@@ -1,12 +1,120 @@
 """Immutable input loading and filesystem audits; never launches processes."""
 
 import hashlib
+import os
 from pathlib import Path
+import shutil
 
 from . import schema as s
 from .admission import reference, resolve_proposal_account, validate_proposal_context
 from .errors import SearchError
 from .storage import safe_path, _strict_json
+
+
+def file_digest(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def parse_lean_inspection(output, declaration):
+    """Capture the complete delimited type and both exact axiom records."""
+    import re
+    blocks = re.findall(r"^EXACTORY_TYPE_BEGIN\n(.*?)^EXACTORY_TYPE_END\s*$", output, re.MULTILINE | re.DOTALL)
+    s.require(output.count("EXACTORY_TYPE_BEGIN") == 1 and output.count("EXACTORY_TYPE_END") == 1 and len(blocks) == 1,
+              "Inspection must contain one complete printed type block", "verification_failed")
+    printed = blocks[0].rstrip("\n")
+    s.require(re.match(re.escape(declaration) + r"(?:\s|\.\{)", printed) is not None and ":" in printed,
+              "Printed type must identify exactly the requested declaration", "verification_failed")
+    records = {}
+    for key, name in [("declaration_axioms", declaration), ("correspondence_axioms", "exactory_correspondence")]:
+        pattern = r"^\s*(?:'|`)?" + re.escape(name) + r"(?:'|`)? (?:depends on axioms: \[([^\]]*)\]|(does not depend on any axioms))\s*$"
+        matches = re.findall(pattern, output, re.MULTILINE)
+        s.require(len(matches) == 1, "Inspection must identify exactly the requested declaration and its correspondence theorem", "verification_failed")
+        records[key] = [item.strip() for item in matches[0][0].split(",") if item.strip()]
+    return dict(records, printed_type=printed)
+
+
+def installed_lean(project, search_path):
+    """Resolve an existing installation without invoking elan or installing tools."""
+    selected = shutil.which("lake", path=search_path)
+    s.require(selected is not None, "Lake is not installed", "missing_toolchain")
+    executable = Path(selected).absolute()
+    elan = executable.parent / "elan"
+    if elan.exists() and os.path.samefile(str(executable), str(elan)):
+        version = (project / "lean-toolchain").read_text().strip()
+        s.require(version.startswith("leanprover/lean4:") and ".." not in version,
+                  "The exact installed Lean toolchain must be named", "missing_toolchain")
+        installation = safe_path(executable.parent.parent / "toolchains", version.replace("/", "--").replace(":", "---"))
+        executable = installation / "bin/lake"
+        s.require(executable.is_file() and (installation / "bin/lean").is_file(),
+                  "The requested Lean toolchain is unavailable; no download was started", "missing_toolchain")
+    else:
+        installation = executable.parent.parent if executable.parent.name == "bin" and (executable.parent / "lean").exists() else executable.parent
+    return executable.resolve(), installation.resolve()
+
+
+def capture_toolchain(root):
+    root = Path(root).resolve()
+    files = []
+    for path in sorted(root.rglob("*")):
+        if path.is_symlink():
+            s.require(not path.is_dir(), "Symlinked toolchain directories need explicit supported resolution", "incomplete_dependencies")
+            try:
+                path.resolve().relative_to(root)
+            except ValueError as error:
+                raise SearchError("incomplete_dependencies", "Toolchain symlink escapes its installation") from error
+        if path.is_file():
+            files.append({"path": str(path.relative_to(root)), "digest": file_digest(path)})
+    s.require(bool(files), "Toolchain inventory is empty", "incomplete_dependencies")
+    return {"root": str(root), "files": files}
+
+
+def audit_toolchain(inventory):
+    s.closed(inventory, "root files")
+    s.require(Path(inventory["root"]).is_absolute(), "Toolchain root must be absolute")
+    for item in s.records(inventory["files"]):
+        s.closed(item, "path digest")
+        safe_path(Path(inventory["root"]), item["path"])
+        s.digest_string(item["digest"])
+    s.require(capture_toolchain(Path(inventory["root"])) == inventory,
+              "Installed toolchain membership or bytes changed", "digest_mismatch")
+
+
+def freeze_execution_inputs(root, node, spec, content):
+    """Capture the enumerated local source boundary before reserving a process."""
+    step = safe_path(root, node["attack_slug"] + "/deterministic/" + spec["step_dir"])
+    s.require(step.is_dir(), "Execution step directory is missing", "missing_evidence")
+    s.text(spec["dependency_enumeration"])
+    paths = set()
+    for item in s.records(spec["artifacts"]):
+        s.closed(item, "path digest role")
+        path = safe_path(root, item["path"])
+        s.require(item["path"] not in paths and path.is_file(), "Input is missing or duplicated", "missing_evidence")
+        paths.add(item["path"])
+        s.require(content.put_artifact(path.read_bytes()) == item["digest"], "Execution input changed", "digest_mismatch")
+        s.choice(item["role"], {"proof", "source", "study", "certificate", "checker", "theorem", "toolchain", "input"})
+    required = set()
+    for path in step.rglob("*"):
+        relative = path.relative_to(step)
+        if any(part in {".lake", ".git", "__pycache__"} for part in relative.parts):
+            continue
+        s.require(not path.is_symlink(), "Execution source boundary contains a symlink", "unsafe_path")
+        if path.is_file() and relative.as_posix() not in {"result.json", "inspection.log", "axioms-check.lean", "verification-review.json"}:
+            required.add(str(path.relative_to(root)))
+    s.require(required <= paths and bool(required), "Execution manifest omits local source dependencies", "incomplete_dependencies")
+    external = []
+    for item in s.records(spec["external_dependencies"]):
+        s.closed(item, "path digest")
+        path = Path(item["path"])
+        s.require(path.is_absolute() and path.is_file() and not path.is_symlink(), "External dependency is not a regular absolute file")
+        s.require(hashlib.sha256(path.read_bytes()).hexdigest() == item["digest"], "External dependency changed", "digest_mismatch")
+        external.append(item)
+    frozen = {"schema_version": 1, "claim_digest": node["claim_digest"],
+              "artifacts": spec["artifacts"], "external_dependencies": external}
+    return content.put_blob(frozen)
 
 
 def import_inputs(root, inputs, content):
@@ -199,7 +307,12 @@ def audit_local_delivery(root, state, delivery, content):
             if cp["origin"].get("node_id") != node["id"]:
                 continue
             for manifest in manifest_closure(cp["evidence_digests"], content).values():
-                for artifact in manifest["artifacts"]:
+                required_artifacts = list(manifest["artifacts"])
+                if manifest.get("verification") is not None:
+                    run = reference(state["runs"], manifest["verification"]["run_id"], "accepted workload")
+                    s.require(run.get("legacy_result") is not None, "Accepted native result publication is missing", "delivery_required")
+                    required_artifacts.extend(run[key] for key in ["legacy_result", "legacy_inspection"] if run.get(key) is not None)
+                for artifact in required_artifacts:
                     source = safe_path(root, artifact["path"]).resolve()
                     try:
                         local = str(source.relative_to(workspace.resolve()))
@@ -296,6 +409,8 @@ def audit_verification(state, manifest, content):
     s.closed(verification, "run_id result_digest policy_review requested_declaration requested_type_digest")
     run = state["runs"].get(verification["run_id"])
     s.require(run is not None and run.get("status") == "terminal", "Evidence needs its controlled terminal verification run", "verification_required")
+    s.require(run.get("termination") == "exit" and run.get("kind") == manifest["kind"],
+              "Execution failed or was not this verifier kind", "verification_failed")
     s.require(run.get("result_digest") == verification["result_digest"], "Terminal execution result differs", "digest_mismatch")
     result = content.get_blob(verification["result_digest"])
     s.closed(result, "schema_version run_id claim_digest input_digest commands declaration theorem_type_digest toolchain_digest")
@@ -307,9 +422,18 @@ def audit_verification(state, manifest, content):
                         "artifacts": manifest["artifacts"], "external_dependencies": manifest["external_dependencies"]},
               "Controlled run did not inspect these exact evidence artifacts", "digest_mismatch")
     from .proof import validate_review
+    spec = content.get_blob(run["spec_digest"])
+    s.require(spec["kind"] == run["kind"], "Run kind differs from its pinned spec", "digest_mismatch")
+    subject = {"node_id": run["node_id"], "task": run["task"],
+               "spec_without_input_review": {key: value for key, value in spec.items() if key != "input_review"}}
+    validate_review(spec["input_review"], s.digest(subject), manifest["claim_digest"])
+    s.require(content.get_blob(s.digest(subject)) == subject and content.get_blob(s.digest(spec["input_review"])) == spec["input_review"],
+              "Pinned input review differs", "digest_mismatch")
     validate_review(verification["policy_review"], verification["result_digest"], manifest["claim_digest"])
     commands = s.records(result["commands"])
     s.require(len(commands) == (2 if manifest["kind"] == "lean" else 1), "Verification command record is incomplete")
+    s.require([command["argv"] for command in commands] == run["commands"],
+              "Result commands differ from the reserved workload", "digest_mismatch")
     for command in commands:
         s.closed(command, "argv exit_code stdout_digest stderr_digest")
         s.require(bool(s.records(command["argv"])), "Verification argv is empty")
@@ -319,6 +443,7 @@ def audit_verification(state, manifest, content):
         content.get_artifact(command["stdout_digest"])
         content.get_artifact(command["stderr_digest"])
     if manifest["kind"] == "lean":
+        audit_toolchain(content.get_blob(run["toolchain_inventory_digest"]))
         import re
         import attack
         s.text(result["declaration"])
@@ -328,10 +453,19 @@ def audit_verification(state, manifest, content):
         content.get_artifact(result["toolchain_digest"])
         content.get_artifact(result["theorem_type_digest"])
         output = content.get_artifact(commands[1]["stdout_digest"]).decode("utf-8", errors="strict")
-        declaration = re.escape(result["declaration"])
-        matches = re.findall(r"^\s*(?:'|`)?" + declaration + r"(?:'|`)? (?:depends on axioms: \[([^\]]*)\]|(does not depend on any axioms))\s*$", output, re.MULTILINE)
-        s.require(len(matches) == 1, "Inspection must identify exactly the requested declaration", "verification_failed")
-        axioms = {v.strip() for v in matches[0][0].split(",") if v.strip()}
+        captured = parse_lean_inspection(output, result["declaration"])
+        inspection = run.get("inspection")
+        s.require(inspection is not None and inspection["source_digest"] == run["inspection_source_digest"], "Missing bound inspection provenance", "verification_failed")
+        s.require(content.get_artifact(inspection["printed_type_digest"]) == captured["printed_type"].encode()
+                  and all(inspection[key] == captured[key] for key in ["declaration_axioms", "correspondence_axioms"]),
+                  "Captured inspection facts differ", "digest_mismatch")
+        from .execution import lean_inspection_source
+        spec = content.get_blob(run["spec_digest"])
+        step = next(item for item in inputs["artifacts"] if item["path"].endswith("/step.json"))
+        description = _strict_json(content.get_artifact(step["digest"]), "corrupt_artifact")
+        s.require(content.get_artifact(inspection["source_digest"]) == lean_inspection_source(description, spec["requested_type"]).encode(),
+                  "Inspection source is not the exact native protocol", "digest_mismatch")
+        axioms = set(captured["declaration_axioms"] + captured["correspondence_axioms"])
         s.require(axioms <= set(attack.STANDARD_AXIOMS), "Inspection includes forbidden axioms", "verification_failed")
     else:
         s.require(verification["requested_declaration"] is None and verification["requested_type_digest"] is None,
