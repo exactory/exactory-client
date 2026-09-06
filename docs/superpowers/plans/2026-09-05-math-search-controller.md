@@ -797,7 +797,9 @@ def test_cancel_is_acknowledged_without_refunding_started_work(self):
 
 Files: create `search_controller/local_review.py` and
 `harness/tests/test_search_local_review.py`; extend `service.py`, `model.py`,
-`integration.py`, `evidence.py`, `cli.py`, `attack.py`, `SEARCH.md` and affected tests.
+`integration.py`, `evidence.py`, `proof.py`, `scheduler.py`, `cli.py`, `attack.py`,
+`SEARCH.md` and affected tests. The controller's scoped interface decisions are
+in the plan-scoped `task-11-controller-handoff.md`.
 
 Interfaces: add `search review-local NODE --spec FILE` for typed receipts of exact
 local packages and literature-resolution records. Reuse immutable manifests,
