@@ -325,6 +325,15 @@ def test_unadmitted_verify_never_launches_checker(self):
   states, declaration/type/axioms, and immutable artifacts. A changed or incomplete
   dependency boundary prevents proof acceptance. Certificate success additionally
   needs reviewed checker/completeness and exact claim correspondence.
+  For installed Lean runtime/library inputs, capture a deterministic content-addressed
+  inventory of the resolved existing toolchain, referenced by the native run spec,
+  input-review subject and controlled run. Check exact file membership and hashes
+  before launch, after execution and during full acceptance/completion audit. This
+  is run provenance, not a second evidence manifest or a replacement terminal format.
+  Missing, changed or unsupported toolchain resolution fails closed; no automatic
+  installation or download is permitted. Disclose the trusted read-only external
+  dependency boundary, without claiming OS-hermetic execution. Use tiny synthetic
+  inventories for negative tests and retain the genuine no-Mathlib Lean smoke.
 - [ ] Support closed `command`, `certificate`, and `lean` run variants. A generic
   command records execution/evidence, never a certificate or kernel result. Bind the
   admitted task purpose/domain and the actual argv, frozen inputs, external dependencies,
