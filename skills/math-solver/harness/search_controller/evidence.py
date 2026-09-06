@@ -110,7 +110,7 @@ def freeze_execution_inputs(root, node, spec, content):
         s.closed(item, "path digest")
         path = Path(item["path"])
         s.require(path.is_absolute() and path.is_file() and not path.is_symlink(), "External dependency is not a regular absolute file")
-        s.require(hashlib.sha256(path.read_bytes()).hexdigest() == item["digest"], "External dependency changed", "digest_mismatch")
+        s.require(file_digest(path) == item["digest"], "External dependency changed", "digest_mismatch")
         external.append(item)
     frozen = {"schema_version": 1, "claim_digest": node["claim_digest"],
               "artifacts": spec["artifacts"], "external_dependencies": external}
@@ -383,7 +383,7 @@ def audit_manifest(root, state, digest, content, claim_digest=None, verify=True,
         s.require(path.is_absolute(), "Shared read-only dependencies use explicit absolute paths")
         s.digest_string(dependency["digest"])
         try:
-            actual = hashlib.sha256(path.read_bytes()).hexdigest()
+            actual = file_digest(path)
         except OSError as error:
             raise SearchError("missing_evidence", "Shared dependency is unavailable", {"path": str(path)}) from error
         s.require(actual == dependency["digest"], "Shared dependency changed", "digest_mismatch")

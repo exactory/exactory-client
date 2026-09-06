@@ -11,6 +11,11 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version 0.34.0 adds the persistent mathematical search controller and reviewed
+finite-computation contracts. Read the [release and upgrade notes](docs/releases/0.34.0.md)
+before updating a waiting agent or adopting an existing attack. An update does
+not resume paused research or reset its budget.
+
 ### Claude Code
 
 ```

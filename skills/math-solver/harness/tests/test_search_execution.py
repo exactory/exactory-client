@@ -238,9 +238,19 @@ class SearchExecutionTests(WorkspaceTest):
             with self.assertRaises(OSError):
                 self.run_cli("finish", self.slug)
         finished = (self.workspace / "units/FINISHED.json").read_bytes()
+        before = self.controller.status()
+        identity, intent = next(iter(before["service"]["native_intents"].items()))
         with self.assertRaises(SearchError) as caught:
             invoke(self.controller, "reconcile", {}, None)
         self.assertEqual(caught.exception.code, "recovery_conflict")
+        self.assertIsInstance(caught.exception.details, dict)
+        self.assertEqual(caught.exception.details["intent_id"], identity)
+        self.assertEqual(caught.exception.details["original_command"], "finish")
+        self.assertEqual(caught.exception.details["original_args"], self.controller.store.get_blob(intent["args_digest"]))
+        self.assertEqual(caught.exception.details["conflicting_paths"], [str(self.workspace / "units/FINISHED.json")])
+        self.assertIn("Operator handoff required", caught.exception.message)
+        self.assertIn("no supported replay or automatic overwrite", caught.exception.message)
+        self.assertEqual(self.controller.status(), before)
         self.assertEqual((self.workspace / "units/FINISHED.json").read_bytes(), finished)
 
     def test_native_crash_before_any_write_can_reconcile_unchanged_inputs(self):

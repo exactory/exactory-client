@@ -20,6 +20,18 @@ review, and merge/push 0.34.0 through local-dev, dev and main. Continue Tasks 10
 after that first release, followed by Task 13's documentation/integration follow-up.
 The priority change does not waive known defects, reviews or release gates.
 
+Current user-directed validation override (2026-09-06): minimize duplicate local
+validation to make this release available sooner. Task 8 runs focused regressions
+for its changed behavior plus generation, syntax and source JSON checks, then
+commits. The controller integrates fresh `origin/main` and obtains one combined
+independent review of the changed surfaces and integration boundaries, informed
+by the approved prior task reviews. The unchanged GitHub CI on the exact
+`local-dev` integration commit is the authoritative full-suite and coverage gate.
+Only after it passes, promote that identical SHA through `dev` and `main` and
+confirm their scheduled checks. Do not repeat the full suites locally at both
+feature and integration tips. Known findings still require code fixes, all CI
+gates remain required, and Tasks 10-12 and follow-up Task 13 remain pending.
+
 ## Global Constraints
 
 - Write all artifacts, code, comments, and generated reports in English.
@@ -592,7 +604,8 @@ README as needed; add focused integration tests for discovered cross-task defect
 
 Interfaces: no new workflow API. Consume implemented Tasks 1-6/9 and verify their
 approved scenario matrix. Tasks 10-12 are not represented as shipped. The final
-reviewer evaluates the whole branch diff before the early release.
+combined reviewer evaluates the changed surfaces and integration boundaries,
+using the approved prior review evidence, before the early release.
 
 - [ ] Exercise a complete tiny objective with AND/OR routes, partial accepted coverage,
   failed alternative, successful continuation, native-child pending local finish,
@@ -620,15 +633,19 @@ reviewer evaluates the whole branch diff before the early release.
   additions, explicit adoption with inherited budgets, pause preservation, and
   source release versus installed host/trust state. Do not migrate running research
   or change any agent's installation automatically.
-- [ ] Run `python3 -m unittest discover -s tests -v` and
-  `python3 -m unittest discover -s skills/math-solver/harness/tests -t skills/math-solver/harness -v`.
-  Run syntax/JSON validation, `python3 codex/generate.py --check`, and the existing
-  Codex coverage gate. Preserve exact command outputs in the report.
+- [ ] Under the current user-directed minimum-validation override, run focused
+  changed-behavior regressions, syntax/source JSON validation and
+  `python3 codex/generate.py --check` locally. Preserve exact outputs and label the
+  full suites and coverage as pending CI, not waived or locally passed. The
+  unchanged CI must run `python3 -m unittest discover -s tests -v`,
+  `python3 -m unittest discover -s skills/math-solver/harness/tests -t skills/math-solver/harness -v`,
+  and the existing Codex branch/subprocess coverage gate on the exact integrated
+  `local-dev` SHA before promotion. Do not duplicate those full runs locally.
 - [ ] Conduct available supported live host smoke only within user authorization and
   resource limits. Report any host verification that could not run; never label
   fixture-only coverage as end-to-end installed enforcement.
-- [ ] Self-review and commit local release-ready changes. Independent whole-branch
-  review follows. The controller performs the already authorized merge/push flow
+- [ ] Self-review and commit local release-ready changes. One combined independent
+  changed-surface and integration-boundary review follows. The controller performs the already authorized merge/push flow
   after that review. Do not install, merge, push, tag, or publish from the task agent.
 
 ## Task 9: Typed computation admission and mandatory result interpretation

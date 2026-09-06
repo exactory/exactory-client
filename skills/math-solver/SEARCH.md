@@ -378,6 +378,17 @@ invocation can acknowledge its own durable receipt while retaining the lock.
 With no receipt, an acquired original lock and exact unchanged pre-state permit
 an unchanged acknowledgement; changed state remains ambiguous.
 
+An ambiguous changed state returns `recovery_conflict` with `intent_id`,
+`original_command`, the pinned `original_args`, and exact absolute
+`conflicting_paths`. Stop at operator handoff. Preserve those files, the intent,
+its argument/pre-state/ownership blobs, the original lock file, and any receipt.
+This release provides no replay or automatic overwrite for an ambiguous native
+effect. Do not rerun the uncertain command, edit controller records, infer success
+from matching output bytes, or restore files merely to make reconciliation pass.
+An operator must inspect the preserved evidence and determine a supported repair
+before work continues. Reconciliation itself only consumes an existing valid
+receipt, or acknowledges the exact unchanged pre-state after acquiring its lock.
+
 Guarded legacy mutations require admission; journal and verify also require the
 current reserved move. Provisional `init` without a parent and read-only native
 inspection remain available. In 0.34.0, `init CHILD --from PARENT` intentionally

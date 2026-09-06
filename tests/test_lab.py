@@ -159,9 +159,19 @@ class TestState(_InsideWorkspaceTestCase):
         self.assertTrue(state["autopilot"])
 
     def test_set_refuses_an_unknown_stage(self) -> None:
-        with self.assertRaises(SystemExit) as caught:
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as caught:
             _lab._build_parser().parse_args(["state", "set", "--stage", "escape"])
         self.assertEqual(caught.exception.code, 2)
+        self.assertEqual(stderr.getvalue(),
+            "usage: exactory-lab state set [-h]\n"
+            "                              [--stage {initiate,cohort,ideate,experiment,write,evaluate,deposit,submit,complete}]\n"
+            "                              [--status STATUS] [--autopilot {on,off}]\n"
+            "                              [--waiting WAITING] [--loop-target LOOP_TARGET]\n"
+            "                              [--loop-budget LOOP_BUDGET]\n"
+            "                              [--loop-notes LOOP_NOTES]\n"
+            "exactory-lab state set: error: argument --stage: invalid choice: 'escape' "
+            "(choose from initiate, cohort, ideate, experiment, write, evaluate, deposit, submit, complete)\n")
 
     def test_set_switches_autopilot(self) -> None:
         _run_lab_command(["state", "set", "--autopilot", "off"], None, self)

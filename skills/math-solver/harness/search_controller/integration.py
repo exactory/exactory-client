@@ -7,6 +7,7 @@ from pathlib import Path
 import uuid
 
 from . import schema as s
+from .errors import SearchError
 from .storage import safe_path
 from .admission import reference
 from .evidence import audit_admission, proposal_inputs
@@ -313,9 +314,19 @@ def reconcile_native_intents(controller, state, content, emit, owned_context=Non
                 check_native_effect(intent, before, actual)
             else:
                 s.require(not current_owner, "Live native invocation has no durable outcome", "recovery_required")
-                s.require(actual == before,
-                          "Native effect is ambiguous; preserve edits and inspect original intent " + identity,
-                          "recovery_conflict")
+                if actual != before:
+                    old = {item["path"]: item["digest"] for item in before["files"]}
+                    new = {item["path"]: item["digest"] for item in actual["files"]}
+                    paths = [str(controller.root / node["attack_slug"] / path)
+                             for path in sorted(set(old) | set(new)) if old.get(path) != new.get(path)]
+                    raise SearchError("recovery_conflict",
+                        "Native effect is ambiguous for original command " + intent["command"]
+                        + " (intent " + identity + "); conflicting paths: " + ", ".join(paths)
+                        + ". Operator handoff required: preserve these files and the pinned intent, arguments, "
+                        "snapshots and ownership records. There is no supported replay or automatic overwrite; "
+                        "matching output bytes do not establish success.",
+                        {"intent_id": identity, "original_command": intent["command"],
+                         "original_args": content.get_blob(intent["args_digest"]), "conflicting_paths": paths})
                 receipt = {"id": identity, "outcome": "unchanged", "post_digest": intent["pre_digest"]}
             emit("native_acknowledged", receipt)
         finally:

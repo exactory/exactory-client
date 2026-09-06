@@ -20,7 +20,7 @@ if __package__ in {None, ""}:
 
 from search_controller import schema as s
 from search_controller.errors import SearchError
-from search_controller.evidence import freeze_execution_inputs, installed_lean, capture_toolchain, audit_toolchain
+from search_controller.evidence import freeze_execution_inputs, installed_lean, capture_toolchain, audit_toolchain, file_digest
 from search_controller.execution_state import account_for_work
 from search_controller.storage import safe_path, canonical_bytes, _strict_json
 
@@ -165,7 +165,7 @@ def build_run(controller, state, spec, target, content):
             command[0] = str(safe_path(directory, "build/" + relative))
             continue
         command[0] = str(Path(executable).absolute())
-        binding = {"path": str(resolved), "digest": hashlib.sha256(resolved.read_bytes()).hexdigest()}
+        binding = {"path": str(resolved), "digest": file_digest(resolved)}
         if binding not in bindings:
             bindings.append(binding)
     if spec["kind"] != "command":
@@ -381,7 +381,6 @@ def launcher(directory):
 
 
 def execution_boundary(config, directory):
-    from search_controller.evidence import file_digest
     run = config["run"]
     modes = {item["path"]: item["mode"] for item in run["input_modes"]}
     for item in config["inputs"]["artifacts"]:
@@ -557,7 +556,7 @@ def native_spec(controller, node, args):
         inventory_digest = controller.store.put_blob(capture_toolchain(installation))
     s.require(executable is not None, "Verifier executable is unavailable", "missing_toolchain")
     executable_path = Path(executable).resolve()
-    binding = {"path": str(executable_path), "digest": hashlib.sha256(executable_path.read_bytes()).hexdigest()}
+    binding = {"path": str(executable_path), "digest": file_digest(executable_path)}
     if binding not in dependencies:
         dependencies.append(binding)
     spec = {"kind": args.verify_command, "step_dir": args.step_dir, "artifacts": artifacts,
