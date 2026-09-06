@@ -34,8 +34,8 @@ def build_files() -> dict[Path, str]:
             for handler in group["hooks"]:
                 script = handler["command"].rsplit("/", 1)[1].rstrip('"')
                 handler["command"] = f'python3 "${{PLUGIN_ROOT}}/codex/hook.py" {script}'
-                # Resume/stop handlers can run a 20-second harness subprocess.
-                if event in ("SessionStart", "Stop"):
+                # Math validation and lifecycle handlers share a bounded lookup.
+                if event in ("SessionStart", "Stop") or script == "guard_attack_files.py":
                     handler["timeout"] = max(handler.get("timeout", 0), 30)
     config["hooks"]["SessionStart"].insert(0, {"hooks": [{
         "type": "command",

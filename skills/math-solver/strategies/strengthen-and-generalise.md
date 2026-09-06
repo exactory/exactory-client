@@ -55,7 +55,10 @@ refutation excludes its candidate in step 2.
    strengthen-the-target, steps 1 to 4. Output: the candidate and its
    deduction, journalled as a change of statement, handed to step 3.
 3. Test the candidate on small instances. Entry dispatched:
-   test-strengthenings-by-counterexample. Output: a counterexample,
+   test-strengthenings-by-counterexample. Hand work stays in the move; an actual
+   solver process first receives a reviewed bounded counterexample-search task
+   under `../SEARCH.md#computation-admission-and-mandatory-interpretation`.
+   Output: a counterexample,
    returning the plan to step 2. Step 4 begins on the entry's failure
    signal, no counterexample in the computable range; the candidate is
    then the statement to prove.
@@ -116,6 +119,8 @@ statement move composes with any other component.
 - A refuted candidate or a skipped step dropped without record. Check:
   the refuting instance is in a step 3 move's output; a skipped step's
   move has `failure_signal_fired` true and the reason.
+- A no-hit finite search promoted to support for the strengthening. Check: its
+  interpretation remains bounded evidence and the strengthened claim stays open.
 - An entry dispatched before the study record exists. Check:
   `journal add` refuses a move whose `study/strengthen-and-generalise.md` is missing
   or empty (`../harness/README.md`).

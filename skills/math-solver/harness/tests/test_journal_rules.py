@@ -9,7 +9,7 @@ import json
 from tests.support import (
     ALL_YES,
     OPENING,
-    WorkspaceTest,
+    AdmittedWorkspaceTest,
     make_move,
     prepare_plan,
     write_ranking,
@@ -25,7 +25,7 @@ ENTRY_OF = {
 }
 
 
-class JournalRulesTest(WorkspaceTest):
+class JournalRulesTest(AdmittedWorkspaceTest):
     def setUp(self):
         super().setUp()
         for name in ENTRY_OF:
@@ -223,7 +223,7 @@ def digest_of(problem):
     return hashlib.sha256(json.dumps(problem, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-class JournalRecordTest(WorkspaceTest):
+class JournalRecordTest(AdmittedWorkspaceTest):
     """What a journal line records beyond the move itself: the deterministic steps the
     move ran, whether it closed the attack, and whether problem.json changed under it."""
 

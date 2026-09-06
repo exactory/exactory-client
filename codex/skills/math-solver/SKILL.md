@@ -1,6 +1,6 @@
 ---
 name: math-solver
-description: Solve, disprove, or advance a stated mathematical proposition - set the problem, check novelty against the literature, walk the admitted strategies under a fixed move budget, cash out what stands as a result, and resume an open attack from its record. Use when a mathematical proposition, conjecture, or open problem is stated and is to be proved, disproved, or advanced; when a problem is given by number from a problem list or database; when a claimed bound, exponent, constant, or finiteness statement is presented as open; or when the user asks to resume, restart, or continue an attack.
+description: Use when a stated mathematical proposition, conjecture, claimed open bound, exponent, constant, finiteness statement, or numbered open problem is to be proved, disproved, formally verified, or advanced through persistent bounded research; or when the user asks to resume, restart, or continue such an objective.
 ---
 
 # Exactory: math-solver

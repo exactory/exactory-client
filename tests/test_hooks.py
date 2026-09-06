@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+
 import hashlib
 import json
 import re
@@ -681,15 +683,19 @@ class TestHooksManifest(unittest.TestCase):
                 self.assertTrue((_PLUGIN_ROOT / script_path).is_file())
 
     def test_hooks_json_wires_every_hook_script(self) -> None:
+        entrypoints = {f"hooks/{path.name}" for path in (_PLUGIN_ROOT / "hooks").glob("*.py")
+                       if any(isinstance(node, ast.FunctionDef) and node.name == "main"
+                              for node in ast.parse(path.read_text()).body)}
         self.assertEqual(
             self._read_wired_script_paths(),
-            {f"hooks/{path.name}" for path in (_PLUGIN_ROOT / "hooks").glob("*.py")},
+            entrypoints,
         )
         self.assertIn("Stop", self.config["hooks"])
 
     def test_each_hook_is_wired_to_its_designed_event_and_matcher(self) -> None:
-        gate_matcher = self.config["hooks"]["PreToolUse"][0]
-        self.assertEqual(gate_matcher["matcher"], "Bash")
+        gate_matcher = next(group for group in self.config["hooks"]["PreToolUse"]
+                            if any("enforce_citation_check.py" in hook["command"] for hook in group["hooks"]))
+        self.assertEqual(gate_matcher["matcher"], "Bash|exec_command")
         self.assertIn("enforce_citation_check.py", gate_matcher["hooks"][0]["command"])
         self.assertEqual(gate_matcher["hooks"][0]["timeout"], 20)
         # "Write|Edit" is an exact list of two tool names only because it holds

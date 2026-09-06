@@ -1,7 +1,7 @@
 import json
 
 from tests.support import (
-    WorkspaceTest,
+    AdmittedWorkspaceTest,
     make_move,
     prepare_plan,
     write_journal,
@@ -10,7 +10,7 @@ from tests.support import (
 )
 
 
-class JournalAddTest(WorkspaceTest):
+class JournalAddTest(AdmittedWorkspaceTest):
     def setUp(self):
         super().setUp()
         write_study(self.workspace, "attack-the-negative-side")

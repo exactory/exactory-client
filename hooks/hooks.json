@@ -1,9 +1,19 @@
 {
-  "description": "Exactory AI Science hooks: blocking PreToolUse gates on submission and production deposit, on filing a verdict without its cohort impact prediction, on catastrophic experiment shell, and on closing a stage without a logged decision; an advisory PostToolUse check on references edits; a PostToolUse recorder that notes when an agent writes the paper's LaTeX source; and a Stop hook that keeps an autopilot study moving. Math-solver hooks: blocking PreToolUse gates on editing the files the attack harness and the hooks write (by Write, Edit, or a shell write), on writing a unit before the cash-out started, and on drafting a unit before its check; a PostToolUse recorder that appends every tool call that touched an attack workspace to its activity log; a SessionStart hook that reports every open attack with its status so the session resumes it; and a Stop hook that keeps an open attack moving.",
+  "description": "Exactory AI Science hooks retain study gates and autopilot. Math hooks validate reported managed writes, preserve native unit sequencing, record advisory activity, resume one explicitly focused objective through a read-only controller query, and delegate Stop accounting and pause ownership to the controller. Nested operations not exposed by the host remain outside hook observability.",
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/guard_attack_files.py\"",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|exec_command",
         "hooks": [
           {
             "type": "command",
@@ -24,22 +34,12 @@
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/enforce_decision_log.py\"",
             "timeout": 15
-          },
-          {
-            "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/guard_attack_files.py\"",
-            "timeout": 15
           }
         ]
       },
       {
         "matcher": "Write|Edit",
         "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/guard_attack_files.py\"",
-            "timeout": 15
-          },
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/enforce_unit_flow.py\"",
@@ -70,7 +70,7 @@
         ]
       },
       {
-        "matcher": "Write|Edit|Bash",
+        "matcher": "Write|Edit|Bash|exec_command",
         "hooks": [
           {
             "type": "command",

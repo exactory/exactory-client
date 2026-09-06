@@ -12,10 +12,17 @@ costs: [bound_quality, object]
 
 ## Action
 
+Before any solver or program starts, use the exact reviewed finite-task and run
+contracts in `../SEARCH.md#computation-admission-and-mandatory-interpretation`.
+Bind the complete range or encoding, encoder, solver, certificate checker,
+information value, stopping threshold, bounded verification cost, and every
+possible outcome with its next action. Hand enumeration inside a move needs no
+run admission. A no-hit result is bounded evidence, not a proof or renewed budget.
+
 1. Encode the instance into satisfiability, integer programming, or a custom enumeration, as an enumeration run with a trusted base small enough to read (an encoder of a few dozen lines).
 2. Raise the parameter from the last known value; when each parameter's witness is derived from the previous parameter's witness, run the parameters as a certified witness chain. Record the first value where the answer changes, and the pattern of solutions below it.
 3. Match the search paradigm to the instance (global splitting for hard combinatorial structure, local refutation for propagation-heavy instances), and tune the splitting heuristic to the statistical profile of the instance or to an expected density; a default heuristic can cost orders of magnitude.
-4. Emit a checkable certificate for each instance and verify it with the enumeration run's independent checker.
+4. Emit a checkable certificate for each instance and verify it with the independently designed checker through the frozen executor; do not let a test call the producer again behind the checker boundary.
 5. Report exact values for the parameters settled and the threshold located.
 
 ## Output form

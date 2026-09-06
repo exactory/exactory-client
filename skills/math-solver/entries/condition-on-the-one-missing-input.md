@@ -12,10 +12,10 @@ costs: [axioms, bound_quality, object, obligations]
 ## Action
 
 1. State the implication "missing input implies target" as a theorem with the sharpest threshold: how much of the hypothesis (which exponent, which range of the parameter) suffices.
-2. Trace which restricted form of the hypothesis the argument actually uses (a restriction of the parameter to a structured subset, to a finite list, to a residue class) and restate the requirement in that weaker form before anyone has proved the full hypothesis.
+2. Trace which restricted form of the hypothesis the argument actually uses (a restriction of the parameter to a structured subset, to a finite list, to a residue class) and restate the requirement in that weaker form before anyone has proved the full hypothesis. When it becomes another record, submit that exact claim for reviewed admission under `../SEARCH.md#proposal`, recording logical and native lineage separately.
 3. Look for a setting where the hypothesis is a theorem (an analogue over a function field, a finite-field model, an enlarged language) and prove the result there.
 4. Attack the restricted hypothesis directly, trading generality for what current estimates reach.
-5. When the hypothesis can be replaced by an explicit object that does its work (an explicit annihilator in place of a triviality assumption), do so and drop the hypothesis.
+5. When the hypothesis can be replaced by an explicit object that does its work (an explicit annihilator in place of a triviality assumption), do so and drop the hypothesis only after the exact dependency and implication bridge are independently accepted under `../SEARCH.md#checkpoints-and-accepted-results`.
 
 ## Output form
 

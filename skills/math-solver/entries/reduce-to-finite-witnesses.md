@@ -14,7 +14,7 @@ costs: [effectivity, object, obligations]
 1. State the finite version explicitly, with the parameter that indexes it (number of vertices, the interval from 1 to n, the matrix dimension) and the constant that must not depend on it.
 2. Prove the equivalence by compactness, by monotonicity, or by a limiting argument.
 3. Decide which side has a finite certificate: a negative answer by one finite object (a graph, an unsatisfiable formula), a positive answer by an infinite family or a uniform construction.
-4. Pass the finitely certifiable side to enumerate-small-cases-to-locate-the-threshold or to certify-the-finite-residue-by-computation. Pass the uniform side to the bounding entries, with the constant's independence from the parameter as the primary obstacle.
+4. Pass the finitely certifiable side to enumerate-small-cases-to-locate-the-threshold or to certify-the-finite-residue-by-computation. Before any process launch, bind the proved equivalence or reduction, exact finite domain, unresolved tail, information value, outcome map and stopping rule through `../SEARCH.md#computation-admission-and-mandatory-interpretation`; a finite prefix plus an unresolved named or infinite tail is not a finite residue. Pass the uniform side to the bounding entries, with the constant's independence from the parameter as the primary obstacle.
 
 ## Output form
 

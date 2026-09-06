@@ -15,7 +15,7 @@ costs: [effectivity, implication, object, obligations]
 1. Write the packing inequality: the sum over elements of the local weight is at most the total. Locate exactly where the loss between the local weight and the target weight sits.
 2. Replace the per-element inequality by one that averages over an element and its neighbours, or by one that uses a constraint the extremal structure imposes on which elements can be present together.
 3. Choose the decomposition so that the local inequality is both true and tractable; a hybrid of two natural decompositions is allowed.
-4. The result is a finite optimisation over local configurations. Pass it to certify-the-finite-residue-by-computation when the case count is large, or close it by hand when a structural constraint leaves a margin.
+4. The result is a finite optimisation over local configurations. Pass it to certify-the-finite-residue-by-computation when the case count is large, after its exact configurations, necessity or completeness basis, outcomes and stopping rule are admitted under `../SEARCH.md#computation-admission-and-mandatory-interpretation`; close it by hand when a structural constraint leaves a margin.
 
 ## Output form
 

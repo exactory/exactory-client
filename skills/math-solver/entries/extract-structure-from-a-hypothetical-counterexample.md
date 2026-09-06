@@ -14,7 +14,7 @@ costs: [object, obligations]
 1. Assume a counterexample exists with the worst possible parameters (the minimal dimension, the exact conjectured exponent).
 2. From each available argument, derive a necessary condition: what the counterexample's factors must divide, which residue classes its parameters occupy, how its density is distributed across scales, at which points and at which rate it concentrates and which model profile the concentration must resemble, how its countable pieces attach along the index, which known structures it must resemble.
 3. Accumulate the conditions until they contradict a known theorem or an integral identity whose boundary term is controlled by an invariant of the ambient space, force the object into a class already understood, or leave a finite range of parameters.
-4. Hand a finite range to enumerate-small-cases-to-locate-the-threshold; hand a structured class to prove-the-special-case-where-the-method-is-stronger; hand a near-miss class to axiomatise-the-method-and-build-a-near-miss.
+4. Hand a finite range to enumerate-small-cases-to-locate-the-threshold; if a process will run, first admit the exact range and counterexample or diagnostic purpose under `../SEARCH.md#computation-admission-and-mandatory-interpretation`. Hand a structured class to prove-the-special-case-where-the-method-is-stronger; hand a near-miss class to axiomatise-the-method-and-build-a-near-miss.
 
 ## Output form
 

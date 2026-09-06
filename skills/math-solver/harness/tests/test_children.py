@@ -1,24 +1,30 @@
 """A strategy that opens a second record (its claim a hypothesis of the first) opens
-it as a child attack: `init <child> --from <parent>` links the two, `status` shows
+it through reviewed controller admission. `status` shows
 the link both ways, `finish` on the parent waits for the child, and a child opens
 no child of its own."""
 
 import json
+import attack
 
-from tests.support import WorkspaceTest, make_move, write_journal
+from tests.support import AdmittedWorkspaceTest, make_move, write_journal, prepare_plan, admit_native_child, write_study
 
 
-class ChildAttackTest(WorkspaceTest):
+class ChildAttackTest(AdmittedWorkspaceTest):
+    def setUp(self):
+        super().setUp()
+        prepare_plan(self)
+
     def init_child(self, slug="hypothesis", parent="sample"):
-        return self.run_cli("init", slug, "--from", parent)
+        return admit_native_child(self.controller, slug, parent)
 
     def child_json(self, slug="hypothesis"):
         return json.loads((self.attack_root / slug / "parent.json").read_text())
 
     def finish_child(self, slug="hypothesis"):
-        (self.attack_root / slug / "units" / "FINISHED.json").write_text(
-            json.dumps({"outcome": "cashed-out", "units": []})
-        )
+        workspace = self.attack_root / slug
+        write_study(workspace, "problem")
+        (workspace / "units/INVENTORY.md").write_text("Inventory: no retained units.\n")
+        self.assertEqual(self.run_cli("finish", slug)[0], 0)
 
     def status_lines(self, slug):
         status, out, err = self.run_cli("status", slug)
@@ -27,29 +33,27 @@ class ChildAttackTest(WorkspaceTest):
 
     def test_opens_the_child_and_records_the_parent_and_the_move_count(self):
         write_journal(self.workspace, [make_move(1), make_move(2)])
-        status, out, err = self.init_child()
-        self.assertEqual((status, err), (0, ""))
-        self.assertEqual(out, "created %s (child of sample, opened after move 2)\n" % (self.attack_root / "hypothesis"))
+        self.assertEqual(self.init_child(), (self.attack_root / "hypothesis").resolve())
         self.assertEqual(self.child_json(), {"parent": "sample", "opened_after_move": 2})
         self.assertTrue((self.attack_root / "hypothesis" / "problem.json").exists())
 
     def test_refuses_a_parent_with_no_workspace(self):
-        status, out, err = self.init_child(parent="nope")
-        self.assertEqual((status, err), (1, "no workspace for parent nope; a child opens under an open attack\n"))
+        self.assertEqual(list(attack.find_parent_defects(self.attack_root, "nope")),
+                         ["no workspace for parent nope; a child opens under an open attack"])
         self.assertFalse((self.attack_root / "hypothesis").exists())
 
     def test_refuses_a_finished_parent(self):
         self.finish_child("sample")
         self.assertEqual(
-            self.init_child()[2],
-            "parent sample is finished; a child opens under an open attack\n",
+            list(attack.find_parent_defects(self.attack_root, "sample")),
+            ["parent sample is finished; a child opens under an open attack"],
         )
 
     def test_a_child_opens_no_child(self):
         self.init_child()
         self.assertEqual(
-            self.init_child(slug="deeper", parent="hypothesis")[2],
-            "parent hypothesis is itself a child of sample; a child opens no child\n",
+            list(attack.find_parent_defects(self.attack_root, "hypothesis")),
+            ["parent hypothesis is itself a child of sample; a child opens no child"],
         )
 
     def test_status_shows_the_link_both_ways(self):

@@ -18,6 +18,7 @@ import json
 import shlex
 import sys
 from pathlib import Path
+from math_search import normalize, workspace_for
 
 _LOG_NAME = "activity.jsonl"
 _KEPT_ENTRIES = 200
@@ -33,10 +34,7 @@ def _resolve(raw: str, cwd: Path) -> Path:
 
 
 def _find_workspace(path: Path) -> Path | None:
-    for directory in (path, *path.parents):
-        if directory.parent.name == "attack" and (directory / "problem.json").is_file():
-            return directory
-    return None
+    return workspace_for(path)
 
 
 def _describe_file_call(tool_input: dict, cwd: Path) -> tuple[Path, str] | None:
@@ -58,10 +56,15 @@ def _describe_shell_call(command: str, cwd: Path) -> tuple[Path, str] | None:
     is_harness_call = any(token.split("/")[-1] in _HARNESS_COMMANDS for token in tokens)
     for index, token in enumerate(tokens):
         if is_harness_call and (attack_root / token / "problem.json").is_file():
+            if (attack_root / ".search/tree.json").is_file():
+                return attack_root / token, "exactory-math " + token
             return attack_root / token, " ".join(tokens[: index + 1])
         if "/" in token:
-            workspace = _find_workspace(_resolve(token, cwd))
+            target = _resolve(token, cwd)
+            workspace = _find_workspace(target)
             if workspace is not None:
+                if (workspace.parent / ".search/tree.json").is_file():
+                    return workspace, target.relative_to(workspace).as_posix()
                 return workspace, command[:_TARGET_LENGTH]
     return None
 
@@ -79,7 +82,11 @@ def _append(workspace: Path, tool_name: str, target: str) -> None:
 
 
 def main() -> None:
-    payload = json.load(sys.stdin)
+    payload = normalize(json.load(sys.stdin))
+    response = payload.get("tool_response")
+    if isinstance(response, dict) and (response.get("success") is False or response.get("isError") is True
+            or response.get("exit_code") not in (None, 0)):
+        sys.exit(0)
     tool_name = payload.get("tool_name")
     tool_input = payload.get("tool_input") or {}
     cwd = Path(payload.get("cwd") or ".").resolve()

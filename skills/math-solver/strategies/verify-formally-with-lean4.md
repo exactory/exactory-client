@@ -67,10 +67,14 @@ check.
    formalise-while-fresh, step 3. Output: every lemma closed, or the one
    that resists named.
 6. Run `formal check` in the step directory of that reference's section
-   7: the harness
-   writes `result.json`, and pass means the axiom list stays within Lean's
-   standard axioms. Record the theorem, its constants, the toolchain, and
-   that list in the step's `README.md`. Entry: formalise-while-fresh,
+   7 through the reviewed frozen-input protocol in
+   `../SEARCH.md#metered-execution-and-native-integration`. The input review
+   binds the exact declaration, requested type, source, environment,
+   dependencies, permissions, toolchain inventory and generated inspection
+   source. The controlled build and inspection produce execution evidence;
+   exact claim correspondence, dependencies and axiom policy are audited before
+   acceptance. Record the theorem, its constants, the toolchain, and both axiom
+   lists in the step's `README.md`. Entry: formalise-while-fresh,
    step 4. Output: the certificate.
 
 ## Failure signal
@@ -117,6 +121,9 @@ walk. Excludes nothing: a mode change follows any earlier change.
   taken as a proof: a warning build filed as a certificate. Check:
   `result.json` carries the harness's list; `sorryAx` fails the step, and
   a compiler axiom of section 5 relabels the unit computational evidence.
+- A successful build or axiom print treated as controller acceptance. Check:
+  the terminal result has interpretation, independent policy review, exact
+  declaration/type audit, checkpoint and acceptance records.
 - A theorem weaker than the claim: a smaller domain, a missing quantifier,
   a rounded constant, a redefined notion. Check: step 2's reading against
   the claim sentence, repeated at cash-out by a second reader.

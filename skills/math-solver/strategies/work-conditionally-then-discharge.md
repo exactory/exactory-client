@@ -57,7 +57,9 @@ unknown and none is no; no otherwise. Question 5 picks step 4's route; yes to
    condition-on-the-one-missing-input, step 1. Output: the conditional
    theorem, to step 3.
 3. Restrict the hypothesis to the form the proof uses; open the second
-   record with it as claim. Dispatches
+   record with it as claim only after its exact contribution, logical
+   predecessor, budget account, and native-versus-logical lineage pass
+   proposal review and admission under `../SEARCH.md#proposal`. Dispatches
    condition-on-the-one-missing-input, step 2. Output: the restricted
    hypothesis, to step 4, or to step 5 when questions 6 to 8 are yes.
 4. Take the route the study and question 5 pick: prove the target where
@@ -68,7 +70,9 @@ unknown and none is no; no otherwise. Question 5 picks step 4's route; yes to
    explicit argument, to `verify-formally-with-lean4`; the
    analogue-setting special case, to `solve-the-model-world-first` as
    its model proof; the second record, with what it still needs, to
-   the cash-out.
+   the cash-out. A result from that record returns through an accepted
+   dependency and an explicitly checked implication bridge; local child
+   closure alone does not discharge the parent.
 5. Test whether the opposite axiom refutes the target. Dispatches
    test-independence-under-two-opposite-axioms. Output: an independence
    theorem, or a one-directional conditional result with the open half
@@ -110,7 +114,8 @@ it moves no quadruple component.
 
 - The hypothesis assumed, never journalled as a decision. Check: step
   2's journal line names it, and the second record opened at step 3
-  carries `parent.json` naming this one.
+  carries reviewed lineage; when admission selected `native_parent`, its
+  controller-created `parent.json` names this one.
 - The full hypothesis assumed when the proof uses less. Check: step 3's
   form is weaker, or the record says why not.
 - The discharge tried by the method that left the input missing. Check:

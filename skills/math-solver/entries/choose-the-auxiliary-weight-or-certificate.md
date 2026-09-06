@@ -13,7 +13,7 @@ costs: [bound_quality, obligations]
 
 1. Write the bound as a functional of the auxiliary object with the constraints made explicit.
 2. Enlarge the family: let the weight depend on one more coordinate; let it be adaptive, depending only on what earlier stages have revealed; let it concentrate on the surviving set; let it vary with a time parameter so that the target quantity becomes monotone along the flow.
-3. Pose the choice as an optimisation (maximise a ratio of quadratic forms, minimise the largest root of an expected polynomial, find a function with prescribed zeros and sign pattern) and pass it to optimise-the-certificate-family-numerically.
+3. Pose the choice as an optimisation (maximise a ratio of quadratic forms, minimise the largest root of an expected polynomial, find a function with prescribed zeros and sign pattern) and pass its exact truncation and parameter domain to reviewed computation admission under `../SEARCH.md#computation-admission-and-mandatory-interpretation` before optimise-the-certificate-family-numerically launches a process.
 4. Where the problem itself supplies a natural weight (a multiplicative function attached to the objects), test it first against the known counterexamples to the unweighted statement.
 5. Prove the optimiser's bound with an explicit constant.
 

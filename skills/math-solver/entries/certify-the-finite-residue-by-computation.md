@@ -11,6 +11,13 @@ costs: [axioms, object]
 
 ## Action
 
+Every launched phase first receives the exact reviewed finite basis, domain,
+outcome map, stopping rule and bounded verification plan in
+`../SEARCH.md#computation-admission-and-mandatory-interpretation`, then runs through
+the frozen executor in `../SEARCH.md#metered-execution-and-native-integration`.
+Completeness, coverage, claim correspondence, dependencies and result policy remain
+separate acceptance obligations.
+
 1. Reduce the analytic residue to inequalities on compact ranges with explicit tail estimates, then prove each by a certified special-case check (interval arithmetic in two independent implementations); when the residue is a statement over an interval of the parameter, cover the interval by a certified witness chain.
 2. Enumerate the finite family by an enumeration run whose trusted base is small and published; recast the completeness of the enumeration as a formal check when its completeness is in question.
 3. Replace each nonlinear local problem by a linear relaxation, solved as a numerical optimisation run, and split by branch and bound only where the relaxation fails.

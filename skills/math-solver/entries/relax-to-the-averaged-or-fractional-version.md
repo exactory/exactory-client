@@ -13,7 +13,7 @@ costs: [bound_quality, effectivity, object, obligations]
 
 1. Write the averaged or fractional statement and prove it.
 2. Decompose the original into the relaxed statement plus a rounding or deviation statement: the integral optimum is within a factor of the fractional one; the pointwise value is within the average.
-3. Attack the rounding statement separately. Its hypothesis is often the dual of the relaxation, which is where an imported lemma may fit (import-the-engine-from-an-adjacent-problem).
+3. Attack the rounding statement separately. When that creates another attack, submit its exact claim, logical predecessor, account and bridge back to the original statement for review and admission under `../SEARCH.md#proposal`; separation alone does not decide native parentage. Its hypothesis is often the dual of the relaxation, which is where an imported lemma may fit (import-the-engine-from-an-adjacent-problem).
 4. If the rounding gap cannot be closed, the averaged result stands as a result of the right order.
 
 ## Output form

@@ -15,6 +15,8 @@ from tests.support import (
     write_journal,
     write_ranking,
     write_study,
+    admit_existing_workspace,
+    reserved_journal,
 )
 
 
@@ -31,7 +33,7 @@ class StatusTest(WorkspaceTest):
         return next(line for line in self.lines() if line.startswith(head))
 
     def add(self, move):
-        return self.run_cli("journal", "add", self.slug, "--json", json.dumps(move))
+        return reserved_journal(["journal", "add", self.slug, "--json", json.dumps(move)], self.attack_root)
 
     # The stages, from the empty workspace to the finished one
 
@@ -58,6 +60,7 @@ class StatusTest(WorkspaceTest):
         self.assertEqual(self.line("next:"), "next: write preconditions.json and run plan")
 
     def test_a_planned_attack_waits_for_the_ranking(self):
+        admit_existing_workspace(self.attack_root, self.slug)
         self.write_json("problem.json", make_problem())
         write_study(self.workspace, "problem")
         self.write_json("preconditions.json", make_preconditions(ALL_YES))
@@ -114,6 +117,7 @@ class StatusTest(WorkspaceTest):
         self.assertEqual(self.line("next:"), "next: run stall; the rule is no admissible opening")
 
     def test_units_are_counted_by_what_they_still_need(self):
+        prepare_plan(self)
         write_journal(self.workspace, [make_move(1, closes=True)])
         (self.workspace / "units" / "INVENTORY.md").write_text("# Inventory: sample\n")
         for number in (1, 2, 3):
@@ -136,6 +140,7 @@ class StatusTest(WorkspaceTest):
         self.assertEqual(self.line("next:"), "next: check-unit 1; write units/2/draft.md; write units/3/evaluation.md; then finish")
 
     def test_an_inventory_with_no_unit_asks_for_the_conversion(self):
+        prepare_plan(self)
         write_journal(self.workspace, [make_move(1, closes=True)])
         (self.workspace / "units" / "INVENTORY.md").write_text("# Inventory: sample\n")
         self.assertEqual(self.lines()[0], "attack/sample: stage 7 (cash out)")

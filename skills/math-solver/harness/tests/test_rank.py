@@ -1,7 +1,7 @@
-from tests.support import ALL_YES, WorkspaceTest, make_preconditions, make_problem, write_ranking, write_study
+from tests.support import ALL_YES, AdmittedWorkspaceTest, make_preconditions, make_problem, write_ranking, write_study
 
 
-class RankTest(WorkspaceTest):
+class RankTest(AdmittedWorkspaceTest):
     """The plan says which strategies are admitted as openings; the solver says in
     what order it would open with them, and every row cites what it read."""
 

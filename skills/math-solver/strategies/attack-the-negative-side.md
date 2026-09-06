@@ -60,9 +60,12 @@ step 4, to question 7 step 5.
    it leaves, a finite range or a structured class. Conditions
    contradicting a known theorem (the entry's action 3) leave no object:
    the direction returns to true and the chain goes to the cash-out as
-   a full proof.
+   a full proof. Any solver run over the range first uses the exact reviewed
+   counterexample-search domain and stopping rule in
+   `../SEARCH.md#computation-admission-and-mandatory-interpretation`.
 4. When question 6 is yes. Entry: test-strengthenings-by-counterexample,
-   naming the neighbour in the journal. Output: the boundary of what
+   naming the neighbour in the journal. Gate only its process branch; hand
+   checks remain part of the move. Output: the boundary of what
    stays open and the hypothesis any proof must use.
 5. When question 7 is yes. Entry:
    diagonalise-against-every-candidate-under-a-guessing-principle.
@@ -120,6 +123,9 @@ direction move composes with any component.
   target's. Check: the unit's claim is read against `claim` in
   `problem.json` and the object tested against the full hypothesis by
   an independent computation.
+- A no-hit prefix relabelled as native verification or a target
+  counterexample search. Check: the exact admitted claim and domain still need
+  reviewed necessity, and no hit remains bounded evidence.
 - A counterexample under a guessing principle reported as unconditional.
   Check: the unit's claim names the principle.
 - An entry dispatched before the study record exists. Check:

@@ -13,7 +13,7 @@ costs: [obligations]
 
 1. Prove the amplification lemma first: state exactly how the operation changes each parameter and the quantity of interest, and confirm that it preserves the constraint (no forbidden configuration is created, the conserved quantity is still conserved).
 2. Determine the smallest parameter at which a seed can carry a positive excess: the first dimension where a length can exceed its threshold, the smallest motif that can be forced to appear somewhere and forbidden at a fixed position.
-3. Search for the seed there (enumerate-small-cases-to-locate-the-threshold) and verify it by an independent check, with a computer-free proof where one is available.
+3. Search for the seed there (enumerate-small-cases-to-locate-the-threshold) only after the amplification lemma and the exact bounded seed domain, necessity, outcome map and stopping rule pass `../SEARCH.md#computation-admission-and-mandatory-interpretation`; verify it by an independent check, with a computer-free proof where one is available. A small search space is not permission by itself.
 4. Apply the amplification and quantify the violation or the bound it gives.
 5. Optimise the seed to shrink the final object, then test the limits of the seed class.
 

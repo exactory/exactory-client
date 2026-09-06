@@ -527,6 +527,15 @@ def run_budget(args):
 
 
 def run_journal_add(args):
+    line = validated_journal_line(args)
+    workspace = args.attack_root / args.slug
+    moves = read_journal(workspace)
+    with (workspace / "journal.jsonl").open("a") as journal:
+        journal.write(json.dumps(line) + "\n")
+    print_budget(compute_budget(moves + [line], read_failure_window_start(workspace)))
+
+
+def validated_journal_line(args):
     workspace = args.attack_root / args.slug
     move = parse_move_json(args.json)
     moves = read_journal(workspace)
@@ -546,10 +555,7 @@ def run_journal_add(args):
     )
     if defects:
         raise ValidationError(defects)
-    line = dict(move, problem_digest=compute_problem_digest(problem))
-    with (workspace / "journal.jsonl").open("a") as journal:
-        journal.write(json.dumps(line) + "\n")
-    print_budget(compute_budget(moves + [line], window_start))
+    return dict(move, problem_digest=compute_problem_digest(problem))
 
 
 def find_step_defects(steps, workspace):
@@ -953,8 +959,9 @@ def find_inventory_defects(workspace, command):
 def run_finish(args):
     workspace = args.attack_root / args.slug
     finished_path = workspace / "units" / "FINISHED.json"
+    child_defects = list(find_open_child_defects(args.attack_root, args.slug))
     if not read_journal(workspace) and not (workspace / "units" / "INVENTORY.md").exists():
-        defects = list(find_stage_three_exit_defects(workspace))
+        defects = list(find_stage_three_exit_defects(workspace)) or child_defects
         if defects:
             raise ValidationError(defects)
         write_json(finished_path, {"outcome": "solved-in-literature", "units": []})
@@ -964,7 +971,7 @@ def run_finish(args):
     defects = (
         list(find_inventory_defects(workspace, "finish"))
         or [defect for number in numbers for defect in find_finished_unit_defects(workspace, number)]
-        or list(find_open_child_defects(args.attack_root, args.slug))
+        or child_defects
     )
     if defects:
         raise ValidationError(defects)
@@ -1384,14 +1391,8 @@ def find_unit_move_defects(numbers, journal_moves):
 
 
 def run_verify_lean(args):
-    step_dir = resolve_step_dir(args)
-    step = read_json(step_dir / "step.json")
-    defects = list(find_lean_project_defects(step_dir, step))
-    if defects:
-        raise ValidationError(defects)
-    result = check_lean_theorem(step_dir, step["theorem"], step.get("file", "Main.lean"))
-    write_json(step_dir / "result.json", result)
-    return print_verdict(result, result["reason"] or describe_axioms(result))
+    from search_controller.execution import native_verify
+    return native_verify(args)
 
 
 def find_lean_project_defects(step_dir, step):
@@ -1404,24 +1405,6 @@ def find_lean_project_defects(step_dir, step):
     file_name = step.get("file", "Main.lean")
     if not (step_dir / file_name).exists():
         yield "%s: missing" % file_name
-
-
-def check_lean_theorem(step_dir, theorem, file_name):
-    build = run_in(step_dir, ["lake", "build"])
-    if build.returncode != 0:
-        return build_lean_result(theorem, [], "fail", "lake build failed", build.stdout)
-    module_name = ".".join(Path(file_name).with_suffix("").parts)
-    check_path = step_dir / AXIOMS_CHECK_FILE
-    check_path.write_text("import %s\n#print axioms %s\n" % (module_name, theorem))
-    try:
-        printed = run_in(step_dir, ["lake", "env", "lean", AXIOMS_CHECK_FILE])
-    finally:
-        check_path.unlink()
-    axioms = parse_axioms(printed.stdout)
-    if axioms is None:
-        return build_lean_result(theorem, [], "fail", "no axioms line in the lean output", printed.stdout)
-    status, reason = classify_axioms(theorem, axioms)
-    return build_lean_result(theorem, axioms, status, reason, printed.stdout)
 
 
 def parse_axioms(output):
@@ -1473,20 +1456,8 @@ def describe_axioms(result):
 
 
 def run_verify_certificate(args):
-    step_dir = resolve_step_dir(args)
-    script = step_dir / "check.sh"
-    if not script.exists():
-        raise ValidationError(["check.sh: missing"])
-    if not os.access(script, os.X_OK):
-        raise ValidationError(["check.sh: not executable"])
-    completed = run_in(step_dir, [str(script.resolve())])
-    result = {
-        "status": "pass" if completed.returncode == 0 else "fail",
-        "exit_status": completed.returncode,
-        "output_head": head_lines(completed.stdout),
-    }
-    write_json(step_dir / "result.json", result)
-    return print_verdict(result, "check.sh exited %d" % completed.returncode)
+    from search_controller.execution import native_verify
+    return native_verify(args)
 
 
 def resolve_step_dir(args):
@@ -1494,12 +1465,6 @@ def resolve_step_dir(args):
     if not step_dir.is_dir():
         raise ValidationError(["deterministic/%s: missing" % args.step_dir])
     return step_dir
-
-
-def run_in(directory, command):
-    return subprocess.run(
-        command, cwd=directory, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
-    )
 
 
 def head_lines(output):
@@ -1525,7 +1490,8 @@ def write_json(path, data):
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(description="Deterministic harness for an attack workspace.")
+    from search_controller.cli import SearchParser, install_parser
+    parser = SearchParser(description="Deterministic harness for an attack workspace.")
     parser.add_argument(
         "--strategies", type=Path, default=DEFAULT_STRATEGIES_DIR, help="directory of strategy files"
     )
@@ -1611,17 +1577,37 @@ def build_parser():
         verify_command.add_argument("slug")
         verify_command.add_argument("step_dir", metavar="step-dir")
         verify_command.set_defaults(run=run)
+    install_parser(commands, DEFAULT_STRATEGIES_DIR)
     return parser
 
 
 def main(argv=None):
-    args = build_parser().parse_args(argv)
+    from search_controller.cli import print_error
+    from search_controller.errors import SearchError
+    context = None
     try:
-        return args.run(args) or 0
+        args = build_parser().parse_args(argv)
+        from search_controller.integration import before_legacy, after_legacy
+        context = before_legacy(args)
+        outcome = args.run(args) or 0
+        after_legacy(context, outcome)
+        return outcome
+    except SearchError as error:
+        print_error(error)
+        return 1
     except ValidationError as error:
+        from search_controller.integration import after_legacy
+        try:
+            after_legacy(context, 1, error.problems)
+        except SearchError as recovery_error:
+            print_error(recovery_error)
+            return 1
         for problem in error.problems:
             print(problem, file=sys.stderr)
         return 1
+    finally:
+        from search_controller.integration import release_native_ownership
+        release_native_ownership(context)
 
 
 if __name__ == "__main__":

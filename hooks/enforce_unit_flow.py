@@ -18,6 +18,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from math_search import normalize, workspace_for
 
 _UNIT_PATH_RE = re.compile(r"^units/(\d+)/[^/]+$")
 _DRAFT_FILES = ("draft.md", "evaluation.md")
@@ -35,10 +36,7 @@ def _deny(reason: str) -> None:
 
 
 def _find_workspace(path: Path) -> Path | None:
-    for directory in path.parents:
-        if directory.parent.name == "attack" and (directory / "problem.json").is_file():
-            return directory
-    return None
+    return workspace_for(path)
 
 
 def _is_checked_as_it_stands(unit_dir: Path) -> bool:
@@ -54,7 +52,7 @@ def _is_checked_as_it_stands(unit_dir: Path) -> bool:
 
 
 def main() -> None:
-    payload = json.load(sys.stdin)
+    payload = normalize(json.load(sys.stdin))
     if payload.get("tool_name") not in ("Write", "Edit"):
         sys.exit(0)
     path = Path((payload.get("tool_input") or {}).get("file_path", ""))
