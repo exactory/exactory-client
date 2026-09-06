@@ -233,15 +233,21 @@ def remaining_allowance(account):
             "runs": account["max_runs"] - account["used_runs"] - account["reserved_runs"]}
 
 
-def require_current_account(state, account_id):
-    """Reject new work on historical allowance segments, even if unused."""
+def _current_account(state, account_id):
+    """Resolve an account's lineage to its unique current allowance segment."""
     account = reference(state["accounts"], account_id, "budget account")
     lineage = {key: item for key, item in state["accounts"].items()
                if item["lineage_owner"] == account["lineage_owner"]}
     predecessors = {item["predecessor_account_id"] for item in lineage.values()}
     current = set(lineage) - predecessors
     s.require(len(current) == 1, "Budget lineage has no unique current segment", "corrupt_state")
-    s.require(account_id in current, "Budget account has a renewed successor", "account_superseded")
+    return lineage[next(iter(current))]
+
+
+def require_current_account(state, account_id):
+    """Reject new work on historical allowance segments, even if unused."""
+    account = _current_account(state, account_id)
+    s.require(account_id == account["id"], "Budget account has a renewed successor", "account_superseded")
     return account
 
 
@@ -256,10 +262,16 @@ def choose_account(state, proposal, target):
         candidates.insert(0, state["nodes"][predecessor]["account_id"])
         s.require(budget["account_id"] in {None, candidates[0]}, "Continuation must inherit its predecessor account")
     if budget["account_id"] is not None:
-        reference(state["accounts"], budget["account_id"], "budget account")
-        s.require(not candidates or budget["account_id"] in candidates, "Budget account is unrelated to this investigation")
+        selected = reference(state["accounts"], budget["account_id"], "budget account")
+        s.require(not candidates or any(state["accounts"][key]["lineage_owner"] == selected["lineage_owner"]
+                                       for key in candidates), "Budget account is unrelated to this investigation")
         candidates.insert(0, budget["account_id"])
-    account = require_current_account(state, candidates[0]) if candidates else None
+    account = None
+    if candidates:
+        if budget["account_id"] is None and proposal["relationship"] != "continuation":
+            account = _current_account(state, candidates[0])
+        else:
+            account = require_current_account(state, candidates[0])
     renewal = budget["mode"] == "renew"
     if renewal:
         s.require(account is not None and qualifying_progress(state, budget["basis_checkpoint_id"], budget["basis_checkpoint_digest"]),

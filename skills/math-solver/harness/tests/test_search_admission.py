@@ -545,6 +545,62 @@ class AdmissionTests(unittest.TestCase):
         self.assertEqual(guard(state, "account-000002")["id"], "account-000002")
         self.assertEqual(state, before)
 
+    def cross_target_lineage(self):
+        state = self.approved(decomposition_proposal())
+        state["accounts"]["account-000001"].update(used_moves=24, used_runs=7)
+        value = self.renewal(state)
+        value["claim"] = copy.deepcopy(state["obligations"]["obligation-000003"]["claim"])
+        value["target_obligation"] = "obligation-000003"
+        value["contribution"]["route"] = "route-000001"
+        state = self.approved(value, state)
+        state["accounts"]["account-000002"].update(used_moves=5, used_runs=3,
+                                                    reserved_moves=1, reserved_runs=2)
+        retry = decomposition_proposal()
+        retry["attack_slug"] = "return-to-base-cases"
+        return state, retry
+
+    def test_implicit_historical_target_reuses_current_lineage_allowance(self):
+        from search_controller.admission import remaining_allowance
+        state, value = self.cross_target_lineage()
+        before = copy.deepcopy(state["accounts"])
+        state = self.approved(value, state)
+        self.assertEqual(state["nodes"]["node-000003"]["account_id"], "account-000002")
+        self.assertEqual(state["accounts"], before)
+        self.assertEqual(remaining_allowance(state["accounts"]["account-000002"]),
+                         {"moves": 18, "runs": 19})
+        self.assertEqual(state["accounts"]["account-000002"]["historical_moves"], 24)
+
+    def test_explicit_current_segment_is_related_to_its_historical_target(self):
+        state, value = self.cross_target_lineage()
+        value["budget"].update(mode="inherit", account_id="account-000002")
+        before = copy.deepcopy(state["accounts"])
+        state = self.approved(value, state)
+        self.assertEqual(state["nodes"]["node-000003"]["account_id"], "account-000002")
+        self.assertEqual(state["accounts"], before)
+
+    def test_historical_target_cannot_explicitly_select_a_superseded_segment(self):
+        state, value = self.cross_target_lineage()
+        value["budget"].update(mode="inherit", account_id="account-000001")
+        with self.assertRaises(SearchError) as caught:
+            self.approved(value, state)
+        self.assertEqual(caught.exception.code, "account_superseded")
+
+    def test_implicit_continuation_stays_bound_to_superseded_predecessor(self):
+        state, value = self.cross_target_lineage()
+        predecessor = successor(state, category="coverage")
+        value.update(relationship="continuation", logical_predecessor="node-000001",
+                     anchor=predecessor["anchor"], inherited_evidence=predecessor["inherited_evidence"])
+        with self.assertRaises(SearchError) as caught:
+            self.approved(value, state)
+        self.assertEqual(caught.exception.code, "account_superseded")
+
+    def test_implicit_historical_target_obeys_current_segment_exhaustion(self):
+        state, value = self.cross_target_lineage()
+        state["accounts"]["account-000002"]["used_moves"] = 23
+        with self.assertRaises(SearchError) as caught:
+            self.approved(value, state)
+        self.assertEqual(caught.exception.code, "budget_exhausted")
+
 
 if __name__ == "__main__":
     unittest.main()

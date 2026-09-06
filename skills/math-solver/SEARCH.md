@@ -320,7 +320,14 @@ the first account ID, and renewal preserves its predecessor's counters.
 
 `budget.mode: new` has null account and checkpoint bindings; it still reuses an
 account if a target, structurally equivalent claim, or declared equivalent node
-already has one. `inherit` requires an account and null checkpoint bindings.
+already has one. This implicit discovery resolves the matching node's account
+lineage to its unique current segment, even when a reviewed renewal targets a
+different obligation and only the historical node matches the new proposal.
+It preserves the current segment's used/reserved counters and inherited history;
+it does not create another allowance. Explicit selection of that current segment
+is related to historical targets in the same lineage. Explicit selection of the
+historical segment itself is still rejected. `inherit` requires an account and
+null checkpoint bindings.
 It cannot increase that account's limits. Only the unique current segment of a
 lineage can receive new admissions or resource reservations. Explicitly choosing a
 superseded account fails with `account_superseded`, even if it has unused allowance.
