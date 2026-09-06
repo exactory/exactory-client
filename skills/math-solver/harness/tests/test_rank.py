@@ -25,6 +25,38 @@ class RankTest(AdmittedWorkspaceTest):
         self.assertEqual(out.splitlines()[0], "1. %s" % self.openings()[0])
         self.assertEqual(len(out.splitlines()), len(self.openings()))
 
+    def test_nonobject_ranking_fails_cleanly_and_acknowledges_unchanged_inputs(self):
+        write_ranking(self)
+        valid = self.read_json("ranking.json")
+        original = self.controller.status()
+        for value in [valid["order"], [], None, "order", 42, 1.5, True, False]:
+            with self.subTest(value=value):
+                self.write_json("ranking.json", value)
+                before = (self.workspace / "ranking.json").read_bytes()
+                status, out, err = self.rank()
+                self.assertEqual(status, 1)
+                self.assertEqual(out, "")
+                self.assertIn("ranking.json: not an object", err)
+                self.assertEqual((self.workspace / "ranking.json").read_bytes(), before)
+                state = self.controller.status()
+                self.assertEqual(state["service"]["native_intents"], {})
+                receipt = list(state["service"]["native_receipts"].values())[-1]
+                self.assertEqual(receipt["outcome"], "unchanged")
+                self.assertEqual(state["totals"], original["totals"])
+                self.assertEqual(state["accounts"], original["accounts"])
+                self.assertEqual(state["nodes"]["node-000001"]["claim"],
+                                 original["nodes"]["node-000001"]["claim"])
+        self.write_json("ranking.json", valid)
+        self.assertEqual(self.rank()[0], 0)
+
+    def test_object_still_requires_a_complete_order(self):
+        for value in [{}, {"order": None}, {"order": []}]:
+            with self.subTest(value=value):
+                self.write_json("ranking.json", value)
+                status, out, err = self.rank()
+                self.assertEqual((status, out), (1, ""))
+                self.assertIn("ranking.json:", err)
+
     def test_accepts_an_order_the_plan_did_not_choose(self):
         write_ranking(self)
         ranking = self.read_json("ranking.json")

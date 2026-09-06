@@ -47,7 +47,7 @@ class WorkspaceTest(unittest.TestCase):
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        self.attack_root = Path(self._tmp.name) / "attack"
+        self.attack_root = Path(self._tmp.name).resolve() / "attack"
         self.attack_root.mkdir()
         self.workspace = self.attack_root / self.slug
         run(["init", self.slug], self.attack_root)
