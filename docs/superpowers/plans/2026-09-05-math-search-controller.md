@@ -334,6 +334,15 @@ def test_unadmitted_verify_never_launches_checker(self):
   installation or download is permitted. Disclose the trusted read-only external
   dependency boundary, without claiming OS-hermetic execution. Use tiny synthetic
   inventories for negative tests and retain the genuine no-Mathlib Lean smoke.
+  Capture the original declaration's complete printed type separately from the
+  requested source type. Generate an immutable, named correspondence theorem of
+  the requested type and inspect both its axioms and the original declaration's
+  axioms in the same successful inspection command. Type-directed elaboration can
+  introduce additional coercion dependencies; inspecting only the original theorem
+  misses them. Preserve the requested type digest in the terminal result, and keep
+  generated source, complete type output and both axiom reports as run provenance.
+  Test a real custom-axiom coercion negative; printed type text equality alone is
+  not a general proof of type equivalence.
 - [ ] Support closed `command`, `certificate`, and `lean` run variants. A generic
   command records execution/evidence, never a certificate or kernel result. Bind the
   admitted task purpose/domain and the actual argv, frozen inputs, external dependencies,
