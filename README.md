@@ -35,8 +35,9 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
-Version 0.34.0 adds the persistent mathematical search controller and reviewed
-finite-computation contracts. Read the [release and upgrade notes](docs/releases/0.34.0.md)
+Version 0.34.1 fixes ranking validation and protects task writes during recovery
+in the persistent mathematical search controller introduced in 0.34.0.
+Read the [release and upgrade notes](docs/releases/0.34.1.md)
 before updating a waiting agent or adopting an existing attack. An update does
 not resume paused research or reset its budget.
 
