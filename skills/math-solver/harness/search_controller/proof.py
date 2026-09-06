@@ -34,6 +34,7 @@ def record_checkpoint(state, payload):
     if origin["kind"] == "journal_move":
         s.closed(origin, "kind node_id move journal_prefix_digest")
         node = reference(state["nodes"], origin["node_id"], "producer node")
+        s.require(node["proposal_id"] is not None, "Historical imports cannot produce new local checkpoints", "admission_required")
         s.integer(origin["move"], 1, 24)
         s.digest_string(origin["journal_prefix_digest"])
         s.require(cp["milestone_id"] in {x["criterion_id"] for x in node["checkpoint_criteria"]}, "Checkpoint must name a declared milestone")

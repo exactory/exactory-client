@@ -6,9 +6,45 @@ from . import schema as s
 from .admission import EVENT_HANDLERS as ADMISSION_HANDLERS, obligation_record
 from .proof import EVENT_HANDLERS as PROOF_HANDLERS
 from .scheduler import EVENT_HANDLERS as SCHEDULER_HANDLERS, initial_control
+from .adoption import EVENT_HANDLERS as ADOPTION_HANDLERS
 
 
-EVENT_HANDLERS = dict(ADMISSION_HANDLERS, **PROOF_HANDLERS, **SCHEDULER_HANDLERS)
+EVENT_HANDLERS = dict(ADMISSION_HANDLERS, **PROOF_HANDLERS, **SCHEDULER_HANDLERS, **ADOPTION_HANDLERS)
+
+
+def service_operation(state, payload):
+    """Replay only typed facts emitted by the filesystem service boundary."""
+    s.closed(payload, "command target spec_digest operations effects")
+    allowed = {
+        "init": set(), "render": set(), "propose": {"proposal_recorded"},
+        "adopt": {"legacy_imported", "legacy_import_version_recorded", "adoption_allowance_recorded"},
+        "review": {"review_recorded"}, "admit": {"proposal_admitted"},
+        "checkpoint": {"checkpoint_recorded"}, "accept": {"result_accepted"},
+        "complete": {"objective_completed"}, "audit": {"evidence_invalidated"},
+        "retreat": {"node_retreated"}, "replan": {"replan_recorded"},
+        "focus": {"control_recorded"}, "pause": {"control_recorded"},
+        "resume": {"control_recorded"}, "hook-stop": {"control_recorded"},
+    }
+    s.choice(payload["command"], allowed)
+    s.optional_text(payload["target"])
+    s.digest_string(payload["spec_digest"])
+    s.require(len(s.records(payload["operations"])) <= 256, "Too many internal operations")
+    for operation in payload["operations"]:
+        s.closed(operation, "kind payload")
+        s.choice(operation["kind"], allowed[payload["command"]])
+        EVENT_HANDLERS[operation["kind"]](state, operation["payload"])
+    for effect in s.records(payload["effects"]):
+        s.closed(effect, "kind slug snapshot_digest")
+        s.choice(effect["kind"], {"initialize_workspace", "preserve_manual_views"})
+        if effect["kind"] == "initialize_workspace":
+            s.slug(effect["slug"])
+        else:
+            s.require(effect["slug"] == ".", "Manual root view uses the registered root")
+        s.digest_string(effect["snapshot_digest"])
+        state["service"]["effects"].append(copy.deepcopy(effect))
+
+
+EVENT_HANDLERS["service_operation"] = service_operation
 
 
 def initial_state(contract, objective_id):
@@ -28,6 +64,7 @@ def initial_state(contract, objective_id):
         "next_ids": {kind: 2 if kind == "obligation" else 1 for kind in kinds},
         "proof_status": "open", "execution_status": "needs_replan", "publication_status": [],
         "requests": {},
+        "service": {"effects": [], "imports": {}, "import_versions": [], "journal_receipts": {}, "adoption_allowances": []},
     }
 
 

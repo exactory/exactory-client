@@ -289,6 +289,7 @@ def record_node_facts(state, payload):
     facts = payload["facts"]
     s.closed(facts, "node_id status result_action cashout_action waiting_on failed_strategies stagnation_moves external_block dependency_route_ids dependency_assumption_ids")
     node = reference(state["nodes"], facts["node_id"], "node")
+    s.require(node["proposal_id"] is not None, "Imported history cannot receive new local lifecycle facts", "admission_required")
     allowed_statuses = {"admitted", "active", "waiting", "result_ready", "finished"}
     if node["status"] == "retreated":
         allowed_statuses = {"retreated", "finished"}
@@ -328,6 +329,7 @@ def retreat_node(state, payload):
     value = payload["retreat"]
     s.closed(value, "node_id criterion failed_hypothesis observation last_checkpoint_id remaining_assumption_ids reconsideration abandoned_route_ids abandoned_assumption_ids")
     node = reference(state["nodes"], value["node_id"], "retreat node")
+    s.require(node["proposal_id"] is not None, "An import has no admitted strategy to retreat", "admission_required")
     s.require(node["status"] not in {"retreated", "finished"}, "Node already stopped")
     s.require(value["criterion"] in node["retreat_criteria"] and retreat_due(state, node["id"]) == value["criterion"], "Declared retreat predicate has not fired")
     for key in ["failed_hypothesis", "observation", "reconsideration"]:

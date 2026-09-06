@@ -1525,7 +1525,8 @@ def write_json(path, data):
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(description="Deterministic harness for an attack workspace.")
+    from search_controller.cli import SearchParser, install_parser
+    parser = SearchParser(description="Deterministic harness for an attack workspace.")
     parser.add_argument(
         "--strategies", type=Path, default=DEFAULT_STRATEGIES_DIR, help="directory of strategy files"
     )
@@ -1611,13 +1612,22 @@ def build_parser():
         verify_command.add_argument("slug")
         verify_command.add_argument("step_dir", metavar="step-dir")
         verify_command.set_defaults(run=run)
+    install_parser(commands, DEFAULT_STRATEGIES_DIR)
     return parser
 
 
 def main(argv=None):
-    args = build_parser().parse_args(argv)
+    from search_controller.cli import print_error
+    from search_controller.errors import SearchError
     try:
+        args = build_parser().parse_args(argv)
+        if hasattr(args, "slug"):
+            from search_controller.service import Controller
+            Controller(args.attack_root, args.strategies).guard_legacy(args.command, args.slug, vars(args))
         return args.run(args) or 0
+    except SearchError as error:
+        print_error(error)
+        return 1
     except ValidationError as error:
         for problem in error.problems:
             print(problem, file=sys.stderr)

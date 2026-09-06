@@ -230,7 +230,12 @@ def progress_identity(checkpoint):
 
 def remaining_allowance(account):
     """Unknown historical use is a blocked account, never a zero estimate."""
-    s.require(account["historical_usage"] == "known" or account["renewal_basis"] is not None,
+    adoption = account.get("adoption_basis")
+    if adoption is not None:
+        s.closed(adoption, "import_id snapshot_digest review_digest claim_digest")
+        s.require(account.get("role") == "verification" and adoption["claim_digest"] == account.get("owner_claim_digest"),
+                  "Adoption allowance belongs only to its exact verification claim", "usage_unknown")
+    s.require(account["historical_usage"] == "known" or account["renewal_basis"] is not None or adoption is not None,
               "Historical usage is unknown; reviewed renewal is required", "usage_unknown")
     return {"moves": account["max_moves"] - account["used_moves"] - account["reserved_moves"],
             "runs": account["max_runs"] - account["used_runs"] - account["reserved_runs"]}
@@ -276,6 +281,9 @@ def choose_account(state, proposal, target):
         else:
             account = require_current_account(state, candidates[0])
     renewal = budget["mode"] == "renew"
+    if account is not None and account.get("adoption_basis") is not None:
+        s.require(proposal["role"] == "verification" and s.digest(proposal["claim"]) == account["owner_claim_digest"],
+                  "Verification-only lineage cannot become unrelated research", "admission_required")
     if renewal:
         s.require(account is not None and qualifying_progress(state, budget["basis_checkpoint_id"], budget["basis_checkpoint_digest"]),
                   "Renewal needs accepted progress or relevant accepted external evidence", "budget_exhausted")
@@ -292,11 +300,16 @@ def choose_account(state, proposal, target):
                 s.require(progress_identity(used_checkpoint) != basis,
                           "The same progress cannot renew a lineage twice", "budget_exhausted")
         for node in state["nodes"].values():
+            if node["proposal_id"] is None:
+                continue
             old = state["proposals"][node["proposal_id"]]["record"]
             if node["account_id"] in lineage:
                 s.require(old["method"] != proposal["method"] and node["id"] not in proposal["equivalent_node_ids"],
                           "An identical attempt cannot renew through renaming", "budget_exhausted")
     if account is not None and not renewal:
+        if account.get("adoption_basis") is not None:
+            s.require(proposal["role"] == "verification" and s.digest(proposal) in account["adoption_proposal_digests"],
+                      "Imported allowance needs its exact reviewed verification proposal", "admission_required")
         if account["renewal_basis"] is not None:
             s.require(qualifying_progress(state, account["renewal_basis"], account["renewal_basis_digest"]),
                       "Renewal evidence is no longer accepted", "budget_exhausted")
@@ -320,6 +333,9 @@ def choose_account(state, proposal, target):
         "renewal_basis": budget["basis_checkpoint_id"] if renewal else None,
         "renewal_basis_digest": budget["basis_checkpoint_digest"] if renewal else None,
     }
+    if account is not None and account.get("adoption_basis") is not None:
+        state["accounts"][identity].update(role="verification", adoption_basis=copy.deepcopy(account["adoption_basis"]),
+                                            adoption_proposal_digests=account["adoption_proposal_digests"] + [s.digest(proposal)])
     return identity
 
 

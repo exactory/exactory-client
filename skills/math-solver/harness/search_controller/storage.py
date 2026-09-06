@@ -207,7 +207,7 @@ class Store:
     def lock_path(self) -> Path:
         return self.root / "tree.lock"
 
-    def initialize(self, contract: Any, objective_id: str) -> Dict[str, Any]:
+    def initialize(self, contract: Any, objective_id: str, initial_event=None) -> Dict[str, Any]:
         if not _is_nonempty_string(objective_id) or not isinstance(contract, dict):
             raise SearchError(
                 "invalid_input", "objective_id and contract must be non-empty ID and object"
@@ -218,12 +218,17 @@ class Store:
             "schema_version": SCHEMA_VERSION,
             "objective_id": objective_id,
             "contract": contract,
-            "events": [],
+            "events": [] if initial_event is None else [initial_event],
         }
+        _validate_document(candidate)
         with self._writer_lock():
             if self.tree_path.exists() or self.tree_path.is_symlink():
                 current = self._read_document()
-                if canonical_bytes(current) == canonical_bytes(candidate):
+                if canonical_bytes(current) == canonical_bytes(candidate) or (
+                    initial_event is not None and current["contract"] == contract
+                    and current["objective_id"] == objective_id
+                    and current["events"][:1] == [initial_event]
+                ):
                     return current
                 raise SearchError(
                     "already_initialized",
@@ -231,6 +236,49 @@ class Store:
                 )
             self._atomic_replace(self.tree_path, canonical_bytes(candidate))
         return self._read_document()
+
+    def append_operation(self, identity, expected_revision, request_id, build, validate=None):
+        """Build one service operation under lock after request/revision checks.
+
+        build(isolated_document, content_sink) returns the closed event payload.
+        The sink stages immutable content in memory; it never acquires another
+        lock. Neither builders nor validators receive authoritative mutable data.
+        """
+        if not isinstance(identity, dict) or set(identity) != {"command", "target", "spec_digest"}:
+            raise SearchError("invalid_input", "Operation identity is malformed")
+        canonical_bytes(identity)
+        if (type(expected_revision) is not int or expected_revision < 0
+                or not _is_nonempty_string(request_id) or not callable(build)):
+            raise SearchError("invalid_input", "Operation request is malformed")
+        self._check_root()
+        with self._writer_lock():
+            document = self._read_document()
+            for existing in document["events"]:
+                if existing["request_id"] == request_id:
+                    old = {key: existing["payload"].get(key) for key in identity}
+                    if existing["kind"] == "service_operation" and old == identity:
+                        return existing
+                    raise SearchError("request_id_conflict", "Request ID has different command inputs")
+            revision = len(document["events"])
+            if expected_revision != revision:
+                raise SearchError("revision_conflict", "Expected revision differs", {"expected": expected_revision, "actual": revision})
+            sink = ContentSink(self)
+            payload = build(_strict_json(canonical_bytes(document), "corrupt_state"), sink)
+            payload = _strict_json(canonical_bytes(payload), "invalid_json")
+            if any(payload.get(key) != value for key, value in identity.items()):
+                raise SearchError("invalid_input", "Builder changed the command identity")
+            event = {"sequence": revision + 1, "request_id": request_id,
+                     "kind": "service_operation", "payload": payload}
+            if validate is not None:
+                validate(_strict_json(canonical_bytes(document), "corrupt_state"),
+                         _strict_json(canonical_bytes(event), "invalid_json"))
+            candidate = dict(document, events=document["events"] + [event])
+            _validate_document(candidate)
+            for (namespace, digest), raw in sink.staged.items():
+                suffix = ".json" if namespace == "blobs" else ""
+                self._write_immutable(self._content_path(namespace, digest + suffix), raw)
+            self._atomic_replace(self.tree_path, canonical_bytes(candidate))
+            return event
 
     def read(self) -> Dict[str, Any]:
         self._check_root()
@@ -526,3 +574,34 @@ class Store:
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
+
+
+class ContentSink:
+    """Transaction-local immutable bytes, readable before their commit."""
+
+    def __init__(self, store):
+        self.store = store
+        self.staged = {}
+
+    def put_artifact(self, raw):
+        if not isinstance(raw, bytes):
+            raise SearchError("invalid_input", "Artifact must be bytes")
+        digest = hashlib.sha256(raw).hexdigest()
+        self.staged[("artifacts", digest)] = raw
+        return digest
+
+    def put_blob(self, value):
+        raw = canonical_bytes(value)
+        digest = hashlib.sha256(raw).hexdigest()
+        self.staged[("blobs", digest)] = raw
+        return digest
+
+    def get_artifact(self, digest):
+        self.store._validate_digest(digest)
+        key = ("artifacts", digest)
+        return self.staged[key] if key in self.staged else self.store.get_artifact(digest)
+
+    def get_blob(self, digest):
+        self.store._validate_digest(digest)
+        key = ("blobs", digest)
+        return _strict_json(self.staged[key], "corrupt_blob") if key in self.staged else self.store.get_blob(digest)

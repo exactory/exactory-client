@@ -1,10 +1,10 @@
 # Mathematical search controller JSON contract
 
-This document defines the executable Task 2 and Task 3 interfaces for the persistent search
+This document defines the executable Task 2 through Task 4 interfaces for the persistent search
 controller. It does not authorize execution, publish results, or replace the
 existing math-solver workflow. Checkpoints, proof acceptance, and scheduling are
-pure logic. Filesystem evidence verification, execution, CLI commands, and host
-adapters are implemented by subsequent tasks.
+pure logic. Task 4 implements the filesystem service, CLI, adoption and generated
+views. Execution, reservation reconciliation and host adapters remain subsequent tasks.
 
 ## Pure model and storage integration
 
@@ -783,3 +783,289 @@ Stop decision allow_stop. Side intervals store `node_id`, `account_id`,
 `start_used_moves`, and `max_moves`. Pending move identities and unresolved
 execution errors are reserved integration fields for the subsequent execution
 reducer; they are not public flags and Task 3 does not invent executor events.
+
+## Filesystem service and CLI
+
+`Controller(root: Path, strategies_dir=None)` takes the attack root. Its storage
+is `Store(root / ".search")`. The service exports
+`command(name, spec, expected_revision, request_id, target=None)`,
+`status(full_audit=False)`, and `guard_legacy(command, slug, details)`.
+`cli.install_parser(commands, strategies_default)` installs the nested `search`
+parser while retaining global `--attack-root` and `--strategies` placement.
+
+Every mutation requires `--expected-revision N --request-id ID`. Specs are read
+with `--spec FILE`. `--json` and human-readable output contain the same JSON
+decision; human output is indented. Errors are JSON on stderr:
+`{"error":{"code":Text,"message":Text,"details":JSON|null}}`, with exit 1.
+Unknown commands, unknown fields, unsafe paths, stale revisions and conflicting
+request IDs fail without committing a prefix. There is no arbitrary-event command.
+`begin`, `run` and `reconcile` currently return `capability_unavailable`. They do
+not reserve work, launch anything, or claim successful reconciliation.
+
+Public command specs are closed records:
+
+| Command | Spec |
+| --- | --- |
+| init | `{contract: Contract}` |
+| propose | `{proposal: Proposal, inputs: [Input]}` |
+| review | `{proposal_id: ID, review: Review, inputs: [Input]}` |
+| admit ID | `{}`; `--spec` may be omitted |
+| checkpoint [ID] | `{checkpoint: PublicCheckpoint, inputs: [Input]}` |
+| accept ID | `{obligation_id: ID|null, outcome: Outcome, dependency_ids: [ID], route_bindings: [RouteBinding], review: ResultReview, inputs: [Input]}` |
+| complete | `{subject: ClosureSubject, review: ResultReview, inputs: [Input]}` |
+| adopt | `{mappings: [ImportMapping], inputs: [Input]}` |
+| retreat ID | `Retreat` without `node_id` |
+| replan | The documented `replan_recorded` payload |
+| focus, pause, resume, hook-stop | The respective `ControlInput` without `action` |
+| audit, render, status, next | `{}`; no spec file |
+
+`status` and `next` are read-only and need no revision or request ID.
+`PublicCheckpoint` is `CheckpointInput` without `verification_status`; the service
+sets `pending`. Local checkpoints require their positional node ID and an
+acknowledged reserved journal receipt. External checkpoints have no positional
+node and consume no journal move. Neither kind accepts evidence automatically.
+
+`Input = {path: RelativePath, digest: SHA256, kind: "artifact"|"blob"}`.
+Paths resolve within the attack root and cannot traverse or escape through
+symlinks. Artifact digests hash raw bytes. Blob digests hash strict canonical JSON.
+Duplicate JSON keys and non-finite JSON are rejected. Inputs are copied into
+immutable stores before the event document commits. Study/source digests in
+proposals identify nonempty raw artifacts; inherited evidence identifies manifest
+blobs. Reviews are separately stored blobs and never occur inside the subject
+whose digest they review. Host/operator provenance is an explicit trust boundary;
+the CLI cannot establish intellectual independence cryptographically.
+
+Mutation receipts contain `objective_id`, `revision`, `proof_status`, and `command`.
+They describe the original committed mutation on identical request replay.
+`hook-stop` additionally returns `decision` and `current_revision`: accounting is
+deduplicated but a former continuation is evaluated against current control. An
+old execution decision cannot override a later pause or root-ready frontier. The
+continuation-limit summary is issued once; replay permits stopping.
+
+Bounded status includes `freshness: {status:"unchecked", failures:{}}`; recorded
+acceptance is not a claim that artifact hashes were freshly checked. Full status
+audit performs no computation and returns effective failed freshness without
+writing history. `search audit` commits discovered invalidations. Acceptance and
+completion always inspect the full accepted dependency closure. A failed final
+delivery audit conservatively invalidates its contributing acceptance support and
+the recorded closure, retaining all history. None of these audits runs a compiler,
+checker, Lean, shell script or mathematical job.
+
+## Immutable evidence manifests
+
+Every checkpoint evidence digest names this closed blob:
+
+```text
+EvidenceManifest = {
+  schema_version: 1, kind: "analytical"|"certificate"|"lean",
+  claim_digest: SHA256(Claim),
+  conclusion: {outcome: "proof"|"counterexample"|"reduction"|"obstruction"|"hypothesis",
+               dependency_ids: [AcceptanceID], route_bindings: [RouteBinding]},
+  artifacts: [{path: RelativePath, digest: SHA256(RawBytes),
+               role: "proof"|"source"|"study"|"certificate"|"checker"|
+                     "theorem"|"toolchain"|"input"}],
+  dependencies: [EvidenceManifestDigest],
+  external_dependencies: [{path: AbsolutePath, digest: SHA256(RawBytes)}],
+  verification: Verification | null
+}
+```
+
+The conclusion pins the interpretation before the result review. Acceptance must
+match its outcome, dependency IDs and route bindings exactly. A positive proof
+cannot become a counterexample by changing the acceptance command. Classification
+and standard derive from the inspected manifest closure. Analytical evidence needs
+a proof artifact and cannot contain checker/certificate/theorem/toolchain roles
+or a computational dependency. Reviews assess the mathematical meaning of the
+declared analytical proof; this is not an automatic natural-language proof checker.
+Certificate evidence needs both certificate and checker artifacts. Lean evidence
+needs theorem and toolchain artifacts. Missing dependency bytes, cycles, mismatched
+claims and insufficient transitive policies fail closed.
+
+Relative artifact paths describe the frozen version. Editing a later working copy
+does not edit accepted evidence. Explicit absolute external dependencies are
+read-only inputs whose current bytes are checked on every full audit. They are
+never write targets. Source and study artifacts of external origins are also pinned
+and audited. Capturing a directory is not evidence that the manifest enumerates
+every mathematical dependency; the independent review and controlled verifier
+must establish that completeness.
+
+Task 5 must produce and bind these computational records:
+
+```text
+Verification = {
+  run_id: RunID, result_digest: SHA256(TerminalVerificationResult),
+  policy_review: ResultReview,
+  requested_declaration: Text|null, requested_type_digest: SHA256|null
+}
+TerminalVerificationResult = {
+  schema_version: 1, run_id: RunID, claim_digest: SHA256(Claim),
+  input_digest: SHA256(FrozenVerificationInputs),
+  commands: [{argv: [Text], exit_code: Integer,
+              stdout_digest: SHA256(RawBytes), stderr_digest: SHA256(RawBytes)}],
+  declaration: Text|null, theorem_type_digest: SHA256|null,
+  toolchain_digest: SHA256|null
+}
+FrozenVerificationInputs = {
+  schema_version: 1, claim_digest: SHA256(Claim),
+  artifacts: EvidenceManifest.artifacts,
+  external_dependencies: EvidenceManifest.external_dependencies
+}
+```
+
+The run must exist in authoritative `state.runs`, have `status: terminal`, and
+bind exactly `result_digest` and `input_digest`. Importing a result JSON file
+cannot create that run. The policy review pins the terminal result and exact
+claim; its findings cover checker correctness/completeness or formal statement,
+requested declaration/type and permitted axioms as appropriate.
+Certificate results have one successful command and null Lean fields. Lean
+results have successful build and inspection commands, the exact requested
+declaration/type, and pinned toolchain/type artifacts. Inspection output must
+identify the requested declaration exactly once and use only the existing
+standard axiom allowlist. Plausible output with nonzero exit status is rejected.
+Task 5 owns actual command selection, process ownership, input capture, compiler
+retry charging and terminal-result persistence. Task 4 consumes only their audited
+records and cannot mint a controlled run.
+
+Task 5 also owns `service.journal_receipts`, keyed by `"NodeID:MoveNumber"`:
+
+```text
+{node_id: NodeID, move: Integer[1,24], reservation_id: ID,
+ journal_prefix_digest: SHA256(RawJournalPrefix), problem_digest: SHA256}
+```
+
+Only acknowledged, immutable reservations may create receipts. The complete raw
+prefix, including the harness-derived last move's problem digest, must match the
+actual journal bytes. Appending later moves preserves earlier receipts. Changed
+prefixes fail audit. No public spec can inject receipts, and adoption does not
+synthesize them from old line counts. Existing pass rules remain 8 moves per pass,
+3 passes and the 24-move hard cap; default templates remain 24 runs, 300 seconds,
+and one worker.
+
+## Exact local delivery packages
+
+Each `LocalDelivery.checked_unit_digests` entry names:
+
+```text
+{schema_version:1, node_id:NodeID, unit_number:PositiveInteger,
+ files:[{path:RelativePathWithinNode, digest:SHA256(RawBytes)}]}
+```
+
+Packages are ordered by the native unit numbers and cover every applicable unit.
+Each contains its exact `unit.json`, check stamp, draft, evaluation and referenced
+proof evidence inputs. Auditing re-runs native read-only unit/form/finish validators
+and compares actual bytes, not merely the `unit.json` stamp. Inventory,
+consolidation and handoff digests bind `units/INVENTORY.md`,
+`units/consolidation.md`, and `HANDOFF.md`. Cash-out must have its actual native
+stage-seven trigger; empty unit lists are valid only when there are no units.
+The separate draft/evaluation lists equal the package versions exactly.
+
+`finished` requires the actual matching native FINISHED record and no unfinished
+native children. The pending-unused-child exception requires every other artifact
+and gate to pass first, the exact unfinished mapped native child IDs, and no
+contributing child. It writes no fabricated FINISHED file. A missing evaluation or
+changed proof input cannot be hidden by that exception. Final statement review
+pins the complete ClosureSubject and all these exact package/deliverable digests.
+
+## Explicit adoption and preserved history
+
+```text
+ImportMapping = {
+  attack_slug: Slug, claim: Claim, target_obligation: ID|null,
+  logical_predecessor: NodeID|null, snapshot_digest: SHA256(LegacySnapshot),
+  snapshot_paths: [RelativePathWithinNode], usage: {moves: Integer|null, runs: Integer|null},
+  review: ResultReview, verification: AdoptionVerification|null
+}
+LegacySnapshot = {
+  files:[{path:RelativePathWithinNode,digest:SHA256(RawBytes)}], omitted_paths:[RelativePath]
+}
+AdoptionVerification = {proposal: Proposal, review: Review, allowance_review: ResultReview}
+```
+
+The import review subject is ImportMapping without `review` and `verification`.
+The snapshot boundary explicitly lists every relevant visible research file.
+Automatic traversal excludes hidden files/trees and `build`, `dist`,
+`node_modules`, `__pycache__`; exclusions are visible in `omitted_paths`. Required
+proof sources in an omitted tree must still be explicitly frozen or declared as
+read-only proof dependencies before acceptance. Adoption does not claim a complete
+proof closure from this snapshot alone. Problem, journal, parent, FINISHED, units,
+and manual lineage bytes remain unchanged. Native parents must be mapped first;
+depth-one native links remain distinct from deeper logical predecessors.
+
+Historical nodes have `proposal_id:null`, no fabricated admission/studies, and
+status `imported` when unfinished or `finished` when an actual historical FINISHED
+exists. Both are read-only imports. They cannot produce new local checkpoints,
+retreats or lifecycle facts. Historical local completion grants no proof acceptance.
+The generated tree and lineage show the original objective and residual obligations.
+Original manual views are content-addressed before replacement.
+
+Usage fields are reviewed cumulative lineage observations. Unknown history stays
+`historical_usage:unknown`, with null historical counters. Observable journal
+counts are retained as lower bounds. Copies of the same normalized exact claim
+share the historical account; increasing known observations can only increase its
+usage. No source alias or changed snapshot creates a fresh verification account.
+Unknown objective usage refuses a new allowance under a finite global cap.
+
+The first controlled verification has a separately reviewed allowance subject:
+
+```text
+{import_id:ImportID, snapshot_digest:LegacySnapshotDigest, claim_digest:SHA256(Claim),
+ proposal_digest:SHA256(Proposal), limits:Limits}
+```
+
+Its verification-only account has immutable
+`adoption_basis:{import_id,snapshot_digest,review_digest,claim_digest}`,
+`role:verification`, and `adoption_proposal_digests`. The underlying ordinary
+proposal/review and independent allowance review are pinned. The basis permits
+the explicitly approved first verification despite unknown prior history; it
+does not make that history known. An arbitrary adoption_basis on a research
+account cannot unblock it. Revalidation and reviewed changed inputs use the same
+current account and remaining allowance, never fresh counters.
+
+`service.imports` retains original records. `service.import_versions` appends
+reviewed same-path amendments, preserving exact claim, target, native/logical
+lineage and original history. Shortening/changing the preserved journal, editing
+native parent or historical FINISHED bytes, or reducing recorded usage is rejected.
+`service.adoption_allowances` pins each approved snapshot version explicitly.
+An unchanged replay reuses the node. A genuinely new input version cannot reopen
+a finished verification node or overwrite its admission; it needs another
+ordinarily reviewed verification node on the same account. Exhaustion remains
+exhaustion and must be resolved through a bounded, explicitly authorized renewal.
+
+## Locked command construction and recoverable projections
+
+`Store.append_operation(identity, expected_revision, request_id, build, validate=None)`
+is the internal service transaction API. Identity is exactly
+`{command,target,spec_digest}`. Identical replay and conflicting-ID checks precede
+the builder; stale new requests never call it. `build(isolated_document, content_sink)`
+returns `{command,target,spec_digest,operations,effects}`. The sink stages immutable
+bytes in memory and supplies `put/get_blob` and `put/get_artifact`; it does not
+reacquire the writer lock. After pure validation succeeds, the same locked writer
+persists staged content and atomically replaces the event document. Callback
+mutation cannot change authoritative input or the candidate persisted by storage.
+
+The outer event remains exactly `{sequence,request_id,kind,payload}`, with kind
+`service_operation`. Its bounded list contains only typed `{kind,payload}` internal
+operations permitted for that command. Nested batches and unknown operations are
+rejected. Adoption additionally uses `legacy_imported`,
+`legacy_import_version_recorded`, and `adoption_allowance_recorded` internal facts;
+the service never exposes their injection through CLI inputs. Failed later
+operations commit neither a prefix nor staged artifacts.
+
+Effects are `{kind:"initialize_workspace"|"preserve_manual_views",slug,snapshot_digest}`.
+Workspace effects pin an immutable `{directories:[RelativePath],files:[{path,digest}]}`
+snapshot. View-preservation effects use slug `.` and save original view bytes.
+The committed event is the durable intent. Idempotent filesystem application
+happens afterward, with content-bound `.search/effect-DIGEST.json`
+acknowledgements. Interrupted initialization does not imply an atomic transaction
+across legacy files. Status/next report pending effects as a blocker; replaying
+the original command or `search render` recovers without rerunning math or
+granting another admission. Conflicting preexisting bytes cause `recovery_conflict`.
+Projection writes serialize against the current event document to avoid stale
+SEARCH_TREE/LINEAGE output from concurrent commands.
+
+Task 4 wires managed legacy preflight for admission, imported/finished terminality,
+safe paths, and refusal of unmanaged verifier entry within a registered controller.
+Full legacy research-stage reservation enforcement, guarding direct unmanaged
+research, journal acknowledgement and process execution remain Task 5. This is
+not an OS sandbox, a production bypass flag, or a claim that host hooks are already
+integrated. No progress-report addendum or event timestamp field is implemented.
