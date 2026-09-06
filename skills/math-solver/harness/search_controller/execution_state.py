@@ -97,7 +97,7 @@ EVENT_HANDLERS = {"move_reserved": reserve_move, "journal_intended": journal_int
 def reserve_run(state, payload):
     s.closed(payload, "run")
     run = payload["run"]
-    s.closed(run, "id node_id account_id reservation_id kind input_digest spec_digest task cwd snapshot_root output_root commands timeout_seconds environment threads expected_outputs dependency_enumeration executable_bindings reserved_units token requested_declaration requested_type_digest toolchain_digest toolchain_inventory_digest inspection_source_digest publication_prestate")
+    s.closed(run, "id node_id account_id reservation_id kind input_digest spec_digest task cwd snapshot_root output_root commands timeout_seconds environment threads expected_outputs dependency_enumeration executable_bindings reserved_units token requested_declaration requested_type_digest toolchain_digest toolchain_inventory_digest inspection_source_digest publication_prestate input_modes")
     s.choice(run["kind"], {"command", "certificate", "lean"})
     units = 2 if run["kind"] == "lean" else 1
     s.require(run["reserved_units"] == units and len(run["commands"]) == units, "Command reservation count differs")
@@ -120,6 +120,10 @@ def reserve_run(state, payload):
         s.text(run[key])
     for argv in s.records(run["commands"]):
         s.strings(argv, nonempty=True)
+    for item in s.records(run["input_modes"]):
+        s.closed(item, "path mode")
+        s.text(item["path"])
+        s.integer(item["mode"], 0, 0o777)
     for item in s.records(run["publication_prestate"]):
         s.closed(item, "path digest")
         s.text(item["path"])
@@ -189,7 +193,7 @@ EVENT_HANDLERS.update(run_reserved=reserve_run, run_launched=launch_run, run_fin
 
 
 def native_intended(state, payload):
-    s.closed(payload, "id node_id command args_digest pre_digest output_paths")
+    s.closed(payload, "id node_id command args_digest pre_digest output_paths ownership_digest")
     s.require(not state["service"]["native_intents"] and not state["service"]["legacy_intents"]
               and not state["control"]["pending_moves"] and not any(run["status"] != "terminal" for run in state["runs"].values()),
               "Another native mutation or execution requires recovery", "recovery_required")
@@ -200,6 +204,7 @@ def native_intended(state, payload):
     s.strings(payload["output_paths"])
     s.digest_string(payload["args_digest"])
     s.digest_string(payload["pre_digest"])
+    s.digest_string(payload["ownership_digest"])
     state["service"]["native_intents"][payload["id"]] = copy.deepcopy(payload)
     state["control"]["state_error"] = "Native intent {} ({}) requires reconciliation".format(payload["id"], payload["command"])
 

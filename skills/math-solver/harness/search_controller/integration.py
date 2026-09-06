@@ -1,6 +1,8 @@
 """Native harness admission guards and journal reconciliation."""
 
+import fcntl
 import json
+import os
 from pathlib import Path
 import uuid
 
@@ -123,7 +125,7 @@ def before_legacy(args):
     if args.command != "journal" or args.journal_command != "add":
         context = {"controller": controller, "node": node, "command": args.command} if node else None
         if node and args.command in {"plan", "rank", "fail", "stall", "check-unit", "finish"}:
-            context["native_intent"] = begin_native_intent(controller, node, args)
+            context["native_intent"], context["native_ownership"] = begin_native_intent(controller, node, args)
         return context
     import attack
     workspace = safe_path(controller.root, args.slug)
@@ -189,7 +191,7 @@ def after_legacy(context, outcome, diagnostics=None):
         record_native_success(controller, context["native_intent"])
     def build(state, content):
         operations = []
-        reconcile_native_intents(controller, state, content, lambda kind, payload: operations.append({"kind": kind, "payload": payload}))
+        reconcile_native_intents(controller, state, content, lambda kind, payload: operations.append({"kind": kind, "payload": payload}), context)
         if context["command"] == "journal":
             reconcile_journals(controller, state, content, lambda kind, payload: operations.append({"kind": kind, "payload": payload}))
         import copy
@@ -219,7 +221,11 @@ def native_snapshot(controller, node, content):
 
 
 def begin_native_intent(controller, node, args):
+    from .execution import start_identity
     identity = "native-" + uuid.uuid4().hex
+    directory = safe_path(controller.store.root, "native")
+    directory.mkdir(exist_ok=True)
+    ownership = (directory / (identity + ".lock")).open("x+b")
     arguments = {key: value for key, value in vars(args).items() if key != "run"}
     arguments = {key: str(value) if isinstance(value, Path) else value for key, value in arguments.items()}
     outputs = {"plan": ["openings.json"], "rank": [], "fail": ["preconditions.json", "openings.json"],
@@ -229,9 +235,26 @@ def begin_native_intent(controller, node, args):
         current = reference(state["nodes"], node["id"], "native producer")
         return [{"kind": "native_intended", "payload": {"id": identity, "node_id": current["id"],
             "command": args.command, "args_digest": content.put_blob(arguments),
-            "pre_digest": content.put_blob(native_snapshot(controller, current, content)), "output_paths": outputs}}]
-    internal_operation(controller, "legacy-native", identity, build)
-    return identity
+            "pre_digest": content.put_blob(native_snapshot(controller, current, content)), "output_paths": outputs,
+            "ownership_digest": content.put_blob(owner)}}]
+    try:
+        fcntl.flock(ownership.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        info = os.fstat(ownership.fileno())
+        owner = {"id": identity, "pid": os.getpid(), "start_identity": start_identity(),
+                 "device": info.st_dev, "inode": info.st_ino}
+        ownership.flush()
+        os.fsync(ownership.fileno())
+        internal_operation(controller, "legacy-native", identity, build)
+        return identity, ownership
+    except BaseException:
+        ownership.close()
+        raise
+
+
+def release_native_ownership(context):
+    """Release only after the synchronous invocation and its acknowledgement end."""
+    if context is not None and context.get("native_ownership") is not None:
+        context["native_ownership"].close()
 
 
 def record_native_success(controller, identity, outcome="succeeded", diagnostics=None):
@@ -259,24 +282,43 @@ def check_native_effect(intent, before, after):
               + ", ".join(sorted(changed - set(intent["output_paths"]))), "recovery_conflict")
 
 
-def reconcile_native_intents(controller, state, content, emit):
+def reconcile_native_intents(controller, state, content, emit, owned_context=None):
     from .execution import read_record
     for identity, intent in state["service"]["native_intents"].items():
-        node = state["nodes"][intent["node_id"]]
-        before = content.get_blob(intent["pre_digest"])
-        actual = native_snapshot(controller, node, content)
-        marker = safe_path(controller.store.root, "native/" + identity + ".json")
-        if marker.exists():
-            receipt = read_record(marker)
-            s.require(receipt["id"] == identity and actual == content.get_blob(receipt["post_digest"]),
-                      "Native output changed after its success receipt", "recovery_conflict")
-            check_native_effect(intent, before, actual)
-        else:
-            s.require(actual == before,
-                      "Native effect is ambiguous; preserve edits and inspect original intent " + identity,
-                      "recovery_conflict")
-            receipt = {"id": identity, "outcome": "unchanged", "post_digest": intent["pre_digest"]}
-        emit("native_acknowledged", receipt)
+        owner = content.get_blob(intent["ownership_digest"])
+        lock = safe_path(controller.store.root, "native/" + identity + ".lock")
+        s.require(lock.is_file() and not lock.is_symlink(), "Native ownership evidence is missing", "recovery_required")
+        current_owner = owned_context is not None and owned_context.get("native_intent") == identity
+        ownership = owned_context["native_ownership"] if current_owner else lock.open("rb")
+        try:
+            info = os.fstat(ownership.fileno())
+            path_info = lock.stat()
+            s.require(owner["id"] == identity and (owner["device"], owner["inode"]) == (info.st_dev, info.st_ino)
+                      == (path_info.st_dev, path_info.st_ino), "Native ownership evidence changed", "recovery_required")
+            if not current_owner:
+                try:
+                    fcntl.flock(ownership.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    s.require(False, "Native invocation still owns intent " + identity, "recovery_required")
+            node = state["nodes"][intent["node_id"]]
+            before = content.get_blob(intent["pre_digest"])
+            actual = native_snapshot(controller, node, content)
+            marker = safe_path(controller.store.root, "native/" + identity + ".json")
+            if marker.exists():
+                receipt = read_record(marker)
+                s.require(receipt["id"] == identity and actual == content.get_blob(receipt["post_digest"]),
+                          "Native output changed after its success receipt", "recovery_conflict")
+                check_native_effect(intent, before, actual)
+            else:
+                s.require(not current_owner, "Live native invocation has no durable outcome", "recovery_required")
+                s.require(actual == before,
+                          "Native effect is ambiguous; preserve edits and inspect original intent " + identity,
+                          "recovery_conflict")
+                receipt = {"id": identity, "outcome": "unchanged", "post_digest": intent["pre_digest"]}
+            emit("native_acknowledged", receipt)
+        finally:
+            if not current_owner:
+                ownership.close()
 
 
 def observe_node(controller, state, node, content=None):

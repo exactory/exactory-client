@@ -424,6 +424,9 @@ def audit_verification(state, manifest, content):
     from .proof import validate_review
     spec = content.get_blob(run["spec_digest"])
     s.require(spec["kind"] == run["kind"], "Run kind differs from its pinned spec", "digest_mismatch")
+    s.require(spec["input_modes"] == run["input_modes"]
+              and [item["path"] for item in run["input_modes"]] == [item["path"] for item in inputs["artifacts"]],
+              "Run permissions differ from reviewed input provenance", "digest_mismatch")
     subject = {"node_id": run["node_id"], "task": run["task"],
                "spec_without_input_review": {key: value for key, value in spec.items() if key != "input_review"}}
     validate_review(spec["input_review"], s.digest(subject), manifest["claim_digest"])

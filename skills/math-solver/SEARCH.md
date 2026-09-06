@@ -24,10 +24,11 @@ Common = {kind: "command"|"certificate"|"lean", step_dir: RelativeStepName,
   environment: {NonsecretEnvironmentKey: String}, dependency_enumeration: Text,
   timeout_seconds: PositiveInt, expected_outputs: [RelativeOutputPath]}
 command adds {argv: [Text]}
-certificate adds {input_review: ResultReview}
-lean adds {input_review: ResultReview, requested_declaration: Text,
+certificate adds {input_review: ResultReview, input_modes: [InputMode]}
+lean adds {input_review: ResultReview, input_modes: [InputMode], requested_declaration: Text,
   requested_type: Text, toolchain_inventory_digest: Digest,
   inspection_source_digest: Digest}
+InputMode = {path: RelativeAttackRootPath, mode: Int[0,511]}
 ```
 
 All mutations retain expected-revision and request-ID checks. Begin derives the
@@ -44,6 +45,23 @@ actual task and inputs but cannot infer arbitrary code's mathematical purpose
 from filenames or labels. Domain completeness and semantic correspondence remain
 independent review responsibilities. Generic success never creates certificate
 or kernel verification status.
+
+Exact absolute local argv elements, including argv[0], are mapped from declared
+artifacts beneath the attack root into the captured build tree. A relative local
+executable containing `/` is resolved from the declared step directory. An
+executable selected from a local PATH entry is also mapped to its declared frozen
+artifact. An undeclared absolute local path is refused before reservation. This mapping is not
+a shell parser: paths embedded in source code or compound option strings remain
+part of the reviewed semantic/dependency boundary, not an OS sandbox guarantee.
+External dependencies remain an explicitly trusted read-only boundary.
+
+Every run records the actual permission mode of each frozen artifact, in artifact
+order, and restores that mode separately on its input/build copies. Special
+permission bits are unsupported. Native `input_modes` also belongs to the reusable
+input-review subject; changing source permissions requires a new input-bound
+review. Generic runs derive modes at reservation. Pre/post execution checks cover
+copied bytes and modes, and verification audits bind run modes to the reviewed
+specification. No input is made executable merely because another file needs it.
 
 Before native reservation, an independent `ResultReview` must approve exactly
 `{node_id, task, spec_without_input_review}` and the node's claim digest. The
@@ -90,7 +108,7 @@ RunReservation = {id, node_id, account_id, reservation_id, kind, input_digest,
   environment, threads, expected_outputs, dependency_enumeration,
   executable_bindings, reserved_units, token, requested_declaration,
   requested_type_digest, toolchain_digest, toolchain_inventory_digest,
-  inspection_source_digest, publication_prestate}
+  inspection_source_digest, publication_prestate, input_modes: [InputMode]}
 executable_bindings = [{path: AbsolutePath, digest: Digest}]
 publication_prestate = [{path: RelativeAttackRootPath, digest: Digest|null}]
 run_launched: {run_id, token, identity: {pid, process_group, start_identity, token}}
@@ -150,7 +168,7 @@ substitute another run's plausible result. Conflicting accepted path versions ar
 reported explicitly.
 
 Native non-journal operations use `native_intended` with exactly
-`{id,node_id,command,args_digest,pre_digest,output_paths}`. The pinned pre/post
+`{id,node_id,command,args_digest,pre_digest,output_paths,ownership_digest}`. The pinned pre/post
 snapshot blob is `{files:[{path,digest}]}` and the args blob contains the original
 native parsed arguments except its Python callable. Native success writes a
 durable receipt before acknowledgement. `native_acknowledged` is exactly
@@ -161,6 +179,19 @@ success. Missing receipts are not inferred from file presence or absence. A
 conflict preserves the user's files and reports the original intent and command.
 Unresolved native intents block new research mutations. Reconcile does not replay
 an unknown native operation or duplicate a prior acknowledgement.
+
+Before recording the intent, the synchronous native invocation exclusively locks
+its fresh `native/ID.lock` file and retains that descriptor through all native
+writes and acknowledgement. Its immutable ownership blob is
+`{id,pid,start_identity,device,inode}`. The lock file is never unlinked or recreated
+by the protocol. The invocation closes its descriptor on stack termination;
+process death also releases OS ownership. Reconciliation must acquire that exact
+recorded lock before acknowledging a terminated invocation. A stored PID alone
+is not proof of liveness or death. A live lock, a missing lock, or replaced ownership
+evidence blocks reconciliation, even when a receipt exists. Only the owning
+invocation can acknowledge its own durable receipt while retaining the lock.
+With no receipt, an acquired original lock and exact unchanged pre-state permit
+an unchanged acknowledgement; changed state remains ambiguous.
 
 Guarded legacy mutations require admission; journal and verify also require the
 current reserved move. Provisional `init` without a parent and read-only native

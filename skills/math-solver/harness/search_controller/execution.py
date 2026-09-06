@@ -9,6 +9,7 @@ import re
 import selectors
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -65,7 +66,7 @@ def build_run(controller, state, spec, target, content):
     common = "kind step_dir artifacts external_dependencies environment dependency_enumeration timeout_seconds expected_outputs"
     s.choice(spec.get("kind"), {"command", "certificate", "lean"})
     s.closed(spec, common + (" argv" if spec["kind"] == "command" else
-                            " input_review requested_declaration requested_type toolchain_inventory_digest inspection_source_digest" if spec["kind"] == "lean" else " input_review"))
+                            " input_review input_modes requested_declaration requested_type toolchain_inventory_digest inspection_source_digest" if spec["kind"] == "lean" else " input_review input_modes"))
     units = 2 if spec["kind"] == "lean" else 1
     node, account = account_for_work(state, target, "runs", units)
     if spec["kind"] == "command":
@@ -132,9 +133,30 @@ def build_run(controller, state, spec, target, content):
         commands = [[str(lake), "build"], [str(lake), "env", "lean", "axioms-check.lean"]]
     bindings = []
     for command in commands:
+        if spec["kind"] == "command":
+            for index, argument in enumerate(command):
+                candidate = Path(argument)
+                if index == 0 and not candidate.is_absolute() and "/" in argument:
+                    candidate = safe_path(controller.root, step) / candidate
+                if candidate.is_absolute() and candidate.resolve().is_relative_to(controller.root.resolve()):
+                    relative = str(candidate.resolve().relative_to(controller.root.resolve()))
+                    s.require(relative in {item["path"] for item in spec["artifacts"]},
+                              "Local argv input must be a declared frozen artifact: " + relative, "missing_evidence")
+                    safe_path(controller.root, relative)
+                    command[index] = str(safe_path(directory, "build/" + relative))
+        if Path(command[0]).is_relative_to(directory / "build"):
+            source = safe_path(controller.root, str(Path(command[0]).relative_to(directory / "build")))
+            s.require(os.access(str(source), os.X_OK), "Local executable is not executable", "missing_toolchain")
+            continue
         executable = shutil.which(command[0], path=environment["PATH"])
         s.require(executable is not None, "Executable is unavailable; installation is not automatic", "missing_toolchain")
         resolved = Path(executable).resolve()
+        if spec["kind"] == "command" and resolved.is_relative_to(controller.root.resolve()):
+            relative = str(resolved.relative_to(controller.root.resolve()))
+            s.require(relative in {item["path"] for item in spec["artifacts"]},
+                      "Local executable must be a declared frozen artifact: " + relative, "missing_evidence")
+            command[0] = str(safe_path(directory, "build/" + relative))
+            continue
         command[0] = str(Path(executable).absolute())
         binding = {"path": str(resolved), "digest": hashlib.sha256(resolved.read_bytes()).hexdigest()}
         if binding not in bindings:
@@ -143,6 +165,9 @@ def build_run(controller, state, spec, target, content):
         s.require(all(binding in spec["external_dependencies"] for binding in bindings),
                   "Native input review must pin the selected verifier executables", "input_review_required")
     frozen = freeze_execution_inputs(controller.root, node, spec, content)
+    input_modes = capture_input_modes(controller.root, content.get_blob(frozen)["artifacts"])
+    if spec["kind"] != "command":
+        s.require(input_modes == spec["input_modes"], "Input permissions differ from the reviewed specification", "digest_mismatch")
     publication_prestate = []
     if spec["kind"] != "command":
         for name in ["result.json"] + (["inspection.log"] if spec["kind"] == "lean" else []):
@@ -158,7 +183,16 @@ def build_run(controller, state, spec, target, content):
         "dependency_enumeration": spec["dependency_enumeration"], "executable_bindings": bindings,
         "reserved_units": units, "token": uuid.uuid4().hex, "requested_declaration": declaration,
         "requested_type_digest": theorem_type, "toolchain_digest": toolchain, "toolchain_inventory_digest": inventory_digest,
-        "inspection_source_digest": inspection_source, "publication_prestate": publication_prestate}
+        "inspection_source_digest": inspection_source, "publication_prestate": publication_prestate, "input_modes": input_modes}
+
+
+def capture_input_modes(root, artifacts):
+    modes = []
+    for item in artifacts:
+        mode = stat.S_IMODE(safe_path(root, item["path"]).stat().st_mode)
+        s.require(mode <= 0o777, "Special executable permission bits are unsupported", "unsafe_path")
+        modes.append({"path": item["path"], "mode": mode})
+    return modes
 
 
 def lean_inspection_source(description, requested_type):
@@ -177,13 +211,14 @@ def materialize(controller, run):
     directory.mkdir(parents=True, exist_ok=False)
     (directory / "output").mkdir()
     inputs = controller.store.get_blob(run["input_digest"])
-    spec = controller.store.get_blob(run["spec_digest"])
+    modes = {item["path"]: item["mode"] for item in run["input_modes"]}
     for item in inputs["artifacts"]:
         raw = controller.store.get_artifact(item["digest"])
         for prefix in ["input", "build"]:
             target = safe_path(directory, prefix + "/" + item["path"])
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(raw)
+            target.chmod(modes[item["path"]])
     if run["kind"] == "lean":
         project = Path(run["cwd"])
         (project / "axioms-check.lean").write_bytes(controller.store.get_artifact(run["inspection_source_digest"]))
@@ -340,9 +375,10 @@ def launcher(directory):
 def execution_boundary(config, directory):
     from search_controller.evidence import file_digest
     run = config["run"]
+    modes = {item["path"]: item["mode"] for item in run["input_modes"]}
     for item in config["inputs"]["artifacts"]:
         source = safe_path(directory, "build/" + item["path"])
-        if not source.is_file() or file_digest(source) != item["digest"]:
+        if not source.is_file() or file_digest(source) != item["digest"] or stat.S_IMODE(source.stat().st_mode) != modes[item["path"]]:
             return "input_changed"
     if run["inspection_source_digest"] is not None:
         source = Path(run["cwd"]) / "axioms-check.lean"
@@ -517,6 +553,7 @@ def native_spec(controller, node, args):
     if binding not in dependencies:
         dependencies.append(binding)
     spec = {"kind": args.verify_command, "step_dir": args.step_dir, "artifacts": artifacts,
+            "input_modes": capture_input_modes(controller.root, artifacts),
             "external_dependencies": dependencies, "environment": environment,
             "dependency_enumeration": description.get("dependency_enumeration", "Recursive local project sources plus explicitly declared external dependencies; proof policy review must assess completeness"),
             "timeout_seconds": node["admission"]["limits"]["timeout_seconds"], "expected_outputs": []}

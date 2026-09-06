@@ -29,7 +29,8 @@ class VerificationAuditTests(unittest.TestCase):
             step_digest = store.put_artifact(json.dumps(description).encode())
             source_digest = store.put_artifact(lean_inspection_source(description, "True").encode())
             task = {"kind": "proof", "purpose": "Verify True", "input_domain": "The exact declared fixture"}
-            spec = {"kind": "lean", "requested_type": "True"}
+            input_modes = [{"path": "sample/deterministic/proof/step.json", "mode": 0o644}]
+            spec = {"kind": "lean", "requested_type": "True", "input_modes": input_modes}
             subject = {"node_id": "node-000001", "task": task, "spec_without_input_review": dict(spec)}
             spec["input_review"] = {"subject_digest": store.put_blob(subject), "claim_digest": digest(claim()),
                 "reviewer": provenance("input-reviewer"), "decision": "approve",
@@ -57,7 +58,7 @@ class VerificationAuditTests(unittest.TestCase):
                 manifest = dict(inputs, kind="lean", verification={"run_id": "run-000001", "result_digest": result_digest,
                                   "policy_review": review, "requested_declaration": "root", "requested_type_digest": theorem_type})
                 state = {"runs": {"run-000001": {"status": "terminal", "kind": "lean", "termination": "exit",
-                    "node_id": "node-000001", "task": task,
+                    "node_id": "node-000001", "task": task, "input_modes": input_modes,
                     "commands": [["lake", "build"], ["lake", "env", "lean", "Inspect.lean"]],
                     "toolchain_inventory_digest": inventory, "inspection_source_digest": source_digest, "spec_digest": spec_digest,
                     "inspection": {"source_digest": source_digest, "printed_type_digest": store.put_artifact(b"root : True"),
@@ -65,6 +66,9 @@ class VerificationAuditTests(unittest.TestCase):
                     "input_digest": input_digest, "result_digest": result_digest}}}
                 if accepted:
                     audit_verification(state, manifest, store)
+                    state["runs"]["run-000001"]["input_modes"] = [{"path": "sample/deterministic/proof/step.json", "mode": 0o755}]
+                    with self.assertRaises(SearchError):
+                        audit_verification(state, manifest, store)
                 else:
                     with self.assertRaises(SearchError, msg=output):
                         audit_verification(state, manifest, store)

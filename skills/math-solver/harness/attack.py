@@ -1605,6 +1605,9 @@ def main(argv=None):
         for problem in error.problems:
             print(problem, file=sys.stderr)
         return 1
+    finally:
+        from search_controller.integration import release_native_ownership
+        release_native_ownership(context)
 
 
 if __name__ == "__main__":
