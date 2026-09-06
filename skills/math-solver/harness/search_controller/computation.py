@@ -65,11 +65,13 @@ def validate_basis(state, proposal, value):
     basis, domain = value["basis"], value["domain"]
     claim = proposal["claim"]
     policy = claim["proof_policy"]
+    reviewed_dependencies = set()
     for item in basis["dependencies"]:
         accepted = reference(state["acceptances"], item["acceptance_id"], "computation acceptance")
         s.require(s.digest(accepted) == item["acceptance_digest"], "Bound acceptance changed", "digest_mismatch")
         closure = acceptance_closure(state, accepted["id"], policy)
         s.require(closure is not None, "Computation basis is stale or below proof policy", "audit_failed")
+        reviewed_dependencies.update(closure)
         cp = state["checkpoints"][accepted["checkpoint_id"]]
         s.require(s.digest(cp["claim"]) == item["claim_digest"], "Bound claim differs", "claim_mismatch")
         for identity in closure:
@@ -90,10 +92,14 @@ def validate_basis(state, proposal, value):
                   and target in route["premises"] and route["bridge"] == reduction["obligation_id"]
                   and reduction["route_content_digests"].get(route["id"]) == route_identity(route)]
         s.require(bool(routes), "Finite residue requires an accepted exact root reduction bridge", "computation_required")
+        # Resolve nonfinite premises only through the reviewed dependency closure,
+        # whose claims, policies, assumptions, artifacts and reviews are audited.
+        reviewed_state = dict(state, acceptances={identity: state["acceptances"][identity]
+                                                 for identity in reviewed_dependencies})
         s.require(any(all(state["obligations"][oid]["claim"]["scope"]["kind"] in FINITE_SCOPES
-                              or obligation_support(state, oid, policy) is not None
+                              or obligation_support(reviewed_state, oid, policy) is not None
                           for oid in route["premises"]) for route in routes),
-                  "An unresolved unbounded tail is not a finite residue", "computation_required")
+                  "An unresolved or unpinned unbounded tail is not a finite residue", "computation_required")
         s.require(claim["scope"]["kind"] in FINITE_SCOPES,
                   "The reduction target must be an explicitly finite obligation", "computation_required")
         if domain["kind"] in FINITE_SCOPES:

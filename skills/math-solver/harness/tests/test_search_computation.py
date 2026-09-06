@@ -259,6 +259,102 @@ class ComputationBasisTests(WorkspaceTest):
         with self.assertRaises(SearchError):
             self.admit(candidate)
 
+    def accepted_tail(self, pin=True):
+        candidate = self.reduction(unbounded_tail=True)
+        state = self.controller.status()
+        route = state["routes"]["route-000001"]
+        tail_id = route["premises"][1]
+        tail_claim = state["obligations"][tail_id]["claim"]
+        proof = self.artifact("tail-proof.md", "Independent analytical proof of the fixture's complete named tail.")
+        manifest = {"schema_version": 1, "kind": "analytical", "claim_digest": digest(tail_claim),
+                    "conclusion": {"outcome": "proof", "dependency_ids": [], "route_bindings": []},
+                    "artifacts": [{"path": proof["path"], "digest": proof["digest"], "role": "proof"}],
+                    "dependencies": [], "external_dependencies": [], "verification": None}
+        (self.attack_root / "tail-manifest.json").write_text(json.dumps(manifest))
+        checkpoint = {"schema_version": 1, "kind": "proof", "claim": tail_claim,
+            "origin": {"kind": "external_result", "source": "Independent synthetic tail proof", "source_digest": proof["digest"],
+                       "statement": tail_claim["statement"], "statement_digest": digest(tail_claim), "study_digest": self.evidence["digest"]},
+            "evidence_digests": [digest(manifest)], "what_changed": "The complete named tail has an independent proof",
+            "remaining_obligation_ids": [route["premises"][0]], "next_hypothesis": "Check the finite residue", "milestone_id": None}
+        invoke(self.controller, "checkpoint", {"checkpoint": checkpoint, "inputs": [proof,
+            {"path": "tail-manifest.json", "kind": "blob", "digest": digest(manifest)}]}, None)
+        checkpoint = self.controller.status()["checkpoints"]["checkpoint-000002"]
+        invoke(self.controller, "accept", {"obligation_id": tail_id, "outcome": "proof", "dependency_ids": [],
+            "route_bindings": [], "review": result_review(checkpoint, tail_claim), "inputs": []}, checkpoint["id"])
+        tail = self.controller.status()["acceptances"]["acceptance-000002"]
+        if pin:
+            candidate["computation"]["basis"]["dependencies"].append(
+                {"acceptance_id": tail["id"], "acceptance_digest": digest(tail), "claim_digest": digest(tail_claim)})
+        return candidate, proof["digest"], tail
+
+    def finite_producer(self, candidate):
+        from tests.support import ALL_YES, FIXTURE_STRATEGIES, OPENING, make_preconditions, make_problem, write_study
+        self.controller.strategies_dir = FIXTURE_STRATEGIES
+        candidate["method"] = OPENING
+        candidate["studies"]["strategies"] = [{"method": OPENING, "digest": self.evidence["digest"]}]
+        node = self.admit(candidate)
+        workspace = self.attack_root / node["attack_slug"]
+        problem = make_problem()
+        problem["claim"] = candidate["claim"]["statement"]
+        (workspace / "problem.json").write_text(json.dumps(problem))
+        write_study(workspace, "problem")
+        write_study(workspace, OPENING)
+        (workspace / "preconditions.json").write_text(json.dumps(make_preconditions(ALL_YES)))
+        status, _, error = self.run_cli("plan", node["attack_slug"])
+        self.assertEqual((status, error), (0, ""))
+        openings = json.loads((workspace / "openings.json").read_text())["openings"]
+        (workspace / "ranking.json").write_text(json.dumps({"generated_from": "openings.json", "order": [
+            {"strategy": item["strategy"], "cites": ["shape.objects"], "reason": "The studied finite fixture applies"}
+            for item in openings]}))
+        marker = self.attack_root / "tail-based-producer-ran"
+        step = workspace / "deterministic" / "job"
+        step.mkdir()
+        (step / "job.py").write_text("from pathlib import Path\nPath(" + repr(str(marker)) + ").touch()\n")
+        invoke(self.controller, "begin", begin_spec(), node["id"])
+        return node, marker, command_spec(workspace, [sys.executable, "job.py"])
+
+    def test_unpinned_corrupted_named_tail_cannot_authorize_admission(self):
+        candidate, artifact, _ = self.accepted_tail(pin=False)
+        (self.controller.store.root / "artifacts" / artifact).write_text("Corrupted independent tail proof")
+        marker = self.attack_root / "tail-based-producer-ran"
+        before = self.controller.status()["accounts"]
+        with self.assertRaises(SearchError) as caught:
+            node, _, spec = self.finite_producer(candidate)
+            invoke(self.controller, "run", spec, node["id"])
+        self.assertEqual(caught.exception.code, "computation_required")
+        self.assertEqual(self.controller.status()["accounts"], before)
+        self.assertFalse(marker.exists())
+
+    def test_valid_pinned_named_tail_allows_actual_finite_execution(self):
+        candidate, _, _ = self.accepted_tail()
+        node, marker, spec = self.finite_producer(candidate)
+        invoke(self.controller, "run", spec, node["id"])
+        self.assertTrue(marker.exists())
+        self.assertEqual(self.controller.status()["totals"]["used_runs"], 1)
+
+    def test_pinned_tail_corruption_before_launch_preserves_the_original_account(self):
+        candidate, artifact, _ = self.accepted_tail()
+        node, marker, spec = self.finite_producer(candidate)
+        before = self.controller.status()["accounts"]
+        (self.controller.store.root / "artifacts" / artifact).write_text("Corrupted after move reservation")
+        with self.assertRaises(SearchError) as caught:
+            invoke(self.controller, "run", spec, node["id"])
+        self.assertEqual(caught.exception.code, "corrupt_artifact")
+        self.assertEqual(self.controller.status()["accounts"], before)
+        self.assertFalse(marker.exists())
+
+    def test_withdrawn_pinned_tail_before_launch_preserves_the_original_account(self):
+        candidate, artifact, tail = self.accepted_tail()
+        node, marker, spec = self.finite_producer(candidate)
+        before = self.controller.status()["accounts"]
+        (self.controller.store.root / "artifacts" / artifact).write_text("Corrupted before explicit audit")
+        invoke(self.controller, "audit", {}, None)
+        self.assertNotEqual(self.controller.status()["acceptances"][tail["id"]]["status"], "accepted")
+        with self.assertRaises(SearchError):
+            invoke(self.controller, "run", spec, node["id"])
+        self.assertEqual(self.controller.status()["accounts"], before)
+        self.assertFalse(marker.exists())
+
     def test_stale_bound_evidence_preserves_accounts(self):
         candidate = self.reduction()
         candidate["computation"]["basis"]["bound_acceptance_id"] = "acceptance-000001"

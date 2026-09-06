@@ -65,6 +65,10 @@ including its pinned route content, with the target among its premises. The targ
 has an explicit finite scope. Every other unresolved premise also has an explicit
 finite scope; an unresolved named or infinite tail is refused. Finite siblings
 need not already be proved. A proposed route alone grants no computation basis.
+Any accepted support used to remove a nonfinite premise must be within the
+reviewed basis dependency closure. Other recorded acceptances cannot supply
+implicit support. The same closure receives the claim, assumption, policy,
+artifact and review audits before admission and launch.
 
 `diagnostic` uses the proposal's reviewed necessity, outcome/action map and stopping
 condition. `standalone` requires the existing standalone significance record and
