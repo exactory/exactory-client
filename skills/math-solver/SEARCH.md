@@ -857,6 +857,13 @@ the locked command transaction. Unaccepted inputs receive an integrity audit;
 first verification does not require its own future terminal run. Accepted support
 receives the full verification/policy audit before it can justify an allowance.
 A failed audit commits no event, account change or workspace effect.
+This includes an existing current segment's implicit `renewal_basis` when a
+`new` or `inherit` proposal reuses it. Auditing and admission share the pure
+`resolve_proposal_account(state, proposal, target)` selector; it does not allocate
+or mutate an account. Automatic reuse resolves the current segment, while an
+explicit superseded account remains an `account_superseded` refusal. Proposal
+context and references are validated before auditing, so an unknown checkpoint
+anchor returns structured `dangling_reference` without a transaction prefix.
 
 Local publication packages must contain the exact accepted versions of all local
 artifacts in the complete manifest dependency closure, including `source` and

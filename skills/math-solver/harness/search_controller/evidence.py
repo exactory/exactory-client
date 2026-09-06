@@ -4,6 +4,7 @@ import hashlib
 from pathlib import Path
 
 from . import schema as s
+from .admission import reference, resolve_proposal_account, validate_proposal_context
 from .errors import SearchError
 from .storage import safe_path, _strict_json
 
@@ -63,14 +64,19 @@ def manifest_closure(digests, content):
 
 def audit_admission(root, state, proposal, content):
     """Revalidate the proposal's evidence and accepted budget basis under lock."""
+    s.validate_proposal(proposal)
+    _, target = validate_proposal_context(state, proposal, None)
+    account = resolve_proposal_account(state, proposal, target)
     checkpoint_ids = set()
     if proposal["anchor"]["kind"] == "checkpoint":
         checkpoint_ids.add(proposal["anchor"]["checkpoint_id"])
     if proposal["budget"]["mode"] == "renew":
         checkpoint_ids.add(proposal["budget"]["basis_checkpoint_id"])
+    elif account is not None and account["renewal_basis"] is not None:
+        checkpoint_ids.add(account["renewal_basis"])
     manifests = list(proposal["inherited_evidence"])
     for identity in checkpoint_ids:
-        checkpoint = state["checkpoints"][identity]
+        checkpoint = reference(state["checkpoints"], identity, "admission checkpoint")
         audit_checkpoint(root, state, checkpoint, content, verify=False)
         manifests.extend(checkpoint["evidence_digests"])
     for digest in proposal["inherited_evidence"]:
@@ -90,7 +96,7 @@ def audit_admission(root, state, proposal, content):
         accepted = state["acceptances"].get(identity)
         s.require(accepted is not None and accepted["status"] == "accepted", "Inherited acceptance is unavailable", "audit_failed")
         s.require(content.get_blob(s.digest(accepted["review"])) == accepted["review"], "Pinned review differs", "digest_mismatch")
-        checkpoint = state["checkpoints"][accepted["checkpoint_id"]]
+        checkpoint = reference(state["checkpoints"], accepted["checkpoint_id"], "accepted checkpoint")
         audit_checkpoint(root, state, checkpoint, content)
         checked.add(identity)
         pending.extend(accepted["dependency_ids"])

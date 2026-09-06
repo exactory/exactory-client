@@ -259,7 +259,8 @@ def require_current_account(state, account_id):
     return account
 
 
-def choose_account(state, proposal, target):
+def resolve_proposal_account(state, proposal, target):
+    """Select the existing segment without allocating or changing allowance."""
     budget = proposal["budget"]
     candidates = []
     for node in reversed(list(state["nodes"].values())):
@@ -280,6 +281,12 @@ def choose_account(state, proposal, target):
             account = _current_account(state, candidates[0])
         else:
             account = require_current_account(state, candidates[0])
+    return account
+
+
+def choose_account(state, proposal, target):
+    budget = proposal["budget"]
+    account = resolve_proposal_account(state, proposal, target)
     renewal = budget["mode"] == "renew"
     if account is not None and account.get("adoption_basis") is not None:
         s.require(proposal["role"] == "verification" and s.digest(proposal["claim"]) == account["owner_claim_digest"],

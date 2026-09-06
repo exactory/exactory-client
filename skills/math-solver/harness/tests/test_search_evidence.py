@@ -98,12 +98,45 @@ class EvidenceTests(SearchCLIWorkspace, unittest.TestCase):
         artifact.write_bytes(original)
         self.search("admit", {}, target="proposal-000002", revision=revision + 2)
         self.assertEqual(len(self.search("status")["accounts"]), 2)
+        return artifact
 
     def test_renewal_refuses_corrupt_accepted_basis_without_any_committed_effect(self):
         self.assert_corrupt_renewal_refused()
 
     def test_renewal_audits_separately_accepted_dependency_closure(self):
         self.assert_corrupt_renewal_refused(acceptance_dependency=True)
+
+    def assert_reused_renewal_basis_refused(self, mode, account_id=None):
+        artifact = self.assert_corrupt_renewal_refused()
+        prepared = self.prepared_proposal()
+        proposed = prepared["proposal"]
+        proposed["attack_slug"] = "reuse"
+        proposed["budget"].update(mode=mode, account_id=account_id)
+        self.search("propose", prepared, revision=9)
+        self.search("review", {"proposal_id": "proposal-000003", "review": review(proposed), "inputs": []}, revision=10)
+        original = artifact.read_bytes()
+        artifact.write_text("Corrupt the implicit current allowance basis")
+        before = (self.root / ".search" / "tree.json").read_bytes()
+        result = self.search("admit", {}, target="proposal-000003", revision=11, success=False)
+        expected = "account_superseded" if account_id == "account-000001" else "corrupt_artifact"
+        self.assertEqual(result["error"]["code"], expected)
+        self.assertEqual((self.root / ".search" / "tree.json").read_bytes(), before)
+        self.assertFalse((self.root / "reuse").exists())
+        artifact.write_bytes(original)
+        if account_id != "account-000001":
+            self.search("admit", {}, target="proposal-000003", revision=11)
+            state = self.search("status")
+            self.assertEqual(state["nodes"]["node-000003"]["account_id"], "account-000002")
+            self.assertEqual(len(state["accounts"]), 2)
+
+    def test_new_proposal_audits_implicitly_reused_current_renewal_basis(self):
+        self.assert_reused_renewal_basis_refused("new")
+
+    def test_inherit_proposal_audits_selected_current_renewal_basis(self):
+        self.assert_reused_renewal_basis_refused("inherit", "account-000002")
+
+    def test_inherit_proposal_does_not_redirect_an_explicit_superseded_account(self):
+        self.assert_reused_renewal_basis_refused("inherit", "account-000001")
 
     def test_acceptance_uses_immutable_proof_and_full_audit(self):
         self.setup_external()

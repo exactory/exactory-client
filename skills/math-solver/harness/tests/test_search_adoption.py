@@ -166,6 +166,23 @@ class AdoptionTests(SearchCLIWorkspace, unittest.TestCase):
         self.assertEqual(state["runs"], {})
         self.assertEqual(state["acceptances"], {})
 
+    def test_unknown_verification_checkpoint_is_a_structured_atomic_refusal(self):
+        self.create_legacy()
+        self.initialize()
+        spec = self.verification_spec()
+        verification = spec["mappings"][0]["verification"]
+        proposal = verification["proposal"]
+        proposal["anchor"] = {"kind": "checkpoint", "checkpoint_id": "checkpoint-999999", "digest": "a" * 64}
+        verification["review"] = review(proposal)
+        subject = {"import_id": "import-000001", "snapshot_digest": spec["mappings"][0]["snapshot_digest"],
+                   "claim_digest": digest(claim()), "proposal_digest": digest(proposal), "limits": proposal["limits"]}
+        verification["allowance_review"]["subject_digest"] = digest(subject)
+        before = (self.root / ".search" / "tree.json").read_bytes()
+        result = self.search("adopt", spec, revision=1, success=False)
+        self.assertEqual(result["error"]["code"], "dangling_reference")
+        self.assertEqual((self.root / ".search" / "tree.json").read_bytes(), before)
+        self.assertFalse((self.root / "verify-legacy").exists())
+
     def test_research_account_cannot_use_arbitrary_adoption_basis(self):
         from search_controller.admission import remaining_allowance
         from search_controller.errors import SearchError
