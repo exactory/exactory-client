@@ -29,6 +29,13 @@ def _hold_lock(lock_path, ready, release):
         release.wait(timeout=10)
 
 
+def _nested_object(depth, leaf):
+    value = leaf
+    for _ in range(depth):
+        value = {"nested": value}
+    return value
+
+
 class SearchStorageTests(unittest.TestCase):
     def setUp(self):
         self.temporary_directory = tempfile.TemporaryDirectory()
@@ -211,6 +218,46 @@ class SearchStorageTests(unittest.TestCase):
                 "events": [first, second],
             },
         )
+
+    def test_validator_snapshot_accepts_deeply_nested_candidate_payload(self):
+        store = self.initialized_store()
+        event = store.append(
+            "record",
+            _nested_object(500, "candidate-leaf"),
+            0,
+            "request-one",
+            validate=lambda document, candidate: None,
+        )
+        self.assertEqual(event["sequence"], 1)
+        self.assertEqual(event["request_id"], "request-one")
+
+    def test_validator_snapshot_accepts_deeply_nested_committed_contract(self):
+        store = Store(self.root)
+        store.initialize(
+            {"claim": _nested_object(500, "contract-leaf")}, "objective-a"
+        )
+        event = store.append(
+            "record",
+            {"value": 1},
+            0,
+            "request-one",
+            validate=lambda document, candidate: None,
+        )
+        self.assertEqual(event["sequence"], 1)
+
+    def test_validator_snapshot_accepts_deeply_nested_committed_event(self):
+        store = self.initialized_store()
+        store.append(
+            "record", _nested_object(500, "event-leaf"), 0, "request-one"
+        )
+        event = store.append(
+            "record",
+            {"value": 2},
+            1,
+            "request-two",
+            validate=lambda document, candidate: None,
+        )
+        self.assertEqual(event["sequence"], 2)
 
     def test_interrupted_replace_preserves_exact_old_document_bytes(self):
         store = self.initialized_store()

@@ -1,7 +1,6 @@
 """Crash-safe storage for search-controller events and immutable evidence."""
 
 import contextlib
-import copy
 import errno
 import hashlib
 import json
@@ -286,7 +285,16 @@ class Store:
                 "payload": _strict_json(payload_bytes, "invalid_json"),
             }
             if validate is not None:
-                validate(copy.deepcopy(document), copy.deepcopy(candidate))
+                validation_document = _strict_json(
+                    canonical_bytes(document), "corrupt_state"
+                )
+                validation_candidate = {
+                    "sequence": candidate["sequence"],
+                    "request_id": candidate["request_id"],
+                    "kind": candidate["kind"],
+                    "payload": _strict_json(payload_bytes, "invalid_json"),
+                }
+                validate(validation_document, validation_candidate)
             _validate_event(candidate, revision + 1)
             new_document = {
                 "schema_version": document["schema_version"],
