@@ -712,8 +712,12 @@ def test_unclassified_result_cannot_launch_again(self):
   in the immutable subject. Exactly one of outcome/inconclusive_reason is non-null.
   root_decision is `{kind, reason}`, with kind `undecided`, `proof_candidate` or
   `counterexample_candidate` and nonempty reason explaining the actual route effect.
-  Enforce candidate/classification consistency. Diagnostic and audit-only work
-  cannot claim a theorem candidate. Failed/inconclusive runs remain undecided.
+  A candidate root decision requires the matching candidate classification and
+  a non-standalone root connection. A candidate classification may instead have
+  root_decision undecided with a reason, for example an independently significant
+  standalone theorem or a partial result that does not decide the root. Diagnostic
+  and audit-only work cannot claim a theorem candidate. Failed/inconclusive runs
+  remain undecided.
   Historical run reservations without computation_digest remain replayable only
   under their old finite admission shape; fresh public reservations include it
   and cannot use that compatibility path to bypass the gate.
