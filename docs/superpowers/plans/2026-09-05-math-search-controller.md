@@ -39,7 +39,9 @@ is `skills/math-solver/harness/search_controller/`.
 | `schema.py`, `admission.py`, `model.py` | Closed schemas, reviewed proposals, immutable obligations, budget accounts, pure event replay |
 | `proof.py`, `scheduler.py` | Assumption-safe AND/OR propagation, checkpoint/retreat logic, deterministic next action |
 | `service.py`, `cli.py`, `render.py` | Filesystem-backed commands, adoption, scope/evidence validation, generated views |
-| `execution.py`, `evidence.py` | Frozen input snapshots, metered processes, recovery, immutable evidence manifests |
+| `adoption.py` | Explicit preserved legacy mappings, snapshots, and stable imported usage |
+| `evidence.py` | Immutable manifest schema and read-only audit in Task 4; capture/freeze support in Task 5 |
+| `execution.py` | Metered processes, launcher ownership, and execution recovery |
 | `integration.py` | Existing harness admission guards, journal intents, stage/finish and verifier integration |
 | `hooks/math_search.py` | Shared host discovery, normalization, controller invocation, protected-path decisions |
 | `skills/math-solver/SEARCH.md` | Operational search workflow and JSON contract examples |
@@ -234,7 +236,8 @@ def test_b_success_selects_ready_c_without_running_parent(self):
 
 ## Task 4: CLI controller, adoption, evidence acceptance, and generated views
 
-Files: create `search_controller/service.py`, `cli.py`, `render.py`;
+Files: create `search_controller/service.py`, `cli.py`, `render.py`, `evidence.py`,
+`adoption.py`; extend storage and pure service-operation handling as needed;
 modify `harness/attack.py` parser dispatch and `bin/exactory-math` package loading;
 create `harness/tests/test_search_cli.py`, `test_search_adoption.py`.
 
@@ -259,6 +262,17 @@ def test_finished_legacy_attack_does_not_complete_adopted_objective(self):
   locked expected-revision/request-ID storage. Run/begin/reconcile command registration
   delegates to the execution/integration boundary delivered next; until that task,
   these paths report explicit unavailable capability rather than succeeding.
+- [ ] Use sequential internal milestones for CLI/projections, evidence acceptance/
+  completion, and adoption/integration. Keep one task report and review the entire
+  Task 4 base-to-head range. A narrow under-lock payload-construction extension may
+  build a closed service-operation event from isolated input state. Preserve the
+  existing append contract and four-field envelope. Bind canonical public command
+  identity separately from derived observations, and replay before any builder or
+  mutable-source read. Stale/conflicting requests cannot run the builder. Bounded
+  typed internal operation batches must reject nesting and unknown operations and
+  commit no prefix on validation failure. Persist staged immutable content under
+  the existing lock without recursive lock acquisition. Legacy mutable writes use
+  recoverable intents outside that event transaction; no subprocess runs under it.
 - [ ] Resolve and validate source/subject manifests, reviews, exact scope bindings,
   immutable journal prefixes, and external-result imports. Audits hash artifact
   dependencies, never execute mathematical jobs. Bounded status reports unchecked
@@ -278,7 +292,7 @@ def test_finished_legacy_attack_does_not_complete_adopted_objective(self):
 
 ## Task 5: Metered execution and existing harness enforcement
 
-Files: create `search_controller/execution.py`, `evidence.py`, `integration.py`;
+Files: create `search_controller/execution.py`, `integration.py`; extend `evidence.py`;
 modify `service.py`, `attack.py`, existing harness test setup/fixtures where needed;
 create `harness/tests/test_search_execution.py`, `test_search_legacy_guards.py`.
 
