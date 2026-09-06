@@ -109,6 +109,63 @@ class AdoptionTests(SearchCLIWorkspace, unittest.TestCase):
         self.search("adopt", spec, revision=2)
         self.assertEqual(len(self.search("status")["accounts"]), 2)
 
+    def inherited_adoption(self, computational=False):
+        from search_controller.storage import Store
+        self.create_legacy()
+        self.initialize()
+        store = Store(self.root / ".search")
+        proof = store.put_artifact(b"The inherited analytical lemma proof.")
+        source = store.put_artifact(b"The exact original source and scope study.")
+        child = {"schema_version": 1, "kind": "analytical", "claim_digest": digest(claim()),
+                 "conclusion": {"outcome": "proof", "dependency_ids": [], "route_bindings": []},
+                 "artifacts": [{"path": "child-proof.md", "digest": proof, "role": "proof"}],
+                 "dependencies": [], "external_dependencies": [], "verification": None}
+        parent = copy.deepcopy(child)
+        parent["artifacts"] = [{"path": "parent-proof.md", "digest": source, "role": "proof"}]
+        parent["dependencies"] = [store.put_blob(child)]
+        if computational:
+            parent["kind"] = "certificate"
+            parent["artifacts"] = [{"path": "certificate.json", "digest": proof, "role": "certificate"},
+                                   {"path": "checker.py", "digest": source, "role": "checker"}]
+            parent["dependencies"] = []
+            parent["verification"] = None
+        checkpoint = {"schema_version": 1, "kind": "proof", "claim": claim(),
+                      "origin": {"kind": "external_result", "source": "Reviewed source",
+                                 "source_digest": source, "statement": claim()["statement"],
+                                 "statement_digest": digest(claim()), "study_digest": source},
+                      "evidence_digests": [store.put_blob(parent)], "what_changed": "Inherited lemma",
+                      "remaining_obligation_ids": [], "next_hypothesis": "Verify the legacy result", "milestone_id": None}
+        self.search("checkpoint", {"checkpoint": checkpoint, "inputs": []}, revision=1)
+        cp = self.search("status")["checkpoints"]["checkpoint-000001"]
+        spec = self.verification_spec()
+        verification = spec["mappings"][0]["verification"]
+        proposal = verification["proposal"]
+        proposal.update(anchor={"kind": "checkpoint", "checkpoint_id": cp["id"], "digest": digest(cp)},
+                        inherited_evidence=cp["evidence_digests"])
+        verification["review"] = review(proposal)
+        subject = {"import_id": "import-000001", "snapshot_digest": spec["mappings"][0]["snapshot_digest"],
+                   "claim_digest": digest(claim()), "proposal_digest": digest(proposal), "limits": proposal["limits"]}
+        verification["allowance_review"]["subject_digest"] = digest(subject)
+        return spec, proof
+
+    def test_adoption_admission_audits_transitive_inherited_evidence_atomically(self):
+        spec, proof = self.inherited_adoption()
+        before = (self.root / ".search" / "tree.json").read_bytes()
+        (self.root / ".search" / "artifacts" / proof).write_text("Corrupted inherited child proof")
+        result = self.search("adopt", spec, revision=2, success=False)
+        self.assertEqual(result["error"]["code"], "corrupt_artifact")
+        self.assertEqual((self.root / ".search" / "tree.json").read_bytes(), before)
+        self.assertFalse((self.root / "verify-legacy").exists())
+
+    def test_first_verification_can_admit_intact_unverified_computational_inputs(self):
+        spec, _ = self.inherited_adoption(computational=True)
+        self.search("adopt", spec, revision=2)
+        state = self.search("status")
+        self.assertEqual(state["nodes"]["node-000002"]["role"], "verification")
+        self.assertEqual(state["accounts"]["account-000002"]["historical_usage"], "unknown")
+        self.assertEqual(state["runs"], {})
+        self.assertEqual(state["acceptances"], {})
+
     def test_research_account_cannot_use_arbitrary_adoption_basis(self):
         from search_controller.admission import remaining_allowance
         from search_controller.errors import SearchError

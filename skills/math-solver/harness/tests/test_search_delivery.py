@@ -66,7 +66,7 @@ class DeliveryTests(SearchCLIWorkspace, unittest.TestCase):
         state = self.search("status")
         proof = workspace / "units" / "1" / "proof.md"
         accepted_digest = store.put_artifact(proof.read_bytes())
-        manifest = {"artifacts": [{"path": "attempt/units/1/proof.md", "digest": accepted_digest, "role": "proof"}]}
+        manifest = {"artifacts": [{"path": "attempt/units/1/proof.md", "digest": accepted_digest, "role": "proof"}], "dependencies": []}
         state["checkpoints"]["checkpoint-000001"] = {"origin": {"node_id": "node-000001"}, "evidence_digests": [store.put_blob(manifest)]}
         state["acceptances"]["acceptance-000001"] = {"status": "accepted", "checkpoint_id": "checkpoint-000001"}
         proof.write_text("A different proof after the accepted version.")
@@ -77,6 +77,55 @@ class DeliveryTests(SearchCLIWorkspace, unittest.TestCase):
         delivery["checked_unit_digests"] = [store.put_blob(package)]
         with self.assertRaises(SearchError):
             evidence.audit_local_delivery(self.root, state, delivery, store)
+
+    def assert_accepted_input_cannot_be_replaced(self, role, transitive=False):
+        from search_controller import evidence
+        delivery, workspace, store = self.delivery()
+        state = self.search("status")
+        relative = "units/1/proof.md" if role == "proof" else "units/1/" + role + ".txt"
+        path = workspace / relative
+        if role != "proof":
+            path.write_text("Exact accepted " + role)
+        accepted_digest = store.put_artifact(path.read_bytes())
+        manifest = {"artifacts": [{"path": "attempt/" + relative, "digest": accepted_digest, "role": role}], "dependencies": []}
+        if transitive:
+            manifest = {"artifacts": [], "dependencies": [store.put_blob(manifest)]}
+        state["checkpoints"]["checkpoint-000001"] = {"origin": {"node_id": "node-000001"}, "evidence_digests": [store.put_blob(manifest)]}
+        state["acceptances"]["acceptance-000001"] = {"status": "accepted", "checkpoint_id": "checkpoint-000001"}
+        package = store.get_blob(delivery["checked_unit_digests"][0])
+        package["files"] = [item for item in package["files"] if item["path"] != relative]
+        package["files"].append({"path": relative, "digest": accepted_digest})
+        delivery["checked_unit_digests"] = [store.put_blob(package)]
+        evidence.audit_local_delivery(self.root, state, delivery, store)
+        path.write_text("A changed published version after acceptance")
+        package["files"][-1]["digest"] = store.put_artifact(path.read_bytes())
+        delivery["checked_unit_digests"] = [store.put_blob(package)]
+        with self.assertRaises(SearchError) as caught:
+            evidence.audit_local_delivery(self.root, state, delivery, store)
+        self.assertEqual(caught.exception.code, "digest_mismatch")
+
+    def test_refreshed_package_cannot_replace_transitive_accepted_proof(self):
+        self.assert_accepted_input_cannot_be_replaced("proof", transitive=True)
+
+    def test_refreshed_package_cannot_replace_direct_accepted_source(self):
+        self.assert_accepted_input_cannot_be_replaced("source")
+
+    def test_refreshed_package_cannot_replace_direct_accepted_input(self):
+        self.assert_accepted_input_cannot_be_replaced("input")
+
+    def test_conflicting_required_versions_are_rejected_explicitly(self):
+        from search_controller import evidence
+        delivery, workspace, store = self.delivery()
+        state = self.search("status")
+        manifests = []
+        for raw in [(workspace / "units/1/proof.md").read_bytes(), b"Another accepted version"]:
+            manifests.append(store.put_blob({"artifacts": [{"path": "attempt/units/1/proof.md",
+                              "digest": store.put_artifact(raw), "role": "proof"}], "dependencies": []}))
+        state["checkpoints"]["checkpoint-000001"] = {"origin": {"node_id": "node-000001"}, "evidence_digests": manifests}
+        state["acceptances"]["acceptance-000001"] = {"status": "accepted", "checkpoint_id": "checkpoint-000001"}
+        with self.assertRaises(SearchError) as caught:
+            evidence.audit_local_delivery(self.root, state, delivery, store)
+        self.assertEqual(caught.exception.code, "conflicting_evidence_versions")
 
 
 if __name__ == "__main__":

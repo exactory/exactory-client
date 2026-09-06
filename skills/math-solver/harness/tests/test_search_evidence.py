@@ -5,7 +5,7 @@ import json
 import unittest
 
 from tests.test_search_cli import SearchCLIWorkspace
-from tests.search_fixtures import contract, digest, provenance
+from tests.search_fixtures import contract, digest, provenance, review
 
 
 class EvidenceTests(SearchCLIWorkspace, unittest.TestCase):
@@ -52,6 +52,58 @@ class EvidenceTests(SearchCLIWorkspace, unittest.TestCase):
         self.assertEqual(state["acceptances"], {})
         self.assertEqual(state["proof_status"], "open")
         self.assertEqual(state["totals"]["used_moves"], 0)
+
+    def assert_corrupt_renewal_refused(self, acceptance_dependency=False):
+        self.admit()
+        evidence = self.external_checkpoint()
+        if acceptance_dependency:
+            # A proved reduction and the subsequent proof are distinct progress.
+            evidence["checkpoint"]["kind"] = "reduction"
+        self.search("checkpoint", evidence, revision=4)
+        self.search("accept", self.accept_spec(), target="checkpoint-000001", revision=5)
+        cp = self.search("status")["checkpoints"]["checkpoint-000001"]
+        revision = 6
+        if acceptance_dependency:
+            second = self.external_checkpoint()
+            second["inputs"][0] = self.artifact("proof.md", "A reviewed deduction using the separately accepted first result.")
+            manifest = json.loads((self.root / "manifest.json").read_text())
+            manifest["artifacts"][0]["digest"] = second["inputs"][0]["digest"]
+            manifest["conclusion"]["dependency_ids"] = ["acceptance-000001"]
+            (self.root / "manifest.json").write_text(json.dumps(manifest))
+            second["inputs"][-1]["digest"] = digest(manifest)
+            second["checkpoint"]["evidence_digests"] = [digest(manifest)]
+            self.search("checkpoint", second, revision=6)
+            cp = self.search("status")["checkpoints"]["checkpoint-000002"]
+            acceptance = {"obligation_id": "obligation-000001", "outcome": "proof", "dependency_ids": ["acceptance-000001"],
+                          "route_bindings": [], "review": self.result_review(cp, cp["claim"]), "inputs": []}
+            self.search("accept", acceptance, target=cp["id"], revision=7)
+            revision = 8
+        prepared = self.prepared_proposal()
+        proposed = prepared["proposal"]
+        proposed.update(attack_slug="renewed", method="new-method")
+        proposed["studies"]["strategies"][0]["method"] = "new-method"
+        proposed["budget"] = {"mode": "renew", "account_id": "account-000001",
+                              "basis_checkpoint_id": cp["id"], "basis_checkpoint_digest": digest(cp),
+                              "justification": "Accepted progress supports a distinct method"}
+        self.search("propose", prepared, revision=revision)
+        self.search("review", {"proposal_id": "proposal-000002", "review": review(proposed), "inputs": []}, revision=revision + 1)
+        before = (self.root / ".search" / "tree.json").read_bytes()
+        artifact = self.root / ".search" / "artifacts" / evidence["inputs"][0]["digest"]
+        original = artifact.read_bytes()
+        artifact.write_text("Corrupted after acceptance and before admission")
+        result = self.search("admit", {}, target="proposal-000002", revision=revision + 2, success=False)
+        self.assertEqual(result["error"]["code"], "corrupt_artifact")
+        self.assertEqual((self.root / ".search" / "tree.json").read_bytes(), before)
+        self.assertFalse((self.root / "renewed").exists())
+        artifact.write_bytes(original)
+        self.search("admit", {}, target="proposal-000002", revision=revision + 2)
+        self.assertEqual(len(self.search("status")["accounts"]), 2)
+
+    def test_renewal_refuses_corrupt_accepted_basis_without_any_committed_effect(self):
+        self.assert_corrupt_renewal_refused()
+
+    def test_renewal_audits_separately_accepted_dependency_closure(self):
+        self.assert_corrupt_renewal_refused(acceptance_dependency=True)
 
     def test_acceptance_uses_immutable_proof_and_full_audit(self):
         self.setup_external()

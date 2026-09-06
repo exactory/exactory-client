@@ -6,7 +6,7 @@ from pathlib import Path
 from . import schema as s
 from .admission import reference
 from .errors import SearchError
-from .evidence import import_inputs, proposal_inputs, audit_state, audit_checkpoint, audit_local_delivery
+from .evidence import import_inputs, proposal_inputs, audit_admission, audit_state, audit_checkpoint, audit_local_delivery
 from .model import apply_event, initial_state, replay
 from .render import render, replace_text
 from .scheduler import next_action
@@ -115,6 +115,7 @@ class Controller:
                     verification = mapping["verification"]
                     s.closed(verification, "proposal review allowance_review")
                     proposal_inputs(verification["proposal"], content)
+                    audit_admission(self.root, state, verification["proposal"], content)
                     for key in ["proposal", "review", "allowance_review"]:
                         content.put_blob(verification[key])
                     imported = next(v for v in state["service"]["imports"].values() if v["subject"]["attack_slug"] == mapping["attack_slug"])
@@ -151,6 +152,7 @@ class Controller:
             s.closed(spec, "")
             proposal = reference(state["proposals"], target, "proposal")["record"]
             proposal_inputs(proposal, content)
+            audit_admission(self.root, state, proposal, content)
             for review in state["reviews"].values():
                 if review["proposal_id"] == target:
                     s.require(content.get_blob(review["digest"]) == review["record"], "Review changed", "digest_mismatch")

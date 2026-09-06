@@ -851,6 +851,19 @@ delivery audit conservatively invalidates its contributing acceptance support an
 the recorded closure, retaining all history. None of these audits runs a compiler,
 checker, Lean, shell script or mathematical job.
 
+Ordinary and adoption admission audit their checkpoint anchors, inherited manifest
+closures, accepted renewal bases and transitive acceptance dependencies inside
+the locked command transaction. Unaccepted inputs receive an integrity audit;
+first verification does not require its own future terminal run. Accepted support
+receives the full verification/policy audit before it can justify an allowance.
+A failed audit commits no event, account change or workspace effect.
+
+Local publication packages must contain the exact accepted versions of all local
+artifacts in the complete manifest dependency closure, including `source` and
+`input` roles. Two required digests for the same local path cause
+`conflicting_evidence_versions`; an omitted or replaced required artifact causes
+`digest_mismatch`. A refreshed package cannot replace the accepted closure.
+
 ## Immutable evidence manifests
 
 Every checkpoint evidence digest names this closed blob:

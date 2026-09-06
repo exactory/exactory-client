@@ -43,6 +43,60 @@ def proposal_inputs(proposal, content):
         content.get_blob(digest)
 
 
+def manifest_closure(digests, content):
+    """Load the exact bounded manifest graph, rejecting cycles."""
+    manifests = {}
+    def visit(digest, visiting):
+        s.require(digest not in visiting, "Evidence dependency cycle", "dependency_cycle")
+        if digest in manifests:
+            return
+        s.require(len(manifests) < 256, "Evidence dependency closure is excessive", "dependency_cycle")
+        manifest = content.get_blob(digest)
+        manifests[digest] = manifest
+        s.strings(manifest["dependencies"])
+        for child in manifest["dependencies"]:
+            visit(child, visiting | {digest})
+    for digest in digests:
+        visit(digest, set())
+    return manifests
+
+
+def audit_admission(root, state, proposal, content):
+    """Revalidate the proposal's evidence and accepted budget basis under lock."""
+    checkpoint_ids = set()
+    if proposal["anchor"]["kind"] == "checkpoint":
+        checkpoint_ids.add(proposal["anchor"]["checkpoint_id"])
+    if proposal["budget"]["mode"] == "renew":
+        checkpoint_ids.add(proposal["budget"]["basis_checkpoint_id"])
+    manifests = list(proposal["inherited_evidence"])
+    for identity in checkpoint_ids:
+        checkpoint = state["checkpoints"][identity]
+        audit_checkpoint(root, state, checkpoint, content, verify=False)
+        manifests.extend(checkpoint["evidence_digests"])
+    for digest in proposal["inherited_evidence"]:
+        audit_manifest(root, state, digest, content, verify=False)
+    pending = [identity for identity, accepted in state["acceptances"].items()
+               if accepted["status"] == "accepted" and accepted["checkpoint_id"] in checkpoint_ids]
+    checked = set()
+    while manifests or pending:
+        for manifest in manifest_closure(manifests, content).values():
+            pending.extend(manifest["conclusion"]["dependency_ids"])
+        manifests = []
+        if not pending:
+            break
+        identity = pending.pop()
+        if identity in checked:
+            continue
+        accepted = state["acceptances"].get(identity)
+        s.require(accepted is not None and accepted["status"] == "accepted", "Inherited acceptance is unavailable", "audit_failed")
+        s.require(content.get_blob(s.digest(accepted["review"])) == accepted["review"], "Pinned review differs", "digest_mismatch")
+        checkpoint = state["checkpoints"][accepted["checkpoint_id"]]
+        audit_checkpoint(root, state, checkpoint, content)
+        checked.add(identity)
+        pending.extend(accepted["dependency_ids"])
+        manifests.extend(checkpoint["evidence_digests"])
+
+
 def audit_state(root, state, content):
     """Return failed accepted identities without changing recorded history."""
     failures = {}
@@ -131,23 +185,26 @@ def audit_local_delivery(root, state, delivery, content):
             package_evidence.update(files)
         s.require(drafts == delivery["draft_digests"] and evaluations == delivery["evaluation_digests"],
                   "Delivery lists differ from their exact checked unit packages", "digest_mismatch")
+        required_versions = {}
         for acceptance in state["acceptances"].values():
             if acceptance["status"] != "accepted":
                 continue
             cp = state["checkpoints"][acceptance["checkpoint_id"]]
             if cp["origin"].get("node_id") != node["id"]:
                 continue
-            for manifest_digest in cp["evidence_digests"]:
-                manifest = content.get_blob(manifest_digest)
+            for manifest in manifest_closure(cp["evidence_digests"], content).values():
                 for artifact in manifest["artifacts"]:
                     source = safe_path(root, artifact["path"]).resolve()
                     try:
                         local = str(source.relative_to(workspace.resolve()))
                     except ValueError:
                         continue
-                    if artifact["role"] in {"proof", "certificate", "checker", "theorem", "toolchain"}:
-                        s.require(package_evidence.get(local) == artifact["digest"],
-                                  "Local delivery uses a different accepted proof version", "digest_mismatch")
+                    s.require(local not in required_versions or required_versions[local] == artifact["digest"],
+                              "Accepted evidence requires conflicting local versions: " + local, "conflicting_evidence_versions")
+                    required_versions[local] = artifact["digest"]
+        for local, digest in required_versions.items():
+            s.require(package_evidence.get(local) == digest,
+                      "Local delivery uses a different accepted evidence version: " + local, "digest_mismatch")
         unfinished = []
         for child in attack.list_children(root, node["attack_slug"]):
             if not (child / "units" / "FINISHED.json").exists():
