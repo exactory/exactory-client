@@ -305,6 +305,91 @@ class SchedulerTests(unittest.TestCase):
         state = event(state, "control_recorded", payload)
         self.assertEqual(state["control"]["stop_decision"], {"kind": "allow_stop"})
 
+    def test_retreated_node_can_complete_cashout_without_restarting_research(self):
+        from search_controller.scheduler import next_action
+        state = route_state()
+        state["accounts"]["account-000001"]["used_moves"] = 24
+        retreat = {"node_id": "node-000001", "criterion": {"kind": "move_limit", "threshold": 24},
+                   "failed_hypothesis": "The estimate suffices", "observation": "Move limit reached",
+                   "last_checkpoint_id": None, "remaining_assumption_ids": [],
+                   "reconsideration": "A verified stronger estimate", "abandoned_route_ids": [],
+                   "abandoned_assumption_ids": []}
+        state = event(state, "node_retreated", {"retreat": retreat})
+        accounts = copy.deepcopy(state["accounts"])
+        for step in ["inventory", "unit_checks", "consolidation", "draft", "evaluation", "handoff", "finish"]:
+            state = event(state, "node_facts_recorded", {"facts": facts_record(status="retreated", cashout_action=step)})
+            self.assertEqual(next_action(state), {"kind": "local_cashout", "node_id": "node-000001", "step": step})
+            self.assertEqual(state["nodes"]["node-000001"]["status"], "retreated")
+        for status in ["admitted", "active", "waiting", "result_ready"]:
+            with self.subTest(status=status), self.assertRaises(SearchError):
+                event(state, "node_facts_recorded", {"facts": facts_record(status=status)})
+        state = event(state, "node_facts_recorded", {"facts": facts_record(status="finished")})
+        self.assertEqual(next_action(state)["kind"], "replan")
+        self.assertEqual(state["nodes"]["node-000001"]["status"], "finished")
+        self.assertEqual(state["accounts"], accounts)
+        self.assertEqual(state["control"]["retreats"], [retreat])
+        with self.assertRaises(SearchError):
+            event(state, "node_facts_recorded", {"facts": facts_record(status="active")})
+
+    def test_node_facts_cannot_retreat_without_declared_predicate_transition(self):
+        with self.assertRaises(SearchError):
+            event(route_state(), "node_facts_recorded", {"facts": facts_record(status="retreated")})
+
+    def test_repeated_stop_delivery_uses_current_root_finalization_without_recounting(self):
+        state = route_state()
+        payload = {"action": "hook_stop", "delivery_id": "frontier-event", "session_id": None,
+                   "turn_id": None, "stop_hook_active": False}
+        state = event(state, "control_recorded", payload)
+        self.assertEqual(state["control"]["stop_decision"]["action"]["kind"], "execute_node")
+        state = accepted(state, "obligation-000001")
+        state = event(state, "control_recorded", payload)
+        self.assertEqual(state["control"]["stop_decision"], {"kind": "continue", "action": {
+            "kind": "finalize_root", "outcome": "proof", "acceptance_ids": ["acceptance-000001"]}})
+        self.assertEqual(state["control"]["stop_count"], 1)
+        self.assertEqual(len(state["control"]["stop_deliveries"]), 1)
+
+    def test_repeated_stop_delivery_uses_current_reconciliation_without_recounting(self):
+        state = route_state()
+        payload = {"action": "hook_stop", "delivery_id": "frontier-event", "session_id": None,
+                   "turn_id": None, "stop_hook_active": None}
+        state = event(state, "control_recorded", payload)
+        state["control"]["pending_moves"] = ["move-000001"]
+        state = event(state, "control_recorded", payload)
+        self.assertEqual(state["control"]["stop_decision"], {"kind": "continue", "action": {
+            "kind": "reconcile_move", "move_id": "move-000001"}})
+        self.assertEqual(state["control"]["stop_count"], 1)
+
+    def test_repeated_previously_allowed_stop_does_not_grant_free_continuation(self):
+        state = route_state()
+        payload = {"action": "hook_stop", "delivery_id": "paused-event", "session_id": None,
+                   "turn_id": None, "stop_hook_active": False}
+        state = event(state, "control_recorded", {"action": "pause", "reason": "User stopped"})
+        state = event(state, "control_recorded", payload)
+        state = event(state, "control_recorded", {"action": "resume", "objective_id": state["objective_id"],
+                    "message_id": "resume-message", "session_id": "session", "instruction": "Resume this objective",
+                    "provenance": provenance("operator")})
+        state = event(state, "control_recorded", payload)
+        self.assertEqual(state["control"]["stop_decision"], {"kind": "allow_stop"})
+        self.assertEqual(state["control"]["stop_count"], 0)
+
+    def test_unused_node_observations_preserve_completed_objective(self):
+        from search_controller.scheduler import next_action
+        from tests.test_search_proof import closure_record
+        state = route_state()
+        state = event(state, "node_facts_recorded", {"facts": facts_record()})
+        state = accepted(state, "obligation-000001")
+        closure = closure_record(state)
+        state = event(state, "objective_completed", {"closure": closure, "digest": digest(closure)})
+        accounts = copy.deepcopy(state["accounts"])
+        for status in ["active", "finished"]:
+            state = event(state, "node_facts_recorded", {"facts": facts_record(status=status)})
+            self.assertEqual(state["nodes"]["node-000001"]["status"], status)
+            self.assertEqual(state["execution_status"], "resolved")
+            self.assertEqual(state["proof_status"], "proved")
+            self.assertEqual(state["control"]["closure"], closure)
+            self.assertEqual(next_action(state), {"kind": "resolved", "proof_status": "proved"})
+        self.assertEqual(state["accounts"], accounts)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -232,8 +232,10 @@ def record_control(state, payload):
         delivery = payload["delivery_id"]
         upcoming = next_action(state)
         if delivery is not None and delivery in control["stop_deliveries"]:
-            control["stop_decision"] = ({"kind": "allow_stop"} if upcoming["kind"] in {"paused", "resolved", "handoff", "blocked"}
-                                        else copy.deepcopy(control["stop_deliveries"][delivery]))
+            prior = control["stop_deliveries"][delivery]
+            control["stop_decision"] = ({"kind": "continue", "action": upcoming}
+                                        if prior["kind"] == "continue" and upcoming["kind"] not in {"paused", "resolved", "handoff", "blocked"}
+                                        else {"kind": "allow_stop"})
             return
         if upcoming["kind"] in {"paused", "resolved", "handoff", "blocked"}:
             decision = {"kind": "allow_stop"}
@@ -287,8 +289,12 @@ def record_node_facts(state, payload):
     facts = payload["facts"]
     s.closed(facts, "node_id status result_action cashout_action waiting_on failed_strategies stagnation_moves external_block dependency_route_ids dependency_assumption_ids")
     node = reference(state["nodes"], facts["node_id"], "node")
-    s.choice(facts["status"], {"admitted", "active", "waiting", "result_ready", "finished"})
-    s.require(node["status"] not in {"retreated", "finished"} or facts["status"] == node["status"], "Terminal local lifecycle cannot be restarted")
+    allowed_statuses = {"admitted", "active", "waiting", "result_ready", "finished"}
+    if node["status"] == "retreated":
+        allowed_statuses = {"retreated", "finished"}
+    elif node["status"] == "finished":
+        allowed_statuses = {"finished"}
+    s.choice(facts["status"], allowed_statuses)
     if facts["result_action"] is not None:
         s.choice(facts["result_action"], {"verification", "snapshot", "acceptance"})
     if facts["cashout_action"] is not None:
@@ -313,7 +319,7 @@ def record_node_facts(state, payload):
         active = state["control"]["active_node_id"]
         s.require(active is None or active == node["id"] or state["nodes"][active]["status"] != "active", "Only one node may be active")
         state["control"]["active_node_id"] = node["id"]
-        if state["execution_status"] != "paused":
+        if state["execution_status"] not in {"paused", "resolved"}:
             state["execution_status"] = "running"
 
 

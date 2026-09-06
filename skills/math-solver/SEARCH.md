@@ -647,7 +647,7 @@ this exception. Root completion remains independent of unused alternative resear
 
 ```text
 node_id: NodeID
-status: "admitted" | "active" | "waiting" | "result_ready" | "finished"
+status: "admitted" | "active" | "waiting" | "result_ready" | "retreated" | "finished"
 result_action: "verification" | "snapshot" | "acceptance" | null
 cashout_action: "inventory" | "unit_checks" | "consolidation" | "draft" |
                 "evaluation" | "finish" | "handoff" | null
@@ -659,8 +659,13 @@ dependency_route_ids: [RouteID]
 dependency_assumption_ids: [ID]
 ```
 
-Recording facts updates local lifecycle only, never theorem truth. Terminal local
-nodes cannot restart through these facts. The service determines truthful stage
+Recording facts updates local lifecycle only, never theorem truth or an already
+resolved objective's execution status. A retreated node can retain `retreated`
+while reporting cash-out progress and then become `finished`; it cannot return to
+research states. A finished node remains finished. NodeFacts cannot initiate
+retreat: that requires `node_retreated` and its declared predicate. Ordinary active
+observations from unused investigations preserve completed root delivery. The
+service determines truthful stage
 and result actions from the native records, and counts stagnation from the declared
 test, not arbitrary model assertions. It retains recorded dependency routes and
 assumptions so retreat can suspend dependent descendants. The scheduler also
@@ -718,7 +723,11 @@ Main work keeps priority even during a side interval. Standalone nodes can also
 run when admitted main work is externally blocked; they confer no root coverage.
 
 Stop accounting is objective-wide, capped at 40 continuations. Repeated delivery
-IDs do not consume another count; missing IDs conservatively count each invocation.
+IDs do not consume another count. For a previously continuing delivery, the returned
+action is derived from the current frontier, including newly accepted root evidence,
+pending reconciliation, or changed prerequisites; the historical action is never
+reissued as authorization. A previously stopping delivery grants no free continuation.
+Missing IDs conservatively count each invocation.
 The 40th request durably pauses and issues one `summary_then_stop`. Later calls,
 including replay of a formerly continuing delivery after pause, permit stopping.
 Neither missing metadata nor `stop_hook_active: false` creates new authorization.
@@ -762,7 +771,7 @@ a current account or a rerun. Stable creation IDs break otherwise equal choices.
 ```
 
 Derived control fields are `nonprogress_replans`, `progress_fingerprints`,
-`stop_count`, `stop_deliveries` (delivery ID to decision), `summary_issued`,
+`stop_count`, `stop_deliveries` (delivery ID to original accounting decision), `summary_issued`,
 `stop_decision`, `pause_reason`, `focus`, `state_error`, `active_node_id`,
 `retreat_node_id`, `pending_moves`, `node_facts`, `selected_routes`, `closure`,
 `main_external_block`, `side_interval`, `resume_record`, `resume_ids`,
