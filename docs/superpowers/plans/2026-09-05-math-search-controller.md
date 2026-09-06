@@ -10,6 +10,12 @@ Tech Stack: Python 3.9+, standard library, unittest, existing Claude/Codex hook 
 
 Spec: `docs/superpowers/specs/2026-09-05-math-search-controller.md`
 
+Approved on 2026-09-06: also implement
+`docs/superpowers/specs/2026-09-06-math-search-retrospective-addendum.md` and
+`docs/superpowers/specs/2026-09-06-math-search-progress-addendum.md`.
+Preserve completed Tasks 1-6. Execute new Tasks 9-12 next, then pending Tasks 7-8,
+then independent whole-branch review and the authorized merge flow.
+
 ## Global Constraints
 
 - Write all artifacts, code, comments, and generated reports in English.
@@ -22,7 +28,9 @@ Spec: `docs/superpowers/specs/2026-09-05-math-search-controller.md`
 - No unmetered legacy execution flag is permitted.
 - No new external dependency, network service, learned scheduling, or database service.
 - Do not migrate the Dittert workspace as a plugin test.
-- Do not automatically push, tag, publish, or change the user's hook trust.
+- After successful verification and independent review, integrate through local-dev,
+  dev, and main, with ordinary pushes as authorized on 2026-09-06. Never force push.
+- Do not tag, publish a paper, install the plugin, or change the user's hook trust.
 - Work in the current checkout, explicitly authorized by the user on 2026-09-05.
 - Commit only scoped task changes. Never use broad destructive cleanup or change unrelated user files.
 - Research-style agent pressure-test artifacts belong under `/Users/ryshiro/exactory/exactory-research`, not the plugin checkout.
@@ -532,6 +540,8 @@ regenerate Codex entrypoints. Behavioral artifacts stay in the research workspac
 
 Interfaces: documentation describes the real executable schema/CLI, not a parallel
 manual implementation. Existing strategy semantics and local stages stay intact.
+This task follows approved Tasks 9-12. The saved control/current conditions already
+exist in the plan-scoped behavioral handoff; do not recollect those baselines.
 
 - [ ] Before changing SKILL guidance, collect fresh-context no-guidance controls and
   current-skill pressure responses covering low-value finite prefixes, necessary
@@ -544,12 +554,24 @@ manual implementation. Existing strategy semantics and local stages stay intact.
   study/admission to preserve the original request, moves to use begin/run/journal,
   verification to bind evidence, and cash-out/finish to distinguish root closure.
   Every affected entry that creates a second record or finite task must respect the gate.
+- [ ] Route finite work through the implemented typed completeness, information-value,
+  result-interpretation and verification-cost gates. Compare saved evidence first;
+  preserve necessary diagnostics and significant standalone results. A tautological
+  prefix/tail split is not a finite reduction. Tests consume saved certificates
+  without silently rerunning producers. Do not claim enforcement over unreported
+  tool calls, internal solver counts, or in-context reasoning.
+- [ ] Document explicit cancellation separately from pause, typed local reviews and
+  literature outcomes separately from root proof, and evidence-only cash-out. Route
+  the three-extraction/returned-children state through the actual lawful aggregation
+  transition. Link the generated parent progress view without subjective percentages.
 - [ ] Provide one runnable tiny end-to-end example with real JSON specs, review trust
   disclosures, proof/decision distinctions, and exact outputs. Test the example by
   executing its commands against a temporary research workspace, not grepping the text.
 - [ ] Run fresh-context forward pressure tests with the updated skill and runtime.
   For behavioral wording comparisons use five samples per compared condition;
   verify all flagged cases manually and include separate high-pressure scenarios.
+  Include all prewritten forward cases F-R, retaining the genuine finite-residue
+  and standalone-result positive controls. Do not show participants the rubric.
 - [ ] Validate skill frontmatter using the supplied validator, regenerate Codex files,
   run all documentation examples and relevant suites, self-review, and commit.
 
@@ -567,6 +589,11 @@ approved spec scenario matrix. The final reviewer evaluates the whole branch dif
   expected status must distinguish partial, ready, complete, and invalidated.
 - [ ] Attempt admission, budget, stale-evidence, arbitrary-event, legacy verify, and
   hook normalization bypasses. Add a failing test for each actual defect before fixing.
+- [ ] Include retrospective regressions for required interpretation, typed finite
+  residue, ignored cooperative interruption, cancellation acknowledgement, stale
+  local review, UNKNOWN/log-audit nonproof, append-only progress, and lawful returned
+  child aggregation. Resolve the deferred actionable native-recovery diagnostic and
+  expected argparse stderr finding by code/assertions, never suppressing a gate.
 - [ ] Set both manifest versions to `0.34.0`, update pinned manifest expectations and
   release notes, and regenerate Codex artifacts. Do not alter marketplace settings
   unrelated to versioned source delivery.
@@ -578,7 +605,273 @@ approved spec scenario matrix. The final reviewer evaluates the whole branch dif
   resource limits. Report any host verification that could not run; never label
   fixture-only coverage as end-to-end installed enforcement.
 - [ ] Self-review and commit local release-ready changes. Independent whole-branch
-  review follows. Do not install, merge, push, tag, or publish as part of this task.
+  review follows. The controller performs the already authorized merge/push flow
+  after that review. Do not install, merge, push, tag, or publish from the task agent.
+
+## Task 9: Typed computation admission and mandatory result interpretation
+
+Files: create `search_controller/computation.py`, `computation_io.py`, and
+`harness/tests/test_search_computation.py`. Extend `schema.py`, `admission.py`,
+`model.py`, `scheduler.py`, `service.py`, `cli.py`, `execution_state.py`,
+`execution.py`, `evidence.py`, `integration.py`, affected focused test fixtures,
+and `SEARCH.md`. Paths are relative to `skills/math-solver/harness/` except SEARCH.md.
+
+Interfaces: `computation.py` owns pure closed records and replay handlers;
+`computation_io.py` owns exact artifact/basis auditing. Use the existing event log,
+proposal review, accounts, and executor. No separate task database or arbitrary
+event command. `ComputationContract` is versioned and part of new finite proposals.
+
+- [ ] Write RED tests before source changes for an admitted infinite-prefix producer
+  with no finite reduction, a nominal prefix/tail AND split, predetermined means,
+  stale bound evidence, and another launch before interpretation. Assert rejection
+  precedes producer side effects and preserves the original account.
+
+```python
+def test_unclassified_result_cannot_launch_again(self):
+    node, run = self.run_admitted_finite_question()
+    self.assertEqual(self.controller.command("next", {}, None, None)["kind"],
+                     "interpret_run")
+    before = self.controller.status()["accounts"]
+    with self.assertRaises(SearchError):
+        self.launch_again(node)
+    self.assertEqual(self.controller.status()["accounts"], before)
+```
+
+  Implement these public-operation fixture helpers in the named test file. A real
+  tiny producer writes a marker; a refusal must leave it absent. Do not inject a
+  caller-supplied accepted theorem into the public service.
+- [ ] Add proposal schema version 2 with one additional `computation` field. It is
+  null for analytical proof tasks and required for the three finite task kinds.
+  Keep version 1 readable during replay. New finite proposals/admissions require
+  version 2; historical accepted facts and usage remain unchanged. The existing
+  independent proposal review binds the entire new contract, avoiding duplicate
+  reviews for an unchanged new proposal.
+- [ ] Define the closed computation record with `schema_version`, `domain`, `basis`,
+  `preflight`, and `verification_plan`. A domain is an existing case-ID or integer
+  interval scope, or a `bounded_encoding` with immutable `encoding_digest` and
+  positive `max_instances`; a bare named/unbounded domain is not finite.
+  Basis identifies exactly one of `root_finite_scope`, `finite_residue`, `diagnostic`,
+  `standalone`, or `counterexample`, with exact deduction evidence and any accepted
+  completeness/bound dependencies. Document its complete tagged schema in SEARCH.md.
+  Root finite-scope work must cover an actual subdomain of the finite root; a named
+  unbounded root requires accepted finite-residue reduction, reviewed diagnostic
+  necessity, or independently admitted standalone significance. A proposed
+  prefix/tail route does not suffice. Existing claim/assumption/policy/freshness
+  checks apply to all imported basis acceptances. Review must cover completeness
+  of the encoding for the exact claim, not only the parameter bounds.
+- [ ] Preflight has exact fields `uncertainty`, `inspected_evidence`,
+  `already_determined`, `cheapest_sufficient_check`, and `failure_signal`.
+  Evidence is a list of immutable digests and already_determined is boolean.
+  Refuse a producer when its declared mathematical outcome is already determined;
+  retain legitimate independent verification under its separate input-review
+  contract. Reuse the proposal's existing necessity outcome/action map and stopping
+  condition rather than duplicating them. Admission is a recorded semantic review,
+  not a claim that string comparison decides arbitrary mathematical relevance.
+- [ ] Verification plan has exact fields `certificate_shape`, `checker_method`,
+  `producer_seconds`, `checker_seconds`, `checker_cap_seconds`, `fallback`,
+  `max_input_bytes`. Durations and byte limit are positive integers; expected checker
+  time cannot exceed its cap without redesign. All execution limits remain bounded
+  by the admitted node allowance. Default max_input_bytes is 67108864 (64 MiB)
+  in examples/fixtures, with an explicitly reviewed larger value allowed.
+- [ ] Add `search amend-computation NODE --spec FILE` for an already admitted version-1
+  finite node. Spec binds the original proposal digest, computation contract,
+  independent ResultReview and explicit artifact inputs. It can add missing
+  guarantees, not change the original task, claim, method, limits or accounts.
+  Reject a material scope change and point to a reviewed successor. No new budget,
+  automatic resume, reclassified historical output or overwritten review follows.
+  New execution on an unamended historical finite node must fail closed with this
+  recovery route; old journals, root contracts and proposal/review digests remain.
+- [ ] Pin the effective computation digest in each new finite run and validate it
+  both at the service boundary and pure reservation replay. Native verification
+  under a finite node cannot bypass the contract; analytical verification of an
+  already produced exact proof keeps the existing independent input-review route.
+- [ ] Add `search interpret RUN --spec FILE`. Its immutable record pins run ID,
+  actual result digest, effective computation digest, a declared outcome or explicit
+  inconclusive reason, classification, root decision, remaining obligation IDs and
+  next action. Use classifications `observation`, `audit_only`, `undecided`,
+  `proof_candidate`, and `counterexample_candidate`. Interpretation supplies no
+  proof acceptance or permission itself. Timeout/cancel/UNKNOWN interpretations
+  cannot claim a decided theorem. Do not parse arbitrary stdout to guess a verdict.
+- [ ] After reconciling an actual finite run, expose `interpret_run` before another
+  mathematical launch across the objective. Preserve pause and live-work ownership
+  precedence and allow required journal acknowledgement/reconciliation. Require
+  interpretation even for a retry; unchanged authorized retries retain original
+  usage and scope without a duplicate proposal review. Read-only status never
+  creates an interpretation. A renamed node cannot hide a pending result.
+- [ ] Add positive tests for a genuine accepted finite reduction, finite-root cases,
+  independently significant standalone theorem and necessary diagnostic. Add replay,
+  changed-input, historical-amendment, timeout/log-audit and scope-change tests.
+  Run the focused computation/execution/admission suites, update SEARCH.md with
+  actual closed fields and executable CLI shapes, self-review and commit.
+
+## Task 10: Bounded snapshots, measured execution and owned cancellation
+
+Files: extend `search_controller/evidence.py`, `execution.py`, `execution_state.py`,
+`service.py`, `model.py`, `cli.py`, `integration.py`, `SEARCH.md`; create
+`harness/tests/test_search_execution_resources.py` and update affected fixtures.
+Split focused resource/ownership helpers if necessary, without a second executor.
+
+Interfaces: consume Task 9's verification_plan and effective computation digest.
+Keep the existing frozen-input review and launcher-owned process object as the
+authority. Add a public `search cancel RUN --spec FILE` with explicit reason and
+operator provenance. It requests cancellation; only the owning launcher signals
+its own child process group and acknowledges the terminal result.
+
+- [ ] Write RED tests for a growing/oversized input before allocation, an owned
+  process that ignores cooperative interruption, cancellation while streams are
+  open or already closed, and cancellation/reconciliation with an uncertain owner.
+  Use tiny fixture processes, short declared caps and no external solver jobs.
+
+```python
+def test_cancel_is_acknowledged_without_refunding_started_work(self):
+    run = self.start_owned_ignoring_interrupts()
+    self.cancel_with_operator_reason(run)
+    self.await_owned_terminal(run)
+    state = self.controller.status()
+    self.assertEqual(state["runs"][run]["termination"], "cancelled")
+    self.assertGreater(state["runs"][run]["charged_units"], 0)
+```
+
+- [ ] Bound total local snapshot bytes using the declared max_input_bytes before
+  materializing them. Stat preflight alone is insufficient: bounded reads must
+  reject growth during capture. Stream file hashes for read-only external tools
+  and dependencies. Apply equivalent explicit caps to native proof verification,
+  bound in its existing input review; update exact subject helpers and fixtures.
+  Do not silently cap a successful snapshot or label this an OS memory sandbox.
+- [ ] Record producer versus checker role and measured elapsed execution seconds
+  in exact run provenance/terminal records. Derive role from the authorized run
+  kind, not a label that lets a producer consume checker authority. Use monotonic
+  elapsed measurement, preserve null/unknown for unmeasured historical data, and
+  validate finite nonnegative numbers. Report CPU, RAM, internal solver calls and
+  hidden retries as unknown rather than fabricated totals.
+- [ ] Persist cancellation intent before notifying the existing launcher ownership
+  channel. Bind token, run and request identity; only that launcher can acknowledge.
+  A pre-start cancellation may avoid launch; a started one keeps consumed charges.
+  Poll the request while monitoring the child, including after stdout/stderr close.
+  A crash between intent and notification is recoverable without signalling a PID
+  from a stale file. Never unlink the ownership lock or touch unrelated processes.
+  Cancellation is allowed while user-paused and while a native verification intent
+  is pending; it does not resume research or fabricate native acknowledgement.
+- [ ] Distinguish plain pause (blocks future launches), pending cancellation,
+  acknowledged cancellation, timeout, launch failure and indeterminate ownership
+  in status and recovery. Terminal cancel is idempotent; repeated notification
+  cannot spend another launch or change a completed result. Pending cancellation
+  and failed notification remain visible with an exact next recovery action.
+- [ ] Bound producer and checker execution using the reviewed plan, including the
+  shared Lean build/inspection deadline. Test external expiry even when the child
+  ignores a cooperative interrupt. Keep existing one-workload, two-command Lean,
+  charge/retry, exact input and dependency rules.
+- [ ] Run focused resource/execution/native-verification suites and actual tiny
+  cancellation fixtures, update SEARCH.md and command examples, self-review, commit.
+
+## Task 11: Exact local review receipts and meaningful cash-out
+
+Files: create `search_controller/local_review.py` and
+`harness/tests/test_search_local_review.py`; extend `service.py`, `model.py`,
+`integration.py`, `evidence.py`, `cli.py`, `attack.py`, `SEARCH.md` and affected tests.
+
+Interfaces: add `search review-local NODE --spec FILE` for typed receipts of exact
+local packages and literature-resolution records. Reuse immutable manifests,
+ResultReview/provenance primitives and the existing local/native transaction path.
+No replacement journal, native parent schema, proof policy, or arbitrary verdict
+inference from prose. The root's existing accepted-proof requirement remains.
+
+- [ ] Write RED tests for unchanged unit.json with mutated proof/draft/dependency,
+  a negative or partial review attached to a full-proof unit, unresolved literature
+  marked solved, and a log-audit receipt substituted for feasibility verification.
+
+```python
+def test_mutating_proof_invalidates_local_full_review(self):
+    node = self.review_complete_local_package()
+    self.change_pinned_proof(node)
+    with self.assertRaises(SearchError):
+        self.finish_native(node)
+    self.assertNotEqual(self.controller.status(full_audit=True)["proof_status"],
+                        "proved")
+```
+
+- [ ] Receipt binds exact claim and assumptions, evidence manifest, dependencies,
+  proof/draft identities where applicable, review scope, verdict, trusted base,
+  reviewer provenance and unresolved obligations. Separate mathematics, paper
+  evaluation and literature resolution. Accept recorded negative/partial receipts
+  as history, but they cannot satisfy a complete-positive requirement. Identity
+  hashes establish what was reviewed, not mathematical truth by themselves.
+- [ ] Guard new native check-unit/finish and literature-only completion with these
+  receipts. Preserve old local FINISHED and unit stamps as historical facts;
+  never promote them silently. A literal FAIL in a prose file is not a machine
+  verdict; the structured receipt must be explicit. A literature solution needs
+  an exact source identity and solved outcome; unresolved novelty stays unresolved.
+  Preserve the native drafting order: a pre-draft check-unit receipt can pin the
+  unit/claim/proof, while final package review must pin the later draft, evaluation
+  and dependency closure. A pre-draft receipt cannot satisfy final package review.
+- [ ] Bind each new cash-out unit to either a contributing admitted obligation or
+  independently admitted standalone theorem. A pipeline or unbounded prefix without
+  such a basis remains evidence, not a publishable mathematical unit. Preserve
+  genuine finite standalone work and local workflow completion distinct from root
+  resolution. Necessary diagnostic evidence can be cited without becoming a theorem.
+- [ ] Exercise the exact state with three negative-side extraction moves, two
+  finished required children and an already reviewed reduction. Supply the actual
+  legal administrative composition path when all deductions exist. If a new lemma
+  remains, return its precise missing admission/allowance; do not create a fourth
+  extraction, fake stall, generic order override or renamed budget. Preserve the
+  existing exception for root-ready evidence with unused native children, while
+  exposing local_finish_pending_unused_children honestly.
+- [ ] Reject changed or withdrawn dependencies during full local/root audit and
+  downstream delivery. Test a restricted-family receipt cannot close an unrestricted
+  claim. Run focused local-review/finish/delivery/legacy suites, document exact
+  receipt schemas and lawful composition in SEARCH.md, self-review and commit.
+
+## Task 12: Parent progress report with immutable history
+
+Files: create `search_controller/progress.py` and
+`harness/tests/test_search_progress.py`; extend `storage.py`, `model.py`,
+`service.py`, `render.py`, `cli.py`, `hooks/math_search.py`, relevant hook tests and
+`SEARCH.md`. Consume the full approved progress addendum, not only this task summary.
+
+Interfaces: optional storage-owned envelope `recorded_at_utc`; four existing fields
+stay required. The timestamp is YYYY-MM-DDTHH:MM:SSZ metadata only. New events include
+it; old events remain readable without fabricated time. One versioned projection
+owns a fixed header, marked mutable current tree, and append-only historical suffix.
+
+- [ ] Write RED tests using public mutations for event timestamps, pause/checkpoint/
+  acceptance updates, history preservation, duplicate replay and read-only status.
+
+```python
+def test_replay_preserves_old_entries(self):
+    self.create_checkpoint_and_report()
+    before = self.read_history_bytes()
+    self.accept_checkpoint_and_replay_same_request()
+    after = self.read_history_bytes()
+    self.assertTrue(after.startswith(before))
+    self.assertEqual(self.count_last_event_entries(), 1)
+```
+
+- [ ] Publish PROGRESS.md in the controller root's direct parent by default. Add
+  explicit `search configure-report --spec FILE` for a different basename in that
+  same parent when an unowned file conflicts. Keep ownership in immutable controller
+  state; initial creation is exclusive across roots. Reject symlinks and traversal.
+  Do not overwrite an unowned report or take ownership by reading its apparent title.
+- [ ] Append one three-to-five-line English entry per relevant committed transaction,
+  derived from that exact event-prefix state: timestamp/event, main obligations,
+  branch counts/status, cash-out and exact coverage with reason. Keep all historical
+  bytes and the initial header immutable. Only the marked current-tree region can
+  change. Render active/unresolved/shared/standalone/failed work distinctly and link
+  the complete generated SEARCH_TREE. Flatten/escape labels and marker-like input.
+- [ ] Compute only justified finite-root case coverage with its denominator and
+  open common premises. Do not infer percentages from activity or arbitrary weights.
+  General progress is not quantifiable until resolution; only audited root proof
+  completion has a 100% proof label. Keep disproof separately labelled.
+- [ ] Assign storage timestamps after idempotency/revision validation. Project under
+  the objective writer lock without holding it during jobs. A committed-event/
+  failed-projection interruption must report accurate state and be repaired on a
+  later managed mutation, explicit render or reconciliation, without duplicate
+  entries or new research. Read-only status reports stale view without writing.
+  Corrupted history/ownership requires explicit repair; never silently rewrite it.
+- [ ] Test concurrent cross-root creation, concurrent updates, interrupted atomic
+  replacement, custom basenames, symlink/marker injection, old timestamp-free events,
+  partial/all-case-with-open-bridge/root-complete views, and supported shell/patch
+  protection including containing-directory operations. Run focused storage/progress/
+  hook suites, update SEARCH.md, self-review and commit.
 
 ## Plan self-review and acceptance mapping
 
@@ -594,6 +887,11 @@ approved spec scenario matrix. The final reviewer evaluates the whole branch dif
 | Sections 11-12: cash-out, import, adoption, compatibility | 3, 4, 5, 7 |
 | Section 13: regression, behavioral, and release gates | Every task; final matrix in 8 |
 | Section 14: prior research attribution | Approved spec retained; concise routing in 7 |
+| Retrospective sections 1-3: finite completeness, information value, actual outcomes | 9, 7, 8 |
+| Retrospective section 4: verification design, bounded capture and resource records | 9, 10, 7, 8 |
+| Retrospective section 5: pause/cancel, exact review and lawful aggregation | 6, 10, 11, 7, 8 |
+| Retrospective section 6 and complete progress addendum | 11, 12, 7, 8 |
+| Approved merge route and preservation of upstream changes | Controller after final review and integrated-delta validation |
 
 The task reviews check both spec compliance and code quality. Record findings and
 fixes in the plan-scoped SDD ledger. A local implementation is not an installed or
