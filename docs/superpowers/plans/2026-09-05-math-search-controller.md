@@ -42,6 +42,7 @@ is `skills/math-solver/harness/search_controller/`.
 | `adoption.py` | Explicit preserved legacy mappings, snapshots, and stable imported usage |
 | `evidence.py` | Immutable manifest schema and read-only audit in Task 4; capture/freeze support in Task 5 |
 | `execution.py` | Metered processes, launcher ownership, and execution recovery |
+| `execution_state.py` | Pure move/run reservations, command-unit accounting, and lifecycle transitions |
 | `integration.py` | Existing harness admission guards, journal intents, stage/finish and verifier integration |
 | `hooks/math_search.py` | Shared host discovery, normalization, controller invocation, protected-path decisions |
 | `skills/math-solver/SEARCH.md` | Operational search workflow and JSON contract examples |
@@ -292,7 +293,8 @@ def test_finished_legacy_attack_does_not_complete_adopted_objective(self):
 
 ## Task 5: Metered execution and existing harness enforcement
 
-Files: create `search_controller/execution.py`, `integration.py`; extend `evidence.py`;
+Files: create `search_controller/execution.py`, `execution_state.py`, `integration.py`;
+extend `evidence.py` and pure handler registration in `model.py`;
 modify `service.py`, `attack.py`, existing harness test setup/fixtures where needed;
 create `harness/tests/test_search_execution.py`, `test_search_legacy_guards.py`.
 
@@ -301,6 +303,9 @@ Interfaces: implement begin/run/reconcile service operations and
 `before_legacy(args) -> context` and `after_legacy(context, outcome) -> None` to the
 harness. These are internal validated transactions, not caller-set bypass flags.
 Existing verify commands route through the same executor and ledger as `search run`.
+Pure lifecycle handlers live in `execution_state.py`, not the process I/O module.
+Task 5 records its exact closed request/event variants in `SEARCH.md`; the reviewed
+terminal verification and frozen-input record formats remain authoritative.
 
 - [ ] Write RED for unadmitted `verify` not launching a process, attempts without
   journalling, exhausted inherited accounts, false certificate status, wrong Lean
@@ -320,6 +325,24 @@ def test_unadmitted_verify_never_launches_checker(self):
   states, declaration/type/axioms, and immutable artifacts. A changed or incomplete
   dependency boundary prevents proof acceptance. Certificate success additionally
   needs reviewed checker/completeness and exact claim correspondence.
+- [ ] Support closed `command`, `certificate`, and `lean` run variants. A generic
+  command records execution/evidence, never a certificate or kernel result. Bind the
+  admitted task purpose/domain and the actual argv, frozen inputs, external dependencies,
+  dependency enumeration, nonsecret environment, bounded output expectation, timeout,
+  and thread settings. Native verifier argv is derived from its captured project.
+  Begin takes the minimal planned pass/trigger/step citations that native legality
+  checks cannot derive, and derives the next move number. Later journal acknowledgement
+  must match that reservation. No new per-retry significance review is required;
+  a changed admitted purpose, domain or allowance requires reviewed amendment.
+- [ ] One Lean verification workload reserves two command units atomically under one
+  run ID, one for build and one for inspection. Certificate and generic command
+  workloads reserve one. The Lean commands share the admitted total wall timeout
+  and top-level workload ownership. Record reserved, started and charged units
+  explicitly. An inspection proven never started after a terminal failed build can
+  release its reservation; uncertain launch/crash/cancellation remains charged and
+  blocks replacement. Rejected preflight consumes nothing. Test insufficient allowance
+  before either Lean command starts, failed-build no-start evidence, and uncertain
+  recovery. Verification acceptance still requires both successful command records.
 - [ ] Implement reserved/launched/terminal/indeterminate lifecycle and launcher
   handshake. Use safe process identity, single top-level workload ownership, explicit
   timeouts, appropriate thread settings, and bounded output storage. Charge retries,
