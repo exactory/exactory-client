@@ -56,7 +56,7 @@ class Controller:
             return state if name == "status" else next_action(state)
         s.integer(expected_revision)
         s.text(request_id)
-        if name not in {"admit", "accept", "retreat", "checkpoint", "begin", "run"}:
+        if name not in {"admit", "accept", "retreat", "checkpoint", "begin", "run", "amend-computation", "interpret"}:
             s.require(target is None, "This command has no positional target")
         elif name != "checkpoint":
             s.text(target)
@@ -158,6 +158,27 @@ class Controller:
         elif name == "run":
             from .execution import build_run
             emit("run_reserved", {"run": build_run(self, state, spec, target, content)})
+        elif name == "interpret":
+            from .computation_io import audit_run_result
+            s.closed(spec, "result_digest computation_digest outcome inconclusive_reason classification root_decision remaining_obligation_ids next_action")
+            run = reference(state["runs"], target, "interpreted run")
+            result = audit_run_result(state, run, content)
+            if spec["classification"] in {"proof_candidate", "counterexample_candidate"}:
+                s.require(len(result["commands"]) == len(run["commands"])
+                          and all(command["exit_code"] == 0 for command in result["commands"]),
+                          "Unsuccessful execution cannot decide a theorem")
+            value = dict(spec, run_id=target)
+            emit("run_interpreted", {"interpretation": value, "digest": content.put_blob(value)})
+        elif name == "amend-computation":
+            from .computation_io import audit_computation
+            s.closed(spec, "proposal_digest computation review inputs")
+            node = reference(state["nodes"], target, "amendment node")
+            proposal = reference(state["proposals"], node["proposal_id"], "admitted proposal")["record"]
+            import_inputs(self.root, spec["inputs"], content)
+            audit_computation(self.root, state, proposal, spec["computation"], content)
+            subject = {"node_id": target, "proposal_digest": spec["proposal_digest"], "computation": spec["computation"]}
+            content.put_blob(spec["review"])
+            emit("computation_amended", {"subject": subject, "review": spec["review"], "digest": content.put_blob(subject)})
         elif name == "reconcile":
             from .integration import reconcile_journals, reconcile_native_intents
             s.closed(spec, "")
@@ -178,6 +199,8 @@ class Controller:
                     verification = mapping["verification"]
                     s.closed(verification, "proposal review allowance_review")
                     proposal_inputs(verification["proposal"], content)
+                    from .computation import require_new_proposal
+                    require_new_proposal(verification["proposal"])
                     audit_admission(self.root, state, verification["proposal"], content)
                     for key in ["proposal", "review", "allowance_review"]:
                         content.put_blob(verification[key])
@@ -200,6 +223,8 @@ class Controller:
             s.closed(spec, "proposal inputs")
             proposal = spec["proposal"]
             s.validate_proposal(proposal)
+            from .computation import require_new_proposal
+            require_new_proposal(proposal)
             safe_path(self.root, proposal["attack_slug"])
             import_inputs(self.root, spec["inputs"], content)
             proposal_inputs(proposal, content)
@@ -214,6 +239,8 @@ class Controller:
         elif name == "admit":
             s.closed(spec, "")
             proposal = reference(state["proposals"], target, "proposal")["record"]
+            from .computation import require_new_proposal
+            require_new_proposal(proposal)
             proposal_inputs(proposal, content)
             audit_admission(self.root, state, proposal, content)
             for review in state["reviews"].values():

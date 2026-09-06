@@ -8,7 +8,7 @@ from tests.search_fixtures import contract, proposal, review, digest
 from tests.support import ALL_YES, OPENING, FIXTURE_STRATEGIES, make_problem, make_preconditions, run, write_study
 
 
-def admit_workspace(root, slug="sample", max_runs=24, computational=False, exact_claim="True holds."):
+def admit_workspace(root, slug="sample", max_runs=24, computational=False, exact_claim="True holds.", historical=False, configure=None):
     controller = Controller(root, FIXTURE_STRATEGIES)
     workspace = root / slug
     problem = make_problem()
@@ -42,10 +42,36 @@ def admit_workspace(root, slug="sample", max_runs=24, computational=False, exact
             candidate["studies"]["strategies"] = [{"method": OPENING, "digest": value}]
         else:
             candidate["studies"][name] = value
+    if computational and not historical:
+        candidate.update(schema_version=2, computation=computation_contract(candidate["studies"]["problem"]))
+    if configure is not None:
+        configure(candidate)
+        candidate["anchor"]["digest"] = digest(original)
     controller.command("init", {"contract": original}, 0, "initialize")
-    controller.command("propose", {"proposal": candidate, "inputs": inputs}, 1, "proposal")
-    controller.command("review", {"proposal_id": "proposal-000001", "review": review(candidate), "inputs": []}, 2, "review")
-    controller.command("admit", {}, 3, "admit", "proposal-000001")
+    if historical:
+        # Replay an archived v1 admission, not a new public admission or theorem.
+        from search_controller.evidence import import_inputs
+        from search_controller.model import apply_event, replay
+        import_inputs(root, inputs, controller.store)
+        approved = review(candidate)
+        controller.store.put_blob(candidate)
+        controller.store.put_blob(approved)
+        for kind, payload in [
+            ("proposal_recorded", {"proposal": candidate, "digest": digest(candidate)}),
+            ("review_recorded", {"proposal_id": "proposal-000001", "review": approved, "digest": digest(approved)}),
+            ("proposal_admitted", {"proposal_id": "proposal-000001"}),
+        ]:
+            revision = controller.status()["revision"]
+            controller.store.append(kind, payload, revision, "archived-" + kind,
+                                    validate=lambda document, event: apply_event(replay(document), event))
+    else:
+        controller.command("propose", {"proposal": candidate, "inputs": inputs}, 1, "proposal")
+        controller.command("review", {"proposal_id": "proposal-000001", "review": review(candidate), "inputs": []}, 2, "review")
+        revision = 3
+        if candidate["category"] == "standalone":
+            controller.command("review", {"proposal_id": "proposal-000001", "review": review(candidate, "reviewer-two"), "inputs": []}, 3, "second-review")
+            revision = 4
+        controller.command("admit", {}, revision, "admit", "proposal-000001")
     (workspace / "preconditions.json").write_text(json.dumps(make_preconditions(ALL_YES)))
     status, out, err = run(["plan", slug], root)
     if status:
@@ -56,6 +82,22 @@ def admit_workspace(root, slug="sample", max_runs=24, computational=False, exact
         for item in openings]}
     (workspace / "ranking.json").write_text(json.dumps(ranking))
     return controller
+
+
+def computation_contract(evidence_digest):
+    return {"schema_version": 1,
+        "domain": {"kind": "case_ids", "case_ids": ["supplied-fixture"]},
+        "basis": {"kind": "diagnostic", "deduction_digest": evidence_digest, "dependencies": [],
+                  "completeness_acceptance_id": None, "bound_acceptance_id": None},
+        "preflight": {"uncertainty": "Whether the actual supplied fixture command succeeds",
+                      "inspected_evidence": [evidence_digest], "already_determined": False,
+                      "cheapest_sufficient_check": "Execute the exact bounded fixture once",
+                      "failure_signal": "A nonzero exit or a timeout leaves the fixture undecided"},
+        "verification_plan": {"certificate_shape": "Exact fixture result and captured logs",
+                              "checker_method": "Independent review of the exact fixture output",
+                              "producer_seconds": 2, "checker_seconds": 2, "checker_cap_seconds": 300,
+                              "fallback": "Keep the question undecided and redesign the check",
+                              "max_input_bytes": 67108864}}
 
 
 def begin_spec():

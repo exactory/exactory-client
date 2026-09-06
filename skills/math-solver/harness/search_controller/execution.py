@@ -69,6 +69,13 @@ def build_run(controller, state, spec, target, content):
                             " input_review input_modes requested_declaration requested_type toolchain_inventory_digest inspection_source_digest" if spec["kind"] == "lean" else " input_review input_modes"))
     units = 2 if spec["kind"] == "lean" else 1
     node, account = account_for_work(state, target, "runs", units)
+    from .computation import effective_contract, validate_run
+    from .computation_io import audit_computation
+    computation = effective_contract(state, node)
+    computation_digest = s.digest(computation) if computation is not None else None
+    validate_run(state, node, spec["kind"], computation_digest, spec["timeout_seconds"])
+    if computation is not None:
+        audit_computation(controller.root, state, state["proposals"][node["proposal_id"]]["record"], computation, content)
     if spec["kind"] == "command":
         s.require(node["admission"]["task"]["kind"] in {"finite_decision", "finite_proof", "counterexample_search"}
                   and node["admission"]["contribution"]["necessity"] is not None,
@@ -177,6 +184,7 @@ def build_run(controller, state, spec, target, content):
     content.put_blob(spec)
     return {"id": run_id, "node_id": target, "account_id": account["id"], "reservation_id": move["id"],
         "kind": spec["kind"], "input_digest": frozen, "spec_digest": s.digest(spec), "task": node["admission"]["task"],
+        "computation_digest": computation_digest,
         "cwd": str(cwd), "snapshot_root": str(directory / "input"), "output_root": str(directory / "output"),
         "commands": commands, "timeout_seconds": spec["timeout_seconds"], "environment": environment,
         "threads": node["admission"]["limits"]["workers"], "expected_outputs": spec["expected_outputs"],

@@ -54,6 +54,8 @@ def guard_legacy(controller, command, slug, details):
 
 
 def audit_work(controller, state, node, content):
+    from .computation_io import audit_amendment
+    audit_amendment(controller.root, state, node, content)
     proposal = state["proposals"][node["proposal_id"]]
     s.require(content.get_blob(proposal["digest"]) == proposal["record"], "Admission proposal changed", "digest_mismatch")
     proposal_inputs(proposal["record"], content)

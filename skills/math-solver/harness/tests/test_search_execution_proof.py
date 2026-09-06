@@ -1,5 +1,6 @@
 """A real finite certificate supports a separately reviewed analytical bridge."""
 
+import copy
 import hashlib
 import json
 
@@ -7,7 +8,7 @@ from search_controller.service import Controller
 from search_controller.errors import SearchError
 from search_controller.proof import root_support
 from tests.search_fixtures import contract, proposal, review, digest, provenance
-from tests.search_execution_support import begin_spec, invoke, review_native_inputs
+from tests.search_execution_support import begin_spec, computation_contract, invoke, review_native_inputs
 from tests.support import WorkspaceTest, make_problem, make_preconditions, ALL_YES, OPENING, FIXTURE_STRATEGIES, make_move, write_ranking
 
 
@@ -99,7 +100,36 @@ class CertifiedBridgeExecutionTests(WorkspaceTest):
         candidate["checkpoint_criteria"][0]["obligation_id"] = "new:residues"
         self.controller = Controller(self.attack_root, FIXTURE_STRATEGIES)
         self.controller.command("init", {"contract": original}, 0, "initialize")
-        premise_node = self.admit(candidate, 1)
+        bridge = copy.deepcopy(candidate)
+        bridge.update(attack_slug="bridge", claim=bridge_claim, target_obligation="new:bridge")
+        bridge["task"] = {"kind": "proof", "purpose": "Prove the conditional Euclidean division bridge", "input_domain": "Every integer"}
+        bridge["contribution"].update(necessity=None, deduction="Euclidean division reduces the root to the finite residue premise")
+        bridge["checkpoint_criteria"][0]["obligation_id"] = "new:bridge"
+        bridge_node = self.admit(bridge, 1)
+        invoke(self.controller, "begin", begin_spec(), bridge_node)
+        proof = self.input_file("bridge/proof.md", "Assume that r^2 modulo 4 lies in {0,1} for every r in {0,1,2,3}. Let n be any integer. Euclidean division gives n = 4q + r with 0 <= r < 4. Then n^2 = 16q^2 + 8qr + r^2, so n^2 and r^2 have the same residue modulo 4. The assumed finite premise therefore implies that n^2 is never congruent to 2 modulo 4. This conditional implication does not assume that its premise has already been proved.\n")
+        self.controller.store.put_artifact((self.attack_root / proof["path"]).read_bytes())
+        journal_result = self.run_cli("journal", "add", "bridge", "--json", json.dumps(make_move(1)))
+        self.assertEqual(journal_result[0], 0, journal_result)
+        route = self.controller.status()["routes"]["route-000001"]
+        analytical = {"schema_version": 1, "kind": "analytical", "claim_digest": digest(bridge_claim),
+            "conclusion": {"outcome": "proof", "dependency_ids": [], "route_bindings": [{
+                "route_id": route["id"], "route_digest": digest(route), "case_obligation_ids": [],
+                "shared_prerequisite_ids": ["obligation-000002"], "discharged_assumption_ids": []}]},
+            "artifacts": [{"path": proof["path"], "digest": proof["digest"], "role": "proof"}],
+            "dependencies": [], "external_dependencies": [], "verification": None}
+        self.record_result(bridge_node, analytical)
+        self.assertIsNone(root_support(self.controller.status()))
+        accepted_bridge = self.controller.status()["acceptances"]["acceptance-000001"]
+        candidate.update(schema_version=2, target_obligation="obligation-000002",
+                         computation=computation_contract(proof["digest"]), decomposition={"obligations": [], "routes": []})
+        candidate["contribution"]["route"] = "route-000001"
+        candidate["contribution"]["necessity"]["obligation_id"] = "obligation-000002"
+        candidate["checkpoint_criteria"][0]["obligation_id"] = "obligation-000002"
+        candidate["computation"]["domain"] = residue_claim["scope"]
+        candidate["computation"]["basis"].update(kind="finite_residue", reduction_acceptance_id=accepted_bridge["id"],
+            dependencies=[{"acceptance_id": accepted_bridge["id"], "acceptance_digest": digest(accepted_bridge), "claim_digest": digest(bridge_claim)}])
+        premise_node = self.admit(candidate, 2)
         self.input_file(self.slug + "/deterministic/residues/certificate.txt", "0 0\n1 1\n2 0\n3 1\n")
         self.input_file(self.slug + "/deterministic/residues/check.sh", "#!/bin/sh\nset -eu\ncount=0\nwhile read -r r square; do\n  [ \"$r\" -eq \"$count\" ]\n  [ \"$square\" -eq \"$((r*r % 4))\" ]\n  [ \"$square\" -ne 2 ]\n  count=$((count+1))\ndone < certificate.txt\n[ \"$count\" -eq 4 ]\nprintf 'All four residue rows verified\\n'\n")
         (self.workspace / "deterministic/residues/check.sh").chmod(0o755)
@@ -111,36 +141,20 @@ class CertifiedBridgeExecutionTests(WorkspaceTest):
         with self.assertRaises(SearchError):
             invoke(self.controller, "begin", begin_spec(), premise_node)
         run = self.controller.status()["runs"]["run-000001"]
+        invoke(self.controller, "interpret", {"result_digest": run["result_digest"], "computation_digest": run["computation_digest"],
+            "outcome": "verified", "inconclusive_reason": None, "classification": "proof_candidate",
+            "root_decision": {"kind": "proof_candidate", "reason": "The finite residue candidate completes the already accepted modular reduction"},
+            "remaining_obligation_ids": ["obligation-000002"], "next_action": "Review the modular lift"}, run["id"])
         manifest = dict(self.controller.store.get_blob(run["input_digest"]), kind="certificate", dependencies=[],
             conclusion={"outcome": "proof", "dependency_ids": [], "route_bindings": []}, verification={"run_id": run["id"],
                 "result_digest": run["result_digest"], "policy_review": self.result_review(run["result_digest"], digest(residue_claim)),
                 "requested_declaration": None, "requested_type_digest": None})
         self.record_result(premise_node, manifest)
-        self.assertIsNone(root_support(self.controller.status()))
-        bridge = proposal()
-        bridge.update(attack_slug="bridge", claim=bridge_claim, target_obligation="obligation-000003")
-        bridge["anchor"]["digest"] = digest(original)
-        bridge["contribution"].update(route="route-000001", deduction="Euclidean division transfers the certified residue result to every integer")
-        bridge["checkpoint_criteria"][0]["obligation_id"] = "obligation-000003"
-        bridge_node = self.admit(bridge, 2)
-        invoke(self.controller, "begin", begin_spec(), bridge_node)
-        proof = self.input_file("bridge/proof.md", "Let n be an integer. Euclidean division gives n = 4q + r with 0 <= r < 4. Then n^2 = 16q^2 + 8qr + r^2, so n^2 and r^2 have the same residue modulo 4. The separately certified complete table gives r^2 modulo 4 in {0,1}. Therefore n^2 is never congruent to 2 modulo 4.\n")
-        self.controller.store.put_artifact((self.attack_root / proof["path"]).read_bytes())
-        journal_result = self.run_cli("journal", "add", "bridge", "--json", json.dumps(make_move(1)))
-        self.assertEqual(journal_result[0], 0, journal_result)
-        route = self.controller.status()["routes"]["route-000001"]
-        analytical = {"schema_version": 1, "kind": "analytical", "claim_digest": digest(bridge_claim),
-            "conclusion": {"outcome": "proof", "dependency_ids": ["acceptance-000001"], "route_bindings": [{
-                "route_id": route["id"], "route_digest": digest(route), "case_obligation_ids": [],
-                "shared_prerequisite_ids": ["obligation-000002"], "discharged_assumption_ids": []}]},
-            "artifacts": [{"path": proof["path"], "digest": proof["digest"], "role": "proof"}],
-            "dependencies": [], "external_dependencies": [], "verification": None}
-        self.record_result(bridge_node, analytical)
         state = self.controller.status(full_audit=True)
         self.assertEqual(state["freshness"]["status"], "fresh")
         self.assertEqual(root_support(state)["acceptance_ids"], ["acceptance-000001", "acceptance-000002"])
-        self.assertEqual(state["acceptances"]["acceptance-000001"]["standard"], "certificate")
-        self.assertEqual(state["acceptances"]["acceptance-000002"]["classification"], "analytical")
+        self.assertEqual(state["acceptances"]["acceptance-000002"]["standard"], "certificate")
+        self.assertEqual(state["acceptances"]["acceptance-000001"]["classification"], "analytical")
         self.assertEqual(state["totals"]["used_moves"], 2)
         self.assertEqual(state["totals"]["used_runs"], 1)
         self.assertEqual(state["proof_status"], "open")

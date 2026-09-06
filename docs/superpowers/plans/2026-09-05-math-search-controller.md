@@ -798,8 +798,7 @@ def test_cancel_is_acknowledged_without_refunding_started_work(self):
 Files: create `search_controller/local_review.py` and
 `harness/tests/test_search_local_review.py`; extend `service.py`, `model.py`,
 `integration.py`, `evidence.py`, `proof.py`, `scheduler.py`, `cli.py`, `attack.py`,
-`SEARCH.md` and affected tests. The controller's scoped interface decisions are
-in the plan-scoped `task-11-controller-handoff.md`.
+`SEARCH.md` and affected tests.
 
 Interfaces: add `search review-local NODE --spec FILE` for typed receipts of exact
 local packages and literature-resolution records. Reuse immutable manifests,
@@ -827,6 +826,10 @@ def test_mutating_proof_invalidates_local_full_review(self):
   evaluation and literature resolution. Accept recorded negative/partial receipts
   as history, but they cannot satisfy a complete-positive requirement. Identity
   hashes establish what was reviewed, not mathematical truth by themselves.
+  Keep ResultReview unchanged and bind the receipt's scope and typed verdict inside
+  its hashed subject. Derive the exact admission basis from the node. Literature
+  identity has nonempty identifier/version, source_artifact_digest and an explicit
+  solved/unresolved outcome; also pin the current problem and novelty bytes.
 - [ ] Guard new native check-unit/finish and literature-only completion with these
   receipts. Preserve old local FINISHED and unit stamps as historical facts;
   never promote them silently. A literal FAIL in a prose file is not a machine
@@ -835,6 +838,14 @@ def test_mutating_proof_invalidates_local_full_review(self):
   Preserve the native drafting order: a pre-draft check-unit receipt can pin the
   unit/claim/proof, while final package review must pin the later draft, evaluation
   and dependency closure. A pre-draft receipt cannot satisfy final package review.
+  Preserve the native unit_sha256 stamp. At a new native-use gate select the latest
+  exact current receipt for node/unit/scope, with no fallback past a negative or
+  partial review. New delivery explicitly pins one paper_evaluation_receipt_id per
+  unit in native order; each final receipt pins its mathematics receipt. Version
+  the new receipt-bearing closure and retain historical closure replay without
+  granting old stamps new public completion authority. Local receipt audit failures
+  are distinct from unrelated mathematical acceptance failures; a closure using a
+  stale local package retains the existing downstream invalidation behavior.
 - [ ] Bind each new cash-out unit to either a contributing admitted obligation or
   independently admitted standalone theorem. A pipeline or unbounded prefix without
   such a basis remains evidence, not a publishable mathematical unit. Preserve
@@ -847,6 +858,9 @@ def test_mutating_proof_invalidates_local_full_review(self):
   extraction, fake stall, generic order override or renamed budget. Preserve the
   existing exception for root-ready evidence with unused native children, while
   exposing local_finish_pending_unused_children honestly.
+  The three-extraction fixture must not substitute three failures to manufacture
+  a cash-out trigger. Test the actual successful/unfinished extraction state and
+  its legal composition command or exact unmet prerequisite.
 - [ ] Reject changed or withdrawn dependencies during full local/root audit and
   downstream delivery. Test a restricted-family receipt cannot close an unrestricted
   claim. Run focused local-review/finish/delivery/legacy suites, document exact

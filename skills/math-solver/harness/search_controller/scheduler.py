@@ -123,6 +123,10 @@ def next_action(state):
     for run_id, run in sorted(state["runs"].items()):
         if run["status"] == "reserved":
             return {"kind": "reconcile_run", "run_id": run_id}
+    from .computation import pending_interpretation
+    pending = pending_interpretation(state)
+    if pending is not None:
+        return {"kind": "interpret_run", "run_id": pending["id"], "node_id": pending["node_id"]}
     for nid, facts in sorted(control["node_facts"].items()):
         if facts.get("result_action"):
             if facts["result_action"] == "verification":

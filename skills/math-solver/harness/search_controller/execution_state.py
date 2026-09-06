@@ -97,11 +97,19 @@ EVENT_HANDLERS = {"move_reserved": reserve_move, "journal_intended": journal_int
 def reserve_run(state, payload):
     s.closed(payload, "run")
     run = payload["run"]
-    s.closed(run, "id node_id account_id reservation_id kind input_digest spec_digest task cwd snapshot_root output_root commands timeout_seconds environment threads expected_outputs dependency_enumeration executable_bindings reserved_units token requested_declaration requested_type_digest toolchain_digest toolchain_inventory_digest inspection_source_digest publication_prestate input_modes")
+    s.closed(run, "id node_id account_id reservation_id kind input_digest spec_digest task cwd snapshot_root output_root commands timeout_seconds environment threads expected_outputs dependency_enumeration executable_bindings reserved_units token requested_declaration requested_type_digest toolchain_digest toolchain_inventory_digest inspection_source_digest publication_prestate input_modes" +
+             (" computation_digest" if "computation_digest" in run else ""))
     s.choice(run["kind"], {"command", "certificate", "lean"})
     units = 2 if run["kind"] == "lean" else 1
     s.require(run["reserved_units"] == units and len(run["commands"]) == units, "Command reservation count differs")
     node, account = account_for_work(state, run["node_id"], "runs", units)
+    if "computation_digest" in run:
+        from .computation import validate_run
+        validate_run(state, node, run["kind"], run["computation_digest"], run["timeout_seconds"])
+    else:
+        s.require(state["proposals"][node["proposal_id"]]["record"]["schema_version"] == 1
+                  and node["id"] not in state["service"]["computation_amendments"],
+                  "New run reservations must pin their computation digest", "computation_required")
     if run["kind"] == "command":
         s.require(node["admission"]["task"]["kind"] in {"finite_decision", "finite_proof", "counterexample_search"}
                   and node["admission"]["contribution"]["necessity"] is not None,

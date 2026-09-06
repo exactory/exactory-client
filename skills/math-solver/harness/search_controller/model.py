@@ -8,10 +8,11 @@ from .proof import EVENT_HANDLERS as PROOF_HANDLERS
 from .scheduler import EVENT_HANDLERS as SCHEDULER_HANDLERS, initial_control
 from .adoption import EVENT_HANDLERS as ADOPTION_HANDLERS
 from .execution_state import EVENT_HANDLERS as EXECUTION_HANDLERS
+from .computation import EVENT_HANDLERS as COMPUTATION_HANDLERS
 from .discovery import record as record_discovery
 
 
-EVENT_HANDLERS = dict(ADMISSION_HANDLERS, **PROOF_HANDLERS, **SCHEDULER_HANDLERS, **ADOPTION_HANDLERS, **EXECUTION_HANDLERS)
+EVENT_HANDLERS = dict(ADMISSION_HANDLERS, **PROOF_HANDLERS, **SCHEDULER_HANDLERS, **ADOPTION_HANDLERS, **EXECUTION_HANDLERS, **COMPUTATION_HANDLERS)
 EVENT_HANDLERS["discovery_recorded"] = record_discovery
 
 
@@ -30,6 +31,7 @@ def service_operation(state, payload):
         "focus": {"control_recorded", "discovery_recorded"}, "pause": {"control_recorded"},
         "resume": {"control_recorded", "discovery_recorded"}, "hook-stop": {"control_recorded", "node_facts_recorded"},
         "begin": {"move_reserved"},
+        "amend-computation": {"computation_amended"}, "interpret": {"run_interpreted"},
         "run": {"run_reserved"}, "execution-launch": {"run_launched"},
         "legacy-journal": {"journal_intended"},
         "legacy-native": {"native_intended"},
@@ -75,7 +77,8 @@ def initial_state(contract, objective_id):
         "proof_status": "open", "execution_status": "needs_replan", "publication_status": [],
         "requests": {},
         "service": {"effects": [], "imports": {}, "import_versions": [], "journal_receipts": {}, "adoption_allowances": [],
-                    "moves": {}, "legacy_intents": {}, "native_intents": {}, "native_receipts": {}, "discovery_intents": {}},
+                    "moves": {}, "legacy_intents": {}, "native_intents": {}, "native_receipts": {}, "discovery_intents": {},
+                    "computation_amendments": {}, "run_interpretations": {}},
     }
 
 

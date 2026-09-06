@@ -211,8 +211,10 @@ def validate_decomposition(value):
 
 def validate_proposal(value):
     canonical_bytes(value)
-    closed(value, "schema_version author category relationship attack_slug role claim target_obligation logical_predecessor native_parent anchor inherited_evidence inherited_assumption_ids hypothesis method applicability success_criterion failure_criterion parent_effect studies contribution task limits budget equivalent_node_ids checkpoint_criteria retreat_criteria decomposition")
-    integer(value["schema_version"], 1, 1)
+    require(isinstance(value, dict), "Proposal must be a record")
+    closed(value, "schema_version author category relationship attack_slug role claim target_obligation logical_predecessor native_parent anchor inherited_evidence inherited_assumption_ids hypothesis method applicability success_criterion failure_criterion parent_effect studies contribution task limits budget equivalent_node_ids checkpoint_criteria retreat_criteria decomposition" +
+           (" computation" if value.get("schema_version") == 2 else ""))
+    integer(value["schema_version"], 1, 2)
     validate_provenance(value["author"])
     choice(value["category"], CATEGORIES)
     choice(value["relationship"], RELATIONSHIPS)
@@ -247,6 +249,12 @@ def validate_proposal(value):
     choice(value["task"]["kind"], {"proof", "finite_decision", "finite_proof", "counterexample_search"})
     text(value["task"]["purpose"])
     text(value["task"]["input_domain"])
+    if value["schema_version"] == 2:
+        if value["task"]["kind"] == "proof":
+            require(value["computation"] is None, "Analytical proof tasks use a null computation contract")
+        else:
+            from .computation import validate_contract as validate_computation
+            validate_computation(value["computation"])
     contribution = value["contribution"]
     closed(contribution, "route deduction necessity coverage standalone")
     optional_text(contribution["route"])

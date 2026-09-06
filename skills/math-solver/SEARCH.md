@@ -1,5 +1,169 @@
 # Mathematical search controller JSON contract
 
+## Computation admission and mandatory interpretation
+
+New finite proposals use proposal `schema_version: 2` with one additional field,
+`computation`. Analytical `task.kind: proof` uses `computation: null`. Version 1
+proposals, reviews, admissions, run reservations and accepted results remain
+readable during replay. The public service refuses new version 1 finite proposals
+and admissions. Its new run reservations always include `computation_digest`,
+which is null only for analytical tasks. Historical reservations without that field
+are accepted only for original version 1 admissions without amendments. This is
+historical replay compatibility; there is no public arbitrary event API.
+
+The closed, versioned computation contract is:
+
+```text
+ComputationContract = {
+  schema_version: 1,
+  domain: FiniteDomain,
+  basis: Basis,
+  preflight: {
+    uncertainty: Text,
+    inspected_evidence: [ArtifactDigest],
+    already_determined: Boolean,
+    cheapest_sufficient_check: Text,
+    failure_signal: Text
+  },
+  verification_plan: {
+    certificate_shape: Text,
+    checker_method: Text,
+    producer_seconds: PositiveInteger,
+    checker_seconds: PositiveInteger,
+    checker_cap_seconds: PositiveInteger,
+    fallback: Text,
+    max_input_bytes: PositiveInteger
+  }
+}
+FiniteDomain = Scope(kind="case_ids"|"integer_interval") |
+  {kind: "bounded_encoding", encoding_digest: ArtifactDigest,
+   max_instances: PositiveInteger}
+Basis common fields = {
+  kind: "root_finite_scope"|"finite_residue"|"diagnostic"|"standalone"|"counterexample",
+  deduction_digest: ArtifactDigest,
+  dependencies: [{acceptance_id: AcceptanceID,
+                  acceptance_digest: SHA256(Acceptance), claim_digest: SHA256(Claim)}],
+  completeness_acceptance_id: AcceptanceID|null,
+  bound_acceptance_id: AcceptanceID|null
+}
+finite_residue adds exactly {reduction_acceptance_id: AcceptanceID}.
+```
+
+Every non-null acceptance reference must occur in `dependencies`. Deduction,
+encoding and inspected-evidence artifacts are nonempty immutable bytes imported
+through the existing explicit `inputs` list. Bound acceptances pin their entire
+accepted records and exact claims. Their transitive proof dependencies must remain
+accepted, meet the proposal's proof policy and introduce no additional assumptions.
+Admission and each launch audit the original immutable proof artifacts and reviews.
+
+`root_finite_scope` requires an actual subdomain of the original finite root.
+For `bounded_encoding`, the proposal claim supplies the finite scope compared
+with the root; accepted completeness and bound evidence must establish that the
+exact encoding covers that scope. Parameter inclusion alone is insufficient.
+`finite_residue` requires an accepted proof of the exact root route's bridge,
+including its pinned route content, with the target among its premises. The target
+has an explicit finite scope. Every other unresolved premise also has an explicit
+finite scope; an unresolved named or infinite tail is refused. Finite siblings
+need not already be proved. A proposed route alone grants no computation basis.
+
+`diagnostic` uses the proposal's reviewed necessity, outcome/action map and stopping
+condition. `standalone` requires the existing standalone significance record and
+its two independent proposal approvals. `counterexample` requires
+`task.kind: counterexample_search`. These purposes may have null completeness and
+bound references; a proof-producing bounded encoding always requires both. These
+are recorded semantic reviews. The controller does not decide mathematical
+relevance or encoding completeness by comparing prose.
+
+The existing independent proposal review binds the entire computation contract.
+Its scope finding must assess completeness for the exact claim and encoding, and
+its necessity finding must assess preflight evidence, the cheapest sufficient
+check, the existing outcome/action map and the proposed verification plan. No
+duplicate computation review is required for an unchanged version 2 proposal.
+`already_determined: true` refuses a producer. A separately admitted verification
+role can still check exact existing inputs through its independent native
+input-review contract; it cannot use a generic command to repeat production.
+
+All plan durations and the byte allowance are positive integers. Expected checker
+time cannot exceed `checker_cap_seconds`, and all durations remain within the
+original node timeout allowance. Native checking is capped by the admitted checker
+cap. The byte allowance and producer/checker estimates are typed declarations for
+subsequent execution measurement and byte-I/O work; this task adds neither a new
+executor nor runtime byte accounting. The examples and test fixtures use
+`max_input_bytes: 67108864` (64 MiB). A larger value needs explicit review as part
+of the same immutable contract. Existing move, command-unit and worker limits
+remain unchanged.
+
+Historical finite nodes require a retrospective amendment before a new run:
+
+```text
+exactory-math search amend-computation NODE --spec amendment.json \
+  --expected-revision REV --request-id REQUEST --json
+amendment.json = {proposal_digest, computation: ComputationContract,
+                  review: ResultReview,
+                  inputs: [{path: RelativeAttackRootPath, digest: Digest,
+                            kind: "artifact"|"blob"}]}
+review subject = {node_id: NODE, proposal_digest, computation}
+```
+
+The original proposal digest binds task, claim, method, limits and account. A
+finite structured claim retains its exact domain; a material scope change needs
+a reviewed successor on the existing account. For historical textual domains,
+the independent review must establish exact correspondence to the original task.
+An amendment adds guarantees once and is immutable. It does not allocate resources,
+resume a paused objective, edit the original proposal or review, change native
+journals, or reinterpret historical output. Its pinned subject, review and basis
+artifacts are audited before subsequent work. An unchanged retry retains the same
+account and scope and receives the existing per-run charge.
+
+Every actual terminal run with a computation digest needs explicit interpretation:
+
+```text
+exactory-math search interpret RUN --spec interpretation.json \
+  --expected-revision REV --request-id REQUEST --json
+interpretation.json = {
+  result_digest: Digest, computation_digest: Digest,
+  outcome: Text|null, inconclusive_reason: Text|null,
+  classification: "observation"|"audit_only"|"undecided"|
+                  "proof_candidate"|"counterexample_candidate",
+  root_decision: {kind: "undecided"|"proof_candidate"|"counterexample_candidate",
+                  reason: Text},
+  remaining_obligation_ids: [ObligationID], next_action: Text
+}
+```
+
+Exactly one of outcome and inconclusive_reason is non-null. A declared outcome
+and its next action must match the existing admitted necessity map. The immutable
+interpretation additionally pins `run_id: RUN`. Actual result bytes, command argv,
+stdout, stderr and declared output artifacts are audited; arbitrary stdout is not
+parsed for a mathematical verdict. An explicit `UNKNOWN` outcome, inconclusive
+interpretation, timeout, cancellation or other failed run cannot claim a theorem
+candidate. Successful exit codes alone supply no proof acceptance.
+
+A candidate root decision requires matching candidate classification and a
+non-standalone root connection. A partial or standalone theorem candidate may
+leave `root_decision.kind: undecided`, with a reason stating what remains open.
+Finite decisions and diagnostic/audit-only results cannot become theorem
+candidates. Interpretation itself supplies neither acceptance nor execution
+authority, and it cannot overwrite a previous interpretation.
+
+After live-work ownership and required journal reconciliation, `next` returns
+`{kind:"interpret_run",run_id,node_id}` before another mathematical launch anywhere
+in the objective. Renaming or admitting another node does not clear this gate.
+Pause, unresolved native intents and live runs retain their existing precedence.
+Journalling and reconciliation remain available, including before a retry.
+Read-only status and next never create interpretations.
+
+The existing event log carries the following typed service operations:
+
+```text
+amend-computation -> computation_amended: {subject, review, digest: SHA256(subject)}
+interpret -> run_interpreted: {interpretation, digest: SHA256(interpretation)}
+```
+
+Replay stores them in `service.computation_amendments` keyed by node ID and
+`service.run_interpretations` keyed by run ID. These are projections of the same
+event log, not another task database, scheduler or event store.
+
 ## Metered execution and native integration
 
 The four-field document and event envelopes below remain unchanged. Execution
@@ -104,7 +268,7 @@ journal_acknowledged: {node_id, move, reservation_id,
   journal_prefix_digest, problem_digest}
 run_reserved: {run: RunReservation}
 RunReservation = {id, node_id, account_id, reservation_id, kind, input_digest,
-  spec_digest, task, cwd, snapshot_root, output_root, commands, timeout_seconds,
+  spec_digest, task, computation_digest, cwd, snapshot_root, output_root, commands, timeout_seconds,
   environment, threads, expected_outputs, dependency_enumeration,
   executable_bindings, reserved_units, token, requested_declaration,
   requested_type_digest, toolchain_digest, toolchain_inventory_digest,
@@ -315,7 +479,7 @@ obligations. No symbolic set parser or inference from prose is provided.
 ## Proposal
 
 ```text
-schema_version: 1
+schema_version: 1 | 2
 author: Provenance
 category: "main" | "coverage" | "standalone"
 relationship: "main" | "prerequisite" | "coverage" | "alternative" |
@@ -348,6 +512,7 @@ task: {
   kind: "proof" | "finite_decision" | "finite_proof" | "counterexample_search",
   purpose: Text, input_domain: Text
 }
+computation: ComputationContract | null  (required in version 2; absent in version 1)
 limits: {
   max_moves: Integer[1,24], max_runs: PositiveInteger,
   timeout_seconds: PositiveInteger, workers: PositiveInteger

@@ -353,6 +353,9 @@ def admit_proposal(state, payload):
     proposal = record["record"]
     review_ids = approving_reviews(state, record["id"], proposal)
     graph, target = validate_proposal_context(state, proposal, record["id"])
+    if proposal.get("computation") is not None:
+        from .computation import validate_basis
+        validate_basis(state, proposal, proposal["computation"])
     s.require(state["control"]["nonprogress_replans"] < 3, "Three replans without verified progress require a pause", "replan_limit")
     for resource in ["moves", "runs"]:
         cap = state["contract"]["resource_policy"]["max_total_" + resource]

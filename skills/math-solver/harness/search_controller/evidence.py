@@ -141,6 +141,9 @@ def import_inputs(root, inputs, content):
 
 
 def proposal_inputs(proposal, content):
+    if proposal.get("computation") is not None:
+        from .computation_io import computation_inputs
+        computation_inputs(proposal["computation"], content)
     studies = proposal["studies"]
     required = [studies["problem"], studies["novelty"]] + [v["digest"] for v in studies["strategies"]]
     standalone = proposal["contribution"]["standalone"]
@@ -174,6 +177,9 @@ def audit_admission(root, state, proposal, content):
     """Revalidate the proposal's evidence and accepted budget basis under lock."""
     s.validate_proposal(proposal)
     _, target = validate_proposal_context(state, proposal, None)
+    if proposal.get("computation") is not None:
+        from .computation_io import audit_computation
+        audit_computation(root, state, proposal, proposal["computation"], content)
     account = resolve_proposal_account(state, proposal, target)
     checkpoint_ids = set()
     if proposal["anchor"]["kind"] == "checkpoint":
