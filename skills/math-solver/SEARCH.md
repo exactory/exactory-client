@@ -1231,8 +1231,10 @@ Public command specs are closed records:
 
 `status` and `next` are read-only and need no revision or request ID.
 Every other public command uses the current `--expected-revision` and a unique
-`--request-id`; `admit` and the read-only commands are the only entries above
-whose `--spec` can be omitted. Place `--attack-root` before `search`. For example:
+`--request-id`. Commands whose table row defines a nonempty spec require
+`--spec FILE`; `admit` accepts an optional empty spec, while `reconcile`, `audit`,
+and `render` have no `--spec` option. Place `--attack-root` before `search`. For
+example:
 
 ```sh
 exactory-math --attack-root attack search propose --spec proposal.json \
