@@ -217,11 +217,14 @@ def qualifying_progress(state, checkpoint_id, expected_digest):
     s.require(s.digest(checkpoint) == expected_digest, "Renewal checkpoint differs", "digest_mismatch")
     return checkpoint["kind"] in {"proof", "reduction", "obstruction"} and any(
         item["checkpoint_id"] == checkpoint_id and item["checkpoint_digest"] == expected_digest
-        and item["status"] == "accepted" for item in state["acceptances"].values())
+        and item["status"] == "accepted" and item.get("progress_eligible", True)
+        for item in state["acceptances"].values())
 
 
 def progress_identity(checkpoint):
     """Renaming a checkpoint does not change its recorded mathematical progress."""
+    if "claim" in checkpoint:
+        return s.digest({"claim": s.claim_identity(checkpoint["claim"]), "kind": checkpoint["kind"]})
     return s.digest({key: value for key, value in checkpoint.items() if key != "id"})
 
 

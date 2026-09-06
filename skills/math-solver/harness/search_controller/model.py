@@ -3,7 +3,12 @@
 import copy
 
 from . import schema as s
-from .admission import EVENT_HANDLERS, obligation_record
+from .admission import EVENT_HANDLERS as ADMISSION_HANDLERS, obligation_record
+from .proof import EVENT_HANDLERS as PROOF_HANDLERS
+from .scheduler import EVENT_HANDLERS as SCHEDULER_HANDLERS, initial_control
+
+
+EVENT_HANDLERS = dict(ADMISSION_HANDLERS, **PROOF_HANDLERS, **SCHEDULER_HANDLERS)
 
 
 def initial_state(contract, objective_id):
@@ -17,7 +22,7 @@ def initial_state(contract, objective_id):
         "obligations": {root: obligation_record(root, contract["original_claim"])},
         "routes": {}, "nodes": {}, "proposals": {}, "reviews": {}, "accounts": {},
         "checkpoints": {}, "acceptances": {}, "runs": {},
-        "control": {"nonprogress_replans": 0},
+        "control": initial_control(),
         "totals": {"used_moves": 0, "used_runs": 0, "reserved_moves": 0, "reserved_runs": 0,
                    "historical_usage": "known"},
         "next_ids": {kind: 2 if kind == "obligation" else 1 for kind in kinds},

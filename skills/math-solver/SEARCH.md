@@ -1,9 +1,10 @@
 # Mathematical search controller JSON contract
 
-This document defines the executable Task 2 interfaces for the persistent search
+This document defines the executable Task 2 and Task 3 interfaces for the persistent search
 controller. It does not authorize execution, publish results, or replace the
-existing math-solver workflow. Proof acceptance, checkpoints, scheduling, execution,
-CLI commands, and host adapters are implemented by subsequent tasks.
+existing math-solver workflow. Checkpoints, proof acceptance, and scheduling are
+pure logic. Filesystem evidence verification, execution, CLI commands, and host
+adapters are implemented by subsequent tasks.
 
 ## Pure model and storage integration
 
@@ -30,6 +31,14 @@ Supported events and exact payloads:
 | `proposal_recorded` | `{"proposal": Proposal, "digest": SHA256(Proposal)}` |
 | `review_recorded` | `{"proposal_id": ID, "review": Review, "digest": SHA256(Review)}` |
 | `proposal_admitted` | `{"proposal_id": ID}` |
+| `checkpoint_recorded` | `{"checkpoint": CheckpointInput, "digest": SHA256(CheckpointInput)}` |
+| `result_accepted` | `{"acceptance": AcceptanceInput, "digest": SHA256(AcceptanceInput)}` |
+| `evidence_invalidated` | `{"acceptance_ids": [ID], "reason": Text, "provenance": Provenance}` |
+| `objective_completed` | `{"closure": Closure, "digest": SHA256(Closure)}` |
+| `node_facts_recorded` | `{"facts": NodeFacts}` |
+| `node_retreated` | `{"retreat": Retreat}` |
+| `replan_recorded` | `{"route_orders": [RouteOrder], "progress_acceptance_ids": [ID], "reason": Text}` |
+| `control_recorded` | `ControlInput` |
 
 Digests use `SHA256(canonical_bytes(record))`. Canonical JSON is sorted-key,
 compact, UTF-8, finite JSON, with Unicode preserved. Records are inline in the
@@ -398,3 +407,370 @@ decision="approve")`. `decomposition_proposal()` supplies a root interval split
 into two exact finite pieces and an explicit open bridge. The checkpoint and
 successor helpers are internal pure-test fixtures only; they are not CLI inputs
 and do not bypass the eventual evidence service.
+
+## Checkpoints and accepted results
+
+All events added by Task 3 are internal reducer events. The public service must
+construct them after validating actual artifacts and host/operator provenance.
+It must never expose arbitrary event injection or accept a public verification
+flag in place of those checks. Pure replay checks bindings and logical sufficiency;
+it neither authenticates a person nor opens an evidence file.
+
+`CheckpointInput` has exactly:
+
+```text
+schema_version: 1
+kind: "proof" | "reduction" | "obstruction" | "hypothesis"
+claim: Claim
+origin: JournalOrigin | ExternalOrigin
+evidence_digests: [SHA256]
+verification_status: "pending"
+what_changed: Text
+remaining_obligation_ids: [ObligationID]
+next_hypothesis: Text
+milestone_id: Text | null
+```
+
+Evidence is nonempty except for hypotheses. The reducer adds its stable `id` to
+the stored checkpoint; all later bindings use the digest of this complete stored
+record, including `id`. The pending status is immutable snapshot metadata.
+Acceptance is represented separately and never edits the checkpoint.
+
+```text
+JournalOrigin = {
+  kind: "journal_move", node_id: NodeID, move: Integer[1,24],
+  journal_prefix_digest: SHA256
+}
+ExternalOrigin = {
+  kind: "external_result", source: Text, source_digest: SHA256,
+  statement: Text, statement_digest: SHA256(Claim), study_digest: SHA256
+}
+```
+
+External `statement` equals the claim's statement; its digest covers the entire
+claim, including scope and assumptions. It has null `milestone_id` and never
+fabricates a journal move. Sources, studies, and evidence are immutable pinned
+inputs. Neither origin contains its own review, avoiding a content-digest cycle.
+
+A local origin requires a declared milestone of its admitted producer. For
+`accepted_obligation`, `accepted_case_set`, or `verified_reduction`, the checkpoint
+claim must equal the named milestone obligation. For `verified_obstruction` or
+`hypothesis_recorded`, it must equal the producer's admitted claim. Permitted
+checkpoint kinds are respectively proof, proof, reduction, obstruction, and
+hypothesis. This permits a reviewed, predeclared intermediate output but forbids
+arbitrary cross-node claim capture. The service additionally checks that the
+pinned journal prefix really belongs to this producer, the move was properly
+reserved and journalled, and the admitted milestone corresponds to the actual
+result snapshot. A matching integer move number alone is not that check.
+
+`AcceptanceInput` has exactly:
+
+```text
+schema_version: 1
+checkpoint_id: CheckpointID
+checkpoint_digest: SHA256(StoredCheckpoint)
+obligation_id: ObligationID | null
+outcome: "proof" | "counterexample" | "reduction" | "obstruction"
+classification: "analytical" | "computational"
+standard: "reviewed" | "certificate" | "lean-kernel"
+dependency_ids: [AcceptanceID]
+route_bindings: [RouteBinding]
+review: ResultReview
+audit: ResultAudit
+```
+
+The target claim, quantifiers, scope, proof policy, and assumption context must
+match the checkpoint structurally. Implications require their own exact target
+and bridge. Null target is permitted only for an admitted standalone local
+producer with an exact matching claim. Hypotheses and no-hit outcomes cannot be
+accepted. A proof checkpoint permits proof or counterexample; obstruction permits
+obstruction. A reduction checkpoint permits reduction (nonclosing progress), or
+proof when it proves the exact targeted reduction/implication under all normal
+proof checks. Only `outcome: proof` can supply a premise or bridge. A reduction
+label by itself does not imply its conclusion.
+
+```text
+ResultReview = {
+  subject_digest: SHA256(StoredCheckpoint), claim_digest: SHA256(Claim),
+  reviewer: Provenance, decision: "approve",
+  findings: {statement: Text, assumptions: Text, scope: Text,
+             dependencies: Text, policy: Text}
+}
+ResultAudit = {
+  subject_digest: SHA256(StoredCheckpoint), dependency_ids: [AcceptanceID],
+  evidence_digests: [SHA256], provenance: Provenance
+}
+RouteBinding = {
+  route_id: RouteID, route_digest: SHA256(CurrentRoute),
+  case_obligation_ids: [ObligationID], shared_prerequisite_ids: [ObligationID],
+  discharged_assumption_ids: [ObligationID]
+}
+```
+
+Review is distinct from proposal review and binds the full stored checkpoint
+and exact claim. A local producer cannot supply its own result review. The audit
+lists must exactly match the acceptance dependencies and checkpoint evidence.
+The service supplies an audit only after checking freshness of the complete
+transitive immutable dependency closure, manifest completeness, actual proof
+policy checks, and the pinned review. It classifies computational claims from
+their actual evidence; callers cannot relabel a computation as analytical.
+
+Analytical reviewed bridges can satisfy certificate policy. Every computational
+claim in their dependency closure must meet certificate policy. Lean-kernel
+requirements apply to all contributing claims and bridges, including dependencies
+whose local claim requested a weaker policy. Local stronger requirements also
+remain binding when a parent requests a weaker policy. The service must check
+the real checker/completeness review or requested Lean declaration, build,
+inspection and permitted axioms before emitting the corresponding standard.
+
+Dependencies must already be accepted proofs, must remain usable, and cannot
+refer back to the same checkpoint or drop extra assumptions. Graph propagation
+uses all premises AND an explicitly accepted bridge; alternative routes are OR.
+A route binding must be supplied by the exact bridge's proof acceptance and
+must pin that route. The stored acceptance adds `route_content_digests`, which
+hash each bound route excluding mutable status and alternative order. Reordering
+work does not change an accepted theorem.
+
+Case and common-prerequisite lists are disjoint subsets of the route premises.
+When cases are listed, together they must name every premise. Every admitted
+coverage node must be explicitly listed as a case by its bridge. The service's
+independent scope review must distinguish whole cases from scalar components;
+the controller does not infer that distinction from prose. Each case scope must
+be inside the finite parent scope. Interval unions use endpoint-aware interval
+operations, not integer enumeration, and overlap is counted once. Missing cases,
+an unproved common prerequisite, a dropped assumption, or an insufficient bridge
+policy prevents the affected coverage. Named infinite domains have no finite
+fraction and require their quantified bridge or tail obligations.
+
+Discharged assumptions are explicit route premises with proofs under the parent
+assumption context. An assumption cannot discharge itself. More complicated
+conditional chains must expose the necessary intermediate obligations. A
+conditional theorem proves its stated implication, not its consequent without
+the hypothesis. Direct proofs of the exact root need no artificial bridge.
+
+Stored acceptances add `id`, `status: accepted | invalidated`,
+`route_content_digests: {RouteID: SHA256}`, `progress_key: SHA256`, and
+`progress_eligible: Boolean`. The latter fields are derived, never caller inputs.
+Progress identity normalizes the exact claim and checkpoint kind; acceptance
+additionally distinguishes proof from nonclosing reduction. A previously accepted
+mathematical result cannot regain progress credit by changing its checkpoint ID,
+origin bookkeeping, next hypothesis, evidence bytes, or run-manifest metadata.
+Historical invalidation does not grant a fresh research allowance either.
+New accepted claims/reductions/obstructions can qualify. Semantic duplication
+still requires the admission/result review boundary.
+
+`qualifying_progress` consumes the full checkpoint digest and accepted status as
+before, and now also requires derived `progress_eligible` for Task 3 records.
+Historical minimal Task 2 fixture records retain compatibility. Renewal identity
+for complete checkpoints uses normalized claim plus kind, preventing copy-based
+renewal even if a new acceptance is requested. Replan progress keys are consumed
+at most once. Valid old proofs remain reusable even when they confer no new budget.
+
+Pure proof functions are:
+
+```text
+acceptance_closure(state, acceptance_id, policy) -> set[AcceptanceID] | None
+obligation_support(state, obligation_id, policy=None) -> set[AcceptanceID] | None
+root_support(state) -> {outcome: "proof" | "counterexample", acceptance_ids: [ID]} | None
+coverage(state, route_id) -> {accepted: Integer, total: Integer, remaining: List}
+checkpoint_milestone(state, checkpoint_id) -> Boolean
+```
+
+Remaining integer coverage is a list of inclusive `[lower, upper]` pairs; explicit
+cases use a list of remaining case IDs. This is an exact case count, not overall
+proof completeness. Milestones evaluate their named typed predicate and require
+matching usable acceptance, except `hypothesis_recorded`, which only records a
+hypothesis and grants no proof or renewal credit. Verified reduction recognizes
+both a nonclosing reduction and a proved reduction. Verified obstruction names
+the producer's declared route and never disproves the objective by implication.
+
+Invalidation preserves checkpoints and acceptance history, invalidates transitive
+acceptance dependencies, and recomputes obligation status. If it affects the stored
+final closure, proof becomes `invalidated` and execution reopens unless paused.
+Changing a working copy is not an invalidation input unless that copy is itself
+the referenced immutable evidence. The service must distinguish these cases.
+
+## Final closure and local delivery
+
+Root support only requests finalization. `objective_completed` alone changes
+proof status to proved/disproved. A counterexample must target the original claim;
+disproof of a premise never propagates as root disproof. A proof-only contract
+with accepted root counterexample requires the host to report that conflict and
+request user direction, while accurately retaining outcome `counterexample` or
+proof status `disproved`.
+
+`Closure` is `{subject: ClosureSubject, review: ResultReview, audit: ClosureAudit}`.
+Here ResultReview's subject digest covers `ClosureSubject`, and its claim digest
+is the original claim digest. Its reviewer is independent of every local producer.
+
+```text
+ClosureSubject = {
+  schema_version: 1, objective_id: ID, contract_digest: SHA256,
+  outcome: "proof" | "counterexample", acceptance_ids: [AcceptanceID],
+  evidence_digests: [SHA256], local_deliveries: [LocalDelivery],
+  deliverables: [{requirement: Text, digest: SHA256}]
+}
+ClosureAudit = {
+  subject_digest: SHA256(ClosureSubject), acceptance_ids: [AcceptanceID],
+  evidence_digests: [SHA256], provenance: Provenance
+}
+LocalDelivery = {
+  node_id: NodeID, inventory_digest: SHA256, checked_unit_digests: [SHA256],
+  consolidation_digest: SHA256, draft_digests: [SHA256],
+  evaluation_digests: [SHA256], handoff_digest: SHA256,
+  finish: {kind: "finished" | "local_finish_pending_unused_children",
+           unused_child_ids: [NodeID]}
+}
+```
+
+Closure binds the deterministic complete root-support set and the exact union
+of its evidence digests. Every local producer in that transitive support needs
+one delivery; unrelated nodes cannot be included. Required deliverables match
+the frozen contract exactly. Pending moves/runs, pause, unresolved state errors,
+and ambiguous focus prevent completion.
+
+The service validates the actual stage 7/8 triggers, inventory, applicable checked
+units, consolidation, drafts, evaluations and handoff, including applicability of
+empty artifact lists. It checks every referenced immutable artifact in the subject
+and its compatibility with the accepted versions before creating ClosureAudit.
+These records are service facts, not caller-supplied declarations that checks passed.
+For `finished`, the service verifies the real finish result. For the pending finish
+exception, it verifies that all contributing artifacts are checked and unused
+native children are the sole remaining local finish refusal. The reducer requires
+exactly the actual unfinished native child IDs and excludes contributing children.
+It does not mark any child or parent finished. Other local gate failures cannot use
+this exception. Root completion remains independent of unused alternative research.
+
+## Node facts, retreat and replanning
+
+`NodeFacts` are internal observations from journal/stage reconciliation:
+
+```text
+node_id: NodeID
+status: "admitted" | "active" | "waiting" | "result_ready" | "finished"
+result_action: "verification" | "snapshot" | "acceptance" | null
+cashout_action: "inventory" | "unit_checks" | "consolidation" | "draft" |
+                "evaluation" | "finish" | "handoff" | null
+waiting_on: [ObligationID]
+failed_strategies: [StudiedMethod]
+stagnation_moves: NonnegativeInteger
+external_block: Text | null
+dependency_route_ids: [RouteID]
+dependency_assumption_ids: [ID]
+```
+
+Recording facts updates local lifecycle only, never theorem truth. Terminal local
+nodes cannot restart through these facts. The service determines truthful stage
+and result actions from the native records, and counts stagnation from the declared
+test, not arbitrary model assertions. It retains recorded dependency routes and
+assumptions so retreat can suspend dependent descendants. The scheduler also
+requires the premises and bridge of a consumer's explicitly selected route;
+unproved execution prerequisites are allowed only when stated in its conditional
+claim's assumption context.
+
+```text
+Retreat = {
+  node_id: NodeID, criterion: RetreatCriterion, failed_hypothesis: Text,
+  observation: Text, last_checkpoint_id: CheckpointID | null,
+  remaining_assumption_ids: [ID], reconsideration: Text,
+  abandoned_route_ids: [RouteID], abandoned_assumption_ids: [ID]
+}
+RouteOrder = {route_id: RouteID, alternative_order: [NodeID], selected: Boolean}
+```
+
+Retreat requires a declared predicate that has fired: account move/run limits,
+observed studied-strategy failure, declared stagnation, or a usable counterexample
+to a method prerequisite. It records the reason and saved checkpoint, marks the
+node retreated, suspends logically descending investigations that depend on the
+abandoned routes/assumptions, and preserves independent accepted facts. It retains
+all accounts and historical records. Selection then tries admitted alternatives
+at the nearest ancestor before returning to root traversal.
+
+Replan preserves accounts and changes only committed alternative/selected-route
+order and round accounting. No usable new progress increments the objective round
+count; three such rounds durably pause. New usable accepted progress resets the
+round counter only once per mathematical progress identity. New checkpoint IDs,
+review prose, hypothesis records, and rerun bytes do not reset it. Only explicit
+verified resume can clear an existing pause.
+
+## Control and closed scheduler actions
+
+`ControlInput` has one of these exact shapes:
+
+```text
+{action: "pause", reason: Text}
+{action: "resume", objective_id: ID, message_id: Text, session_id: Text,
+ instruction: Text, provenance: Provenance}
+{action: "focus", focus: "focused" | "ambiguous" | "unrelated", provenance: Provenance}
+{action: "hook_stop", delivery_id: Text | null, session_id: Text | null,
+ turn_id: Text | null, stop_hook_active: Boolean | null}
+{action: "side_interval", node_id: NodeID, max_moves: Integer[1,24],
+ message_id: Text, provenance: Provenance}
+```
+
+The host/operator must authenticate explicit user instruction for resume and side
+allocation; model-authored provenance is rejected. Resume binds this objective
+and a previously unused message/session identity. It rearms objective continuation
+and controller replanning, never local accounts. Old resume instructions cannot
+rearm later pauses. Side intervals stay within the admitted node's current account
+and remaining move allowance, and are measured from its cumulative used moves.
+Main work keeps priority even during a side interval. Standalone nodes can also
+run when admitted main work is externally blocked; they confer no root coverage.
+
+Stop accounting is objective-wide, capped at 40 continuations. Repeated delivery
+IDs do not consume another count; missing IDs conservatively count each invocation.
+The 40th request durably pauses and issues one `summary_then_stop`. Later calls,
+including replay of a formerly continuing delivery after pause, permit stopping.
+Neither missing metadata nor `stop_hook_active: false` creates new authorization.
+Pause, unrelated/ambiguous focus, resolution and genuine blockers permit handoff.
+Delivery replay is objective-local; the host must normalize delivery identity
+without reusing one identifier for distinct observed deliveries.
+
+`next_action(state)` returns exactly one of these closed shapes and performs no I/O:
+
+```text
+{kind: "paused", reason: Text}
+{kind: "blocked", reason: Text}
+{kind: "handoff", reason: Text}
+{kind: "resolved", proof_status: "proved" | "disproved"}
+{kind: "execution_pending", run_id: RunID, status: "launched" | "indeterminate"}
+{kind: "reconcile_move", move_id: ID}
+{kind: "reconcile_run", run_id: RunID}
+{kind: "prepare_result", node_id: NodeID, step: "verification" | "snapshot" | "acceptance"}
+{kind: "finalize_root", outcome: "proof" | "counterexample", acceptance_ids: [AcceptanceID]}
+{kind: "local_cashout", node_id: NodeID, step: CashoutAction}
+{kind: "execute_node", node_id: NodeID}
+{kind: "retreat", node_id: NodeID, criterion: RetreatCriterion}
+{kind: "replan", round: PositiveInteger, obligation_ids: [ObligationID]}
+```
+
+Priority is pause/state errors/focus/live execution, pending reconciliation,
+produced-result verification/snapshot/acceptance, root finalization, due local
+cash-out, active main work and its continuation, waiting prerequisites, nearest
+ancestor alternative, root-route traversal, and bounded replanning. A successful
+B can select ready C without any active parent. Local cash-out remains possible
+after research exhaustion. New verification requires a current account and
+remaining moves/runs; accepting historical immutable evidence does not require
+a current account or a rerun. Stable creation IDs break otherwise equal choices.
+
+`control.stop_decision` is one of:
+
+```text
+{kind: "allow_stop"}
+{kind: "summary_then_stop", reason: Text}
+{kind: "continue", action: NextAction}
+```
+
+Derived control fields are `nonprogress_replans`, `progress_fingerprints`,
+`stop_count`, `stop_deliveries` (delivery ID to decision), `summary_issued`,
+`stop_decision`, `pause_reason`, `focus`, `state_error`, `active_node_id`,
+`retreat_node_id`, `pending_moves`, `node_facts`, `selected_routes`, `closure`,
+`main_external_block`, `side_interval`, `resume_record`, `resume_ids`,
+`side_instruction_ids`, and `retreats`. All live in the single replayed state.
+Node-fact entries add derived `suspended: Boolean`; retreat may create an entry
+containing only that suspension field before service facts arrive. Initial nullable
+references are null, collections empty, focus focused, counters zero, and initial
+Stop decision allow_stop. Side intervals store `node_id`, `account_id`,
+`start_used_moves`, and `max_moves`. Pending move identities and unresolved
+execution errors are reserved integration fields for the subsequent execution
+reducer; they are not public flags and Task 3 does not invent executor events.
