@@ -13,8 +13,12 @@ Spec: `docs/superpowers/specs/2026-09-05-math-search-controller.md`
 Approved on 2026-09-06: also implement
 `docs/superpowers/specs/2026-09-06-math-search-retrospective-addendum.md` and
 `docs/superpowers/specs/2026-09-06-math-search-progress-addendum.md`.
-Preserve completed Tasks 1-6. Execute new Tasks 9-12 next, then pending Tasks 7-8,
-then independent whole-branch review and the authorized merge flow.
+Preserve completed Tasks 1-6. On 2026-09-06 the user requested an earlier usable
+version because other agents are waiting. Finish and review Task 9, then execute
+Tasks 7-8 against that implemented scope, perform the independent whole-branch
+review, and merge/push 0.34.0 through local-dev, dev and main. Continue Tasks 10-12
+after that first release, followed by Task 13's documentation/integration follow-up.
+The priority change does not waive known defects, reviews or release gates.
 
 ## Global Constraints
 
@@ -540,7 +544,9 @@ regenerate Codex entrypoints. Behavioral artifacts stay in the research workspac
 
 Interfaces: documentation describes the real executable schema/CLI, not a parallel
 manual implementation. Existing strategy semantics and local stages stay intact.
-This task follows approved Tasks 9-12. The saved control/current conditions already
+For the early 0.34.0 release this task follows approved Task 9 and Tasks 1-6.
+Tasks 10-12 remain approved follow-up work, not available APIs. The saved
+control/current conditions already
 exist in the plan-scoped behavioral handoff; do not recollect those baselines.
 
 - [ ] Before changing SKILL guidance, collect fresh-context no-guidance controls and
@@ -560,18 +566,22 @@ exist in the plan-scoped behavioral handoff; do not recollect those baselines.
   prefix/tail split is not a finite reduction. Tests consume saved certificates
   without silently rerunning producers. Do not claim enforcement over unreported
   tool calls, internal solver counts, or in-context reasoning.
-- [ ] Document explicit cancellation separately from pause, typed local reviews and
-  literature outcomes separately from root proof, and evidence-only cash-out. Route
-  the three-extraction/returned-children state through the actual lawful aggregation
-  transition. Link the generated parent progress view without subjective percentages.
+- [ ] Document actual pause, native local finish, exact root acceptance and
+  evidence-only cash-out semantics. Explicitly disclose that immediate owned
+  cancellation, typed local-package/literature receipts and the parent progress
+  report belong to pending Tasks 10-12. Do not give commands that are not implemented.
+  A local finish or literature hit still cannot replace the original formalization
+  request. Do not claim a new lawful aggregation transition before its actual test.
 - [ ] Provide one runnable tiny end-to-end example with real JSON specs, review trust
   disclosures, proof/decision distinctions, and exact outputs. Test the example by
   executing its commands against a temporary research workspace, not grepping the text.
 - [ ] Run fresh-context forward pressure tests with the updated skill and runtime.
   For behavioral wording comparisons use five samples per compared condition;
   verify all flagged cases manually and include separate high-pressure scenarios.
-  Include all prewritten forward cases F-R, retaining the genuine finite-residue
-  and standalone-result positive controls. Do not show participants the rubric.
+  Include all prewritten forward cases F-R for the implemented policy and APIs,
+  retaining the genuine finite-residue and standalone-result positive controls.
+  Explicitly distinguish policy-level/manual limits from pending deterministic
+  enforcement. Do not show participants the rubric.
 - [ ] Validate skill frontmatter using the supplied validator, regenerate Codex files,
   run all documentation examples and relevant suites, self-review, and commit.
 
@@ -580,8 +590,9 @@ exist in the plan-scoped behavioral handoff; do not recollect those baselines.
 Files: modify both plugin manifests, manifest tests, release notes and release-facing
 README as needed; add focused integration tests for discovered cross-task defects.
 
-Interfaces: no new workflow API. Consume all implemented surfaces and verify the
-approved spec scenario matrix. The final reviewer evaluates the whole branch diff.
+Interfaces: no new workflow API. Consume implemented Tasks 1-6/9 and verify their
+approved scenario matrix. Tasks 10-12 are not represented as shipped. The final
+reviewer evaluates the whole branch diff before the early release.
 
 - [ ] Exercise a complete tiny objective with AND/OR routes, partial accepted coverage,
   failed alternative, successful continuation, native-child pending local finish,
@@ -590,13 +601,25 @@ approved spec scenario matrix. The final reviewer evaluates the whole branch dif
 - [ ] Attempt admission, budget, stale-evidence, arbitrary-event, legacy verify, and
   hook normalization bypasses. Add a failing test for each actual defect before fixing.
 - [ ] Include retrospective regressions for required interpretation, typed finite
-  residue, ignored cooperative interruption, cancellation acknowledgement, stale
-  local review, UNKNOWN/log-audit nonproof, append-only progress, and lawful returned
-  child aggregation. Resolve the deferred actionable native-recovery diagnostic and
+  residue, preserved historical reservation/result replay, and UNKNOWN/log-audit
+  nonproof. Keep cancellation, bounded byte capture, typed local review, parent
+  progress and the specific returned-child aggregation regression assigned to
+  Tasks 10-12 and their follow-up release, not silently waived or claimed complete.
+  Resolve the deferred actionable native-recovery diagnostic and
   expected argparse stderr finding by code/assertions, never suppressing a gate.
+- [ ] Include the small retrospective-derived streaming-hash fix before release:
+  reuse evidence.file_digest for external dependency/executable identity checks
+  that still call read_bytes in evidence.py and execution.py. Test actual digest
+  agreement, changed-file rejection and bounded read requests on small real files.
+  Do not allocate enormous test inputs. This is bounded-memory hashing, not total
+  local snapshot-byte enforcement; retain that separate Task 10 requirement.
 - [ ] Set both manifest versions to `0.34.0`, update pinned manifest expectations and
   release notes, and regenerate Codex artifacts. Do not alter marketplace settings
   unrelated to versioned source delivery.
+  Include an upgrade notice for waiting agents: exact released scope, pending
+  additions, explicit adoption with inherited budgets, pause preservation, and
+  source release versus installed host/trust state. Do not migrate running research
+  or change any agent's installation automatically.
 - [ ] Run `python3 -m unittest discover -s tests -v` and
   `python3 -m unittest discover -s skills/math-solver/harness/tests -t skills/math-solver/harness -v`.
   Run syntax/JSON validation, `python3 codex/generate.py --check`, and the existing
@@ -764,7 +787,8 @@ def test_cancel_is_acknowledged_without_refunding_started_work(self):
 - [ ] Bound total local snapshot bytes using the declared max_input_bytes before
   materializing them. Stat preflight alone is insufficient: bounded reads must
   reject growth during capture. Stream file hashes for read-only external tools
-  and dependencies. Apply equivalent explicit caps to native proof verification,
+  and dependencies, preserving the early-release Task 8 streaming fix rather than
+  reimplementing or relabelling its evidence. Apply equivalent explicit caps to native proof verification,
   bound in its existing input review; update exact subject helpers and fixtures.
   Do not silently cap a successful snapshot or label this an OS memory sandbox.
 - [ ] Record producer versus checker role and measured elapsed execution seconds
@@ -917,6 +941,29 @@ def test_replay_preserves_old_entries(self):
   partial/all-case-with-open-bridge/root-complete views, and supported shell/patch
   protection including containing-directory operations. Run focused storage/progress/
   hook suites, update SEARCH.md, self-review and commit.
+
+## Task 13: Follow-up skill alignment and integrated release
+
+Run only after the early 0.34.0 release and approved Tasks 10-12. This is a distinct
+integration scope for newly implemented APIs, not a rerun of the early-release
+baseline or a replacement for the original objective.
+
+Files: shared math-solver instructions and SEARCH examples, generated Codex
+entrypoints, integration tests, release notes and both manifests as required.
+
+- [ ] Extend the already aligned skill with actual owned cancellation, typed
+  local-package/literature receipts, the tested aggregation route, measured/bounded
+  execution inputs and parent progress reporting. Preserve all earlier controls.
+- [ ] Execute the updated examples and focused pressure tests for changed guidance,
+  retaining earlier exact responses and scoring without recollecting controls that
+  were not changed. Reassess any prewritten case whose deterministic support differs.
+- [ ] Join the Task 10-12 regression surfaces with the existing full workflow and
+  rerun the unchanged release/coverage gates on the final bytes. Choose the next
+  version from actual repository state; never replace the already shipped 0.34.0
+  history or reuse its exact test evidence for changed source.
+- [ ] Obtain independent task and whole-branch review, resolve findings, then use
+  the authorized ordered merge/push flow. Publish the exact remaining limitations.
+  No plugin installation, hook trust change or research migration is implied.
 
 ## Plan self-review and acceptance mapping
 
