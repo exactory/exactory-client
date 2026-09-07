@@ -45,6 +45,16 @@ transaction lock used to capture native snapshots. `task list` and `status`
 remain available. Task maintenance does not consume research budget or require
 a new move, and remains available after local finish when recovery is clear.
 
+An already-interrupted legacy rank with subsequently corrected inputs is not
+automatically repaired. The narrowly scoped, independently reviewed operator
+abandonment operation is documented in [RANK_RECOVERY.md](RANK_RECOVERY.md).
+It preserves the original intent and input history without recording success.
+
+A problem refinement during a reserved move is recorded with its original and
+updated snapshots. The admitted claim, original reservation and budget remain
+unchanged. See [JOURNAL_TRANSITIONS.md](JOURNAL_TRANSITIONS.md) for journal
+ownership, interrupted writes, and exact-preimage recovery of older reservations.
+
 ## Test
 
 From the plugin root:
@@ -53,7 +63,7 @@ From the plugin root:
 python3 -m unittest discover -s skills/math-solver/harness/tests -t skills/math-solver/harness
 ```
 
-223 tests, one module per command or pure function, plus
+Tests are grouped by command or pure function, plus
 `tests/test_journal_rules.py` for the flow rules `journal add` enforces.
 The strategy files
 they read are the fixtures under `tests/fixtures/strategies/` (five
@@ -74,7 +84,7 @@ found.
 | `check-problem <slug>` | validates `problem.json`: every key present, no empty strings, `direction` and `mode` from the allowed sets; prints `problem.json: ok` |
 | `plan <slug>` | validates `preconditions.json` against the strategy files and `problem.json`, writes `openings.json` with every strategy whose verdict is not `no` (yes before unknown, name order within, each with its component and declared costs), prints them; refuses to run while `study/problem.md` is missing or empty |
 | `rank <slug>` | validates `ranking.json` against the openings (every one exactly once, each row citing a `problem.json` field or a cost the strategy declares) and prints the order the solver chose |
-| `journal add <slug> --json '<move>'` | validates and appends the native move. Managed work first reserves its exact strategy, entry, pass, triggers and citations with `search begin`; the controller acknowledges the exact appended prefix |
+| `journal add <slug> --json '<move>' [--problem-before PATH]` | validates and appends the native move under shared journal ownership. Managed work first reserves its exact strategy, entry, pass, triggers and citations with `search begin`; the controller acknowledges the exact appended prefix and any validated problem transition. The optional path supplies an older reservation's exact original problem value |
 | `budget <slug>` | prints moves used in this pass and overall, passes used, and whether a stall is due |
 | `fail <slug> <strategy>` | sets the strategy's verdict to `no` with a `note` and a `failed_after_move` stamp, then runs `plan` |
 | `verify lean <slug> <step-dir>` | after exact input review, routes the requested declaration and type through the controller's frozen bounded build and inspection; writes native `result.json`, which remains evidence until controller interpretation, audit and acceptance |

@@ -200,7 +200,9 @@ begin NODE --spec FILE:
   {strategy: Text, entry: Text, pass: Int[1,3],
    trigger_features: [Text], step_cites: [Text]}
 reconcile:
-  {} (the CLI takes no --spec)
+  {} (ordinary recovery; omit --spec or supply an empty object)
+reconcile --spec FILE:
+  {rank_recovery: ReviewedRankRecovery} (see harness/RANK_RECOVERY.md)
 run NODE --spec FILE:
   Common plus exactly one tagged variant below
 Common = {kind: "command"|"certificate"|"lean", step_dir: RelativeStepName,
@@ -220,8 +222,23 @@ All mutations retain expected-revision and request-ID checks. Begin derives the
 next move number and legal walk from the actual native record. Studies, admitted
 strategy, claim, pass and native flow limits must match. A move is not an
 unmetered planning token: its eventual journal line must bind exactly that entry,
-pass, walk, triggers, citations, problem digest, and prior journal bytes. The
-native journal schema remains unchanged, including its derived problem digest.
+pass, walk, triggers, citations, and prior journal bytes. Begin preserves the
+native canonical problem bytes under the reservation's problem digest. If the
+problem changes during that move, the journal intent records both problem
+values and its exact native line. Both values must validate and retain the
+admitted claim. The reservation keeps its original digest; the intent and
+acknowledgment bind the updated digest. The native journal schema remains
+unchanged, including its derived problem digest and its existing
+`problem_changed` comparison with the previous journal line or plan.
+
+Normal journal writers and reconciliation share nonblocking per-node ownership
+through durable acknowledgment. Recovery validates the frozen append before
+writing it, appends at most once, and charges the original reservation once.
+Existing reservations without a stored preimage can supply the exact original
+problem value with `journal add --problem-before PATH`. See
+[JOURNAL_TRANSITIONS.md](harness/JOURNAL_TRANSITIONS.md) for the recovery and
+version boundaries. A problem transition does not change frozen run inputs,
+authorize a new claim or workload, accept a proof, or reset a budget.
 
 Generic commands require an admitted finite task and its reviewed necessity,
 complete input domain, outcomes and stopping condition. An analytical proof
@@ -284,7 +301,9 @@ The closed execution operation payloads are:
 move_reserved: {reservation: MoveReservation}
 MoveReservation = {id, node_id, account_id, move, pass, strategy, entry, walk,
   trigger_features, step_cites, problem_digest, journal_prefix_digest}
-journal_intended: {reservation_id, before_digest, after_digest, problem_digest}
+journal_intended: {reservation_id, before_digest, after_digest, problem_digest,
+  problem_transition?: {before: NativeProblem, after: NativeProblem,
+    line: NativeJournalLine}}
 journal_acknowledged: {node_id, move, reservation_id,
   journal_prefix_digest, problem_digest}
 run_reserved: {run: RunReservation}
@@ -386,8 +405,12 @@ This release provides no replay or automatic overwrite for an ambiguous native
 effect. Do not rerun the uncertain command, edit controller records, infer success
 from matching output bytes, or restore files merely to make reconciliation pass.
 An operator must inspect the preserved evidence and determine a supported repair
-before work continues. Reconciliation itself only consumes an existing valid
+before work continues. Ordinary reconciliation only consumes an existing valid
 receipt, or acknowledges the exact unchanged pre-state after acquiring its lock.
+The explicitly reviewed, opt-in [legacy rank operator recovery](harness/RANK_RECOVERY.md)
+is a separate abandonment decision for its narrowly defined initial interruption.
+It preserves the changed inputs and all prior records, does not fabricate a native
+receipt, and does not establish the original process outcome or successful rank.
 
 Guarded legacy mutations require admission; journal and verify also require the
 current reserved move. Provisional `init` without a parent and read-only native
@@ -1227,7 +1250,7 @@ Public command specs are closed records:
 | admit ID | `{}`; `--spec` may be omitted |
 | begin ID | The `begin NODE --spec FILE` record under [Metered execution and native integration](#metered-execution-and-native-integration) |
 | run ID | The tagged `run NODE --spec FILE` record under [Metered execution and native integration](#metered-execution-and-native-integration) |
-| reconcile | `{}`; no spec file |
+| reconcile | `{}` normally; optional `--spec` for the exact [rank operator recovery](harness/RANK_RECOVERY.md) record |
 | amend-computation ID | The amendment record under [Computation admission and mandatory interpretation](#computation-admission-and-mandatory-interpretation) |
 | interpret ID | The interpretation record under [Computation admission and mandatory interpretation](#computation-admission-and-mandatory-interpretation) |
 | checkpoint [ID] | `{checkpoint: PublicCheckpoint, inputs: [Input]}` |
@@ -1243,8 +1266,9 @@ Public command specs are closed records:
 `status` and `next` are read-only and need no revision or request ID.
 Every other public command uses the current `--expected-revision` and a unique
 `--request-id`. Commands whose table row defines a nonempty spec require
-`--spec FILE`; `admit` accepts an optional empty spec, while `reconcile`, `audit`,
-and `render` have no `--spec` option. Place `--attack-root` before `search`. For
+`--spec FILE`; `admit` accepts an optional empty spec and `reconcile` an optional
+operator-recovery spec. `audit` and `render` have no `--spec` option. Place
+`--attack-root` before `search`. For
 example:
 
 ```sh

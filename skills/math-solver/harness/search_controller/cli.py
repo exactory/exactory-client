@@ -74,7 +74,7 @@ def install_parser(commands, strategies_default):
             parser.add_argument("target", nargs="?")
         if name in specs:
             parser.add_argument("--spec", type=Path, required=True)
-        elif name == "admit":
+        elif name in {"admit", "reconcile"}:
             parser.add_argument("--spec", type=Path)
         if name not in readonly:
             parser.add_argument("--expected-revision", type=int, required=name != "hook-stop")

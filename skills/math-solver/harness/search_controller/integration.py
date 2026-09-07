@@ -13,6 +13,7 @@ from .storage import safe_path
 from .admission import reference
 from .evidence import audit_admission, proposal_inputs
 from .execution_state import account_for_work
+from .problem_records import audit_journal_append, load_problem_before, pin_problem, validate_problem
 
 
 MUTATIONS = {"plan", "rank", "journal", "verify", "fail", "stall", "check-unit", "finish"}
@@ -126,7 +127,7 @@ def build_begin(controller, state, spec, target, content):
     if defects:
         raise attack.ValidationError(defects)
     return dict(planned, id="move-{}-{}".format(target, len(moves) + 1), node_id=target,
-                account_id=account["id"], problem_digest=attack.compute_problem_digest(problem),
+                account_id=account["id"], problem_digest=pin_problem(content, problem),
                 journal_prefix_digest=content.put_artifact(raw))
 
 
@@ -153,7 +154,25 @@ def before_legacy(args):
         if node and args.command in {"plan", "rank", "fail", "stall", "check-unit", "finish"}:
             context["native_intent"], context["native_ownership"] = begin_native_intent(controller, node, args)
         return context
+    return begin_journal_intent(controller, node, args)
+
+
+def begin_journal_intent(controller, node, args):
+    from .journal_io import acquire_journal_ownership
+    ownership = acquire_journal_ownership(controller, node["id"])
+    context = {"controller": controller, "node": node, "command": "journal", "journal_ownership": ownership}
+    try:
+        record_journal_intent(context, args)
+        args._journal_context = context
+        return context
+    except BaseException:
+        ownership.close()
+        raise
+
+
+def record_journal_intent(context, args):
     import attack
+    controller, node = context["controller"], context["node"]
     workspace = safe_path(controller.root, args.slug)
     move = attack.parse_move_json(args.json)
     line = attack.validated_journal_line(args)
@@ -162,32 +181,44 @@ def before_legacy(args):
         pending = state["control"]["pending_moves"]
         s.require(len(pending) == 1, "No unique reserved move", "reservation_required")
         reservation = state["service"]["moves"][pending[0]]
+        s.require(reservation["node_id"] == node["id"], "Reserved move belongs to another journal", "reservation_mismatch")
+        context["reservation_id"] = reservation["id"]
         for field in ["move", "pass", "strategy", "entry", "walk", "trigger_features", "step_cites"]:
             s.require(move[field] == reservation[field], "Journal differs from reserved entry: " + field, "reservation_mismatch")
-        s.require(line["problem_digest"] == reservation["problem_digest"], "Problem changed during reserved move", "digest_mismatch")
+        problem = attack.read_json(workspace / "problem.json")
+        validate_problem(problem, node["claim"]["statement"])
+        s.require(attack.compute_problem_digest(problem) == line["problem_digest"],
+                  "Problem changed while preparing the journal", "digest_mismatch")
+        problem_digest = pin_problem(content, problem)
         raw = (workspace / "journal.jsonl").read_bytes()
         s.require(content.put_artifact(raw) == reservation["journal_prefix_digest"], "Journal changed during reserved move", "digest_mismatch")
         after = raw + (json.dumps(line) + "\n").encode("utf-8")
-        return [{"kind": "journal_intended", "payload": {"reservation_id": reservation["id"],
+        payload = {"reservation_id": reservation["id"],
             "before_digest": reservation["journal_prefix_digest"], "after_digest": content.put_artifact(after),
-            "problem_digest": reservation["problem_digest"]}}]
+            "problem_digest": problem_digest}
+        source = getattr(args, "problem_before", None)
+        before = None
+        if source is not None or problem_digest != reservation["problem_digest"]:
+            before = load_problem_before(controller, node, reservation, content, source)
+        if problem_digest != reservation["problem_digest"]:
+            payload["problem_transition"] = {"before": before, "after": problem, "line": line}
+        return [{"kind": "journal_intended", "payload": payload}]
     internal_operation(controller, "legacy-journal", request, build)
-    return {"controller": controller, "node": node, "command": "journal"}
 
 
 def reconcile_journals(controller, state, content, emit):
     for reservation_id, intent in state["service"]["legacy_intents"].items():
         move = state["service"]["moves"][reservation_id]
         node = state["nodes"][move["node_id"]]
+        before, expected = audit_journal_append(controller, node, move, intent, content)
         path = safe_path(controller.root, node["attack_slug"] + "/journal.jsonl")
         raw = path.read_bytes()
-        expected = content.get_artifact(intent["after_digest"])
-        s.require(raw == expected or raw == content.get_artifact(intent["before_digest"]),
+        s.require(raw == expected or raw == before,
                   "Journal conflicts with its durable intent", "recovery_conflict")
         if raw == expected:
             emit("journal_acknowledged", {"node_id": node["id"], "move": move["move"],
                 "reservation_id": reservation_id, "journal_prefix_digest": intent["after_digest"],
-                "problem_digest": move["problem_digest"]})
+                "problem_digest": intent["problem_digest"]})
 
 
 def after_legacy(context, outcome, diagnostics=None):
@@ -279,8 +310,10 @@ def begin_native_intent(controller, node, args):
 
 def release_native_ownership(context):
     """Release only after the synchronous invocation and its acknowledgement end."""
-    if context is not None and context.get("native_ownership") is not None:
-        context["native_ownership"].close()
+    if context is not None:
+        for key in ["native_ownership", "journal_ownership"]:
+            if context.get(key) is not None:
+                context[key].close()
 
 
 def record_native_success(controller, identity, outcome="succeeded", diagnostics=None):
@@ -438,17 +471,15 @@ def observe_result(controller, state, node, moves, content):
 
 def recover_journal_effects(controller):
     """Complete only already recorded append intents, then acknowledge once."""
-    from .render import replace_text
+    from .journal_io import apply_journal_intent, journal_ownership
     state = controller.status()
-    for identity, intent in state["service"]["legacy_intents"].items():
+    for identity in state["service"]["legacy_intents"]:
         move = state["service"]["moves"][identity]
         node = state["nodes"][move["node_id"]]
-        path = safe_path(controller.root, node["attack_slug"] + "/journal.jsonl")
-        before = controller.store.get_artifact(intent["before_digest"])
-        after = controller.store.get_artifact(intent["after_digest"])
-        actual = path.read_bytes()
-        s.require(actual in {before, after}, "Journal conflicts with its durable intent", "recovery_conflict")
-        if actual == before:
-            replace_text(path, after.decode("utf-8"))
-    if state["service"]["legacy_intents"]:
-        after_legacy({"controller": controller, "command": "journal"}, 0)
+        with journal_ownership(controller, node["id"]) as ownership:
+            current = controller.status()
+            if identity not in current["service"]["legacy_intents"]:
+                continue
+            apply_journal_intent(controller, current, identity, controller.store)
+            after_legacy({"controller": controller, "node": node, "command": "journal",
+                          "journal_ownership": ownership}, 0)

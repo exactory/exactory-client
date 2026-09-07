@@ -206,6 +206,19 @@ class TestDecide(_InsideWorkspaceTestCase):
         return [json.loads(line) for line in
                 log_path.read_text(encoding="utf-8").splitlines()]
 
+    def test_decide_refuses_an_unknown_stage(self) -> None:
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as caught:
+            _lab._build_parser().parse_args(
+                ["decide", "--decision", "adopt node n3", "--why", "best metric",
+                 "--stage", "escape"]
+            )
+        self.assertEqual(caught.exception.code, 2)
+        self.assertEqual(stderr.getvalue().splitlines()[-1],
+            "exactory-lab decide: error: argument --stage: invalid choice: 'escape' "
+            "(choose from initiate, cohort, ideate, experiment, write, evaluate, deposit, submit, complete)")
+        self.assertFalse((self.workspace / ".exactory" / "decisions.jsonl").exists())
+
     def test_decide_appends_an_entry_with_the_current_stage(self) -> None:
         _run_lab_command(["decide", "--decision", "cs.LG is the category",
                           "--why", "the context names deep learning"], None, self)
