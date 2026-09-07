@@ -237,18 +237,21 @@ class Store:
             self._atomic_replace(self.tree_path, canonical_bytes(candidate))
         return self._read_document()
 
-    def append_operation(self, identity, expected_revision, request_id, build, validate=None):
+    def append_operation(self, identity, expected_revision, request_id, build, validate=None, before_commit=None):
         """Build one service operation under lock after request/revision checks.
 
         build(isolated_document, content_sink) returns the closed event payload.
         The sink stages immutable content in memory; it never acquires another
         lock. Neither builders nor validators receive authoritative mutable data.
+        An optional read-only before_commit check runs after content persistence,
+        while the transaction lock is still held, immediately before the event.
         """
         if not isinstance(identity, dict) or set(identity) != {"command", "target", "spec_digest"}:
             raise SearchError("invalid_input", "Operation identity is malformed")
         canonical_bytes(identity)
         if (type(expected_revision) is not int or expected_revision < 0
-                or not _is_nonempty_string(request_id) or not callable(build)):
+                or not _is_nonempty_string(request_id) or not callable(build)
+                or (before_commit is not None and not callable(before_commit))):
             raise SearchError("invalid_input", "Operation request is malformed")
         self._check_root()
         with self._writer_lock():
@@ -277,6 +280,8 @@ class Store:
             for (namespace, digest), raw in sink.staged.items():
                 suffix = ".json" if namespace == "blobs" else ""
                 self._write_immutable(self._content_path(namespace, digest + suffix), raw)
+            if before_commit is not None:
+                before_commit()
             self._atomic_replace(self.tree_path, canonical_bytes(candidate))
             return event
 

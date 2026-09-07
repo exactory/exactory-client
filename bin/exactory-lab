@@ -554,6 +554,15 @@ def _run_run(args: argparse.Namespace) -> None:
         raise SystemExit(1)
 
 
+def _parse_stage(value: str) -> str:
+    """Keep stage validation errors consistent across supported Python versions."""
+    if value not in _STAGES:
+        raise argparse.ArgumentTypeError(
+            f"invalid choice: {value!r} (choose from {', '.join(_STAGES)})"
+        )
+    return value
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="exactory-lab",
@@ -584,7 +593,7 @@ def _build_parser() -> argparse.ArgumentParser:
     show.set_defaults(handler=_run_state_show)
     state_set = state_commands.add_parser("set", allow_abbrev=False,
                                           help="Mutate the given study state keys.")
-    state_set.add_argument("--stage", choices=_STAGES,
+    state_set.add_argument("--stage", type=_parse_stage, choices=_STAGES,
                            help="The stage the study is in.")
     state_set.add_argument("--status",
                            help="Free-form status word, e.g. pending, running, done.")
@@ -606,7 +615,7 @@ def _build_parser() -> argparse.ArgumentParser:
                         help="What was decided, in one sentence.")
     decide.add_argument("--why", required=True,
                         help="Why this over the alternatives.")
-    decide.add_argument("--stage", choices=_STAGES,
+    decide.add_argument("--stage", type=_parse_stage, choices=_STAGES,
                         help="Stage the decision belongs to. Default: the current one.")
     decide.add_argument("--evidence",
                         help="File or result the decision rests on.")

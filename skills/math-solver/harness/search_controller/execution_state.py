@@ -5,6 +5,7 @@ import copy
 from . import schema as s
 from .admission import reference, remaining_allowance, require_current_account, qualifying_progress
 from .scheduler import next_action
+from .problem_records import validate_journal_problem
 
 
 def account_for_work(state, node_id, resource, units=1):
@@ -61,11 +62,13 @@ def reserve_move(state, payload):
 
 
 def journal_intended(state, payload):
-    s.closed(payload, "reservation_id before_digest after_digest problem_digest")
+    s.closed(payload, "reservation_id before_digest after_digest problem_digest" +
+             (" problem_transition" if "problem_transition" in payload else ""))
     move = reference(state["service"]["moves"], payload["reservation_id"], "reserved move")
     s.require(move["status"] == "reserved" and move["id"] in state["control"]["pending_moves"], "Journal requires its pending move", "reservation_required")
     s.require(not any(run["status"] != "terminal" for run in state["runs"].values()), "Workload must terminate before journalling", "recovery_required")
-    s.require(payload["before_digest"] == move["journal_prefix_digest"] and payload["problem_digest"] == move["problem_digest"], "Journal intent changed the reservation")
+    s.require(payload["before_digest"] == move["journal_prefix_digest"], "Journal intent changed the reserved prefix")
+    validate_journal_problem(state, move, payload)
     for key in ["before_digest", "after_digest", "problem_digest"]:
         s.digest_string(payload[key])
     s.require(move["id"] not in state["service"]["legacy_intents"], "Journal intent already exists", "recovery_required")
@@ -77,7 +80,7 @@ def journal_acknowledged(state, payload):
     value = reference(state["service"]["moves"], payload["reservation_id"], "reserved move")
     intent = reference(state["service"]["legacy_intents"], value["id"], "journal intent")
     s.require(value["status"] == "reserved" and payload["node_id"] == value["node_id"] and payload["move"] == value["move"]
-              and payload["journal_prefix_digest"] == intent["after_digest"] and payload["problem_digest"] == value["problem_digest"],
+              and payload["journal_prefix_digest"] == intent["after_digest"] and payload["problem_digest"] == intent["problem_digest"],
               "Journal acknowledgement differs from original reservation")
     account = state["accounts"][value["account_id"]]
     account["reserved_moves"] -= 1

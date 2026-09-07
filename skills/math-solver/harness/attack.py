@@ -534,8 +534,10 @@ def run_journal_add(args):
     line = validated_journal_line(args)
     workspace = args.attack_root / args.slug
     moves = read_journal(workspace)
-    with (workspace / "journal.jsonl").open("a") as journal:
-        journal.write(json.dumps(line) + "\n")
+    from search_controller.journal_io import append_managed_journal
+    if not append_managed_journal(args, line):
+        with (workspace / "journal.jsonl").open("a") as journal:
+            journal.write(json.dumps(line) + "\n")
     print_budget(compute_budget(moves + [line], read_failure_window_start(workspace)))
 
 
@@ -1529,6 +1531,7 @@ def build_parser():
     journal_add = journal_commands.add_parser("add", help="validate and append one move")
     journal_add.add_argument("slug")
     journal_add.add_argument("--json", required=True, help="the move as one JSON object")
+    journal_add.add_argument("--problem-before", help="original problem snapshot below the attack root, for a reservation made before snapshot capture")
     journal_add.set_defaults(run=run_journal_add)
 
     budget = commands.add_parser("budget", help="print the move budget state")

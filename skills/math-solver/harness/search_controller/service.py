@@ -1,6 +1,7 @@
 """Filesystem and operator boundary over the pure search controller."""
 
 import copy
+from contextlib import ExitStack
 from pathlib import Path
 
 from . import schema as s
@@ -76,10 +77,14 @@ class Controller:
             s.require(name == "hook-stop", "Session mutation validation is only available for hook-stop")
             identity_spec = {"spec": identity_spec, "hook_session": hook_session}
         identity = {"command": name, "target": target, "spec_digest": s.digest(identity_spec)}
+        operator_recovery = name == "reconcile" and bool(spec)
         built = []
         def build(document, content):
             built.append(True)
-            return self._build(name, spec, target, identity, document, content, routing, hook_session)
+            return self._build(name, spec, target, identity, document, content, routing, hook_session, operation_locks)
+        def check_recovery_commit():
+            from .rank_recovery import audit_commit
+            audit_commit(self, spec)
         if name == "init":
             s.closed(spec, "contract")
             s.require(target is None and expected_revision == 0, "Initialization requires revision zero")
@@ -90,15 +95,17 @@ class Controller:
             apply_event(initial_state(contract, "objective-000001"), event)
             self.store.initialize(contract, "objective-000001", event)
         else:
-            event = self.store.append_operation(identity, expected_revision, request_id,
-                build,
-                lambda document, candidate: apply_event(replay(document), candidate))
+            with ExitStack() as operation_locks:
+                event = self.store.append_operation(identity, expected_revision, request_id,
+                    build,
+                    lambda document, candidate: apply_event(replay(document), candidate),
+                    before_commit=check_recovery_commit if name == "reconcile" and spec else None)
         if name == "run" and built:
             from .execution import launch
             state = replay(self.store.read())
             run_id = event["payload"]["operations"][0]["payload"]["run"]["id"]
             launch(self, state["runs"][run_id])
-        elif name == "reconcile":
+        elif name == "reconcile" and not spec:
             from .execution import reconcile_runs
             from .integration import recover_journal_effects
             reconcile_runs(self)
@@ -106,9 +113,13 @@ class Controller:
         with self.store._writer_lock():
             document = self.store.read()
             state = replay(document)
-            self._recover_effects(state)
+            if not operator_recovery:
+                self._recover_effects(state)
+            render_ready = not operator_recovery or all(
+                safe_path(self.store.root, "effect-" + s.digest(effect) + ".json").exists()
+                for effect in state["service"]["effects"])
             manual = safe_path(self.root, "SEARCH_TREE.md")
-            if name != "init" or not manual.exists():
+            if render_ready and (name != "init" or not manual.exists()):
                 render(self.root, state)
             if routing is not None:
                 from .discovery import publish
@@ -141,7 +152,7 @@ class Controller:
             s.require(validation.get(key) is None or validation[key] == state[key],
                       "Registered objective identity changed; recover discovery", "discovery_conflict")
 
-    def _build(self, name, spec, target, identity, document, content, routing=None, hook_session=None):
+    def _build(self, name, spec, target, identity, document, content, routing=None, hook_session=None, operation_locks=None):
         state = replay(document)
         s.require(not state["service"]["native_intents"] or name in {"reconcile", "pause", "focus", "hook-stop", "audit", "render"},
                   "Reconcile the original native intent before another controller mutation", "recovery_required")
@@ -180,10 +191,18 @@ class Controller:
             content.put_blob(spec["review"])
             emit("computation_amended", {"subject": subject, "review": spec["review"], "digest": content.put_blob(subject)})
         elif name == "reconcile":
-            from .integration import reconcile_journals, reconcile_native_intents
-            s.closed(spec, "")
-            reconcile_journals(self, state, content, emit)
-            reconcile_native_intents(self, state, content, emit)
+            if spec:
+                from .rank_recovery import build_abandonment
+                build_abandonment(self, state, spec, content, emit, operation_locks)
+                return dict(identity, operations=operations, effects=[])
+            else:
+                from .integration import reconcile_journals, reconcile_native_intents
+                from .journal_io import journal_ownership
+                for reservation_id in state["service"]["legacy_intents"]:
+                    node_id = state["service"]["moves"][reservation_id]["node_id"]
+                    operation_locks.enter_context(journal_ownership(self, node_id))
+                reconcile_journals(self, state, content, emit)
+                reconcile_native_intents(self, state, content, emit)
         elif name == "adopt":
             from .adoption import build_import, record_import, record_import_version, record_allowance
             s.closed(spec, "mappings inputs")
