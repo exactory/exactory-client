@@ -107,7 +107,7 @@ def abstract_reading(records, artifacts, readings, item):
             for unit in bundle["units"]:
                 if (unit["kind"] == "abstract" and unit["link"] is not None and unit["link"]["locator"]["kind"] == "text"
                         and " ".join(unit["link"]["locator"]["quote"].split()) == abstract_text
-                        and any(i["unit_id"] == unit["id"] and contains(i["link"], unit["link"]) for i in reading["inspections"])):
+                        and any(i["unit_id"] == unit["id"] and contains(i["link"], unit["link"], records) for i in reading["inspections"])):
                     return reading
     return None
 

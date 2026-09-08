@@ -4,7 +4,9 @@ A Link is {version_id, source_id, artifact: ArtifactRef, locator}. A text locato
 is {kind: text, start, end, quote}, in Unicode character offsets. JSON locators
 are {kind: json, pointer, value}. PDF visual locators are {kind: pdf, page_index,
 printed_page: str|null, region: [x, y, width, height]}, using zero-based PDF pages
-and normalized page coordinates. HTML visuals use {kind: html, anchor: TEXT}.
+and normalized page coordinates. HTML visuals use {kind: html, anchor: TEXT,
+assets?: [{url, source_id, artifact}]}. Assets are acquired original image bytes,
+bound to actual resources of the selected saved HTML visual.
 
 PDF bounds use the acquired extraction's form-feed page map, not printed page
 numbers. No extraction/page map means no mechanically admitted PDF inspection.
@@ -94,7 +96,7 @@ def read_locator(artifacts, artifact, locator, *, capture=None):
             text(locator["printed_page"], "Printed page", code="invalid_locator")
         return None
     if kind == "html":
-        fields(locator, ("kind", "anchor"), code="invalid_locator")
+        fields(locator, ("kind", "anchor"), ("assets",), code="invalid_locator")
         if (artifact["media_type"] not in ("text/html", "application/xhtml+xml")
                 or not isinstance(locator["anchor"], dict) or locator["anchor"].get("kind") != "text"):
             raise ResearchError("invalid_locator", "HTML visual inspections require an anchor in the original HTML")
@@ -121,7 +123,11 @@ def validate_link(records, artifacts, link):
     if capture is not None and capture["availability"] != "available":
         raise ResearchError("source_pending", "An incomplete full-text capture cannot establish a reading")
     value = read_locator(artifacts, link["artifact"], link["locator"], capture=capture)
-    return {"work": work, "source": source, "capture": capture, "abstract": abstract, "value": value}
+    visual = None
+    if link["locator"]["kind"] == "html":
+        from .visual_assets import visual_context
+        visual = visual_context(records, artifacts, link, source, capture)
+    return {"work": work, "source": source, "capture": capture, "abstract": abstract, "value": value, "visual": visual}
 
 
 def _within_metadata_assertion(records, work, source, locator):
@@ -147,13 +153,38 @@ def _within_metadata_assertion(records, work, source, locator):
     return False
 
 
-def link_identity(link):
+def original_identity(records, link):
+    work = exact_work(records, link["version_id"])
+    capture = fulltext_capture(work, link["source_id"])
+    source = records.get("source", {}).get(link["source_id"])
+    original = capture.get("original") if capture else source.get("response") if source else None
+    if original is None:
+        raise ResearchError("source_pending", "The corresponding original capture is missing")
+    return original["sha256"]
+
+
+def complete_original(context):
+    """Only acquired complete originals can establish article-unit scope."""
+    source, capture = context["source"], context["capture"]
+    return (capture is not None and capture["availability"] == "available"
+            and source["capture_method"] == "http" and source["origin_verified"] is True
+            and source["response_complete"] is True and capture["original"] == source["response"])
+
+
+def link_identity(link, records):
     """Content identity permits explicit reuse across identical capture receipts."""
-    return {"version_id": link["version_id"], "sha256": link["artifact"]["sha256"], "locator": link["locator"]}
+    locator = link["locator"]
+    if locator["kind"] == "html":
+        locator = {"kind": "html", "anchor": locator["anchor"],
+                   "assets": sorted(({"url": a["url"], "sha256": a["artifact"]["sha256"]} for a in locator.get("assets", [])),
+                                    key=lambda a: a["url"])}
+    return {"version_id": link["version_id"], "original_sha256": original_identity(records, link),
+            "sha256": link["artifact"]["sha256"], "locator": locator}
 
 
-def contains(outer, inner):
-    if outer["version_id"] != inner["version_id"] or outer["artifact"]["sha256"] != inner["artifact"]["sha256"]:
+def contains(outer, inner, records):
+    if (outer["version_id"] != inner["version_id"] or outer["artifact"]["sha256"] != inner["artifact"]["sha256"]
+            or original_identity(records, outer) != original_identity(records, inner)):
         return False
     a, b = outer["locator"], inner["locator"]
     if a["kind"] != b["kind"]:
@@ -164,6 +195,11 @@ def contains(outer, inner):
         x, y, width, height = a["region"]
         u, v, w, h = b["region"]
         return a["page_index"] == b["page_index"] and x <= u and y <= v and u + w <= x + width and v + h <= y + height
+    if a["kind"] == "html":
+        assets_a = {(x["url"], x["artifact"]["sha256"]) for x in a.get("assets", [])}
+        assets_b = {(x["url"], x["artifact"]["sha256"]) for x in b.get("assets", [])}
+        return (a["anchor"]["start"] <= b["anchor"]["start"] < b["anchor"]["end"] <= a["anchor"]["end"]
+                and assets_b <= assets_a)
     return a == b
 
 

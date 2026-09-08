@@ -32,9 +32,10 @@ from .graph import citation_graph, obligation, selected_bundle, validate_target
 from .http import safe_url
 from .imports import _pointer
 from .operations import fields, immutable_record, iso_date, prepared_mutation, profile_name, strings, text, timestamp
-from .providers import Arxiv, Crossref, OpenAlex, _json
-from .reading import bundle_digest, current_readings, fulltext_coverage
-from .source_links import captured_source, contains, exact_work, fulltext_capture, read_locator, validate_link
+from .providers import _json
+from .reading import bundle_digest, current_readings, fulltext_coverage, required_unit_obligations
+from .search_pages import enumerate_pages, native_page
+from .source_links import captured_source, complete_original, contains, covers_text, exact_work, fulltext_capture, original_identity, read_locator, validate_link
 
 
 SEARCH_PURPOSES = ("direct", "originals", "theory", "adjacent", "recent")
@@ -48,7 +49,8 @@ def _reference(value, records, artifacts, version_id, bibliography_unit):
         raise ResearchError("invalid_bibliography", "Classify the reference as paper, nonpaper or unknown")
     text(value["reason"], "Reference classification", code="invalid_bibliography")
     context = validate_link(records, artifacts, value["link"])
-    if context["work"]["id"] != version_id or bibliography_unit is None or not contains(bibliography_unit["link"], value["link"]):
+    if (context["work"]["id"] != version_id or bibliography_unit is None or bibliography_unit["link"] is None
+            or not contains(bibliography_unit["link"], value["link"], records)):
         raise ResearchError("invalid_bibliography", "Each occurrence must be anchored within this version's bibliography unit")
     if value["target"] is not None:
         from .identities import normalize_identifier
@@ -75,7 +77,7 @@ def import_bundle(store, payload, *, expected_revision, request_id):
             raise ResearchError("invalid_bundle", "A passage cannot certify a complete article bundle")
         if not isinstance(value["units"], list) or not value["units"]:
             raise ResearchError("invalid_bundle", "Declare the article's actual text, visual and supplement units")
-        units = {}
+        units, visual_resources = {}, []
         for unit in value["units"]:
             fields(unit, ("id", "kind", "required", "link"), ("reason", "url"), code="invalid_bundle")
             text(unit["id"], "Unit ID", code="invalid_bundle")
@@ -91,6 +93,9 @@ def import_bundle(store, payload, *, expected_revision, request_id):
                 raise ResearchError("source_mismatch", "A bundle cannot borrow another article or version's units")
             if unit["kind"] in ("figure", "table", "equation") and unit["link"]["locator"]["kind"] not in ("pdf", "html"):
                 raise ResearchError("invalid_bundle", "Required visual material needs a locator in the original document")
+            if context["visual"] is not None and unit["required"]:
+                visual_resources.append({"unit_id": unit["id"], "original_sha256": original_identity(records, unit["link"]),
+                                         "resources": context["visual"]["resources"]})
         if value["scope"] == "article" and not any(u["kind"] == "text" and u["required"] and u["link"] is not None
                 and u["link"]["source_id"] == source["id"] and u["link"]["artifact"] == capture["text"] for u in units.values()):
             raise ResearchError("invalid_bundle", "An article bundle must delimit its acquired main text")
@@ -104,11 +109,22 @@ def import_bundle(store, payload, *, expected_revision, request_id):
                 raise ResearchError("source_mismatch", "The inventory must describe this exact version")
         bibliography = value["bibliography"]
         fields(bibliography, ("complete", "unit_id", "entries"), code="invalid_bibliography")
+        if bibliography["unit_id"] is not None:
+            text(bibliography["unit_id"], "Bibliography unit ID", code="invalid_bibliography")
         unit = units.get(bibliography["unit_id"])
         if type(bibliography["complete"]) is not bool or not isinstance(bibliography["entries"], list):
             raise ResearchError("invalid_bibliography", "Bibliography completeness and occurrences must be explicit")
         if bibliography["complete"] and (value["scope"] != "article" or unit is None or unit["kind"] != "bibliography" or unit["link"] is None):
             raise ResearchError("invalid_bibliography", "Only a located article bibliography can establish reference coverage")
+        if bibliography["complete"]:
+            context = validate_link(records, artifacts, unit["link"])
+            if context["visual"] is not None and context["visual"]["pending"]:
+                raise ResearchError("invalid_bibliography", "Acquire and link the original visual bibliography bytes before declaring completeness",
+                                    {"pending": context["visual"]["pending"]})
+            if not complete_original(context) or (context["capture"]["original"]["sha256"] != capture["original"]["sha256"]
+                    and not any(u["kind"] == "supplement" and u["required"] and u["link"] is not None
+                        and covers_text(artifacts, u["link"]) and contains(u["link"], unit["link"], records) for u in units.values())):
+                raise ResearchError("invalid_bibliography", "Complete bibliography requires the main original or an explicitly complete original supplement")
         if not isinstance(value["resolutions"], list):
             raise ResearchError("invalid_bibliography", "Reference resolutions must be an array")
         changes, occurrence_ids = [], []
@@ -123,6 +139,7 @@ def import_bundle(store, payload, *, expected_revision, request_id):
         resolved = set()
         for resolution in value["resolutions"]:
             _reference(resolution, records, artifacts, value["version_id"], unit)
+            text(resolution.get("reference_id"), "Reference occurrence ID", code="invalid_bibliography")
             occurrence = records.get("reference_occurrence", {}).get(resolution.get("reference_id"))
             if occurrence is None or occurrence["source_work_id"] != work["id"] or occurrence["id"] in resolved:
                 raise ResearchError("invalid_bibliography", "Resolve each existing occurrence once within its exact source version")
@@ -131,6 +148,7 @@ def import_bundle(store, payload, *, expected_revision, request_id):
         existing = records.get("source_bundle", {}).get(value["id"])
         bundle = dict(value, original_sha256=capture["original"]["sha256"] if capture else source["response"]["sha256"],
                       includes_abstract=capture["includes_abstract"] if capture else False, occurrence_ids=occurrence_ids,
+                      visual_resources=visual_resources,
                       sequence=existing["sequence"] if existing else len(records.get("source_bundle", {})) + 1)
         for earlier in records.get("source_bundle", {}).values():
             if earlier["version_id"] == work["id"] and earlier["original_sha256"] == bundle["original_sha256"]:
@@ -138,6 +156,12 @@ def import_bundle(store, payload, *, expected_revision, request_id):
                     if unit["required"] and (unit["id"] not in units or not units[unit["id"]]["required"] or units[unit["id"]]["kind"] != unit["kind"]):
                         raise ResearchError("invalid_bundle", "A new inventory cannot drop or demote previously required units of the same original body",
                                             {"unit_id": unit["id"], "previous_bundle_id": earlier["id"]})
+                    if unit["required"] and unit["link"] is not None and unit["link"]["locator"]["kind"] == "html":
+                        previous = validate_link(records, artifacts, unit["link"])["visual"]["resources"]
+                        retained = next((v["resources"] for v in visual_resources if v["unit_id"] == unit["id"]), [])
+                        if not {r["url"] for r in previous} <= {r["url"] for r in retained}:
+                            raise ResearchError("invalid_bundle", "An anchor change cannot discard known resources of a required visual",
+                                                {"unit_id": unit["id"], "previous_bundle_id": earlier["id"]})
         changes.append(immutable_record(records, "source_bundle", value["id"], bundle))
         changes.append(("bundle_selection", work["id"], {"bundle_id": value["id"]}))
         updated = copy.deepcopy(work)
@@ -149,12 +173,12 @@ def import_bundle(store, payload, *, expected_revision, request_id):
         if reference_set not in updated["reference_sets"]:
             updated["reference_sets"].append(reference_set)
         changes.append(("work", work["id"], updated))
-        return changes, {"id": value["id"], "version_id": work["id"], "digest": bundle_digest(bundle), "occurrence_ids": occurrence_ids}
+        return changes, {"id": value["id"], "version_id": work["id"], "digest": bundle_digest(bundle, records), "occurrence_ids": occurrence_ids}
 
     return prepared_mutation(store, "literature.bundle", payload, prepare, expected_revision=expected_revision, request_id=request_id)
 
 
-def _search_response(records, artifacts, response):
+def _search_response(records, artifacts, response, scope):
     fields(response, ("source_id", "query"), ("query_locator", "results_pointer"), code="invalid_search")
     source = captured_source(records, artifacts, response["source_id"])
     text(response["query"], "Search query", code="invalid_search")
@@ -162,19 +186,16 @@ def _search_response(records, artifacts, response):
         if read_locator(artifacts, source["response"], response["query_locator"]) != response["query"]:
             raise ResearchError("invalid_search", "The recorded query must equal its original response value")
     else:
-        names = {"arxiv": {"search_query"}, "openalex": {"search"}, "crossref": {"query"}}
+        names = {"arxiv": {"search_query"}, "openalex": {"search"}, "crossref": {"query", "query.bibliographic", "query.author"}}
         names = names.get(source["provider"], {"q", "query", "search", "search_query"})
         actual = [value for key, value in parse_qsl(urlsplit(source["url"]).query) if key in names]
         if response["query"] not in actual:
             raise ResearchError("invalid_search", "Bind the exact search-query parameter or a saved response query value; URL path fragments are insufficient")
     if source["provider"] in ("arxiv", "openalex", "crossref"):
-        adapter = {"arxiv": Arxiv, "openalex": OpenAlex, "crossref": Crossref}[source["provider"]]()
-        page = adapter.parse(artifacts.read(source["response"]))
-        found = [w["id"] for w in page.works]
-        pending = list(page.failures)
-        if not page.complete:
-            pending.append({"code": "search_response_incomplete"})
+        page = native_page(source, artifacts.read(source["response"]), response["query"], scope)
+        found, pending = page["found"], []
     elif source["provider"] in ("web", "mcp"):
+        page = None
         try:
             raw = _pointer(_json(artifacts.read(source["response"]), require_object=False), response.get("results_pointer"))
         except ResearchError as error:
@@ -195,7 +216,7 @@ def _search_response(records, artifacts, response):
     for identifier in found:
         if identifier not in records.get("work", {}) or source["id"] not in records["work"][identifier]["source_ids"]:
             raise ResearchError("invalid_search", "Found works must retain this search response as provenance")
-    return source, found, pending
+    return source, found, pending, page
 
 
 def _search_evidence_digest(records, scope, found):
@@ -215,7 +236,9 @@ def _search_evidence_digest(records, scope, found):
         content["aliases"] = {k: sorted({a["work_id"] for a in record["assertions"]}) for k, record in records.get("alias", {}).items()
                               if k in work.get("aliases", []) or any(a["work_id"] == work.get("work_id") for a in record["assertions"])}
         bundle = selected_bundle(records, version, scope.get("target"))
-        content["bundle_digest"] = bundle_digest(bundle) if bundle else None
+        content["bundle_digest"] = bundle_digest(bundle, records) if bundle else None
+        content["visual_assets"] = sorted({digest([a["html_sha256"], a["url"], a["availability"],
+            a["artifact"]["sha256"] if a["artifact"] else None]) for a in records.get("visual_asset", {}).values() if a["version_id"] == version})
         works[version] = content
     return digest([scope, works, graph["nodes"]])
 
@@ -235,14 +258,18 @@ def record_search(store, payload, *, expected_revision, request_id):
         date = timestamp(value["captured_at"])
         if not isinstance(value["responses"], list) or not value["responses"]:
             raise ResearchError("invalid_search", "An empty user list without original captured responses is not a search")
-        found, pending, queries = set(), [], set()
+        found, pending, queries, pages = set(), [], set(), []
         for response in value["responses"]:
-            source, identifiers, gaps = _search_response(records, ArtifactStore(store.root), response)
+            source, identifiers, gaps, page = _search_response(records, ArtifactStore(store.root), response, value["scope"])
             if timestamp(source["captured_at"]) > date:
                 raise ResearchError("invalid_search", "A search cannot precede its captured responses")
             found.update(identifiers)
             pending.extend(gaps)
             queries.add(response["query"])
+            if page is not None:
+                pages.append(page)
+        page_groups, enumeration_pending = enumerate_pages(pages)
+        pending.extend(enumeration_pending)
         if found != set(value["found_work_ids"]) or queries != set(value["queries"]):
             raise ResearchError("invalid_search", "Search results and queries must account for every saved response")
         if not set(value["cited_work_ids"]) <= found or value["verdict"] == "replicate-extend" and not value["cited_work_ids"]:
@@ -250,7 +277,7 @@ def record_search(store, payload, *, expected_revision, request_id):
         current_scope = records.get("literature_scope", {}).get(value["profile"])
         if current_scope is None:
             raise ResearchError("roots_missing", "Define the literature scope before recording a dependent search")
-        record = dict(value, scope_digest=digest(current_scope), pending=pending,
+        record = dict(value, scope_digest=digest(current_scope), pending=pending, page_groups=page_groups,
                       evidence_digest=_search_evidence_digest(records, current_scope, found))
         changes = [immutable_record(records, "literature_search", value["id"], record)]
         changes.append(("search_selection", value["profile"] + ":" + value["purpose"], {"search_id": value["id"]}))
@@ -283,14 +310,16 @@ def _historical_status(work, cutoff):
     return "unknown"
 
 
-def _work_sources(work):
-    return sorted(set(work["source_ids"]) | {c["source_id"] for c in work["fulltexts"] if c["source_id"]})
+def _work_sources(work, records):
+    assets = [records["visual_asset"][a] for a in work.get("visual_asset_ids", [])]
+    return sorted(set(work["source_ids"]) | {c["source_id"] for c in work["fulltexts"] if c["source_id"]}
+                  | {s for a in assets for s in a["source_ids"]})
 
 
 def _work_paths(work, records, artifacts):
     references = [a["artifact"] for a in work["abstracts"]]
     references.extend(a for c in work["fulltexts"] for a in (c["original"], c["text"]) if a is not None)
-    references.extend(records["source"][s]["response"] for s in _work_sources(work) if records["source"][s]["response"] is not None)
+    references.extend(records["source"][s]["response"] for s in _work_sources(work, records) if records["source"][s]["response"] is not None)
     for reference in references:
         artifacts.read(reference)
     return sorted({a["path"] for a in references})
@@ -353,7 +382,7 @@ reference resolutions, consequential requirements and purpose-specific searches.
                 "Record this purpose's saved search responses against the current literature scope.", purpose=purpose))
         for search in current:
             for response in search["responses"]:
-                _search_response(records, artifacts, response)
+                _search_response(records, artifacts, response, search["scope"])
             if search["pending"]:
                 obligations.append(obligation("search_pending", "Complete the captured search enumeration or parser obligations.",
                                               purpose=purpose, search_id=search["id"], pending=search["pending"]))
@@ -409,10 +438,7 @@ reference resolutions, consequential requirements and purpose-specific searches.
                 if bundle is None:
                     obligations.append(obligation("source_bundle_missing", "Import the exact article boundaries and required source units.", version_id=version, paths=paths))
                 else:
-                    for unit in bundle["units"]:
-                        if unit["required"] and unit["link"] is None:
-                            obligations.append(obligation("required_unit_missing", "Acquire and inspect this required supplement or other source unit.",
-                                                          version_id=version, unit_id=unit["id"], url=unit.get("url")))
+                    obligations.extend(required_unit_obligations(records, artifacts, bundle))
                 for reading in partial:
                     obligations.extend(reading["assessment"]["pending"])
         if depth == "abstract" and abstract is None and not qualified and "cohort" not in reasons.get(version, []):
@@ -436,6 +462,7 @@ reference resolutions, consequential requirements and purpose-specific searches.
                           "fulltext_read": full is not None, "abstract_read": abstract is not None,
                           "body_coverage": coverage,
                           "bundle_id": bundle["id"] if bundle else None, "required_units": bundle["units"] if bundle else [],
+                          "visual_assets": [records["visual_asset"][a] for a in work.get("visual_asset_ids", [])],
                           "retrievals": [{"source_id": c["source_id"], "availability": c["availability"],
                                           "extraction_status": c["extraction_status"], "url": c["url"],
                                           "next_eligible_at": records.get("source", {}).get(c["source_id"], {}).get("next_eligible_at")}
@@ -446,7 +473,7 @@ reference resolutions, consequential requirements and purpose-specific searches.
     families = {records["work"][v]["work_id"] for v in relevant if v in records.get("work", {})}
     aliases = {k: a for k, a in records.get("alias", {}).items() if any(x["work_id"] in families for x in a["assertions"])
                or any(r["target"] == k for r in graph["references"])}
-    source_ids = {s for v in relevant if v in records.get("work", {}) for s in _work_sources(records["work"][v])}
+    source_ids = {s for v in relevant if v in records.get("work", {}) for s in _work_sources(records["work"][v], records)}
     source_ids.update(r["source_id"] for s in searches.values() for r in s["responses"])
     source_ids.update(s for a in availability for s in a["source_ids"])
     dependencies = {"scope": scope, "target": records.get("configuration", {}).get("research", {}).get("target") if profile == "verification" else None,
@@ -455,6 +482,9 @@ reference resolutions, consequential requirements and purpose-specific searches.
                     "readings": used_readings, "collections": collections, "cohort_digest": cohort_state["digest"], "requirements": full_requirements,
                     "searches": searches, "availability": availability}
     dependencies["search_selection"] = selected_searches
+    dependencies["visual_assets"] = {k: a for k, a in records.get("visual_asset", {}).items() if a["version_id"] in relevant}
+    dependencies["visual_asset_selection"] = {k: s for k, s in records.get("visual_asset_selection", {}).items()
+                                                if s["asset_id"] in dependencies["visual_assets"]}
     counts = {"works": len(families), "versions": len(inventory), "cohort_families": len({x["work_id"] for x in cohort}),
               "reference_occurrences": len(graph["references"]), "obligations": len(obligations),
               "fulltext_read": sum(x["fulltext_read"] for x in inventory), "abstract_read": sum(x["abstract_read"] for x in inventory)}

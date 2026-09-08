@@ -22,14 +22,15 @@ from .errors import ResearchError
 from .evidence import digest
 from .graph import main_captures, obligation, selected_bundle
 from .operations import fields, immutable_record, iso_date, prepared_mutation, profile_name, strings, text
-from .source_links import contains, covers_text, exact_work, link_identity, validate_link
+from .source_links import complete_original, contains, covers_text, exact_work, link_identity, original_identity, validate_link
+from .visual_assets import asset_dependencies
 
 
 NOTE_FIELDS = ("problem", "claims", "assumptions", "methods", "evidence", "limitations", "relevance")
 FULLTEXT_PURPOSES = ("major_claim", "novelty", "innovation", "validity")
 
 
-def bundle_digest(bundle):
+def bundle_digest(bundle, records):
     """Reading dependency: original bytes and exact required-unit inventory.
 
 Capture receipt IDs and bundle labels do not require rereading identical bytes.
@@ -38,12 +39,35 @@ Adding/changing a unit, abstract inclusion or bibliography changes this digest.
     return digest({"version_id": bundle["version_id"], "original_sha256": bundle.get("original_sha256"),
                    "scope": bundle["scope"], "completeness": bundle["completeness"],
                    "includes_abstract": bundle.get("includes_abstract"),
+                   "visual_dependencies": [{"unit_id": u["unit_id"], "resources": asset_dependencies(
+                       records, bundle["version_id"], u["original_sha256"], u["resources"])} for u in bundle.get("visual_resources", [])],
                    "units": [{"id": u["id"], "kind": u["kind"], "required": u["required"],
-                              "link": link_identity(u["link"]) if u["link"] else None,
+                              "link": link_identity(u["link"], records) if u["link"] else None,
                               "reason": u.get("reason"), "url": u.get("url")} for u in bundle["units"]],
                    "bibliography": {"complete": bundle["bibliography"]["complete"], "unit_id": bundle["bibliography"]["unit_id"],
-                                    "entries": [{"target": e["target"], "kind": e["kind"], "link": link_identity(e["link"])}
+                                    "entries": [{"target": e["target"], "kind": e["kind"], "link": link_identity(e["link"], records)}
                                                 for e in bundle["bibliography"]["entries"]]}})
+
+
+def required_unit_obligations(records, artifacts, bundle):
+    """Shared completeness boundary, actionable before any reading is written."""
+    pending = []
+    for unit in bundle["units"]:
+        if not unit["required"]:
+            continue
+        affected = {"version_id": bundle["version_id"], "unit_id": unit["id"]}
+        if unit["link"] is None:
+            pending.append(obligation("required_unit_missing", "Acquire the required source unit and import the extended bundle.",
+                                      url=unit.get("url"), **affected))
+            continue
+        context = validate_link(records, artifacts, unit["link"])
+        if context["visual"] is not None:
+            pending.extend(obligation(p["code"], "Acquire, link and inspect the complete static visual bytes.",
+                **dict(affected, **{k: v for k, v in p.items() if k != "code"})) for p in context["visual"]["pending"])
+        if not complete_original(context) or (unit["kind"] == "supplement" and not covers_text(artifacts, unit["link"])):
+            pending.append(obligation("required_unit_incomplete", "Acquire the complete original required unit; a scoped passage remains partial.",
+                                      paths=[unit["link"]["artifact"]["path"]], **affected))
+    return pending
 
 
 def _assess(records, artifacts, value):
@@ -58,6 +82,8 @@ def _assess(records, artifacts, value):
     contexts = []
     for inspection in inspections:
         fields(inspection, ("unit_id", "link", "note"), code="invalid_reading")
+        if inspection["unit_id"] is not None:
+            text(inspection["unit_id"], "Inspection unit ID", code="invalid_reading")
         text(inspection["note"], "Inspection note", code="invalid_reading")
         context = validate_link(records, artifacts, inspection["link"])
         if context["work"]["id"] != value["version_id"]:
@@ -72,29 +98,29 @@ def _assess(records, artifacts, value):
             raise ResearchError("invalid_reading", "Every source-specific note must cite actual inspection indices")
     pending, included_abstract, dependency = [], False, None
     if value["depth"] == "fulltext":
+        text(value.get("bundle_id"), "Bundle ID", code="invalid_reading")
         bundle = records.get("source_bundle", {}).get(value.get("bundle_id"))
         if bundle is None or bundle["version_id"] != value["version_id"]:
             raise ResearchError("invalid_reading", "Full reading requires an imported exact-version source bundle")
         units = {u["id"]: u for u in bundle["units"]}
         for inspection in inspections:
             unit = units.get(inspection["unit_id"])
-            if unit is None or unit["link"] is None or not contains(unit["link"], inspection["link"]):
+            if unit is None or unit["link"] is None or not contains(unit["link"], inspection["link"], records):
                 raise ResearchError("outside_reading_unit", "An inspection must stay within its declared article unit")
         if bundle["scope"] != "article" or bundle["completeness"] != "complete":
             pending.append(obligation("source_bundle_incomplete", "Complete the article's source bundle before claiming full depth.", version_id=value["version_id"]))
+        pending.extend(required_unit_obligations(records, artifacts, bundle))
         for unit in units.values():
-            if not unit["required"]:
-                continue
-            if unit["link"] is None:
-                pending.append(obligation("required_unit_missing", "Acquire the required source unit and import the extended bundle.",
-                                          version_id=value["version_id"], unit_id=unit["id"], url=unit.get("url")))
-            elif not any(i["unit_id"] == unit["id"] and contains(i["link"], unit["link"]) for i in inspections):
+            if unit["required"] and unit["link"] is not None and not any(
+                    i["unit_id"] == unit["id"] and contains(i["link"], unit["link"], records) for i in inspections):
                 pending.append(obligation("required_unit_uninspected", "Inspect the complete required text or visual unit.",
                                           version_id=value["version_id"], unit_id=unit["id"], paths=[unit["link"]["artifact"]["path"]]))
-        included_abstract = bundle.get("includes_abstract") is True and any(
-            u["kind"] == "abstract" and u["link"] is not None and any(
-                i["unit_id"] == u["id"] and contains(i["link"], u["link"]) for i in inspections) for u in units.values())
-        dependency = bundle_digest(bundle)
+        included_abstract = bundle.get("includes_abstract") is not False and any(
+            u["kind"] == "abstract" and u["link"] is not None and u["link"]["locator"]["kind"] == "text"
+            and original_identity(records, u["link"]) == bundle["original_sha256"]
+            and complete_original(validate_link(records, artifacts, u["link"])) and any(
+                i["unit_id"] == u["id"] and contains(i["link"], u["link"], records) for i in inspections) for u in units.values())
+        dependency = bundle_digest(bundle, records)
     elif value["depth"] == "abstract":
         if value.get("bundle_id") is not None:
             raise ResearchError("invalid_reading", "Abstract reading links the original abstract directly")
@@ -127,7 +153,7 @@ def current_readings(records, artifacts, version_id, *, target=None):
             continue
         assessment = _assess(records, artifacts, value)
         if value["depth"] == "fulltext":
-            if selected is None or assessment["bundle_digest"] != bundle_digest(selected):
+            if selected is None or assessment["bundle_digest"] != bundle_digest(selected, records):
                 partial.append(dict(value, assessment=dict(assessment, status="partial", pending=[obligation(
                     "reading_bundle_stale", "Inspect the currently required source bundle; historical readings are preserved.", version_id=version_id)])))
                 continue
@@ -144,16 +170,26 @@ Returns {reading_id, digest, depth, mechanical_only}. This validates documented
 source inspection, not comprehension, entailment, or the truth of a claim.
 """
     context = validate_link(records, artifacts, link)
-    if target is None and context["capture"] is not None:
-        target = {"id": link["version_id"], "sha256": context["capture"]["original"]["sha256"]}
     if depth not in ("fulltext", "abstract", "passage"):
         raise ResearchError("invalid_reading", "Unsupported required evidence depth")
-    readings, _ = current_readings(records, artifacts, link["version_id"], target=target)
-    for reading in readings:
-        eligible = (reading["depth"] == "fulltext" if depth == "fulltext" else
-                    reading["assessment"]["includes_abstract"] if depth == "abstract" else True)
-        if eligible and any(contains(i["link"], link) for i in reading["inspections"]):
-            return {"reading_id": reading["id"], "digest": digest(reading), "depth": depth, "mechanical_only": True}
+    targets = [target]
+    if target is None and context["capture"] is not None:
+        original = context["capture"]["original"]["sha256"]
+        originals = {original}
+        # An explicitly inspected supplement belongs to its main bundle. Its
+        # own original pin need not name a separate main-article bundle.
+        for bundle in records.get("source_bundle", {}).values():
+            if bundle["version_id"] == link["version_id"] and any(u["kind"] == "supplement" and u["link"] is not None
+                    and original_identity(records, u["link"]) == original for u in bundle["units"]):
+                originals.add(bundle["original_sha256"])
+        targets = [{"id": link["version_id"], "sha256": sha} for sha in sorted(originals)]
+    for pin in targets:
+        readings, _ = current_readings(records, artifacts, link["version_id"], target=pin)
+        for reading in readings:
+            eligible = (reading["depth"] == "fulltext" and complete_original(context) if depth == "fulltext" else
+                        reading["assessment"]["includes_abstract"] if depth == "abstract" else True)
+            if eligible and any(contains(i["link"], link, records) for i in reading["inspections"]):
+                return {"reading_id": reading["id"], "digest": digest(reading), "depth": depth, "mechanical_only": True}
     raise ResearchError("reading_missing", "Read the linked exact source at the required depth before relying on it",
                         {"version_id": link["version_id"], "depth": depth, "path": link["artifact"]["path"]})
 
