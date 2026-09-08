@@ -20,6 +20,7 @@ from .artifacts import _relative_parts
 from .development import validate_admitted_execution
 from .errors import ResearchError
 from .evidence import digest
+from .execution_outputs import output_paths, read_sealed_outputs, seal_outputs
 from .operations import immutable_record, prepared_mutation
 from .storage import _canonical
 from .workspace import checked_parent, json_projection, read_file, strict_json, write_projection
@@ -92,6 +93,14 @@ def _publish_job(store, claim):
 def _release(store, claim, root, job):
     from .artifacts import ArtifactStore
     from .execution import _binding, _files
+
+    def authorize(current):
+        admission = validate_admitted_execution(current, ArtifactStore(store.root), claim["admission_id"])
+        binding = _binding(current, claim["admission_id"])
+        if binding["digest"] != claim["binding_digest"]:
+            raise ResearchError("execution_identity_mismatch", "The remote release differs from its durable binding")
+        _files(store, admission, binding)
+
     records = store.snapshot()["records"]
     released = records.get("execution_remote_release", {}).get(claim["admission_id"])
     if released is None:
@@ -108,16 +117,31 @@ def _release(store, claim, root, job):
             raise ResearchError("execution_runtime_changed", "The runner did not confirm the admitted job and exact Python version")
         value = {"admission_id": claim["admission_id"], "job_sha256": digest(job), "worker": accepted}
         def prepare(current, payload):
-            admission = validate_admitted_execution(current, ArtifactStore(store.root), claim["admission_id"])
-            binding = _binding(current, claim["admission_id"])
-            if binding["digest"] != claim["binding_digest"]:
-                raise ResearchError("execution_identity_mismatch", "The remote release differs from its durable binding")
-            _files(store, admission, binding)
+            authorize(current)
             return [immutable_record(current, "execution_remote_release", claim["admission_id"], value)], value
         released = prepared_mutation(store, "execution.remote-release", value, prepare,
             expected_revision=store.revision, request_id="remote-release-" + digest(claim))["result"]
     nonce = released["worker"]["worker_nonce"]
-    _immutable(root, "jobs/" + job["job_id"] + "/GO-" + nonce, _canonical(released).encode())
+    prefix = "jobs/" + job["job_id"]
+    go = prefix + "/GO-" + nonce
+    if not (root / go).exists():
+        started = prefix + "/STARTED-" + nonce
+        if (root / started).exists():
+            if strict_json(read_file(root, started)) != released["worker"]:
+                raise ResearchError("execution_identity_mismatch", "The original start marker belongs to a different remote worker")
+            return released
+        if (root / "results" / job["job_id"] / "DONE").exists():
+            # Collection validates the complete original result. It does not
+            # need to issue another execution signal to recover known history.
+            return released
+        # A retained release is an immutable identity, not current permission
+        # to emit a signal that may never have reached the original runner.
+        current = store.snapshot()
+        authorize(current["records"])
+        revision = store.revision
+        if revision != current["revision"]:
+            raise ResearchError("stale_revision", "Research changed while checking a missing remote execution signal; retain the release and recheck before dispatch", {"expected_revision": current["revision"], "revision": revision})
+    _immutable(root, go, _canonical(released).encode())
     return released
 
 
@@ -146,13 +170,12 @@ def collect_colab(store, claim):
     if (released is None or read_file(root, prefix + "/DONE").decode() != digest(result)
             or result.get("job_sha256") != digest(job) or result.get("worker") != released["worker"]):
         raise ResearchError("execution_identity_mismatch", "The Colab result differs from the only released worker and job")
-    output_paths = {"stdout", "stderr"} | {"work/" + item["path"] for item in job["config"]["outputs"] if item["path"] not in ("stdout", "stderr")}
-    output_paths.add("work/results/" + job["node"] + ".json")
+    allowed_paths = set(output_paths(job["config"]))
     destination = _directory(claim["admission_id"])
     seen = set()
     for item in result["files"]:
         path = item["path"]
-        if path not in output_paths or path in seen:
+        if path not in allowed_paths or path in seen:
             raise ResearchError("execution_identity_mismatch", "Remote output names differ from the declared observation contract")
         seen.add(path)
         data = read_file(root, prefix + "/" + path)
@@ -230,14 +253,11 @@ def _execute_job(root, job, worker):
     terminal = {"status": status, "exit_code": process.returncode, "duration_s": time.monotonic() - started,
                 "binding_digest": config["binding_digest"], "config_sha256": job["config_sha256"],
                 "actual_argv": argv, "runtime": worker["runtime"], "backend": "colab"}
-    paths = {"stdout", "stderr", "work/results/" + job["node"] + ".json"}
-    paths.update("work/" + item["path"] for item in config["outputs"] if item["path"] not in ("stdout", "stderr"))
+    terminal["output_seal"] = seal_outputs(root, relative, config)
+    contents = read_sealed_outputs(root, relative, config, terminal)
     files = []
     prefix = "results/" + job["job_id"]
-    for path in sorted(paths):
-        if not (root / relative / path).exists():
-            continue
-        data = read_file(root, relative + "/" + path)
+    for path, data in contents.items():
         _immutable(root, prefix + "/" + path, data)
         files.append({"path": path, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)})
     result = {"job_sha256": digest(job), "worker": worker, "terminal": terminal, "files": files}

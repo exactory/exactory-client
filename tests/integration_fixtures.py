@@ -120,16 +120,17 @@ def prepare_manuscript(case, *, pdf="draft/paper.pdf", sources=None):
     return bundle
 
 
-def admit_lab(case, script="code/program.py", *, body=None, run_id="lab-run", backend="local", timeout=5, seed=None, outputs=None):
+def admit_lab(case, script="code/program.py", *, body=None, run_id="lab-run", backend="local", timeout=5, seed=None,
+              outputs=None, usage_unit="execution", reserved_units=1, max_units=8):
     path = case.root / "experiment" / script
     if body is not None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(body)
-    plan = case.plan()
-    plan["resource_limits"]["unit"] = "execution"
+    plan = case.plan(max_units=max_units)
+    plan["resource_limits"]["unit"] = usage_unit
     case.mutate(case.development().plan_cycle, plan)
     pinned = case.store.snapshot()["records"]["cycle_plan"][plan["id"]]
-    admission = {"id": run_id, "cycle_id": plan["id"], "plan_digest": pinned["digest"], "reserved_units": 1,
+    admission = {"id": run_id, "cycle_id": plan["id"], "plan_digest": pinned["digest"], "reserved_units": reserved_units,
                  "command": {"argv": [sys.executable, str(path)],
                     "program": case.artifacts.put(path.read_bytes(), "text/x-python"), "inputs": [],
                     "versions": {"python": sys.version.split()[0]}, "seed": seed,
@@ -139,6 +140,6 @@ def admit_lab(case, script="code/program.py", *, body=None, run_id="lab-run", ba
     launch = importlib.import_module("research_harness.execution")
     binding = {"admission_id": run_id, "script": script, "backend": backend, "timeout_seconds": timeout,
                "inputs": [], "outputs": outputs or [{"id": "result", "requirement_id": "measurements", "path": "stdout", "media_type": "text/plain"}],
-               "usage_unit": "execution"}
+               "usage_unit": usage_unit}
     case.mutate(launch.bind_execution, binding)
     return result

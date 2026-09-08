@@ -9,11 +9,9 @@ reconciled, retaining every reservation.
 from contextlib import contextmanager
 import fcntl
 import hashlib
-import json
 import math
 import os
 from pathlib import Path
-import signal
 import subprocess
 import sys
 import time
@@ -23,6 +21,7 @@ from .artifacts import ArtifactStore, _relative_parts
 from .development import record_execution, validate_admitted_execution
 from .errors import ResearchError
 from .evidence import digest
+from .execution_outputs import log_bytes, output_metric, output_path, read_sealed_outputs, seal_outputs
 from .operations import fields, immutable_record, prepared_mutation, text
 from .storage import _canonical
 from .workspace import checked_parent, json_projection, read_file, strict_json, write_projection
@@ -248,18 +247,6 @@ def launch_execution(store, admission_id, *, expected_revision, request_id):
                                    request_id="reconcile-" + request_id, owned=True)
 
 
-def _metric(data):
-    result = None
-    for line in data.decode("utf-8", "replace").splitlines():
-        try:
-            value = strict_json(line)
-        except ResearchError:
-            continue
-        if isinstance(value, dict) and "metric" in value:
-            result = value
-    return result
-
-
 def _finish_reconciliation(store, payload, observation, expected_revision, request_id):
     receipt = store.mutate("execution.reconcile", payload, lambda tx: observation["summary"],
                            expected_revision=expected_revision, request_id=request_id)
@@ -302,30 +289,23 @@ def _reconcile(store, payload, expected_revision, request_id):
                 raise ResearchError("execution_recovery_required", "No terminal outcome is available; preserve the claim and reconcile. A dead local owner may be recorded interrupted with a reason.")
             observed = {"status": "interrupted", "exit_code": None, "duration_s": None, "binding_digest": binding["digest"],
                         "config_sha256": claim["config_artifact"]["sha256"], "reason": payload["reason"]}
+            observed["output_seal"] = seal_outputs(store.root, directory, claim["config"], origin="recovery")
         else:
             observed = strict_json(read_file(store.root, directory + "/terminal.json"))
         if observed.get("binding_digest") != binding["digest"] or observed.get("config_sha256") != claim["config_artifact"]["sha256"]:
             raise ResearchError("execution_identity_mismatch", "The observed worker output belongs to a different frozen run")
         artifacts = ArtifactStore(store.root)
+        files = read_sealed_outputs(store.root, directory, claim["config"], observed)
+        if terminal.exists() and observed["output_seal"]["origin"] != "worker":
+            raise ResearchError("execution_output_seal_required", "A producer terminal requires its original worker output seal")
         outputs = []
         for item in binding["outputs"]:
-            path = directory + ("/" if item["path"] in ("stdout", "stderr") else "/work/") + item["path"]
-            try:
-                data = read_file(store.root, path)
-            except ResearchError as error:
-                if error.code == "artifact_missing":
-                    continue
-                raise
-            outputs.append({"id": item["id"], "requirement_id": item["requirement_id"], "artifact": artifacts.put(data, item["media_type"])})
-        stdout = read_file(store.root, directory + "/stdout") if (store.root / directory / "stdout").exists() else b""
-        stderr = read_file(store.root, directory + "/stderr") if (store.root / directory / "stderr").exists() else b""
-        metric = _metric(stdout)
-        if metric is None:
-            fallback = store.root / directory / "work/results" / (Path(binding["script"]).stem + ".json")
-            if fallback.is_file():
-                metric = strict_json(read_file(store.root, str(fallback.relative_to(store.root))))
-        log = b"----- STDOUT -----\n" + stdout + b"\n----- STDERR -----\n" + stderr
-        log_ref = artifacts.put(log, "text/plain; charset=utf-8")
+            path = output_path(item["path"])
+            if path in files:
+                outputs.append({"id": item["id"], "requirement_id": item["requirement_id"], "artifact": artifacts.put(files[path], item["media_type"])})
+        stderr = files.get("stderr", b"")
+        metric = output_metric(claim["config"], files)
+        log_ref = artifacts.put(log_bytes(files), "text/plain; charset=utf-8")
         summary = {"admission_id": admission_id, "cycle_id": admission["cycle_id"], "node": Path(binding["script"]).stem,
                    "ok": observed["status"] == "completed" and metric is not None,
                    "is_buggy": observed["status"] != "completed" or metric is None,
@@ -335,7 +315,9 @@ def _reconcile(store, payload, expected_revision, request_id):
                    "stderr_tail": stderr.decode("utf-8", "replace")[-800:], "backend": binding["backend"],
                    "program_sha256": admission["command"]["program"]["sha256"], "timeout_seconds": binding["timeout_seconds"],
                    "scientific_validation": False}
-        usage = (1 if binding["usage_unit"] == "execution" else observed["duration_s"]) if observed["status"] == "completed" else None
+        usage = observed["duration_s"]
+        if binding["usage_unit"] == "execution":
+            usage = 1 if observed["exit_code"] is not None else None
         execution = {"id": "launched-" + digest({"admission_id": admission_id}), "cycle_id": admission["cycle_id"],
                      "origin": {"kind": "managed", "admission_id": admission_id}, "command": admission["command"],
                      "status": observed["status"], "exit_code": observed["exit_code"],
@@ -349,7 +331,8 @@ def _reconcile(store, payload, expected_revision, request_id):
             record_execution(store, execution, expected_revision=store.revision, request_id="launcher-outcome-" + digest(claim))
         observation = {"admission_id": admission_id, "claim_digest": digest(claim), "binding_digest": binding["digest"],
                        "execution": execution,
-                       "terminal": artifacts.put(_canonical(observed).encode(), "application/json"), "log": log_ref, "summary": summary}
+                       "terminal": artifacts.put(_canonical(observed).encode(), "application/json"), "log": log_ref, "summary": summary,
+                       "files": [{"path": path, "artifact": artifacts.put(data, "application/octet-stream")} for path, data in files.items()]}
         prepared_mutation(store, "execution.observe", {"admission_id": admission_id},
             lambda current, value: ([immutable_record(current, "execution_observation", admission_id, observation)], observation),
             expected_revision=store.revision, request_id=request_id + ":observation")

@@ -34,12 +34,58 @@ class ResearchCliTests(unittest.TestCase):
         result = self.run_cli("exactory-lab", "init", "--slug", "bounded")
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def research_mutation(self, command, payload, revision, request_id):
+        path = self.root / (request_id + ".json")
+        path.write_text(json.dumps(payload))
+        return self.run_cli("exactory-research", command, "--file", str(path),
+                            "--expected-revision", str(revision), "--request-id", request_id)
+
     def test_initialization_creates_a_pending_current_contract(self):
         self.init_lab()
         self.assertTrue((self.root / ".exactory/research.sqlite3").is_file())
         records = Store(self.root).snapshot()["records"]
         self.assertEqual(records["configuration"]["research"]["profile"], "research")
         self.assertIsNone(records["configuration"]["research"]["target"])
+
+    def test_fresh_verifier_can_acquire_before_exact_target_initialization(self):
+        from research_fixtures import atom, entry
+        pending = self.research_mutation("acquire", {"identifier": "arxiv:2601.00001v1", "max_requests": 0}, 0, "acquire-first")
+        self.assertEqual(pending.returncode, 0, pending.stderr)
+        self.assertEqual(json.loads(pending.stdout)["status"], "pending")
+        store = Store(self.root)
+        self.assertNotIn("configuration", store.snapshot()["records"])
+        self.assertNotIn("source", store.snapshot()["records"])
+        metadata = self.root / "metadata.xml"
+        metadata.write_bytes(atom([entry()], total=1))
+        imported = self.research_mutation("import-response", {"provider": "arxiv", "response_file": str(metadata),
+            "source_url": "https://export.arxiv.org/api/query?id_list=2601.00001v1",
+            "captured_at": "2026-09-07T00:00:00Z"}, store.revision, "exact-metadata")
+        self.assertEqual(imported.returncode, 0, imported.stderr)
+        self.assertEqual(json.loads(imported.stdout)["work_ids"], ["arxiv:2601.00001v1"])
+        before = store.snapshot()
+        target = {"kind": "work", "id": "arxiv:2601.00001v2", "source_id": None, "sha256": None}
+        refused = self.research_mutation("init", {"profile": "verification", "target": target}, store.revision, "unknown-target")
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("unknown_work", refused.stderr)
+        self.assertEqual(store.snapshot(), before)
+        target["id"] = "arxiv:2601.00001v1"
+        initialized = self.research_mutation("init", {"profile": "verification", "target": target}, store.revision, "exact-target")
+        self.assertEqual(initialized.returncode, 0, initialized.stderr)
+        self.assertEqual(store.snapshot()["records"]["configuration"]["research"]["target"], target)
+        gate = self.run_cli("exactory-research", "gate", "verification")
+        self.assertNotEqual(gate.returncode, 0)
+        self.assertIn("readiness_required", gate.stderr)
+        self.assertNotIn("reading", store.snapshot()["records"])
+
+    def test_acquisition_does_not_implicitly_adopt_a_legacy_workspace(self):
+        path = self.root / ".exactory/study.json"
+        path.parent.mkdir()
+        original = b'{"version":1,"stage":"cohort","status":"pending"}\n'
+        path.write_bytes(original)
+        result = self.research_mutation("acquire", {"identifier": "arxiv:2601.00001v1", "max_requests": 0}, 0, "legacy-acquire")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((path.parent / "research.sqlite3").exists())
+        self.assertEqual(path.read_bytes(), original)
 
     def test_direct_stage_jump_refuses_all_requested_changes(self):
         self.init_lab()
@@ -61,6 +107,36 @@ class ResearchCliTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("cohort", result.stderr)
         self.assertEqual(path.read_bytes(), before)
+
+    def test_stage_and_done_cannot_complete_the_unread_target(self):
+        self.init_lab()
+        store = Store(self.root)
+        before = store.snapshot()
+        projection = (self.root / ".exactory/study.json").read_bytes()
+        result = self.run_cli("exactory-lab", "state", "set", "--stage", "cohort", "--status", "done",
+                              "--waiting", "none", "--loop-budget", "100")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("cohort_missing", result.stderr)
+        self.assertEqual(store.snapshot(), before)
+        self.assertEqual((self.root / ".exactory/study.json").read_bytes(), projection)
+        entered = self.run_cli("exactory-lab", "state", "set", "--stage", "cohort", "--status", "pending")
+        self.assertEqual(entered.returncode, 0, entered.stderr)
+        self.assertEqual(store.snapshot()["records"]["workspace"]["study"]["status"], "pending")
+
+    def test_inherited_done_cannot_complete_the_unread_target(self):
+        self.init_lab()
+        finished = self.run_cli("exactory-lab", "state", "set", "--status", "done")
+        self.assertEqual(finished.returncode, 0, finished.stderr)
+        store = Store(self.root)
+        before = store.snapshot()
+        projection = (self.root / ".exactory/study.json").read_bytes()
+        result = self.run_cli("exactory-lab", "state", "set", "--stage", "cohort")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("cohort_missing", result.stderr)
+        self.assertEqual(store.snapshot(), before)
+        self.assertEqual((self.root / ".exactory/study.json").read_bytes(), projection)
+        entered = self.run_cli("exactory-lab", "state", "set", "--stage", "cohort", "--status", "pending")
+        self.assertEqual(entered.returncode, 0, entered.stderr)
 
     def test_editing_the_stage_projection_does_not_authorize_work(self):
         self.init_lab()
@@ -177,6 +253,11 @@ os._exit(23)
         pending_bytes = journal.read_bytes()
         status = self.run_cli("exactory-research", "status")
         self.assertIn("store_recovery_required", status.stderr)
+        self.assertEqual(journal.read_bytes(), pending_bytes)
+        acquisition = self.research_mutation("acquire", {"identifier": "arxiv:2601.00001v1", "max_requests": 0},
+                                             before["revision"], "hot-acquisition")
+        self.assertNotEqual(acquisition.returncode, 0)
+        self.assertIn("store_recovery_required", acquisition.stderr)
         self.assertEqual(journal.read_bytes(), pending_bytes)
         result = self.run_cli("exactory-research", "recover", "--expected-revision", str(before["revision"]))
         self.assertEqual(result.returncode, 0, result.stderr)

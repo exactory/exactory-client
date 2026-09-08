@@ -1,11 +1,13 @@
 """Actual entrypoint gates with evidence created by the domain services."""
 
+import copy
 import importlib
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
+from unittest import mock
 
 from development_fixtures import DevelopmentCase
 
@@ -73,3 +75,70 @@ class ResearchGateTests(DevelopmentCase):
         self.assertEqual(self.development().record_readiness_review(self.store, payload,
             expected_revision=revision, request_id=receipt["request_id"]), receipt)
         self.assertEqual(self.store.snapshot(), before)
+
+    def test_unsealed_historical_observation_keeps_receipts_but_is_pending_for_readiness(self):
+        from integration_fixtures import observed_candidate
+        from research_harness import execution
+        from research_harness.gates import gate_report
+        from research_harness.storage import _canonical
+        from research_harness.workspace import strict_json
+        self.prepared_study()
+        actual = execution.prepared_mutation
+
+        def retain_original_observation(store, operation, payload, prepare, **identity):
+            if operation == "execution.observe":
+                def original_envelope(records, value):
+                    changes, observation = prepare(records, value)
+                    terminal = strict_json(self.artifacts.read(observation["terminal"]))
+                    terminal.pop("output_seal", None)
+                    observation["terminal"] = self.artifacts.put(_canonical(terminal).encode(), "application/json")
+                    observation.pop("files", None)
+                    return changes, observation
+                return actual(store, operation, payload, original_envelope, **identity)
+            return actual(store, operation, payload, prepare, **identity)
+
+        with mock.patch.object(execution, "prepared_mutation", side_effect=retain_original_observation):
+            payload = observed_candidate(self)
+        self.assertTrue(self.development().readiness_report(self.store)["ready"])
+        saved = self.store.snapshot()["records"]["execution"][payload["id"]]
+        identity = {"expected_revision": saved["recorded_revision"] - 1, "request_id": saved["request_id"]}
+        receipt = self.development().record_execution(self.store, payload, **identity)
+        before = self.store.snapshot()
+        report = gate_report(self.store, "readiness")
+        self.assertFalse(report["ready"])
+        self.assertIn("execution_output_seal_required", [item["code"] for item in report["obligations"]])
+        self.assertEqual(self.development().record_execution(self.store, payload, **identity), receipt)
+        self.assertEqual(self.store.snapshot(), before)
+
+    def test_current_readiness_checks_streams_against_the_worker_seal(self):
+        from integration_fixtures import observed_candidate
+        from research_harness.gates import gate_state
+        self.prepared_study()
+        payload = observed_candidate(self)
+        original = self.store.snapshot()
+        self.assertTrue(gate_state(original["records"], self.artifacts, "readiness")["ready"])
+        records = copy.deepcopy(original["records"])
+        observation = records["execution_observation"][payload["origin"]["admission_id"]]
+        observation["log"] = self.artifacts.put(b"Injected output and diagnostics", "text/plain; charset=utf-8")
+        report = gate_state(records, self.artifacts, "readiness")
+        self.assertFalse(report["ready"])
+        self.assertIn("execution_output_mismatch", [item["code"] for item in report["obligations"]])
+        self.assertEqual(self.store.snapshot(), original)
+
+    def test_worker_seal_consumer_rejects_an_otherwise_matching_outcome(self):
+        from integration_fixtures import observed_candidate
+        from research_harness.execution_evidence import _observed
+        self.prepared_study()
+        payload = observed_candidate(self)
+        original = self.store.snapshot()
+        accepted = _observed(original["records"], self.artifacts, payload["id"])
+        self.assertEqual(accepted["observation"]["execution"], payload)
+        records = copy.deepcopy(original["records"])
+        execution = records["execution"][payload["id"]]["payload"]
+        execution["outputs"][0]["artifact"] = self.artifacts.put(b'{"value":123456}', "application/json")
+        observation = records["execution_observation"][payload["origin"]["admission_id"]]
+        observation["execution"] = copy.deepcopy(execution)
+        self.assertEqual(observation["execution"], execution)
+        self.assertEqual(observation["terminal"], accepted["observation"]["terminal"])
+        self.assert_error("execution_output_mismatch", lambda: _observed(records, self.artifacts, payload["id"]))
+        self.assertEqual(self.store.snapshot(), original)

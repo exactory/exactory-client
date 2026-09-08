@@ -51,9 +51,26 @@ Use `artifact` to pin authored program files, original review JSON, assessor pro
 6. Observe the run, assess result and validity evidence separately, preserve a `checkpoint`, and deliver its candidate to an independent reviewer. Record `review`, then evaluate current whole `readiness`. An individual passed assessment or historical review receipt is insufficient.
 7. Prepare the exact `manuscript`, deliver its actual bytes to two independent blind assessors, and record their unchanged review JSON through `manuscript-review`. Deposit and submission require the current resulting bundle and receipts.
 
-`exactory-lab state set` validates all requested fields together before changing any state. The stages are `initiate`, `cohort`, `literature`, `ideate`, `experiment`, `write`, `evaluate`, `deposit`, `submit`, and `complete`. Forward edges are adjacent only; both source completion and target prerequisites apply. Setting only `--status done` checks the current stage's completion requirement. Waiting, paused, or operational status changes do not certify readiness.
+`exactory-lab state set` validates all requested fields together before changing any state. The stages are `initiate`, `cohort`, `literature`, `ideate`, `experiment`, `write`, `evaluate`, `deposit`, `submit`, and `complete`. Forward edges are adjacent only; both source completion and target prerequisites apply. Any proposed `done` status also checks the target stage's completion requirement, including a status inherited from the previous stage. To enter unfinished work after a completed stage, include `--status pending`. Waiting, paused, or operational status changes do not certify readiness.
 
 Explicit returns are available from `ideate` through `submit` to `literature`, from `experiment` to `ideate` after an assessment, and from `evaluate` to `experiment` or `write`. A return cannot also assert `done`. All histories, observations, objective identity, and original resource accounts remain retained.
+
+For a fresh verification directory, begin with an acquisition mutation. `acquire`, `collect`, and `import-response` can create an unconfigured Store when no managed workspace exists. This does not select the research profile or certify preparation. Existing legacy markers require explicit adoption, and an existing hot Store still requires `recover`.
+
+Save `{ "identifier": "arxiv:2601.00001v1", "max_requests": 4 }` as `metadata-query.json`, then acquire the exact metadata:
+
+```sh
+exactory-research acquire --file metadata-query.json --expected-revision 0 --request-id metadata-first
+exactory-research status
+```
+
+When metadata for that exact version is present, save `{ "profile": "verification", "target": { "kind": "work", "id": "arxiv:2601.00001v1", "source_id": null, "sha256": null } }` as `verification-init.json`. Use the current revision returned by status as `REVISION`:
+
+```sh
+exactory-research init --file verification-init.json --expected-revision REVISION --request-id verification-target
+```
+
+If acquisition remains pending, retain its request history and complete acquisition before initialization. Initialization continues to reject unknown works. A metadata-only target remains pending for verification until its original main source, exact target pin, required reading, and synthesis are complete. An imported metadata response is explicitly attributed external input; it is not an original-source reading.
 
 ## Operation fields
 
@@ -108,13 +125,17 @@ exactory-lab run code/program.py --admission run-1 --backend local --timeout 30 
   --expected-revision 42 --request-id actual-run-001
 ```
 
-Backend, timeout, and seed must match the binding and admission. A null seed needs its declared reason; a seed is passed as `EXACTORY_LAB_SEED`. The conventional fallback metric path is `results/SCRIPT_STEM.json` inside the private working directory. The process runs in a private copy of the pinned script and inputs. The launcher claims the admission once, rechecks current preparation before releasing its token, captures the actual terminal outcome, and records immutable outputs and logs. The familiar result/log paths are disposable projections.
+Backend, timeout, and seed must match the binding and admission. A null seed needs its declared reason; a seed is passed as `EXACTORY_LAB_SEED`. The conventional fallback metric path is `results/SCRIPT_STEM.json` inside the private working directory. The process runs in a private copy of the pinned script and inputs. The launcher claims the admission once and rechecks current preparation before releasing its token. Before publishing its terminal outcome, the worker seals the presence or absence, SHA-256, and size of every declared output, both streams, and the fallback metric file. Reconciliation rejects changed, removed, or newly inserted bytes and saves the complete sealed inventory as immutable artifacts. Current author readiness checks the saved result, log, and metric against that original seal. The familiar result/log paths are disposable projections.
 
 A retry returns/reconciles that run; it does not execute the same admission twice. Missing or lost results require `reconcile-run`. A dead local worker may be recorded interrupted after ownership checks. Unknown usage retains its full reservation. An interrupted process, timeout, missing output, or old modeled managed record cannot become current author readiness through a public result JSON label. An imported observation retains its actual provenance and chronological limits and does not consume or satisfy a prospective admission.
 
+Known wall time is recorded for successful, failed, partial, and timed-out processes. Charges retain the reservation floor and add measured overruns. If an older pinned terminal contains measured time that its historical account did not charge, that strategy's new admissions and unstarted launches remain pending for accounting reconciliation. Historical payloads, receipts, and charges are preserved; this release does not automatically add a correction or invent unmeasured usage.
+
+Older terminal records without a worker output seal cannot establish a new managed observation or current readiness. Already recorded historical receipts still replay. An explicit dead-owner recovery may retain partial bytes with a recovery seal, which is not a worker completion seal and supplies no completed-result authority. Do not create a replacement seal for old bytes whose original producer binding is unavailable.
+
 For Colab, set `EXACTORY_LAB_COLAB_DIR` to an existing shared folder on both hosts, bind `backend: "colab"`, and declare the actual remote Python version in `command.versions.python`. Run the installed `exactory-lab colab-serve` on the remote host. The client needs the same admitted logical script path, but the remote runner maps it to its private working directory and records the actual executable path and SHA-256.
 
-Protocol 2 writes immutable job bytes and `READY`, records a runner's unique nonce and runtime, then commits a client release and `GO` only after current local preparation passes. Only that nonce may start once. Result collection checks the job, release, runtime, hashes, and output contract before observing an outcome. Old jobs without this protocol cannot execute. A dead heartbeat or transport wait timeout leaves the run pending; it is not evidence that remote execution failed. A runner crash or mirror conflict after a durable release can require external inspection. No retry silently creates another job or refunds its reservation.
+Protocol 2 writes immutable job bytes and `READY`, records a runner's unique nonce and runtime, then commits a client release and `GO` only after current local preparation passes. A saved release does not authorize emitting a missing GO after preparation changes; that side effect needs a fresh current check. An already started or completed original job is collected without recreating a missing signal. Only the released nonce may start once. Result collection checks the job, release, runtime, complete worker seal, hashes, and output contract before observing an outcome. Both client and runner need the seal-aware execution implementation; older unsealed terminal bytes remain pending. Old jobs without protocol 2 cannot execute. A dead heartbeat or transport wait timeout leaves the run pending; it is not evidence that remote execution failed. A runner crash or mirror conflict after a durable release can require external inspection. No retry silently creates another job or refunds its reservation.
 
 ## Review, publication, and verification
 

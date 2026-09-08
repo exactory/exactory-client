@@ -8,6 +8,7 @@ mathematical proof acceptance has its separate controller and is unchanged.
 from .development import readiness_state
 from .errors import ResearchError
 from .evidence import digest
+from .execution_outputs import validate_observed_outputs
 from .graph import obligation
 from .workspace import strict_json
 
@@ -48,6 +49,7 @@ def _observed(records, artifacts, identifier):
             raise ResearchError("execution_observation_mismatch", "The remote result lacks its exact admitted runtime and one-time worker release")
     elif terminal.get("runtime") != binding["runtime"] or terminal.get("actual_argv") != config["argv"]:
         raise ResearchError("execution_observation_mismatch", "The local result differs from the admitted runtime or executed argv")
+    validate_observed_outputs(artifacts, config, terminal, observation, execution)
     return {"admission": admission, "binding": binding, "claim": claim, "observation": observation,
             "remote_release": released}
 
