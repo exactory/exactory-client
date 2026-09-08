@@ -79,7 +79,8 @@ class AcquisitionTests(unittest.TestCase):
     def test_fulltext_challenge_and_abstract_landing_pages_are_not_fulltext(self):
         self.metadata()
         bodies = [b"<html><title>Checking your browser</title><p>Enable JavaScript and cookies to continue.</p></html>",
-                  b"<article><h1>An example</h1><section class='abstract'><h2>Abstract</h2><p>Only an abstract.</p></section></article>"]
+                  b"<article><h1>An example</h1><section class='abstract'><h2>Abstract</h2><p>Only an abstract.</p></section></article>",
+                  b'<article class="article-body"><h1>An authored article title.</h1><section class="abstract">Only the original abstract.</section></article>']
         for i, body in enumerate(bodies):
             http, _, _ = client([(200, {"Content-Type": "text/html"}, body)])
             result = acquire_fulltext(self.store, "arxiv:2601.00001v1", "https://arxiv.org/html/2601.00001v1",
@@ -88,6 +89,8 @@ class AcquisitionTests(unittest.TestCase):
             capture = self.store.snapshot()["records"]["work"]["arxiv:2601.00001v1"]["fulltexts"][-1]
             self.assertIsNone(capture["text"])
             self.assertEqual(capture["extraction_status"], "challenge" if i == 0 else "landing_page")
+            self.assertEqual(capture["availability"], "pending")
+            self.assertEqual(ArtifactStore(self.root).read(capture["original"]), body)
 
     def test_fulltext_html_body_is_saved_without_marking_read(self):
         self.metadata()
@@ -141,6 +144,23 @@ class AcquisitionTests(unittest.TestCase):
         self.assertFalse(source["origin_verified"])
         self.assertNotIn("reading", records)
 
+    def test_versionless_native_arxiv_import_preserves_originals_and_remains_pending(self):
+        raw = atom([entry("2601.00001")], total=1)
+        result = import_response(self.store, "arxiv", raw,
+            source_url="https://export.arxiv.org/api/query?id_list=2601.00001",
+            captured_at="2026-09-07T00:00:00Z", request_id="versionless-import", expected_revision=0)
+        self.assertEqual(result["status"], "pending")
+        self.assertIn({"code": "missing_version", "work_id": "arxiv:2601.00001"}, result["pending"])
+        records = self.store.snapshot()["records"]
+        work = records["work"]["arxiv:2601.00001"]
+        self.assertIsNone(work["version"])
+        self.assertIsNone(work["abstracts"][0]["version"])
+        self.assertEqual(ArtifactStore(self.root).read(work["abstract"]), b"A short original abstract.")
+        source = records["source"][result["source_ids"][0]]
+        self.assertEqual(ArtifactStore(self.root).read(source["response"]), raw)
+        self.assertEqual(list(records["work"]), ["arxiv:2601.00001"])
+        self.assertNotIn("reading", records)
+
     def test_bad_import_mapping_and_credential_provenance_never_write_state(self):
         for source_url, mappings in [("https://example.org/?token=secret", []),
                                      ("https://example.org/", [{"id": "/missing", "title": "/title"}])]:
@@ -150,6 +170,25 @@ class AcquisitionTests(unittest.TestCase):
                     captured_at="2026-09-07T00:00:00+00:00", request_id="invalid", expected_revision=revision,
                     mappings=mappings, media_type="application/json")
             self.assertEqual(self.store.revision, revision)
+
+    def test_sas_credentials_are_rejected_before_fulltext_or_import_admission(self):
+        self.metadata()
+        original = self.store.snapshot()
+        signed = ("https://authored.blob.core.windows.net/articles/example.pdf"
+                  "?sv=2025-01-05&sp=r&sig=authored-secret")
+        http, wire, _ = client([(200, {"Content-Type": "application/pdf"}, b"Unexpected source")])
+        with self.assertRaises(ResearchError) as error:
+            acquire_fulltext(self.store, "2601.00001v1", signed, request_id="signed-fulltext",
+                             expected_revision=self.store.revision, http=http)
+        self.assertEqual(error.exception.code, "unsafe_url")
+        self.assertEqual(wire.requests, [])
+        self.assertEqual(self.store.snapshot(), original)
+        with self.assertRaises(ResearchError) as error:
+            import_response(self.store, "arxiv", atom([entry()], total=1), source_url=signed,
+                            captured_at="2026-09-07T00:00:00Z", request_id="signed-import",
+                            expected_revision=self.store.revision)
+        self.assertEqual(error.exception.code, "unsafe_url")
+        self.assertEqual(self.store.snapshot(), original)
 
     def test_different_date_assertions_and_reference_sets_survive_refresh(self):
         http, _, _ = client([json_response(crossref())])

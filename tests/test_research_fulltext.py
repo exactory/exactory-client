@@ -53,6 +53,37 @@ class FulltextTests(unittest.TestCase):
                 self.assertNotEqual(result["status"], "extracted")
                 self.assertIsNone(result["text"])
 
+    def test_article_body_class_does_not_turn_title_metadata_or_abstract_into_body(self):
+        pages = [
+            b'<article class="article-body"><h1>An authored article title.</h1><section class="abstract">Only the original abstract.</section></article>',
+            b'<article class="article__body"><header><p>A title and author.</p></header><div class="article-meta"><p>A journal and date.</p></div><section class="abstract"><p>Only the original abstract.</p></section></article>',
+            b'<article class="jats_body"><h2>A section title alone.</h2></article>',
+            b'<article class="article-body"><p itemprop="headline">A title.</p><p itemprop="author">An author.</p><section role="doc-abstract"><p>Only an abstract.</p></section></article>',
+        ]
+        for raw in pages:
+            with self.subTest(raw=raw):
+                result = extract(raw, "text/html")
+                self.assertEqual(result["status"], "landing_page")
+                self.assertIsNone(result["text"])
+
+    def test_includes_abstract_requires_nonempty_content_in_the_saved_article_text(self):
+        body = b'<article class="article-body">%s<p>The complete article body.</p></article>'
+        cases = [
+            (b'<div id="abstract">An external abstract.</div>' + body % b'', False, b'An external abstract.'),
+            (body % b'<section class="abstract"></section>', False, None),
+            (body % b'<section class="abstract"><h2>Abstract</h2> </section>', False, None),
+            (body % b'<section class="abstract"><script>An omitted abstract.</script></section>', False, b'An omitted abstract.'),
+            (body % b'<section class="abstract"><h2>Abstract</h2><p>The included abstract.</p></section>', True, b'The included abstract.'),
+        ]
+        for raw, included, abstract in cases:
+            with self.subTest(included=included, raw=raw):
+                result = extract(raw, "text/html")
+                self.assertEqual(result["status"], "extracted")
+                self.assertEqual(result["includes_abstract"], included)
+                self.assertIn("The complete article body.", result["text"])
+                if abstract is not None:
+                    self.assertEqual(abstract.decode() in result["text"], included)
+
 
 if __name__ == "__main__":
     unittest.main()

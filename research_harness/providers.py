@@ -13,6 +13,10 @@ coverage is {status: missing|partial|provided, reported_count, returned_count,
 bibliography_complete: False, scope: 'provider_metadata'}. Registry coverage
 alone cannot certify the actual article's bibliography.
 
+JSON responses allow at most 128 nested object/array containers, counting the
+root container. The bound covers unused fields and is independent of Python's
+interpreter recursion limit.
+
 Arxiv uses stable submitted-date ascending pages, max 2000 and a 30000 query
 ceiling. Acquisition partitions larger queries. OpenAlex uses cursor paging,
 per_page <=100 and an optional bearer token. Crossref uses rows <=1000 and stops
@@ -29,6 +33,9 @@ from urllib.parse import quote, urlencode
 
 from .errors import ResearchError
 from .identities import family_id, normalize_identifier, version_of
+
+
+_MAX_JSON_DEPTH = 128
 
 
 @dataclass
@@ -97,6 +104,14 @@ def _json(data, *, require_object=True):
         result = json.loads(data, object_pairs_hook=pairs, parse_constant=nonfinite)
         if require_object and not isinstance(result, dict):
             raise ValueError()
+        containers = [(result, 1)]
+        while containers:
+            value, depth = containers.pop()
+            if isinstance(value, (dict, list)):
+                if depth > _MAX_JSON_DEPTH:
+                    raise ValueError()
+                children = value.values() if isinstance(value, dict) else value
+                containers.extend((child, depth + 1) for child in children if isinstance(child, (dict, list)))
         json.dumps(result, ensure_ascii=False, allow_nan=False).encode("utf-8")
         return result
     except (ValueError, TypeError, UnicodeError, RecursionError) as error:

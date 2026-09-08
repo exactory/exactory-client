@@ -1,10 +1,17 @@
 """Bounded HTTPS GETs with pinned public destinations and evidence of each attempt.
 
-HttpClient(...).get(url, *, headers=None, accept=(), budget=None) returns Fetch
+HttpClient(...).get(url, *, headers=None, accept=(), budget=None,
+                    not_before=None) returns Fetch
 or raises HttpFailure. Both expose attempts: [{url, captured_at, status, headers,
-body: bytes, complete: bool, error: code | None}]. No request headers, cookies or
-credential URLs enter this evidence. `complete` describes the response transfer,
-not article availability. HttpFailure.as_dict() excludes binary attempt bodies.
+body: bytes, complete: bool, error: code | None, response_received_at,
+next_eligible_at}]. Receipt and eligibility are UTC ISO timestamps or None.
+Retry-After eligibility is recorded before a request budget can stop retries.
+not_before restores persisted eligibility. Waiting counts against total_timeout;
+waits beyond max_retry_after or the remaining deadline fail with rate_limited
+before DNS, budget consumption or a new attempt. An expired eligibility adds no
+wait. No request headers, cookies or credential URLs enter attempt evidence.
+`complete` describes the response transfer, not article availability.
+HttpFailure.as_dict() excludes binary attempt bodies.
 
 Injection: transport(url, headers, *, address, timeout) -> RawResponse; it must
 connect only to address, validate TLS for the URL hostname, perform no redirects
@@ -25,14 +32,14 @@ import ssl
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from urllib.parse import parse_qsl, urljoin, urlsplit, urlunsplit
 
 from .errors import ResearchError
 
 
-_SECRET = re.compile(r"(^|[-_])(key|token|secret|password|signature|credential|authorization)($|[-_])", re.I)
+_SECRET = re.compile(r"(^|[-_])(key|token|secret|password|sig|signature|credential|authorization)($|[-_])", re.I)
 _COMPACT_SECRET_NAMES = {"apikey", "accesskey", "accesskeyid", "accesstoken", "authtoken", "authentication",
                          "bearertoken", "clientsecret", "clientkey", "refreshtoken", "sessiontoken", "subscriptionkey"}
 _SAFE_HEADERS = {"content-type", "content-length", "content-range", "content-encoding", "retry-after", "etag", "last-modified", "date"}
@@ -147,6 +154,21 @@ class HttpFailure(ResearchError):
         self.attempts = attempts
 
 
+def _retry_after_time(value, received_at):
+    if not value:
+        return None
+    try:
+        if re.fullmatch(r"[0-9]+", value.strip()):
+            eligible = datetime.fromisoformat(received_at) + timedelta(seconds=int(value))
+        else:
+            eligible = parsedate_to_datetime(value)
+        if eligible.utcoffset() is None:
+            return None
+        return eligible.astimezone(timezone.utc).isoformat()
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
 def _resolve(host, timeout):
     # getaddrinfo has no timeout argument. A daemon confines a stalled resolver's
     # effect to this call's finite wait; it never holds a store transaction.
@@ -259,6 +281,21 @@ class HttpClient:
         if seconds > 0:
             self.clock.sleep(seconds)
 
+    def _wait_until(self, eligible_at, deadline):
+        if eligible_at is None:
+            return
+        try:
+            eligible = datetime.fromisoformat(eligible_at.replace("Z", "+00:00"))
+            if eligible.utcoffset() is None:
+                raise ValueError()
+            delay = max(0.0, (eligible - datetime.fromisoformat(self.clock.now())).total_seconds())
+        except (TypeError, ValueError, AttributeError) as error:
+            raise ResearchError("invalid_input", "Request eligibility must be an ISO timestamp with timezone") from error
+        if delay > self.max_retry_after or self.clock.monotonic() + delay >= deadline:
+            raise ResearchError("rate_limited", "The next eligible request exceeds this call's wait allowance",
+                                {"next_eligible_at": eligible_at, "retry_after_seconds": delay})
+        self._delay(delay, deadline)
+
     def _retry_delay(self, headers, retry):
         value = headers.get("retry-after")
         if value:
@@ -277,7 +314,7 @@ class HttpClient:
             return max(0.0, delay)
         return float(2 ** retry)
 
-    def get(self, url, *, headers=None, accept=(), budget=None):
+    def get(self, url, *, headers=None, accept=(), budget=None, not_before=None):
         budget = budget if budget is not None else RequestBudget()
         attempts, redirects, retries = [], 0, 0
         deadline = self.clock.monotonic() + self.total_timeout
@@ -290,12 +327,14 @@ class HttpClient:
             url = safe_url(url)
             while True:
                 budget.check()
+                self._wait_until(not_before, deadline)
                 host = urlsplit(url).hostname
                 interval = 3 if host in ("arxiv.org", "export.arxiv.org") else 0
                 self._delay(max(0, self._last_request.get(host, -float("inf")) + interval - self.clock.monotonic()), deadline)
                 budget.consume()
                 attempt = {"url": url, "captured_at": self.clock.now(), "status": None,
-                           "headers": {}, "body": b"", "complete": False, "error": None}
+                           "headers": {}, "body": b"", "complete": False, "error": None,
+                           "response_received_at": None, "next_eligible_at": None}
                 attempts.append(attempt)
                 self._last_request[host] = self.clock.monotonic()
                 response = None
@@ -314,6 +353,11 @@ class HttpClient:
                     all_headers = {k.lower(): str(v) for k, v in response.headers.items()}
                     attempt["headers"] = {k: v for k, v in all_headers.items() if k in _SAFE_HEADERS}
                     attempt["status"] = response.status
+                    attempt["response_received_at"] = self.clock.now()
+                    attempt["next_eligible_at"] = _retry_after_time(all_headers.get("retry-after"), attempt["response_received_at"])
+                    if attempt["next_eligible_at"] is not None:
+                        not_before = max((time for time in (not_before, attempt["next_eligible_at"]) if time is not None),
+                                         key=lambda time: datetime.fromisoformat(time.replace("Z", "+00:00")))
                     length = all_headers.get("content-length")
                     if length is not None and (not length.isdigit() or int(length) > self.max_bytes):
                         raise ResearchError("response_too_large", "Response length exceeds the configured bound or is invalid")
@@ -326,9 +370,10 @@ class HttpClient:
                         chunk = response.stream.read(min(65536, self.max_bytes + 1 - len(body)))
                         if not chunk:
                             break
-                        body.extend(chunk)
+                        room = self.max_bytes - len(body)
+                        body.extend(chunk[:room])
                         attempt["body"] = bytes(body)
-                        if len(body) > self.max_bytes:
+                        if len(chunk) > room:
                             raise ResearchError("response_too_large", "Response exceeds the configured byte limit")
                     if self.clock.monotonic() >= deadline:
                         raise socket.timeout()
@@ -339,6 +384,15 @@ class HttpClient:
                     attempt["error"] = "timeout"
                     if retries >= self.max_retries:
                         raise ResearchError("timeout", "HTTP operation timed out") from error
+                except http.client.IncompleteRead as error:
+                    room = self.max_bytes - len(attempt["body"])
+                    attempt["body"] += error.partial[:room]
+                    attempt["complete"] = False
+                    attempt["error"] = "response_too_large" if len(error.partial) > room else "incomplete_response"
+                    if len(error.partial) > room:
+                        raise ResearchError("response_too_large", "Partial response exceeds the configured byte limit") from error
+                    if retries >= self.max_retries:
+                        raise ResearchError("incomplete_response", "HTTP response ended before its body was complete") from error
                 except (OSError, http.client.HTTPException) as error:
                     attempt["error"] = "network_error"
                     if retries >= self.max_retries:
@@ -351,7 +405,10 @@ class HttpClient:
                         response.close()
                 if attempt["error"]:
                     budget.check()
-                    self._delay(float(2 ** retries), deadline)
+                    if attempt["next_eligible_at"] is not None:
+                        self._wait_until(not_before, deadline)
+                    else:
+                        self._delay(float(2 ** retries), deadline)
                     retries += 1
                     continue
                 status = attempt["status"]
@@ -371,7 +428,10 @@ class HttpClient:
                     continue
                 if status in _RETRY and retries < self.max_retries:
                     budget.check()
-                    self._delay(self._retry_delay(attempt["headers"], retries), deadline)
+                    if attempt["next_eligible_at"] is not None:
+                        self._wait_until(not_before, deadline)
+                    else:
+                        self._delay(self._retry_delay(attempt["headers"], retries), deadline)
                     retries += 1
                     continue
                 if status < 200 or status >= 300:

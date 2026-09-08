@@ -1,7 +1,8 @@
 """Materialize acquired evidence before short Store transaction callbacks.
 
 source/{id}: {id, provider, operation_id, attempt_ordinal, requested_identifier,
-url, captured_at, exact_version, http_status, headers, capture_method,
+url, captured_at, response_received_at, next_eligible_at, exact_version,
+http_status, headers, capture_method,
 content_scope, origin_verified, response_complete,
 status: captured|failed|partial, response: ArtifactRef|None, error}.
 Source ids are deterministic hashes of operation id and attempt ordinal. A
@@ -53,6 +54,8 @@ def prepare_sources(artifacts, attempts, provider, operation_id, *, start=0, ver
         source = {"id": derived_id(operation_id, "source", index), "provider": provider,
                   "operation_id": operation_id, "attempt_ordinal": index, "requested_identifier": requested_identifier,
                   "url": attempt["url"], "captured_at": attempt["captured_at"], "exact_version": version,
+                  "response_received_at": attempt.get("response_received_at"),
+                  "next_eligible_at": attempt.get("next_eligible_at"),
                   "capture_method": "http", "content_scope": "response", "origin_verified": attempt["status"] is not None,
                   "http_status": attempt["status"], "headers": attempt["headers"],
                   "status": "captured" if successful else "partial" if attempt["status"] == 206 or (not attempt["complete"] and attempt["body"]) else "failed",

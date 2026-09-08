@@ -6,8 +6,10 @@ injection accepts bytes and returns {status, text}; its successful status is
 'extracted'. Missing, scanned, malformed or timed-out extraction remains pending.
 The default pdftotext invocation uses explicit argv, a timeout, a private temp
 directory, and a bounded output read. HTML requires article-body structure with
-content beyond an abstract; HTTP success or arbitrary extracted text is not
-evidence of full-text availability. No function here creates a reading record.
+nonempty content blocks beyond titles, metadata and abstracts. includes_abstract
+only describes nonempty abstract content actually saved in the extraction.
+HTTP success or arbitrary extracted text is not evidence of full-text
+availability. No function here creates a reading record.
 """
 
 import math
@@ -89,22 +91,33 @@ class _Article(HTMLParser):
         self.text = []
         self.all_text = []
         self.body_text = []
-        self.has_abstract = False
+        self.included_abstract = False
         self.has_article = False
         self.has_body = False
 
     def handle_starttag(self, tag, attrs):
         attributes = dict(attrs)
         classes = set((attributes.get("class") or "").lower().split())
-        parent = self.stack[-1][1] if self.stack else {"skip": False, "article": False, "abstract": False, "body": False}
+        properties = set((attributes.get("itemprop") or "").lower().split())
+        roles = set((attributes.get("role") or "").lower().split())
+        parent = self.stack[-1][1] if self.stack else {"skip": False, "article": False, "abstract": False,
+                                                    "body": False, "heading": False, "metadata": False, "content": False}
         state = dict(parent)
         state["skip"] = state["skip"] or tag in ("script", "style", "nav", "form", "noscript")
         state["article"] = state["article"] or tag == "article" or bool(classes & {"ltx_document", "article-body", "article__body", "jats_body"})
-        state["abstract"] = state["abstract"] or bool(classes & {"abstract", "ltx_abstract", "article-abstract"}) or attributes.get("id") in ("abstract", "Abs1")
+        state["abstract"] = (state["abstract"] or tag == "abstract" or "doc-abstract" in roles or "abstract" in properties
+                             or bool(classes & {"abstract", "ltx_abstract", "article-abstract"}) or attributes.get("id") in ("abstract", "Abs1"))
         state["body"] = state["body"] or bool(classes & {"article-body", "article__body", "jats_body", "ltx_section"})
+        state["heading"] = state["heading"] or tag in ("h1", "h2", "h3", "h4", "h5", "h6", "title") or "heading" in roles or bool(properties & {"headline", "name"}) or bool(
+            classes & {"title", "subtitle", "article-title", "article__title", "ltx_title", "jats_title"})
+        state["metadata"] = state["metadata"] or tag in ("header", "footer", "aside", "address", "time") or bool(
+            properties & {"author", "affiliation", "datepublished", "datemodified", "datecreated", "publisher", "identifier", "keywords", "copyrightnotice"}) or bool(
+            classes & {"metadata", "article-meta", "article__meta", "article-info", "authors", "author", "affiliation",
+                       "affiliations", "article-author", "article-authors", "byline", "journal", "publication-date", "ltx_authors", "ltx_date"})
+        state["content"] = state["content"] or tag in ("p", "li", "dd", "td", "pre", "blockquote") or bool(
+            classes & {"ltx_para", "ltx_p", "paragraph"})
         self.has_article |= state["article"]
         self.has_body |= state["body"]
-        self.has_abstract |= state["abstract"]
         if tag not in ("area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"):
             self.stack.append((tag, state))
         if tag in ("p", "div", "section", "h1", "h2", "h3", "br", "li", "tr"):
@@ -125,7 +138,9 @@ class _Article(HTMLParser):
         self.all_text.append(data)
         if state.get("article"):
             self.text.append(data)
-            if state.get("body") and not state.get("abstract"):
+            if state.get("abstract") and not state.get("heading") and data.strip():
+                self.included_abstract = True
+            if state.get("body") and state.get("content") and not any(state.get(key) for key in ("abstract", "heading", "metadata")):
                 self.body_text.append(data)
 
 
@@ -160,5 +175,5 @@ def extract(data, media_type, *, extractor=None):
         result["status"] = "landing_page"
     else:
         result.update({"status": "extracted", "text": re.sub(r"\n[ \t]*\n+", "\n\n", "".join(parser.text)).strip(),
-                       "includes_abstract": parser.has_abstract})
+                       "includes_abstract": parser.included_abstract})
     return result

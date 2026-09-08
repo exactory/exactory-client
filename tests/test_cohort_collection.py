@@ -5,6 +5,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timezone
+from email.utils import format_datetime
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -103,6 +105,61 @@ class CollectionTests(unittest.TestCase):
         done = resume_cohort(self.store, result["collection_id"], request_id="later", expected_revision=self.store.revision, http=http)
         self.assertEqual(done["status"], "complete")
         self.assertEqual(len(wire.requests), 2)
+
+    def test_retry_after_survives_fresh_resumes_without_attempts_until_expiry(self):
+        for form in ("seconds", "date"):
+            with self.subTest(form=form):
+                workspace = self.root / form
+                store = Store(workspace, create=True)
+                http, wire, clock = client([])
+                started = clock.seconds
+                eligible = datetime.fromtimestamp(started + 120, timezone.utc)
+                retry_after = "120" if form == "seconds" else format_datetime(eligible, usegmt=True)
+                wire.responses.append((429, {"Retry-After": retry_after, "Content-Type": "text/plain"}, b"Please wait."))
+                first = collect_cohort(store, DEFINITION, request_id="limited", expected_revision=0,
+                                       max_requests=1, http=http)
+                self.assertEqual(first["attempts_used"], 1)
+                original_source = next(iter(store.snapshot()["records"]["source"].values()))
+                for index in range(2):
+                    reopened = Store(workspace)
+                    resumed_http, resumed_wire, resumed_clock = client([xml_response(atom([entry()], total=1))])
+                    resumed_clock.seconds = started + index
+                    paused = resume_cohort(reopened, first["collection_id"], request_id="early-" + str(index),
+                        expected_revision=reopened.revision, max_requests=1, http=resumed_http)
+                    self.assertEqual(paused["attempts_used"], 0)
+                    self.assertEqual(paused["status"], "paused")
+                    self.assertEqual(paused["pending"][0]["code"], "rate_limited")
+                    self.assertEqual(resumed_wire.requests, [])
+                    self.assertEqual(resumed_clock.sleeps, [])
+                    self.assertEqual(paused["source_count"], 1)
+                    self.assertEqual(paused["next_eligible_at"], eligible.isoformat())
+                    self.assertEqual(collection_status(reopened, first["collection_id"])["next_eligible_at"], eligible.isoformat())
+                    self.assertEqual(list(reopened.snapshot()["records"]["source"].values()), [original_source])
+                self.assertEqual(original_source["next_eligible_at"], eligible.isoformat())
+                self.assertEqual(ArtifactStore(workspace).read(original_source["response"]), b"Please wait.")
+                expired_http, expired_wire, expired_clock = client([xml_response(atom([entry()], total=1))])
+                expired_clock.seconds = started + 120
+                reopened = Store(workspace)
+                done = resume_cohort(reopened, first["collection_id"], request_id="eligible",
+                    expected_revision=reopened.revision, max_requests=1, http=expired_http)
+                self.assertEqual(done["status"], "complete")
+                self.assertEqual(done["attempts_used"], 1)
+                self.assertEqual(len(expired_wire.requests), 1)
+                self.assertEqual(expired_clock.sleeps, [])
+                self.assertEqual(done["source_count"], 2)
+
+    def test_fresh_resume_waits_for_retry_after_within_its_wait_allowance(self):
+        http, _, clock = client([(429, {"Retry-After": "5"}, b"Please wait.")])
+        first = collect_cohort(self.store, DEFINITION, request_id="limited", expected_revision=0,
+                               max_requests=1, http=http)
+        resumed_http, wire, resumed_clock = client([xml_response(atom([entry()], total=1))])
+        resumed_clock.seconds = clock.seconds
+        done = resume_cohort(Store(self.root), first["collection_id"], request_id="eligible-after-wait",
+                             expected_revision=self.store.revision, max_requests=1, http=resumed_http)
+        self.assertEqual(done["status"], "complete")
+        self.assertEqual(resumed_clock.seconds - clock.seconds, 5)
+        self.assertEqual(resumed_clock.sleeps, [5.0])
+        self.assertEqual(len(wire.requests), 1)
 
     def test_missing_abstract_and_category_are_pending_with_saved_originals(self):
         http, _, _ = client([xml_response(atom([entry(abstract=None), entry("2601.00002v1", category=None)], total=2))])

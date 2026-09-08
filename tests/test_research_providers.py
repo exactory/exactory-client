@@ -133,6 +133,19 @@ class ProviderTests(unittest.TestCase):
                 OpenAlex().parse(raw)
             self.assertEqual(error.exception.code, "invalid_response")
 
+    def test_json_depth_is_bounded_in_unused_fields_independently_of_runtime(self):
+        prefix = json.dumps(openalex()).encode()[:-1] + b',"unused":'
+        for opening, closing in ((b'[', b']'), (b'{"child":', b'}')):
+            with self.subTest(container=opening):
+                accepted = prefix + opening * 127 + b'0' + closing * 127 + b'}'
+                self.assertEqual(len(OpenAlex().parse(accepted).works), 1)
+                rejected = prefix + opening * 128 + b'0' + closing * 128 + b'}'
+                with self.assertRaises(ResearchError) as error:
+                    OpenAlex().parse(rejected)
+                self.assertEqual(error.exception.code, "invalid_response")
+        quoted = prefix + json.dumps('[' * 1500 + '\\"' + ']' * 1500).encode() + b'}'
+        self.assertEqual(len(OpenAlex().parse(quoted).works), 1)
+
     def test_arxiv_namespace_and_primary_category_shape_are_validated(self):
         raw = atom([entry()], total=1).replace(b"http://arxiv.org/abs/2601.00001v1", b"https://openalex.org/W123")
         page = Arxiv().parse(raw)

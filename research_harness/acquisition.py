@@ -16,7 +16,11 @@ import_response(store, provider, response: bytes, *, source_url, captured_at,
 Collection definitions are exactly freeze's four fields. collection/{id} holds
 definition, page_size, active_operation, partitions [{id,start,end,offset,total,
 seen_count,epoch,status,restart}], sequence, source_count, returned_count,
-extraction_failures, pending and last_attempt_at. Inclusive minute partitions
+extraction_failures, pending, last_attempt_at and next_eligible_at. The latter
+retains the latest observed Retry-After deadline as a UTC ISO timestamp, even
+after expiry. Every resume restores it in a fresh client; a future deadline
+beyond the fetch wait allowance produces pending without a new HTTP attempt.
+Inclusive minute partitions
 are disjoint; a query above 30000 is bisected until enumerable or explicitly
 pending at a single minute. cohort_member/cohort_exclusion/cohort_seen records
 are keyed by a hash of collection/family and hold collection_id, work_id,
@@ -164,6 +168,7 @@ def _collection_summary(records, collection):
             "source_count": collection["source_count"], "returned_count": collection["returned_count"],
             "unique_count": len(seen), "member_count": len(members), "exclusion_count": len(exclusions),
             "extraction_failures": collection["extraction_failures"], "pending_partitions": unenumerated,
+            "next_eligible_at": collection.get("next_eligible_at"),
             "reading_obligations": obligations, "next_abstract": next((o for o in obligations if o["artifact"]), None)}
 
 
@@ -198,6 +203,7 @@ def collect_cohort(store, definition, *, request_id, expected_revision, max_requ
         collection = {"id": collection_id, "definition": definition, "page_size": page_size,
                       "active_operation": request_id, "sequence": 0, "source_count": 0,
                       "returned_count": 0, "extraction_failures": 0, "pending": [], "last_attempt_at": None,
+                      "next_eligible_at": None,
                       "partitions": [_partition("0", definition["windowStart"].replace("-", "") + "0000",
                                                 definition["windowEnd"].replace("-", "") + "2359")]}
         transaction.put("collection", collection_id, collection)
@@ -244,6 +250,10 @@ def _page_update(transaction, collection, partition_id, page, prepared, sources,
     collection["source_count"] += len(sources)
     if sources:
         collection["last_attempt_at"] = sources[-1]["captured_at"]
+    eligible_times = [source["next_eligible_at"] for source in sources if source["next_eligible_at"] is not None]
+    if collection.get("next_eligible_at") is not None:
+        eligible_times.append(collection["next_eligible_at"])
+    collection["next_eligible_at"] = max(eligible_times) if eligible_times else None
     put_sources(transaction, sources)
     failures = [] if page is None else list(page.failures)
     if page is not None:
@@ -346,7 +356,8 @@ def _run_collection(store, collection_id, request_id, budget, http):
                                                 start=partition["offset"], page_size=collection["page_size"])
         page, failure, attempts, prepared = None, None, [], []
         try:
-            response = http.get(request.url, headers=request.headers, accept=request.accept, budget=budget)
+            response = http.get(request.url, headers=request.headers, accept=request.accept, budget=budget,
+                                not_before=collection.get("next_eligible_at"))
             attempts = response.attempts
             page = provider.parse(response.body)
         except HttpFailure as error:
@@ -525,6 +536,8 @@ def import_response(store, provider, response, *, source_url, captured_at, reque
     for work in page.works:
         if work["abstract_status"] != "available":
             pending.append({"code": "partial_abstract" if work["abstract_status"] == "partial" else "missing_abstract", "work_id": work["work_id"]})
+        if work["id"].startswith("arxiv:") and work["version"] is None:
+            pending.append({"code": "missing_version", "work_id": work["work_id"]})
 
     def commit(transaction):
         put_sources(transaction, sources)
