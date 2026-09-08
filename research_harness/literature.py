@@ -334,8 +334,12 @@ identity/source assertions, active bundles, used readings, selected collections,
 reference resolutions, consequential requirements and purpose-specific searches.
 """
     profile_name(profile)
-    records = store.snapshot()["records"]
-    artifacts = ArtifactStore(store.root)
+    return foundation_state(store.snapshot()["records"], ArtifactStore(store.root), profile)
+
+
+def foundation_state(records, artifacts, profile):
+    """The same foundation assessment on a caller-owned consistent snapshot."""
+    profile_name(profile)
     scope = records.get("literature_scope", {}).get(profile, {})
     graph = citation_graph(records, profile)
     obligations = list(graph["obligations"])
