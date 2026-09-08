@@ -6,7 +6,7 @@ from pathlib import Path
 import shutil
 
 from . import schema as s
-from .admission import reference, resolve_proposal_account, validate_proposal_context
+from .admission import reference, require_current_account, resolve_proposal_account, validate_proposal_context
 from .errors import SearchError
 from .storage import safe_path, _strict_json
 
@@ -178,8 +178,8 @@ def manifest_closure(digests, content):
     return manifests
 
 
-def audit_admission(root, state, proposal, content, foundation=None):
-    """Revalidate the proposal's evidence and accepted budget basis under lock."""
+def audit_admission(root, state, proposal, content, foundation=None, *, execution_account_id=None):
+    """Audit the current foundation, evidence and applicable account under lock."""
     s.validate_proposal(proposal)
     from .research import audit_foundation
     audit_foundation(root, state, proposal, foundation if foundation is not None else proposal.get("foundation"), content)
@@ -187,7 +187,11 @@ def audit_admission(root, state, proposal, content, foundation=None):
     if proposal.get("computation") is not None:
         from .computation_io import audit_computation
         audit_computation(root, state, proposal, proposal["computation"], content)
-    account = resolve_proposal_account(state, proposal, target)
+    # A renewal proposal names its historical predecessor, not the account
+    # allocated by admission. Work audits must use the node's current segment.
+    account = (resolve_proposal_account(state, proposal, target)
+               if execution_account_id is None
+               else require_current_account(state, execution_account_id))
     checkpoint_ids = set()
     if proposal["anchor"]["kind"] == "checkpoint":
         checkpoint_ids.add(proposal["anchor"]["checkpoint_id"])

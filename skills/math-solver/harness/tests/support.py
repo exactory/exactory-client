@@ -117,6 +117,14 @@ def reserved_journal(argv, attack_root):
         state = controller.status()
         node = next(node for node in state["nodes"].values() if node["attack_slug"] == args.slug)
         if not state["control"]["pending_moves"]:
+            records = state["control"]["strategy_refresh"]["assessments"]
+            selected = {tuple(row[key] for key in ["node_id", "strategy"])
+                        for row in records[-1]["assessment"]["strategy_order"]} if records else None
+            if (controller.command("strategy-context", {}, None, None)["required"]
+                    or selected is not None and (node["id"], line["strategy"]) not in selected):
+                from tests.strategy_refresh_support import reassess_fixture
+                reassess_fixture(controller, {(node["id"], line["strategy"])})
+                state = controller.status()
             spec = {key: line[key] for key in ["strategy", "entry", "pass", "trigger_features", "step_cites"]}
             controller.command("begin", spec, state["revision"], "fixture-begin-{}-{}".format(node["id"], line["move"]), node["id"])
     except attack.ValidationError as error:

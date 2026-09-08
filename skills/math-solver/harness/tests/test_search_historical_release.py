@@ -72,6 +72,15 @@ class HistoricalReleaseTests(WorkspaceTest):
         invoke(controller, "amend-foundation", amendment_spec(controller, "node-000001", delivery["foundation"], inputs))
         self.assertEqual(controller.status()["accounts"], recovered["accounts"])
         self.assertEqual(controller.status()["runs"]["run-000001"], old_run)
+        with self.assertRaises(SearchError) as caught:
+            invoke(controller, "begin", begin_spec())
+        self.assertEqual(caught.exception.code, "strategy_reassessment_required")
+        self.assertFalse(marker.exists())
+        self.assertEqual(len(controller.status()["runs"]), 1)
+        self.assertEqual(controller.status()["accounts"], recovered["accounts"])
+        from tests.strategy_refresh_support import reassess_fixture
+        from tests.support import OPENING
+        reassess_fixture(controller, {("node-000001", OPENING)})
         invoke(controller, "begin", begin_spec())
         invoke(controller, "run", spec)
         after = controller.status()

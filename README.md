@@ -35,11 +35,13 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
-Version 0.35.0 is an experimental initial release of the shared research
+Version 0.36.0 is an experimental initial release of the shared research
 foundation and current evidence checks. Skill workflow updates, CI and host
 distribution work, end-to-end validation, and independent review continue for
-0.35.1.
-Read the [release and upgrade notes](docs/releases/0.35.0.md)
+0.37.0. This version retains the reviewed mathematical strategy reassessment,
+failed-method history, investigation priorities, and deferrals introduced in
+[0.35.0](docs/releases/0.35.0.md).
+Read the [release and upgrade notes](docs/releases/0.36.0.md)
 before updating a waiting agent or adopting an existing attack. An update does
 not resume paused research or reset its budget.
 

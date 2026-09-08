@@ -8,6 +8,48 @@ import tempfile
 from .proof import coverage, obligation_support
 from .storage import safe_path, Store
 from .errors import SearchError
+from . import schema as s
+
+
+def strategy_assessment_lines(state, node_id=None):
+    from .strategy_refresh import assessment_status
+    status = assessment_status(state)
+    policy = state["control"]["strategy_refresh"]
+    prefix = ".search/blobs/" if node_id is None else "../.search/blobs/"
+    lines = ["", "## Strategy reassessment", "",
+             "Recorded context: " + status["context_digest"],
+             "Reassessment required by recorded evidence: " + ("yes" if status["required"] else "no"),
+             "Policy recorded as enabled: " + ("yes" if policy["enabled"] else "no; the current service checks new work"),
+             "Local plan freshness is checked by search strategy-context and at execution."]
+    for record in policy["assessments"]:
+        value = record["assessment"]
+        rows = [row for row in value["assessments"] if node_id is None or row["node_id"] == node_id]
+        if node_id is not None and not rows:
+            continue
+        lines += ["", "### " + record["id"], "",
+                  "Predecessor: " + str(record["predecessor_id"]),
+                  "Context: [snapshot](" + prefix + value["context_digest"] + ".json)",
+                  "Assessment: [record](" + prefix + record["digest"] + ".json)",
+                  "Independent review: [record](" + prefix + s.digest(record["review"]) + ".json)",
+                  "What changed: " + value["what_changed"],
+                  "Remaining obligations: " + json.dumps(value["remaining_obligation_ids"]), ""]
+        for row in rows:
+            lines += ["- {} / {}: {}. {}".format(row["node_id"], row["strategy"], row["disposition"], row["reason"]),
+                      "  Next action: " + row["next_action"], "  Evidence: " + json.dumps(row["evidence_ids"])]
+        lines += ["", "Continuing order: " + json.dumps(value["strategy_order"]),
+                  "Considered failures: " + json.dumps(value["considered_failure_ids"]), ""]
+        for hypothesis in value["next_hypotheses"]:
+            lines += ["- Hypothesis: " + hypothesis["statement"],
+                      "  Success criterion: " + hypothesis["success_criterion"],
+                      "  Failure signal: " + hypothesis["failure_signal"]]
+        if value["no_new_hypothesis_reason"] is not None:
+            lines.append("Existing hypotheses retained because: " + value["no_new_hypothesis_reason"])
+    failures = [(identity, failure) for identity, failure in policy["failures"].items()
+                if node_id is None or failure["node_id"] == node_id]
+    if failures:
+        lines += ["", "### Retained strategy failures", ""]
+        lines += ["- {}: {}".format(identity, failure["observation"]) for identity, failure in failures]
+    return lines
 
 
 def replace_text(path, text):
@@ -55,9 +97,13 @@ def render(root, state):
         workspace = safe_path(root, node["attack_slug"])
         lines.append("- {} ({}): {}; obligation {}; account {}.".format(
             node["id"], node["attack_slug"], node["status"], node["obligation_id"], node["account_id"]))
+        deferred = node["id"] in state["control"]["deferred_node_ids"]
+        if deferred:
+            lines.append("  {}: deferred from new research selection; its obligation is retained.".format(node["id"]))
         lineage = ["# Investigation lineage", "", "Generated from .search/tree.json; do not edit.", "",
                    "Node: " + node["id"], "Attack: " + node["attack_slug"],
                    "Claim: " + node["claim"]["statement"], "Status: " + node["status"],
+                   "Deferred from new research selection: " + ("yes" if deferred else "no"),
                    "Obligation: " + str(node["obligation_id"]), "Relationship: " + node["relationship"],
                    "Logical predecessor: " + str(node["logical_predecessor"]),
                    "Predecessor checkpoint: " + str(node["checkpoint_id"]),
@@ -68,6 +114,8 @@ def render(root, state):
                 lineage.extend(["- {}: {}".format(cp["id"], cp["what_changed"]),
                                 "  Remaining obligations: " + json.dumps(cp["remaining_obligation_ids"]),
                                 "  Next hypothesis: " + cp["next_hypothesis"]])
+        lineage.extend(strategy_assessment_lines(state, node["id"]))
         if workspace.is_dir():
             replace_text(safe_path(workspace, "LINEAGE.md"), "\n".join(lineage) + "\n")
+    lines.extend(strategy_assessment_lines(state))
     replace_text(safe_path(root, "SEARCH_TREE.md"), "\n".join(lines) + "\n")

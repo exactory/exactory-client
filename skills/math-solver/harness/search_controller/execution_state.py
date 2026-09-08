@@ -5,7 +5,7 @@ import copy
 from . import schema as s
 from .admission import reference, remaining_allowance, require_current_account, qualifying_progress
 from .scheduler import next_action
-from .problem_records import validate_journal_problem
+from .problem_records import validate_journal_problem, validate_journal_line
 
 
 def account_for_work(state, node_id, resource, units=1):
@@ -30,14 +30,31 @@ def account_for_work(state, node_id, resource, units=1):
 def reserve_move(state, payload):
     s.closed(payload, "reservation")
     value = payload["reservation"]
-    s.closed(value, "id node_id account_id move pass strategy entry walk trigger_features step_cites problem_digest journal_prefix_digest")
+    modern = "purpose" in value
+    s.closed(value, "id node_id account_id move pass strategy entry walk trigger_features step_cites problem_digest journal_prefix_digest" +
+             (" purpose strategy_context_digest assessment_digest planning_digest" if modern else ""))
     node, account = account_for_work(state, value["node_id"], "moves")
     s.require(not state["control"]["pending_moves"] and not state["service"]["legacy_intents"] and not state["service"]["native_intents"],
               "A prior move or legacy operation needs reconciliation", "recovery_required")
     s.require(not any(run["status"] != "terminal" for run in state["runs"].values()), "A workload remains unresolved", "recovery_required")
-    s.require(next_action(state) in [{"kind": "execute_node", "node_id": node["id"]},
-                                    {"kind": "prepare_result", "node_id": node["id"], "step": "verification"}],
+    action = next_action(state)
+    verification = action == {"kind": "prepare_result", "node_id": node["id"], "step": "verification"}
+    s.require(verification or (action.get("kind") == "execute_node" and action.get("node_id") == node["id"]
+                              and action.get("strategy", value["strategy"]) == value["strategy"]),
               "This node is not the admitted execution frontier", "frontier_required")
+    s.require(modern or not state["control"]["strategy_refresh"]["enabled"],
+              "New moves must bind the strategy assessment", "strategy_reassessment_required")
+    if modern:
+        from .strategy_refresh import assessment_status, require_research
+        status = assessment_status(state)
+        s.require(value["purpose"] == ("verification" if verification else "research"),
+                  "Move purpose differs from the execution frontier")
+        s.require(value["strategy_context_digest"] == status["context_digest"]
+                  and value["assessment_digest"] == status["assessment_digest"],
+                  "Move strategy context changed", "strategy_reassessment_stale")
+        s.digest_string(value["planning_digest"])
+        if not verification:
+            require_research(state, node["id"], value["strategy"], value["problem_digest"], value["planning_digest"])
     s.require(value["account_id"] == account["id"], "Reservation account differs", "account_superseded")
     s.integer(value["move"], 1, 24)
     s.integer(value["pass"], 1, 3)
@@ -63,12 +80,17 @@ def reserve_move(state, payload):
 
 def journal_intended(state, payload):
     s.closed(payload, "reservation_id before_digest after_digest problem_digest" +
-             (" problem_transition" if "problem_transition" in payload else ""))
+             (" problem_transition" if "problem_transition" in payload else "") +
+             (" journal_line" if "journal_line" in payload else ""))
     move = reference(state["service"]["moves"], payload["reservation_id"], "reserved move")
     s.require(move["status"] == "reserved" and move["id"] in state["control"]["pending_moves"], "Journal requires its pending move", "reservation_required")
     s.require(not any(run["status"] != "terminal" for run in state["runs"].values()), "Workload must terminate before journalling", "recovery_required")
     s.require(payload["before_digest"] == move["journal_prefix_digest"], "Journal intent changed the reserved prefix")
     validate_journal_problem(state, move, payload)
+    if "journal_line" in payload:
+        validate_journal_line(payload["journal_line"], move, payload["problem_digest"])
+        s.require("problem_transition" not in payload or payload["problem_transition"]["line"] == payload["journal_line"],
+                  "Journal observation differs from its problem transition", "digest_mismatch")
     for key in ["before_digest", "after_digest", "problem_digest"]:
         s.digest_string(payload[key])
     s.require(move["id"] not in state["service"]["legacy_intents"], "Journal intent already exists", "recovery_required")
@@ -89,8 +111,13 @@ def journal_acknowledged(state, payload):
     state["totals"]["used_moves"] += 1
     value["status"] = "journalled"
     state["control"]["pending_moves"].remove(value["id"])
+    line = intent.get("journal_line", intent.get("problem_transition", {}).get("line"))
+    if line is not None:
+        state["service"]["journal_observations"][value["id"]] = copy.deepcopy(line)
     del state["service"]["legacy_intents"][value["id"]]
     state["service"]["journal_receipts"]["{}:{}".format(payload["node_id"], payload["move"])] = copy.deepcopy(payload)
+    from .strategy_refresh import note_evidence
+    note_evidence(state, "journal:" + value["id"])
 
 
 EVENT_HANDLERS = {"move_reserved": reserve_move, "journal_intended": journal_intended,
@@ -101,7 +128,8 @@ def reserve_run(state, payload):
     s.closed(payload, "run")
     run = payload["run"]
     s.closed(run, "id node_id account_id reservation_id kind input_digest spec_digest task cwd snapshot_root output_root commands timeout_seconds environment threads expected_outputs dependency_enumeration executable_bindings reserved_units token requested_declaration requested_type_digest toolchain_digest toolchain_inventory_digest inspection_source_digest publication_prestate input_modes" +
-             (" computation_digest" if "computation_digest" in run else ""))
+             (" computation_digest" if "computation_digest" in run else "") +
+             (" strategy_context_digest" if "strategy_context_digest" in run else ""))
     s.choice(run["kind"], {"command", "certificate", "lean"})
     units = 2 if run["kind"] == "lean" else 1
     s.require(run["reserved_units"] == units and len(run["commands"]) == units, "Command reservation count differs")
@@ -122,6 +150,8 @@ def reserve_run(state, payload):
     move = reference(state["service"]["moves"], run["reservation_id"], "reserved move")
     s.require(move["status"] == "reserved" and move["node_id"] == node["id"] and move["account_id"] == account["id"] == run["account_id"],
               "Run requires the original current reserved move", "reservation_required")
+    if run["kind"] == "command" and ("strategy_context_digest" in run or state["control"]["strategy_refresh"]["enabled"]):
+        require_producer_context(state, run, move)
     s.require(run["task"] == node["admission"]["task"], "Run purpose or input domain differs from admission", "admission_required")
     s.integer(run["timeout_seconds"], 1, node["admission"]["limits"]["timeout_seconds"])
     s.require(run["id"] == "run-{:06d}".format(state["next_ids"]["run"]), "Run identity is not next")
@@ -152,6 +182,8 @@ def launch_run(state, payload):
     s.closed(payload, "run_id token identity")
     run = reference(state["runs"], payload["run_id"], "run")
     s.require(run["status"] == "reserved" and payload["token"] == run["token"], "Launch identity differs")
+    if run["kind"] == "command" and "strategy_context_digest" in run:
+        require_producer_context(state, run, state["service"]["moves"][run["reservation_id"]])
     identity = payload["identity"]
     s.closed(identity, "pid process_group start_identity token")
     s.integer(identity["pid"], 1)
@@ -198,19 +230,34 @@ def finish_run(state, payload):
     account["used_runs"] += charge
     state["totals"]["used_runs"] += charge
     run.update({key: copy.deepcopy(payload[key]) for key in payload if key not in {"run_id", "token"}})
+    if run["status"] == "terminal":
+        from .strategy_refresh import note_evidence
+        note_evidence(state, "run:" + run["id"])
+
+
+def require_producer_context(state, run, move):
+    from .strategy_refresh import assessment_status, require_research
+    s.require(move.get("purpose", "research") == "research", "A verification move cannot launch a producer", "verification_only")
+    require_research(state, move["node_id"], move["strategy"], move["problem_digest"], move.get("planning_digest"))
+    s.require(run.get("strategy_context_digest") == assessment_status(state)["context_digest"],
+              "Research changed after the producer was reserved", "strategy_reassessment_stale")
 
 
 EVENT_HANDLERS.update(run_reserved=reserve_run, run_launched=launch_run, run_finished=finish_run)
 
 
 def native_intended(state, payload):
-    s.closed(payload, "id node_id command args_digest pre_digest output_paths ownership_digest")
+    s.closed(payload, "id node_id command args_digest pre_digest output_paths ownership_digest" +
+             (" strategy" if "strategy" in payload else ""))
     s.require(not state["service"]["native_intents"] and not state["service"]["legacy_intents"]
               and not state["control"]["pending_moves"] and not any(run["status"] != "terminal" for run in state["runs"].values()),
               "Another native mutation or execution requires recovery", "recovery_required")
     node = reference(state["nodes"], payload["node_id"], "native producer")
     s.require(node["proposal_id"] is not None and node["status"] != "finished", "Native mutation requires a nonterminal admission", "admission_required")
     s.choice(payload["command"], {"plan", "rank", "fail", "stall", "check-unit", "finish"})
+    if "strategy" in payload:
+        s.optional_text(payload["strategy"])
+        s.require((payload["command"] == "fail") == (payload["strategy"] is not None), "Failure intent must identify its strategy")
     s.text(payload["id"])
     s.strings(payload["output_paths"])
     s.digest_string(payload["args_digest"])
@@ -222,13 +269,19 @@ def native_intended(state, payload):
 
 def native_acknowledged(state, payload):
     s.closed(payload, "id outcome post_digest diagnostics" if payload.get("outcome") == "failed" else "id outcome post_digest")
-    reference(state["service"]["native_intents"], payload["id"], "native intent")
+    intent = reference(state["service"]["native_intents"], payload["id"], "native intent")
     s.choice(payload["outcome"], {"succeeded", "unchanged", "failed"})
     if payload["outcome"] == "failed":
         s.strings(payload["diagnostics"], nonempty=True)
     s.digest_string(payload["post_digest"])
     del state["service"]["native_intents"][payload["id"]]
-    state["service"]["native_receipts"][payload["id"]] = copy.deepcopy(payload)
+    state["service"]["native_receipts"][payload["id"]] = dict(copy.deepcopy(payload),
+        node_id=intent["node_id"], command=intent["command"], args_digest=intent["args_digest"],
+        pre_digest=intent["pre_digest"], recorded_revision=state["revision"] + 1)
+    if payload["outcome"] == "succeeded" and intent.get("strategy") is not None:
+        from .strategy_refresh import remember_failure
+        remember_failure(state, intent["node_id"], intent["strategy"],
+                         dict(kind="native_receipt", receipt=state["service"]["native_receipts"][payload["id"]]))
     if (state["control"]["state_error"] or "").startswith("Native intent " + payload["id"] + " "):
         state["control"]["state_error"] = None
 

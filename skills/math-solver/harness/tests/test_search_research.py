@@ -154,7 +154,15 @@ class NativeResearchTests(SearchCLIWorkspace, unittest.TestCase):
 
 class NativePrelaunchTests(unittest.TestCase):
     def test_source_changed_after_run_reservation_never_receives_an_execution_token(self):
+        self.assert_source_change_prevents_release(after_launch_record=False)
+
+    def test_source_changed_after_launch_record_never_receives_an_execution_token(self):
+        self.assert_source_change_prevents_release(after_launch_record=True)
+
+    def assert_source_change_prevents_release(self, *, after_launch_record):
+        from contextlib import nullcontext
         import tempfile
+        from search_controller import integration
         from tests.support import run
         from tests.search_execution_support import admit_workspace, begin_spec, invoke, command_spec
         from search_controller.execution import launch
@@ -175,9 +183,19 @@ class NativePrelaunchTests(unittest.TestCase):
             common = Store(root)
             artifact = next(iter(common.snapshot()["records"]["source"].values()))["response"]
             source = root / artifact["path"]
-            source.chmod(0o600)
-            source.write_bytes(b"Changed after reservation but before actual subprocess release.")
-            with self.assertRaises(SearchError) as caught:
+            def change_source():
+                source.chmod(0o600)
+                source.write_bytes(b"Changed after reservation but before actual subprocess release.")
+            original = integration.internal_operation
+            def record_then_change(controller, command, request_id, build):
+                result = original(controller, command, request_id, build)
+                if command == "execution-launch":
+                    change_source()
+                return result
+            interception = patch.object(integration, "internal_operation", side_effect=record_then_change) if after_launch_record else nullcontext()
+            if not after_launch_record:
+                change_source()
+            with interception, self.assertRaises(SearchError) as caught:
                 launch(controller, reserved)
             self.assertEqual(caught.exception.code, "research_foundation_stale")
             terminal = Path(reserved["snapshot_root"]).parent / "terminal.json"
