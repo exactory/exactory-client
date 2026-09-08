@@ -8,7 +8,16 @@ new node starts with `search propose`, independent `search review`, and
 replace the controller's original objective, accepted-evidence graph, or resource
 accounts.
 
-The early 0.34.0 interface documented here includes reviewed admission, durable
+Read the [research constitution](../../RESEARCH_CONSTITUTION.md) and the
+[managed research workflow](../../docs/research-workflow.md). New proposals use
+schema version 3 and a reviewed current `foundation` reference. Complete common
+preparation before proposing, then export actual source bytes and native inputs
+for independent review. The [native foundation contract](../../docs/research-cli.md#native-math-preparation)
+defines the exact reference, export, external-verification claim binding, current
+checks, and append-only `search amend-foundation` for historical nodes. Common
+preparation is separate from native proof acceptance and resource accounting.
+
+The current interface documented here includes reviewed admission, durable
 pause and explicit resume, controlled deadlines, frozen input/result/delivery
 identity audits, and the computation and interpretation contracts below. It does
 not yet include immediate cancellation of an owned workload, full local
@@ -19,11 +28,12 @@ journal `closes` flag are recorded facts, not root acceptance.
 
 ## Computation admission and mandatory interpretation
 
-New finite proposals use proposal `schema_version: 2` with one additional field,
-`computation`. Analytical `task.kind: proof` uses `computation: null`. Version 1
-proposals, reviews, admissions, run reservations and accepted results remain
-readable during replay. The public service refuses new version 1 finite proposals
-and admissions. Its new run reservations always include `computation_digest`,
+The computation field introduced in proposal version 2 remains required in
+version 3 alongside `foundation`. Analytical `task.kind: proof` uses
+`computation: null`. Versions 1 and 2, their reviews, admissions, reservations,
+and accepted results remain readable during replay. Fresh work requires the
+applicable current reviewed amendments; historical replay grants no fresh
+execution permission. New run reservations include `computation_digest`,
 which is null only for analytical tasks. Historical reservations without that field
 are accepted only for original version 1 admissions without amendments. This is
 historical replay compatibility; there is no public arbitrary event API.
@@ -676,7 +686,7 @@ obligations. No symbolic set parser or inference from prose is provided.
 ## Proposal
 
 ```text
-schema_version: 1 | 2
+schema_version: 3 (versions 1 and 2 are historical replay)
 author: Provenance
 category: "main" | "coverage" | "standalone"
 relationship: "main" | "prerequisite" | "coverage" | "alternative" |
@@ -709,7 +719,8 @@ task: {
   kind: "proof" | "finite_decision" | "finite_proof" | "counterexample_search",
   purpose: Text, input_domain: Text
 }
-computation: ComputationContract | null  (required in version 2; absent in version 1)
+computation: ComputationContract | null  (required in versions 2 and 3; absent in version 1)
+foundation: FoundationReference  (required in version 3; defined in the linked native foundation contract)
 limits: {
   max_moves: Integer[1,24], max_runs: PositiveInteger,
   timeout_seconds: PositiveInteger, workers: PositiveInteger

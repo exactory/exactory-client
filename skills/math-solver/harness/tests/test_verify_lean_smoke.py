@@ -19,7 +19,8 @@ class VerifyLeanSmokeTest(WorkspaceTest):
     def setUp(self):
         super().setUp()
         self.step_dir = self.workspace / "deterministic" / "formal-check-1"
-        shutil.copytree(SMOKE_PROJECT, self.step_dir)
+        shutil.copytree(SMOKE_PROJECT, self.step_dir,
+                        ignore=shutil.ignore_patterns(".lake"))
         self.old_path = os.environ["PATH"]
         os.environ["PATH"] = PATH_WITH_ELAN
         self.addCleanup(os.environ.__setitem__, "PATH", self.old_path)

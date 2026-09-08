@@ -23,6 +23,7 @@ def build_files() -> dict[Path, str]:
             f"---\nname: {name}\ndescription: {description.group(1)}\n---\n\n"
             f"# Exactory: {name}\n\n"
             "First read [Codex runtime instructions](../../README.md).\n"
+            "Read the [common research constitution](../../../RESEARCH_CONSTITUTION.md).\n"
             f"Then read and execute the [shared {name} workflow](../../../skills/{name}/SKILL.md).\n"
             "Resolve that workflow's relative links from its own directory.\n"
         )

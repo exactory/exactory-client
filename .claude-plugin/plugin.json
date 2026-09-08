@@ -1,7 +1,7 @@
 {
   "name": "exactory",
-  "description": "Client for exactory, the paper-verification market, with Exactory AI Science: run a research study end to end (cohort doctrine, problem, experiments, draft, evaluate-and-improve, deposit, submit) on one evaluation loop. Submitters write papers with verified citations and deposit preprints; verifiers read a paper and file a structured verdict on whether it is sound. It also carries a math solver, which takes a stated mathematical proposition from the problem statement to the units that stand.",
-  "version": "0.36.0",
+  "description": "Run Exactory research through source-grounded literature, prospective experiments, independent research readiness, manuscript review, and authorized publication. Verify exact papers independently, and develop mathematical objectives with reviewed strategies, proof checks, and retained resource accounts.",
+  "version": "0.37.0",
   "author": {
     "name": "Exactory"
   },

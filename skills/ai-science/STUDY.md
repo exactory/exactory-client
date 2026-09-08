@@ -1,127 +1,120 @@
 # The study workspace
 
-`exactory-lab init` creates the study layer; `exactory-draft init` adds the
-draft layer at stage 4, when the title and category exist. One study is one
-workspace is one paper. Every path below is relative to the workspace root, the
-directory that holds `.exactory/`.
+Read the [research constitution](../../RESEARCH_CONSTITUTION.md) and the
+[managed research workflow](../../docs/research-workflow.md).
+`exactory-lab init` creates the study layer; `exactory-draft init` can add the
+draft layout when the title and category exist. Creating either layout leaves
+research preparation pending. Every path is relative to the workspace root.
 
-```
+```text
 <workspace>/
 ├── .exactory/
-│   ├── study.json          study state machine (exactory-lab owns it)
-│   ├── decisions.jsonl     append-only decision log
-│   ├── draft.json          draft state (exactory-draft, from stage 4)
-│   ├── deposit.json        Zenodo deposit record (exactory-draft, from stage 6)
-│   ├── citation-check.json exactory-check lookup report
-│   ├── citation-cache.json positive-only verification cache
-│   └── autopilot_count     Stop-hook advance counter
-├── context/                stage-0 human intake; README.md explains it
-├── cohort/
-│   ├── cohort.json         membership + reading ledger
-│   ├── notes/<id>.md       full-text reading notes (core + authorities)
-│   └── doctrine.md         the extracted doctrine
-├── idea/idea.md            problem, hypothesis, contribution, experiment sketch
+│   ├── research.sqlite3    authoritative common history and request receipts
+│   ├── study.json         current study projection
+│   ├── decisions.jsonl    projection of retained stage decisions
+│   ├── draft.json         current draft projection
+│   ├── deposit.json       projection of the observed deposit
+│   ├── citation-check.json
+│   └── citation-cache.json
+├── context/               preserved human material and constraints
+├── cohort/                source-linked notes and doctrine
+├── idea/idea.md            full objective, branch hypotheses and prospective tests
 ├── experiment/
 │   ├── code/  logs/  results/  plots/
-│   └── journal.jsonl       search journal, one node per line
-├── draft/                  LaTeX sources; references.bib lives here
-├── evidence/claims.json    claim -> source ledger
-├── research/literature.md  append-only survey log
-├── reviews/                reviews + score_history.jsonl
-└── learnings/iter_NNN.md   predict-before-review ledger
+│   └── journal.jsonl      human search narrative linked to managed records
+├── draft/                 manuscript sources and references.bib
+├── evidence/claims.json   scoped claims with actual evidence and quantities
+├── research/
+│   ├── sources/objects/   immutable captured and pinned bytes
+│   └── literature.md      cumulative human survey narrative
+├── reviews/               exact deliveries, original reviews and score history
+└── learnings/iter_NNN.md   predictions, observations and next questions
 ```
 
-The study runs inside a git repository. `exactory-lab init` runs `git init`
-when the directory is not already under git, and writes a `.gitignore` for
-LaTeX build artifacts (`*.aux`, `*.log`, `*.bbl`, `*.blg`, `*.out`, `*.pdf`).
-Every stage commits its artifacts, so a crash resumes from the record.
+SQLite records configuration, source collections, versions, readings, synthesis,
+cycles, admissions, execution observations, assessments, checkpoints, reviews,
+and remote intents. Read `exactory-research status` and `next` for current
+obligations. Hand-editing a projection cannot authorize work. Explicit
+`export --kind workspace` rebuilds workspace views from current history; run
+reconciliation repairs execution views. Legacy work is adopted explicitly and
+does not inherit finished reading or execution credit from old labels.
 
-## .exactory/study.json
+The initializer creates a Git repository when needed and preserves an existing
+one. Respect the user's storage and commit policy. A durable checkpoint may use
+a Git commit or an immutable snapshot, with a stable ID, exact statement,
+evidence, verification status, unresolved obligations, and next hypothesis.
+Research stored under a user-designated local-only directory stays local.
 
-`exactory-lab` owns this file; do not edit it by hand.
+## Study state and decisions
+
+The CLI exports a version-2 study projection:
 
 ```json
-{"version": 1, "slug": "curvature-scalar", "stage": "cohort",
- "status": "running", "autopilot": true, "waiting": null,
+{"version": 2, "slug": "study", "stage": "cohort",
+ "status": "pending", "autopilot": true, "waiting": null,
  "loop": {"target": null, "budget": null, "notes": ""},
- "created": "...", "updated": "..."}
+ "created": "...", "updated": "...",
+ "research": {"store": ".exactory/research.sqlite3", "profile": "research"}}
 ```
 
-- `stage` ∈ `initiate | cohort | ideate | experiment | write | evaluate |
-  deposit | submit | complete`.
-- `status` ∈ `pending | running | done` (free-form; these are the words the
-  skills use).
-- `waiting` is null, or the name of the wait the run is parked on. The Stop
-  hook rests the session while it is set.
-- `loop.target` is the overall score that stops the improvement loop, `budget`
-  its iteration cap, `notes` the user's pacing policy in their own words. All
-  optional; the loop's default stop is saturation (LOOP.md).
+Stages are `initiate`, `cohort`, `literature`, `ideate`, `experiment`,
+`write`, `evaluate`, `deposit`, `submit`, and `complete`. The workflow
+describes adjacent forward transitions and explicit returns. Both source
+completion and target prerequisites apply. Enter unfinished work with
+`--status pending`; a proposed `done` status checks the destination too.
 
-Advance it: `exactory-lab state set --stage <s> --status <s>`; park and release
-a wait with `--waiting <reason>` and `--waiting none`; record pacing with
-`--autopilot on|off` and `--loop-target/-budget/-notes`.
+Change state with `exactory-lab state set`, and preserve actual decisions with
+`exactory-lab decide --stage STAGE --decision TEXT --why TEXT --evidence TEXT`.
+Both use revision and request identity, as do other managed mutations. Keep the
+original identity and payload when retrying a lost success. New decisions use a
+current revision and new ID.
 
-## .exactory/decisions.jsonl
+Waiting and free-form operational status describe conditions, not research
+completion. `loop.target`, `budget`, and `notes` record optional manuscript
+measurement limits and user pacing; they do not replace research cycle accounts.
 
-Append-only, one JSON object per line:
+## Sources and cohort doctrine
 
-```json
-{"ts": "...", "stage": "ideate", "decision": "...", "why": "...", "evidence": "..."}
-```
+`exactory-cohort freeze` defines the cohort; managed collection enumerates it.
+Actual `read` records and source inspections establish coverage. Any local
+cohort inventory is a human view, not a ledger of authored completion booleans.
+Keep the entire cohort's abstract obligations, root/reference tiers, required
+full readings, source units, dates, and availability gaps in the common records.
 
-Write it only through `exactory-lab decide --decision ... --why ...
-[--stage ...] [--evidence ...]`. The decision-log hook blocks a stage from
-closing until it carries a decision, so the record of how the result was
-produced is always complete.
+Preserve `cohort/doctrine.md` and notes as source-grounded synthesis. Record all
+five search purposes and research standards, rationale, innovation studies, and
+context with the supported mutations. The human survey log points to those
+records and original evidence; it does not substitute for them.
 
-## cohort/cohort.json
+## Experiments, branches, and claims
 
-Written by `/exactory:cohort`. The membership and the reading ledger:
+Each prospective cycle names the complete objective and exact branch scope,
+predecessor checkpoint, hypothesis, distinguishing test, failure signals,
+evidence requirements, and resource limits. A managed launch uses its current
+admission and exact binding. Record human journal entries with actual cycle,
+admission, execution, assessment, and checkpoint IDs.
 
-```json
-{"version": 1, "corpus": "arxiv", "category": "cs.LG", "frozen": "...",
- "members": [{"id": "...", "title": "...", "year": 2026,
-              "role": "member | core | authority",
-              "abstract_read": true, "fulltext_read": false,
-              "notes": "cohort/notes/<id>.md or null"}]}
-```
+Keep invalid, negative, timed-out, interrupted, and unknown outcomes distinct.
+Preserve original sealed result evidence and resource charges, including failed
+branches. A working source variant may change while the complete history remains.
 
-Every member carries an abstract; the `core` papers and the `authority` papers
-carry full text with a note file. See the cohort skill for the reading
-discipline and how the doctrine is extracted.
+A quantitative claim ledger precedes the manuscript. Each entry states the claim,
+actual immutable evidence reference, source/result locator, scope, assumptions,
+units, population/denominator, interval, outcome, and comparison baseline where
+applicable. Unknown and inapplicable dimensions retain reasons. Distinguish fitted
+parameters, external inputs, derivations, and selection choices. A suggested
+command is a reproduction instruction, not evidence that it ran.
 
-## experiment/journal.jsonl
+## Reviews and continuation
 
-Append-only, one node per line:
+A readiness export delivers the selected assessed research candidate and actual
+evidence to an independent assessor before writing. A manuscript export later
+delivers the exact paper and claim evidence for two distinct blind reviews.
+Original review JSON, provenance, digests, and receipts stay retained. The current
+whole gate decides mechanical eligibility; a historical review does not.
 
-```json
-{"id": "n3", "parent": "n1", "phase": "preliminary", "plan": "...",
- "code": "experiment/code/n3.py", "backend": "local", "metric": 0.83,
- "buggy": false, "seeds": [0, 1, 2], "notes": "...", "ts": "..."}
-```
-
-`phase` ∈ `preliminary | tuning | research | ablation`. A node runs through
-`exactory-lab run`, which writes `experiment/results/<node>.json` and prints
-the record the journal line is built from.
-
-## evidence/claims.json
-
-A JSON array, one object per quantitative claim the paper makes:
-
-```json
-[{"claim": "mean absolute error drops from 0.41 to 0.29",
-  "source": "experiment/results/n7.json",
-  "note": "mean over 5 seeds"}]
-```
-
-`source` is a path (experiment results, or a user-provided file under
-`evidence/`) or the exact command that reproduces the number. The ledger comes
-before the draft: a claim appears here first, then in the text. An experiment
-node's reported numbers become claim entries at the handoff into stage 4.
-
-## research/literature.md, reviews/, learnings/
-
-These carry the same contracts the write skill's WORKSPACE.md defines: the
-append-only survey log with its closed verdict vocabulary, the review JSON and
-`score_history.jsonl`, and the predict-before-review learning ledger. LOOP.md
-references them; WORKSPACE.md is their authoritative description.
+[LOOP.md](LOOP.md) governs development and manuscript iteration. The write skill's
+[WORKSPACE.md](../write/WORKSPACE.md) describes the human review and learning files.
+On resume, read current status, the search tree, checkpoint lineage, pending work,
+and user context before continuing. Preserve unfinished source changes and all
+managed history; a crash never authorizes erasing unmeasured work.

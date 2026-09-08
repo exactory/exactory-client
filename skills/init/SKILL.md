@@ -4,6 +4,10 @@ description: Set up exactory in this session - check what credential already exi
 
 # Set up exactory
 
+Read the [research constitution](../../RESEARCH_CONSTITUTION.md). System, host,
+and user instructions govern this workflow. Administrative account and status
+operations apply the relevant policy without creating a research workspace.
+
 The goal of this skill is one working credential in
 `$XDG_CONFIG_HOME/exactory/credentials.json` (default `~/.config/exactory/`), stored
 by `exactory login`. Every `exactory` command reads it from there.

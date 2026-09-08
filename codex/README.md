@@ -3,12 +3,17 @@
 The Codex entrypoints use the same workflows, commands, and checks as Claude Code.
 The shared instructions stay under `skills/`. The commands stay under `bin/`.
 
+Read the [common research constitution](../RESEARCH_CONSTITUTION.md) and
+[managed workflow](../docs/research-workflow.md). Every Codex entrypoint links the
+same policy and its shared workflow. System, host, and user instructions govern;
+administrative account/status operations do not initialize research unnecessarily.
+
 Use Python 3.9 or later for the commands. The improvement loop also needs Git.
 Paper workflows that compile a PDF need a LaTeX compiler.
 
 ## Run a skill
 
-1. Read the shared `SKILL.md` linked from the Codex entrypoint.
+1. Read the common constitution and shared `SKILL.md` linked from the entrypoint.
 2. Resolve its relative document links from that shared skill's directory.
 3. Run its commands from the user's workspace.
 
@@ -25,8 +30,20 @@ exactory whoami
 Use the path of this installed copy. Do not assume a fixed cache location.
 `exactory-math skill-dir` returns the shared math-solver directory.
 
+Use `exactory-research status` and `next` on resume. Cohort collection, actual
+reading, and the installed literature-review stage precede ideation. The complete
+objective and current synthesis precede prospective cycle admission and exact run
+binding. Independent research readiness review of the actual candidate precedes
+writing; two blind reviews of the exact manuscript are a separate publication
+requirement. Use the actual payloads from `exactory-research example OPERATION`
+and the [CLI reference](../docs/research-cli.md). Preserve failed branches,
+checkpoints, source changes, uncommitted user work, and all resource costs.
+
 For a fresh math-solver objective, use the shared workflow's reviewed controller
-path: `search init`, `propose`, independent `review`, and `admit`. Every mutating
+path: `search init`, current common preparation, schema-3 `propose` with the
+actual exported foundation, independent `review`, and `admit`. Follow the
+[native foundation delivery](../docs/research-cli.md#native-math-preparation)
+for new proposals and reviewed amendments to historical nodes. Every mutating
 controller command uses the current expected revision and a unique request ID;
 `search status` and `search next` are read-only. Do not create a managed child with
 legacy `init --from` after admission. Reserve moves before execution, and use the
@@ -78,8 +95,9 @@ Codex file events. Shell, session-start, and stop events use the shared handlers
 The CLI checks on citation integrity and submission also run within the commands.
 Hook checks cover supported tool calls; the host's sandbox and permissions still
 control access. Preserve the shared workflow's authorization and pacing rules.
-Invoking a study or deposit authorizes its completion, including production
-steps. Pause at the stops the user names and when required credentials are absent.
+An end-to-end study or deposit request authorizes its requested stages within
+system, host, and user constraints. Preserve named stops, resource limits, and
+pending evidence or independent-review conditions as well as missing credentials.
 
 ## Maintain the Codex entrypoints
 

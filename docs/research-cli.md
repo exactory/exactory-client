@@ -2,6 +2,9 @@
 
 `exactory-research` exposes the shared research store through Python 3.9 or later and the standard library. `exactory-lab`, `exactory-draft`, `exactory`, and the native math controller consume its current evidence at their own authoritative boundaries. A download, marker file, process exit code, old receipt, or stage name does not establish scientific readiness.
 
+Follow the [managed research workflow](research-workflow.md) for the executable
+stage order, evidence interpretation, independent review, and continuation rules.
+
 ## Inputs and receipts
 
 Each JSON mutation takes the same arguments:

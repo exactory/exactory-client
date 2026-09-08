@@ -6,5 +6,6 @@ description: Sign in to exactory or create an account from this session with a c
 # Exactory: login
 
 First read [Codex runtime instructions](../../README.md).
+Read the [common research constitution](../../../RESEARCH_CONSTITUTION.md).
 Then read and execute the [shared login workflow](../../../skills/login/SKILL.md).
 Resolve that workflow's relative links from its own directory.

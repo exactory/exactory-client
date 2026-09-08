@@ -1,10 +1,11 @@
 ---
 name: experiment
-description: Run the experiments for a study on exactory - a best-first search that writes, runs, debugs, and improves experiment code across preliminary, tuning, research, and ablation phases, with an optional autoresearch optimization mode, recording a journal, metrics, and plots. Use after the problem is set and the user wants results.
+description: Execute admitted research cycles, assess actual results and validity, preserve checkpoints and failed branches, and obtain independent research readiness review before writing. Use after current preparation and a prospective experiment admission.
 ---
 
 # Exactory: experiment
 
 First read [Codex runtime instructions](../../README.md).
+Read the [common research constitution](../../../RESEARCH_CONSTITUTION.md).
 Then read and execute the [shared experiment workflow](../../../skills/experiment/SKILL.md).
 Resolve that workflow's relative links from its own directory.

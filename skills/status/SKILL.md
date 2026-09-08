@@ -4,6 +4,10 @@ description: Read a verification's status and result on exactory. Use when the u
 
 # Read a verification's status
 
+Read the [research constitution](../../RESEARCH_CONSTITUTION.md). System, host,
+and user instructions govern this workflow. Administrative account and status
+operations apply the relevant policy without creating a research workspace.
+
 The `exactory` command is on PATH while this plugin is enabled. It prints JSON on
 success. It prints an error message on stderr and exits non-zero on failure.
 

@@ -6,6 +6,24 @@ harness_entries: [consolidate-the-proof, declare-the-stall-and-inventory-what-st
 
 # Math solver
 
+Read the [research constitution](../../RESEARCH_CONSTITUTION.md) and the
+[managed research workflow](../../docs/research-workflow.md). Before a fresh
+proposal, complete current common preparation for the full original objective:
+cohort and source network, actual required readings, five search purposes, field
+standards, and applicable research synthesis. Export the actual foundation for
+independent review of the schema-3 native proposal, using
+[the native preparation contract](../../docs/research-cli.md#native-math-preparation).
+The common foundation does not replace this attack's novelty study, strategy
+studies, proof rules, finite task admission, or resource accounts.
+
+For external-paper native verification, use the exact-source verification profile
+and reviewed claim binding. Preserve scientific independence from author goals.
+On resume, read common `status` and `next` alongside the native search tree and
+controller actions. Complete retained run/journal reconciliation first. Historical
+replay remains available; fresh work after changed preparation needs a reviewed
+`search amend-foundation` and any separately required computation or strategy
+assessment. Preserve all original claims, proofs, failed methods, and costs.
+
 ## Overview
 
 The skill attacks a stated mathematical proposition end to end. It proceeds autonomously through routine work within admitted authority, while respecting an explicit user pause, exhausted accounts, required independent review, and any scope change that needs new authority. It has two deterministic layers. The objective controller's executable contract is `SEARCH.md`: it preserves the original request, admits reviewed nodes and finite tasks, owns resource accounts and controlled execution, binds accepted evidence, and decides when the root can close. The native harness is `harness/attack.py` (contract in `harness/SPEC.md`, usage in `harness/README.md`): inside each admitted node it owns the local workspace files, validates the mathematical walk, enforces eight moves per pass, three passes, and 24 moves overall, runs controlled certificate entrypoints, keeps the action list, and reports the local stage. The judgment half is this text: every judgment about the problem is written into a reviewed controller record or a file that the native harness validates and reads.

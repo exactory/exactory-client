@@ -26,10 +26,11 @@ def main() -> None:
     parser.add_argument("--claude", default="claude")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    with tempfile.TemporaryDirectory(prefix="exactory-claude-smoke-") as scratch:
+    with tempfile.TemporaryDirectory(prefix="exactory Claude host smoke-") as scratch:
         root = Path(scratch)
-        plugin = root / "plugin"
-        shutil.copytree(ROOT, plugin, ignore=shutil.ignore_patterns(".git", "__pycache__", ".coverage*"))
+        plugin = root / "Plugin with spaces"
+        shutil.copytree(ROOT, plugin, ignore=shutil.ignore_patterns(
+            ".git", ".superpowers", ".lake", "__pycache__", ".coverage*"))
         workspace = root / "workspace"
         attack = workspace / "attack/smoke"
         (attack / "units").mkdir(parents=True)
@@ -37,7 +38,8 @@ def main() -> None:
         (attack / "tasks.json").write_text("[]")
         (attack / "units/FINISHED.json").write_text("{}")
         actions = [
-            ("Skill", {"skill": "exactory:status"}),
+            ("Skill", {"skill": "exactory:literature-review"}),
+            ("Bash", {"command": f"python3 {shlex.quote(str(plugin / 'bin/exactory-research'))} example init > research-example.json"}),
             ("Bash", {"command": f"python3 {shlex.quote(str(plugin / 'bin/exactory-math'))} skill-dir > skill-dir.txt"}),
             ("Write", {"file_path": str(attack / "tasks.json"), "content": "[1]"}),
             ("Write", {"file_path": str(workspace / "safe.txt"), "content": "smoke-ok"}),
@@ -102,7 +104,8 @@ def main() -> None:
                if not key.startswith(("ANTHROPIC_", "CLAUDE_CODE_USE_"))}
         env.update({"ANTHROPIC_BASE_URL": f"http://127.0.0.1:{server.server_port}",
                     "ANTHROPIC_API_KEY": "local-smoke-fixture", "CLAUDE_CONFIG_DIR": str(root / "config"),
-                    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"})
+                    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "PYTHONDONTWRITEBYTECODE": "1"})
+        env.pop("PYTHONPATH", None)
         try:
             completed = subprocess.run(
                 [args.claude, "-p", "Run the Exactory integration smoke test.",
@@ -123,9 +126,10 @@ def main() -> None:
         assert (attack / "tasks.json").read_text() == "[]", "Protected record was changed"
         assert (workspace / "safe.txt").read_text() == "smoke-ok", completed.stdout[-2000:]
         assert Path((workspace / "skill-dir.txt").read_text().strip()).resolve() == (plugin / "skills/math-solver").resolve()
+        assert json.loads((workspace / "research-example.json").read_text()) == {"profile": "research", "target": None}
         assert "harness only" in json.dumps(requests), "Claude did not receive the hook denial"
-        assert "exactory:status" in completed.stdout, "The shared skill was not discovered"
-        print("PASS: real Claude Code skill, CLI, denied protected write, allowed normal write (scripted model API)")
+        assert "exactory:literature-review" in completed.stdout, "The shared literature skill was not discovered"
+        print("PASS: real Claude Code literature skill, common and native CLIs, denied protected write, allowed normal write (scripted model API)")
 
 
 if __name__ == "__main__":

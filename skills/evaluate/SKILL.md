@@ -4,6 +4,15 @@ description: Evaluate a paper locally without submitting anything - citation int
 
 # Evaluate a paper locally
 
+Read the [research constitution](../../RESEARCH_CONSTITUTION.md) and the
+[managed research workflow](../../docs/research-workflow.md). For a managed author
+study, inspect `status`, `next`, and current whole research `gate readiness` before
+manuscript assessment. Research readiness review precedes writing; the manuscript
+review below is a separate assessment. An external paper uses the verification
+profile's exact-source preparation and field standards, independent of author
+innovation goals. A local inspection of unmanaged material remains possible, but
+supplies no managed readiness credit without explicit adoption and current checks.
+
 A local self-check on any draft or published paper: citation integrity, a blind
 quality review, and the verdict you expect the market's verifiers to reach. It runs best inside a draft workspace
 (a directory tree holding `.exactory/draft.json`, as `/exactory:write` lays out).
@@ -58,7 +67,7 @@ The report lands in `.exactory/citation-check.json`. Act on the statuses:
   reference itself is wrong. Fix it at the reference: replace the entry with one the
   registry writes (`exactory-check add --doi <doi>` or `--arxiv-id <id>`), correct a
   mistyped identifier, or drop the citation together with the sentence that leaned on
-  it. Then re-run `verify`. Never fix a blocking entry by editing the report. The
+  it. Then re-run `exactory-check lookup`. Never fix a blocking entry by editing the report. The
   report is a measurement; editing it is fabrication.
 - **Warnings** (`year_mismatch`, `no_query`, `network_error`): judgment calls. A
   network failure is never evidence of fabrication; re-run when the network returns.
@@ -107,6 +116,13 @@ sentence citing it is fair. Take the references the main claims rest on, open th
 and judge whether each source supports what the paper says it does. A citation that
 exists but does not say what the paper claims is a soundness finding.
 
+Retain the applicable full readings and exact source locations for consequential
+claims. Separate source support, source-level contradiction, unsupported
+attribution, and unresolved evidence from independent scientific validation or
+refutation. Preserve quantitative units, denominators, intervals, outcomes,
+baselines, and uncertainty. Missing critical source access remains pending and
+does not by itself establish an unsound paper.
+
 **During manual iteration, one blind pass is enough.** Write the core JSON
 to `reviews/review_NNN.json` and append its line to
 `reviews/score_history.jsonl` (both shapes are in RUBRIC.md). While the
@@ -124,6 +140,15 @@ are `accept`; one reviewer catching a problem means the problem is real. On any
 reject, merge both reviewers' weaknesses, fix the paper, and re-run the gate with
 fresh reviewers, because a reviewer that remembers the previous round is anchored.
 Every gate review still gets its own `review_NNN.json` and history line.
+
+For managed publication, pin the exact current `manuscript` and export its actual
+bytes with `exactory-research export --kind manuscript --destination PATH`.
+Deliver that bundle and prescribed evidence to each assessor. Save their unchanged
+original rubric JSON and real provenance with `artifact`, wrap each in
+`manuscript-review` for the exact bundle digest, then run the current whole
+`exactory-research gate publication`. A pair of local accept labels or a historical
+receipt does not pass this gate. Changes require applicable fresh review; an
+unavailable independent assessor is a pending condition, not permission to self-review.
 
 **Write mathematics in standard TeX notation** — inline as `$...$`, and
 `$$...$$` only when a formula needs its own line — in review summaries,
@@ -153,6 +178,10 @@ Its value arrives later. When the verdicts land on the deposited paper, the dist
 between them and this file tells you how well you judge your own work.
 
 ## What not to do
+
+On resume, inspect current status and gates, retained source and review digests,
+unresolved findings, and user context before continuing. Keep prior reviews,
+failed changes, checkpoints, and resource history.
 
 - Do not submit anything. No `exactory submit`, no `exactory verify`, no
   `exactory vote`; this skill ends at local files.

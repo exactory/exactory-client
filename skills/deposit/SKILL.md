@@ -4,6 +4,14 @@ description: Deposit a paper's preprint to Zenodo and get its DOI, from a draft 
 
 # Deposit to Zenodo
 
+Read the [research constitution](../../RESEARCH_CONSTITUTION.md). Follow the
+[managed research workflow](../../docs/research-workflow.md) for current whole
+research readiness, the exact manuscript bundle, two independent blind reviews,
+and `exactory-research gate publication` before deposit. Begin or resume with
+`status` and `next`; reconcile any unknown remote intent with
+`exactory-draft reconcile INTENT_ID` before another write. A local accept label,
+credential, or historical receipt does not establish current publication readiness.
+
 The product of this stage is a citable, immutable record: the preprint on
 Zenodo with a DOI, deposited by the human author who takes responsibility for
 it. A submitted paper is verified on this fixed record, so deposit is the border
@@ -40,7 +48,9 @@ PATH while this plugin is enabled.
 2. **Write the abstract to a file.** Copy the paper's final abstract into
    `draft/abstract.txt` as plain text: no LaTeX commands, paragraphs separated
    by one blank line. This file becomes the record's description on Zenodo,
-   so it must match the abstract in the PDF word for word.
+   so it must match the abstract in the PDF word for word. Pin and review this
+   exact file as part of the manuscript bundle before the publication gate; a
+   changed abstract invalidates the affected current reviews.
 3. **Deposit to the sandbox first.**
    ```
    exactory-draft deposit --creator "<Family, Given>" --abstract-file draft/abstract.txt
@@ -62,8 +72,9 @@ PATH while this plugin is enabled.
    exactory-draft deposit --production --publish --confirm-publish --creator "<Family, Given>" --abstract-file draft/abstract.txt
    ```
    Run it, and state the command in the report beside its result: the record
-   DOI and the concept DOI. The concept DOI names the paper across all its
-   versions and is the one to submit. When the user named a stop before
+   DOI and the concept DOI. The concept DOI names the paper across versions;
+   managed author submission binds the concrete production record DOI and current
+   publication receipt. When the user named a stop before
    production, park instead and hand them the exact command.
 
 ## Publishing a revised version
@@ -79,6 +90,11 @@ exactory-draft deposit --production --publish --confirm-publish --new-version --
 `.exactory/deposit.json`, on the same environment. The concept DOI stays the
 same; a new version DOI is minted. The first version keeps its DOI and its
 place on the record.
+
+The revised PDF, abstract, bibliography, claim ledger, and optional sources need
+their own current bundle and applicable independent reviews. An uncertain
+new-version creation remains pending when its remote draft ID cannot be recovered;
+retain its intent and reconcile rather than repeating creation.
 
 Log the stage decision (the DOI, whether sandbox or production) and, unless
 the user ended the run at deposit, set the state:

@@ -4,6 +4,10 @@ description: Sign in to exactory or create an account from this session with a c
 
 # Log in to exactory
 
+Read the [research constitution](../../RESEARCH_CONSTITUTION.md). System, host,
+and user instructions govern this workflow. Administrative account and status
+operations apply the relevant policy without creating a research workspace.
+
 `exactory login` is on PATH while this plugin is enabled. It stores the key in
 `$XDG_CONFIG_HOME/exactory/credentials.json` (default
 `~/.config/exactory/credentials.json`), readable by the user only. Every other

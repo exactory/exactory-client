@@ -35,13 +35,14 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
-Version 0.36.0 is an experimental initial release of the shared research
-foundation and current evidence checks. Skill workflow updates, CI and host
-distribution work, end-to-end validation, and independent review continue for
-0.37.0. This version retains the reviewed mathematical strategy reassessment,
-failed-method history, investigation priorities, and deferrals introduced in
-[0.35.0](docs/releases/0.35.0.md).
-Read the [release and upgrade notes](docs/releases/0.36.0.md)
+Version 0.37.0 connects the shared research foundation to every skill's workflow:
+cohort collection, literature synthesis, prospective experiment admission,
+independent research readiness before writing, and review of the exact manuscript.
+It retains the mathematical strategy reassessment, failed-method history,
+investigation priorities, and deferrals introduced in
+[0.35.0](docs/releases/0.35.0.md) and the common foundation introduced in
+[0.36.0](docs/releases/0.36.0.md).
+Read the [release and upgrade notes](docs/releases/0.37.0.md)
 before updating a waiting agent or adopting an existing attack. An update does
 not resume paused research or reset its budget.
 
@@ -108,35 +109,36 @@ one unlocks, and what a study still does without it. It never prints a value.
 
 ## What runs without a key
 
-A study writes and evaluates a paper with no credential at all: the cohort, the
-problem, the experiments, the draft, the citation check, and the evaluation
-loop. Those stages read public sources that need no key (arXiv, Crossref,
-DataCite, OpenAlex, PubMed, Zenodo). Credentials gate the last two stages only.
-`ZENODO_TOKEN` deposits the preprint, and `EXACTORY_API_KEY` submits it. Without
-them the run reaches a finished paper in the workspace, parks there, and names
-the variable to export to go further. The paper goes nowhere until the key that
-sends it is set.
+A study can acquire public sources, analyze them, run local experiments, write,
+and evaluate without market credentials. Public providers include arXiv, Crossref,
+DataCite, OpenAlex, PubMed, and Zenodo. Completion still depends on actual source
+access, evidence, resources, and independent assessment. `ZENODO_TOKEN` is needed
+for production deposit and `EXACTORY_API_KEY` for market submission. Missing
+credentials leave that stage pending while preserving the completed local work.
 
 ## Exactory AI Science
 
-`/exactory:ai-science` runs a research study end to end: build the cohort and
-its doctrine, set a problem, run experiments, draft, evaluate and improve until
-the quality saturates, deposit a preprint, and submit it for verification. It is
-one loop — the same evaluation a submitter rehearses in private is the one the
-market's verifiers run in public on the deposited record.
+`/exactory:ai-science` runs a research study end to end: enumerate the cohort,
+read and synthesize its source network, fix the complete objective, execute
+admitted research cycles, and obtain independent readiness assessment before
+writing. The manuscript then receives separate blind review before authorized
+deposit and submission. The [research constitution](RESEARCH_CONSTITUTION.md) and
+[executable workflow](docs/research-workflow.md) describe the current obligations.
 
-The agent is the scientist: it sets the problem, writes and runs the experiment
-code, writes the paper, and judges it, with no external LLM keys. A study is one
+The agent develops hypotheses, writes and runs experiment code, and drafts the
+paper. Independent assessors review actual evidence and the manuscript. A study is one
 workspace, created by `exactory-lab init`; the loop reads `context/` at the
 start and at every improvement iteration, so the user drops material in as it
 runs. Experiments run on a pluggable compute layer (`local` by default, `colab`
 for GPU nodes — see [`colab/README.md`](colab/README.md)). Invoking the study
 authorizes every stage, including deposit and submission. The shared workflow
-defines the credential stops and respects the pacing the user names.
+preserves resource limits, pending evidence and review obligations, and the pacing
+the user names. A mechanical gate does not certify scientific truth or a breakthrough.
 
 | Stage skill | Purpose |
 |---|---|
 | `/exactory:cohort` | Build the cohort and extract its doctrine: the field's rules, its authorities, its open problems with their advance criteria |
+| `/exactory:literature-review` | Read the source network, record all five search purposes, and ground the full objective, standards, innovation, and scientific context |
 | `/exactory:ideate` | Turn an open problem and the human context into a specific, novel, feasible problem |
 | `/exactory:experiment` | Run a best-first experiment search, with an optional autoresearch optimization mode |
 | `/exactory:deposit` | Deposit the preprint to Zenodo and get its DOI |
@@ -147,7 +149,8 @@ defines the credential stops and respects the pacing the user names.
 |---|---|---|
 | `/exactory:init` | Both | Guided setup: check what is set, then register in the session with an emailed code or through the web sign-up page |
 | `/exactory:login` | Both | Sign in or create an account with a code sent to your email, and store the API key locally |
-| `/exactory:ai-science` | Submitter | Run a study end to end: cohort, problem, experiments, draft, improve, deposit, submit |
+| `/exactory:ai-science` | Submitter | Run a study through current preparation, admitted research, independent readiness, drafting, and authorized publication |
+| `/exactory:literature-review` | Both | Build or refresh exact-source literature and synthesis before research admission or paper verification |
 | `/exactory:math-solver` | Submitter | Attack a stated mathematical proposition: set the problem, check novelty, walk the admitted strategies under a fixed budget, cash out what stands, and resume an open attack from its record |
 | `/exactory:write` | Submitter | Draft the paper: evidence intake and doctrine-conforming sections with verified citations |
 | `/exactory:evaluate` | Both | Evaluate a paper locally: citation integrity, a structured quality review, and the verdict you expect the market to reach |
@@ -158,7 +161,7 @@ defines the credential stops and respects the pacing the user names.
 
 ## CLIs
 
-Seven commands are available in the plugin's `bin/` directory. Each uses Python 3.9+
+Eight commands are available in the plugin's `bin/` directory. Each uses Python 3.9+
 with the standard library only. In Codex, the [runtime guide](codex/README.md)
 sets this directory on PATH for each shell call.
 
@@ -202,7 +205,17 @@ stderr and exits non-zero.
 
 **`exactory-cohort`** freezes the population a study is read against. `freeze`
 computes the field and the six-month window from the paper's own fields, with
-no network call, or from the source API as a fallback.
+no network call, or from the source API as a fallback. This is a population
+definition; `exactory-research collect` enumerates its members and retains page
+receipts. Actual reading records are separate from acquisition.
+
+**`exactory-research`** owns the shared SQLite research record. It acquires exact
+sources, records reading and synthesis, plans and admits cycles, binds actual
+execution, retains assessments and checkpoints, and exports real review inputs.
+`status` and `next` expose current obligations; `gate` evaluates the intended
+action. `example OPERATION` returns the actual payload shape. See the
+[CLI reference](docs/research-cli.md) for all operations, reliable request retries,
+explicit legacy adoption, recovery, and native mathematical foundation delivery.
 
 **`exactory-check`** keeps citations honest. `add` fetches a reference from
 the registry (Crossref, DataCite, or the arXiv API) and writes the BibTeX
@@ -216,14 +229,15 @@ and `deposit` sends the built PDF and sources to Zenodo. The sandbox API and
 draft state are the defaults. A production publish also needs the
 `--confirm-publish` flag, because a published DOI is permanent. `--new-version`
 publishes a revised version of a record already deposited, keeping the concept
-DOI. The publish output prints the record DOI and the concept DOI, and
-`exactory submit` takes the concept DOI.
+DOI. The publish output prints the record DOI and the concept DOI. Managed author
+submission binds the concrete production record and its current publication receipt.
 
 **`exactory-lab`** owns an Exactory AI Science study. `init` creates the study
 workspace and its git repository, `keys` reports which credentials the
 environment holds and what the study does without each one, `state` and
 `decide` drive the study state machine and its append-only decision log, and
-`run` executes an experiment script on a compute backend (`local`, or `colab` via `colab-status` and
+`run --admission ID` executes the exact prospectively admitted and bound script
+on a compute backend (`local`, or `colab` via `colab-status` and
 `colab-serve`), confined to the workspace and recording a result the experiment
 journal is built from.
 
@@ -236,10 +250,15 @@ is soft evidence. When SymPy is installed it adds a symbolic verdict, but it is
 never a hard dependency.
 
 **`exactory-math`** runs the harness of the `/exactory:math-solver` skill
-from whatever directory the user works in. It owns the attack workspace under
-`attack/<slug>/`: `init` creates it (with `--from <parent>`, as a child attack
-whose claim is a hypothesis of the parent's, which then finishes only after
-the child); `check-problem`, `plan`, `rank`, and
+from the user's workspace. A managed objective starts with `search init`, current
+common preparation, a schema-3 proposal carrying the exported foundation,
+independent review, and `search admit`. The controller preserves the complete
+objective, proof standard, evidence graph, finite task admission, resource
+accounts, and checkpoint lineage. `search status` and `search next` identify the
+current action; a recorded pause requires an authorized explicit resume.
+
+Admission creates the native workspace under `attack/<slug>/`. Within it,
+`check-problem`, `plan`, `rank`, and
 `check-unit` validate what the solver writes into it; `journal add` appends one
 move after checking that it is where the attack stands (the walk opens with the
 first strategy of the solver's ranking and grows one admissible step at a time,
@@ -254,6 +273,13 @@ and evaluated; `task` keeps the action list; and `status` prints where the
 attack stands and the next step, derived from the record. `skill-dir` prints
 the directory that holds the skill's own strategies and entries, which the
 solver reads as it works.
+
+After new evidence, the controller can require reviewed strategy reassessment,
+including retained failed methods. Changed common preparation requires a reviewed
+foundation amendment before fresh work. Legacy `init` and `--from` remain part of
+the unmanaged native interface; managed children use reviewed controller proposals.
+Local `finish` does not complete the controller's root objective. See the
+[native controller contract](skills/math-solver/SEARCH.md) for its exact rules.
 
 A session can end before an attack does. The record is the save: every
 harness command writes its file the moment it accepts, and five hooks hold
@@ -273,15 +299,13 @@ workspace they do nothing.
   the file or command. `status` shows the last three, so a resumed session
   sees what the previous one was doing when it stopped.
 - **Resume.** At session start (a new session, a resume, a clear, or a
-  compaction), every open attack under the working directory is reported
-  with its `status`, and the session is told to resume the skill at its
-  stage 0 instead of starting over. The same happens when the user asks to
-  resume or restart an attack: the skill runs `exactory-math status <slug>`
-  and continues from the `next:` line.
-- **Continue.** The session does not stop while an attack under the working
-  directory has no `units/FINISHED.json`; the block names every open attack
-  with its state and the next step. `EXACTORY_ATTACK_MAX` (default 40) caps
-  the advances.
+  compaction), the hooks report managed controller actions and native status.
+  Resume from `search status` and `search next`, then the selected native record.
+  Reading status does not clear a pause or satisfy a current gate.
+- **Continue.** Continuation follows current controller authority, budgets,
+  pause state, and pending evidence or review. Native unfinished-work handling
+  retains its `EXACTORY_ATTACK_MAX` advance cap. A native completion marker
+  cannot close a broader managed objective with remaining obligations.
 
 ## Citation gate and hooks
 

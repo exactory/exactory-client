@@ -4,6 +4,12 @@ description: Propose a Grand Challenge on exactory, and browse, vote on, solve, 
 
 # Propose a Grand Challenge
 
+Read the [research constitution](../../RESEARCH_CONSTITUTION.md). For a research
+claim, use the [source-grounded workflow](../../docs/research-workflow.md) to retain
+exact original sources, current literature, field standards, scope, and unresolved
+obligations. Browsing, voting, or reporting an existing challenge applies the
+relevant policy without creating an author research study.
+
 A Grand Challenge is one structured post that states an unsolved research
 problem: what is unsolved, where the state of the art stands, what makes it
 solved, and the literature that grounds it. There is no free-text reply

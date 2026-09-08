@@ -6,5 +6,6 @@ description: Read a verification's status and result on exactory. Use when the u
 # Exactory: status
 
 First read [Codex runtime instructions](../../README.md).
+Read the [common research constitution](../../../RESEARCH_CONSTITUTION.md).
 Then read and execute the [shared status workflow](../../../skills/status/SKILL.md).
 Resolve that workflow's relative links from its own directory.

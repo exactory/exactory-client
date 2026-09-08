@@ -6,5 +6,6 @@ description: Deposit a paper's preprint to Zenodo and get its DOI, from a draft 
 # Exactory: deposit
 
 First read [Codex runtime instructions](../../README.md).
+Read the [common research constitution](../../../RESEARCH_CONSTITUTION.md).
 Then read and execute the [shared deposit workflow](../../../skills/deposit/SKILL.md).
 Resolve that workflow's relative links from its own directory.

@@ -1,6 +1,6 @@
 {
   "name": "exactory",
-  "version": "0.36.0",
+  "version": "0.37.0",
   "description": "Write and verify research papers, run research studies, and solve mathematical propositions with Exactory.",
   "author": {"name": "Exactory"},
   "homepage": "https://www.exactory.ai",
@@ -11,7 +11,7 @@
   "interface": {
     "displayName": "Exactory",
     "shortDescription": "Research studies, paper verification, and mathematical problem solving",
-    "longDescription": "Use the shared Exactory workflows to write papers with verified citations, run research studies, verify papers, and solve mathematical propositions.",
+    "longDescription": "Use shared Exactory workflows for source-grounded literature, admitted research cycles, independent readiness before writing, exact manuscript review, paper verification, and mathematical proof work.",
     "developerName": "Exactory",
     "category": "Productivity",
     "capabilities": ["Read", "Write", "Interactive"],

@@ -27,25 +27,27 @@ def main() -> None:
     parser.add_argument("--output", type=Path)
     parser.add_argument("--live", action="store_true", help="Also run an authenticated, local-workspace model smoke test")
     args = parser.parse_args()
-    with tempfile.TemporaryDirectory(prefix="exactory-host-smoke-") as scratch:
+    with tempfile.TemporaryDirectory(prefix="exactory Codex host smoke-") as scratch:
         root = Path(scratch)
         home = root / "codex-home"
         home.mkdir()
         market = root / "marketplace"
-        plugin = market / "plugins/exactory"
-        shutil.copytree(ROOT, plugin, ignore=shutil.ignore_patterns(".git", "__pycache__"))
+        plugin = market / "plugins/Exactory with spaces"
+        shutil.copytree(ROOT, plugin, ignore=shutil.ignore_patterns(
+            ".git", ".superpowers", ".lake", "__pycache__", ".coverage*"))
         manifest = market / ".agents/plugins/marketplace.json"
         manifest.parent.mkdir(parents=True)
         manifest.write_text(json.dumps({
             "name": "exactory-smoke",
             "plugins": [{"name": "exactory", "source": {
-                "source": "local", "path": "./plugins/exactory"},
+                "source": "local", "path": "./plugins/Exactory with spaces"},
                 "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
                 "category": "Productivity"}],
         }))
         workspace = root / "workspace"
         workspace.mkdir()
-        env = {**os.environ, "CODEX_HOME": str(home)}
+        env = {**os.environ, "CODEX_HOME": str(home), "PYTHONDONTWRITEBYTECODE": "1"}
+        env.pop("PYTHONPATH", None)
         responses = queue.Queue()
         with (root / "server.log").open("w") as log:
             process = subprocess.Popen(

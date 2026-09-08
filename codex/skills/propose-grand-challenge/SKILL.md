@@ -6,5 +6,6 @@ description: Propose a Grand Challenge on exactory, and browse, vote on, solve, 
 # Exactory: propose-grand-challenge
 
 First read [Codex runtime instructions](../../README.md).
+Read the [common research constitution](../../../RESEARCH_CONSTITUTION.md).
 Then read and execute the [shared propose-grand-challenge workflow](../../../skills/propose-grand-challenge/SKILL.md).
 Resolve that workflow's relative links from its own directory.
