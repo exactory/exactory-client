@@ -24,6 +24,14 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from research_harness.cli import add_identity
+from research_harness.errors import ResearchError
+from research_harness.integration import command_identity, current_store
+from research_harness.submission import submit_managed, send_verdict, continue_submission
+from research_harness.verification import record_task
+from research_harness.workspace import find_workspace, strict_json
+
 _DEFAULT_API_URL = "https://www.exactory.ai"
 _TIMEOUT_SECONDS = 30
 _BARE_ARXIV_ID_RE = re.compile(r"(\d{4}\.\d{4,5})(?:v\d+)?")
@@ -112,6 +120,7 @@ def _save_api_key(api_key: str, email: str, label: str) -> Path:
 
 def _send_request(method: str, path: str, body: dict | None = None, *,
                   authenticated: bool = True,
+                  allow_missing: bool = False,
                   error_messages: dict[int, str] = _HTTP_ERR_MSGS) -> tuple[dict, int]:
     """Send one API request. Returns the parsed JSON body and the HTTP status."""
     headers = {"Content-Type": "application/json", "User-Agent": _USER_AGENT}
@@ -133,6 +142,8 @@ def _send_request(method: str, path: str, body: dict | None = None, *,
         with urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS) as response:
             return json.load(response), response.getcode()
     except urllib.error.HTTPError as error:
+        if allow_missing and error.code == 404:
+            return {}, 404
         detail = error.read().decode(errors="replace")[:2000]
         message = error_messages.get(error.code, f"The server returned HTTP {error.code}.")
         _exit_with_error(f"{message}\n{detail}")
@@ -151,13 +162,9 @@ def _print_json(payload: dict) -> None:
 def _run_submit(args: argparse.Namespace) -> None:
     # Inside a draft workspace, the offline citation gate must pass first. The
     # gate command owns the checks; this command only forwards its refusal.
-    start_dir = Path.cwd().resolve()
-    workspace = next(
-        (directory for directory in (start_dir, *start_dir.parents)
-         if (directory / ".exactory" / "draft.json").is_file()),
-        None,
-    )
-    if workspace is not None:
+    workspace = find_workspace(required=False)
+    managed = workspace is not None and any((workspace / ".exactory" / name).exists() for name in ("draft.json", "study.json"))
+    if managed:
         gate_process = subprocess.run(
             [sys.executable, str(Path(__file__).with_name("exactory-check")),
              "gate", "--workspace", str(workspace)],
@@ -179,7 +186,12 @@ def _run_submit(args: argparse.Namespace) -> None:
             _exit_with_error(f"The command names {len(args.challenge)} challenges."
                              f" The limit is {_MAX_DECLARED_CHALLENGES}. Remove some.")
         body["grandChallengeIds"] = args.challenge
-    payload, status = _send_request("POST", "/api/v1/verifications", body)
+    if managed:
+        store = current_store(workspace)
+        payload = submit_managed(store, body, _send_request, **command_identity(store, args))
+        status = 201
+    else:
+        payload, status = _send_request("POST", "/api/v1/verifications", body)
     if status == 200:
         print("The server returned the existing open request for this paper.",
               file=sys.stderr)
@@ -211,6 +223,9 @@ def _run_tasks(args: argparse.Namespace) -> None:
 def _run_task(args: argparse.Namespace) -> None:
     identifier = _resolve_paper_identifier(args.identifier)
     payload, _ = _send_request("GET", "/api/v1/tasks/" + _quote_identifier_path(identifier))
+    if args.bind:
+        store = current_store(find_workspace())
+        payload = record_task(store, {"task": payload}, **command_identity(store, args))
     _print_json(payload)
 
 
@@ -249,7 +264,7 @@ _UUID_RE = re.compile(
 def _run_verify(args: argparse.Namespace) -> None:
     try:
         with open(args.file, encoding="utf-8") as handle:
-            body = json.load(handle)
+            body = strict_json(handle.read())
     except OSError as error:
         _exit_with_error(f"Cannot read {args.file}: {error}.")
     except json.JSONDecodeError as error:
@@ -276,21 +291,27 @@ def _run_verify(args: argparse.Namespace) -> None:
 
     # The command takes the verification id the page names, or the paper's DOI or arXiv
     # id; a non-UUID identifier resolves through the task route, which reads all three.
-    verification_id = args.identifier
-    if not _UUID_RE.fullmatch(verification_id):
-        identifier = _resolve_paper_identifier(args.identifier)
-        task, _ = _send_request(
-            "GET", "/api/v1/tasks/" + _quote_identifier_path(identifier)
-        )
-        verification_id = task["verificationId"]
-
-    payload, _ = _send_request(
-        "POST",
-        "/api/v1/verifications/"
-        + urllib.parse.quote(verification_id, safe="") + "/verdicts",
-        body,
-    )
+    identifier = _resolve_paper_identifier(args.identifier)
+    task, _ = _send_request("GET", "/api/v1/tasks/" + _quote_identifier_path(identifier))
+    store = current_store(find_workspace())
+    payload = send_verdict(store, task, body, _send_request, **command_identity(store, args))
     _print_json(payload)
+
+
+def _run_reconcile(args: argparse.Namespace) -> None:
+    store = current_store(find_workspace())
+    from research_harness.remote import get_intent
+    intent = get_intent(store, args.intent_id)
+    if intent["kind"] == "submit":
+        _print_json(continue_submission(store, args.intent_id, _send_request))
+        return
+    if intent["kind"] == "verdict":
+        identity = intent["binding"]["verification_id"]
+        task, _ = _send_request("GET", "/api/v1/tasks/" + _quote_identifier_path(identity))
+        _print_json(send_verdict(store, task, intent["binding"]["body"], _send_request,
+                                expected_revision=store.revision, request_id=intent["id"]))
+        return
+    raise ResearchError("remote_intent_mismatch", "Use exactory-draft reconcile for a Zenodo deposit")
 
 
 def _resolve_paper_identifier(identifier: str) -> str:
@@ -610,6 +631,7 @@ def _build_parser() -> argparse.ArgumentParser:
                              " more than one, at most"
                              f" {_MAX_DECLARED_CHALLENGES}.")
     submit.set_defaults(handler=_run_submit)
+    add_identity(submit, required=False)
 
     status = commands.add_parser("status", allow_abbrev=False,
                                  help="Show one verification with its verdicts.")
@@ -641,6 +663,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     task.add_argument("identifier",
                       help="A DOI, an arXiv id, or a verification id.")
+    task.add_argument("--bind", action="store_true", help="Bind the task-only response to this prepared verification workspace and exact acquired body.")
+    add_identity(task, required=False)
     task.set_defaults(handler=_run_task)
 
     paper = commands.add_parser("paper", allow_abbrev=False, help="Show a stored paper.")
@@ -659,6 +683,11 @@ def _build_parser() -> argparse.ArgumentParser:
                              " rationaleSections, wouldChange, findings,"
                              " prediction, suggestions, supersedesVerdictId.")
     verify.set_defaults(handler=_run_verify)
+    add_identity(verify, required=False)
+    reconcile = commands.add_parser("reconcile", allow_abbrev=False,
+        help="Observe a pending submit/verdict intent through task-only reads. The existing API cannot confirm an unknown verdict body; it remains pending without repeating POST.")
+    reconcile.add_argument("intent_id")
+    reconcile.set_defaults(handler=_run_reconcile)
 
     vote = commands.add_parser(
         "vote", allow_abbrev=False,
@@ -782,7 +811,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = _build_parser().parse_args()
-    args.handler(args)
+    try:
+        args.handler(args)
+    except ResearchError as error:
+        _exit_with_error(json.dumps({"error": error.as_dict()}))
 
 
 if __name__ == "__main__":

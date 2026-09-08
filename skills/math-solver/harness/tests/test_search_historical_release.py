@@ -10,9 +10,9 @@ from search_controller.errors import SearchError
 from search_controller.model import replay
 from search_controller.service import Controller
 from tests import test_search_computation as computation
-from tests.search_execution_support import command_spec, invoke
+from tests.search_execution_support import begin_spec, command_spec, invoke
 from tests.search_fixtures import digest
-from tests.support import FIXTURE_STRATEGIES, WorkspaceTest
+from tests.support import FIXTURE_STRATEGIES, WorkspaceTest, make_move
 
 
 class HistoricalReleaseTests(WorkspaceTest):
@@ -51,6 +51,28 @@ class HistoricalReleaseTests(WorkspaceTest):
         invoke(controller, "amend-computation", amendment)
         self.assertEqual(controller.status()["accounts"], before["accounts"])
         self.assertEqual(controller.status()["runs"]["run-000001"], old_run)
+        with self.assertRaises(SearchError) as foundation_error:
+            invoke(controller, "run", spec)
+        self.assertEqual(foundation_error.exception.code, "research_foundation_amendment_required")
+        # The archived run is terminal, but its move still needs its truthful
+        # journal. Recovery remains available before fresh preparation exists.
+        invoke(controller, "reconcile", {}, None)
+        self.assertEqual(controller.status()["runs"]["run-000001"], old_run)
+        self.assertEqual(controller.status()["accounts"], before["accounts"])
+        result = self.run_cli("journal", "add", self.slug, "--json", json.dumps(make_move(1)))
+        self.assertEqual(result[0], 0, result)
+        recovered = controller.status()
+        self.assertEqual(recovered["control"]["pending_moves"], [])
+        self.assertEqual(recovered["totals"]["used_runs"], 1)
+        self.assertEqual(recovered["totals"]["used_moves"], 1)
+        from tests.research_support import pin_research, amendment_spec
+        candidate = dict(controller.status()["proposals"]["proposal-000001"]["record"])
+        inputs = []
+        delivery = pin_research(self.attack_root, candidate, inputs)
+        invoke(controller, "amend-foundation", amendment_spec(controller, "node-000001", delivery["foundation"], inputs))
+        self.assertEqual(controller.status()["accounts"], recovered["accounts"])
+        self.assertEqual(controller.status()["runs"]["run-000001"], old_run)
+        invoke(controller, "begin", begin_spec())
         invoke(controller, "run", spec)
         after = controller.status()
         self.assertEqual(marker.read_text(), "one fresh run")

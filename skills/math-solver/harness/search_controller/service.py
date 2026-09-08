@@ -57,7 +57,7 @@ class Controller:
             return state if name == "status" else next_action(state)
         s.integer(expected_revision)
         s.text(request_id)
-        if name not in {"admit", "accept", "retreat", "checkpoint", "begin", "run", "amend-computation", "interpret"}:
+        if name not in {"admit", "accept", "retreat", "checkpoint", "begin", "run", "amend-computation", "amend-foundation", "interpret"}:
             s.require(target is None, "This command has no positional target")
         elif name != "checkpoint":
             s.text(target)
@@ -190,6 +190,18 @@ class Controller:
             subject = {"node_id": target, "proposal_digest": spec["proposal_digest"], "computation": spec["computation"]}
             content.put_blob(spec["review"])
             emit("computation_amended", {"subject": subject, "review": spec["review"], "digest": content.put_blob(subject)})
+        elif name == "amend-foundation":
+            from .research import audit_foundation, record_amendment
+            s.closed(spec, "subject review inputs")
+            s.require(spec["subject"]["node_id"] == target, "Foundation amendment names a different node", "claim_mismatch")
+            node = reference(state["nodes"], target, "amendment node")
+            proposal = reference(state["proposals"], node["proposal_id"], "admitted proposal")["record"]
+            import_inputs(self.root, spec["inputs"], content)
+            audit_foundation(self.root, state, proposal, spec["subject"]["foundation"], content)
+            payload = {"subject": spec["subject"], "review": spec["review"], "digest": content.put_blob(spec["subject"])}
+            record_amendment(copy.deepcopy(state), payload)
+            content.put_blob(spec["review"])
+            emit("foundation_amended", payload)
         elif name == "reconcile":
             if spec:
                 from .rank_recovery import build_abandonment
@@ -220,6 +232,8 @@ class Controller:
                     proposal_inputs(verification["proposal"], content)
                     from .computation import require_new_proposal
                     require_new_proposal(verification["proposal"])
+                    from .research import require_new
+                    require_new(verification["proposal"])
                     audit_admission(self.root, state, verification["proposal"], content)
                     for key in ["proposal", "review", "allowance_review"]:
                         content.put_blob(verification[key])
@@ -244,15 +258,21 @@ class Controller:
             s.validate_proposal(proposal)
             from .computation import require_new_proposal
             require_new_proposal(proposal)
+            from .research import require_new, audit_foundation
+            require_new(proposal)
             safe_path(self.root, proposal["attack_slug"])
             import_inputs(self.root, spec["inputs"], content)
             proposal_inputs(proposal, content)
+            audit_foundation(self.root, state, proposal, proposal["foundation"], content)
             emit("proposal_recorded", {"proposal": proposal, "digest": content.put_blob(proposal)})
         elif name == "review":
             s.closed(spec, "proposal_id review inputs")
             import_inputs(self.root, spec["inputs"], content)
             proposal = reference(state["proposals"], spec["proposal_id"], "proposal")["record"]
             proposal_inputs(proposal, content)
+            from .research import require_new, audit_foundation
+            require_new(proposal)
+            audit_foundation(self.root, state, proposal, proposal["foundation"], content)
             emit("review_recorded", {"proposal_id": spec["proposal_id"], "review": spec["review"],
                                      "digest": content.put_blob(spec["review"])})
         elif name == "admit":
@@ -260,6 +280,8 @@ class Controller:
             proposal = reference(state["proposals"], target, "proposal")["record"]
             from .computation import require_new_proposal
             require_new_proposal(proposal)
+            from .research import require_new
+            require_new(proposal)
             proposal_inputs(proposal, content)
             audit_admission(self.root, state, proposal, content)
             for review in state["reviews"].values():

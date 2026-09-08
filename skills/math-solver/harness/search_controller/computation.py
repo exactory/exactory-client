@@ -125,8 +125,8 @@ def validate_basis(state, proposal, value):
 
 
 def require_new_proposal(proposal):
-    s.require(proposal["task"]["kind"] not in FINITE_TASKS or proposal["schema_version"] == 2,
-              "New finite proposals require schema_version 2 and a computation contract", "computation_required")
+    s.require(proposal["task"]["kind"] not in FINITE_TASKS or proposal["schema_version"] in (2, 3),
+              "New finite proposals require an explicit computation contract", "computation_required")
 
 
 def effective_contract(state, node):

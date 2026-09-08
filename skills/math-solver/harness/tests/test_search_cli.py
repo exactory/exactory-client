@@ -51,7 +51,7 @@ class SearchCLIWorkspace:
     def initialize(self):
         return self.search("init", {"contract": contract()}, request="initialize")
 
-    def prepared_proposal(self):
+    def prepared_proposal(self, common=True):
         value = proposal()
         inputs = []
         for name in ["problem", "novelty", "induction"]:
@@ -63,6 +63,9 @@ class SearchCLIWorkspace:
                 value["studies"]["strategies"][0]["digest"] = digest
             else:
                 value["studies"][name] = digest
+        if common:
+            from tests.research_support import pin_research
+            pin_research(self.root, value, inputs)
         return {"proposal": value, "inputs": inputs}
 
     def admit(self):

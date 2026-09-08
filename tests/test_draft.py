@@ -17,6 +17,9 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
+from integration_fixtures import prepare_research, prepare_manuscript
+from research_harness.errors import ResearchError
+
 _PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -38,13 +41,18 @@ _WORKSPACE_DIR_NAMES = (".exactory", "draft", "evidence", "research", "reviews",
 def _run_draft_command(argv: list[str], expected_exit_code: int | None,
                        test_case: unittest.TestCase) -> str:
     args = _draft._build_parser().parse_args(argv)
+    def invoke():
+        try:
+            args.handler(args)
+        except ResearchError as error:
+            _draft._exit_with_error(json.dumps({"error": error.as_dict()}))
     sink = io.StringIO()
     with contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):
         if expected_exit_code is None:
-            args.handler(args)
+            invoke()
         else:
             with test_case.assertRaises(SystemExit) as caught:
-                args.handler(args)
+                invoke()
             test_case.assertEqual(caught.exception.code, expected_exit_code)
     return sink.getvalue()
 
@@ -79,7 +87,7 @@ class _FakeZenodoApi:
             return {"metadata": {"prereserve_doi": {"doi": "10.5281/zenodo.4242"}}}
         if method == "POST" and url.endswith("/deposit/depositions/4242/actions/publish"):
             return {
-                "doi": "10.5281/zenodo.4242",
+                "id": 4242, "doi": "10.5281/zenodo.4242",
                 "conceptdoi": "10.5281/zenodo.4241",
                 "links": {"record_html": f"{base_url}/records/4242"},
             }
@@ -104,7 +112,7 @@ class _FakeZenodoApi:
             return {"metadata": {"prereserve_doi": {"doi": "10.5281/zenodo.4343"}}}
         if method == "POST" and url.endswith("/deposit/depositions/4343/actions/publish"):
             return {
-                "doi": "10.5281/zenodo.4343",
+                "id": 4343, "doi": "10.5281/zenodo.4343",
                 "conceptdoi": "10.5281/zenodo.4241",
                 "links": {"record_html": f"{base_url}/records/4343"},
             }
@@ -191,12 +199,12 @@ class TestInit(unittest.TestCase):
         for dir_name in _WORKSPACE_DIR_NAMES:
             self.assertTrue((self.workspace_dir / dir_name).is_dir(), dir_name)
         state = json.loads((self.workspace_dir / ".exactory" / "draft.json").read_text())
-        self.assertEqual(state["version"], 1)
+        self.assertEqual(state["version"], 2)
         self.assertEqual(state["title"], "Cohort Percentiles")
         self.assertEqual(state["corpus"], "arxiv")
         self.assertEqual(state["category"], "cs.MA")
         self.assertRegex(state["created"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
-        self.assertEqual(set(state), {"version", "title", "corpus", "category", "created"})
+        self.assertEqual(set(state), {"version", "title", "corpus", "category", "created", "research"})
         literature_lines = (
             (self.workspace_dir / "research" / "literature.md").read_text().splitlines()
         )
@@ -226,6 +234,8 @@ class _DepositTestCase(unittest.TestCase):
             "A second paragraph states the limits.\n"
         )
         _write_passing_citation_report(self.workspace_dir)
+        self.research = prepare_research(self.workspace_dir, candidate=True)
+        prepare_manuscript(self.research)
         self.addCleanup(os.chdir, os.getcwd())
         os.chdir(self.workspace_dir)
 
@@ -396,26 +406,28 @@ class TestDeposit(_DepositTestCase):
         outside_pdf_path.write_bytes(b"%PDF-1.4 fake paper from elsewhere")
         return outside_pdf_path
 
-    def test_a_pdf_from_outside_the_draft_tree_claims_only_the_deposit(self) -> None:
-        # The record attests for this workspace, not for a file --pdf points
-        # at somewhere else on disk.
+    def test_a_pdf_from_outside_the_draft_tree_is_refused_before_deposit(self) -> None:
         _write_authorship_record(self.workspace_dir, _AGENT_WROTE_THE_PAPER_RECORD_TEXT)
-        self._deposit(["--creator", "Shiroshita, Ryosuke",
-                       "--pdf", str(self._write_pdf_outside_the_workspace())])
-        self._assert_claims_only_the_deposit(self._read_sent_metadata())
+        outside = self._write_pdf_outside_the_workspace()
+        self.assertFalse(_draft._has_exactory_authorship_evidence(outside))
+        output = self._deposit(["--creator", "Shiroshita, Ryosuke", "--pdf", str(outside)], 1)
+        self.assertIn("publication_artifact_mismatch", output)
+        self.assertEqual(self.fake_api.requests, [])
 
-    def test_a_pdf_symlinked_out_of_the_draft_tree_claims_only_the_deposit(self) -> None:
+    def test_a_pdf_symlinked_out_of_the_draft_tree_is_refused_before_deposit(self) -> None:
         _write_authorship_record(self.workspace_dir, _AGENT_WROTE_THE_PAPER_RECORD_TEXT)
         paper_path = self.workspace_dir / "draft" / "paper.pdf"
         paper_path.unlink()
         paper_path.symlink_to(self._write_pdf_outside_the_workspace())
-        self._deposit(["--creator", "Shiroshita, Ryosuke"])
-        self._assert_claims_only_the_deposit(self._read_sent_metadata())
+        self.assertFalse(_draft._has_exactory_authorship_evidence(paper_path))
+        output = self._deposit(["--creator", "Shiroshita, Ryosuke"], 1)
+        self.assertIn("readiness_required", output)
+        self.assertEqual(self.fake_api.requests, [])
 
     def test_a_blank_abstract_file_is_refused_before_any_request(self) -> None:
         (self.workspace_dir / "draft" / "abstract.txt").write_text(" \n\n")
         stderr_text = self._deposit(
-            ["--creator", "Shiroshita, Ryosuke"], expected_exit_code=2
+            ["--creator", "Shiroshita, Ryosuke"], expected_exit_code=1
         )
         self.assertIn("abstract", stderr_text)
         self.assertEqual(self.fake_api.requests, [])
@@ -424,7 +436,7 @@ class TestDeposit(_DepositTestCase):
         stderr_text = _run_draft_command(
             ["deposit", "--abstract-file", "draft/nothing-here.txt",
              "--creator", "Shiroshita, Ryosuke"],
-            2, self,
+            1, self,
         )
         self.assertIn("nothing-here.txt", stderr_text)
         self.assertEqual(self.fake_api.requests, [])
@@ -433,6 +445,7 @@ class TestDeposit(_DepositTestCase):
         (self.workspace_dir / "draft" / "paper.pdf").rename(
             self.workspace_dir / "draft" / "main.pdf"
         )
+        prepare_manuscript(self.research, pdf="draft/main.pdf")
         self._deposit(["--creator", "Shiroshita, Ryosuke"])
         upload_urls = [
             request.full_url for request in self.fake_api.requests
@@ -462,6 +475,7 @@ class TestDeposit(_DepositTestCase):
     def test_a_tarball_keeps_its_archive_suffix_in_the_supplementary_name(self) -> None:
         sources_path = self.workspace_dir / "code.tar.gz"
         sources_path.write_bytes(b"fake tarball")
+        prepare_manuscript(self.research, sources="code.tar.gz")
         self._deposit(["--creator", "Shiroshita, Ryosuke", "--sources", str(sources_path)])
         upload_urls = [
             request.full_url for request in self.fake_api.requests
@@ -487,6 +501,7 @@ class TestDeposit(_DepositTestCase):
     def test_sources_archive_uploads_under_the_supplementary_name(self) -> None:
         sources_path = self.workspace_dir / "sources.zip"
         sources_path.write_bytes(b"PK fake zip")
+        prepare_manuscript(self.research, sources="sources.zip")
         self._deposit(["--creator", "Shiroshita, Ryosuke", "--sources", str(sources_path)])
         upload_urls = [
             request.full_url for request in self.fake_api.requests
@@ -553,11 +568,12 @@ class TestProductionDepositGate(_DepositTestCase):
         self.assertIn("exactory-check lookup", stderr_text)
         self.assertEqual(self.fake_api.requests, [])
 
-    def test_sandbox_deposit_is_not_gated(self) -> None:
+    def test_sandbox_also_requires_the_current_reviewed_bibliography(self) -> None:
         (self.workspace_dir / ".exactory" / "citation-check.json").unlink()
         (self.workspace_dir / "draft" / "references.bib").unlink()
-        self._deposit(["--creator", "Shiroshita, Ryosuke"])
-        self.assertTrue(self.fake_api.requests)
+        output = self._deposit(["--creator", "Shiroshita, Ryosuke"], 1)
+        self.assertIn("readiness_required", output)
+        self.assertEqual(self.fake_api.requests, [])
 
 
 class TestParserStrictness(unittest.TestCase):
@@ -575,7 +591,7 @@ class TestDepositPreconditions(_DepositTestCase):
         outside_dir = tempfile.TemporaryDirectory()
         self.addCleanup(outside_dir.cleanup)
         os.chdir(outside_dir.name)
-        stderr_text = self._deposit(["--creator", "Shiroshita, Ryosuke"], expected_exit_code=2)
+        stderr_text = self._deposit(["--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
         self.assertIn("init", stderr_text)
 
     def test_deposit_without_a_pdf_is_an_error(self) -> None:
@@ -627,11 +643,11 @@ class TestDepositState(_DepositTestCase):
 
 class TestNewVersion(_DepositTestCase):
     def record_prior_deposit(self, environment: str = "sandbox") -> None:
-        (self.workspace_dir / ".exactory" / "deposit.json").write_text(json.dumps({
-            "environment": environment,
-            "deposition_id": 4242,
-            "draft_url": "https://sandbox.zenodo.org/deposit/4242",
-        }))
+        args = ["--creator", "Shiroshita, Ryosuke", "--publish"]
+        if environment == "production":
+            args.extend(["--production", "--confirm-publish"])
+        self._deposit(args)
+        self.fake_api.requests.clear()
 
     def test_new_version_reuses_the_stored_deposition(self) -> None:
         self.record_prior_deposit()
@@ -679,7 +695,7 @@ class TestNewVersion(_DepositTestCase):
             ["--new-version", "--creator", "Shiroshita, Ryosuke"],
             expected_exit_code=1,
         )
-        self.assertIn("production", stderr_text)
+        self.assertIn("same environment", stderr_text)
         self.assertEqual(self.fake_api.requests, [])
 
     def test_new_version_without_a_stored_deposit_is_an_error(self) -> None:
@@ -687,7 +703,7 @@ class TestNewVersion(_DepositTestCase):
             ["--new-version", "--creator", "Shiroshita, Ryosuke"],
             expected_exit_code=1,
         )
-        self.assertIn("deposit.json", stderr_text)
+        self.assertIn("prior concrete record", stderr_text)
 
 
 if __name__ == "__main__":

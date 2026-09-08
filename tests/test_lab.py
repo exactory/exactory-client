@@ -15,6 +15,9 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
+from integration_fixtures import prepare_research, admit_lab
+from research_harness.errors import ResearchError
+
 _PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -49,13 +52,25 @@ _STUDY_DIR_NAMES = (
 def _run_lab_command(argv: list[str], expected_exit_code: int | None,
                      test_case: unittest.TestCase) -> str:
     args = _lab._build_parser().parse_args(argv)
+    def invoke():
+        try:
+            if argv[0] == "run" and not args.admission:
+                script = test_case.workspace / "experiment" / args.script
+                if script.is_file() and (test_case.workspace / "experiment").resolve() in script.resolve().parents:
+                    case = prepare_research(test_case.workspace)
+                    admission = admit_lab(case, args.script, backend=args.backend,
+                                          timeout=args.timeout, seed=args.seed)
+                    args.admission = admission["id"]
+            args.handler(args)
+        except ResearchError as error:
+            _lab._exit_with_error(json.dumps({"error": error.as_dict()}))
     sink = io.StringIO()
     with contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):
         if expected_exit_code is None:
-            args.handler(args)
+            invoke()
         else:
             with test_case.assertRaises(SystemExit) as caught:
-                args.handler(args)
+                invoke()
             test_case.assertEqual(caught.exception.code, expected_exit_code)
     return sink.getvalue()
 
@@ -96,7 +111,7 @@ class TestInit(_WorkspaceTestCase):
     def test_init_writes_the_study_state(self) -> None:
         self.init_workspace()
         state = self.read_study_state()
-        self.assertEqual(state["version"], 1)
+        self.assertEqual(state["version"], 2)
         self.assertEqual(state["slug"], "curvature")
         self.assertEqual(state["stage"], "initiate")
         self.assertEqual(state["status"], "pending")
@@ -165,13 +180,15 @@ class TestState(_InsideWorkspaceTestCase):
         self.assertEqual(caught.exception.code, 2)
         self.assertEqual(stderr.getvalue(),
             "usage: exactory-lab state set [-h]\n"
-            "                              [--stage {initiate,cohort,ideate,experiment,write,evaluate,deposit,submit,complete}]\n"
+            "                              [--stage {initiate,cohort,literature,ideate,experiment,write,evaluate,deposit,submit,complete}]\n"
             "                              [--status STATUS] [--autopilot {on,off}]\n"
             "                              [--waiting WAITING] [--loop-target LOOP_TARGET]\n"
             "                              [--loop-budget LOOP_BUDGET]\n"
             "                              [--loop-notes LOOP_NOTES]\n"
+            "                              [--expected-revision EXPECTED_REVISION]\n"
+            "                              [--request-id REQUEST_ID]\n"
             "exactory-lab state set: error: argument --stage: invalid choice: 'escape' "
-            "(choose from initiate, cohort, ideate, experiment, write, evaluate, deposit, submit, complete)\n")
+            "(choose from initiate, cohort, literature, ideate, experiment, write, evaluate, deposit, submit, complete)\n")
 
     def test_set_switches_autopilot(self) -> None:
         _run_lab_command(["state", "set", "--autopilot", "off"], None, self)
@@ -216,7 +233,7 @@ class TestDecide(_InsideWorkspaceTestCase):
         self.assertEqual(caught.exception.code, 2)
         self.assertEqual(stderr.getvalue().splitlines()[-1],
             "exactory-lab decide: error: argument --stage: invalid choice: 'escape' "
-            "(choose from initiate, cohort, ideate, experiment, write, evaluate, deposit, submit, complete)")
+            "(choose from initiate, cohort, literature, ideate, experiment, write, evaluate, deposit, submit, complete)")
         self.assertFalse((self.workspace / ".exactory" / "decisions.jsonl").exists())
 
     def test_decide_appends_an_entry_with_the_current_stage(self) -> None:
@@ -346,9 +363,9 @@ class TestColabBackend(_InsideWorkspaceTestCase):
         del os.environ["EXACTORY_LAB_COLAB_DIR"]
         output = _run_lab_command(["run", "code/n1.py", "--backend", "colab"], 1, self)
         record = json.loads(output.splitlines()[-1])
-        self.assertFalse(record["ok"])
-        self.assertEqual(record["backend"], "colab")
-        self.assertIn("EXACTORY_LAB_COLAB_DIR", record["stderr_tail"])
+        self.assertEqual(record["error"]["code"], "execution_transport_required")
+        self.assertIn("EXACTORY_LAB_COLAB_DIR", record["error"]["message"])
+        self.assertFalse((self.sync_root / "jobs").exists())
 
     def test_timeout_without_a_runner_reports_the_dead_heartbeat(self) -> None:
         self.write_script("n2.py", "print('x')\n")
@@ -356,8 +373,9 @@ class TestColabBackend(_InsideWorkspaceTestCase):
             ["run", "code/n2.py", "--backend", "colab", "--timeout", "0.2"], 1, self
         )
         record = json.loads(output.splitlines()[-1])
-        self.assertFalse(record["ok"])
-        self.assertIn("runner", record["stderr_tail"].lower())
+        self.assertEqual(record["error"]["code"], "execution_recovery_required")
+        self.assertIn("runner", record["error"]["message"].lower())
+        self.assertIn("heartbeat", record["error"]["message"].lower())
         job_dirs = list((self.sync_root / "jobs").iterdir())
         self.assertEqual(len(job_dirs), 1)
         job = json.loads((job_dirs[0] / "job.json").read_text(encoding="utf-8"))
@@ -367,26 +385,24 @@ class TestColabBackend(_InsideWorkspaceTestCase):
         self.assertTrue((job_dirs[0] / "code" / "n2.py").is_file())
 
     def test_serve_scan_processes_one_job_and_writes_done_last(self) -> None:
-        job_dir = self.sync_root / "jobs" / "study__n3__1"
-        (job_dir / "code").mkdir(parents=True)
-        (job_dir / "code" / "n3.py").write_text(
-            "import json\nprint(json.dumps({'metric': 0.9}))\n", encoding="utf-8"
-        )
-        (job_dir / "job.json").write_text(json.dumps({
-            "job_id": "study__n3__1", "slug": "study", "node": "n3",
-            "script": "code/n3.py", "timeout": 30, "seed": None,
-            "created": time.time(),
-        }), encoding="utf-8")
-        (job_dir / "READY").write_text(str(time.time()), encoding="utf-8")
+        from research_harness import execution, remote_execution
+        self.write_script("n3.py", "import json\nprint(json.dumps({'metric': 0.9}))\n")
+        case = prepare_research(self.workspace)
+        admission = admit_lab(case, "code/n3.py", backend="colab", timeout=30)
+        claim = execution._claim(case.store, admission["id"], case.store.revision, "runner-once")["result"]
+        root, job = remote_execution._publish_job(case.store, claim)
+        job_dir = self.sync_root / "jobs" / job["job_id"]
+        self.assertFalse(_lab._serve_scan_once(self.sync_root))
+        self.assertTrue((job_dir / "PROCESSED").is_file())
+        result_dir = self.sync_root / "results" / job["job_id"]
+        self.assertFalse((result_dir / "DONE").exists())
+        remote_execution._release(case.store, claim, root, job)
         self.assertTrue(_lab._serve_scan_once(self.sync_root))
-        result_dir = self.sync_root / "results" / "study__n3__1"
         self.assertTrue((result_dir / "DONE").is_file())
-        record = json.loads(
-            (result_dir / "results" / "n3.json").read_text(encoding="utf-8")
-        )
+        record = execution.reconcile_execution(case.store, {"admission_id": admission["id"]},
+            expected_revision=case.store.revision, request_id="collect-once")
         self.assertTrue(record["ok"])
         self.assertEqual(record["metric"], {"metric": 0.9})
-        self.assertTrue((job_dir / "PROCESSED").is_file())
         self.assertFalse(_lab._serve_scan_once(self.sync_root))
 
     def test_round_trip_through_a_threaded_runner(self) -> None:

@@ -21,6 +21,13 @@ import sys
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from research_harness.errors import ResearchError
+from research_harness.storage import Store
+from research_harness.integration import (command_identity, current_store, initialize_workspace,
+                                           study_state, update_study, record_decision)
+from research_harness.cli import add_identity
+
 # The release version has one definition: the plugin manifest. Deriving the
 # User-Agent from it at boot keeps the two from drifting apart.
 _PLUGIN_VERSION = json.loads(
@@ -34,6 +41,7 @@ _STUDY_STATE_PATH = Path(".exactory") / "study.json"
 _STAGES = (
     "initiate",
     "cohort",
+    "literature",
     "ideate",
     "experiment",
     "write",
@@ -140,18 +148,17 @@ def _find_workspace(start_dir: Path | None = None) -> Path:
 
 
 def _load_study_state(workspace_dir: Path) -> dict:
+    if (workspace_dir / ".exactory/research.sqlite3").exists():
+        try:
+            return study_state(current_store(workspace_dir))
+        except ResearchError as error:
+            _exit_with_error(json.dumps({"error": error.as_dict()}))
     state_path = workspace_dir / _STUDY_STATE_PATH
     try:
         return json.loads(state_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as error:
         _exit_with_error(f"{state_path} is not valid JSON. Cause: {error}")
     raise AssertionError("unreachable")
-
-
-def _save_study_state(workspace_dir: Path, state: dict) -> None:
-    state["updated"] = _format_timestamp()
-    state_path = workspace_dir / _STUDY_STATE_PATH
-    state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
 
 
 def _is_inside_git_repository(directory: Path) -> bool:
@@ -183,7 +190,11 @@ def _run_init(args: argparse.Namespace) -> None:
         "created": now,
         "updated": now,
     }
-    state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    store = Store(workspace_dir, create=True)
+    try:
+        initialize_workspace(store, {"kind": "study", "state": state}, **command_identity(store, args))
+    except ResearchError as error:
+        _exit_with_error(json.dumps({"error": error.as_dict()}))
     (workspace_dir / "context" / "README.md").write_text(
         _CONTEXT_README, encoding="utf-8"
     )
@@ -238,141 +249,39 @@ def _run_state_show(args: argparse.Namespace) -> None:
 
 def _run_state_set(args: argparse.Namespace) -> None:
     workspace_dir = _find_workspace()
-    state = _load_study_state(workspace_dir)
+    changes = {}
     if args.stage is not None:
-        state["stage"] = args.stage
+        changes["stage"] = args.stage
     if args.status is not None:
-        state["status"] = args.status
+        changes["status"] = args.status
     if args.autopilot is not None:
-        state["autopilot"] = args.autopilot == "on"
+        changes["autopilot"] = args.autopilot == "on"
     if args.waiting is not None:
-        state["waiting"] = None if args.waiting == "none" else args.waiting
+        changes["waiting"] = None if args.waiting == "none" else args.waiting
     if args.loop_target is not None:
-        state["loop"]["target"] = args.loop_target
+        changes.setdefault("loop", {})["target"] = args.loop_target
     if args.loop_budget is not None:
-        state["loop"]["budget"] = args.loop_budget
+        changes.setdefault("loop", {})["budget"] = args.loop_budget
     if args.loop_notes is not None:
-        state["loop"]["notes"] = args.loop_notes
-    _save_study_state(workspace_dir, state)
-    print(json.dumps(state, indent=2))
+        changes.setdefault("loop", {})["notes"] = args.loop_notes
+    try:
+        store = current_store(workspace_dir)
+        result = update_study(store, changes, **command_identity(store, args))
+    except ResearchError as error:
+        _exit_with_error(json.dumps({"error": error.as_dict()}))
+    print(json.dumps(result["result"], indent=2))
 
 
 def _run_decide(args: argparse.Namespace) -> None:
     workspace_dir = _find_workspace()
     stage = args.stage or _load_study_state(workspace_dir)["stage"]
-    entry = {
-        "ts": _format_timestamp(),
-        "stage": stage,
-        "decision": args.decision,
-        "why": args.why,
-        "evidence": args.evidence or "",
-    }
-    log_path = workspace_dir / ".exactory" / "decisions.jsonl"
-    with log_path.open("a", encoding="utf-8") as log_file:
-        log_file.write(json.dumps(entry) + "\n")
-    print(json.dumps(entry, indent=2))
+    store = current_store(workspace_dir)
+    entry = {"stage": stage, "decision": args.decision, "why": args.why, "evidence": args.evidence or ""}
+    result = record_decision(store, entry, **command_identity(store, args))
+    print(json.dumps(result["result"], indent=2))
 
 
-def _parse_metric_from_stdout(stdout_text: str) -> dict | None:
-    metric = None
-    for line in stdout_text.splitlines():
-        stripped_line = line.strip()
-        if not (stripped_line.startswith("{") and stripped_line.endswith("}")):
-            continue
-        try:
-            candidate = json.loads(stripped_line)
-        except ValueError:
-            continue
-        if isinstance(candidate, dict) and "metric" in candidate:
-            metric = candidate
-    return metric
-
-
-def _write_run_log(experiment_dir: Path, node: str, command_line: str,
-                   returncode: int, duration_s: float,
-                   stdout_text: str, stderr_text: str) -> None:
-    log_path = experiment_dir / "logs" / f"{node}.log"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    log_path.write_text(
-        f"$ {command_line}\n"
-        f"# cwd={experiment_dir}\n"
-        f"# rc={returncode} duration={duration_s}s\n"
-        f"\n----- STDOUT -----\n{stdout_text}"
-        f"\n----- STDERR -----\n{stderr_text}\n",
-        encoding="utf-8",
-    )
-
-
-def _build_run_record(node: str, backend: str, returncode: int, timed_out: bool,
-                      duration_s: float, metric: dict | None, seed: int | None,
-                      stderr_text: str) -> dict:
-    is_buggy = returncode != 0 or timed_out or metric is None
-    return {
-        "node": node,
-        "ok": not is_buggy,
-        "is_buggy": is_buggy,
-        "returncode": returncode,
-        "timed_out": timed_out,
-        "duration_s": duration_s,
-        "metric": metric,
-        "seed": seed,
-        "log": f"experiment/logs/{node}.log",
-        "stderr_tail": stderr_text[-800:],
-        "backend": backend,
-    }
-
-
-def _execute_script_in(run_root: Path, script_path: Path, node: str,
-                       timeout: float, seed: int | None, backend: str) -> dict:
-    """Run the script with run_root as cwd; logs/ and results/ live under it."""
-    env = os.environ.copy()
-    if seed is not None:
-        env["EXACTORY_LAB_SEED"] = str(seed)
-    start = time.monotonic()
-    timed_out = False
-    try:
-        completed = subprocess.run(
-            [sys.executable, str(script_path)],
-            cwd=str(run_root), env=env,
-            capture_output=True, text=True, timeout=timeout,
-        )
-        returncode = completed.returncode
-        stdout_text = completed.stdout
-        stderr_text = completed.stderr
-    except subprocess.TimeoutExpired as error:
-        timed_out = True
-        returncode = -1
-        stdout_text = error.stdout or ""
-        stderr_text = (error.stderr or "") + f"\n[exactory-lab] timeout after {timeout}s"
-    duration_s = round(time.monotonic() - start, 3)
-    metric = _parse_metric_from_stdout(stdout_text)
-    if metric is None:
-        results_path = run_root / "results" / f"{node}.json"
-        if results_path.is_file():
-            try:
-                metric = json.loads(results_path.read_text(encoding="utf-8"))
-            except ValueError:
-                metric = None
-    _write_run_log(run_root, node, f"{sys.executable} {script_path}",
-                   returncode, duration_s, stdout_text, stderr_text)
-    return _build_run_record(node, backend, returncode, timed_out, duration_s,
-                             metric, seed, stderr_text)
-
-
-def _execute_local(workspace_dir: Path, script_path: Path, node: str,
-                   timeout: float, seed: int | None) -> dict:
-    return _execute_script_in(workspace_dir / "experiment", script_path, node,
-                              timeout, seed, "local")
-
-
-# ------------------------------------------------------- the colab backend
-#
-# Compute only, never an LLM. The transport is one shared folder (a Google
-# Drive mirror): the client writes jobs/<id>/{code/, job.json, READY}, the
-# runner notebook claims a job with PROCESSED, executes it on the GPU
-# runtime, and writes results/<id>/{logs/, results/, plots/, DONE}. READY
-# and DONE are written last on their side of the handoff, and the runner
-# rewrites RUNNER_ALIVE as a heartbeat each poll.
+# Shared-folder compute uses the same admitted execution protocol as local runs.
 
 _RUNNER_ALIVE_FILE_NAME = "RUNNER_ALIVE"
 
@@ -398,108 +307,9 @@ def _is_runner_alive(sync_root: Path, max_age_seconds: float = 180.0) -> bool:
     return time.time() - heartbeat <= max_age_seconds
 
 
-def _build_colab_error_record(run_root: Path, node: str, seed: int | None,
-                              message: str) -> dict:
-    _write_run_log(run_root, node, "(colab backend)", -1, 0.0, "", message)
-    return _build_run_record(node, "colab", -1, False, 0.0, None, seed, message)
-
-
-def _execute_colab(workspace_dir: Path, script_path: Path, node: str,
-                   timeout: float, seed: int | None) -> dict:
-    experiment_dir = workspace_dir / "experiment"
-    sync_root = _read_colab_sync_root()
-    if sync_root is None or not sync_root.is_dir():
-        return _build_colab_error_record(
-            experiment_dir, node, seed,
-            "EXACTORY_LAB_COLAB_DIR is not set to an existing directory."
-            " Point it at the local mirror of the runner's Drive folder.",
-        )
-    slug = _load_study_state(workspace_dir)["slug"]
-    job_id = f"{slug}__{node}__{int(time.time())}"
-    job_dir = sync_root / "jobs" / job_id
-    shutil.copytree(experiment_dir / "code", job_dir / "code",
-                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-    job = {
-        "job_id": job_id,
-        "slug": slug,
-        "node": node,
-        "script": str(script_path.relative_to(experiment_dir.resolve())),
-        "timeout": timeout,
-        "seed": seed,
-        "created": time.time(),
-    }
-    (job_dir / "job.json").write_text(json.dumps(job, indent=2) + "\n",
-                                      encoding="utf-8")
-    time.sleep(_read_colab_interval("EXACTORY_LAB_COLAB_SYNC_WAIT", 10.0))
-    (job_dir / "READY").write_text(str(time.time()), encoding="utf-8")
-
-    result_dir = sync_root / "results" / job_id
-    poll_seconds = _read_colab_interval("EXACTORY_LAB_COLAB_POLL", 10.0)
-    deadline = time.monotonic() + timeout + _read_colab_interval(
-        "EXACTORY_LAB_COLAB_WAIT", 1800.0
-    )
-    while not (result_dir / "DONE").is_file():
-        if time.monotonic() >= deadline:
-            message = f"The colab runner did not finish job {job_id} in time."
-            if not _is_runner_alive(sync_root):
-                message += (" No runner heartbeat: start colab_runner.ipynb"
-                            " on a GPU runtime, or run this node locally.")
-            return _build_colab_error_record(experiment_dir, node, seed, message)
-        time.sleep(poll_seconds)
-
-    for source_name, target_dir in (("logs", experiment_dir / "logs"),
-                                    ("results", experiment_dir / "results"),
-                                    ("plots", experiment_dir / "plots")):
-        source_dir = result_dir / source_name
-        if source_dir.is_dir():
-            target_dir.mkdir(parents=True, exist_ok=True)
-            for source_file in source_dir.iterdir():
-                shutil.copy2(source_file, target_dir / source_file.name)
-    record = json.loads(
-        (experiment_dir / "results" / f"{node}.json").read_text(encoding="utf-8")
-    )
-    record["backend"] = "colab"
-    record["log"] = f"experiment/logs/{node}.log"
-    return record
-
-
-def _process_colab_job(sync_root: Path, job_dir: Path) -> None:
-    job = json.loads((job_dir / "job.json").read_text(encoding="utf-8"))
-    work_dir = sync_root / "_work" / job["job_id"]
-    if work_dir.exists():
-        shutil.rmtree(work_dir)
-    shutil.copytree(job_dir / "code", work_dir / "code")
-    for dir_name in ("logs", "results", "plots"):
-        (work_dir / dir_name).mkdir(parents=True, exist_ok=True)
-    record = _execute_script_in(work_dir, work_dir / job["script"], job["node"],
-                                float(job["timeout"]), job["seed"], "colab")
-    (work_dir / "results" / f"{job['node']}.json").write_text(
-        json.dumps(record, indent=2) + "\n", encoding="utf-8"
-    )
-    result_dir = sync_root / "results" / job["job_id"]
-    for dir_name in ("logs", "results", "plots"):
-        target_dir = result_dir / dir_name
-        target_dir.mkdir(parents=True, exist_ok=True)
-        for source_file in (work_dir / dir_name).iterdir():
-            shutil.copy2(source_file, target_dir / source_file.name)
-    (result_dir / "DONE").write_text(str(time.time()), encoding="utf-8")
-
-
 def _serve_scan_once(sync_root: Path) -> bool:
-    """Claim and process the oldest unprocessed READY job. True if one ran."""
-    (sync_root / _RUNNER_ALIVE_FILE_NAME).write_text(str(time.time()),
-                                                     encoding="utf-8")
-    jobs_dir = sync_root / "jobs"
-    if not jobs_dir.is_dir():
-        return False
-    for ready_path in sorted(jobs_dir.glob("*/READY")):
-        job_dir = ready_path.parent
-        if (job_dir / "PROCESSED").exists():
-            continue
-        (job_dir / "PROCESSED").write_text(str(time.time()), encoding="utf-8")
-        _process_colab_job(sync_root, job_dir)
-        return True
-    return False
+    from research_harness.remote_execution import serve_scan_once
+    return serve_scan_once(sync_root)
 
 
 def _require_colab_sync_root() -> Path:
@@ -531,7 +341,7 @@ def _run_colab_serve(args: argparse.Namespace) -> None:
             time.sleep(poll_seconds)
 
 
-_BACKENDS = {"local": _execute_local, "colab": _execute_colab}
+_BACKENDS = ("local", "colab")
 
 
 def _run_run(args: argparse.Namespace) -> None:
@@ -544,11 +354,22 @@ def _run_run(args: argparse.Namespace) -> None:
             " Pass its path relative to experiment/, e.g. code/n3.py.", 2,
         )
     node = script_path.stem
-    record = _BACKENDS[args.backend](workspace_dir, script_path, node,
-                                     args.timeout, args.seed)
-    results_path = experiment_dir / "results" / f"{node}.json"
-    results_path.parent.mkdir(parents=True, exist_ok=True)
-    results_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    if not getattr(args, "admission", None):
+        _exit_with_error("Research execution needs --admission from a prospective admitted cycle; run exactory-research next.")
+    try:
+        from research_harness.execution import execution_status, launch_execution
+        store = current_store(workspace_dir)
+        status = execution_status(store, args.admission)
+        binding = status["binding"]
+        admission = status["admission"]
+        if not binding or not admission:
+            raise ResearchError("execution_binding_required", "Bind the admitted run with exactory-research bind-run before launching")
+        if (binding["script"] != args.script or binding["backend"] != args.backend
+                or binding["timeout_seconds"] != args.timeout or admission["command"]["seed"] != args.seed):
+            raise ResearchError("execution_identity_mismatch", "Script, backend, seed and timeout must equal the admitted run binding")
+        record = launch_execution(store, args.admission, **command_identity(store, args))
+    except ResearchError as error:
+        _exit_with_error(json.dumps({"error": error.as_dict()}))
     print(json.dumps(record))
     if not record["ok"]:
         raise SystemExit(1)
@@ -578,6 +399,7 @@ def _build_parser() -> argparse.ArgumentParser:
     init.add_argument("--slug", required=True,
                       help="Short name of the study, used in job ids and records.")
     init.set_defaults(handler=_run_init)
+    add_identity(init, required=False)
 
     keys = commands.add_parser(
         "keys", allow_abbrev=False,
@@ -608,6 +430,7 @@ def _build_parser() -> argparse.ArgumentParser:
     state_set.add_argument("--loop-notes", dest="loop_notes",
                            help="The user's pacing policy, in their own words.")
     state_set.set_defaults(handler=_run_state_set)
+    add_identity(state_set, required=False)
 
     decide = commands.add_parser("decide", allow_abbrev=False,
                                  help="Append one entry to the decision log.")
@@ -620,6 +443,7 @@ def _build_parser() -> argparse.ArgumentParser:
     decide.add_argument("--evidence",
                         help="File or result the decision rests on.")
     decide.set_defaults(handler=_run_decide)
+    add_identity(decide, required=False)
 
     run = commands.add_parser("run", allow_abbrev=False,
                               help="Execute one experiment script and record"
@@ -632,6 +456,8 @@ def _build_parser() -> argparse.ArgumentParser:
                      help="Seconds before the run is killed. Default: 1800.")
     run.add_argument("--seed", type=int,
                      help="Seed exported to the script as EXACTORY_LAB_SEED.")
+    run.add_argument("--admission", help="The exact prospective admission ID, claimed once before launch.")
+    add_identity(run, required=False)
     run.set_defaults(handler=_run_run)
 
     colab_status = commands.add_parser("colab-status", allow_abbrev=False,

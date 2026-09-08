@@ -197,7 +197,11 @@ class ReleaseWorkflowTests(WorkspaceTest):
             "outcome": "verified", "inconclusive_reason": None, "classification": "proof_candidate",
             "root_decision": {"kind": "proof_candidate", "reason": "The candidate supplies the remaining finite premise of the accepted lift"},
             "remaining_obligation_ids": [high_id], "next_action": "Review the modular lift"}, run["id"])
-        manifest = dict(self.controller.store.get_blob(run["input_digest"]), kind="certificate", dependencies=[],
+        run_inputs = self.controller.store.get_blob(run["input_digest"])
+        self.assertEqual(run_inputs["schema_version"], 2)
+        self.assertEqual(run_inputs["foundation"], successor["foundation"])
+        manifest = dict({key: run_inputs[key] for key in ("claim_digest", "artifacts", "external_dependencies")},
+            schema_version=1, kind="certificate", dependencies=[],
             conclusion={"outcome": "proof", "dependency_ids": [], "route_bindings": []}, verification={"run_id": run["id"],
                 "result_digest": run["result_digest"], "policy_review": self.result_review(run["result_digest"], digest(high)),
                 "requested_declaration": None, "requested_type_digest": None})

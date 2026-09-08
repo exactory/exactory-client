@@ -484,6 +484,29 @@ def _execution_artifacts(artifacts, value):
         artifacts.read(output["artifact"])
 
 
+def validate_admitted_execution(records, artifacts, admission_id):
+    """Recheck a prospective admission immediately before a real launcher spends it.
+
+    This read-only check adds no reservation and returns no proof credit. Original
+    admission replay remains historical; outcomes can still be reconciled when
+    this current preparation check fails.
+    """
+    admission = _get(records, "execution_admission", admission_id, "execution_not_admitted")
+    plan = _get(records, "cycle_plan", admission["cycle_id"], "unknown_cycle")
+    context = _Context(records, artifacts)
+    context.require_ready()
+    account = records["strategy_account"][plan["strategy_key"]]
+    _validate_reopening(context, plan["payload"], account)
+    if _plan_dependencies(context, plan["payload"]) != plan["dependencies"]:
+        raise ResearchError("plan_dependencies_stale", "Plan a current development before launching after a source, scope or policy change")
+    if admission["plan_digest"] != plan["digest"] or admission["dependencies"] != plan["dependencies"]:
+        raise ResearchError("plan_digest_mismatch", "Admission does not bind the current immutable plan")
+    _command(artifacts, admission["command"])
+    if admission_id in records.get("execution_outcome", {}):
+        raise ResearchError("execution_already_recorded", "A recorded admission cannot launch again")
+    return admission
+
+
 def _checkpoint_record(records, artifacts, dependencies, identifier, cycle, assessment, reason, next_hypothesis, revision, request_id):
     plan = records["cycle_plan"][cycle["id"]]
     content = {"id": identifier, "cycle_id": cycle["id"], "objective": plan["payload"]["objective"],

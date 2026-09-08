@@ -27,6 +27,17 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from research_harness.errors import ResearchError
+from research_harness.gates import gate_report, require_ready
+from research_harness.integration import command_identity, current_store, initialize_workspace
+from research_harness.storage import Store
+from research_harness.workspace import find_workspace
+from research_harness.artifacts import ArtifactStore
+from research_harness.publication import validate_upload
+from research_harness.zenodo import deposit as deposit_bundle, continue_deposit
+from research_harness.cli import add_identity
+
 _PRODUCTION_API_URL = "https://zenodo.org/api"
 _SANDBOX_API_URL = "https://sandbox.zenodo.org/api"
 _TIMEOUT_SECONDS = 180
@@ -96,7 +107,11 @@ def _run_init(args: argparse.Namespace) -> None:
     state = {"version": 1, "title": args.title, "corpus": args.corpus,
              "category": args.category,
              "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
-    state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    store = Store(workspace_dir, create=True)
+    try:
+        initialize_workspace(store, {"kind": "draft", "state": state}, **command_identity(store, args))
+    except ResearchError as error:
+        _exit_with_error(json.dumps({"error": error.as_dict()}))
     literature_path = workspace_dir / "research" / "literature.md"
     if not literature_path.exists():
         literature_path.write_text(_LITERATURE_HEADER, encoding="utf-8")
@@ -243,45 +258,13 @@ def _mark_paper_as_preview(base_url: str, record_id: int, token: str) -> None:
     _call_zenodo("PUT", draft_url, token, json_body=document)
 
 
-def _open_new_version_draft(base_url: str, environment: str, token: str) -> dict:
-    try:
-        prior = json.loads(_DEPOSIT_STATE_PATH.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        _exit_with_error(f"{_DEPOSIT_STATE_PATH} does not exist here."
-                         " Run a plain deposit first; --new-version revises it.")
-    except json.JSONDecodeError as error:
-        _exit_with_error(f"{_DEPOSIT_STATE_PATH} is not valid JSON. Cause: {error}")
-    if prior.get("environment") != environment:
-        _exit_with_error(
-            f"The stored deposit is on {prior.get('environment')}, not"
-            f" {environment}. Run --new-version against the same environment.")
-    created = _call_zenodo(
-        "POST",
-        f"{base_url}/deposit/depositions/{prior['deposition_id']}/actions/newversion",
-        token,
-    )
-    draft_url = created.get("links", {}).get("latest_draft", "")
-    if draft_url == "":
-        _exit_with_error("Zenodo returned no new-version draft link.")
-    return _call_zenodo("GET", draft_url, token)
-
-
-def _save_deposit_state(environment: str, deposition: dict,
-                        published: dict | None) -> None:
-    state = {
-        "environment": environment,
-        "deposition_id": deposition["id"],
-        "draft_url": deposition.get("links", {}).get("html", ""),
-    }
-    if published is not None:
-        state["doi"] = published.get("doi", "")
-        state["concept_doi"] = published.get("conceptdoi", "")
-        state["record_url"] = published.get("links", {}).get("record_html", "")
-    _DEPOSIT_STATE_PATH.write_text(json.dumps(state, indent=2) + "\n",
-                                   encoding="utf-8")
-
-
 def _run_deposit(args: argparse.Namespace) -> None:
+    try:
+        workspace = find_workspace()
+        store = current_store(workspace)
+        require_ready(gate_report(store, "readiness"), "publication")
+    except ResearchError as error:
+        _exit_with_error(json.dumps({"error": error.as_dict()}))
     state = _load_draft_state()
     pdf_path = Path(args.pdf) if args.pdf else _find_newest_pdf()
     if not pdf_path.exists():
@@ -289,7 +272,9 @@ def _run_deposit(args: argparse.Namespace) -> None:
     sources_path = Path(args.sources) if args.sources else None
     if sources_path is not None and not sources_path.exists():
         _exit_with_error(f"The file {sources_path} does not exist.", 2)
-    abstract_text = _read_abstract_text(Path(args.abstract_file))
+    report = validate_upload(store, pdf_path, Path(args.abstract_file), sources_path)
+    bundle = report["bundle"]
+    abstract_text = ArtifactStore(store.root).read(bundle["files"]["abstract"]["artifact"]).decode("utf-8").strip()
     has_exactory_authorship_evidence = _has_exactory_authorship_evidence(pdf_path)
     token = _read_zenodo_token(args.production)
     if args.publish and args.production and not args.confirm_publish:
@@ -310,37 +295,35 @@ def _run_deposit(args: argparse.Namespace) -> None:
 
     base_url = _PRODUCTION_API_URL if args.production else _SANDBOX_API_URL
     environment = "production" if args.production else "sandbox"
-    if args.new_version:
-        deposition = _open_new_version_draft(base_url, environment, token)
-    else:
-        deposition = _call_zenodo("POST", f"{base_url}/deposit/depositions", token,
-                                  json_body={})
-    bucket_url = deposition["links"]["bucket"]
-    _call_zenodo("PUT", f"{bucket_url}/{_PAPER_UPLOAD_NAME}", token,
-                 file_bytes=pdf_path.read_bytes())
-    if sources_path is not None:
-        _call_zenodo("PUT", f"{bucket_url}/{_name_sources_upload(sources_path)}", token,
-                     file_bytes=sources_path.read_bytes())
     metadata = _build_deposit_metadata(state["title"], args.creator, abstract_text,
                                        has_exactory_authorship_evidence)
-    _call_zenodo("PUT", f"{base_url}/deposit/depositions/{deposition['id']}",
-                 token, json_body={"metadata": metadata})
-    _mark_paper_as_preview(base_url, deposition["id"], token)
+    uploads = [{"name": _PAPER_UPLOAD_NAME, "artifact": bundle["files"]["pdf"]["artifact"]}]
+    if sources_path is not None:
+        uploads.append({"name": _name_sources_upload(sources_path), "artifact": bundle["files"]["sources"]["artifact"]})
+    binding = {"bundle_digest": bundle["digest"], "prepared_revision": bundle["prepared_revision"],
+               "base_url": base_url, "environment": environment, "new_version": args.new_version,
+               "publish": args.publish, "metadata": metadata, "uploads": uploads,
+               "prior": store.snapshot()["records"].get("workspace", {}).get("deposit") if args.new_version else None}
+    identity = command_identity(store, args)
+    # CAS validates the snapshot that supplied the exact upload bytes.
+    if args.expected_revision is None:
+        identity["expected_revision"] = report["revision"]
+    receipt = deposit_bundle(store, binding, lambda method, url, **kwargs: _call_zenodo(method, url, token, **kwargs),
+                            lambda base, record_id: _mark_paper_as_preview(base, record_id, token), **identity)
+    print(json.dumps(receipt, indent=2))
 
-    if args.publish:
-        # Per https://developers.zenodo.org, doi is present only on published
-        # depositions; conceptdoi names the paper across all its versions.
-        published = _call_zenodo(
-            "POST", f"{base_url}/deposit/depositions/{deposition['id']}/actions/publish", token
-        )
-        _save_deposit_state(environment, deposition, published)
-        print(f"The record is published: {published.get('links', {}).get('record_html', '')}")
-        print(f"Record DOI: {published.get('doi', '')}")
-        print(f"Concept DOI: {published.get('conceptdoi', '')}")
-    else:
-        _save_deposit_state(environment, deposition, None)
-        print(f"The draft deposit is created. Review it at: {deposition['links'].get('html', '')}")
-        print("Zenodo assigns the record DOI and the concept DOI when you publish the record.")
+
+def _run_reconcile(args: argparse.Namespace) -> None:
+    store = current_store(find_workspace())
+    from research_harness.remote import get_intent
+    intent = get_intent(store, args.intent_id)
+    if intent["kind"] != "deposit":
+        raise ResearchError("remote_intent_mismatch", "Use a deposit intent for Zenodo reconciliation")
+    token = _read_zenodo_token(intent["binding"]["environment"] == "production")
+    receipt = continue_deposit(store, args.intent_id,
+        lambda method, url, **kwargs: _call_zenodo(method, url, token, **kwargs),
+        lambda base, record_id: _mark_paper_as_preview(base, record_id, token), reconcile=True)
+    print(json.dumps(receipt, indent=2))
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -358,6 +341,7 @@ def _build_parser() -> argparse.ArgumentParser:
     init.add_argument("--corpus", default="arxiv",
                       help="Corpus the cohort is stated against (default: arxiv).")
     init.set_defaults(handler=_run_init)
+    add_identity(init, required=False)
 
     deposit = commands.add_parser("deposit", allow_abbrev=False,
                                   help="Deposit the built PDF to Zenodo.")
@@ -383,13 +367,20 @@ def _build_parser() -> argparse.ArgumentParser:
     deposit.add_argument("--creator", action="append", required=True,
                          help='Author as "Family name, Given names". Repeat for more authors.')
     deposit.set_defaults(handler=_run_deposit)
+    add_identity(deposit, required=False)
+    reconcile = commands.add_parser("reconcile", allow_abbrev=False, help="Reconcile a saved deposit intent through remote reads before continuing confirmed steps.")
+    reconcile.add_argument("intent_id")
+    reconcile.set_defaults(handler=_run_reconcile)
 
     return parser
 
 
 def main() -> None:
     args = _build_parser().parse_args()
-    args.handler(args)
+    try:
+        args.handler(args)
+    except ResearchError as error:
+        _exit_with_error(json.dumps({"error": error.as_dict()}))
 
 
 if __name__ == "__main__":

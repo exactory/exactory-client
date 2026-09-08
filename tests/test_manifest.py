@@ -50,6 +50,7 @@ class TestPluginManifest(unittest.TestCase):
             "exactory-draft": f"exactory-draft/{version}",
             "exactory-lab": f"exactory-lab/{version}",
             "exactory-cohort": f"exactory-cohort/{version}",
+            "exactory-research": f"exactory-research/{version}",
         }
         # `exactory-math` makes no request: it runs the math-solver harness in place,
         # so it carries no user agent and is not in the mapping above.

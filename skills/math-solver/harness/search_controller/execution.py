@@ -171,7 +171,8 @@ def build_run(controller, state, spec, target, content):
     if spec["kind"] != "command":
         s.require(all(binding in spec["external_dependencies"] for binding in bindings),
                   "Native input review must pin the selected verifier executables", "input_review_required")
-    frozen = freeze_execution_inputs(controller.root, node, spec, content)
+    from .research import effective_foundation
+    frozen = freeze_execution_inputs(controller.root, node, spec, content, effective_foundation(state, node))
     input_modes = capture_input_modes(controller.root, content.get_blob(frozen)["artifacts"])
     if spec["kind"] != "command":
         s.require(input_modes == spec["input_modes"], "Input permissions differ from the reviewed specification", "digest_mismatch")
@@ -281,8 +282,16 @@ def launch(controller, run):
         s.require((directory / "ready.json").exists(), "Launcher did not establish its identity", "recovery_required")
         identity = read_record(directory / "ready.json")
         s.require(identity["pid"] == process.pid and identity["token"] == run["token"], "Unexpected launcher identity", "recovery_conflict")
-        internal_operation(controller, "execution-launch", "launch-" + run["id"], lambda state, content: [
-            {"kind": "run_launched", "payload": {"run_id": run["id"], "token": run["token"], "identity": identity}}])
+        def prelaunch(state, content):
+            from .integration import audit_work
+            from .research import effective_foundation
+            node = state["nodes"][run["node_id"]]
+            audit_work(controller, state, node, content)
+            inputs = content.get_blob(run["input_digest"])
+            s.require(inputs.get("foundation") == effective_foundation(state, node),
+                      "The launch must use the foundation reviewed for this reserved run", "research_foundation_stale")
+            return [{"kind": "run_launched", "payload": {"run_id": run["id"], "token": run["token"], "identity": identity}}]
+        internal_operation(controller, "execution-launch", "launch-" + run["id"], prelaunch)
         process.stdin.write((run["token"] + "\n").encode())
         process.stdin.flush()
         process.stdin.close()
@@ -290,6 +299,11 @@ def launch(controller, run):
     finally:
         if process.stdin is not None and not process.stdin.closed:
             process.stdin.close()
+        if process.poll() is None:
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired as error:
+                raise SearchError("recovery_required", "The launcher remains live after prelaunch refusal; retain the reserved run and reconcile") from error
     reconcile_runs(controller)
 
 
@@ -382,6 +396,19 @@ def launcher(directory):
 
 def execution_boundary(config, directory):
     run = config["run"]
+    if config["inputs"].get("schema_version") == 2:
+        try:
+            from search_controller.service import Controller
+            from search_controller.research import audit_foundation, effective_foundation
+            controller = Controller(Path(directory).parents[2])
+            state = controller.status()
+            node = state["nodes"][run["node_id"]]
+            foundation = config["inputs"]["foundation"]
+            if effective_foundation(state, node) != foundation:
+                return "foundation_changed"
+            audit_foundation(controller.root, state, state["proposals"][node["proposal_id"]]["record"], foundation, controller.store)
+        except SearchError:
+            return "foundation_changed"
     modes = {item["path"]: item["mode"] for item in run["input_modes"]}
     for item in config["inputs"]["artifacts"]:
         source = safe_path(directory, "build/" + item["path"])

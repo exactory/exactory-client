@@ -85,6 +85,41 @@ def shell_tokens(command):
     return list(lexer)
 
 
+def argument_data(tokens):
+    """Locate interpreter source/module arguments without interpreting their code.
+
+    A program passed to -c/-e is an argument value, never a filesystem operand.
+    Other explicit paths and the actual working directory remain discoverable.
+    Managed arbitrary code is still rejected by guard's supported-command check.
+    """
+    data, start = set(), 0
+    separators = {";", "&&", "||", "|", "&"}
+    while start < len(tokens):
+        end = next((i for i in range(start, len(tokens)) if tokens[i] in separators), len(tokens))
+        command = start
+        while command < end and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tokens[command]):
+            command += 1
+        if command < end and Path(tokens[command]).name == "env":
+            command += 1
+            while command < end and (tokens[command].startswith("-") or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tokens[command])):
+                if tokens[command] in {"-u", "--unset", "-C", "--chdir"}:
+                    command += 1
+                command += 1
+        if command < end:
+            executable = Path(tokens[command]).name
+            flags = ({"-c", "-m"} if re.fullmatch(r"python(?:[0-9]+(?:\.[0-9]+)*)?", executable) else
+                     {"-c"} if executable in {"sh", "bash", "zsh", "dash", "ksh"} else
+                     {"-e", "--eval", "-p", "--print"} if executable in {"node", "nodejs"} else set())
+            for position in range(command + 1, end):
+                if tokens[position] in flags and position + 1 < end:
+                    data.add(position + 1)
+                    break
+                if not tokens[position].startswith("-"):
+                    break
+        start = end + 1
+    return data
+
+
 def operation_paths(payload):
     tool = payload.get("tool_name")
     raw = payload.get("tool_input")
@@ -97,7 +132,10 @@ def operation_paths(payload):
         except (ValueError, TypeError):
             return []
         paths = []
-        for token in tokens:
+        data = argument_data(tokens)
+        for index, token in enumerate(tokens):
+            if index in data:
+                continue
             if not token or token.startswith("-") or token in {";", "&&", "|", ">", ">>", "<"}:
                 continue
             candidate = token.split("=", 1)[-1] if token.startswith(("of=", "if=")) else token

@@ -1,0 +1,2105 @@
+{
+  "init": {
+    "profile": "research",
+    "target": null
+  },
+  "adopt": {
+    "id": "legacy-import-1",
+    "profile": "research",
+    "target": null,
+    "files": [
+      ".exactory/study.json",
+      "cohort/doctrine.md"
+    ],
+    "reason": "Preserve selected legacy bytes and expose pending current obligations."
+  },
+  "artifact": {
+    "id": "program-1",
+    "path": "experiment/code/program.py",
+    "media_type": "text/x-python"
+  },
+  "target": {
+    "target": {
+      "kind": "objective",
+      "id": "complete-objective",
+      "statement": "Establish the stated bound over the complete declared domain."
+    },
+    "reason": "Fix the complete objective before planning."
+  },
+  "constitution": {
+    "previous_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "Record review of the current distributed constitution; reassess dependent decisions separately."
+  },
+  "collect": {
+    "definition": {
+      "corpus": "arxiv",
+      "primaryCategory": "cs.LG",
+      "windowStart": "2026-01-01",
+      "windowEnd": "2026-01-31"
+    },
+    "max_requests": 10,
+    "page_size": 100
+  },
+  "resume": {
+    "collection_id": "COLLECTION_ID",
+    "max_requests": 10
+  },
+  "acquire": {
+    "identifier": "arxiv:2601.00001v1",
+    "provider": "arxiv",
+    "max_requests": 2
+  },
+  "expand": {
+    "identifier": "doi:10.1234/example",
+    "provider": "crossref",
+    "max_requests": 2
+  },
+  "fulltext": {
+    "identifier": "arxiv:2601.00001v1",
+    "url": "https://arxiv.org/html/2601.00001v1",
+    "max_requests": 2
+  },
+  "import-response": {
+    "provider": "mcp",
+    "response_file": "/absolute/path/to/original-response.json",
+    "source_url": "https://example.org/search?q=finite+bound",
+    "captured_at": "2026-09-07T12:00:00Z",
+    "media_type": "application/json",
+    "mappings": [
+      {
+        "id": "/results/0/id",
+        "title": "/results/0/title",
+        "abstract": "/results/0/abstract"
+      }
+    ]
+  },
+  "roots": {
+    "profile": "research",
+    "roots": [
+      "arxiv:2601.00001v1"
+    ],
+    "collection_ids": [
+      "COLLECTION_ID"
+    ]
+  },
+  "bundle": {
+    "id": "bundle-1",
+    "version_id": "arxiv:2601.00001v1",
+    "source_id": "SOURCE_ID",
+    "scope": "article",
+    "completeness": "complete",
+    "units": [
+      {
+        "id": "body",
+        "kind": "text",
+        "required": true,
+        "link": {
+          "version_id": "arxiv:2601.00001v1",
+          "source_id": "SOURCE_ID",
+          "artifact": {
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+            "size": 15,
+            "media_type": "text/plain"
+          },
+          "locator": {
+            "kind": "text",
+            "start": 0,
+            "end": 15,
+            "quote": "Source passage."
+          }
+        }
+      },
+      {
+        "id": "bibliography",
+        "kind": "bibliography",
+        "required": true,
+        "link": {
+          "version_id": "arxiv:2601.00001v1",
+          "source_id": "SOURCE_ID",
+          "artifact": {
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+            "size": 15,
+            "media_type": "text/plain"
+          },
+          "locator": {
+            "kind": "text",
+            "start": 0,
+            "end": 15,
+            "quote": "Source passage."
+          }
+        }
+      }
+    ],
+    "inventory": {
+      "text": "Replace this inventory with all actual required source units.",
+      "links": [
+        {
+          "version_id": "arxiv:2601.00001v1",
+          "source_id": "SOURCE_ID",
+          "artifact": {
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+            "size": 15,
+            "media_type": "text/plain"
+          },
+          "locator": {
+            "kind": "text",
+            "start": 0,
+            "end": 15,
+            "quote": "Source passage."
+          }
+        }
+      ]
+    },
+    "bibliography": {
+      "complete": true,
+      "unit_id": "bibliography",
+      "entries": []
+    },
+    "resolutions": []
+  },
+  "read": {
+    "id": "reading-1",
+    "version_id": "arxiv:2601.00001v1",
+    "depth": "abstract",
+    "inspections": [
+      {
+        "unit_id": null,
+        "link": {
+          "version_id": "arxiv:2601.00001v1",
+          "source_id": "SOURCE_ID",
+          "artifact": {
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+            "size": 15,
+            "media_type": "text/plain"
+          },
+          "locator": {
+            "kind": "text",
+            "start": 0,
+            "end": 15,
+            "quote": "Source passage."
+          }
+        },
+        "note": "Replace with the actual inspection."
+      }
+    ],
+    "notes": {
+      "problem": {
+        "text": "Record what the source says about problem.",
+        "status": "present",
+        "inspections": [
+          0
+        ]
+      },
+      "claims": {
+        "text": "Record what the source says about claims.",
+        "status": "present",
+        "inspections": [
+          0
+        ]
+      },
+      "assumptions": {
+        "text": "Record what the source says about assumptions.",
+        "status": "present",
+        "inspections": [
+          0
+        ]
+      },
+      "methods": {
+        "text": "Record what the source says about methods.",
+        "status": "present",
+        "inspections": [
+          0
+        ]
+      },
+      "evidence": {
+        "text": "Record what the source says about evidence.",
+        "status": "present",
+        "inspections": [
+          0
+        ]
+      },
+      "limitations": {
+        "text": "Record what the source says about limitations.",
+        "status": "present",
+        "inspections": [
+          0
+        ]
+      },
+      "relevance": {
+        "text": "Record what the source says about relevance.",
+        "status": "present",
+        "inspections": [
+          0
+        ]
+      }
+    }
+  },
+  "search": {
+    "id": "direct-search-1",
+    "profile": "research",
+    "purpose": "direct",
+    "queries": [
+      "finite bound"
+    ],
+    "responses": [
+      {
+        "source_id": "SOURCE_ID",
+        "query": "finite bound",
+        "query_locator": {
+          "kind": "json",
+          "pointer": "/q",
+          "value": "finite bound"
+        },
+        "results_pointer": "/results"
+      }
+    ],
+    "captured_at": "2026-09-07T12:00:00Z",
+    "scope": "The complete objective and its exact comparison class.",
+    "found_work_ids": [
+      "arxiv:2601.00001v1"
+    ],
+    "verdict": "replicate-extend",
+    "cited_work_ids": [
+      "arxiv:2601.00001v1"
+    ],
+    "impact": "State what the retrieved work changes about the comparison.",
+    "gaps": []
+  },
+  "require-fulltext": {
+    "id": "dependency-1",
+    "profile": "research",
+    "version_id": "arxiv:2601.00001v1",
+    "purpose": "major_claim",
+    "reason": "The proposed mechanism depends on this original source."
+  },
+  "availability": {
+    "id": "availability-1",
+    "profile": "research",
+    "version_id": "arxiv:2601.00001v1",
+    "depth": "fulltext",
+    "source_ids": [
+      "FAILED_HTTP_SOURCE_ID"
+    ],
+    "reason": "The origin returned a terminal failure.",
+    "policy": {
+      "id": "retrieval-policy-1",
+      "minimum_attempts": 1,
+      "allowed_statuses": [
+        404
+      ],
+      "rationale": "Record the terminal origin response. Critical dependencies remain pending."
+    }
+  },
+  "select-cohort-abstract": {
+    "collection_id": "COLLECTION_ID",
+    "work_id": "arxiv:2601.00001",
+    "unresolved_assertion_id": "UNRESOLVED_ASSERTION_ID",
+    "selected_assertion_id": "EXACT_VERSION_ASSERTION_ID",
+    "reason": "Select captured exact-version abstract evidence for this retained unknown-version member."
+  },
+  "visual": {
+    "link": {
+      "version_id": "arxiv:2601.00001v1",
+      "source_id": "SOURCE_ID",
+      "artifact": {
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+        "size": 15,
+        "media_type": "text/plain"
+      },
+      "locator": {
+        "kind": "text",
+        "start": 0,
+        "end": 15,
+        "quote": "Source passage."
+      }
+    },
+    "url": "https://example.org/figure.png",
+    "max_requests": 2
+  },
+  "standards": {
+    "id": "standards",
+    "profile": "research",
+    "scope": "The current bounded-sequence study.",
+    "field": "Sequence theory",
+    "article_type": null,
+    "venue": null,
+    "cohort_doctrine": [
+      {
+        "statement": "The cohort makes assumptions and bounded regimes explicit.",
+        "scope": "Bounded sequences in the original study.",
+        "assumptions": [
+          "Inputs are bounded."
+        ],
+        "evidence": [
+          {
+            "version_id": "arxiv:2601.00001v1",
+            "source_id": "SOURCE_ID",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "text",
+              "start": 0,
+              "end": 15,
+              "quote": "Source passage."
+            }
+          }
+        ],
+        "date": "2026-09-07",
+        "evidence_timing": "current",
+        "source_support": "supported_as_scoped",
+        "scientific_status": "unresolved",
+        "uncertainties": []
+      }
+    ],
+    "methodology": [
+      {
+        "statement": "The source establishes a bound under finite input assumptions.",
+        "scope": "Bounded sequences in the original study.",
+        "assumptions": [
+          "Inputs are bounded."
+        ],
+        "evidence": [
+          {
+            "version_id": "arxiv:2601.00001v1",
+            "source_id": "SOURCE_ID",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "text",
+              "start": 0,
+              "end": 15,
+              "quote": "Source passage."
+            }
+          }
+        ],
+        "date": "2026-09-07",
+        "evidence_timing": "current",
+        "source_support": "supported_as_scoped",
+        "scientific_status": "unresolved",
+        "uncertainties": []
+      }
+    ],
+    "reporting": [
+      {
+        "statement": "The source establishes a bound under finite input assumptions.",
+        "scope": "Bounded sequences in the original study.",
+        "assumptions": [
+          "Inputs are bounded."
+        ],
+        "evidence": [
+          {
+            "version_id": "arxiv:2601.00001v1",
+            "source_id": "SOURCE_ID",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "text",
+              "start": 0,
+              "end": 15,
+              "quote": "Source passage."
+            }
+          }
+        ],
+        "date": "2026-09-07",
+        "evidence_timing": "current",
+        "source_support": "supported_as_scoped",
+        "scientific_status": "unresolved",
+        "uncertainties": []
+      }
+    ],
+    "citation": [
+      {
+        "statement": "The source establishes a bound under finite input assumptions.",
+        "scope": "Bounded sequences in the original study.",
+        "assumptions": [
+          "Inputs are bounded."
+        ],
+        "evidence": [
+          {
+            "version_id": "arxiv:2601.00001v1",
+            "source_id": "SOURCE_ID",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "text",
+              "start": 0,
+              "end": 15,
+              "quote": "Source passage."
+            }
+          }
+        ],
+        "date": "2026-09-07",
+        "evidence_timing": "current",
+        "source_support": "supported_as_scoped",
+        "scientific_status": "unresolved",
+        "uncertainties": []
+      }
+    ],
+    "presentation": [
+      {
+        "statement": "The source establishes a bound under finite input assumptions.",
+        "scope": "Bounded sequences in the original study.",
+        "assumptions": [
+          "Inputs are bounded."
+        ],
+        "evidence": [
+          {
+            "version_id": "arxiv:2601.00001v1",
+            "source_id": "SOURCE_ID",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "text",
+              "start": 0,
+              "end": 15,
+              "quote": "Source passage."
+            }
+          }
+        ],
+        "date": "2026-09-07",
+        "evidence_timing": "current",
+        "source_support": "supported_as_scoped",
+        "scientific_status": "unresolved",
+        "uncertainties": []
+      }
+    ],
+    "applicability_questions": []
+  },
+  "rationale": {
+    "id": "rationale",
+    "profile": "research",
+    "scope": "The complete objective for bounded sequences.",
+    "and": {
+      "statement": "The source establishes a bound under finite input assumptions.",
+      "scope": "Bounded sequences in the original study.",
+      "assumptions": [
+        "Inputs are bounded."
+      ],
+      "evidence": [
+        {
+          "version_id": "arxiv:2601.00001v1",
+          "source_id": "SOURCE_ID",
+          "artifact": {
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+            "size": 15,
+            "media_type": "text/plain"
+          },
+          "locator": {
+            "kind": "text",
+            "start": 0,
+            "end": 15,
+            "quote": "Source passage."
+          }
+        }
+      ],
+      "date": "2026-09-07",
+      "evidence_timing": "current",
+      "source_support": "supported_as_scoped",
+      "scientific_status": "established",
+      "uncertainties": []
+    },
+    "but": {
+      "statement": "The unbounded extension remains unsupported.",
+      "scope": "Bounded sequences in the original study.",
+      "assumptions": [
+        "Inputs are bounded."
+      ],
+      "evidence": [
+        {
+          "version_id": "arxiv:2601.00001v1",
+          "source_id": "SOURCE_ID",
+          "artifact": {
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+            "size": 15,
+            "media_type": "text/plain"
+          },
+          "locator": {
+            "kind": "text",
+            "start": 0,
+            "end": 15,
+            "quote": "Source passage."
+          }
+        }
+      ],
+      "date": "2026-09-07",
+      "evidence_timing": "current",
+      "source_support": "supported_as_scoped",
+      "scientific_status": "unresolved",
+      "uncertainties": []
+    },
+    "therefore": {
+      "proposal": "Construct a finite bound covering all allowed inputs.",
+      "test": "Prove the claimed bound or exhibit a violating input.",
+      "failure_conditions": [
+        "An allowed sequence violates the bound."
+      ]
+    },
+    "value": {
+      "kind": "basic_science",
+      "beneficiaries": [],
+      "capabilities": [
+        "A reusable bound for subsequent sequence theory."
+      ],
+      "uncertainties": [
+        {
+          "scope": "Near-term non-scientific use.",
+          "reason": "No observed application was established in the source.",
+          "next_evidence": "Study downstream constructions and barriers if a relevant use appears."
+        }
+      ]
+    }
+  },
+  "innovation": {
+    "id": "innovation",
+    "profile": "research",
+    "scope": "The finite-bound objective and its distinguishing test.",
+    "cases": [
+      {
+        "id": "case-0",
+        "work_id": "arxiv:2601.00001v1",
+        "relation": "within_field",
+        "field": "Sequence theory",
+        "selection_reason": "This study can test the separation between existence and construction.",
+        "original": {
+          "statement": "The source establishes a bound under finite input assumptions.",
+          "scope": "Bounded sequences in the original study.",
+          "assumptions": [
+            "Inputs are bounded."
+          ],
+          "evidence": [
+            {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "text",
+                "start": 0,
+                "end": 15,
+                "quote": "Source passage."
+              }
+            }
+          ],
+          "date": "2026-09-07",
+          "evidence_timing": "current",
+          "source_support": "supported_as_scoped",
+          "scientific_status": "unresolved",
+          "uncertainties": []
+        },
+        "bottleneck": {
+          "statement": "The source establishes a bound under finite input assumptions.",
+          "scope": "Bounded sequences in the original study.",
+          "assumptions": [
+            "Inputs are bounded."
+          ],
+          "evidence": [
+            {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "text",
+                "start": 0,
+                "end": 15,
+                "quote": "Source passage."
+              }
+            }
+          ],
+          "date": "2026-09-07",
+          "evidence_timing": "current",
+          "source_support": "supported_as_scoped",
+          "scientific_status": "unresolved",
+          "uncertainties": []
+        },
+        "prior_constraint": {
+          "statement": "The source establishes a bound under finite input assumptions.",
+          "scope": "Bounded sequences in the original study.",
+          "assumptions": [
+            "Inputs are bounded."
+          ],
+          "evidence": [
+            {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "text",
+                "start": 0,
+                "end": 15,
+                "quote": "Source passage."
+              }
+            }
+          ],
+          "date": "2026-09-07",
+          "evidence_timing": "current",
+          "source_support": "supported_as_scoped",
+          "scientific_status": "unresolved",
+          "uncertainties": []
+        },
+        "conceptual_change": {
+          "statement": "The source establishes a bound under finite input assumptions.",
+          "scope": "Bounded sequences in the original study.",
+          "assumptions": [
+            "Inputs are bounded."
+          ],
+          "evidence": [
+            {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "text",
+                "start": 0,
+                "end": 15,
+                "quote": "Source passage."
+              }
+            }
+          ],
+          "date": "2026-09-07",
+          "evidence_timing": "current",
+          "source_support": "supported_as_scoped",
+          "scientific_status": "unresolved",
+          "uncertainties": []
+        },
+        "later_validation": {
+          "claims": [],
+          "gaps": [
+            {
+              "scope": "Near-term non-scientific use.",
+              "reason": "No observed application was established in the source.",
+              "next_evidence": "Study downstream constructions and barriers if a relevant use appears."
+            }
+          ]
+        },
+        "adoption": {
+          "claims": [],
+          "gaps": [
+            {
+              "scope": "Near-term non-scientific use.",
+              "reason": "No observed application was established in the source.",
+              "next_evidence": "Study downstream constructions and barriers if a relevant use appears."
+            }
+          ]
+        },
+        "transfer": {
+          "mechanism": {
+            "statement": "The source establishes a bound under finite input assumptions.",
+            "scope": "Bounded sequences in the original study.",
+            "assumptions": [
+              "Inputs are bounded."
+            ],
+            "evidence": [
+              {
+                "version_id": "arxiv:2601.00001v1",
+                "source_id": "SOURCE_ID",
+                "artifact": {
+                  "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                  "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                  "size": 15,
+                  "media_type": "text/plain"
+                },
+                "locator": {
+                  "kind": "text",
+                  "start": 0,
+                  "end": 15,
+                  "quote": "Source passage."
+                }
+              }
+            ],
+            "date": "2026-09-07",
+            "evidence_timing": "current",
+            "source_support": "supported_as_scoped",
+            "scientific_status": "unresolved",
+            "uncertainties": []
+          },
+          "mapping": "Map the finite constraint to our sequence domain.",
+          "assumptions": [
+            "The domain is bounded."
+          ],
+          "test": "Test the bound at extremal inputs.",
+          "failure_conditions": [
+            "An admissible extremum violates the proposal."
+          ],
+          "limits": [
+            "The source supplies no unbounded-domain guarantee."
+          ]
+        },
+        "selection_signals": [
+          "High citation counts are a discovery signal only."
+        ]
+      },
+      {
+        "id": "case-1",
+        "work_id": "arxiv:2601.00002v1",
+        "relation": "external",
+        "field": "Numerical analysis",
+        "selection_reason": "This study can test the separation between existence and construction.",
+        "original": {
+          "statement": "The source establishes a bound under finite input assumptions.",
+          "scope": "Bounded sequences in the original study.",
+          "assumptions": [
+            "Inputs are bounded."
+          ],
+          "evidence": [
+            {
+              "version_id": "arxiv:2601.00002v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "text",
+                "start": 0,
+                "end": 15,
+                "quote": "Source passage."
+              }
+            }
+          ],
+          "date": "2026-09-07",
+          "evidence_timing": "current",
+          "source_support": "supported_as_scoped",
+          "scientific_status": "unresolved",
+          "uncertainties": []
+        },
+        "bottleneck": {
+          "statement": "The source establishes a bound under finite input assumptions.",
+          "scope": "Bounded sequences in the original study.",
+          "assumptions": [
+            "Inputs are bounded."
+          ],
+          "evidence": [
+            {
+              "version_id": "arxiv:2601.00002v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "text",
+                "start": 0,
+                "end": 15,
+                "quote": "Source passage."
+              }
+            }
+          ],
+          "date": "2026-09-07",
+          "evidence_timing": "current",
+          "source_support": "supported_as_scoped",
+          "scientific_status": "unresolved",
+          "uncertainties": []
+        },
+        "prior_constraint": {
+          "statement": "The source establishes a bound under finite input assumptions.",
+          "scope": "Bounded sequences in the original study.",
+          "assumptions": [
+            "Inputs are bounded."
+          ],
+          "evidence": [
+            {
+              "version_id": "arxiv:2601.00002v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "text",
+                "start": 0,
+                "end": 15,
+                "quote": "Source passage."
+              }
+            }
+          ],
+          "date": "2026-09-07",
+          "evidence_timing": "current",
+          "source_support": "supported_as_scoped",
+          "scientific_status": "unresolved",
+          "uncertainties": []
+        },
+        "conceptual_change": {
+          "statement": "The source establishes a bound under finite input assumptions.",
+          "scope": "Bounded sequences in the original study.",
+          "assumptions": [
+            "Inputs are bounded."
+          ],
+          "evidence": [
+            {
+              "version_id": "arxiv:2601.00002v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "text",
+                "start": 0,
+                "end": 15,
+                "quote": "Source passage."
+              }
+            }
+          ],
+          "date": "2026-09-07",
+          "evidence_timing": "current",
+          "source_support": "supported_as_scoped",
+          "scientific_status": "unresolved",
+          "uncertainties": []
+        },
+        "later_validation": {
+          "claims": [],
+          "gaps": [
+            {
+              "scope": "Near-term non-scientific use.",
+              "reason": "No observed application was established in the source.",
+              "next_evidence": "Study downstream constructions and barriers if a relevant use appears."
+            }
+          ]
+        },
+        "adoption": {
+          "claims": [],
+          "gaps": [
+            {
+              "scope": "Near-term non-scientific use.",
+              "reason": "No observed application was established in the source.",
+              "next_evidence": "Study downstream constructions and barriers if a relevant use appears."
+            }
+          ]
+        },
+        "transfer": {
+          "mechanism": {
+            "statement": "The source establishes a bound under finite input assumptions.",
+            "scope": "Bounded sequences in the original study.",
+            "assumptions": [
+              "Inputs are bounded."
+            ],
+            "evidence": [
+              {
+                "version_id": "arxiv:2601.00002v1",
+                "source_id": "SOURCE_ID",
+                "artifact": {
+                  "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                  "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                  "size": 15,
+                  "media_type": "text/plain"
+                },
+                "locator": {
+                  "kind": "text",
+                  "start": 0,
+                  "end": 15,
+                  "quote": "Source passage."
+                }
+              }
+            ],
+            "date": "2026-09-07",
+            "evidence_timing": "current",
+            "source_support": "supported_as_scoped",
+            "scientific_status": "unresolved",
+            "uncertainties": []
+          },
+          "mapping": "Map the finite constraint to our sequence domain.",
+          "assumptions": [
+            "The domain is bounded."
+          ],
+          "test": "Test the bound at extremal inputs.",
+          "failure_conditions": [
+            "An admissible extremum violates the proposal."
+          ],
+          "limits": [
+            "The source supplies no unbounded-domain guarantee."
+          ]
+        },
+        "selection_signals": [
+          "High citation counts are a discovery signal only."
+        ]
+      }
+    ]
+  },
+  "context": {
+    "id": "context",
+    "profile": "research",
+    "scope": "Scientific capabilities and possible neighboring use.",
+    "current": [
+      {
+        "statement": "The source establishes a bound under finite input assumptions.",
+        "scope": "Bounded sequences in the original study.",
+        "assumptions": [
+          "Inputs are bounded."
+        ],
+        "evidence": [
+          {
+            "version_id": "arxiv:2601.00001v1",
+            "source_id": "SOURCE_ID",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "text",
+              "start": 0,
+              "end": 15,
+              "quote": "Source passage."
+            }
+          }
+        ],
+        "date": "2026-09-07",
+        "evidence_timing": "current",
+        "source_support": "supported_as_scoped",
+        "scientific_status": "unresolved",
+        "uncertainties": []
+      }
+    ],
+    "historical": [
+      {
+        "statement": "The source establishes a bound under finite input assumptions.",
+        "scope": "Bounded sequences in the original study.",
+        "assumptions": [
+          "Inputs are bounded."
+        ],
+        "evidence": [
+          {
+            "version_id": "arxiv:2601.00001v1",
+            "source_id": "SOURCE_ID",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "text",
+              "start": 0,
+              "end": 15,
+              "quote": "Source passage."
+            }
+          }
+        ],
+        "date": "2026-09-07",
+        "evidence_timing": "retrospective",
+        "source_support": "supported_as_scoped",
+        "scientific_status": "unresolved",
+        "uncertainties": []
+      }
+    ],
+    "beneficiaries": [],
+    "capabilities": [
+      "Better finite constructions."
+    ],
+    "barriers": [
+      "No implementation is known for the unbounded setting."
+    ],
+    "uncertainties": [
+      {
+        "scope": "Near-term non-scientific use.",
+        "reason": "No observed application was established in the source.",
+        "next_evidence": "Study downstream constructions and barriers if a relevant use appears."
+      }
+    ],
+    "speculative_links": [
+      {
+        "scope": "Near-term non-scientific use.",
+        "reason": "No observed application was established in the source.",
+        "next_evidence": "Study downstream constructions and barriers if a relevant use appears."
+      }
+    ]
+  },
+  "cycle": {
+    "id": "cycle-1",
+    "author": "cycle-author",
+    "objective": {
+      "kind": "objective",
+      "id": "complete-objective",
+      "statement": "Establish the stated bound over the complete declared domain."
+    },
+    "scope": {
+      "id": "complete-objective",
+      "kind": "full",
+      "statement": "Establish the stated bound over the complete declared domain.",
+      "assumptions": [
+        "n is an integer in the stated finite range."
+      ],
+      "remaining_obligations": []
+    },
+    "hypothesis": "Establish the stated bound over the complete declared domain.",
+    "question": "Does exhaustive enumeration attain the proposed finite bound?",
+    "strategy": {
+      "kind": "tightness_limits",
+      "mechanism": "Exhaustive finite enumeration.",
+      "why": "Every admissible integer can be tested and the extremum identified."
+    },
+    "predecessor": null,
+    "inheritance": [],
+    "reopening": [],
+    "distinguishing_test": "Enumerate all integers in the scope and compare each square with 9.",
+    "expected_outcomes": [
+      {
+        "id": "bound",
+        "statement": "Every value is bounded, and the stated extremum is attained."
+      }
+    ],
+    "failure_signals": [
+      {
+        "id": "counterexample",
+        "statement": "An admissible input violates the claimed bound."
+      }
+    ],
+    "evidence_requirements": [
+      {
+        "id": "measurements",
+        "kind": "result",
+        "description": "The enumerated inputs and values."
+      },
+      {
+        "id": "checks",
+        "kind": "validation",
+        "description": "The comparison against the proposed bound."
+      }
+    ],
+    "literature": {
+      "scope": {
+        "id": "complete-objective",
+        "kind": "full",
+        "statement": "Establish the stated bound over the complete declared domain.",
+        "assumptions": [
+          "n is an integer in the stated finite range."
+        ],
+        "remaining_obligations": []
+      },
+      "foundation_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "comparison": "The authored source describes bounded cases; this test checks the exact finite claim.",
+      "sources": [
+        {
+          "version_id": "arxiv:2601.00001v1",
+          "source_id": "SOURCE_ID",
+          "artifact": {
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+            "size": 15,
+            "media_type": "text/plain"
+          },
+          "locator": {
+            "kind": "text",
+            "start": 0,
+            "end": 15,
+            "quote": "Source passage."
+          }
+        }
+      ],
+      "gaps": []
+    },
+    "resource_limits": {
+      "max_executions": 4,
+      "max_units": 8,
+      "unit": "execution"
+    }
+  },
+  "admit": {
+    "id": "run-1",
+    "cycle_id": "cycle-1",
+    "plan_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "command": {
+      "argv": [
+        "/absolute/path/to/python3",
+        "/absolute/path/to/study/experiment/code/program.py"
+      ],
+      "program": {
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+        "size": 15,
+        "media_type": "text/plain"
+      },
+      "inputs": [],
+      "versions": {
+        "python": "3.13.8"
+      },
+      "seed": null,
+      "seed_reason": "This algorithm is deterministic; replace this explanation with the actual reason."
+    },
+    "reserved_units": 1
+  },
+  "bind-run": {
+    "admission_id": "run-1",
+    "script": "code/program.py",
+    "backend": "local",
+    "timeout_seconds": 30,
+    "inputs": [],
+    "outputs": [
+      {
+        "id": "result",
+        "requirement_id": "measurements",
+        "path": "results/result.json",
+        "media_type": "application/json"
+      },
+      {
+        "id": "validation",
+        "requirement_id": "checks",
+        "path": "results/validation.json",
+        "media_type": "application/json"
+      }
+    ],
+    "usage_unit": "execution"
+  },
+  "reconcile-run": {
+    "admission_id": "run-1"
+  },
+  "result": {
+    "id": "external-observation",
+    "cycle_id": "cycle-1",
+    "origin": {
+      "kind": "imported",
+      "original": {
+        "run_id": "external-run-1",
+        "executed_at": null,
+        "provenance": {
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+          "size": 15,
+          "media_type": "text/plain"
+        }
+      },
+      "reason": "Preserve an attributed earlier run whose timestamp was not retained.",
+      "deduction": "Its scoped observations may be reviewed as history; it has no prospective admission credit."
+    },
+    "command": {
+      "argv": [
+        "/absolute/path/to/python3",
+        "/absolute/path/to/study/experiment/code/program.py"
+      ],
+      "program": {
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+        "size": 15,
+        "media_type": "text/plain"
+      },
+      "inputs": [],
+      "versions": {
+        "python": "3.13.8"
+      },
+      "seed": null,
+      "seed_reason": "This algorithm is deterministic; replace this explanation with the actual reason."
+    },
+    "status": "completed",
+    "exit_code": 0,
+    "usage": {
+      "units": 1,
+      "reason": "Resource usage in the original observation."
+    },
+    "outputs": [
+      {
+        "id": "result",
+        "requirement_id": "measurements",
+        "artifact": {
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+          "size": 15,
+          "media_type": "text/plain"
+        }
+      },
+      {
+        "id": "validation",
+        "requirement_id": "checks",
+        "artifact": {
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+          "size": 15,
+          "media_type": "text/plain"
+        }
+      }
+    ],
+    "notes": "Imported history; this does not establish prospective managed execution."
+  },
+  "assess": {
+    "id": "assessment-1",
+    "cycle_id": "cycle-1",
+    "author": "cycle-author",
+    "scope": {
+      "id": "complete-objective",
+      "kind": "full",
+      "statement": "Establish the stated bound over the complete declared domain.",
+      "assumptions": [
+        "n is an integer in the stated finite range."
+      ],
+      "remaining_obligations": []
+    },
+    "execution_ids": [
+      "external-observation"
+    ],
+    "result": {
+      "statement": "Establish the stated bound over the complete declared domain.",
+      "evidence": [
+        {
+          "kind": "result",
+          "execution_id": "external-observation",
+          "output_id": "result",
+          "artifact": {
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+            "size": 15,
+            "media_type": "text/plain"
+          },
+          "locator": {
+            "kind": "json",
+            "pointer": "/result",
+            "value": {
+              "bound": 9
+            }
+          }
+        }
+      ]
+    },
+    "validity_checks": [
+      {
+        "id": "exhaustive",
+        "question": "Was every admissible input tested against the bound?",
+        "method": "Compare the enumeration and its maximum with the claimed finite bound.",
+        "status": "passed",
+        "explanation": "The enumerated values and the extremum agree.",
+        "evidence": [
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "validation",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/validation",
+              "value": {
+                "passed": true
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "outcomes": [
+      {
+        "outcome_id": "bound",
+        "status": "observed",
+        "explanation": "The bounded finite result was observed.",
+        "evidence": [
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "failures": [
+      {
+        "signal_id": "counterexample",
+        "target_claim": "Establish the stated bound over the complete declared domain.",
+        "status": "not_observed",
+        "explanation": "No input in the specified scope violates the bound.",
+        "evidence": [
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "validation",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/validation",
+              "value": {
+                "passed": true
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "findings": [],
+    "assumptions": [
+      "n is an integer in the stated finite range."
+    ],
+    "remaining_obligations": [],
+    "objective_status": "achieved",
+    "disposition": "complete",
+    "development": {
+      "bottleneck_change": "The exact finite range and its extremum have been checked.",
+      "next_question": null,
+      "strategy": "none",
+      "reason": "No useful unresolved branch remains within this complete finite objective.",
+      "novelty": {
+        "scope": {
+          "id": "complete-objective",
+          "kind": "full",
+          "statement": "Establish the stated bound over the complete declared domain.",
+          "assumptions": [
+            "n is an integer in the stated finite range."
+          ],
+          "remaining_obligations": []
+        },
+        "foundation_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+        "comparison": "The evidence is specific to the stated finite target and does not claim an unbounded theorem.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "text",
+                "start": 0,
+                "end": 15,
+                "quote": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          }
+        ],
+        "gaps": []
+      },
+      "contribution": {
+        "and": "Finite domains permit exhaustive checks.",
+        "but": "The exact bound still needed testing.",
+        "therefore": "The enumeration establishes this finite instance.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "text",
+                "start": 0,
+                "end": 15,
+                "quote": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          }
+        ]
+      },
+      "alternatives": [
+        {
+          "strategy": "generalization",
+          "question": "Does the bound extend beyond n = 3?",
+          "disposition": "not_useful",
+          "reason": "That extension is outside this fixed finite objective.",
+          "evidence": [
+            {
+              "kind": "result",
+              "execution_id": "external-observation",
+              "output_id": "result",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "json",
+                "pointer": "/result",
+                "value": {
+                  "bound": 9
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "branches": [
+        {
+          "cycle_id": "cycle-1",
+          "disposition": "resolved",
+          "reason": "The entire planned finite scope is covered.",
+          "evidence": [
+            {
+              "kind": "result",
+              "execution_id": "external-observation",
+              "output_id": "result",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "json",
+                "pointer": "/result",
+                "value": {
+                  "bound": 9
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "checkpoint": {
+    "id": "checkpoint-1",
+    "cycle_id": "cycle-1",
+    "assessment_id": "assessment-1",
+    "reason": "Preserve the exact assessed scope and remaining obligations.",
+    "next_hypothesis": null,
+    "select_for_readiness": true
+  },
+  "review": {
+    "id": "review-1",
+    "candidate_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "assessor": {
+      "id": "independent-assessor",
+      "kind": "agent",
+      "provenance": {
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+        "size": 15,
+        "media_type": "text/plain"
+      },
+      "relationship": "The fixture assessor is distinct from the cycle author.",
+      "independence_basis": "A separately declared review context received the exact candidate and evidence."
+    },
+    "verdict": "ready",
+    "checks": [
+      {
+        "kind": "validity",
+        "status": "passed",
+        "reason": "The authored candidate documents the exact finite claim, evidence and limits.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "text",
+                "start": 0,
+                "end": 15,
+                "quote": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "validation",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/validation",
+              "value": {
+                "passed": true
+              }
+            }
+          }
+        ]
+      },
+      {
+        "kind": "scope",
+        "status": "passed",
+        "reason": "The authored candidate documents the exact finite claim, evidence and limits.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "text",
+                "start": 0,
+                "end": 15,
+                "quote": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "validation",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/validation",
+              "value": {
+                "passed": true
+              }
+            }
+          }
+        ]
+      },
+      {
+        "kind": "novelty",
+        "status": "passed",
+        "reason": "The authored candidate documents the exact finite claim, evidence and limits.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "text",
+                "start": 0,
+                "end": 15,
+                "quote": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "validation",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/validation",
+              "value": {
+                "passed": true
+              }
+            }
+          }
+        ]
+      },
+      {
+        "kind": "contribution",
+        "status": "passed",
+        "reason": "The authored candidate documents the exact finite claim, evidence and limits.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "text",
+                "start": 0,
+                "end": 15,
+                "quote": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "validation",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/validation",
+              "value": {
+                "passed": true
+              }
+            }
+          }
+        ]
+      },
+      {
+        "kind": "development",
+        "status": "passed",
+        "reason": "The authored candidate documents the exact finite claim, evidence and limits.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "text",
+                "start": 0,
+                "end": 15,
+                "quote": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "validation",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/validation",
+              "value": {
+                "passed": true
+              }
+            }
+          }
+        ]
+      },
+      {
+        "kind": "branches",
+        "status": "passed",
+        "reason": "The authored candidate documents the exact finite claim, evidence and limits.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "text",
+                "start": 0,
+                "end": 15,
+                "quote": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "validation",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/validation",
+              "value": {
+                "passed": true
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "limitations": [
+      "This authored receipt does not establish comprehension, impartiality or scientific novelty."
+    ]
+  },
+  "manuscript": {
+    "id": "manuscript-1",
+    "files": {
+      "pdf": "draft/paper.pdf",
+      "abstract": "draft/abstract.txt",
+      "bibliography": "draft/references.bib",
+      "claims": "evidence/claims.json",
+      "sources": null
+    },
+    "claim_evidence": [
+      {
+        "claim_id": "claim-1",
+        "evidence": [
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "manuscript-review": {
+    "id": "manuscript-review-1",
+    "bundle_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "assessor": {
+      "id": "independent-reviewer-1",
+      "kind": "agent",
+      "provenance": {
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+        "size": 15,
+        "media_type": "text/plain"
+      },
+      "relationship": "Describe the assessor relationship to the author.",
+      "independence_basis": "Describe the separate blind review context and its exact input delivery."
+    },
+    "review": {
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 15,
+      "media_type": "application/json"
+    },
+    "blind": true
+  },
+  "bind-verdict": {
+    "id": "verdict-assessment-1",
+    "task_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "body": {
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 15,
+      "media_type": "application/json"
+    },
+    "assessment": {
+      "assessor": "independent-verifier",
+      "provenance": {
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+        "size": 15,
+        "media_type": "text/plain"
+      },
+      "independence_basis": "Describe independent review before reading any other verdict.",
+      "blind": true,
+      "checks": [
+        {
+          "dimension": "soundness",
+          "reason": "Record the separate soundness assessment.",
+          "evidence": [
+            {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "text",
+                "start": 0,
+                "end": 15,
+                "quote": "Source passage."
+              }
+            }
+          ]
+        },
+        {
+          "dimension": "novelty",
+          "reason": "Record the separate novelty assessment.",
+          "evidence": [
+            {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "text",
+                "start": 0,
+                "end": 15,
+                "quote": "Source passage."
+              }
+            }
+          ]
+        },
+        {
+          "dimension": "impact",
+          "reason": "Record the separate impact assessment.",
+          "evidence": [
+            {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "text",
+                "start": 0,
+                "end": 15,
+                "quote": "Source passage."
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

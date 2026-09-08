@@ -64,22 +64,27 @@ def _archive_policy(records, artifacts, contract, data):
                             dict(contract, artifact=artifacts.put(data, "text/markdown; charset=utf-8")))
 
 
+def prepare_initialization(records, artifacts, value):
+    """Prepare configuration for an atomic workspace initialization or adoption."""
+    fields(value, ("profile", "target"))
+    if records.get("configuration", {}).get("research") is not None:
+        raise ResearchError("configuration_exists", "Use explicit target or constitution operations for the existing study")
+    profile_name(value["profile"])
+    _validate_target(records, artifacts, value["profile"], value["target"])
+    contract, data = _constitution()
+    config = dict(value, constitution=contract)
+    changes = [_archive_policy(records, artifacts, contract, data), ("configuration", "research", config)]
+    if value["profile"] == "research" and value["target"] is not None:
+        changes.append(immutable_record(records, "research_objective", value["target"]["id"], value["target"]))
+    return changes, config
+
+
 def initialize_research(store, payload, *, expected_revision, request_id):
     """Initialize once with {profile, target}; null research targets are pending."""
     artifacts = ArtifactStore(store.root)
 
     def prepare(records, value):
-        fields(value, ("profile", "target"))
-        if records.get("configuration", {}).get("research") is not None:
-            raise ResearchError("configuration_exists", "Use explicit target or constitution operations for the existing study")
-        profile_name(value["profile"])
-        _validate_target(records, artifacts, value["profile"], value["target"])
-        contract, data = _constitution()
-        config = dict(value, constitution=contract)
-        changes = [_archive_policy(records, artifacts, contract, data), ("configuration", "research", config)]
-        if value["profile"] == "research" and value["target"] is not None:
-            changes.append(immutable_record(records, "research_objective", value["target"]["id"], value["target"]))
-        return changes, config
+        return prepare_initialization(records, artifacts, value)
 
     return prepared_mutation(store, "research.initialize", payload, prepare,
                              expected_revision=expected_revision, request_id=request_id)

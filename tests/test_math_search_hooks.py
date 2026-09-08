@@ -34,6 +34,8 @@ def managed_objective(root, host="claude", session="session", workspace=None):
             proposal["studies"]["strategies"][0]["digest"] = digest
         else:
             proposal["studies"][name] = digest
+    from integration_fixtures import pin_native_research
+    pin_native_research(root, proposal, inputs, controller.status()["contract"])
     controller.command("propose", {"proposal": proposal, "inputs": inputs}, 1, "propose")
     controller.command("review", {"proposal_id": "proposal-000001", "review": FIXTURES["review"](proposal), "inputs": []}, 2, "review")
     controller.command("admit", {}, 3, "admit", "proposal-000001")

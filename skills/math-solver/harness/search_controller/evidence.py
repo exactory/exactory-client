@@ -83,7 +83,7 @@ def audit_toolchain(inventory):
               "Installed toolchain membership or bytes changed", "digest_mismatch")
 
 
-def freeze_execution_inputs(root, node, spec, content):
+def freeze_execution_inputs(root, node, spec, content, foundation=None):
     """Capture the enumerated local source boundary before reserving a process."""
     step = safe_path(root, node["attack_slug"] + "/deterministic/" + spec["step_dir"])
     s.require(step.is_dir(), "Execution step directory is missing", "missing_evidence")
@@ -112,8 +112,10 @@ def freeze_execution_inputs(root, node, spec, content):
         s.require(path.is_absolute() and path.is_file() and not path.is_symlink(), "External dependency is not a regular absolute file")
         s.require(file_digest(path) == item["digest"], "External dependency changed", "digest_mismatch")
         external.append(item)
-    frozen = {"schema_version": 1, "claim_digest": node["claim_digest"],
+    frozen = {"schema_version": 2 if foundation is not None else 1, "claim_digest": node["claim_digest"],
               "artifacts": spec["artifacts"], "external_dependencies": external}
+    if foundation is not None:
+        frozen["foundation"] = foundation
     return content.put_blob(frozen)
 
 
@@ -141,6 +143,9 @@ def import_inputs(root, inputs, content):
 
 
 def proposal_inputs(proposal, content):
+    if proposal.get("foundation") is not None:
+        from .research import foundation_inputs
+        foundation_inputs(proposal["foundation"], content)
     if proposal.get("computation") is not None:
         from .computation_io import computation_inputs
         computation_inputs(proposal["computation"], content)
@@ -173,9 +178,11 @@ def manifest_closure(digests, content):
     return manifests
 
 
-def audit_admission(root, state, proposal, content):
+def audit_admission(root, state, proposal, content, foundation=None):
     """Revalidate the proposal's evidence and accepted budget basis under lock."""
     s.validate_proposal(proposal)
+    from .research import audit_foundation
+    audit_foundation(root, state, proposal, foundation if foundation is not None else proposal.get("foundation"), content)
     _, target = validate_proposal_context(state, proposal, None)
     if proposal.get("computation") is not None:
         from .computation_io import audit_computation
@@ -424,8 +431,13 @@ def audit_verification(state, manifest, content):
     s.require(result["run_id"] == verification["run_id"] and result["claim_digest"] == manifest["claim_digest"], "Verification targets different inputs", "claim_mismatch")
     s.require(run.get("input_digest") == result["input_digest"], "Run input snapshot differs", "digest_mismatch")
     inputs = content.get_blob(result["input_digest"])
-    s.require(inputs == {"schema_version": 1, "claim_digest": manifest["claim_digest"],
-                        "artifacts": manifest["artifacts"], "external_dependencies": manifest["external_dependencies"]},
+    expected = {"schema_version": 1, "claim_digest": manifest["claim_digest"],
+                "artifacts": manifest["artifacts"], "external_dependencies": manifest["external_dependencies"]}
+    if inputs.get("schema_version") == 2:
+        from .research import foundation_inputs
+        foundation_inputs(inputs.get("foundation"), content)
+        expected.update(schema_version=2, foundation=inputs["foundation"])
+    s.require(inputs == expected,
               "Controlled run did not inspect these exact evidence artifacts", "digest_mismatch")
     from .proof import validate_review
     spec = content.get_blob(run["spec_digest"])

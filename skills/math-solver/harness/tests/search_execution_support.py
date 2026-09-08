@@ -65,6 +65,8 @@ def admit_workspace(root, slug="sample", max_runs=24, computational=False, exact
             controller.store.append(kind, payload, revision, "archived-" + kind,
                                     validate=lambda document, event: apply_event(replay(document), event))
     else:
+        from tests.research_support import pin_research
+        pin_research(root, candidate, inputs)
         controller.command("propose", {"proposal": candidate, "inputs": inputs}, 1, "proposal")
         controller.command("review", {"proposal_id": "proposal-000001", "review": review(candidate), "inputs": []}, 2, "review")
         revision = 3
@@ -72,6 +74,14 @@ def admit_workspace(root, slug="sample", max_runs=24, computational=False, exact
             controller.command("review", {"proposal_id": "proposal-000001", "review": review(candidate, "reviewer-two"), "inputs": []}, 3, "second-review")
             revision = 4
         controller.command("admit", {}, revision, "admit", "proposal-000001")
+    if historical:
+        from tests.research_support import pin_research, amendment_spec
+        import copy
+        prepared = copy.deepcopy(candidate)
+        foundation_inputs = []
+        delivery = pin_research(root, prepared, foundation_inputs)
+        amendment = amendment_spec(controller, "node-000001", delivery["foundation"], foundation_inputs)
+        controller.command("amend-foundation", amendment, controller.status()["revision"], "fixture-foundation-amendment", "node-000001")
     (workspace / "preconditions.json").write_text(json.dumps(make_preconditions(ALL_YES)))
     status, out, err = run(["plan", slug], root)
     if status:

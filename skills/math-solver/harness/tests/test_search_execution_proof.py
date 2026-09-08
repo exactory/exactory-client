@@ -41,6 +41,8 @@ class CertifiedBridgeExecutionTests(WorkspaceTest):
             else:
                 candidate["studies"][name] = item["digest"]
         candidate["method"] = OPENING
+        from tests.research_support import pin_research
+        pin_research(self.attack_root, candidate, inputs)
         invoke(self.controller, "propose", {"proposal": candidate, "inputs": inputs}, None)
         pid = "proposal-{:06d}".format(node_number)
         invoke(self.controller, "review", {"proposal_id": pid, "review": review(candidate), "inputs": []}, None)
@@ -145,7 +147,13 @@ class CertifiedBridgeExecutionTests(WorkspaceTest):
             "outcome": "verified", "inconclusive_reason": None, "classification": "proof_candidate",
             "root_decision": {"kind": "proof_candidate", "reason": "The finite residue candidate completes the already accepted modular reduction"},
             "remaining_obligation_ids": ["obligation-000002"], "next_action": "Review the modular lift"}, run["id"])
-        manifest = dict(self.controller.store.get_blob(run["input_digest"]), kind="certificate", dependencies=[],
+        run_inputs = self.controller.store.get_blob(run["input_digest"])
+        self.assertEqual(run_inputs["schema_version"], 2)
+        self.assertEqual(run_inputs["foundation"], candidate["foundation"])
+        # A result uses the unchanged proof-manifest schema. Its terminal run
+        # independently retains the additional common-preparation snapshot.
+        manifest = dict({key: run_inputs[key] for key in ("claim_digest", "artifacts", "external_dependencies")},
+            schema_version=1, kind="certificate", dependencies=[],
             conclusion={"outcome": "proof", "dependency_ids": [], "route_bindings": []}, verification={"run_id": run["id"],
                 "result_digest": run["result_digest"], "policy_review": self.result_review(run["result_digest"], digest(residue_claim)),
                 "requested_declaration": None, "requested_type_digest": None})

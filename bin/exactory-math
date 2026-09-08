@@ -26,6 +26,7 @@ _SKILL_DIR_HELP = "  skill-dir             print the directory that holds the sk
 
 
 def _load_harness():
+    sys.path.insert(0, str(_SKILL_DIR.parent.parent))
     sys.path.insert(0, str(_HARNESS_PATH.parent))
     loader = importlib.machinery.SourceFileLoader("attack", str(_HARNESS_PATH))
     spec = importlib.util.spec_from_loader(loader.name, loader)

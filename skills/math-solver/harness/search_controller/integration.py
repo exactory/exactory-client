@@ -75,16 +75,22 @@ def guard_legacy(controller, command, slug, details):
         pending = state["control"]["pending_moves"]
         s.require(len(pending) == 1 and state["service"]["moves"][pending[0]]["node_id"] == node["id"],
                   "Begin a controller move before execution or journalling", "reservation_required")
+    if command in {"plan", "rank", "verify"}:
+        with controller.store._writer_lock():
+            current = controller.status()
+            audit_work(controller, current, current["nodes"][node["id"]], controller.store)
     return node
 
 
 def audit_work(controller, state, node, content):
+    from .research import audit_amendment as audit_foundation_amendment, effective_foundation
+    audit_foundation_amendment(state, node, content)
     from .computation_io import audit_amendment
     audit_amendment(controller.root, state, node, content)
     proposal = state["proposals"][node["proposal_id"]]
     s.require(content.get_blob(proposal["digest"]) == proposal["record"], "Admission proposal changed", "digest_mismatch")
     proposal_inputs(proposal["record"], content)
-    audit_admission(controller.root, state, proposal["record"], content)
+    audit_admission(controller.root, state, proposal["record"], content, effective_foundation(state, node))
     for identity in node["admission"]["review_ids"]:
         review = state["reviews"][identity]
         s.require(content.get_blob(review["digest"]) == review["record"], "Admission review changed", "digest_mismatch")
@@ -290,6 +296,8 @@ def begin_native_intent(controller, node, args):
                "check-unit": ["units/{}/check-unit.json".format(getattr(args, "unit", ""))]}[args.command]
     def build(state, content):
         current = reference(state["nodes"], node["id"], "native producer")
+        if args.command in {"plan", "rank"}:
+            audit_work(controller, state, current, content)
         return [{"kind": "native_intended", "payload": {"id": identity, "node_id": current["id"],
             "command": args.command, "args_digest": content.put_blob(arguments),
             "pre_digest": content.put_blob(native_snapshot(controller, current, content)), "output_paths": outputs,

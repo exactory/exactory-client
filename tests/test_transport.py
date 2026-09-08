@@ -102,13 +102,15 @@ class _TransportTestCase(unittest.TestCase):
         self.requested_methods: list[str] = []
         self.request_bodies: list[dict | None] = []
         self.response_status = 201
+        self.responses: dict[tuple[str, str], tuple[dict, int]] = {}
         self.addCleanup(setattr, _transport, "_send_request", _transport._send_request)
 
-        def _record_request(method: str, path: str, body: dict | None = None) -> tuple[dict, int]:
+        def _record_request(method: str, path: str, body: dict | None = None,
+                            *, allow_missing: bool = False) -> tuple[dict, int]:
             self.requested_paths.append(path)
             self.requested_methods.append(method)
             self.request_bodies.append(body)
-            return {}, self.response_status
+            return self.responses.get((method, path), ({}, self.response_status))
 
         _transport._send_request = _record_request
 
@@ -282,9 +284,37 @@ class TestSubmitCitationGate(_TransportTestCase):
         self.assertEqual(self.requested_paths, [])
 
     def test_submit_inside_a_workspace_proceeds_when_the_gate_passes(self) -> None:
+        from integration_fixtures import prepare_manuscript, prepare_research
+        from research_harness.zenodo import deposit
+
+        case = prepare_research(self.scratch_dir, candidate=True)
         _write_passing_citation_report(self.scratch_dir)
+        (self.scratch_dir / "draft/paper.pdf").write_bytes(b"%PDF-1.4\n% Authored finite-result fixture.\n%%EOF")
+        (self.scratch_dir / "draft/abstract.txt").write_text("The exact finite bound is 9.")
+        bundle = prepare_manuscript(case)
+        binding = {"bundle_digest": bundle["digest"], "prepared_revision": bundle["prepared_revision"],
+            "base_url": "https://zenodo.org/api", "environment": "production", "new_version": False,
+            "publish": True, "metadata": {"title": "Authored finite result", "description": "The finite bound is 9."},
+            "uploads": [{"name": "paper.pdf", "artifact": bundle["files"]["pdf"]["artifact"]}], "prior": None}
+
+        def publisher(method, url, **kwargs):
+            if method == "POST" and url.endswith("/deposit/depositions"):
+                return {"id": 1, "links": {"bucket": "https://zenodo.org/api/files/fixture"}}
+            if url.endswith("/actions/publish"):
+                return {"id": 1, "doi": "10.5281/zenodo.1", "conceptdoi": "10.5281/zenodo.0",
+                        "links": {"record_html": "https://zenodo.org/records/1"}}
+            return {}
+
+        deposit(case.store, binding, publisher, lambda *args: {},
+                expected_revision=case.store.revision, request_id="transport-publication")
+        self.responses[("POST", "/api/v1/verifications")] = ({"verificationId": _VERIFICATION_ID}, 201)
+        task_path = "/api/v1/tasks/" + _VERIFICATION_ID
+        self.responses[("GET", task_path)] = ({"verificationId": _VERIFICATION_ID,
+            "doi": "10.5281/zenodo.0", "source": "zenodo", "sourceId": "1", "sourceVersion": None,
+            "url": "https://zenodo.org/records/1"}, 200)
         self._run(["submit", "--doi", "10.5281/zenodo.1"])
-        self.assertEqual(self.requested_paths, ["/api/v1/verifications"])
+        self.assertEqual(self.requested_paths, ["/api/v1/verifications", task_path])
+        self.assertEqual(self.request_bodies, [{"doi": "10.5281/zenodo.1"}, None])
 
     def test_submit_from_a_workspace_subdirectory_still_runs_the_gate(self) -> None:
         os.chdir(self.scratch_dir / "draft")
@@ -351,13 +381,32 @@ class TestVerifyPredictionGate(_TransportTestCase):
         self.assertEqual(self.requested_paths, [])
 
     def test_verify_sends_a_verdict_that_carries_the_prediction(self) -> None:
+        from integration_fixtures import prepare_verification
+        from research_harness.verification import bind_verdict, record_task
+
+        case = prepare_verification(self.scratch_dir)
         _write_verdict_file(self.scratch_dir / "verdict.json")
+        task = {"verificationId": _VERIFICATION_ID, "doi": "10.48550/arxiv.2601.00001",
+                "source": "arxiv", "sourceId": "2601.00001", "sourceVersion": 1,
+                "url": "https://arxiv.org/abs/2601.00001v1", "viewerVerdictId": None}
+        pinned = case.mutate(record_task, {"task": task})["result"]
+        case.mutate(bind_verdict, {"id": "transport-verdict", "task_digest": pinned["digest"],
+            "body": case.artifacts.put((self.scratch_dir / "verdict.json").read_bytes(), "application/json"),
+            "assessment": {"assessor": "transport-independent-verifier",
+                "provenance": case.artifacts.put(b"Authored independent verification context.", "text/plain"),
+                "independence_basis": "Separate context read the exact source and no other verdicts.", "blind": True,
+                "checks": [{"dimension": dimension, "reason": "The exact scoped source supports this separate judgment.",
+                            "evidence": [case.linked]} for dimension in ("soundness", "novelty", "impact")]}})
+        self.responses[("GET", f"/api/v1/tasks/{_VERIFICATION_ID}")] = (task, 200)
+        self.responses[("POST", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts")] = (
+            {"id": "22222222-2222-4222-8222-222222222222"}, 201)
         self._run_verify()
         self.assertEqual(
             self.requested_paths,
-            [f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts"],
+            [f"/api/v1/tasks/{_VERIFICATION_ID}", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts"],
         )
-        self.assertEqual(self.request_bodies[0]["prediction"]["percentile"], 15)
+        self.assertEqual(self.request_bodies[1]["prediction"]["percentile"], 15)
+        self.assertEqual(self.request_bodies[1], json.loads((self.scratch_dir / "verdict.json").read_text()))
 
 
 class TestTasksSearchFlags(_TransportTestCase):

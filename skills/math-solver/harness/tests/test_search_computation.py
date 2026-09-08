@@ -162,7 +162,10 @@ class ComputationBasisTests(WorkspaceTest):
         return {"path": path, "kind": "artifact", "digest": hashlib.sha256(text.encode()).hexdigest()}
 
     def admit(self, candidate, inputs=None):
-        invoke(self.controller, "propose", {"proposal": candidate, "inputs": inputs or []}, None)
+        from tests.research_support import pin_research
+        current_inputs = list(inputs or [])
+        pin_research(self.attack_root, candidate, current_inputs)
+        invoke(self.controller, "propose", {"proposal": candidate, "inputs": current_inputs}, None)
         pid = sorted(self.controller.status()["proposals"])[-1]
         invoke(self.controller, "review", {"proposal_id": pid, "review": review(candidate), "inputs": []}, None)
         if candidate["category"] == "standalone":

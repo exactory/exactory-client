@@ -213,8 +213,12 @@ def validate_proposal(value):
     canonical_bytes(value)
     require(isinstance(value, dict), "Proposal must be a record")
     closed(value, "schema_version author category relationship attack_slug role claim target_obligation logical_predecessor native_parent anchor inherited_evidence inherited_assumption_ids hypothesis method applicability success_criterion failure_criterion parent_effect studies contribution task limits budget equivalent_node_ids checkpoint_criteria retreat_criteria decomposition" +
-           (" computation" if value.get("schema_version") == 2 else ""))
-    integer(value["schema_version"], 1, 2)
+           (" computation" if value.get("schema_version") in (2, 3) else "") +
+           (" foundation" if value.get("schema_version") == 3 else ""))
+    integer(value["schema_version"], 1, 3)
+    if value["schema_version"] == 3:
+        from .research import validate_reference
+        validate_reference(value["foundation"])
     validate_provenance(value["author"])
     choice(value["category"], CATEGORIES)
     choice(value["relationship"], RELATIONSHIPS)
@@ -249,7 +253,7 @@ def validate_proposal(value):
     choice(value["task"]["kind"], {"proof", "finite_decision", "finite_proof", "counterexample_search"})
     text(value["task"]["purpose"])
     text(value["task"]["input_domain"])
-    if value["schema_version"] == 2:
+    if value["schema_version"] in (2, 3):
         if value["task"]["kind"] == "proof":
             require(value["computation"] is None, "Analytical proof tasks use a null computation contract")
         else:
