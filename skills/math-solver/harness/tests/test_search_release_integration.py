@@ -10,15 +10,16 @@ from tests import test_search_execution_proof as certified
 from tests.search_execution_support import begin_spec, computation_contract, invoke, review_native_inputs
 from tests.search_fixtures import contract, digest, proposal, provenance
 from tests.support import FIXTURE_STRATEGIES, OPENING, WorkspaceTest, make_move
+from tests.strategy_refresh_support import reassess_fixture
 
 
 class ReleaseWorkflowTests(WorkspaceTest):
     input_file = certified.CertifiedBridgeExecutionTests.input_file
     result_review = certified.CertifiedBridgeExecutionTests.result_review
 
-    def admit(self, candidate):
+    def admit(self, candidate, strategy=OPENING):
         number = len(self.controller.status()["proposals"]) + 1
-        certified.CertifiedBridgeExecutionTests.admit(self, candidate, number)
+        certified.CertifiedBridgeExecutionTests.admit(self, candidate, number, strategy)
         return next(n for n in self.controller.status()["nodes"].values() if n["attack_slug"] == candidate["attack_slug"])
 
     def checkpoint(self, claim, manifest, node=None):
@@ -133,6 +134,7 @@ class ReleaseWorkflowTests(WorkspaceTest):
         self.assertEqual(state["proof_status"], "open")
         self.assertIsNone(root_support(state))
 
+        reassess_fixture(self.controller, {(first["id"], OPENING)})
         invoke(self.controller, "begin", begin_spec(), first["id"])
         self.assertEqual(self.run_cli("journal", "add", self.slug, "--json", json.dumps(make_move(1, failed=True)))[0], 0)
         obstruction = self.analytical(high, self.slug + "/obstruction.md",
@@ -170,21 +172,28 @@ class ReleaseWorkflowTests(WorkspaceTest):
         successor["checkpoint_criteria"] = [{"kind": "accepted_obligation", "criterion_id": "root-proof",
                                               "obligation_id": high_id, "explanation": "Accept the high residue proof"}]
         successor["budget"].update(mode="inherit", account_id=account)
-        continuation = self.admit(successor)
+        continued_strategy = "reduce-to-a-finite-computation"
+        continued_entry = "reduce-to-finite-witnesses"
+        successor["retreat_criteria"] = [{"kind": "strategy_failure", "strategy_id": continued_strategy}]
+        continuation = self.admit(successor, strategy=continued_strategy)
         self.assertEqual(continuation["account_id"], account)
-        self.assertEqual(self.controller.command("next", {}, None, None), {"kind": "execute_node", "node_id": continuation["id"]})
+        self.assertEqual(self.controller.command("next", {}, None, None)["kind"], "reassess_strategies")
+        reassess_fixture(self.controller, {(continuation["id"], continued_strategy)})
+        self.assertEqual(self.controller.command("next", {}, None, None),
+                         {"kind": "execute_node", "node_id": continuation["id"], "strategy": continued_strategy})
         slug = continuation["attack_slug"]
         self.input_file(slug + "/deterministic/residues/certificate.txt", "2 0\n3 1\n")
         self.input_file(slug + "/deterministic/residues/check.sh", "#!/bin/sh\nset -eu\ncount=2\nwhile read -r r square; do\n  [ \"$r\" -eq \"$count\" ]\n  [ \"$square\" -eq \"$((r*r % 4))\" ]\n  [ \"$square\" -eq 0 ] || [ \"$square\" -eq 1 ]\n  count=$((count+1))\ndone < certificate.txt\n[ \"$count\" -eq 4 ]\nprintf 'Both remaining residue rows verified\\n'\n")
         (self.attack_root / slug / "deterministic/residues/check.sh").chmod(0o755)
-        invoke(self.controller, "begin", begin_spec(), continuation["id"])
+        invoke(self.controller, "begin", dict(begin_spec(), strategy=continued_strategy, entry=continued_entry), continuation["id"])
         review_native_inputs(self.controller, slug, "residues")
         result = self.run_cli("verify", "certificate", slug, "residues")
         self.assertEqual(result[0], 0, result)
         blocked = self.run_cli("verify", "certificate", slug, "residues")
         self.assertNotEqual(blocked[0], 0)
         self.assertIn("interpretation_required", blocked[2])
-        result = self.run_cli("journal", "add", slug, "--json", json.dumps(make_move(1, closes=True, steps=["residues"])))
+        result = self.run_cli("journal", "add", slug, "--json", json.dumps(make_move(1, closes=True, steps=["residues"],
+            strategy=continued_strategy, walk=continued_strategy, entry=continued_entry)))
         self.assertEqual(result[0], 0, result)
         run = next(iter(self.controller.status()["runs"].values()))
         self.assertEqual(run["status"], "terminal")
@@ -211,7 +220,7 @@ class ReleaseWorkflowTests(WorkspaceTest):
         child.pop("computation")
         child["task"] = {"kind": "proof", "purpose": "Alternative analytical derivation of the same residues", "input_domain": "r in {2,3}"}
         child["contribution"]["necessity"] = None
-        unused = self.admit(child)
+        unused = self.admit(child, strategy=continued_strategy)
         self.assertTrue((self.attack_root / "unused-child/parent.json").is_file())
         self.assertEqual(unused["native_parent"], continuation["id"])
         accounts = self.controller.status()["accounts"]

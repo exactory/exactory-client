@@ -118,6 +118,8 @@ def audit_journal_append(controller, node, move, intent, content):
     suffix = after[len(before):]
     line = _strict_json(suffix, "recovery_conflict")
     validate_journal_line(line, move, intent["problem_digest"])
+    if "journal_line" in intent:
+        s.require(line == intent["journal_line"], "Journal bytes differ from their planning observation", "recovery_conflict")
     s.require(suffix == (json.dumps(line) + "\n").encode("utf-8"),
               "Journal intent must append exactly one native line", "recovery_conflict")
     transition = intent.get("problem_transition")

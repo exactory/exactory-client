@@ -164,6 +164,7 @@ class ProblemTransitionTests(WorkspaceTest):
         problem = self.read_json("problem.json")
         problem["shape"]["objects"] = "Integers in ℤ with a naïve encoding"
         self.write_json("problem.json", problem)
+        self.assertEqual(self.run_cli("plan", self.slug)[0], 0)
         invoke(self.controller, "begin", begin_spec())
         self.refine_problem()
 

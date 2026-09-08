@@ -4,21 +4,26 @@ import copy
 
 from . import schema as s
 from .admission import reference, remaining_allowance, require_current_account
+from .deferrals import validate_deferrals
 from .errors import SearchError
 from .proof import acceptance_closure, obligation_support, root_support
 
 
 def initial_control():
+    from .strategy_refresh import initial_policy
     return {"nonprogress_replans": 0, "progress_fingerprints": [], "stop_count": 0,
+            "strategy_refresh": initial_policy(),
             "stop_deliveries": {}, "summary_issued": False, "stop_decision": {"kind": "allow_stop"},
             "pause_reason": None, "focus": "focused", "focus_record": None, "state_error": None,
             "active_node_id": None, "retreat_node_id": None, "pending_moves": [],
-            "node_facts": {}, "selected_routes": {}, "closure": None,
+            "node_facts": {}, "selected_routes": {}, "obligation_orders": {}, "closure": None,
             "main_external_block": None, "side_interval": None, "resume_record": None,
-            "resume_ids": [], "side_instruction_ids": [], "retreats": []}
+            "resume_ids": [], "side_instruction_ids": [], "retreats": [], "deferred_node_ids": []}
 
 
 def ready(state, node):
+    if node["id"] in state["control"]["deferred_node_ids"]:
+        return False
     if node["status"] not in {"admitted", "active", "waiting"}:
         return False
     facts = state["control"]["node_facts"].get(node["id"], {})
@@ -71,7 +76,7 @@ def retreat_due(state, node_id):
 
 
 def _ordered_nodes(state, oid):
-    order = []
+    order = list(state["control"].get("obligation_orders", {}).get(oid, []))
     for route in sorted(state["routes"].values(), key=lambda item: item["id"]):
         if route["conclusion"] == oid:
             order.extend(route["alternative_order"])
@@ -146,6 +151,10 @@ def next_action(state):
     for nid, facts in sorted(control["node_facts"].items()):
         if facts.get("cashout_action"):
             return {"kind": "local_cashout", "node_id": nid, "step": facts["cashout_action"]}
+    from .strategy_refresh import research_selection
+    selection = research_selection(state)
+    if selection is not None:
+        return selection
     active = control["active_node_id"]
     if active is not None:
         node = state["nodes"][active]
@@ -258,11 +267,32 @@ def record_control(state, payload):
 
 
 def record_replan(state, payload):
-    s.closed(payload, "route_orders progress_acceptance_ids reason")
+    s.closed(payload, "route_orders progress_acceptance_ids reason" +
+             (" obligation_orders" if "obligation_orders" in payload else "") +
+             (" deferred_node_ids" if "deferred_node_ids" in payload else ""))
     s.text(payload["reason"])
     s.records(payload["route_orders"])
     s.strings(payload["progress_acceptance_ids"])
     control = state["control"]
+    deferred = (validate_deferrals(state, payload["deferred_node_ids"])
+                if "deferred_node_ids" in payload else None)
+    ordered_obligations = set()
+    for order in s.records(payload.get("obligation_orders", [])):
+        s.closed(order, "obligation_id alternative_order")
+        oid = order["obligation_id"]
+        reference(state["obligations"], oid, "ordered obligation")
+        s.require(oid not in ordered_obligations, "Duplicate obligation order")
+        ordered_obligations.add(oid)
+        s.strings(order["alternative_order"])
+        for nid in order["alternative_order"]:
+            node = reference(state["nodes"], nid, "alternative")
+            s.require(node["proposal_id"] is not None and node["category"] != "standalone",
+                      "Alternative requires a reviewed main-work admission", "admission_required")
+            s.require(node["obligation_id"] == oid, "Alternative targets another obligation")
+        if order["alternative_order"]:
+            control["obligation_orders"][oid] = list(order["alternative_order"])
+        else:
+            control["obligation_orders"].pop(oid, None)
     new = set()
     for aid in payload["progress_acceptance_ids"]:
         value = reference(state["acceptances"], aid, "progress acceptance")
@@ -281,6 +311,8 @@ def record_replan(state, payload):
         route["alternative_order"] = list(order["alternative_order"])
         if order["selected"]:
             control["selected_routes"][route["conclusion"]] = route["id"]
+    if deferred is not None:
+        control["deferred_node_ids"] = deferred
     control["progress_fingerprints"].extend(sorted(new))
     control["nonprogress_replans"] = 0 if new else control["nonprogress_replans"] + 1
     if control["nonprogress_replans"] >= 3:
@@ -315,6 +347,9 @@ def record_node_facts(state, payload):
     for oid in facts["dependency_assumption_ids"]:
         s.require(oid in state["obligations"] or oid in state["contract"]["assumption_ids"], "Unknown assumption")
     s.require(set(facts["failed_strategies"]) <= {x["method"] for x in node["admission"]["studies"]["strategies"]}, "Failure names an unstudied strategy")
+    from .strategy_refresh import remember_failure
+    for strategy in facts["failed_strategies"]:
+        remember_failure(state, node["id"], strategy, {"kind": "native_observation", "facts_digest": s.digest(facts)})
     previous = state["control"]["node_facts"].get(node["id"], {})
     saved = copy.deepcopy(facts)
     saved["suspended"] = previous.get("suspended", False)
@@ -366,6 +401,8 @@ def retreat_node(state, payload):
                 child["status"] = "waiting"
     node["status"] = "retreated"
     state["control"]["retreats"].append(copy.deepcopy(value))
+    from .strategy_refresh import note_evidence
+    note_evidence(state, "retreat:" + str(len(state["control"]["retreats"])))
     state["control"]["retreat_node_id"] = node["id"]
     state["control"]["active_node_id"] = None
     if state["execution_status"] != "paused":

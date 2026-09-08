@@ -12,6 +12,18 @@ The skill attacks a stated mathematical proposition end to end. It proceeds auto
 
 ### Before choosing work
 
+After a checkpoint, changed problem, failure observation or terminal computation,
+finish pending journal and interpretation work, then follow `search next`. When
+it reports `reassess_strategies`, run `search strategy-context --json`, reread the
+current evidence and retained failures, and classify every admitted strategy as
+continue, revise, defer or retire. Update affected studies, preconditions and
+native plans. Record the next hypotheses, success criteria and failure signals,
+or explain why the existing hypotheses still suffice. Obtain an independent
+review with a fresh context and submit `search reassess` using the exact contract
+in `SEARCH.md#mandatory-strategy-reassessment`. New research cannot continue under
+an old assessment. Reassessment preserves the original objective, all remaining
+obligations, proof requirements and resource accounts.
+
 Reject a proposed run that merely extends an unbounded prefix, even when it is cheap, ready, checkable, or likely to receive administrative review. Proceed only when the proposal names a necessary diagnostic decision, covers an actually finite root, depends on an accepted finite reduction such as a proved finite-residue bridge, is a properly reviewed bounded counterexample search whose witness could settle the original decision, or is an independently reviewed substantial standalone result, using the exact schemas in `SEARCH.md#computation-admission-and-mandatory-interpretation`. A necessary diagnostic that resolves a named strategy decision and a complete finite-residue check after its analytical reduction are positive controls. A no-hit prefix is not proof and grants no automatic renewal; calling an unexplained prefix a counterexample search does not bypass substantive review. Without one of these bases, return to root strategy analysis; do not prepare another proposal for the same extension. Likewise, do not renew the same-scope account unless a substantive qualifying checkpoint and new evidence satisfy `SEARCH.md#resource-accounts-and-hard-budgets`; a copied record or bookkeeping change does not qualify.
 
 Three levels of text carry the method. A strategy (one file under `strategies/`) is a decision about which component of the attempt to change: the attempt is the quadruple (statement, stage, direction, mode), and each strategy moves one or two of its components. An entry (one file under `entries/`) is a move: a conditional with a trigger, an action, an output form, a failure signal, and a cash-out. A deterministic step (stage 6) is a run whose result is reproducible from recorded code. The skill invokes nothing that is not a strategy's plan step, an entry, or a named deterministic step.
@@ -130,6 +142,12 @@ During the move: carry out the entry's Action, reading the entry's Failure signa
 
 After the move: reconcile any pending receipt, then run `journal add <slug> --json '<move>'` with exactly the legacy fields below; the controller acknowledges its reserved prefix. If a controlled run was used, interpret the terminal run before launching more mathematics. `search interpret` binds the recorded result and computation digests, declared or inconclusive outcome, classification, root-decision candidate, remaining obligations, and admitted next action. A run result, an interpretation candidate, or the legacy `closes` flag is evidence for review, not acceptance or root closure.
 
+Then read `search next` again. A changed research context requires the reviewed
+reassessment above even inside the same pass. Preserve every previous assessment
+and failure in the controller history. Merely rerunning `plan`, keeping the old
+active node, or launching another producer under the old reservation does not
+satisfy the requirement. Verification and cash-out follow their existing priority.
+
 - `move`: the next number.
 - `pass`: the current pass.
 - `walk`: the walk so far, the strategies joined by `+` in the order they were entered, ending in this move's strategy: the opening strategy alone on the first move, unchanged while the strategy continues, and extended by the new strategy on the move that steps into it. `journal add` refuses any other value.
@@ -150,7 +168,7 @@ When `problem_changed` is true, write the change to `problem.json` before runnin
 
 The constants as the code enforces them: 8 moves per pass, 3 passes, 24 moves in all. `journal add` rejects a move whose number is not the next, a move in a spent pass (the next move starts the next pass, up to pass 3), and every move while a stall is due. A stall is due when the last three moves since the last `fail` all fired their failure signal, when pass 3 has used its 8 moves, when 24 moves are used, or when a move closed the attack. Ending a strategy with `fail` starts the count again, so a failure signal ends the strategy and not the attack. Run `budget <slug>` at the start of every pass and after every move whose failure signal fired; when it prints `stall due: yes`, go to stage 7.
 
-At the start of every pass after the first: when a move of the previous pass had `problem_changed` true, re-answer the precondition questions that cite the changed fields, except for a strategy whose record `fail` wrote: its `no` and its `note` stay, and its questions are not re-answered. Rewrite `preconditions.json` and run `plan`; the walk continues from where it stands, under the openings the new plan admits. `journal add` refuses the first move of a new pass while `openings.json` was written over an earlier `problem.json`, so the re-plan is not optional once the problem moved.
+After a changed problem and before the next research move, re-answer the precondition questions that cite the changed fields, except for a strategy whose record `fail` wrote: its `no` and its `note` stay, and its questions are not re-answered. Rewrite `preconditions.json`, run `plan`, and include the resulting plan in the required strategy reassessment. The walk continues from where it stands, under the openings and reviewed selection. The native pass-boundary check remains in force too. A new plan alone does not replace the independent strategy reassessment.
 
 ### Closing
 

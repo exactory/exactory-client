@@ -10,10 +10,12 @@ from .adoption import EVENT_HANDLERS as ADOPTION_HANDLERS
 from .execution_state import EVENT_HANDLERS as EXECUTION_HANDLERS
 from .computation import EVENT_HANDLERS as COMPUTATION_HANDLERS
 from .discovery import record as record_discovery
+from .strategy_refresh import EVENT_HANDLERS as STRATEGY_HANDLERS
 
 
 EVENT_HANDLERS = dict(ADMISSION_HANDLERS, **PROOF_HANDLERS, **SCHEDULER_HANDLERS, **ADOPTION_HANDLERS, **EXECUTION_HANDLERS, **COMPUTATION_HANDLERS)
 EVENT_HANDLERS["discovery_recorded"] = record_discovery
+EVENT_HANDLERS.update(STRATEGY_HANDLERS)
 
 
 def service_operation(state, payload):
@@ -22,7 +24,7 @@ def service_operation(state, payload):
     s.require(not state["service"]["native_intents"] or payload["command"] in {"reconcile", "pause", "focus", "hook-stop", "audit", "render"},
               "Native intent requires reconciliation", "recovery_required")
     allowed = {
-        "init": {"discovery_recorded"}, "render": set(), "propose": {"proposal_recorded"},
+        "init": {"discovery_recorded", "strategy_policy_enabled"}, "render": set(), "propose": {"proposal_recorded"},
         "adopt": {"legacy_imported", "legacy_import_version_recorded", "adoption_allowance_recorded"},
         "review": {"review_recorded"}, "admit": {"proposal_admitted"},
         "checkpoint": {"checkpoint_recorded", "node_facts_recorded"}, "accept": {"result_accepted", "node_facts_recorded"},
@@ -30,7 +32,8 @@ def service_operation(state, payload):
         "retreat": {"node_retreated"}, "replan": {"replan_recorded"},
         "focus": {"control_recorded", "discovery_recorded"}, "pause": {"control_recorded"},
         "resume": {"control_recorded", "discovery_recorded"}, "hook-stop": {"control_recorded", "node_facts_recorded"},
-        "begin": {"move_reserved"},
+        "begin": {"strategy_policy_enabled", "move_reserved"},
+        "reassess": {"strategy_policy_enabled", "strategies_reassessed"},
         "amend-computation": {"computation_amended"}, "interpret": {"run_interpreted"},
         "run": {"run_reserved"}, "execution-launch": {"run_launched"},
         "legacy-journal": {"journal_intended"},
@@ -78,7 +81,7 @@ def initial_state(contract, objective_id):
         "requests": {},
         "service": {"effects": [], "imports": {}, "import_versions": [], "journal_receipts": {}, "adoption_allowances": [],
                     "moves": {}, "legacy_intents": {}, "native_intents": {}, "native_receipts": {}, "discovery_intents": {},
-                    "computation_amendments": {}, "run_interpretations": {}},
+                    "computation_amendments": {}, "run_interpretations": {}, "journal_observations": {}},
     }
 
 

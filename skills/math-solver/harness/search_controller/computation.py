@@ -237,6 +237,8 @@ def record_interpretation(state, payload):
         s.require(not candidate and decision["kind"] == "undecided",
                   "Failed or inconclusive execution cannot decide a theorem")
     state["service"]["run_interpretations"][run["id"]] = copy.deepcopy(payload)
+    from .strategy_refresh import note_evidence
+    note_evidence(state, "run:" + run["id"])
 
 
 EVENT_HANDLERS = {"computation_amended": record_amendment, "run_interpreted": record_interpretation}

@@ -227,6 +227,159 @@ class EvidenceTests(SearchCLIWorkspace, unittest.TestCase):
         self.assertEqual(result["error"]["code"], "verification_required")
         self.assertFalse((self.root / "math-job-ran").exists())
 
+    def executable_renewal(self):
+        """Create a reviewed renewal while the full root remains open."""
+        from search_controller.service import Controller
+        from tests.search_fixtures import decomposition_proposal
+        from tests.search_execution_support import computation_contract
+        from tests.support import (ALL_YES, FIXTURE_STRATEGIES, OPENING,
+                                   make_problem, make_preconditions, run, write_study)
+        self.initialize()
+        first = self.prepared_proposal()
+        first["proposal"]["decomposition"] = decomposition_proposal()["decomposition"]
+        self.search("propose", first, revision=1)
+        self.search("review", {"proposal_id": "proposal-000001",
+                              "review": review(first["proposal"]), "inputs": []}, revision=2)
+        self.search("admit", {}, target="proposal-000001", revision=3)
+        state = self.search("status")
+        base = state["obligations"]["obligation-000002"]["claim"]
+        evidence = self.external_checkpoint()
+        evidence["checkpoint"].update(claim=base, kind="reduction",
+                                      remaining_obligation_ids=["obligation-000001"])
+        evidence["checkpoint"]["origin"].update(statement=base["statement"],
+                                                statement_digest=digest(base))
+        manifest = json.loads((self.root / "manifest.json").read_text())
+        manifest["claim_digest"] = digest(base)
+        (self.root / "manifest.json").write_text(json.dumps(manifest))
+        evidence["inputs"][-1]["digest"] = digest(manifest)
+        evidence["checkpoint"]["evidence_digests"] = [digest(manifest)]
+        self.search("checkpoint", evidence, revision=4)
+        accepted = self.accept_spec()
+        accepted["obligation_id"] = "obligation-000002"
+        self.search("accept", accepted, target="checkpoint-000001", revision=5)
+        cp = self.search("status")["checkpoints"]["checkpoint-000001"]
+        prepared = self.prepared_proposal()
+        proposed = prepared["proposal"]
+        proposed.update(schema_version=2, attack_slug="renewed", method=OPENING,
+                        computation=computation_contract(proposed["studies"]["problem"]))
+        proposed["studies"]["strategies"][0]["method"] = OPENING
+        proposed["budget"] = {"mode": "renew", "account_id": "account-000001",
+                              "basis_checkpoint_id": cp["id"], "basis_checkpoint_digest": digest(cp),
+                              "justification": "Accepted base cases support a distinct full-root method"}
+        proposed["task"] = {"kind": "finite_decision", "purpose": "Exercise the exact fixture command",
+                            "input_domain": "One supplied command fixture"}
+        proposed["contribution"]["necessity"] = {
+            "obligation_id": "obligation-000001",
+            "omission_consequence": "The declared fixture command would remain untested",
+            "domain_justification": "The supplied fixture is the entire test domain",
+            "outcomes": [{"outcome": "verified", "next_action": "Inspect the fixture result"},
+                         {"outcome": "rejected", "next_action": "Record failure"}],
+            "stopping_condition": "Stop when the bounded command terminates"}
+        self.search("propose", prepared, revision=6)
+        self.search("review", {"proposal_id": "proposal-000002",
+                              "review": review(proposed), "inputs": []}, revision=7)
+        self.search("admit", {}, target="proposal-000002", revision=8)
+        workspace = self.root / "renewed"
+        problem = make_problem()
+        problem["claim"] = proposed["claim"]["statement"]
+        problem["quadruple"]["statement"] = problem["claim"]
+        (workspace / "problem.json").write_text(json.dumps(problem))
+        write_study(workspace, "problem", "This test fixture exercises controller state transitions.")
+        write_study(workspace, OPENING, "The complete supplied fixture is the diagnostic domain.")
+        (workspace / "preconditions.json").write_text(json.dumps(make_preconditions(ALL_YES)))
+        status, out, err = run(["plan", "renewed"], self.root)
+        self.assertEqual((status, err), (0, ""))
+        openings = json.loads((workspace / "openings.json").read_text())["openings"]
+        ranking = {"generated_from": "openings.json", "order": [
+            {"strategy": item["strategy"], "cites": ["shape.objects"],
+             "reason": "The fixture's studied order applies"} for item in openings]}
+        (workspace / "ranking.json").write_text(json.dumps(ranking))
+        controller = Controller(self.root, FIXTURE_STRATEGIES)
+        self.assertEqual(self.search("next")["kind"], "reassess_strategies")
+        from tests.strategy_refresh_support import reassess_fixture
+        reassess_fixture(controller, {("node-000002", OPENING)})
+        self.assertEqual(self.search("next"),
+                         {"kind": "execute_node", "node_id": "node-000002", "strategy": OPENING})
+        artifact = self.root / ".search" / "artifacts" / evidence["inputs"][0]["digest"]
+        return controller, workspace, artifact
+
+    def test_renewed_node_can_reserve_without_reopening_its_predecessor_account(self):
+        from search_controller.errors import SearchError
+        from tests.search_execution_support import begin_spec, invoke
+        controller, workspace, artifact = self.executable_renewal()
+        before = controller.status()
+        try:
+            invoke(controller, "begin", begin_spec(), "node-000002")
+        except SearchError as error:
+            self.fail("A valid renewed node must reserve: " + error.code)
+        state = controller.status()
+        self.assertEqual(state["accounts"]["account-000001"], before["accounts"]["account-000001"])
+        self.assertEqual(state["accounts"]["account-000002"]["reserved_moves"], 1)
+        self.assertEqual(state["accounts"]["account-000002"]["used_moves"], 0)
+        self.assertEqual(state["service"]["moves"]["move-node-000002-1"]["account_id"], "account-000002")
+        self.assertEqual(state["proposals"], before["proposals"])
+        self.assertEqual((workspace / "journal.jsonl").read_bytes(), b"")
+
+    def test_renewed_node_can_execute_a_frozen_command_on_its_current_account(self):
+        import sys
+        from tests.search_execution_support import begin_spec, command_spec, invoke
+        controller, workspace, artifact = self.executable_renewal()
+        step = workspace / "deterministic" / "job"
+        step.mkdir()
+        (step / "job.py").write_text("print('renewed fixture')\n")
+        invoke(controller, "begin", begin_spec(), "node-000002")
+        invoke(controller, "run", command_spec(workspace, [sys.executable, "job.py"]), "node-000002")
+        state = controller.status()
+        result = state["runs"]["run-000001"]
+        self.assertEqual(result["status"], "terminal")
+        self.assertEqual(result["termination"], "exit")
+        self.assertEqual(result["account_id"], "account-000002")
+        captured = controller.store.get_blob(result["result_digest"])["commands"][0]
+        self.assertEqual(captured["exit_code"], 0)
+        self.assertEqual(controller.store.get_artifact(captured["stdout_digest"]),
+                         b"renewed fixture\n")
+        self.assertEqual(state["accounts"]["account-000002"]["used_runs"], 1)
+        self.assertEqual(state["accounts"]["account-000001"]["used_runs"], 0)
+
+    def test_renewed_begin_still_audits_corrupt_accepted_basis_without_reservation(self):
+        from search_controller.errors import SearchError
+        from tests.search_execution_support import begin_spec, invoke
+        controller, workspace, artifact = self.executable_renewal()
+        artifact.write_text("Corrupted after successful renewal admission")
+        before = controller.store.tree_path.read_bytes()
+        with self.assertRaises(SearchError) as caught:
+            invoke(controller, "begin", begin_spec(), "node-000002")
+        self.assertEqual(caught.exception.code, "corrupt_artifact")
+        self.assertEqual(controller.store.tree_path.read_bytes(), before)
+        self.assertEqual((workspace / "journal.jsonl").read_bytes(), b"")
+
+    def test_predecessor_node_still_cannot_reserve_after_renewal(self):
+        from search_controller.errors import SearchError
+        from tests.search_execution_support import begin_spec, invoke
+        controller, workspace, artifact = self.executable_renewal()
+        before = controller.store.tree_path.read_bytes()
+        with self.assertRaises(SearchError) as caught:
+            invoke(controller, "begin", begin_spec(), "node-000001")
+        self.assertEqual(caught.exception.code, "account_superseded")
+        self.assertEqual(controller.store.tree_path.read_bytes(), before)
+
+    def test_renewed_run_rechecks_its_basis_after_the_move_was_reserved(self):
+        import sys
+        from search_controller.errors import SearchError
+        from tests.search_execution_support import begin_spec, command_spec, invoke
+        controller, workspace, artifact = self.executable_renewal()
+        step = workspace / "deterministic" / "job"
+        step.mkdir()
+        (step / "job.py").write_text("print('must not launch')\n")
+        invoke(controller, "begin", begin_spec(), "node-000002")
+        artifact.write_text("Corrupted between begin and run")
+        before = controller.store.tree_path.read_bytes()
+        with self.assertRaises(SearchError) as caught:
+            invoke(controller, "run", command_spec(workspace, [sys.executable, "job.py"]), "node-000002")
+        self.assertEqual(caught.exception.code, "corrupt_artifact")
+        self.assertEqual(controller.store.tree_path.read_bytes(), before)
+        self.assertEqual(controller.status()["runs"], {})
+
 
 if __name__ == "__main__":
     unittest.main()

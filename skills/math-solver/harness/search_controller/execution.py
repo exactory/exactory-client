@@ -95,10 +95,17 @@ def build_run(controller, state, spec, target, content):
     s.require(len(pending) == 1, "Begin the entry before launching a workload", "reservation_required")
     move = state["service"]["moves"][pending[0]]
     s.require(move["node_id"] == target, "The reserved entry belongs to another node", "reservation_required")
+    from .strategy_refresh import assessment_status, require_research
+    if spec["kind"] == "command":
+        s.require(move.get("purpose", "research") == "research", "A verification move cannot launch a producer", "verification_only")
+        require_research(state, target, move["strategy"], move["problem_digest"], move.get("planning_digest"))
     workspace = safe_path(controller.root, node["attack_slug"])
     import attack
     s.require(not (workspace / "units/FINISHED.json").exists(), "Attack is locally finished", "terminal_attack")
     s.require(attack.compute_problem_digest(attack.read_json(workspace / "problem.json")) == move["problem_digest"], "Problem changed during the reserved entry", "digest_mismatch")
+    if spec["kind"] == "command":
+        from .strategy_refresh_io import audit_research_plans
+        audit_research_plans(controller, state, move)
     s.integer(spec["timeout_seconds"], 1, node["admission"]["limits"]["timeout_seconds"])
     s.strings(spec["expected_outputs"])
     for path in spec["expected_outputs"]:
@@ -185,6 +192,7 @@ def build_run(controller, state, spec, target, content):
     return {"id": run_id, "node_id": target, "account_id": account["id"], "reservation_id": move["id"],
         "kind": spec["kind"], "input_digest": frozen, "spec_digest": s.digest(spec), "task": node["admission"]["task"],
         "computation_digest": computation_digest,
+        "strategy_context_digest": assessment_status(state)["context_digest"],
         "cwd": str(cwd), "snapshot_root": str(directory / "input"), "output_root": str(directory / "output"),
         "commands": commands, "timeout_seconds": spec["timeout_seconds"], "environment": environment,
         "threads": node["admission"]["limits"]["workers"], "expected_outputs": spec["expected_outputs"],
@@ -274,6 +282,7 @@ def launch(controller, run):
     directory = materialize(controller, run)
     process = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--launcher", str(directory)],
         stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    released = False
     try:
         deadline = time.monotonic() + 5
         while not (directory / "ready.json").exists() and process.poll() is None and time.monotonic() < deadline:
@@ -281,12 +290,37 @@ def launch(controller, run):
         s.require((directory / "ready.json").exists(), "Launcher did not establish its identity", "recovery_required")
         identity = read_record(directory / "ready.json")
         s.require(identity["pid"] == process.pid and identity["token"] == run["token"], "Unexpected launcher identity", "recovery_conflict")
-        internal_operation(controller, "execution-launch", "launch-" + run["id"], lambda state, content: [
-            {"kind": "run_launched", "payload": {"run_id": run["id"], "token": run["token"], "identity": identity}}])
-        process.stdin.write((run["token"] + "\n").encode())
-        process.stdin.flush()
+        def build_launch(state, content):
+            if run["kind"] == "command":
+                from .strategy_refresh_io import audit_research_plans
+                audit_research_plans(controller, state, state["service"]["moves"][run["reservation_id"]])
+            return [{"kind": "run_launched", "payload": {"run_id": run["id"], "token": run["token"], "identity": identity}}]
+        internal_operation(controller, "execution-launch", "launch-" + run["id"], build_launch)
+        # Recheck after the launch record commits, then retain ownership until
+        # token delivery so another controller writer cannot change the context.
+        with controller.store._writer_lock():
+            if run["kind"] == "command":
+                from .model import replay
+                from .execution_state import require_producer_context
+                from .strategy_refresh_io import audit_research_plans
+                state = replay(controller.store.read())
+                move = state["service"]["moves"][run["reservation_id"]]
+                require_producer_context(state, run, move)
+                audit_research_plans(controller, state, move)
+            process.stdin.write((run["token"] + "\n").encode())
+            process.stdin.flush()
+            released = True
         process.stdin.close()
         process.wait(timeout=run["timeout_seconds"] + 10)
+    except SearchError:
+        if not released:
+            # The owned launcher has not received authority to execute a producer.
+            # Closing its input records a definite unstarted result, which can be
+            # reconciled without guessing whether a workload ran or charging it.
+            process.stdin.close()
+            process.wait(timeout=5)
+            reconcile_runs(controller)
+        raise
     finally:
         if process.stdin is not None and not process.stdin.closed:
             process.stdin.close()

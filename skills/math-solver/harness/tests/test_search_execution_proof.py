@@ -29,18 +29,18 @@ class CertifiedBridgeExecutionTests(WorkspaceTest):
                 "dependencies": "The shell builtins verify the complete table; the bridge names the certified premise",
                 "policy": "The certificate checker, its completeness argument, and the algebraic bridge have been reviewed"}}
 
-    def admit(self, candidate, node_number):
+    def admit(self, candidate, node_number, strategy=OPENING):
         inputs = []
         for name, text in [("problem", candidate["claim"]["statement"]),
                            ("novelty", "This is a classical elementary modular fact used as an integration fixture."),
-                           (OPENING, "Check all four residues, then use the exact Euclidean division identity.")]:
+                           (strategy, "Check all four residues, then use the exact Euclidean division identity.")]:
             item = self.input_file("studies-" + str(node_number) + "/" + name + ".md", text)
             inputs.append(item)
-            if name == OPENING:
-                candidate["studies"]["strategies"] = [{"method": OPENING, "digest": item["digest"]}]
+            if name == strategy:
+                candidate["studies"]["strategies"] = [{"method": strategy, "digest": item["digest"]}]
             else:
                 candidate["studies"][name] = item["digest"]
-        candidate["method"] = OPENING
+        candidate["method"] = strategy
         invoke(self.controller, "propose", {"proposal": candidate, "inputs": inputs}, None)
         pid = "proposal-{:06d}".format(node_number)
         invoke(self.controller, "review", {"proposal_id": pid, "review": review(candidate), "inputs": []}, None)
@@ -50,11 +50,12 @@ class CertifiedBridgeExecutionTests(WorkspaceTest):
         problem["claim"] = candidate["claim"]["statement"]
         self.input_file(slug + "/problem.json", json.dumps(problem))
         self.input_file(slug + "/study/problem.md", candidate["claim"]["statement"])
-        self.input_file(slug + "/study/" + OPENING + ".md", "The exact finite residue check and modular identity apply.")
+        self.input_file(slug + "/study/" + strategy + ".md", "The exact finite residue check and modular identity apply.")
         self.input_file(slug + "/preconditions.json", json.dumps(make_preconditions(ALL_YES)))
         status, out, err = self.run_cli("plan", slug)
         self.assertEqual((status, err), (0, ""))
         openings = json.loads((self.attack_root / slug / "openings.json").read_text())["openings"]
+        openings.sort(key=lambda row: row["strategy"] != strategy)
         self.input_file(slug + "/ranking.json", json.dumps({"generated_from": "openings.json", "order": [
             {"strategy": row["strategy"], "cites": ["shape.objects"], "reason": "The studied opening applies"} for row in openings]}))
         return "node-{:06d}".format(node_number)
@@ -133,6 +134,8 @@ class CertifiedBridgeExecutionTests(WorkspaceTest):
         self.input_file(self.slug + "/deterministic/residues/certificate.txt", "0 0\n1 1\n2 0\n3 1\n")
         self.input_file(self.slug + "/deterministic/residues/check.sh", "#!/bin/sh\nset -eu\ncount=0\nwhile read -r r square; do\n  [ \"$r\" -eq \"$count\" ]\n  [ \"$square\" -eq \"$((r*r % 4))\" ]\n  [ \"$square\" -ne 2 ]\n  count=$((count+1))\ndone < certificate.txt\n[ \"$count\" -eq 4 ]\nprintf 'All four residue rows verified\\n'\n")
         (self.workspace / "deterministic/residues/check.sh").chmod(0o755)
+        from tests.strategy_refresh_support import reassess_fixture
+        reassess_fixture(self.controller, {(premise_node, OPENING)})
         invoke(self.controller, "begin", begin_spec(), premise_node)
         review_native_inputs(self.controller, self.slug, "residues")
         self.assertEqual(self.run_cli("verify", "certificate", self.slug, "residues")[0], 0)
