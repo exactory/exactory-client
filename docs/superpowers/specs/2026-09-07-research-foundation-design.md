@@ -58,6 +58,8 @@ transaction.put(kind: str, key: str, value: dict) -> None
 
 The same request ID and identical operation/payload returns the original committed result, even after later revisions. A conflicting replay or stale new mutation fails before changing any state. Reads and failed mutations must not create or upgrade a store. Preserve original mutation values in the event record, so updated projections do not erase history. Do not store a full corpus snapshot after every individual paper update.
 
+If a crashed SQLite write leaves a hot rollback journal, default read-only opening fails with a typed store_recovery_required error instead of writing during a read. Explicit Store(root, create=True) may perform SQLite's native rollback recovery after managed path checks, then validate the existing store. Recovery preserves the last committed revision, records and history. It does not migrate schemas, reset state or certify scientific progress. Provide an explicit supported recovery command in the CLI.
+
 Content objects are stored under research/sources/objects/ by SHA-256. ArtifactStore(root).put(data: bytes, media_type: str) returns {sha256, path, size, media_type}; read(ref) returns verified bytes. Paths are workspace-relative, regular files, and cannot escape via symlinks or traversal. Verify existing objects on reuse. Record source URL, provider, exact source version, capture time, and retrieval failures in domain records. Do not retain credentials in provenance. Mutable human-readable exports are projections, never trusted authoritative state.
 
 This protects managed operations and detects inconsistent artifacts. It does not make a user-writable local directory immune to an actor who can replace the program and database.
