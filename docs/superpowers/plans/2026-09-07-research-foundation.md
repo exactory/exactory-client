@@ -74,9 +74,9 @@ self.assertNotIn("reading", store.snapshot()["records"])
 
 ## Task 3: Citation graph, reading evidence, and five-purpose searches
 
-Files: create research_harness/graph.py, literature.py, reading.py; tests/test_research_graph.py, tests/test_research_reading.py, tests/test_research_literature.py; refine provider integration only as needed.
+Files: create research_harness/graph.py, literature.py, reading.py; tests/test_research_graph.py, tests/test_research_reading.py, tests/test_research_literature.py; refine acquisition/provider integration only as needed, including the explicit versionless cohort-abstract selection contract.
 
-Consumes: normalized work/reference records from Task 2. Produces domain operations `set_roots`, `import_bundle`, `record_reading`, `record_search`, `require_fulltext`, and `foundation_report(store, profile)`; mutating operations accept explicit expected_revision and request_id. A report returns `{ready: bool, digest: str, obligations: list, counts: dict}`. An obligation has a stable code, affected work/reference and actionable explanation.
+Consumes: normalized work/reference records from Task 2. Produces domain operations `set_roots`, `import_bundle`, `record_reading`, `record_search`, `require_fulltext`, `select_cohort_abstract`, and `foundation_report(store, profile)`; mutating operations accept explicit expected_revision and request_id. A report returns `{ready: bool, digest: str, obligations: list, counts: dict}`. An obligation has a stable code, affected work/reference and actionable explanation.
 
 - [ ] Write failing graph fixtures with roots A/B, shared reference C, cycles, unresolved occurrences, incomplete bibliography, and a Tier 3 work required at full depth. The lowest tier wins; no occurrence disappears.
 
@@ -91,6 +91,7 @@ self.assertFalse(foundation_report(store, "research")["ready"])
 
 - [ ] Run focused RED tests. Implement source-specific notes and locator checks, full-text versus abstract distinction, actual cohort abstract reading coverage, five search purposes with saved-response provenance, pending/unavailable policy, and dependency digests.
 - [ ] Ensure later/current work can exist outside the backward graph, alias/version edits invalidate affected decisions, and complete graph claims fail on unknown reference coverage. Export human-readable inventory/coverage without trusting exports as state.
+- [ ] Test explicit current abstract selection for a versionless cohort observation while retaining its unresolved history, original-result replay, and all unrelated pending conditions. Reject a different family, mismatched dates/categories, incomplete evidence, and replacement of a known version's obligation with another version.
 - [ ] Run focused and root tests, commit and report. Keep all acquired original content separate from generated notes and never fabricate missing abstracts.
 
 ## Task 4: Research principles and evidence-linked synthesis
