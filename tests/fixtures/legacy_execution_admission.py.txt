@@ -1,0 +1,118 @@
+# Exact test-only writer definitions from f5b3c46bb22424f3a0d5e836ba9c21e7fbcff51c.
+# Fresh permission is always checked by the current product, outside this namespace.
+
+def admit_execution(store, payload, *, expected_revision, request_id):
+    """Reserve one run and its resources before launch; never an instruction to relaunch.
+
+Task 6 must durably claim the run identity once before the side effect and use
+the admitted program/input bytes and argv. Unknown outcomes require recovery of
+that run. An idempotent admission response retains its original reservation.
+"""
+    artifacts = ArtifactStore(store.root)
+
+    def prepare(records, value):
+        plan = _get(records, "cycle_plan", value.get("cycle_id"), "unknown_cycle")
+        _fields(value, ("id", "cycle_id", "plan_digest", "command", "reserved_units"))
+        _text(value["id"], "Run/admission ID")
+        context = _Context(records, artifacts)
+        context.require_ready()
+        if value["plan_digest"] != plan["digest"]:
+            raise ResearchError("plan_digest_mismatch", "Admit the exact immutable plan the launcher will execute")
+        account = records["strategy_account"][plan["strategy_key"]]
+        _validate_reopening(context, plan["payload"], account)
+        if _plan_dependencies(context, plan["payload"]) != plan["dependencies"]:
+            raise ResearchError("plan_dependencies_stale", "Plan a current development before running after a source, scope or policy change")
+        _command(artifacts, value["command"])
+        _number(value["reserved_units"], "Reserved resource units", positive=True)
+        if _exhausted(account) or account["charged_units"] + value["reserved_units"] > account["limits"]["max_units"]:
+            raise ResearchError("strategy_budget_exhausted", "Keep the incomplete work and its original strategy budget; no new execution is admitted")
+        for admission in records.get("execution_admission", {}).values():
+            if admission["strategy_key"] == plan["strategy_key"] and admission["id"] not in records.get("execution_outcome", {}):
+                raise ResearchError("execution_pending", "Reconcile the existing admitted run before launching another producer", {"admission_id": admission["id"]})
+        cycle = records["cycle"][value["cycle_id"]]
+        if cycle["status"] in ("complete", "failed", "budget_paused"):
+            raise ResearchError("cycle_closed", "Use an explicit successor checkpoint and development question after assessing this branch")
+        record = dict(value, strategy_key=plan["strategy_key"], admitted_revision=expected_revision + 1, request_id=request_id,
+                      dependencies=plan["dependencies"])
+        record["digest"] = digest(record)
+        account = dict(account, executions=account["executions"] + 1, charged_units=account["charged_units"] + value["reserved_units"])
+        changes = [immutable_record(records, "execution_admission", value["id"], record),
+                   ("strategy_account", plan["strategy_key"], account), ("cycle", cycle["id"], dict(cycle, status="running"))]
+        return changes, record
+
+    return prepared_mutation(store, "development.admit", payload, prepare, expected_revision=expected_revision, request_id=request_id)
+
+
+def validate_admitted_execution(records, artifacts, admission_id):
+    """Recheck a prospective admission immediately before a real launcher spends it.
+
+    This read-only check adds no reservation and returns no proof credit. Original
+    admission replay remains historical; outcomes can still be reconciled when
+    this current preparation check fails.
+    """
+    admission = _get(records, "execution_admission", admission_id, "execution_not_admitted")
+    plan = _get(records, "cycle_plan", admission["cycle_id"], "unknown_cycle")
+    context = _Context(records, artifacts)
+    context.require_ready()
+    account = records["strategy_account"][plan["strategy_key"]]
+    _validate_reopening(context, plan["payload"], account)
+    if _plan_dependencies(context, plan["payload"]) != plan["dependencies"]:
+        raise ResearchError("plan_dependencies_stale", "Plan a current development before launching after a source, scope or policy change")
+    if admission["plan_digest"] != plan["digest"] or admission["dependencies"] != plan["dependencies"]:
+        raise ResearchError("plan_digest_mismatch", "Admission does not bind the current immutable plan")
+    _command(artifacts, admission["command"])
+    if admission_id in records.get("execution_outcome", {}):
+        raise ResearchError("execution_already_recorded", "A recorded admission cannot launch again")
+    return admission
+
+
+def bind_execution(store, payload, *, expected_revision, request_id):
+    """Bind admitted bytes to backend, paths, timeout and observed output names."""
+    artifacts = ArtifactStore(store.root)
+    def prepare(records, value):
+        fields(value, ("admission_id", "script", "backend", "timeout_seconds", "inputs", "outputs", "usage_unit"))
+        admission = validate_admitted_execution(records, artifacts, value["admission_id"])
+        _relative_parts(value["script"])
+        if value["backend"] not in ("local", "colab"):
+            raise ResearchError("invalid_execution", "Backend must be local or colab")
+        timeout = value["timeout_seconds"]
+        if type(timeout) not in (int, float) or not math.isfinite(timeout) or timeout <= 0:
+            raise ResearchError("invalid_execution", "A finite positive timeout is required")
+        runtime = _runtime(admission["command"], value["backend"])
+        expected_script = str(store.root / "experiment" / value["script"])
+        if Path(admission["command"]["argv"][1]).resolve() != Path(expected_script).resolve():
+            raise ResearchError("execution_identity_mismatch", "The admitted argv must name the exact declared script")
+        for key in ("inputs", "outputs"):
+            if not isinstance(value[key], list):
+                raise ResearchError("invalid_execution", key + " must be an array")
+        for item in value["inputs"]:
+            fields(item, ("path", "artifact"))
+            _relative_parts(item["path"])
+        paths = [value["script"]] + [item["path"] for item in value["inputs"]]
+        if len(set(paths)) != len(paths) or [v["artifact"] for v in value["inputs"]] != admission["command"]["inputs"]:
+            raise ResearchError("execution_identity_mismatch", "Bind each admitted input in order to one distinct relative path")
+        plan = records["cycle_plan"][admission["cycle_id"]]["payload"]
+        requirements = {item["id"] for item in plan["evidence_requirements"]}
+        output_ids = set()
+        output_paths = set()
+        for output in value["outputs"]:
+            fields(output, ("id", "requirement_id", "path", "media_type"))
+            text(output["id"], "Output ID")
+            _relative_parts(output["path"])
+            if output["id"] in output_ids or output["path"] in output_paths or output["requirement_id"] not in requirements:
+                raise ResearchError("invalid_execution", "Each unique output must name a planned evidence requirement")
+            if output["path"] in paths:
+                raise ResearchError("invalid_execution", "An output cannot replace a frozen input")
+            output_ids.add(output["id"])
+            output_paths.add(output["path"])
+            artifacts.put(b"", output["media_type"])
+        if value["usage_unit"] not in ("execution", "wall_seconds") or plan["resource_limits"]["unit"] != value["usage_unit"]:
+            raise ResearchError("unsupported_usage", "Actual lab accounting supports planned execution or wall_seconds units")
+        record = dict(value, admission_digest=admission["digest"], runtime=runtime)
+        if value["backend"] == "colab":
+            from .remote_execution import transport_root
+            record["transport"] = {"sync_root": str(transport_root()), "protocol": 2}
+        _files(store, admission, record)
+        record["digest"] = digest(record)
+        return [immutable_record(records, "execution_binding", admission["id"], record)], record
+    return prepared_mutation(store, "execution.bind", payload, prepare, expected_revision=expected_revision, request_id=request_id)

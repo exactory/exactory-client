@@ -19,10 +19,13 @@ def require_accounted_usage(records, artifacts, strategy_key):
             continue
         observation = records.get("execution_observation", {}).get(identifier)
         binding = records.get("execution_binding", {}).get(identifier)
-        if observation is None or binding is None or binding["usage_unit"] != "wall_seconds":
-            continue
         claim = records.get("execution_claim", {}).get(identifier)
         outcome = records.get("execution_outcome", {}).get(identifier)
+        if claim is not None and outcome is not None and (observation is None or binding is None):
+            raise ResearchError("execution_usage_reconciliation_required", "A claimed outcome has incomplete observation or binding evidence. Reconcile the original execution before admitting or launching more work; historical accounting is not rewritten",
+                                {"admission_id": identifier, "strategy_key": strategy_key})
+        if observation is None or binding is None or binding["usage_unit"] != "wall_seconds":
+            continue
         execution = records.get("execution", {}).get(outcome["execution_id"]) if outcome else None
         terminal = strict_json(artifacts.read(observation["terminal"]))
         details = {"admission_id": identifier, "strategy_key": strategy_key, "terminal": observation["terminal"]}

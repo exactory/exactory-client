@@ -140,11 +140,14 @@ class ResearchExecutionTests(DevelopmentCase):
     def test_timed_out_wall_time_is_measured_and_exhausts_the_account(self):
         self.wall_time_overrun("import time\ntime.sleep(30)\n", 0.15, "timed_out")
 
-    def legacy_wall_failure(self, *, reserve_following=False):
+    def legacy_wall_failure(self, *, reserve_following=False, interrupt_before_observation=False):
+        from legacy_execution_fixtures import legacy_execution_writers
         admission = admit_lab(self, body="import time\ntime.sleep(0.2)\nraise SystemExit(7)\n",
                               usage_unit="wall_seconds", reserved_units=0.01, max_units=0.1)
         api = importlib.import_module("research_harness.execution")
         original_record = api.record_execution
+        original_mutation = api.prepared_mutation
+        legacy = legacy_execution_writers()
         old = {}
 
         def retain_pre_fix_outcome(store, payload, **identity):
@@ -156,17 +159,31 @@ class ResearchExecutionTests(DevelopmentCase):
             if reserve_following:
                 following = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
                 following["id"] = "historically-admitted"
-                self.mutate(self.development().admit_execution, following)
-                self.mutate(api.bind_execution, {"admission_id": following["id"], "script": "code/program.py",
+                self.mutate(legacy.admit_execution, following)
+                self.mutate(legacy.bind_execution, {"admission_id": following["id"], "script": "code/program.py",
                     "backend": "local", "timeout_seconds": 5, "inputs": [], "usage_unit": "wall_seconds",
                     "outputs": [{"id": "result", "requirement_id": "measurements", "path": "stdout", "media_type": "text/plain"}]})
             return old["receipt"]
 
-        with mock.patch.object(api, "record_execution", side_effect=retain_pre_fix_outcome):
-            result = api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
-                                          request_id="historical-failure")
-        self.assertGreater(result["duration_s"], 0.1)
+        def retain_missing_observation(store, operation, *args, **kwargs):
+            if operation == "execution.observe" and interrupt_before_observation:
+                raise OSError("Historical interruption after outcome and before observation")
+            return original_mutation(store, operation, *args, **kwargs)
+
+        with mock.patch.object(api, "record_execution", side_effect=retain_pre_fix_outcome), \
+                mock.patch.object(api, "prepared_mutation", side_effect=retain_missing_observation):
+            if interrupt_before_observation:
+                with self.assertRaisesRegex(OSError, "Historical interruption after outcome and before observation"):
+                    api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                         request_id="historical-failure")
+            else:
+                api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                     request_id="historical-failure")
+        terminal = json.loads((self.root / api._directory(admission["id"]) / "terminal.json").read_bytes())
+        self.assertGreater(terminal["duration_s"], 0.1)
         before = self.store.snapshot()
+        if interrupt_before_observation:
+            self.assertNotIn(admission["id"], before["records"].get("execution_observation", {}))
         self.assertEqual(original_record(self.store, old["payload"], **old["identity"]), old["receipt"])
         self.assertEqual(self.store.snapshot(), before)
         return admission
@@ -189,6 +206,66 @@ class ResearchExecutionTests(DevelopmentCase):
             "historically-admitted", expected_revision=self.store.revision, request_id="new-launch-after-known-usage"))
         self.assertEqual(self.store.snapshot(), before)
         self.assertNotIn("historically-admitted", before["records"]["execution_claim"])
+
+    def test_unobserved_legacy_outcome_blocks_new_admission(self):
+        admission = self.legacy_wall_failure(interrupt_before_observation=True)
+        before = self.store.snapshot()
+        self.assertEqual(before["records"]["strategy_account"][admission["strategy_key"]]["charged_units"], 0.01)
+        following = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
+        following["id"] = "new-after-unobserved-outcome"
+        self.assert_error("execution_usage_reconciliation_required", lambda: self.mutate(self.development().admit_execution, following))
+        self.assertEqual(self.store.snapshot(), before)
+
+    def test_unobserved_legacy_outcome_blocks_an_unstarted_historical_admission(self):
+        from research_harness.errors import ResearchError
+        admission = self.legacy_wall_failure(reserve_following=True, interrupt_before_observation=True)
+        api = importlib.import_module("research_harness.execution")
+        before = self.store.snapshot()
+        self.assertEqual(before["records"]["strategy_account"][admission["strategy_key"]]["charged_units"], 0.02)
+        try:
+            summary = api.launch_execution(self.store, "historically-admitted",
+                expected_revision=self.store.revision, request_id="new-launch-after-unobserved-outcome")
+        except ResearchError as error:
+            self.assertEqual(error.code, "execution_usage_reconciliation_required")
+        else:
+            self.fail("An unstarted historical admission actually executed: " + json.dumps(summary, sort_keys=True))
+        self.assertEqual(self.store.snapshot(), before)
+        self.assertNotIn("historically-admitted", before["records"]["execution_claim"])
+        self.assertFalse((self.root / api._directory("historically-admitted") / "terminal.json").exists())
+
+    def test_accounted_wall_outcome_recovers_observation_before_new_permission(self):
+        admission = admit_lab(self, body="print('{\"metric\": 7}')\n", usage_unit="wall_seconds",
+                              reserved_units=0.01, max_units=1)
+        api = importlib.import_module("research_harness.execution")
+        original_mutation = api.prepared_mutation
+
+        def stop_before_observation(store, operation, *args, **kwargs):
+            if operation == "execution.observe":
+                raise OSError("Current interruption after accounted outcome")
+            return original_mutation(store, operation, *args, **kwargs)
+
+        with mock.patch.object(api, "prepared_mutation", side_effect=stop_before_observation):
+            with self.assertRaisesRegex(OSError, "Current interruption after accounted outcome"):
+                api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                     request_id="accounted-before-observation")
+        before = self.store.snapshot()["records"]
+        self.assertNotIn(admission["id"], before.get("execution_observation", {}))
+        terminal = json.loads((self.root / api._directory(admission["id"]) / "terminal.json").read_bytes())
+        outcome = before["execution"][before["execution_outcome"][admission["id"]]["execution_id"]]["payload"]
+        self.assertEqual(outcome["usage"]["units"], terminal["duration_s"])
+        self.assertEqual(before["strategy_account"][admission["strategy_key"]]["charged_units"],
+                         max(admission["reserved_units"], terminal["duration_s"]))
+        result = api.reconcile_execution(self.store, {"admission_id": admission["id"]},
+            expected_revision=self.store.revision, request_id="recover-accounted-observation")
+        self.assertTrue(result["ok"])
+        after = self.store.snapshot()["records"]
+        self.assertEqual(after["execution"], before["execution"])
+        self.assertEqual(after["strategy_account"], before["strategy_account"])
+        self.assertIn(admission["id"], after["execution_observation"])
+        following = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
+        following["id"] = "following-accounted-recovery"
+        receipt = self.mutate(self.development().admit_execution, following)
+        self.assertEqual(receipt["result"]["id"], following["id"])
 
     def test_lost_observation_response_reconciles_existing_outcome_once(self):
         admission = admit_lab(self, body="print('{\"metric\": 7}')\n")
