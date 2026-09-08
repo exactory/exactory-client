@@ -133,6 +133,7 @@ def _collection_members(records, collection_id, kind):
 
 
 def _collection_summary(records, collection):
+    from .cohort_evidence import current_selection
     collection_id = collection["id"]
     members = _collection_members(records, collection_id, "cohort_member")
     exclusions = _collection_members(records, collection_id, "cohort_exclusion")
@@ -141,11 +142,21 @@ def _collection_summary(records, collection):
     category_conflicts = sorted({m["work_id"] for m in members} & {m["work_id"] for m in exclusions})
     if category_conflicts:
         pending.append({"code": "primary_category_conflict", "work_ids": category_conflicts})
-    obligations = []
+    obligations, historical = [], []
     for member in sorted(members, key=lambda m: m["work_id"]):
         for identifier in member["version_ids"]:
             work = records.get("work", {}).get(identifier)
             abstract = work.get("abstract") if work else None
+            selection = current_selection(records, collection_id, member, identifier)
+            if selection is not None:
+                historical.append({"work_id": member["work_id"], "version_id": identifier,
+                    "unresolved_assertion_id": selection["unresolved_assertion_id"], "artifact": abstract,
+                    "source_ids": work["source_ids"], "selected_assertion_id": selection["selected_assertion_id"],
+                    "reason": selection["reason"], "historical_version_resolved": False})
+                obligations.append({"work_id": member["work_id"], "version_id": selection["version_id"], "depth": "abstract",
+                                    "artifact": selection["artifact"], "source_ids": [selection["source_id"]],
+                                    "selection": selection})
+                continue
             if abstract is None:
                 pending.append({"code": "missing_abstract", "work_id": member["work_id"], "version_id": identifier})
             if work and work["id"].startswith("arxiv:") and work["version"] is None:
@@ -169,6 +180,7 @@ def _collection_summary(records, collection):
             "unique_count": len(seen), "member_count": len(members), "exclusion_count": len(exclusions),
             "extraction_failures": collection["extraction_failures"], "pending_partitions": unenumerated,
             "next_eligible_at": collection.get("next_eligible_at"),
+            "historical_unresolved": historical,
             "reading_obligations": obligations, "next_abstract": next((o for o in obligations if o["artifact"]), None)}
 
 
@@ -184,6 +196,11 @@ def collection_status(store, collection_id=None):
         for obligation in summary["reading_obligations"]:
             if obligation["artifact"]:
                 artifacts.read(obligation["artifact"])
+            if obligation.get("selection"):
+                artifacts.read(snapshot["records"]["source"][obligation["selection"]["source_id"]]["response"])
+        for historical in summary["historical_unresolved"]:
+            for source_id in historical["source_ids"]:
+                artifacts.read(snapshot["records"]["source"][source_id]["response"])
     return ({"revision": snapshot["revision"], "collections": summaries} if collection_id is None
             else dict(summaries[0], revision=snapshot["revision"]))
 
