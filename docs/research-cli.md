@@ -142,6 +142,151 @@ For Colab, set `EXACTORY_LAB_COLAB_DIR` to an existing shared folder on both hos
 
 Protocol 2 writes immutable job bytes and `READY`, records a runner's unique nonce and runtime, then commits a client release and `GO` only after current local preparation passes. A saved release does not authorize emitting a missing GO after preparation changes; that side effect needs a fresh current check. An already started or completed original job is collected without recreating a missing signal. Only the released nonce may start once. The producer validates its seal before publishing result files. Collection checks transport identities and per-file hashes while copying; reconciliation then validates the complete seal before recording the outcome. Both client and runner need the seal-aware execution implementation; older unsealed terminal bytes remain pending. Old jobs without protocol 2 cannot execute. A dead heartbeat or transport wait timeout leaves the run pending; it is not evidence that remote execution failed. A runner crash or mirror conflict after a durable release can require external inspection. No retry silently creates another job or refunds its reservation.
 
+## Planning a successor
+
+A successor is another full `cycle` payload with a new `id`, a distinct
+`question`, the same complete `objective`, and a current claim-specific
+`literature` comparison. Its `predecessor` is a checkpoint ID, not a cycle ID.
+The checkpoint must preserve the same complete objective, and at least one
+`inheritance` entry must explain its contribution and remaining limits.
+
+| Field | Exact shape and supported choices |
+| --- | --- |
+| `predecessor` | `null` for an initial cycle, or the string ID of a retained checkpoint. |
+| `inheritance[]` | `{checkpoint_id, assessment_id, use, evidence, assumptions, deduction}`. `assessment_id` is the exact ID saved in that checkpoint, or `null` if it preserved no assessment. `use` is `validated_result`, `failure`, or `unresolved`; `evidence` is a nonempty array of the result/source evidence objects above; `assumptions` is a string array; `deduction` explains the contribution to the complete objective. |
+| `reopening[]` | `{assessment_id, signal_id, reason, evidence}`. Name an actual observed failure in that assessment, explain the changed condition, and supply a nonempty evidence array containing changed original source or output bytes. Use `[]` when no recorded failure needs reopening. |
+
+For example, replace these three fields in a full successor `cycle` payload to
+inherit an assessed failure and address its obstruction. This is a partial edit;
+replace every illustrative ID, hash, source passage, locator and judgment with
+the actual retained records. The result and changed source have the complete
+evidence shapes accepted by the command.
+
+```json
+{
+  "predecessor": "checkpoint-failure-001",
+  "inheritance": [
+    {
+      "checkpoint_id": "checkpoint-failure-001",
+      "assessment_id": "assessment-failure-001",
+      "use": "failure",
+      "evidence": [
+        {
+          "kind": "result",
+          "execution_id": "execution-001",
+          "output_id": "result",
+          "artifact": {
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+            "size": 15,
+            "media_type": "application/json"
+          },
+          "locator": {"kind": "json", "pointer": "/result", "value": {"bound": 9}}
+        }
+      ],
+      "assumptions": ["n is an integer in the stated finite range."],
+      "deduction": "Retain the strict-bound failure while testing the original non-strict objective."
+    }
+  ],
+  "reopening": [
+    {
+      "assessment_id": "assessment-failure-001",
+      "signal_id": "counterexample",
+      "reason": "The newly acquired comparison addresses the recorded strict-bound obstruction.",
+      "evidence": [
+        {
+          "kind": "source",
+          "link": {
+            "version_id": "arxiv:2601.00002v1",
+            "source_id": "SOURCE_ID",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {"kind": "text", "start": 0, "end": 15, "quote": "Source passage."}
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+`validated_result` requires a currently validated inherited assessment and the
+exact result references used by that assessment. Retain all its assumptions.
+An `unresolved` inheritance earns no result credit. For a checkpoint with
+`assessment_id: null`, no recorded output, and no pending admission, its own
+original plan sources and assumptions can support `use: "unresolved"`. When
+outputs exist, cite retained execution evidence. Do not invent an assessment or
+an output to continue an unexecuted or interrupted plan.
+
+For the same strategy, every recorded observed failure needs an applicable
+`reopening` entry. A renamed source, a new locator within old bytes, or a changed
+label is insufficient; the original source or output identity must change and
+the reason must explain how that evidence addresses the failure. The same
+normalized method, test, objective and scope retain their original account and
+limits. A successor ID does not reset charges, erase failures, or reopen an
+exhausted budget. Registering a successor also does not launch it; obtain a
+current admission and binding before execution.
+
+## Assessing unfinished work
+
+`exactory-research example assess` prints a complete-case payload shape. Choose
+the values supported by the actual observations; its `achieved` and `complete`
+values are not defaults for a new assessment. Keep the full original objective,
+the assessed scope, every actual execution, and the remaining obligations.
+
+| Field | Supported values and meaning |
+| --- | --- |
+| `objective_status` | `open`: the complete original objective has unfinished obligations. `achieved`: the assessment claims that the whole objective is established; all current evidence and scope requirements still apply. |
+| `disposition` | `continue`: further work remains on this cycle's branch. `complete`: the branch is claimed complete. `failed`: retain a failed branch and its actual failure assessment. `budget_paused`: retain unfinished work under its resource limit. |
+| `development.alternatives[].disposition` | `pursue`: a useful development remains. `not_useful`: the stated question is not useful for this candidate, with a reason and evidence. `resolved`: the question is substantively resolved, with evidence. `budget_paused`: useful development remains and is paused for its budget. |
+| `development.branches[].disposition` | The same four values as alternatives: `pursue`, `not_useful`, `resolved`, `budget_paused`. Each entry names an actual `cycle_id` and retains its reason and evidence. At readiness, a `resolved` branch requires its own current assessment with `validated_result: true`. |
+
+The top-level `disposition` and the two nested disposition fields use different
+vocabularies. A retained `pursue` or `budget_paused` alternative or branch leaves
+an unmet development obligation. Neither `not_useful` nor `resolved` is a way to
+erase a failed branch, its evidence, or its resource account. Readiness includes
+the candidate's own branch and every other retained cycle.
+
+For an unfinished assessment whose next development has not yet been assessed,
+replace these four fields in the full `assess` payload. This JSON is a partial
+edit, not a standalone command payload; replace its obligation with the actual
+unfinished work and retain accurate values for all other required fields.
+
+```json
+{
+  "remaining_obligations": ["Assess the unexecuted planned test and its result validity."],
+  "objective_status": "open",
+  "disposition": "continue",
+  "development": null
+}
+```
+
+`development: null` is accepted and retained, with
+`development_assessment_missing` still unmet. An unexecuted plan can retain
+`execution_ids: []`, `validity_checks: []`, and a `result` statement explaining
+that no execution result is available. Its `result.evidence` can reference
+actual plan sources without claiming an output. Its planned outcome and
+failure statuses remain `unresolved` when they have not been observed. That
+assessment supplies no validated result or completion credit. When a substantive
+development assessment is available, use the full nested shape from the example:
+`development.strategy` is `generalization`, `weaker_assumptions`, `mechanism`,
+`tightness_limits`, `unification`, `representation_change`, `transfer`,
+`practical_usefulness`, `other`, or `none`. A selected strategy requires a
+nonempty `next_question`; `none` requires `next_question: null`. A useful next
+question remains an obligation before readiness.
+
+Record a valid negative result separately from invalid or missing evidence.
+Validity-check statuses are `passed`, `failed`, or `unresolved`; planned outcome
+and failure-signal statuses are `observed`, `not_observed`, or `unresolved`.
+Observing a scientific failure signal can establish a valid negative result.
+Setting an assessment's `disposition` to `failed` does not by itself establish
+that the underlying result is invalid, and setting it to `complete` does not
+establish readiness. Inspect the resulting obligations and current whole gate.
+
 ## Review, publication, and verification
 
 ```sh

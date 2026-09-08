@@ -175,6 +175,11 @@ bytes with `artifact`. Use the returned plan digest and artifact references in
 `admit`; bind the exact backend, interpreter/version, seed or null-seed reason,
 timeout, input paths, and declared output/usage contract before a launch.
 
+Use the CLI's [successor payload fields](research-cli.md#planning-a-successor)
+for the populated `predecessor`, `inheritance`, and `reopening` objects. Retain
+the checkpoint's actual assessment and evidence, inherited assumptions and
+deduction, and the strategy's original failures, charges, and limits.
+
 ```sh
 exactory-research cycle --file cycle.json --expected-revision REVISION --request-id plan-cycle-001
 exactory-research artifact --file program-artifact.json --expected-revision REVISION --request-id pin-program-001
@@ -209,6 +214,11 @@ stable ID and the next hypothesis. Deepen a promising branch from that checkpoin
 reopen a failed branch only when new evidence addresses its recorded obstruction.
 There is no fixed cycle count. Resource exhaustion and incomplete evidence are
 recorded conditions, not conclusions of success or impossibility.
+
+Use the CLI's [unfinished assessment values](research-cli.md#assessing-unfinished-work)
+when obligations remain. The top-level assessment and nested branch dispositions
+have distinct allowed values. `development: null` preserves an unfinished
+assessment and leaves its development obligation unmet.
 
 ```sh
 exactory-research assess --file assessment.json --expected-revision REVISION --request-id assess-cycle-001
