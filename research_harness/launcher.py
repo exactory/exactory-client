@@ -12,6 +12,7 @@ import time
 # Direct execution must not make this package's http.py shadow stdlib http.
 sys.path[0] = str(Path(__file__).resolve().parents[1])
 from research_harness.execution import _owner
+from research_harness.execution_outputs import seal_outputs
 from research_harness.storage import _canonical
 from research_harness.workspace import json_projection, read_file, strict_json
 
@@ -71,6 +72,7 @@ def run_worker(directory, config_sha256, token, *, handshake=True):
         observed = {"status": status, "exit_code": process.returncode, "duration_s": time.monotonic() - start,
                     "binding_digest": config["binding_digest"], "config_sha256": config_sha256,
                     "actual_argv": config["argv"], "runtime": config["runtime"], "backend": config["backend"]}
+        observed["output_seal"] = seal_outputs(root, relative, config)
         json_projection(root, relative + "/terminal.json", observed)
 
 

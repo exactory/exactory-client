@@ -151,6 +151,9 @@ def run(args):
         if args.expected_revision is not None and args.expected_revision != revision:
             raise ResearchError("stale_revision", "Recovered revision differs from the expected committed revision", {"revision": revision})
         return {"revision": revision, "recovered": True, "scientific_validation": False, "schema_migrated": False}
+    elif args.command in ACQUISITION:
+        existing = find_workspace(root, required=False)
+        store = Store(existing) if existing is not None else Store(root, create=True)
     else:
         root = find_workspace(root)
         store = Store(root)

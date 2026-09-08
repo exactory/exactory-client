@@ -104,3 +104,5 @@ def validate_transition(records, artifacts, previous, proposed):
                      "evaluate": "manuscript", "deposit": "publication", "submit": "deposited", "complete": "submitted"}
     if target in prerequisites:
         require_ready(gate_state(records, artifacts, prerequisites[target]), "entering " + target)
+    if proposed["status"] == "done" and target != source:
+        require_ready(gate_state(records, artifacts, completed[target]), target + " completion")

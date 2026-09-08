@@ -20,6 +20,7 @@ import math
 from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evidence import digest
+from .execution_accounting import require_accounted_usage
 from .graph import obligation
 from .operations import fields, immutable_record, prepared_mutation, strings, text, timestamp
 from .reading import validate_read_evidence
@@ -451,6 +452,7 @@ that run. An idempotent admission response retains its original reservation.
         if value["plan_digest"] != plan["digest"]:
             raise ResearchError("plan_digest_mismatch", "Admit the exact immutable plan the launcher will execute")
         account = records["strategy_account"][plan["strategy_key"]]
+        require_accounted_usage(records, artifacts, plan["strategy_key"])
         _validate_reopening(context, plan["payload"], account)
         if _plan_dependencies(context, plan["payload"]) != plan["dependencies"]:
             raise ResearchError("plan_dependencies_stale", "Plan a current development before running after a source, scope or policy change")
@@ -496,6 +498,7 @@ def validate_admitted_execution(records, artifacts, admission_id):
     context = _Context(records, artifacts)
     context.require_ready()
     account = records["strategy_account"][plan["strategy_key"]]
+    require_accounted_usage(records, artifacts, plan["strategy_key"])
     _validate_reopening(context, plan["payload"], account)
     if _plan_dependencies(context, plan["payload"]) != plan["dependencies"]:
         raise ResearchError("plan_dependencies_stale", "Plan a current development before launching after a source, scope or policy change")

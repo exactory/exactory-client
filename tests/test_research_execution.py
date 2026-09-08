@@ -3,8 +3,10 @@
 import importlib
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
+import tempfile
 from unittest import mock
 
 from development_fixtures import DevelopmentCase, PROGRAM
@@ -114,6 +116,157 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assertIn(b"started", self.artifacts.read(outcome["outputs"][0]["artifact"]))
         self.assertFalse(self.development().readiness_report(self.store)["ready"])
 
+    def wall_time_overrun(self, body, timeout, status):
+        admission = admit_lab(self, body=body, timeout=timeout, usage_unit="wall_seconds",
+                              reserved_units=0.01, max_units=0.1)
+        api = importlib.import_module("research_harness.execution")
+        result = api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision, request_id="wall-time")
+        records = self.store.snapshot()["records"]
+        outcome = records["execution"][records["execution_outcome"][admission["id"]]["execution_id"]]["payload"]
+        account = records["strategy_account"][admission["strategy_key"]]
+        self.assertEqual(outcome["status"], status)
+        self.assertGreater(result["duration_s"], 0.1)
+        self.assertEqual(outcome["usage"]["units"], result["duration_s"])
+        self.assertAlmostEqual(account["charged_units"], result["duration_s"])
+        payload = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
+        payload["id"] = "after-overrun"
+        before = self.store.snapshot()
+        self.assert_error("strategy_budget_exhausted", lambda: self.mutate(self.development().admit_execution, payload))
+        self.assertEqual(self.store.snapshot(), before)
+
+    def test_failed_wall_time_is_measured_and_exhausts_the_account(self):
+        self.wall_time_overrun("import time\ntime.sleep(0.2)\nraise SystemExit(7)\n", 5, "failed")
+
+    def test_timed_out_wall_time_is_measured_and_exhausts_the_account(self):
+        self.wall_time_overrun("import time\ntime.sleep(30)\n", 0.15, "timed_out")
+
+    def legacy_wall_failure(self, *, reserve_following=False, interrupt_before_observation=False):
+        from legacy_execution_fixtures import legacy_execution_writers
+        admission = admit_lab(self, body="import time\ntime.sleep(0.2)\nraise SystemExit(7)\n",
+                              usage_unit="wall_seconds", reserved_units=0.01, max_units=0.1)
+        api = importlib.import_module("research_harness.execution")
+        original_record = api.record_execution
+        original_mutation = api.prepared_mutation
+        legacy = legacy_execution_writers()
+        old = {}
+
+        def retain_pre_fix_outcome(store, payload, **identity):
+            # Reconstruct the former producer's null-usage payload through the
+            # real historical API. The process and pinned terminal are actual.
+            payload["usage"]["units"] = None
+            old.update(payload=payload, identity=identity,
+                       receipt=original_record(store, payload, **identity))
+            if reserve_following:
+                following = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
+                following["id"] = "historically-admitted"
+                self.mutate(legacy.admit_execution, following)
+                self.mutate(legacy.bind_execution, {"admission_id": following["id"], "script": "code/program.py",
+                    "backend": "local", "timeout_seconds": 5, "inputs": [], "usage_unit": "wall_seconds",
+                    "outputs": [{"id": "result", "requirement_id": "measurements", "path": "stdout", "media_type": "text/plain"}]})
+            return old["receipt"]
+
+        def retain_missing_observation(store, operation, *args, **kwargs):
+            if operation == "execution.observe" and interrupt_before_observation:
+                raise OSError("Historical interruption after outcome and before observation")
+            return original_mutation(store, operation, *args, **kwargs)
+
+        with mock.patch.object(api, "record_execution", side_effect=retain_pre_fix_outcome), \
+                mock.patch.object(api, "prepared_mutation", side_effect=retain_missing_observation):
+            if interrupt_before_observation:
+                with self.assertRaisesRegex(OSError, "Historical interruption after outcome and before observation"):
+                    api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                         request_id="historical-failure")
+            else:
+                api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                     request_id="historical-failure")
+        terminal = json.loads((self.root / api._directory(admission["id"]) / "terminal.json").read_bytes())
+        self.assertGreater(terminal["duration_s"], 0.1)
+        before = self.store.snapshot()
+        if interrupt_before_observation:
+            self.assertNotIn(admission["id"], before["records"].get("execution_observation", {}))
+        self.assertEqual(original_record(self.store, old["payload"], **old["identity"]), old["receipt"])
+        self.assertEqual(self.store.snapshot(), before)
+        return admission
+
+    def test_retained_null_usage_blocks_new_admission_without_rewriting_history(self):
+        admission = self.legacy_wall_failure()
+        before = self.store.snapshot()
+        self.assertEqual(before["records"]["strategy_account"][admission["strategy_key"]]["charged_units"], 0.01)
+        following = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
+        following["id"] = "new-after-known-usage"
+        self.assert_error("execution_usage_reconciliation_required", lambda: self.mutate(self.development().admit_execution, following))
+        self.assertEqual(self.store.snapshot(), before)
+
+    def test_retained_null_usage_blocks_an_unstarted_historical_admission(self):
+        admission = self.legacy_wall_failure(reserve_following=True)
+        api = importlib.import_module("research_harness.execution")
+        before = self.store.snapshot()
+        self.assertEqual(before["records"]["strategy_account"][admission["strategy_key"]]["charged_units"], 0.02)
+        self.assert_error("execution_usage_reconciliation_required", lambda: api.launch_execution(self.store,
+            "historically-admitted", expected_revision=self.store.revision, request_id="new-launch-after-known-usage"))
+        self.assertEqual(self.store.snapshot(), before)
+        self.assertNotIn("historically-admitted", before["records"]["execution_claim"])
+
+    def test_unobserved_legacy_outcome_blocks_new_admission(self):
+        admission = self.legacy_wall_failure(interrupt_before_observation=True)
+        before = self.store.snapshot()
+        self.assertEqual(before["records"]["strategy_account"][admission["strategy_key"]]["charged_units"], 0.01)
+        following = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
+        following["id"] = "new-after-unobserved-outcome"
+        self.assert_error("execution_usage_reconciliation_required", lambda: self.mutate(self.development().admit_execution, following))
+        self.assertEqual(self.store.snapshot(), before)
+
+    def test_unobserved_legacy_outcome_blocks_an_unstarted_historical_admission(self):
+        from research_harness.errors import ResearchError
+        admission = self.legacy_wall_failure(reserve_following=True, interrupt_before_observation=True)
+        api = importlib.import_module("research_harness.execution")
+        before = self.store.snapshot()
+        self.assertEqual(before["records"]["strategy_account"][admission["strategy_key"]]["charged_units"], 0.02)
+        try:
+            summary = api.launch_execution(self.store, "historically-admitted",
+                expected_revision=self.store.revision, request_id="new-launch-after-unobserved-outcome")
+        except ResearchError as error:
+            self.assertEqual(error.code, "execution_usage_reconciliation_required")
+        else:
+            self.fail("An unstarted historical admission actually executed: " + json.dumps(summary, sort_keys=True))
+        self.assertEqual(self.store.snapshot(), before)
+        self.assertNotIn("historically-admitted", before["records"]["execution_claim"])
+        self.assertFalse((self.root / api._directory("historically-admitted") / "terminal.json").exists())
+
+    def test_accounted_wall_outcome_recovers_observation_before_new_permission(self):
+        admission = admit_lab(self, body="print('{\"metric\": 7}')\n", usage_unit="wall_seconds",
+                              reserved_units=0.01, max_units=1)
+        api = importlib.import_module("research_harness.execution")
+        original_mutation = api.prepared_mutation
+
+        def stop_before_observation(store, operation, *args, **kwargs):
+            if operation == "execution.observe":
+                raise OSError("Current interruption after accounted outcome")
+            return original_mutation(store, operation, *args, **kwargs)
+
+        with mock.patch.object(api, "prepared_mutation", side_effect=stop_before_observation):
+            with self.assertRaisesRegex(OSError, "Current interruption after accounted outcome"):
+                api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                     request_id="accounted-before-observation")
+        before = self.store.snapshot()["records"]
+        self.assertNotIn(admission["id"], before.get("execution_observation", {}))
+        terminal = json.loads((self.root / api._directory(admission["id"]) / "terminal.json").read_bytes())
+        outcome = before["execution"][before["execution_outcome"][admission["id"]]["execution_id"]]["payload"]
+        self.assertEqual(outcome["usage"]["units"], terminal["duration_s"])
+        self.assertEqual(before["strategy_account"][admission["strategy_key"]]["charged_units"],
+                         max(admission["reserved_units"], terminal["duration_s"]))
+        result = api.reconcile_execution(self.store, {"admission_id": admission["id"]},
+            expected_revision=self.store.revision, request_id="recover-accounted-observation")
+        self.assertTrue(result["ok"])
+        after = self.store.snapshot()["records"]
+        self.assertEqual(after["execution"], before["execution"])
+        self.assertEqual(after["strategy_account"], before["strategy_account"])
+        self.assertIn(admission["id"], after["execution_observation"])
+        following = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
+        following["id"] = "following-accounted-recovery"
+        receipt = self.mutate(self.development().admit_execution, following)
+        self.assertEqual(receipt["result"]["id"], following["id"])
+
     def test_lost_observation_response_reconciles_existing_outcome_once(self):
         admission = admit_lab(self, body="print('{\"metric\": 7}')\n")
         api = importlib.import_module("research_harness.execution")
@@ -148,6 +301,57 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assertEqual(self.store.snapshot(), completed)
         self.assertEqual(json.loads(summary.read_bytes()), json.loads(expected_summary))
         self.assertEqual(log.read_bytes(), expected_log)
+
+    def test_local_terminal_recovery_rejects_changed_and_inserted_output_bytes(self):
+        from research_harness.storage import Store
+        api = importlib.import_module("research_harness.execution")
+        admission = admit_lab(self, body="from pathlib import Path\nPath('results/value.json').write_text('{\"value\": 9}')\nprint('{\"metric\": 9}')\n",
+            outputs=[{"id": "result", "requirement_id": "measurements", "path": "results/value.json", "media_type": "application/json"},
+                     {"id": "late", "requirement_id": "checks", "path": "results/late.json", "media_type": "application/json"}])
+        with mock.patch.object(api, "reconcile_execution", side_effect=OSError("Interrupted before the first outcome observation")):
+            with self.assertRaises(OSError):
+                api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision, request_id="terminal-before-recovery")
+        directory = api._directory(admission["id"])
+        terminal = (self.root / directory / "terminal.json").read_bytes()
+        original = self.store.snapshot()
+        self.assertNotIn("execution_outcome", original["records"])
+        changes = (("work/results/value.json", b'{"value":123456}'), ("stdout", b'{"metric":123456}\n'),
+                   ("stderr", b"Injected diagnostics"), ("work/results/late.json", b'{"passed":true}'),
+                   ("work/results/program.json", b'{"metric":123456}'),
+                   ("work/results/value.json", None), ("stdout", None))
+        for relative, changed in changes:
+            with self.subTest(path=relative, removed=changed is None), tempfile.TemporaryDirectory(dir=self.root.parent) as temporary:
+                copy_root = Path(temporary)
+                shutil.copytree(self.root, copy_root, dirs_exist_ok=True)
+                copied = Store(copy_root)
+                if changed is None:
+                    (copy_root / directory / relative).unlink()
+                else:
+                    (copy_root / directory / relative).write_bytes(changed)
+                self.assertEqual((copy_root / directory / "terminal.json").read_bytes(), terminal)
+                self.assert_error("execution_output_mismatch", lambda: api.reconcile_execution(copied,
+                    {"admission_id": admission["id"]}, expected_revision=copied.revision, request_id="changed-output"))
+                self.assertEqual(copied.snapshot(), original)
+        with tempfile.TemporaryDirectory(dir=self.root.parent) as temporary:
+            copy_root = Path(temporary)
+            shutil.copytree(self.root, copy_root, dirs_exist_ok=True)
+            copied = Store(copy_root)
+            legacy = json.loads(terminal)
+            legacy.pop("output_seal")
+            (copy_root / directory / "terminal.json").write_text(json.dumps(legacy))
+            self.assert_error("execution_output_seal_required", lambda: api.reconcile_execution(copied,
+                {"admission_id": admission["id"]}, expected_revision=copied.revision, request_id="unsealed-terminal"))
+            self.assertEqual(copied.snapshot(), original)
+        # The unchanged original remains recoverable without another process or
+        # reservation, even after the failed recovery attempts on exact copies.
+        identity = {"expected_revision": self.store.revision, "request_id": "unchanged-output"}
+        result = api.reconcile_execution(self.store, {"admission_id": admission["id"]}, **identity)
+        self.assertEqual(result["metric"], {"metric": 9})
+        after = self.store.snapshot()
+        self.assertEqual(after["records"]["strategy_account"], original["records"]["strategy_account"])
+        self.assertEqual(len(after["records"]["execution"]), 1)
+        self.assertEqual(api.reconcile_execution(self.store, {"admission_id": admission["id"]}, **identity), result)
+        self.assertEqual(self.store.snapshot(), after)
 
     def test_dead_claim_can_record_interruption_but_never_launch_again(self):
         admission = admit_lab(self, body="raise RuntimeError('must never launch')\n")
