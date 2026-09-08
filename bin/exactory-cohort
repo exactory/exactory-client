@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """exactory-cohort: freeze the population a study is read against.
 
-One command:
+Commands:
   freeze - compute the cohort definition, from the paper's own fields (no network) or,
            as a fallback, by reading the paper's source metadata
+  collect - acquire every member's original abstract, with durable pages and resume
+  status - show acquisition progress and saved abstract reading obligations
 
 The cohort is the field over the six full calendar months before the paper was
 published. This tool does the date arithmetic and the JSON, so no call site computes
@@ -22,6 +24,10 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import date, timedelta
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from research_harness.errors import ResearchError
 
 _ARXIV_API_URL = "https://export.arxiv.org/api/query"
 _ZENODO_API_URL = "https://zenodo.org/api/records"
@@ -199,6 +205,33 @@ def _count_utf16_units(text: str) -> int:
     return len(text.encode("utf-16-le", "surrogatepass")) // 2
 
 
+def _run_collect(args: argparse.Namespace) -> None:
+    from research_harness.acquisition import collect_cohort, resume_cohort
+    from research_harness.storage import Store
+
+    if args.definition:
+        try:
+            with Path(args.definition).open(encoding="utf-8") as stream:
+                definition = json.load(stream)
+        except (OSError, ValueError, UnicodeError) as error:
+            raise ResearchError("invalid_input", "Cannot read the cohort definition JSON file") from error
+        store = Store(Path(args.workspace), create=True)
+        result = collect_cohort(store, definition, request_id=args.request_id,
+                                expected_revision=args.expected_revision, max_requests=args.max_requests)
+    else:
+        store = Store(Path(args.workspace))
+        result = resume_cohort(store, args.resume, request_id=args.request_id,
+                              expected_revision=args.expected_revision, max_requests=args.max_requests)
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+
+
+def _run_status(args: argparse.Namespace) -> None:
+    from research_harness.acquisition import collection_status
+    from research_harness.storage import Store
+
+    print(json.dumps(collection_status(Store(Path(args.workspace)), args.collection_id), indent=2, ensure_ascii=False))
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="exactory-cohort", description=__doc__,
                                      allow_abbrev=False)
@@ -233,12 +266,32 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     freeze.set_defaults(handler=_run_freeze)
 
+    collect = commands.add_parser("collect", allow_abbrev=False,
+                                  help="Save every cohort abstract; a request budget pauses collection.")
+    collect.add_argument("--workspace", default=".", help="Research evidence workspace.")
+    population = collect.add_mutually_exclusive_group(required=True)
+    population.add_argument("--definition", help="JSON file with the four fields returned by freeze.")
+    population.add_argument("--resume", help="Resume this collection ID with a new request ID.")
+    collect.add_argument("--request-id", required=True, help="Stable operation ID; replay performs no new requests.")
+    collect.add_argument("--expected-revision", type=int, required=True, help="Revision from status, or 0 for a new workspace.")
+    collect.add_argument("--max-requests", type=int, help="Maximum HTTP attempts including redirects/retries; 0 only admits and pauses.")
+    collect.set_defaults(handler=_run_collect)
+
+    status = commands.add_parser("status", allow_abbrev=False, help="Read collection progress and saved abstract paths.")
+    status.add_argument("--workspace", default=".", help="Research evidence workspace.")
+    status.add_argument("--collection-id", help="Show one collection, otherwise show all collections.")
+    status.set_defaults(handler=_run_status)
+
     return parser
 
 
 def main() -> None:
     args = _build_parser().parse_args()
-    args.handler(args)
+    try:
+        args.handler(args)
+    except ResearchError as error:
+        print(json.dumps({"error": error.as_dict()}, ensure_ascii=False), file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

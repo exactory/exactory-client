@@ -1,0 +1,20 @@
+{
+  "status": "ok",
+  "message-type": "work",
+  "message-version": "1.0.0",
+  "message": {
+    "DOI": "10.1234/example",
+    "title": ["An authored registry work"],
+    "type": "journal-article",
+    "author": [{"given": "A.", "family": "Researcher"}],
+    "published": {"date-parts": [[2026, 1]]},
+    "published-online": {"date-parts": [[2025, 12, 30]]},
+    "abstract": "<jats:p>A registry abstract.</jats:p>",
+    "reference-count": 3,
+    "reference": [
+      {"key": "r1", "DOI": "10.4567/known"},
+      {"key": "r2", "unstructured": "A laboratory notebook, unpublished, 1991."}
+    ],
+    "link": []
+  }
+}

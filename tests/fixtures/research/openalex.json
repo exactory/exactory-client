@@ -1,0 +1,17 @@
+{
+  "id": "https://openalex.org/W123",
+  "doi": "https://doi.org/10.1234/example",
+  "ids": {
+    "openalex": "https://openalex.org/W123",
+    "doi": "https://doi.org/10.1234/example"
+  },
+  "title": "An authored registry work",
+  "type": "article",
+  "publication_date": "2026-01-03",
+  "updated_date": "2026-09-01T00:00:00",
+  "authorships": [{"author": {"display_name": "A. Researcher"}}],
+  "abstract_inverted_index": {"An": [0], "original": [1], "abstract.": [2]},
+  "referenced_works": ["https://openalex.org/W456", "https://openalex.org/W456"],
+  "best_oa_location": null,
+  "locations": []
+}
