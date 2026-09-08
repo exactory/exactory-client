@@ -185,6 +185,132 @@ Replay stores them in `service.computation_amendments` keyed by node ID and
 `service.run_interpretations` keyed by run ID. These are projections of the same
 event log, not another task database, scheduler or event store.
 
+## Mandatory strategy reassessment
+
+After a recorded research signal, the next research move requires a reviewed
+assessment of the current objective-wide context. Signals include checkpoints,
+acceptances and their invalidation, acknowledged problem changes, journal failure
+observations, terminal runs and their interpretations, native strategy failures,
+and retreats. A changed residual-obligation set or admitted strategy inventory
+also invalidates an existing assessment. These are planning signals. A hypothesis,
+inconclusive run or reassessment grants no proof credit, budget renewal, or reset
+of the nonprogress counter.
+
+Run `search strategy-context --json` to obtain the current immutable context and
+`context_digest`. It includes `evidence`, keyed by stable evidence IDs,
+`strategies`, `remaining_obligation_ids`, and `planning_priorities` (selected
+routes, obligation orders, deferred node IDs and route alternative orders).
+The response also includes
+`plan_bindings`, `native_eligibility` (each strategy's `eligible` and `defects`),
+`stale_plan_node_ids`, `required`, `policy_enabled`, `upgrade_required`, and the
+latest `assessment_id` and `assessment_digest`. This command is read-only. It
+neither reserves work nor resumes a paused objective. `search status` reports
+assessment freshness against recorded evidence; use `strategy-context` to check
+mutable native plans too.
+
+Update relevant precondition answers from the current problem, preserving native
+failure records. Run `plan` for the current problem and prepare a valid ranking
+when needed. Study new methods and admit new scopes through their normal reviewed
+proposals. Then prepare this closed record:
+
+```text
+reassess --spec FILE:
+  {assessment: StrategyAssessment, review: ResultReview}
+StrategyAssessment = {
+  context_digest: SHA256(CurrentContext), author: Provenance,
+  what_changed: Text, remaining_obligation_ids: [ObligationID],
+  considered_failure_ids: [EvidenceID],
+  assessments: [{node_id: NodeID, strategy: Text,
+    disposition: "continue"|"revise"|"defer"|"retire",
+    reason: Text, next_action: Text, evidence_ids: [EvidenceID],
+    failure_resolutions: [{failure_id: EvidenceID, changed_input: Text,
+                          evidence_ids: [EvidenceID]}]}],
+  plan_bindings: {NodeID: {problem_digest: Digest, preconditions_digest: Digest,
+                         openings_digest: Digest, ranking_digest: Digest}},
+  strategy_order: [{node_id: NodeID, strategy: Text}],
+  next_hypotheses: [{statement: Text, evidence_ids: [EvidenceID],
+                     success_criterion: Text, failure_signal: Text}],
+  no_new_hypothesis_reason: Text|null
+}
+```
+
+Classify every current nonterminal admitted strategy exactly once, including
+those no longer promising. Cite context evidence for every decision and hypothesis
+when evidence exists. Preserve exactly the current residual obligations and
+explicitly consider every retained native failure. `strategy_order` contains
+exactly the continuing strategies, in the reviewed execution order; it can replace
+the previous active node with a better alternative. A later `replan` that changes
+route or obligation priorities or node deferrals invalidates this assessment.
+The next review must consider those recorded priorities; once current, its global
+strategy order governs new research subject to native prerequisites, readiness
+and deferrals. An administrative replan that leaves those choices unchanged does
+not invalidate it. `plan_bindings` contains
+exactly the continuing nodes, using the digests returned by `strategy-context`.
+Their native plans must be current, and each continuing strategy must be legal
+under its studies, opening ranking and existing walk. The native problem digest
+uses the harness's JSON encoding; copy it from the response rather than recomputing
+it with the controller's blob encoding.
+
+`revise`, `defer`, and `retire` exclude a strategy from new research without
+deleting its history, obligations, accounts or local reporting. Record either
+new hypotheses with checkable success and failure criteria, or a nonempty
+`no_new_hypothesis_reason` and an empty hypothesis list. Continuing an existing
+method requires an explicit justification against the current evidence; inventing
+a new method for every signal is not required.
+
+Native failures are retained from controlled receipts and node observations,
+including the last failure output when available. Clearing a mutable note cannot
+restore a natively failed strategy in the same node. A reviewed successor using
+that method must address each related failure with a concrete changed input and
+checkpoint, acceptance, journal or run evidence recorded after the failure.
+Related failures include logical ancestors, the same resource-account lineage,
+and nodes with the same claim. A new slug or sibling alone is insufficient.
+
+Obtain a separate reviewer with a fresh context. Give the reviewer the original
+claim, full current context, previous assessments and retained failures, referenced
+immutable evidence, proposed assessment, studies, and current plans. Ask whether
+each disposition follows from what changed, whether any failed method is being
+repeated without its obstruction being addressed, and whether the next hypotheses
+can advance the residual claim. Use `ResultReview` with
+`subject_digest = SHA256(StrategyAssessment)` and
+`claim_digest = SHA256(Contract.original_claim)`. All five findings are required.
+The reviewer must differ from both the assessment author and every current
+admission author in actor and attestation IDs. The harness checks record coverage,
+bindings and declared independence; it does not authenticate identities or decide
+mathematical relevance from prose. Do not fabricate a reviewer identity.
+
+Submit the reviewed record with the current revision and a unique request ID.
+The service freezes the context, assessment, review and native plans, and records
+an `assessment-000001` style ID with its predecessor. Replaying the original
+request returns its original result and cannot clear later progress. Read
+`search next --json` again after submission. An old assessment or a new `replan`
+alone cannot authorize execution.
+
+`reassess_strategies` takes priority over new research. Pending execution,
+reconciliation, journal acknowledgement, required interpretation, result
+verification and acceptance, due local cash-out, and audited root completion
+retain their existing priority. Reassessment itself requires pending work to be
+reconciled and terminal computations interpreted. `begin` binds purpose, context,
+assessment and plan digests. A generic producer rechecks them at reservation and
+launch, so an old pending move cannot run another producer after a new result.
+Input-reviewed certificate and Lean verification can finish evidence under their
+existing contracts. A verification-purpose reservation cannot start a generic
+producer. Changes to native planning files after review or reservation are refused
+before producer execution.
+
+New controllers enable this policy in their initialization transaction. Old
+event histories retain their original replay semantics. The current service
+previews the upgrade read-only and activates it with the first successful new
+`begin` or `reassess`; rejected requests commit no upgrade prefix. Historical
+journal observations are recovered from their frozen acknowledged bytes. New
+producer calls check research freshness even while finishing a historical
+reservation. Existing recovery and result verification remain available.
+
+`SEARCH_TREE.md` and each `LINEAGE.md` retain the assessment sequence, predecessor
+IDs, snapshot links, decisions, evidence and failure references, and hypotheses.
+They preserve the previous investigation and checkpoint sections. They are
+generated views; the event log remains authoritative.
+
 ## Metered execution and native integration
 
 The four-field document and event envelopes below remain unchanged. Execution
@@ -300,15 +426,19 @@ The closed execution operation payloads are:
 ```text
 move_reserved: {reservation: MoveReservation}
 MoveReservation = {id, node_id, account_id, move, pass, strategy, entry, walk,
-  trigger_features, step_cites, problem_digest, journal_prefix_digest}
+  trigger_features, step_cites, problem_digest, journal_prefix_digest,
+  purpose: "research"|"verification", strategy_context_digest,
+  assessment_digest: Digest|null, planning_digest}
 journal_intended: {reservation_id, before_digest, after_digest, problem_digest,
+  journal_line: NativeJournalLine,
   problem_transition?: {before: NativeProblem, after: NativeProblem,
     line: NativeJournalLine}}
 journal_acknowledged: {node_id, move, reservation_id,
   journal_prefix_digest, problem_digest}
 run_reserved: {run: RunReservation}
 RunReservation = {id, node_id, account_id, reservation_id, kind, input_digest,
-  spec_digest, task, computation_digest, cwd, snapshot_root, output_root, commands, timeout_seconds,
+  spec_digest, task, computation_digest, strategy_context_digest,
+  cwd, snapshot_root, output_root, commands, timeout_seconds,
   environment, threads, expected_outputs, dependency_enumeration,
   executable_bindings, reserved_units, token, requested_declaration,
   requested_type_digest, toolchain_digest, toolchain_inventory_digest,
@@ -324,6 +454,14 @@ PathDigest = {path, digest}
 Inspection = {printed_type_digest, source_digest,
   declaration_axioms: [Text], correspondence_axioms: [Text]}
 ```
+
+New service operations always include the strategy fields above. Historical
+move reservations can omit the four fields from `purpose` through
+`planning_digest` together, historical run reservations can omit
+`strategy_context_digest`, and historical journal intents can omit `journal_line`.
+These legacy shapes preserve original replay; they provide no public bypass for
+new research. A present journal line is checked against the reserved entry and
+the frozen appended bytes, and must equal the transition line when one exists.
 
 The authoritative run adds `status: reserved`, `identity: null`, zero started and
 charged units, and null result/termination on reservation, then retains lifecycle
@@ -372,7 +510,9 @@ substitute another run's plausible result. Conflicting accepted path versions ar
 reported explicitly.
 
 Native non-journal operations use `native_intended` with exactly
-`{id,node_id,command,args_digest,pre_digest,output_paths,ownership_digest}`. The pinned pre/post
+`{id,node_id,command,args_digest,pre_digest,output_paths,ownership_digest,strategy}`.
+`strategy` is the failed method for `fail` and null for other commands; historical
+intents may omit it. The pinned pre/post
 snapshot blob is `{files:[{path,digest}]}` and the args blob contains the original
 native parsed arguments except its Python callable. Native success writes a
 durable receipt before acknowledgement. `native_acknowledged` is exactly
@@ -470,8 +610,10 @@ Supported events and exact payloads:
 | `objective_completed` | `{"closure": Closure, "digest": SHA256(Closure)}` |
 | `node_facts_recorded` | `{"facts": NodeFacts}` |
 | `node_retreated` | `{"retreat": Retreat}` |
-| `replan_recorded` | `{"route_orders": [RouteOrder], "progress_acceptance_ids": [ID], "reason": Text}` |
+| `replan_recorded` | `{"route_orders": [RouteOrder], "progress_acceptance_ids": [ID], "reason": Text}`, optionally also `"obligation_orders": [ObligationOrder]` and/or `"deferred_node_ids": [NodeID]` |
 | `control_recorded` | `ControlInput` |
+| `strategy_policy_enabled` | `{version: 1, journal_observations: [{reservation_id: ID, line: AcknowledgedJournalLine}]}` |
+| `strategies_reassessed` | `{assessment: StrategyAssessment, review: ResultReview, digest: SHA256(StrategyAssessment)}` |
 
 Digests use `SHA256(canonical_bytes(record))`. Canonical JSON is sorted-key,
 compact, UTF-8, finite JSON, with Unicode preserved. Records are inline in the
@@ -1115,6 +1257,7 @@ Retreat = {
   abandoned_route_ids: [RouteID], abandoned_assumption_ids: [ID]
 }
 RouteOrder = {route_id: RouteID, alternative_order: [NodeID], selected: Boolean}
+ObligationOrder = {obligation_id: ObligationID, alternative_order: [NodeID]}
 ```
 
 Retreat requires a declared predicate that has fired: account move/run limits,
@@ -1126,7 +1269,53 @@ all accounts and historical records. Selection then tries admitted alternatives
 at the nearest ancestor before returning to root traversal.
 
 Replan preserves accounts and changes only committed alternative/selected-route
-order and round accounting. No usable new progress increments the objective round
+order, explicit research deferrals and round accounting. Its optional `obligation_orders` list orders direct
+alternatives even when no route has their obligation as its conclusion. Each
+entry names an existing obligation and distinct already-admitted, non-standalone
+nodes targeting that exact obligation. Unknown references, duplicate obligation
+entries and extra fields are rejected. An empty `alternative_order` clears that
+obligation's explicit preference; an omitted `obligation_orders` field preserves
+existing preferences. These preferences precede per-route alternative order and
+stable creation order during traversal. They never bypass readiness, active-work
+priority, pending execution, review/closure priority, pause, budget, studied-method
+admission or native entry validation. No failure, retreat, route or proof fact is
+created. The existing event log derives the preference; no stored history is
+rewritten. Older records replay with no direct preference. Readers lacking this
+extension reject new records containing the field rather than silently selecting
+a different frontier, so retain a compatible installed reader once it is used.
+
+The optional `deferred_node_ids: [NodeID]` field supplies the complete desired
+set excluded from new research selection. Omission retains the previous set;
+`[]` clears it and restores ordinary frontier selection. IDs must be distinct,
+known, reviewed main or coverage investigations with status exactly `admitted`.
+An active node, a node with any historical move or run, or a node with observed
+result or cash-out work cannot be deferred. Any pending move or reserved,
+launched or indeterminate run prevents setting or clearing this field.
+
+The filesystem service holds the existing transaction and per-node journal
+ownership through validation and commit. It checks every requested node's native
+journal is present and empty, no native finish exists, and current `observe_node`
+facts contain no result or cash-out action. Nonempty or inconsistent records are
+refused without rewriting them. Existing native-intent and filesystem-effect
+recovery guards still apply. Caller-supplied NodeFacts cannot authorize deferral;
+the reducer independently revalidates state-level eligibility on replay.
+
+Deferral is not a lifecycle transition, failure, retreat, proof acceptance or
+route abandonment. It preserves claims, residual obligations, evidence, retreat
+history, accounts, usage and resource limits. It neither suspends descendants nor
+adds execution authority. Pause, focus, prerequisite, budget, result and root
+closure priorities remain in force; normal frontier, studied-method and native
+entry checks still govern `begin`. It earns no progress credit or refund.
+Invalid or stale requests and conflicting request IDs commit no event prefix;
+replaying the same request consumes one event and one round in total.
+
+Generated SEARCH_TREE.md and per-node LINEAGE.md display deferral alongside the
+unchanged lifecycle, claim and residual information. Old events replay with an
+empty deferral set. Readers without this extension reject new events containing
+the field, so retain a compatible patched reader across plugin upgrades once
+deferral has been used.
+
+No usable new progress increments the objective round
 count; three such rounds durably pause. New usable accepted progress resets the
 round counter only once per mathematical progress identity. New checkpoint IDs,
 review prose, hypothesis records, and rerun bytes do not reset it. Only explicit
@@ -1187,13 +1376,16 @@ without reusing one identifier for distinct observed deliveries.
 {kind: "finalize_root", outcome: "proof" | "counterexample", acceptance_ids: [AcceptanceID]}
 {kind: "local_cashout", node_id: NodeID, step: CashoutAction}
 {kind: "execute_node", node_id: NodeID}
+{kind: "execute_node", node_id: NodeID, strategy: Text}
+{kind: "reassess_strategies", context_digest: Digest, previous_assessment_id: ID|null}
 {kind: "retreat", node_id: NodeID, criterion: RetreatCriterion}
 {kind: "replan", round: PositiveInteger, obligation_ids: [ObligationID]}
 ```
 
 Priority is pause/state errors/focus/live execution, pending reconciliation,
 produced-result verification/snapshot/acceptance, root finalization, due local
-cash-out, active main work and its continuation, waiting prerequisites, nearest
+cash-out, required strategy reassessment and reviewed strategy selection, active
+main work and its continuation when no assessment exists, waiting prerequisites, nearest
 ancestor alternative, root-route traversal, and bounded replanning. A successful
 B can select ready C without any active parent. Local cash-out remains possible
 after research exhaustion. New verification requires a current account and
@@ -1211,9 +1403,14 @@ a current account or a rerun. Stable creation IDs break otherwise equal choices.
 Derived control fields are `nonprogress_replans`, `progress_fingerprints`,
 `stop_count`, `stop_deliveries` (delivery ID to original accounting decision), `summary_issued`,
 `stop_decision`, `pause_reason`, `focus`, `focus_record`, `state_error`, `active_node_id`,
-`retreat_node_id`, `pending_moves`, `node_facts`, `selected_routes`, `closure`,
+`retreat_node_id`, `pending_moves`, `node_facts`, `selected_routes`, `obligation_orders`, `deferred_node_ids`, `closure`,
 `main_external_block`, `side_interval`, `resume_record`, `resume_ids`,
-`side_instruction_ids`, and `retreats`. All live in the single replayed state.
+`side_instruction_ids`, `retreats`, and `strategy_refresh`. All live in the single replayed state.
+`strategy_refresh` contains policy activation, immutable assessment history,
+retained failures and event ordinals for planning evidence.
+`obligation_orders` maps obligation IDs to their committed node-order lists and
+starts empty. `deferred_node_ids` is an initially empty list of investigations
+excluded by the ready predicate; only an explicit replan field replaces it.
 Node-fact entries add derived `suspended: Boolean`; retreat may create an entry
 containing only that suspension field before service facts arrive. Initial nullable
 references are null, collections empty, focus focused, counters zero, and initial
@@ -1259,11 +1456,12 @@ Public command specs are closed records:
 | adopt | `{mappings: [ImportMapping], inputs: [Input]}` |
 | retreat ID | `Retreat` without `node_id` |
 | replan | The documented `replan_recorded` payload |
+| reassess | The reviewed record under [Mandatory strategy reassessment](#mandatory-strategy-reassessment) |
 | focus | `{focus: "focused"|"ambiguous"|"unrelated", provenance: Provenance, session_id: Text}` |
 | pause, resume, hook-stop | The respective `ControlInput` without `action` |
-| audit, render, status, next | `{}`; no spec file |
+| audit, render, status, next, strategy-context | `{}`; no spec file |
 
-`status` and `next` are read-only and need no revision or request ID.
+`status`, `next`, and `strategy-context` are read-only and need no revision or request ID.
 Every other public command uses the current `--expected-revision` and a unique
 `--request-id`. Commands whose table row defines a nonempty spec require
 `--spec FILE`; `admit` accepts an optional empty spec and `reconcile` an optional

@@ -35,10 +35,11 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
-Version 0.34.2 records validated in-move problem changes and coordinates journal
-writes with recovery. It also adds reviewed recovery for a narrowly defined
-interrupted legacy rank.
-Read the [release and upgrade notes](docs/releases/0.34.2.md)
+Version 0.35.0 requires a reviewed reassessment of all current mathematical
+strategies after progress, failed attempts, or changed planning inputs before
+more research can start. It preserves failed-method history and supports
+explicit investigation priorities and deferrals.
+Read the [release and upgrade notes](docs/releases/0.35.0.md)
 before updating a waiting agent or adopting an existing attack. An update does
 not resume paused research or reset its budget.
 

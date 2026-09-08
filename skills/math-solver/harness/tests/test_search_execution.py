@@ -13,18 +13,18 @@ from tests.search_execution_support import admit_workspace, begin_spec, invoke, 
 
 
 class SearchExecutionTests(WorkspaceTest):
-    def test_new_pass_requires_replanning_before_reservation_when_problem_changed(self):
-        import attack
+    def test_problem_progress_requires_reassessment_before_the_next_pass(self):
         invoke(self.controller, "begin", begin_spec())
         self.assertEqual(self.run_cli("journal", "add", self.slug, "--json", json.dumps(make_move(1)))[0], 0)
+        invoke(self.controller, "begin", begin_spec())
         problem = self.read_json("problem.json")
         problem["shape"]["objects"] = "The same exact claim with a refined object description"
         self.write_json("problem.json", problem)
-        invoke(self.controller, "begin", begin_spec())
         self.assertEqual(self.run_cli("journal", "add", self.slug, "--json", json.dumps(make_move(2, problem_changed=True)))[0], 0)
-        with self.assertRaises(attack.ValidationError) as caught:
+        self.assertEqual(self.run_cli("plan", self.slug)[0], 0)
+        with self.assertRaises(SearchError) as caught:
             invoke(self.controller, "begin", dict(begin_spec(), **{"pass": 2}))
-        self.assertIn("run plan before pass 2", str(caught.exception))
+        self.assertEqual(caught.exception.code, "strategy_reassessment_required")
         self.assertEqual(self.controller.status()["control"]["pending_moves"], [])
 
     def setUp(self):

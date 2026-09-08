@@ -55,6 +55,16 @@ updated snapshots. The admitted claim, original reservation and budget remain
 unchanged. See [JOURNAL_TRANSITIONS.md](JOURNAL_TRANSITIONS.md) for journal
 ownership, interrupted writes, and exact-preimage recovery of older reservations.
 
+Managed research also enforces
+[strategy reassessment](../SEARCH.md#mandatory-strategy-reassessment) after new
+recorded evidence or failures. `search strategy-context --json` exposes the current
+basis and native plan defects. `search reassess --spec FILE` records the complete
+assessment and independent review. New moves and producers require that current
+assessment, including producers launched under an older reservation. Reconciliation,
+interpretation, reviewed verification, cash-out and root closure retain priority.
+Generated search-tree and lineage views preserve the assessment sequence and
+failures. Neither an assessment nor a hypothesis resets an account.
+
 ## Test
 
 From the plugin root:

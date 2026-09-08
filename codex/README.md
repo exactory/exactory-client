@@ -34,6 +34,15 @@ controlled frozen run or native verification route described in the shared
 `SEARCH.md`. A local finish, literature hit, run result, or journal close is not
 root acceptance.
 
+After new research evidence, `search next` can require `reassess_strategies`.
+Use the read-only `search strategy-context` output to review all current methods
+and retained failures, obtain an independent assessment review with a fresh
+context, and submit `search reassess` before starting more research. The exact
+schema and recovery priorities are in the shared
+`SEARCH.md#mandatory-strategy-reassessment`. Old execution reservations do not
+authorize repeated producers after progress, and reassessment does not reset
+budgets or grant proof credit.
+
 The current early-release interface has durable pause and controlled deadlines,
 but no immediate owned-job cancellation, typed local-package/literature receipts,
 or automatic parent progress report. Do not invent those commands or infer that a

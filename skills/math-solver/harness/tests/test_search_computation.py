@@ -310,6 +310,8 @@ class ComputationBasisTests(WorkspaceTest):
         step = workspace / "deterministic" / "job"
         step.mkdir()
         (step / "job.py").write_text("from pathlib import Path\nPath(" + repr(str(marker)) + ").touch()\n")
+        from tests.strategy_refresh_support import reassess_fixture
+        reassess_fixture(self.controller, {(node["id"], OPENING)})
         invoke(self.controller, "begin", begin_spec(), node["id"])
         return node, marker, command_spec(workspace, [sys.executable, "job.py"])
 
@@ -504,8 +506,10 @@ class ComputationTests(WorkspaceTest):
         self.assertEqual(state["proof_status"], "open")
         with self.assertRaises(SearchError):
             invoke(self.controller, "interpret", spec, run["id"])
-        self.launch_again(node)
-        self.assertEqual(self.controller.status()["totals"]["used_runs"], 2)
+        with self.assertRaises(SearchError) as caught:
+            self.launch_again(node)
+        self.assertEqual(caught.exception.code, "strategy_reassessment_required")
+        self.assertEqual(self.controller.status()["totals"]["used_runs"], 1)
         self.assertEqual(len(self.controller.status()["reviews"]), 1)
 
     def test_changed_result_or_contract_cannot_be_interpreted(self):

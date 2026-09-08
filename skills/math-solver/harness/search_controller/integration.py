@@ -84,7 +84,8 @@ def audit_work(controller, state, node, content):
     proposal = state["proposals"][node["proposal_id"]]
     s.require(content.get_blob(proposal["digest"]) == proposal["record"], "Admission proposal changed", "digest_mismatch")
     proposal_inputs(proposal["record"], content)
-    audit_admission(controller.root, state, proposal["record"], content)
+    audit_admission(controller.root, state, proposal["record"], content,
+                    execution_account_id=node["account_id"])
     for identity in node["admission"]["review_ids"]:
         review = state["reviews"][identity]
         s.require(content.get_blob(review["digest"]) == review["record"], "Admission review changed", "digest_mismatch")
@@ -122,13 +123,26 @@ def build_begin(controller, state, spec, target, content):
     if defects:
         raise attack.ValidationError(defects)
     digest = attack.compute_problem_digest(problem)
+    from .strategy_refresh import assessment_status, require_research
+    from .strategy_refresh_io import plan_binding, audit_research_plans
+    from .scheduler import next_action
+    action = next_action(state)
+    purpose = "verification" if action == {"kind": "prepare_result", "node_id": target, "step": "verification"} else "research"
+    binding = plan_binding(controller, node)
+    if purpose == "research":
+        require_research(state, target, spec["strategy"], digest, s.digest(binding))
+        audit_research_plans(controller, state)
+        s.require(attack.read_json(workspace / "openings.json")["problem_digest"] == digest,
+                  "Run plan for the current problem before beginning another research entry", "strategy_plan_stale")
     baseline = moves[-1]["problem_digest"] if moves else attack.read_json(workspace / "openings.json")["problem_digest"]
     defects = list(attack.find_problem_change_defects(dict(planned, problem_changed=digest != baseline), moves, budget, workspace, problem))
     if defects:
         raise attack.ValidationError(defects)
     return dict(planned, id="move-{}-{}".format(target, len(moves) + 1), node_id=target,
                 account_id=account["id"], problem_digest=pin_problem(content, problem),
-                journal_prefix_digest=content.put_artifact(raw))
+                journal_prefix_digest=content.put_artifact(raw), purpose=purpose,
+                strategy_context_digest=assessment_status(state)["context_digest"],
+                assessment_digest=assessment_status(state)["assessment_digest"], planning_digest=s.digest(binding))
 
 
 def internal_operation(controller, command, request_id, build):
@@ -195,7 +209,7 @@ def record_journal_intent(context, args):
         after = raw + (json.dumps(line) + "\n").encode("utf-8")
         payload = {"reservation_id": reservation["id"],
             "before_digest": reservation["journal_prefix_digest"], "after_digest": content.put_artifact(after),
-            "problem_digest": problem_digest}
+            "problem_digest": problem_digest, "journal_line": line}
         source = getattr(args, "problem_before", None)
         before = None
         if source is not None or problem_digest != reservation["problem_digest"]:
@@ -292,6 +306,7 @@ def begin_native_intent(controller, node, args):
         current = reference(state["nodes"], node["id"], "native producer")
         return [{"kind": "native_intended", "payload": {"id": identity, "node_id": current["id"],
             "command": args.command, "args_digest": content.put_blob(arguments),
+            "strategy": args.strategy if args.command == "fail" else None,
             "pre_digest": content.put_blob(native_snapshot(controller, current, content)), "output_paths": outputs,
             "ownership_digest": content.put_blob(owner)}}]
     try:

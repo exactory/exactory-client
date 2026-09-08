@@ -326,12 +326,16 @@ class JournalRecordTest(AdmittedWorkspaceTest):
 
     def test_accepts_problem_changed_true_with_a_changed_problem(self):
         self.add(make_move(1))
+        from tests.search_execution_support import begin_spec, invoke
+        invoke(self.controller, "begin", begin_spec())
         self.set_problem(shape={"objects": "finite sets of integers"})
         self.assertEqual(self.add(make_move(2, problem_changed=True))[0], 0)
         self.assertEqual(self.journal()[1]["problem_digest"], digest_of(self.read_json("problem.json")))
 
     def test_a_new_pass_needs_a_plan_over_the_changed_problem(self):
         self.add(make_move(1))
+        from tests.search_execution_support import begin_spec, invoke
+        invoke(self.controller, "begin", begin_spec())
         self.set_problem(shape={"objects": "finite sets of integers"})
         self.add(make_move(2, problem_changed=True))
         self.assertEqual(

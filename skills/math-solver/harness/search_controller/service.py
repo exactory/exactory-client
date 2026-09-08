@@ -30,6 +30,7 @@ class Controller:
         state["freshness"] = {"status": "unchecked", "failures": {}}
         from .execution import process_observations
         state["process_observations"] = process_observations(state)
+        from .strategy_refresh import assessment_status
         if full_audit:
             failures = audit_state(self.root, state, self.store)
             state["freshness"] = {"status": "failed" if failures else "fresh", "failures": failures}
@@ -37,6 +38,7 @@ class Controller:
                 from .proof import invalidate_evidence
                 invalidate_evidence(state, {"acceptance_ids": sorted(failures), "reason": "Evidence audit failed",
                                             "provenance": self.provenance("audit")})
+        state["strategy_assessment"] = assessment_status(state)
         return state
 
     @staticmethod
@@ -46,7 +48,7 @@ class Controller:
 
     def command(self, name, spec, expected_revision, request_id, target=None, *, workspace_root=None, hook_session=None):
         s.require(isinstance(spec, dict), "Command spec must be an object")
-        if name in {"status", "next"}:
+        if name in {"status", "next", "strategy-context"}:
             s.require(set(spec) <= {"session_id", "focus_request_id", "objective_id", "contract_digest"}, "Unknown read-only validation field")
             state = self.status()
             self._validate_routing_identity(state, spec)
@@ -54,7 +56,10 @@ class Controller:
                 from .discovery import validate_session
                 if not validate_session(state, spec["session_id"], spec.get("focus_request_id")):
                     return {"kind": "handoff", "reason": "Explicit matching session focus is required; run search focus"}
-            return state if name == "status" else next_action(state)
+            if name == "status":
+                return state
+            from .strategy_refresh_io import describe_context, effective_next_action
+            return describe_context(self, state) if name == "strategy-context" else effective_next_action(self, state)
         s.integer(expected_revision)
         s.text(request_id)
         if name not in {"admit", "accept", "retreat", "checkpoint", "begin", "run", "amend-computation", "interpret"}:
@@ -90,7 +95,8 @@ class Controller:
             s.require(target is None and expected_revision == 0, "Initialization requires revision zero")
             contract = spec["contract"]
             initial_state(contract, "objective-000001")
-            payload = dict(identity, operations=[{"kind": "discovery_recorded", "payload": routing}], effects=[])
+            payload = dict(identity, operations=[{"kind": "discovery_recorded", "payload": routing},
+                {"kind": "strategy_policy_enabled", "payload": {"version": 1, "journal_observations": []}}], effects=[])
             event = {"sequence": 1, "request_id": request_id, "kind": "service_operation", "payload": payload}
             apply_event(initial_state(contract, "objective-000001"), event)
             self.store.initialize(contract, "objective-000001", event)
@@ -135,7 +141,8 @@ class Controller:
         if name == "hook-stop":
             from .discovery import validate_session
             prior = old["control"]["stop_decision"]
-            action = next_action(state)
+            from .strategy_refresh_io import effective_next_action
+            action = effective_next_action(self, state)
             response["decision"] = ({"kind": "continue", "action": action}
                 if prior["kind"] == "continue" and action["kind"] not in {"paused", "resolved", "handoff", "blocked", "execution_pending"}
                 else prior if built and event["sequence"] == state["revision"] else {"kind": "allow_stop"})
@@ -163,9 +170,25 @@ class Controller:
         operations, effects = [], []
         def emit(kind, value):
             operations.append({"kind": kind, "payload": value})
+        if name in {"begin", "reassess"} and not state["control"]["strategy_refresh"]["enabled"]:
+            from .strategy_refresh_io import policy_payload
+            from .strategy_refresh import enable_policy
+            activation = policy_payload(self, state, content)
+            emit("strategy_policy_enabled", activation)
+            enable_policy(state, activation)
         if name == "begin":
             from .integration import build_begin
             emit("move_reserved", {"reservation": build_begin(self, state, spec, target, content)})
+        elif name == "reassess":
+            from .strategy_refresh_io import build_assessment
+            from .journal_io import journal_ownership
+            s.closed(spec, "assessment review")
+            s.require(isinstance(spec["assessment"], dict) and isinstance(spec["assessment"].get("plan_bindings"), dict),
+                      "Strategy reassessment requires its plan bindings")
+            for node_id in sorted(spec["assessment"]["plan_bindings"]):
+                s.require(node_id in state["nodes"], "Unknown assessment node")
+                operation_locks.enter_context(journal_ownership(self, node_id))
+            emit("strategies_reassessed", build_assessment(self, state, spec, content))
         elif name == "run":
             from .execution import build_run
             emit("run_reserved", {"run": build_run(self, state, spec, target, content)})
@@ -347,6 +370,23 @@ class Controller:
                                  "evidence_digests": subject["evidence_digests"], "provenance": self.provenance("complete")}}
             emit("objective_completed", {"closure": closure, "digest": content.put_blob(closure)})
         elif name == "replan":
+            if "deferred_node_ids" in spec:
+                from .deferrals import validate_deferrals
+                from .integration import observe_node
+                from .journal_io import journal_ownership
+                for nid in validate_deferrals(state, spec["deferred_node_ids"]):
+                    operation_locks.enter_context(journal_ownership(self, nid))
+                    node = state["nodes"][nid]
+                    journal = safe_path(self.root, node["attack_slug"] + "/journal.jsonl")
+                    finished = safe_path(self.root, node["attack_slug"] + "/units/FINISHED.json")
+                    s.require(journal.is_file() and not journal.read_bytes() and not finished.exists(),
+                              "Deferral requires an empty native journal and no native finish",
+                              "deferral_unavailable")
+                    facts = observe_node(self, state, node, content)
+                    s.require(facts["status"] == "admitted" and not facts["result_action"]
+                              and not facts["cashout_action"],
+                              "Current native result and cash-out work cannot be deferred",
+                              "deferral_unavailable")
             emit("replan_recorded", spec)
         elif name == "retreat":
             s.require("node_id" not in spec, "Node is selected by the command")

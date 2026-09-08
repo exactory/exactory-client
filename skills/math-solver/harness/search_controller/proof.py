@@ -56,6 +56,8 @@ def record_checkpoint(state, payload):
         s.require(cp["milestone_id"] is None, "External result has no local milestone")
     identity = allocate(state, "checkpoint")
     state["checkpoints"][identity] = dict(copy.deepcopy(cp), id=identity)
+    from .strategy_refresh import note_evidence
+    note_evidence(state, "checkpoint:" + identity)
 
 
 def policy_allows(acceptance, policy):
@@ -201,6 +203,8 @@ def accept_result(state, payload):
     state["acceptances"][identity] = dict(copy.deepcopy(value), id=identity, status="accepted",
                                          route_content_digests=bindings, progress_key=progress_key,
                                          progress_eligible=progress_eligible)
+    from .strategy_refresh import note_evidence
+    note_evidence(state, "acceptance:" + identity)
     refresh_obligations(state)
 
 

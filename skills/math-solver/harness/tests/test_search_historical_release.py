@@ -51,12 +51,13 @@ class HistoricalReleaseTests(WorkspaceTest):
         invoke(controller, "amend-computation", amendment)
         self.assertEqual(controller.status()["accounts"], before["accounts"])
         self.assertEqual(controller.status()["runs"]["run-000001"], old_run)
-        invoke(controller, "run", spec)
+        with self.assertRaises(SearchError) as caught:
+            invoke(controller, "run", spec)
+        self.assertEqual(caught.exception.code, "strategy_reassessment_required")
         after = controller.status()
-        self.assertEqual(marker.read_text(), "one fresh run")
+        self.assertFalse(marker.exists())
         self.assertEqual(after["runs"]["run-000001"], old_run)
-        self.assertEqual(after["runs"]["run-000002"]["computation_digest"], digest(amendment["computation"]))
-        self.assertEqual(after["runs"]["run-000002"]["status"], "terminal")
+        self.assertEqual(len(after["runs"]), 1)
         self.assertEqual(after["contract"], before["contract"])
         for counters in [after["totals"], after["accounts"]["account-000001"]]:
-            self.assertEqual((counters["used_runs"], counters["reserved_runs"]), (2, 0))
+            self.assertEqual((counters["used_runs"], counters["reserved_runs"]), (1, 0))
