@@ -6,6 +6,9 @@ it through synthesis_selection/{profile}:{kind}. A new assessment needs a new
 ID; old records and operation results remain unchanged. Section readiness is
 mechanical only. synthesis_report additionally requires the current foundation,
 configuration and all profile-applicable sections.
+
+And must declare established context. Citation roots do not determine a case's
+study-specific field relationship.
 """
 
 from .artifacts import ArtifactStore
@@ -179,8 +182,6 @@ def _selected(records, profile, kind):
 def _innovation(state, value):
     families = {"external": set(), "within_field": set()}
     seen, eligible = set(), []
-    roots = state.records.get("literature_scope", {}).get(value["profile"], {}).get("roots", [])
-    root_families = {resolve_family(state.records, root) for root in roots}
     standards = _selected(state.records, value["profile"], "standards")
     field = standards["payload"]["field"].casefold().strip() if standards else None
     if "origin_collection" in value:
@@ -226,7 +227,7 @@ def _innovation(state, value):
             state.obligations.append(obligation("innovation_paper_type_unresolved", "External coverage requires original papers, with source-backed document identity.",
                                                 case_id=case["id"], version_id=work["id"], types=types))
             original_ready = False
-        if case["relation"] == "external" and (family in root_families or field == case["field"].casefold().strip()):
+        if case["relation"] == "external" and field == case["field"].casefold().strip():
             state.obligations.append(obligation("external_case_within_field", "A within-field source cannot also supply external diversity.", case_id=case["id"]))
             original_ready = False
         families[case["relation"]].add(family)
@@ -273,6 +274,10 @@ def _assess(records, artifacts, kind, value, configuration, foundation):
             state.obligations.append(obligation("standards_applicability_unresolved", "Resolve the applicability questions before treating the field-standard assessment as current."))
     elif kind == "rationale":
         state.claim(value["and"], "and")
+        if value["and"]["scientific_status"] != "established":
+            state.obligations.append(obligation("and_context_not_established",
+                "And requires cited established context; preserve other scientific judgments as pending premises for reassessment.",
+                claim_path="and", scientific_status=value["and"]["scientific_status"]))
         state.claim(value["but"], "but")
         fields(value["therefore"], ("proposal", "test", "failure_conditions"), code="invalid_synthesis")
         for key in ("proposal", "test"):

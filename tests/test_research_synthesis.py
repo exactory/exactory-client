@@ -52,7 +52,8 @@ class SynthesisCase(LiteratureCase):
 
     def rationale(self, link, identifier="rationale"):
         return {"id": identifier, "profile": "research", "scope": "The complete objective for bounded sequences.",
-                "and": self.claim(link), "but": self.claim(link, "The unbounded extension remains unsupported."),
+                "and": self.claim(link, scientific_status="established"),
+                "but": self.claim(link, "The unbounded extension remains unsupported."),
                 "therefore": {"proposal": "Construct a finite bound covering all allowed inputs.",
                               "test": "Prove the claimed bound or exhibit a violating input.",
                               "failure_conditions": ["An allowed sequence violates the bound."]},
@@ -89,13 +90,16 @@ class SynthesisCase(LiteratureCase):
         scope = self.store.snapshot()["records"]["literature_scope"][profile]
         self.scope([work], [collection], profile=profile,
                    **({"target": scope["target"]} if profile == "verification" else {}))
+        self.foundation_searches(profile)
+
+    def foundation_searches(self, profile="research", identifier_suffix=""):
         for purpose in ("direct", "originals", "theory", "adjacent", "recent"):
             query = purpose + " finite bound"
             self.sequence += 1
             captured = import_response(self.store, "mcp", json.dumps({"q": query, "results": []}).encode(),
                 source_url="https://example.org/search", captured_at="2026-09-07T12:00:00Z", media_type="application/json", mappings=[],
                 expected_revision=self.store.revision, request_id="search-" + str(self.sequence))
-            self.mutate(record_search, {"id": purpose, "profile": profile, "purpose": purpose, "queries": [query],
+            self.mutate(record_search, {"id": purpose + identifier_suffix, "profile": profile, "purpose": purpose, "queries": [query],
                 "responses": [{"source_id": captured["source_ids"][0], "query": query,
                     "query_locator": {"kind": "json", "pointer": "/q", "value": query}, "results_pointer": "/results"}],
                 "captured_at": "2026-09-07T12:00:00Z", "scope": "The finite-bound comparison.",
@@ -125,6 +129,71 @@ class SynthesisTests(SynthesisCase):
         invalid["and"]["evidence"] = []
         self.assert_error("invalid_synthesis", lambda: self.mutate(api.record_rationale, invalid))
         self.assertEqual(self.store.snapshot()["records"]["synthesis"]["rationale"]["payload"]["value"]["kind"], "basic_science")
+
+    def test_only_established_and_completes_research_while_other_claim_roles_remain_scoped(self):
+        api = self.api()
+        work = self.configured()
+        links = [self.read_source(n) for n in range(1, 7)]
+        self.complete_foundation(work)
+        self.mutate(api.record_standards, self.standards(links[0]))
+        self.mutate(api.record_context, self.context(links[0]))
+        cases = [self.case(links[0], 0, "within_field")] + [self.case(link, n) for n, link in enumerate(links[1:], 1)]
+        self.mutate(api.record_innovation, self.innovation(cases))
+        historical = []
+        for status in ("refuted", "unresolved", "proposed", "established"):
+            payload = self.rationale(links[0], "and-" + status)
+            payload["and"]["scientific_status"] = status
+            payload["but"]["scientific_status"] = status
+            revision = self.store.revision
+            result = self.mutate(api.record_rationale, payload)
+            saved = self.store.snapshot()["records"]["synthesis"][payload["id"]]
+            historical.append((payload, revision, result, saved))
+            with self.subTest(status=status):
+                report = api.synthesis_report(self.store, "research")
+                expected_codes = set() if status == "established" else {"and_context_not_established"}
+                self.assertEqual({x["code"] for x in result["result"]["obligations"]}, expected_codes)
+                self.assertEqual({x["code"] for x in report["obligations"]}, expected_codes)
+                self.assertEqual(result["result"]["ready"], status == "established")
+                self.assertEqual(report["ready"], status == "established")
+                self.assertTrue(report["configuration"]["ready"])
+                self.assertTrue(report["foundation"]["ready"])
+                for kind in ("standards", "context", "innovation"):
+                    self.assertTrue(report["sections"][kind]["ready"])
+                section = report["sections"]["rationale"]
+                self.assertEqual(section["payload"], payload)
+                self.assertTrue(all(x["reading"] is not None for x in section["evidence"]))
+                for item in section["obligations"]:
+                    self.assertEqual(item["claim_path"], "and")
+                    self.assertEqual(item["scientific_status"], status)
+        before = self.store.snapshot()
+        for payload, revision, result, saved in historical:
+            self.assertEqual(before["records"]["synthesis"][payload["id"]], saved)
+            self.assertEqual(api.record_rationale(self.store, payload, expected_revision=revision,
+                             request_id=result["request_id"]), result)
+        self.assertEqual(self.store.snapshot(), before)
+        self.assertEqual({x["id"] for x in api.synthesis_report(self.store, "research")["history"] if x["kind"] == "rationale"},
+                         {payload["id"] for payload, _, _, _ in historical})
+
+    def test_historical_and_eligibility_is_reassessed_without_rewriting_saved_judgments(self):
+        api = self.api()
+        self.configured()
+        payload = self.rationale(self.read_source())
+        payload["and"]["scientific_status"] = "refuted"
+        result = self.mutate(api.record_rationale, payload)
+        before = self.store.snapshot()
+        records = copy.deepcopy(before["records"])
+        # Model the cached eligibility saved by the earlier implementation.
+        assessment = records["synthesis"][payload["id"]]["assessment"]
+        assessment.update(ready=True, obligations=[], counts={"obligations": 0})
+        historical = copy.deepcopy(records)
+        report = api.synthesis_state(records, self.artifacts, "research")
+        section = report["sections"]["rationale"]
+        self.assertFalse(section["ready"])
+        self.assertEqual([x["code"] for x in section["obligations"]], ["and_context_not_established"])
+        self.assertEqual(section["payload"], payload)
+        self.assertEqual(records, historical)
+        self.assertEqual(api.record_rationale(self.store, payload, expected_revision=0, request_id=result["request_id"]), result)
+        self.assertEqual(self.store.snapshot(), before)
 
     def test_full_reading_required_and_current_required_supplement_invalidates_prior_synthesis(self):
         api = self.api()
@@ -160,6 +229,75 @@ class SynthesisTests(SynthesisCase):
         self.assertIn("external_cases_insufficient", {x["code"] for x in result["result"]["obligations"]})
         self.mutate(api.record_innovation, self.innovation(cases[1:], "no-within"))
         self.assertIn("within_field_case_missing", self.synthesis_codes())
+
+    def test_external_tier_one_root_keeps_external_credit_after_current_reassessment(self):
+        api = self.api()
+        work = self.configured()
+        links = [self.read_source(n) for n in range(1, 7)]
+        self.complete_foundation(work)
+        self.mutate(api.record_standards, self.standards(links[0]))
+        self.mutate(api.record_context, self.context(links[0]))
+        self.mutate(api.record_rationale, self.rationale(links[0]))
+        cases = [self.case(links[0], 0, "within_field")] + [self.case(link, n) for n, link in enumerate(links[1:], 1)]
+        payload = self.innovation(cases)
+        original = self.mutate(api.record_innovation, payload)
+        self.assertTrue(api.synthesis_report(self.store, "research")["ready"])
+        records = self.store.snapshot()["records"]
+        scope = records["literature_scope"]["research"]
+        self.scope([work, links[1]["version_id"]], scope["collection_ids"])
+        stale = api.synthesis_report(self.store, "research")
+        self.assertFalse(stale["ready"])
+        self.assertEqual({x["code"] for x in stale["foundation"]["obligations"]}, {"search_scope_stale"})
+        root = next(x for x in stale["foundation"]["inventory"] if x["version_id"] == links[1]["version_id"])
+        self.assertEqual(root["tier"], 1)
+        self.assertTrue(root["fulltext_read"])
+        for section in stale["sections"].values():
+            self.assertFalse(section["ready"])
+            self.assertIn("synthesis_dependencies_stale", {x["code"] for x in section["obligations"]})
+        self.foundation_searches(identifier_suffix="-expanded")
+        current_foundation = foundation_report(self.store, "research")
+        self.assertTrue(current_foundation["ready"], current_foundation["obligations"])
+        self.mutate(api.record_standards, self.standards(links[0], identifier="standards-expanded"))
+        context = self.context(links[0])
+        context["id"] = "context-expanded"
+        self.mutate(api.record_context, context)
+        self.mutate(api.record_rationale, self.rationale(links[0], "rationale-expanded"))
+        result = self.mutate(api.record_innovation, self.innovation(cases, "innovation-expanded"))
+        report = api.synthesis_report(self.store, "research")
+        self.assertEqual(result["result"]["counts"]["external_papers"], 5)
+        self.assertEqual(result["result"]["counts"]["within_field_papers"], 1)
+        self.assertTrue(result["result"]["ready"], result["result"]["obligations"])
+        self.assertTrue(report["ready"], report["obligations"])
+        self.assertEqual(report["obligations"], [])
+        section = report["sections"]["innovation"]
+        self.assertEqual(section["payload"]["cases"], cases)
+        self.assertEqual(section["evidence"], original["result"]["evidence"])
+        self.assertNotEqual(section["dependencies"]["scope"], original["result"]["dependencies"]["scope"])
+        self.assertEqual(self.store.snapshot()["records"]["synthesis"][payload["id"]], records["synthesis"][payload["id"]])
+        self.assertEqual(api.record_innovation(self.store, payload, expected_revision=0,
+                         request_id=original["request_id"]), original)
+
+    def test_external_field_assessment_rejects_same_field_and_conflicting_family_relationships(self):
+        api = self.api()
+        self.configured()
+        links = [self.read_source(n) for n in range(1, 7)]
+        self.mutate(api.record_standards, self.standards(links[0]))
+        cases = [self.case(links[0], 0, "within_field")] + [self.case(link, n) for n, link in enumerate(links[1:], 1)]
+        original = self.mutate(api.record_innovation, self.innovation(cases))
+        self.assertTrue(original["result"]["ready"])
+        same_field = copy.deepcopy(cases)
+        same_field[1]["field"] = " SEQUENCE THEORY "
+        conflict = cases + [self.case(links[1], "within-conflict", "within_field")]
+        for identifier, selected, code in (("same-field", same_field, "external_case_within_field"),
+                                           ("conflicting-family", conflict, "case_field_conflict")):
+            with self.subTest(identifier=identifier):
+                payload = self.innovation(selected, identifier)
+                result = self.mutate(api.record_innovation, payload)["result"]
+                self.assertFalse(result["ready"])
+                self.assertEqual(result["counts"]["external_papers"], 4)
+                self.assertEqual(result["counts"]["within_field_papers"], 1)
+                self.assertEqual({x["code"] for x in result["obligations"]}, {code, "external_cases_insufficient"})
+                self.assertEqual(self.store.snapshot()["records"]["synthesis"][identifier]["payload"], payload)
 
     def test_original_later_validation_and_adoption_keep_their_own_evidence_and_gaps(self):
         api = self.api()
@@ -209,14 +347,20 @@ class SynthesisTests(SynthesisCase):
         self.configured()
         link = self.read_source()
         for support in ("source_not_supported", "source_contradicted", "unresolved"):
-            payload = self.rationale(link, support)
-            payload["and"].update(source_support=support, scientific_status="unresolved", uncertainties=[self.gap()])
-            self.mutate(api.record_rationale, payload)
-            report = api.synthesis_report(self.store, "research")
-            self.assertIn("claim_source_support_unresolved", {x["code"] for x in report["obligations"]})
-            stored = report["sections"]["rationale"]["payload"]["and"]
-            self.assertEqual(stored["source_support"], support)
-            self.assertEqual(stored["scientific_status"], "unresolved")
+            for status in ("established", "unresolved"):
+                with self.subTest(support=support, status=status):
+                    payload = self.rationale(link, support + "-" + status)
+                    payload["and"].update(source_support=support, scientific_status=status, uncertainties=[self.gap()])
+                    result = self.mutate(api.record_rationale, payload)["result"]
+                    self.assertFalse(result["ready"])
+                    expected_codes = {"claim_source_support_unresolved"}
+                    if status != "established":
+                        expected_codes.add("and_context_not_established")
+                    report = api.synthesis_report(self.store, "research")
+                    section = report["sections"]["rationale"]
+                    self.assertEqual({x["code"] for x in section["obligations"]}, expected_codes)
+                    self.assertEqual(section["payload"]["and"]["source_support"], support)
+                    self.assertEqual(section["payload"]["and"]["scientific_status"], status)
 
     def test_verification_requires_standards_without_author_goals_or_external_gallery(self):
         api = self.api()
