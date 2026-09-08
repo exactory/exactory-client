@@ -24,7 +24,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from research_harness.errors import ResearchError
 from research_harness.storage import Store
-from research_harness.integration import (command_identity, current_store, initialize_workspace,
+from research_harness.integration import (command_identity, current_store, initialization_payload, initialize_workspace,
                                            study_state, update_study, record_decision)
 from research_harness.cli import add_identity
 
@@ -173,11 +173,10 @@ def _is_inside_git_repository(directory: Path) -> bool:
 def _run_init(args: argparse.Namespace) -> None:
     workspace_dir = Path(args.dir)
     state_path = workspace_dir / _STUDY_STATE_PATH
-    if state_path.exists():
+    database = workspace_dir / ".exactory/research.sqlite3"
+    if state_path.exists() and (not args.request_id or not database.exists()):
         _exit_with_error(f"{state_path} already exists."
                          " This directory is already a study workspace.")
-    for dir_name in _STUDY_DIR_NAMES:
-        (workspace_dir / dir_name).mkdir(parents=True, exist_ok=True)
     now = _format_timestamp()
     state = {
         "version": 1,
@@ -190,19 +189,25 @@ def _run_init(args: argparse.Namespace) -> None:
         "created": now,
         "updated": now,
     }
-    store = Store(workspace_dir, create=True)
     try:
-        initialize_workspace(store, {"kind": "study", "state": state}, **command_identity(store, args))
+        store = Store(workspace_dir, create=not database.exists())
+        identity = command_identity(store, args)
+        payload = initialization_payload(store, "study", state, identity["request_id"])
+        initialize_workspace(store, payload, **identity)
     except ResearchError as error:
         _exit_with_error(json.dumps({"error": error.as_dict()}))
-    (workspace_dir / "context" / "README.md").write_text(
-        _CONTEXT_README, encoding="utf-8"
-    )
+    for dir_name in _STUDY_DIR_NAMES:
+        (workspace_dir / dir_name).mkdir(parents=True, exist_ok=True)
+    context_readme = workspace_dir / "context" / "README.md"
+    if not context_readme.exists():
+        context_readme.write_text(_CONTEXT_README, encoding="utf-8")
     literature_path = workspace_dir / "research" / "literature.md"
     if not literature_path.exists():
         literature_path.write_text(_LITERATURE_HEADER, encoding="utf-8")
     if not _is_inside_git_repository(workspace_dir):
-        (workspace_dir / ".gitignore").write_text(_LATEX_GITIGNORE, encoding="utf-8")
+        gitignore = workspace_dir / ".gitignore"
+        if not gitignore.exists():
+            gitignore.write_text(_LATEX_GITIGNORE, encoding="utf-8")
         subprocess.run(
             ["git", "init", "-q", "-b", "main", str(workspace_dir)], check=True
         )

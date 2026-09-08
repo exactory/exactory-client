@@ -48,6 +48,22 @@ def pin_artifact(store, payload, *, expected_revision, request_id):
                              expected_revision=expected_revision, request_id=request_id)
 
 
+def initialization_payload(store, kind, state, request_id):
+    """Reuse CLI-generated times while preserving every current user argument."""
+    payload = {"kind": kind, "state": copy.deepcopy(state)}
+    original = store.committed_request(request_id)
+    if original is None:
+        if (store.root / (".exactory/" + kind + ".json")).exists():
+            raise ResearchError("workspace_exists", kind + ".json already exists; use the original initialization request or explicit adoption")
+    elif original["operation"] == "workspace.initialize" and original["payload"].get("kind") == kind:
+        previous = original["payload"].get("state")
+        if isinstance(previous, dict):
+            for key in (("created", "updated") if kind == "study" else ("created",)):
+                if key in previous:
+                    payload["state"][key] = previous[key]
+    return payload
+
+
 def initialize_workspace(store, payload, *, expected_revision, request_id):
     """{kind: study|draft, state: initial marker}; attach the current contract."""
     artifacts = ArtifactStore(store.root)

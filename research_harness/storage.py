@@ -128,6 +128,13 @@ def _event_value(row):
             "changes": _load(row["changes"], list), "result": _load(row["result"])}
 
 
+def _request_row(connection: sqlite3.Connection, request_id: str):
+    return connection.execute(
+        "SELECT events.operation, events.payload, receipts.response FROM receipts "
+        "JOIN events ON events.revision = receipts.revision WHERE receipts.request_id = ?",
+        (request_id,)).fetchone()
+
+
 def _validate(connection: sqlite3.Connection) -> int:
     metadata = connection.execute("SELECT id, schema_version, revision FROM metadata").fetchall()
     if len(metadata) != 1 or metadata[0]["id"] != 1:
@@ -437,6 +444,17 @@ class Store:
             finally:
                 guard._value = None
 
+    def committed_request(self, request_id: str) -> Optional[dict]:
+        """Read a validated original request without retrying or changing it."""
+        _text(request_id, "Request ID")
+        with self._connection() as connection:
+            _validate(connection)
+            original = _request_row(connection, request_id)
+            if original is None:
+                return None
+            return {"operation": original["operation"], "payload": _load(original["payload"], dict),
+                    "response": _load(original["response"], dict)}
+
     def mutate(self, operation: str, payload: dict, apply, *, expected_revision: int, request_id: str) -> dict:
         _text(operation, "Operation")
         _text(request_id, "Request ID")
@@ -447,10 +465,7 @@ class Store:
         encoded_payload = _canonical(payload)
         with self._connection(writable=True) as connection:
             revision = _validate(connection)
-            original = connection.execute(
-                "SELECT events.operation, events.payload, receipts.response FROM receipts "
-                "JOIN events ON events.revision = receipts.revision WHERE receipts.request_id = ?",
-                (request_id,)).fetchone()
+            original = _request_row(connection, request_id)
             if original is not None:
                 if original["operation"] != operation or original["payload"] != encoded_payload:
                     raise ResearchError("request_id_conflict", "Request ID was already committed with different inputs",

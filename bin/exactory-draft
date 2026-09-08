@@ -30,7 +30,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from research_harness.errors import ResearchError
 from research_harness.gates import gate_report, require_ready
-from research_harness.integration import command_identity, current_store, initialize_workspace
+from research_harness.integration import command_identity, current_store, initialization_payload, initialize_workspace
 from research_harness.storage import Store
 from research_harness.workspace import find_workspace
 from research_harness.artifacts import ArtifactStore
@@ -99,19 +99,22 @@ def _exit_with_error(message: str, code: int = 1) -> None:
 def _run_init(args: argparse.Namespace) -> None:
     workspace_dir = Path(args.dir)
     state_path = workspace_dir / _DRAFT_STATE_PATH
-    if state_path.exists():
+    database = workspace_dir / ".exactory/research.sqlite3"
+    if state_path.exists() and (not args.request_id or not database.exists()):
         _exit_with_error(f"{state_path} already exists."
                          " This directory is already a draft workspace.")
-    for dir_name in _WORKSPACE_DIR_NAMES:
-        (workspace_dir / dir_name).mkdir(parents=True, exist_ok=True)
     state = {"version": 1, "title": args.title, "corpus": args.corpus,
              "category": args.category,
              "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
-    store = Store(workspace_dir, create=True)
     try:
-        initialize_workspace(store, {"kind": "draft", "state": state}, **command_identity(store, args))
+        store = Store(workspace_dir, create=not database.exists())
+        identity = command_identity(store, args)
+        payload = initialization_payload(store, "draft", state, identity["request_id"])
+        initialize_workspace(store, payload, **identity)
     except ResearchError as error:
         _exit_with_error(json.dumps({"error": error.as_dict()}))
+    for dir_name in _WORKSPACE_DIR_NAMES:
+        (workspace_dir / dir_name).mkdir(parents=True, exist_ok=True)
     literature_path = workspace_dir / "research" / "literature.md"
     if not literature_path.exists():
         literature_path.write_text(_LITERATURE_HEADER, encoding="utf-8")
