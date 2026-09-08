@@ -885,13 +885,18 @@ class TestLoginSubcommand(_UrlopenTransportTestCase):
             if saved_config_home is not None else os.environ.pop("XDG_CONFIG_HOME", None))
         os.environ["XDG_CONFIG_HOME"] = str(self.scratch_dir)
 
-    def _fail_next_request(self, status: int, body: dict) -> None:
+    def _fail_next_request(self, status: int, body: dict) -> urllib.error.HTTPError:
+        error = urllib.error.HTTPError("https://api.test", status, "refused", {},
+                                       io.BytesIO(json.dumps(body).encode()))
+        self.addCleanup(error.close)
+
         def _raise(request: urllib.request.Request,
                    timeout: float | None = None) -> _FakeResponse:
             self.sent_requests.append(request)
-            raise urllib.error.HTTPError(request.full_url, status, "refused", {},
-                                         io.BytesIO(json.dumps(body).encode()))
+            error.url = request.full_url
+            raise error
         urllib.request.urlopen = _raise
+        return error
 
     def test_without_a_code_it_requests_one_and_sends_no_key(self) -> None:
         self.response_status = 202
@@ -937,17 +942,25 @@ class TestLoginSubcommand(_UrlopenTransportTestCase):
         self.assertTrue(body["label"].startswith("plugin on "))
 
     def test_a_wrong_code_names_the_login_command(self) -> None:
-        self._fail_next_request(401, {"error": "invalid_code"})
+        error = self._fail_next_request(401, {"error": "invalid_code"})
         _, stderr = self._run(["login", "--email", "a@test.local", "--code", "000000"],
                               expected_exit_code=1)
         self.assertIn("exactory login --email", stderr)
         self.assertNotIn("EXACTORY_API_KEY", stderr)
         self.assertEqual(_transport._read_api_key(), "")
+        self.assertTrue(error.closed)
 
     def test_a_rate_limit_says_to_wait(self) -> None:
-        self._fail_next_request(429, {"error": "rate_limited"})
+        error = self._fail_next_request(429, {"error": "rate_limited"})
         _, stderr = self._run(["login", "--email", "a@test.local"], expected_exit_code=1)
         self.assertIn("Wait", stderr)
+        self.assertTrue(error.closed)
+
+    def test_an_allowed_missing_response_is_closed(self) -> None:
+        error = self._fail_next_request(404, {"error": "not_found"})
+        self.assertEqual(_transport._send_request(
+            "GET", "/missing", authenticated=False, allow_missing=True), ({}, 404))
+        self.assertTrue(error.closed)
 
     def test_a_missing_key_elsewhere_names_the_login_command(self) -> None:
         _, stderr = self._run(["tasks"], expected_exit_code=2)
