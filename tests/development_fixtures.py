@@ -156,8 +156,12 @@ class DevelopmentCase(SynthesisCase):
 
     def review(self, execution, identifier="review-1", verdict="ready"):
         evidence = [self.source_evidence(), self.result_evidence(execution), self.result_evidence(execution, True)]
+        candidate = self.candidate()
+        for reference in candidate["evidence"]:
+            if reference not in evidence:
+                evidence.append(copy.deepcopy(reference))
         provenance = self.artifacts.put(b"Authored test review in a separate declared context; no real reviewer is claimed.\n", "text/plain")
-        return {"id": identifier, "candidate_digest": self.candidate()["digest"],
+        return {"id": identifier, "candidate_digest": candidate["digest"],
                 "assessor": {"id": "independent-assessor", "kind": "agent", "provenance": provenance,
                              "relationship": "The fixture assessor is distinct from the cycle author.",
                              "independence_basis": "A separately declared review context received the exact candidate and evidence."},

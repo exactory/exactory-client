@@ -8,6 +8,411 @@ from research_harness.literature import import_bundle
 
 
 class DevelopmentTests(DevelopmentCase):
+    def test_an_unresolved_expected_outcome_blocks_completion_and_current_readiness(self):
+        api = self.development()
+        self.prepared_study()
+        plan, execution = self.run_cycle()
+        payload = self.assessment(plan, execution)
+        payload["outcomes"][0].update(status="unresolved", explanation="The planned outcome remains unresolved despite the retained valid measurements.")
+        assessed = self.mutate(api.assess_cycle, payload)["result"]
+        self.assertTrue(assessed["validated_result"])
+        self.assertFalse(assessed["complete"])
+        self.assertIn("expected_outcome_unresolved", {o["code"] for o in assessed["obligations"]})
+        checkpoint = self.save_checkpoint()
+        self.assertIn("expected_outcome_unresolved", {o["code"] for o in checkpoint["obligations"]})
+        self.mutate(api.record_readiness_review, self.review(execution))
+        self.assertFalse(api.readiness_report(self.store)["ready"])
+        self.assertIn("expected_outcome_unresolved", self.readiness_codes())
+
+    def test_a_not_observed_expected_outcome_can_establish_a_valid_negative_result(self):
+        api = self.development()
+        self.prepared_study()
+        plan = self.plan()
+        plan["hypothesis"] = "Every tested square is strictly less than 9."
+        plan["expected_outcomes"][0]["statement"] = "All finite values are strictly below 9."
+        plan, execution = self.run_cycle(plan)
+        payload = self.assessment(plan, execution)
+        payload["outcomes"][0].update(status="not_observed", explanation="The value 9 at n = 3 disproves strict inequality.")
+        payload["failures"][0].update(status="observed", explanation="The exact counterexample resolves the planned strict-inequality question.")
+        payload["result"]["statement"] = "The original non-strict finite objective holds, and its strict strengthening is false at n = 3."
+        assessed = self.mutate(api.assess_cycle, payload)["result"]
+        self.assertTrue(assessed["validated_result"])
+        self.assertTrue(assessed["complete"])
+        self.save_checkpoint()
+        self.mutate(api.record_readiness_review, self.review(execution))
+        self.assertTrue(api.readiness_report(self.store)["ready"])
+
+    def plan_source_replacement(self, *, interrupted=False, pending=False):
+        api = self.development()
+        self.prepared_study()
+        original = self.plan()
+        self.mutate(api.plan_cycle, original)
+        admission, execution = None, None
+        if interrupted or pending:
+            admission = self.admit(units=2)
+        if interrupted:
+            execution = self.execution(admission, status="interrupted", exit_code=None, used_units=None)
+            execution["outputs"] = []
+            execution["notes"] = "Authored interrupted outcome without any recorded result or output reference."
+            self.mutate(api.record_execution, execution)
+        self.refresh_synthesis("current-comparison")
+        self.assert_error("plan_dependencies_stale", lambda: self.admit(identifier="stale-plan-run"))
+        checkpoint = self.save_checkpoint(assessment_id=None, identifier="unresolved-plan-checkpoint", select=False)
+        replacement = self.plan("replacement-plan")
+        replacement.update(predecessor=checkpoint["id"],
+            question="Does the same intended test remain appropriate under the refreshed prospective comparison?")
+        replacement["inheritance"] = [{"checkpoint_id": checkpoint["id"], "assessment_id": None, "use": "unresolved",
+            "evidence": [self.source_evidence()], "assumptions": original["scope"]["assumptions"],
+            "deduction": "Preserve the original plan and its recorded execution state without claiming a result; refresh the comparison before a new run."}]
+        return original, replacement, admission, execution
+
+    def assert_plan_source_replacement_preserves_history(self, *, interrupted=False):
+        api = self.development()
+        original, replacement, admission, execution = self.plan_source_replacement(interrupted=interrupted)
+        before = self.store.snapshot()["records"]
+        account = next(iter(before["strategy_account"].values()))
+        unestablished = copy.deepcopy(replacement)
+        unestablished["inheritance"][0]["use"] = "validated_result"
+        self.assert_error("inheritance_mismatch", lambda: self.mutate(api.plan_cycle, unestablished))
+        try:
+            planned = self.mutate(api.plan_cycle, replacement)["result"]
+        except ResearchError as error:
+            self.fail("An authenticated unresolved plan must support current replanning without inventing an output: " + error.code)
+        records = self.store.snapshot()["records"]
+        self.assertEqual(records["cycle_plan"][original["id"]], before["cycle_plan"][original["id"]])
+        self.assertEqual(records["configuration"]["research"]["target"], self.objective)
+        self.assertEqual(planned["strategy_key"], account["key"])
+        self.assertEqual(len(records["strategy_account"]), 1)
+        self.assertEqual((records["strategy_account"][account["key"]]["executions"],
+                          records["strategy_account"][account["key"]]["charged_units"]),
+                         (account["executions"], account["charged_units"]))
+        self.assertEqual(records.get("execution", {}), before.get("execution", {}))
+        self.assertEqual(records["cycle"][replacement["id"]]["execution_ids"], [])
+        self.assertIsNone(records["cycle"][replacement["id"]]["assessment_id"])
+        self.assertFalse(api.readiness_report(self.store)["ready"])
+        admitted = self.admit(cycle_id=replacement["id"], identifier="replacement-run")
+        after = self.store.snapshot()["records"]
+        self.assertEqual(admitted["strategy_key"], account["key"])
+        self.assertEqual(after["strategy_account"][account["key"]]["limits"], account["limits"])
+        self.assertEqual((after["strategy_account"][account["key"]]["executions"],
+                          after["strategy_account"][account["key"]]["charged_units"]),
+                         (account["executions"] + 1, account["charged_units"] + 1))
+        if interrupted:
+            self.assertEqual(after["execution"][execution["id"]]["payload"]["outputs"], [])
+            self.assertEqual(after["execution_outcome"][admission["id"]]["execution_id"], execution["id"])
+            self.assertEqual(after["execution_admission"][admission["id"]], admission)
+
+    def test_an_unexecuted_plan_can_be_replaced_after_synthesis_changes_without_resetting_its_strategy(self):
+        self.assert_plan_source_replacement_preserves_history()
+
+    def test_a_recorded_interrupted_run_without_outputs_can_support_unresolved_replanning(self):
+        self.assert_plan_source_replacement_preserves_history(interrupted=True)
+
+    def test_plan_source_inheritance_cannot_hide_a_pending_admission(self):
+        api = self.development()
+        _, replacement, admission, _ = self.plan_source_replacement(pending=True)
+        before = self.store.snapshot()
+        self.assert_error("inheritance_mismatch", lambda: self.mutate(api.plan_cycle, replacement))
+        self.assertEqual(self.store.snapshot(), before)
+        account = next(iter(before["records"]["strategy_account"].values()))
+        self.assertEqual((account["executions"], account["charged_units"]), (1, 2))
+        self.assertNotIn("execution_outcome", before["records"])
+        original = {k: admission[k] for k in ("id", "cycle_id", "plan_digest", "command", "reserved_units")}
+        self.assertEqual(api.admit_execution(self.store, original, expected_revision=0,
+                         request_id=admission["request_id"])["result"], admission)
+
+    def test_plan_source_inheritance_cannot_claim_a_validated_result_or_unrelated_source(self):
+        api = self.development()
+        _, replacement, _, _ = self.plan_source_replacement()
+        forged = copy.deepcopy(replacement)
+        forged["inheritance"][0]["use"] = "validated_result"
+        self.assert_error("inheritance_mismatch", lambda: self.mutate(api.plan_cycle, forged))
+        unrelated = copy.deepcopy(replacement)
+        unrelated["inheritance"][0]["evidence"] = [{"kind": "source", "link": self.links[1]}]
+        self.assert_error("inheritance_mismatch", lambda: self.mutate(api.plan_cycle, unrelated))
+
+    def test_a_replacement_can_finish_after_truthfully_assessing_its_unexecuted_predecessor(self):
+        api = self.development()
+        original, replacement, _, _ = self.plan_source_replacement()
+        self.mutate(api.plan_cycle, replacement)
+        source = self.source_evidence()
+        retired = {"id": "unexecuted-predecessor-assessment", "cycle_id": original["id"], "author": "cycle-author",
+            "scope": original["scope"], "execution_ids": [],
+            "result": {"statement": "No execution result exists for the replaced prospective plan.", "evidence": [source]},
+            "validity_checks": [],
+            "outcomes": [{"outcome_id": "bound", "status": "unresolved", "explanation": "This planned test was never executed.", "evidence": [source]}],
+            "failures": [{"signal_id": "counterexample", "target_claim": original["hypothesis"], "status": "unresolved",
+                "explanation": "The unexecuted plan established no failure or successful result.", "evidence": [source]}],
+            "findings": [], "assumptions": original["scope"]["assumptions"], "remaining_obligations": [self.objective["statement"]],
+            "objective_status": "open", "disposition": "continue", "development": None}
+        unestablished = self.mutate(api.assess_cycle, retired)["result"]
+        self.assertFalse(unestablished["validated_result"])
+        try:
+            admission = self.admit(cycle_id=replacement["id"], identifier="replacement-run")
+        except ResearchError as error:
+            self.fail("An honest later assessment cannot erase the unresolved historical plan inheritance: " + error.code)
+        execution = self.execution(admission)
+        self.mutate(api.record_execution, execution)
+        payload = self.assessment(replacement, execution, "replacement-assessment")
+        payload["development"]["branches"].append({"cycle_id": original["id"], "disposition": "not_useful",
+            "reason": "The stale unexecuted plan was superseded by the current comparison without making a result claim.", "evidence": [source]})
+        self.mutate(api.assess_cycle, payload)
+        self.save_checkpoint(cycle_id=replacement["id"], assessment_id=payload["id"], identifier="replacement-checkpoint")
+        self.mutate(api.record_readiness_review, self.review(execution))
+        self.assertTrue(api.readiness_report(self.store)["ready"])
+        records = self.store.snapshot()["records"]
+        self.assertEqual(records["cycle"][original["id"]]["execution_ids"], [])
+        self.assertEqual(len(records["execution"]), 1)
+        self.assertFalse(records["cycle_assessment"][retired["id"]]["assessment"]["validated_result"])
+
+    def test_a_new_strategy_failure_after_successor_planning_blocks_fresh_admission(self):
+        api = self.development()
+        self.prepared_study()
+        first_plan = self.plan()
+        first_plan["hypothesis"] = "Every tested square is strictly less than 9."
+        first_plan, execution = self.run_cycle(first_plan)
+        original_admission = self.store.snapshot()["records"]["execution_admission"]["run-1"]
+        checkpoint = self.save_checkpoint(assessment_id=None, identifier="before-failure", select=False)
+        successor = copy.deepcopy(first_plan)
+        successor.update(id="prepared-successor", predecessor=checkpoint["id"],
+            question="Does a second finite enumeration confirm the first unassessed measurement?")
+        successor["inheritance"] = [{"checkpoint_id": checkpoint["id"], "assessment_id": None, "use": "unresolved",
+            "evidence": [self.result_evidence(execution)], "assumptions": first_plan["scope"]["assumptions"],
+            "deduction": "Retain the first raw measurement without granting it validated-result credit."}]
+        self.mutate(api.plan_cycle, successor)
+        failed = self.assessment(first_plan, execution, "observed-failure")
+        failed["outcomes"][0]["status"] = "not_observed"
+        failed["failures"][0]["status"] = "observed"
+        failed.update(disposition="failed", objective_status="open", remaining_obligations=["Address the observed strict-bound failure."])
+        self.mutate(api.assess_cycle, failed)
+        before = self.store.snapshot()
+        self.assert_error("branch_reopening_required", lambda: self.admit(cycle_id=successor["id"], identifier="stale-successor-run"))
+        self.assertEqual(self.store.snapshot(), before)
+        original_payload = {k: original_admission[k] for k in ("id", "cycle_id", "plan_digest", "command", "reserved_units")}
+        replay = api.admit_execution(self.store, original_payload, expected_revision=0, request_id=original_admission["request_id"])
+        self.assertEqual(replay["result"], original_admission)
+        self.assertEqual(self.store.snapshot(), before)
+        checkpoint = self.save_checkpoint(assessment_id=failed["id"], identifier="recorded-failure", select=False)
+        changed_source = self.read_source(7)
+        revised = copy.deepcopy(successor)
+        revised.update(id="current-successor", predecessor=checkpoint["id"],
+            question="Does the newly documented comparison address the recorded failure of strict inequality?")
+        revised["inheritance"] = [{"checkpoint_id": checkpoint["id"], "assessment_id": failed["id"], "use": "failure",
+            "evidence": [self.result_evidence(execution)], "assumptions": first_plan["scope"]["assumptions"],
+            "deduction": "The observed failure remains part of this same strategy's history."}]
+        revised["reopening"] = [{"assessment_id": failed["id"], "signal_id": "counterexample",
+            "reason": "The new source supplies a changed comparison for the documented obstruction.",
+            "evidence": [{"kind": "source", "link": changed_source}]}]
+        self.mutate(api.plan_cycle, revised)
+        admitted = self.admit(cycle_id=revised["id"], identifier="current-successor-run")
+        records = self.store.snapshot()["records"]
+        self.assertEqual(admitted["strategy_key"], original_admission["strategy_key"])
+        self.assertEqual(len(records["strategy_account"]), 1)
+        account = records["strategy_account"][admitted["strategy_key"]]
+        self.assertEqual((account["executions"], account["charged_units"]), (2, 2))
+        self.assertEqual(account["limits"], first_plan["resource_limits"])
+        self.assertEqual(account["failures"], [{"assessment_id": failed["id"], "signal_id": "counterexample"}])
+
+    def additional_validation(self, status, *, checked=False, bound=True):
+        api = self.development()
+        self.prepared_study()
+        plan = self.plan()
+        plan["evidence_requirements"].append({"id": "sensitivity", "kind": "validation",
+            "description": "A required independent sensitivity comparison of the saved finite result."})
+        plan, execution = self.run_cycle(plan)
+        result_artifact = execution["outputs"][0]["artifact"]
+        input_path = self.root / result_artifact["path"]
+        program = ("import json\nwith open(%r) as source:\n    data = json.load(source)\n"
+                   "passed = len(data['result']['values']) == 4 and max(data['result']['values']) == 9\n"
+                   "print(json.dumps({'result': data['result'], 'validation': {'passed': passed}}))\n" % str(input_path)).encode()
+        admission = self.admit(identifier="sensitivity-run", program_data=program, inputs=[result_artifact] if bound else [])
+        additional = self.execution(admission, status=status, exit_code=0 if status == "completed" else None,
+                                     used_units=1 if status == "completed" else None)
+        additional["outputs"] = [{"id": "sensitivity", "requirement_id": "sensitivity", "artifact": additional["outputs"][1]["artifact"]}]
+        self.mutate(api.record_execution, additional)
+        payload = self.assessment(plan, execution)
+        payload["execution_ids"].append(additional["id"])
+        if checked:
+            payload["validity_checks"].append({"id": "sensitivity", "question": "Does the required sensitivity check confirm the exact result?",
+                "method": "A second saved program reads the frozen result and checks its length and maximum.", "status": "passed",
+                "explanation": "The actual completed check is claimed as passed for this exact result.",
+                "evidence": [{"kind": "result", "execution_id": additional["id"], "output_id": "sensitivity",
+                    "artifact": additional["outputs"][0]["artifact"], "locator": {"kind": "json", "pointer": "/validation", "value": {"passed": True}}}]})
+        return execution, additional, payload
+
+    def assert_required_validation_incomplete(self, status, *, checked=False, bound=True):
+        api = self.development()
+        execution, additional, payload = self.additional_validation(status, checked=checked, bound=bound)
+        assessed = self.mutate(api.assess_cycle, payload)["result"]
+        self.assertFalse(assessed["validated_result"])
+        self.assertFalse(assessed["complete"])
+        self.assertIn("required_validation_unverified", {o["code"] for o in assessed["obligations"]})
+        self.save_checkpoint()
+        self.mutate(api.record_readiness_review, self.review(execution))
+        self.assertFalse(api.readiness_report(self.store)["ready"])
+        retained = self.store.snapshot()["records"]["execution"][additional["id"]]["payload"]
+        self.assertEqual(retained, additional)
+
+    def test_timed_out_required_validation_output_remains_incomplete(self):
+        self.assert_required_validation_incomplete("timed_out")
+
+    def test_partial_required_validation_output_remains_incomplete(self):
+        self.assert_required_validation_incomplete("partial")
+
+    def test_completed_required_validation_needs_its_own_passed_assessment(self):
+        self.assert_required_validation_incomplete("completed")
+
+    def test_each_required_validation_must_bind_the_actual_result(self):
+        self.assert_required_validation_incomplete("completed", checked=True, bound=False)
+
+    def test_each_completed_passed_bound_required_validation_can_satisfy_readiness(self):
+        api = self.development()
+        execution, _, payload = self.additional_validation("completed", checked=True)
+        assessed = self.mutate(api.assess_cycle, payload)["result"]
+        self.assertTrue(assessed["validated_result"])
+        self.assertTrue(assessed["complete"])
+        self.save_checkpoint()
+        self.mutate(api.record_readiness_review, self.review(execution))
+        self.assertTrue(api.readiness_report(self.store)["ready"])
+
+    def test_a_completed_retry_can_validate_a_requirement_without_erasing_its_timeout(self):
+        api = self.development()
+        execution, incomplete, payload = self.additional_validation("timed_out")
+        first = self.mutate(api.assess_cycle, payload)["result"]
+        self.assertFalse(first["validated_result"])
+        admission = self.admit(identifier="completed-sensitivity", program_data=self.artifacts.read(incomplete["command"]["program"]),
+                               inputs=[execution["outputs"][0]["artifact"]])
+        recovered = self.execution(admission)
+        recovered["outputs"] = [{"id": "sensitivity", "requirement_id": "sensitivity", "artifact": recovered["outputs"][1]["artifact"]}]
+        self.mutate(api.record_execution, recovered)
+        payload["id"] = "validated-retry"
+        payload["execution_ids"].append(recovered["id"])
+        payload["validity_checks"].append({"id": "completed-sensitivity", "question": "Did the required sensitivity validation finish on retry?",
+            "method": "The saved checker reads the same frozen result in the newly admitted run.", "status": "passed",
+            "explanation": "The completed retry satisfies the validation while preserving the earlier timeout.",
+            "evidence": [{"kind": "result", "execution_id": recovered["id"], "output_id": "sensitivity",
+                "artifact": recovered["outputs"][0]["artifact"], "locator": {"kind": "json", "pointer": "/validation", "value": {"passed": True}}}]})
+        assessed = self.mutate(api.assess_cycle, payload)["result"]
+        self.assertTrue(assessed["validated_result"])
+        self.assertTrue(assessed["complete"])
+        self.save_checkpoint(assessment_id=payload["id"])
+        self.mutate(api.record_readiness_review, self.review(execution))
+        self.assertTrue(api.readiness_report(self.store)["ready"])
+        records = self.store.snapshot()["records"]
+        self.assertEqual(records["execution"][incomplete["id"]]["payload"], incomplete)
+        self.assertEqual(next(iter(records["strategy_account"].values()))["executions"], 3)
+
+    def test_incomplete_required_result_output_cannot_satisfy_result_coverage(self):
+        api = self.development()
+        self.prepared_study()
+        plan = self.plan()
+        plan["evidence_requirements"].append({"id": "replication", "kind": "result", "description": "The required second result."})
+        plan, execution = self.run_cycle(plan)
+        additional = self.execution(self.admit(identifier="replication-run"), status="partial", exit_code=None, used_units=None)
+        additional["outputs"] = [{"id": "replication", "requirement_id": "replication", "artifact": additional["outputs"][0]["artifact"]}]
+        self.mutate(api.record_execution, additional)
+        payload = self.assessment(plan, execution)
+        payload["execution_ids"].append(additional["id"])
+        assessed = self.mutate(api.assess_cycle, payload)["result"]
+        self.assertFalse(assessed["validated_result"])
+        self.assertIn("required_result_unverified", {o["code"] for o in assessed["obligations"]})
+
+    def plan_only_source_candidate(self):
+        self.prepared_study()
+        extra = self.read_source(7)
+        plan = self.plan()
+        plan["literature"]["sources"] = [extra]
+        plan, execution = self.run_cycle(plan)
+        payload = self.assessment(plan, execution)
+        self.mutate(self.development().assess_cycle, payload)
+        self.save_checkpoint()
+        return extra, execution, payload
+
+    def test_plan_only_source_corruption_invalidates_current_readiness_and_preserves_replay(self):
+        api = self.development()
+        extra, execution, _ = self.plan_only_source_candidate()
+        review = self.review(execution)
+        receipt = self.mutate(api.record_readiness_review, review)
+        before = api.readiness_report(self.store)
+        self.assertTrue(before["ready"])
+        snapshot = self.store.snapshot()
+        path = self.root / extra["artifact"]["path"]
+        path.chmod(0o600)
+        path.write_bytes(b"Corruption of the source used only by the prospective plan.")
+        after = api.readiness_report(self.store)
+        self.assertFalse(after["ready"])
+        self.assertIn("artifact_corrupt", {o["code"] for o in after["obligations"]})
+        self.assertIn({"kind": "source", "link": extra}, before["candidate"]["evidence"])
+        self.assertEqual(self.store.snapshot(), snapshot)
+        self.assertEqual(api.record_readiness_review(self.store, review, expected_revision=0,
+                         request_id=receipt["request_id"]), receipt)
+
+    def test_plan_only_required_source_units_require_a_current_reading(self):
+        api = self.development()
+        extra, execution, payload = self.plan_only_source_candidate()
+        self.mutate(api.record_readiness_review, self.review(execution))
+        self.assertTrue(api.readiness_report(self.store)["ready"])
+        records = self.store.snapshot()["records"]
+        bundle = records["source_bundle"][records["bundle_selection"][extra["version_id"]]["bundle_id"]]
+        expanded = {k: copy.deepcopy(bundle[k]) for k in ("version_id", "source_id", "scope", "completeness", "units", "inventory", "bibliography", "resolutions")}
+        expanded["id"] = "plan-only-required-supplement"
+        expanded["units"].append({"id": "supplement", "kind": "supplement", "required": True, "link": None,
+            "reason": "The prospective comparison requires the newly identified supplement.", "url": "https://example.org/supplement"})
+        self.mutate(import_bundle, expanded)
+        self.assertIn("reading_missing", self.readiness_codes())
+        payload["id"] = "after-plan-source-expansion"
+        self.assert_error("reading_missing", lambda: self.mutate(api.assess_cycle, payload))
+
+    def test_independent_review_must_cover_the_exact_plan_only_source_link(self):
+        api = self.development()
+        extra, execution, _ = self.plan_only_source_candidate()
+        review = self.review(execution)
+        omitted = {"kind": "source", "link": extra}
+        for check in review["checks"]:
+            check["evidence"] = [e for e in check["evidence"] if e != omitted]
+        self.assert_error("review_evidence_incomplete", lambda: self.mutate(api.record_readiness_review, review))
+        self.mutate(api.record_readiness_review, self.review(execution, "complete-plan-source-review"))
+        self.assertTrue(api.readiness_report(self.store)["ready"])
+
+    def test_reopening_only_source_is_current_evidence_after_the_successor_executes(self):
+        api = self.development()
+        self.prepared_study()
+        first_plan = self.plan()
+        first_plan["hypothesis"] = "Every tested square is strictly less than 9."
+        first_plan, first_execution = self.run_cycle(first_plan)
+        failed = self.assessment(first_plan, first_execution)
+        failed["result"]["statement"] = "The value at n = 3 disproves strict inequality."
+        failed["outcomes"][0]["status"] = "not_observed"
+        failed["failures"][0]["status"] = "observed"
+        failed.update(disposition="failed", objective_status="open", remaining_obligations=["Assess the non-strict objective separately."])
+        self.mutate(api.assess_cycle, failed)
+        checkpoint = self.save_checkpoint(select=False)
+        changed_source = self.read_source(7)
+        successor = self.plan("successor")
+        successor.update(predecessor=checkpoint["id"], question="Does the non-strict formulation resolve the retained finite objective?")
+        successor["inheritance"] = [{"checkpoint_id": checkpoint["id"], "assessment_id": failed["id"], "use": "failure",
+            "evidence": [self.result_evidence(first_execution)], "assumptions": failed["assumptions"],
+            "deduction": "The strict counterexample is retained while the original non-strict objective is tested."}]
+        successor["reopening"] = [{"assessment_id": failed["id"], "signal_id": "counterexample",
+            "reason": "The changed bounded comparison addresses the strict-bound obstruction.",
+            "evidence": [{"kind": "source", "link": changed_source}]}]
+        successor, execution = self.run_cycle(successor, run_id="successor-run")
+        payload = self.assessment(successor, execution, "successor-assessment")
+        payload["development"]["branches"].append({"cycle_id": first_plan["id"], "disposition": "not_useful",
+            "reason": "The strict extension is outside the immutable non-strict objective.", "evidence": [self.result_evidence(first_execution)]})
+        self.mutate(api.assess_cycle, payload)
+        self.save_checkpoint(cycle_id=successor["id"], assessment_id=payload["id"], identifier="successor-checkpoint")
+        self.mutate(api.record_readiness_review, self.review(execution))
+        before = api.readiness_report(self.store)
+        self.assertTrue(before["ready"])
+        path = self.root / changed_source["artifact"]["path"]
+        path.chmod(0o600)
+        path.write_bytes(b"Corruption of the source used only to reopen the strategy.")
+        after = api.readiness_report(self.store)
+        self.assertFalse(after["ready"])
+        self.assertIn("artifact_corrupt", {o["code"] for o in after["obligations"]})
+        self.assertIn({"kind": "source", "link": changed_source}, before["candidate"]["evidence"])
+
     def test_a_post_execution_full_scope_change_cannot_claim_the_prospective_plan(self):
         api = self.development()
         self.prepared_study()
