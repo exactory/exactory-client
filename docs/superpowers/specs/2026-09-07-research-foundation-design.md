@@ -42,6 +42,8 @@ Split a responsibility further when it makes the interface clearer. Do not creat
 
 Use SQLite from the standard library at .exactory/research.sqlite3. A metadata row holds schema version and global revision. The authoritative configuration record (kind configuration, key research) holds task profile, target, and constitution digest, through the same transaction API as other records. Storage initialization alone creates no scientific configuration or readiness. Records have a kind, stable key, canonical JSON value, and content digest. Events and request receipts are append-only. Transactions use BEGIN IMMEDIATE, a finite busy timeout, rollback on failure, and compare-and-swap revisions. Reject unknown future schemas and malformed/corrupt state explicitly.
 
+The shared profiles are `research` and `verification`. A verification target has the shape `{kind: "work", id: EXACT_WORK_ID, source_id: SOURCE_ID_OR_NULL, sha256: ORIGINAL_MAIN_DOCUMENT_SHA_OR_NULL}`. Its identifier is an exact `work.id`, not a paper-family alias. Missing source pins are allowed while preparing the study but leave the verification foundation pending. A complete pin identifies the target's original main full-text bytes, rather than a metadata response, abstract, or text extraction. The literature scope uses the same target shape and must agree with the configured target. A research target is initially null, then `{kind: "objective", id: OBJECTIVE_ID, statement: FULL_OBJECTIVE}` when the complete objective is fixed. This does not replace branch scopes, remaining obligations, or the native mathematical acceptance contract.
+
 Public storage API:
 
 ```python
@@ -79,6 +81,8 @@ Collection retrieves content but does not mark it read. next/status must expose 
 ## 4. Literature and reading
 
 Tier 1 contains one to five closest starting works. In verification it includes the pinned target and up to four comparisons. Tier 2 contains all direct references not in Tier 1. Tier 3 contains all references of Tier 2 not already in Tier 1 or 2. Compute minimum tier over cycles and duplicate paths. Account for every reference occurrence from Tier 1 and 2, including unresolved ones. An incomplete bibliography prevents a complete graph claim.
+
+The verification target's full reading must cover its pinned original bytes and the current required source-bundle units. A different captured body under the same DOI or work identifier cannot satisfy the pin. Identical verified original bytes for the same exact work may reuse an existing valid reading through explicit source linkage, while retaining the configured pin's provenance. A new response receipt alone need not require another reading. Newly required figures or supplements remain obligations even when the main document's bytes are unchanged.
 
 Tier 1 and 2 require every accessible full text read in full. Tier 3 requires available abstracts read. Cohort members separately require abstracts read. Full-text reading satisfies abstract depth when the abstract is included. A source relied on for a major claim, novelty decision, innovation case, or validity finding requires full reading even when it is Tier 3 or outside the graph. This changes the depth obligation, not the graph tier.
 
