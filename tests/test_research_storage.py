@@ -1,6 +1,9 @@
 """Behavioral tests for durable, revisioned research records."""
 
+import errno
+import hashlib
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -280,6 +283,116 @@ class ResearchStorageTests(unittest.TestCase):
         self.assertEqual(store.snapshot(), {"revision": 1, "records": {
             "work": {"paper": {"title": "Outer transaction"}}}})
 
+    def test_directory_alias_access_uses_the_active_directory_identity(self):
+        store = Store(self.workspace, create=True)
+        alias = self.workspace.with_name("WORKSPACE")
+        same_spelling_alias = alias.exists()
+        if same_spelling_alias:
+            self.assertTrue(os.path.samefile(alias, self.workspace))
+        probe = """
+import sqlite3
+import sys
+connection = sqlite3.connect(sys.argv[1], timeout=0.1)
+try:
+    connection.execute("BEGIN IMMEDIATE")
+except sqlite3.OperationalError as error:
+    print(str(error))
+else:
+    print("Unexpectedly acquired the writer lock")
+finally:
+    connection.close()
+"""
+
+        def apply(tx):
+            # A rename supplies the same-inode alias on case-sensitive filesystems.
+            if not same_spelling_alias:
+                self.workspace.rename(alias)
+            try:
+                started = time.monotonic()
+                self.assert_error("store_busy", lambda: Store(alias))
+                self.assertLess(time.monotonic() - started, 3)
+                result = subprocess.run(
+                    [sys.executable, "-c", probe, str(alias / ".exactory" / "research.sqlite3")],
+                    capture_output=True, text=True, timeout=5)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("locked", result.stdout)
+            finally:
+                if not same_spelling_alias:
+                    alias.rename(self.workspace)
+            tx.put("work", "paper", {"title": "Original writer"})
+            return "committed"
+
+        response = store.mutate("add", {}, apply, expected_revision=0, request_id="original")
+        self.assertEqual(response["result"], "committed")
+        self.assertEqual(store.snapshot(), {"revision": 1, "records": {
+            "work": {"paper": {"title": "Original writer"}}}})
+
+    def test_existing_store_rebinds_coordination_after_metadata_directory_replacement(self):
+        previous = Store(self.workspace, create=True)
+        self.database.parent.rename(self.workspace / "previous-metadata")
+        replacement = Store(self.workspace, create=True)
+
+        def apply(tx):
+            self.assert_error("store_busy", previous.snapshot)
+            tx.put("work", "replacement", {"title": "Current directory"})
+            return None
+
+        replacement.mutate("replace", {}, apply, expected_revision=0, request_id="replacement")
+        self.assertEqual(previous.snapshot(), {"revision": 1, "records": {
+            "work": {"replacement": {"title": "Current directory"}}}})
+
+    def test_replaced_regular_metadata_directory_is_rejected_before_sqlite_mutation(self):
+        store = Store(self.workspace, create=True)
+        replacement_workspace = Path(self.temporary.name) / "replacement"
+        Store(replacement_workspace, create=True)
+        replacement_directory = replacement_workspace / ".exactory"
+        replacement_bytes = (replacement_directory / "research.sqlite3").read_bytes()
+        original_open = store._open
+
+        def replace_directory_then_open(path, *, writable):
+            self.database.parent.rename(self.workspace / "previous-metadata")
+            replacement_directory.rename(self.database.parent)
+            return original_open(path, writable=writable)
+
+        with mock.patch.object(store, "_open", side_effect=replace_directory_then_open):
+            self.assert_error("unsafe_path", lambda: self.add(store))
+        self.assertEqual(self.database.read_bytes(), replacement_bytes)
+
+    def test_initialization_propagates_workspace_and_metadata_parent_sync_failures(self):
+        original_fsync = os.fsync
+        for target_name in ("workspace-parent", "metadata-parent"):
+            with self.subTest(target=target_name):
+                workspace = Path(self.temporary.name) / target_name
+                target = workspace.parent if target_name == "workspace-parent" else workspace
+
+                def fail_target_sync(descriptor):
+                    info = os.fstat(descriptor)
+                    if target.exists():
+                        expected = target.stat()
+                        if (info.st_dev, info.st_ino) == (expected.st_dev, expected.st_ino):
+                            raise OSError(errno.EIO, "Injected directory synchronization failure")
+                    original_fsync(descriptor)
+
+                with mock.patch("research_harness.artifacts.os.fsync", side_effect=fail_target_sync):
+                    self.assert_error("storage_io", lambda: Store(workspace, create=True))
+                self.assertFalse((workspace / ".exactory" / "research.sqlite3").exists())
+                self.assertEqual(Store(workspace, create=True).snapshot(), {"revision": 0, "records": {}})
+
+    def test_existing_initialization_establishes_database_directory_durability(self):
+        Store(self.workspace, create=True)
+        directory = self.database.parent.stat()
+        original_fsync = os.fsync
+
+        def fail_database_directory_sync(descriptor):
+            info = os.fstat(descriptor)
+            if (info.st_dev, info.st_ino) == (directory.st_dev, directory.st_ino):
+                raise OSError(errno.EIO, "Injected database publication synchronization failure")
+            original_fsync(descriptor)
+
+        with mock.patch("research_harness.storage.os.fsync", side_effect=fail_database_directory_sync):
+            self.assert_error("storage_io", lambda: Store(self.workspace, create=True))
+            self.assertEqual(Store(self.workspace).snapshot(), {"revision": 0, "records": {}})
+
     def test_concurrent_read_cannot_release_another_managed_writers_process_lock(self):
         store = Store(self.workspace, create=True)
         entered = threading.Event()
@@ -509,6 +622,38 @@ print(json.dumps(Store(Path(sys.argv[1])).snapshot()))
             connection.execute("UPDATE records SET value = ?", ('{"title":"Original"}',))
             connection.execute("UPDATE metadata SET revision = 2")
         self.assert_error("corrupt_state", store.snapshot)
+
+    def test_receipt_json_types_must_match_the_immutable_event(self):
+        store = Store(self.workspace, create=True)
+        store.mutate("typed", {}, lambda tx: 1, expected_revision=0, request_id="typed")
+        original_response = '{"request_id":"typed","result":1,"revision":1}'
+        original_digest = hashlib.sha256(original_response.encode("utf-8")).hexdigest()
+        with self.database_connection() as connection:
+            original_dump = "\n".join(connection.iterdump())
+            original_guards = connection.execute(
+                "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY name").fetchall()
+        self.assertEqual(original_dump.count(original_response), 1)
+        self.assertEqual(original_dump.count(original_digest), 1)
+        for changed_response in (
+                '{"request_id":"typed","result":true,"revision":1}',
+                '{"request_id":"typed","result":1.0,"revision":1}',
+                '{"request_id":"typed","result":1,"revision":true}',
+                '{"request_id":"typed","result":1,"revision":1.0}'):
+            with self.subTest(response=changed_response):
+                changed_digest = hashlib.sha256(changed_response.encode("utf-8")).hexdigest()
+                changed_dump = original_dump.replace(original_response, changed_response).replace(
+                    original_digest, changed_digest)
+                corrupted = self.database.parent / "corrupted.sqlite3"
+                # Rebuild an offline fixture from SQL, retaining all normal guards.
+                with closing(sqlite3.connect(corrupted)) as connection:
+                    connection.executescript(changed_dump)
+                    guards = connection.execute(
+                        "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY name").fetchall()
+                    self.assertEqual(guards, original_guards)
+                    receipt = connection.execute("SELECT response, digest FROM receipts").fetchone()
+                    self.assertEqual(receipt, (changed_response, changed_digest))
+                os.replace(corrupted, self.database)
+                self.assert_error("corrupt_state", lambda: Store(self.workspace))
 
     def test_events_and_receipts_reject_updates_and_deletions(self):
         store = Store(self.workspace, create=True)

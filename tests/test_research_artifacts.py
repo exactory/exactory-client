@@ -1,10 +1,13 @@
 """Immutable content objects must remain verified inside their workspace."""
 
+import errno
 import os
+import stat
 import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from research_harness.artifacts import ArtifactStore
 from research_harness.errors import ResearchError
@@ -49,6 +52,155 @@ class ResearchArtifactTests(unittest.TestCase):
         self.assertEqual(second["sha256"], first["sha256"])
         self.assertEqual(second["media_type"], "application/octet-stream")
         self.assertEqual(list(self.objects.iterdir()), [path])
+
+    def test_first_put_syncs_each_new_directory_entry_including_workspace_ancestors(self):
+        workspace = Path(self.temporary.name) / "new-parent" / "workspace"
+        original_fsync = os.fsync
+        synchronized = set()
+
+        def record_sync(descriptor):
+            info = os.fstat(descriptor)
+            original_fsync(descriptor)
+            if stat.S_ISDIR(info.st_mode):
+                synchronized.add((info.st_dev, info.st_ino))
+
+        with mock.patch("research_harness.artifacts.os.fsync", side_effect=record_sync):
+            reference = ArtifactStore(workspace).put(b"abc", "text/plain")
+        for parent in (workspace.parent.parent, workspace.parent, workspace,
+                       workspace / "research", workspace / "research" / "sources",
+                       workspace / "research" / "sources" / "objects"):
+            info = parent.stat()
+            self.assertIn((info.st_dev, info.st_ino), synchronized, str(parent))
+        self.assertEqual(ArtifactStore(workspace).read(reference), b"abc")
+
+    def test_directory_entry_sync_failure_rejects_first_put_and_allows_a_durable_retry(self):
+        original_fsync = os.fsync
+        for index, relative in enumerate(("parent", "workspace", "research", "sources")):
+            with self.subTest(parent=relative):
+                workspace = Path(self.temporary.name) / ("workspace-" + str(index))
+                parents = {"parent": workspace.parent, "workspace": workspace,
+                           "research": workspace / "research",
+                           "sources": workspace / "research" / "sources"}
+                target = parents[relative]
+
+                def fail_target_sync(descriptor):
+                    info = os.fstat(descriptor)
+                    if target.exists():
+                        expected = target.stat()
+                        if (info.st_dev, info.st_ino) == (expected.st_dev, expected.st_ino):
+                            raise OSError(errno.EIO, "Injected directory synchronization failure")
+                    original_fsync(descriptor)
+
+                store = ArtifactStore(workspace)
+                with mock.patch("research_harness.artifacts.os.fsync", side_effect=fail_target_sync):
+                    self.assert_error("storage_io", lambda: store.put(b"abc", "text/plain"))
+                    # Existing but unsynchronized directory entries still need sync.
+                    self.assert_error("storage_io", lambda: store.put(b"abc", "text/plain"))
+                self.assertEqual(list(workspace.rglob("ba7816bf*")), [])
+                reference = store.put(b"abc", "text/plain")
+                self.assertEqual(store.read(reference), b"abc")
+
+    def test_later_writer_syncs_an_ancestor_left_by_a_paused_directory_creator(self):
+        parent = self.workspace.parent.stat()
+        original_fsync = os.fsync
+        creator_waiting = threading.Event()
+        release_creator = threading.Event()
+        later_writer_synchronized = threading.Event()
+        results = []
+
+        def synchronize_ancestor(descriptor):
+            info = os.fstat(descriptor)
+            is_workspace_parent = (info.st_dev, info.st_ino) == (parent.st_dev, parent.st_ino)
+            if is_workspace_parent and threading.current_thread() is creator:
+                creator_waiting.set()
+                if not release_creator.wait(5):
+                    raise RuntimeError("Test did not release directory creator")
+                raise OSError(errno.EIO, "Injected original directory synchronization failure")
+            original_fsync(descriptor)
+            if is_workspace_parent:
+                later_writer_synchronized.set()
+
+        def create():
+            try:
+                results.append(self.store.put(b"abc", "text/plain"))
+            except BaseException as error:
+                results.append(error)
+
+        creator = threading.Thread(target=create)
+        with mock.patch("research_harness.artifacts.os.fsync", side_effect=synchronize_ancestor):
+            creator.start()
+            try:
+                self.assertTrue(creator_waiting.wait(5))
+                self.assertTrue(self.workspace.is_dir())
+                reference = self.store.put(b"abc", "text/plain")
+                self.assertTrue(later_writer_synchronized.is_set())
+            finally:
+                release_creator.set()
+                creator.join(5)
+        self.assertFalse(creator.is_alive())
+        self.assertEqual(len(results), 1)
+        self.assertIsInstance(results[0], ResearchError)
+        self.assertEqual(results[0].code, "storage_io")
+        self.assertEqual(self.store.read(reference), b"abc")
+
+    def test_reuse_syncs_the_object_directory_while_the_original_publisher_is_paused(self):
+        self.objects.mkdir(parents=True)
+        object_directory = self.objects.stat()
+        original_fsync = os.fsync
+        publisher_waiting = threading.Event()
+        release_publisher = threading.Event()
+        reuse_synchronized = threading.Event()
+        results = []
+
+        def synchronized_publication(descriptor):
+            info = os.fstat(descriptor)
+            is_object_directory = (info.st_dev, info.st_ino) == (
+                object_directory.st_dev, object_directory.st_ino)
+            if is_object_directory and threading.current_thread() is publisher:
+                publisher_waiting.set()
+                if not release_publisher.wait(5):
+                    raise RuntimeError("Test did not release original publisher")
+                raise OSError(errno.EIO, "Injected original publisher synchronization failure")
+            original_fsync(descriptor)
+            if is_object_directory:
+                reuse_synchronized.set()
+
+        def publish():
+            try:
+                results.append(self.store.put(b"abc", "text/plain"))
+            except BaseException as error:
+                results.append(error)
+
+        publisher = threading.Thread(target=publish)
+        with mock.patch("research_harness.artifacts.os.fsync", side_effect=synchronized_publication):
+            publisher.start()
+            try:
+                self.assertTrue(publisher_waiting.wait(5))
+                reference = self.store.put(b"abc", "text/plain")
+                self.assertTrue(reuse_synchronized.is_set())
+            finally:
+                release_publisher.set()
+                publisher.join(5)
+        self.assertFalse(publisher.is_alive())
+        self.assertEqual(len(results), 1)
+        self.assertIsInstance(results[0], ResearchError)
+        self.assertEqual(results[0].code, "storage_io")
+        self.assertEqual(self.store.read(reference), b"abc")
+
+    def test_reuse_propagates_its_own_publication_sync_failure(self):
+        reference = self.store.put(b"abc", "text/plain")
+        directory = self.objects.stat()
+        original_fsync = os.fsync
+
+        def fail_publication_sync(descriptor):
+            info = os.fstat(descriptor)
+            if (info.st_dev, info.st_ino) == (directory.st_dev, directory.st_ino):
+                raise OSError(errno.EIO, "Injected reuse synchronization failure")
+            original_fsync(descriptor)
+
+        with mock.patch("research_harness.artifacts.os.fsync", side_effect=fail_publication_sync):
+            self.assert_error("storage_io", lambda: self.store.put(b"abc", "text/plain"))
+        self.assertEqual(self.store.read(reference), b"abc")
 
     def test_concurrent_puts_publish_one_complete_object(self):
         results = []

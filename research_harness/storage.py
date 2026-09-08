@@ -169,7 +169,7 @@ def _validate(connection: sqlite3.Connection) -> int:
         expected_response = {"revision": row["revision"], "request_id": row["request_id"],
                              "result": event["result"]}
         if (receipt is None or receipt["revision"] != row["revision"]
-                or _load(receipt["response"], dict) != expected_response
+                or receipt["response"] != _canonical(expected_response, "corrupt_state")
                 or _digest(receipt["response"]) != receipt["digest"]):
             raise ResearchError("corrupt_state", "Research request receipt does not match its original event")
     if event_count != revision or connection.execute("SELECT COUNT(*) FROM receipts").fetchone()[0] != revision:
@@ -228,29 +228,32 @@ class Store:
         self._workspace = _Workspace(root)
         self.root = self._workspace.root
         self._path = self.root / ".exactory" / _DATABASE
-        with _LOCK_REGISTRY_GUARD:
-            self._mutex = _WORKSPACE_LOCKS.get(str(self._path))
-            if self._mutex is None:
-                self._mutex = threading.Lock()
-                _WORKSPACE_LOCKS[str(self._path)] = self._mutex
         if create:
-            with self._locked():
-                self._create()
+            with self._workspace.directory(".exactory", create=True) as directory:
+                with self._locked(directory):
+                    self._create(directory)
         with self._connection(writable=create) as connection:
             _validate(connection)
 
     @contextmanager
-    def _locked(self):
+    def _locked(self, directory: int):
         # A raw descriptor close can release another connection's POSIX locks.
-        # Acquire this nonreentrant lock before any header access, then retain it
-        # until all SQLite connections close. Cross-process locks belong to SQLite.
-        if not self._mutex.acquire(timeout=_BUSY_TIMEOUT_SECONDS):
+        # Identify the checked directory on every access, so aliases coordinate
+        # and a replaced directory never inherits a stale cached lock identity.
+        info = os.fstat(directory)
+        identity = (info.st_dev, info.st_ino)
+        with _LOCK_REGISTRY_GUARD:
+            mutex = _WORKSPACE_LOCKS.get(identity)
+            if mutex is None:
+                mutex = threading.Lock()
+                _WORKSPACE_LOCKS[identity] = mutex
+        if not mutex.acquire(timeout=_BUSY_TIMEOUT_SECONDS):
             raise ResearchError("store_busy", "Research store is active in this process; "
                                 "retry after it finishes and use Transaction methods inside callbacks")
         try:
             yield
         finally:
-            self._mutex.release()
+            mutex.release()
 
     def _check_links(self, directory: int, info, *, database: bool):
         if info.st_nlink == 1:
@@ -276,6 +279,10 @@ class Store:
 
     def _check_files(self, directory: int, *, required: bool = True):
         self._check_path(self._path.parent)
+        opened = os.fstat(directory)
+        current = os.stat(self._path.parent, follow_symlinks=False)
+        if (opened.st_dev, opened.st_ino) != (current.st_dev, current.st_ino):
+            raise ResearchError("unsafe_path", "Research metadata directory changed during access")
         for suffix in ("", "-journal", "-wal", "-shm"):
             try:
                 info = os.stat(_DATABASE + suffix, dir_fd=directory, follow_symlinks=False)
@@ -322,69 +329,70 @@ class Store:
 
     @contextmanager
     def _connection(self, *, writable: bool = False):
-        with self._locked():
+        try:
+            with self._workspace.directory(".exactory") as directory:
+                with self._locked(directory):
+                    connection = None
+                    try:
+                        self._check_files(directory)
+                        connection = self._open(self._path, writable=writable)
+                        # Recheck managed names before SQLite can mutate.
+                        self._check_files(directory)
+                        connection.execute("BEGIN IMMEDIATE" if writable else "BEGIN")
+                        try:
+                            yield connection
+                            connection.commit()
+                        except BaseException:
+                            connection.rollback()
+                            raise
+                    finally:
+                        if connection is not None:
+                            connection.close()
+        except FileNotFoundError as error:
+            raise ResearchError("store_missing", "Research store does not exist; initialize or adopt the workspace") from error
+        except sqlite3.Error as error:
+            raise _sql_error(error, readonly=not writable) from error
+
+    def _create(self, directory: int):
+        try:
+            self._check_files(directory, required=False)
+            try:
+                os.stat(_DATABASE, dir_fd=directory, follow_symlinks=False)
+                os.fsync(directory)
+                return
+            except FileNotFoundError:
+                pass
+            temporary = ".research-" + uuid.uuid4().hex + ".sqlite3"
+            descriptor = os.open(temporary, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                                 0o600, dir_fd=directory)
+            os.close(descriptor)
             connection = None
             try:
-                with self._workspace.directory(".exactory") as directory:
-                    self._check_files(directory)
-                    connection = self._open(self._path, writable=writable)
-                    # Recheck managed names immediately before SQLite can mutate.
-                    self._check_files(directory)
-                    connection.execute("BEGIN IMMEDIATE" if writable else "BEGIN")
-                    try:
-                        yield connection
-                        connection.commit()
-                    except BaseException:
-                        connection.rollback()
-                        raise
-            except FileNotFoundError as error:
-                raise ResearchError("store_missing", "Research store does not exist; initialize or adopt the workspace") from error
-            except sqlite3.Error as error:
-                raise _sql_error(error, readonly=not writable) from error
+                connection = self._open(self._path.parent / temporary, writable=True)
+                connection.execute("PRAGMA synchronous = FULL")
+                connection.execute("BEGIN IMMEDIATE")
+                for statement in _SCHEMA.values():
+                    connection.execute(statement)
+                connection.execute("INSERT INTO metadata (id, schema_version, revision) VALUES (1, ?, 0)",
+                                   (_SCHEMA_VERSION,))
+                connection.commit()
+                connection.close()
+                connection = None
+                descriptor = _regular_file(directory, temporary)
+                try:
+                    os.fsync(descriptor)
+                finally:
+                    os.close(descriptor)
+                try:
+                    os.link(temporary, _DATABASE, src_dir_fd=directory, dst_dir_fd=directory,
+                            follow_symlinks=False)
+                except FileExistsError:
+                    pass
             finally:
                 if connection is not None:
                     connection.close()
-
-    def _create(self):
-        try:
-            with self._workspace.directory(".exactory", create=True) as directory:
-                self._check_files(directory, required=False)
-                try:
-                    os.stat(_DATABASE, dir_fd=directory, follow_symlinks=False)
-                    return
-                except FileNotFoundError:
-                    pass
-                temporary = ".research-" + uuid.uuid4().hex + ".sqlite3"
-                descriptor = os.open(temporary, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                                     0o600, dir_fd=directory)
-                os.close(descriptor)
-                connection = None
-                try:
-                    connection = self._open(self._path.parent / temporary, writable=True)
-                    connection.execute("PRAGMA synchronous = FULL")
-                    connection.execute("BEGIN IMMEDIATE")
-                    for statement in _SCHEMA.values():
-                        connection.execute(statement)
-                    connection.execute("INSERT INTO metadata (id, schema_version, revision) VALUES (1, ?, 0)",
-                                       (_SCHEMA_VERSION,))
-                    connection.commit()
-                    connection.close()
-                    connection = None
-                    descriptor = _regular_file(directory, temporary)
-                    try:
-                        os.fsync(descriptor)
-                    finally:
-                        os.close(descriptor)
-                    try:
-                        os.link(temporary, _DATABASE, src_dir_fd=directory, dst_dir_fd=directory,
-                                follow_symlinks=False)
-                    except FileExistsError:
-                        pass
-                finally:
-                    if connection is not None:
-                        connection.close()
-                    os.unlink(temporary, dir_fd=directory)
-                os.fsync(directory)
+                os.unlink(temporary, dir_fd=directory)
+            os.fsync(directory)
         except sqlite3.Error as error:
             raise _sql_error(error) from error
 

@@ -51,12 +51,10 @@ class _Workspace:
 
     @contextmanager
     def directory(self, relative: str, *, create: bool = False):
-        parts = _relative_parts(relative)
+        parts = list(self.root.parts[1:]) + _relative_parts(relative)
         descriptor = None
         try:
-            if create:
-                self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
-            descriptor = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            descriptor = os.open(self.root.anchor, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
             for name in parts:
                 if create:
                     try:
@@ -65,6 +63,14 @@ class _Workspace:
                         pass
                 child = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
                                 dir_fd=descriptor)
+                try:
+                    if create:
+                        # An existing entry may belong to a paused earlier creator.
+                        # Sync its checked parent before acknowledging any child use.
+                        os.fsync(descriptor)
+                except BaseException:
+                    os.close(child)
+                    raise
                 os.close(descriptor)
                 descriptor = child
             yield descriptor
@@ -117,6 +123,7 @@ class ArtifactStore:
         with self._workspace.directory(_OBJECT_DIRECTORY, create=True) as directory:
             try:
                 _verify_object(directory, reference)
+                os.fsync(directory)
                 return reference
             except FileNotFoundError:
                 pass
