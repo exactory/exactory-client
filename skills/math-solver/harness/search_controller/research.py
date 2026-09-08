@@ -1,12 +1,14 @@
 """Pinned shared preparation at native admission and actual launch boundaries.
 
-Lock order is the native writer lock, then a short common Store read. Common
-operations never acquire the native lock. Historical proof/account replay reads
-only native records. Fresh work also checks the currently selected common source
-bytes and policy; migration never supplies a successful research assessment.
+Lock order is the native writer lock, then a common Store read. At final launch,
+both are held through token delivery. Common operations never acquire the native
+lock. Historical proof/account replay reads only native records. Fresh work also
+checks the currently selected common source bytes and policy; migration never
+supplies a successful research assessment.
 """
 
 import copy
+from contextlib import contextmanager
 from pathlib import Path
 
 from . import schema as s
@@ -64,6 +66,19 @@ def _common_root(root, value):
     return path
 
 
+@contextmanager
+def guard_foundation(root, value):
+    from research_harness.errors import ResearchError
+    from research_harness.storage import Store
+    s.require(value is not None, "Historical admission requires search amend-foundation NODE before fresh work", "research_foundation_amendment_required")
+    try:
+        with Store(_common_root(root, value)).guarded_snapshot() as guard:
+            yield guard
+    except ResearchError as error:
+        raise SearchError("research_readiness_required", "Common preparation could not be verified: " + error.message,
+                          {"cause": error.code, "details": error.details}) from error
+
+
 def foundation_inputs(value, content):
     from research_harness.review_delivery import references
     validate_reference(value)
@@ -95,7 +110,7 @@ def _claim_binding(state, proposal, value, records, artifacts):
             validate_read_evidence(records, artifacts, link, depth="fulltext", target=target)
 
 
-def audit_foundation(root, state, proposal, value, content, *, current=True):
+def audit_foundation(root, state, proposal, value, content, *, current=True, common_guard=None):
     from research_harness.artifacts import ArtifactStore
     from research_harness.errors import ResearchError
     from research_harness.storage import Store
@@ -113,7 +128,11 @@ def audit_foundation(root, state, proposal, value, content, *, current=True):
         s.require(report["ready"] and report == snapshot["preparation"] and report["digest"] == value["preparation_digest"],
                   "Pinned complete research preparation is unavailable or stale", "research_readiness_required")
         if current:
-            actual = Store(common).snapshot()
+            if common_guard is None:
+                actual = Store(common).snapshot()
+            else:
+                s.require(common_guard.root == common.resolve(), "Guarded preparation belongs to a different common workspace", "research_foundation_mismatch")
+                actual = common_guard.snapshot()
             artifacts = ArtifactStore(common)
             _claim_binding(state, proposal, value, actual["records"], artifacts)
             latest = synthesis_state(actual["records"], artifacts, value["profile"])

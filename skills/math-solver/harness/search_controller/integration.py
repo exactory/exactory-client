@@ -82,7 +82,7 @@ def guard_legacy(controller, command, slug, details):
     return node
 
 
-def audit_work(controller, state, node, content):
+def audit_work(controller, state, node, content, *, common_guard=None):
     from .research import audit_amendment as audit_foundation_amendment, effective_foundation
     audit_foundation_amendment(state, node, content)
     from .computation_io import audit_amendment
@@ -91,7 +91,7 @@ def audit_work(controller, state, node, content):
     s.require(content.get_blob(proposal["digest"]) == proposal["record"], "Admission proposal changed", "digest_mismatch")
     proposal_inputs(proposal["record"], content)
     audit_admission(controller.root, state, proposal["record"], content, effective_foundation(state, node),
-                    execution_account_id=node["account_id"])
+                    execution_account_id=node["account_id"], common_guard=common_guard)
     for identity in node["admission"]["review_ids"]:
         review = state["reviews"][identity]
         s.require(content.get_blob(review["digest"]) == review["record"], "Admission review changed", "digest_mismatch")

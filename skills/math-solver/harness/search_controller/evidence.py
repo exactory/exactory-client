@@ -178,11 +178,12 @@ def manifest_closure(digests, content):
     return manifests
 
 
-def audit_admission(root, state, proposal, content, foundation=None, *, execution_account_id=None):
+def audit_admission(root, state, proposal, content, foundation=None, *, execution_account_id=None, common_guard=None):
     """Audit the current foundation, evidence and applicable account under lock."""
     s.validate_proposal(proposal)
     from .research import audit_foundation
-    audit_foundation(root, state, proposal, foundation if foundation is not None else proposal.get("foundation"), content)
+    audit_foundation(root, state, proposal, foundation if foundation is not None else proposal.get("foundation"), content,
+                     common_guard=common_guard)
     _, target = validate_proposal_context(state, proposal, None)
     if proposal.get("computation") is not None:
         from .computation_io import audit_computation

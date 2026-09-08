@@ -9,6 +9,7 @@ The SQL metadata row holds schema_version and revision. Scientific configuration
 is the ordinary configuration/research record, owned by domain services.
 """
 
+import copy
 import hashlib
 import json
 import math
@@ -183,6 +184,27 @@ def _validate(connection: sqlite3.Connection) -> int:
     if record_count != len(projections):
         raise ResearchError("corrupt_state", "Research records are missing committed values")
     return revision
+
+
+def _snapshot(connection: sqlite3.Connection) -> dict:
+    revision = _validate(connection)
+    records = {}
+    for row in connection.execute("SELECT kind, key, value FROM records ORDER BY kind, key"):
+        records.setdefault(row["kind"], {})[row["key"]] = _load(row["value"], dict)
+    return {"revision": revision, "records": records}
+
+
+class _GuardedSnapshot:
+    """An isolated snapshot usable only while its read transaction is held."""
+
+    def __init__(self, root: Path, value: dict):
+        self.root = root
+        self._value = value
+
+    def snapshot(self) -> dict:
+        if self._value is None:
+            raise ResearchError("invalid_snapshot_guard", "The guarded research read has finished")
+        return copy.deepcopy(self._value)
 
 
 class Transaction:
@@ -403,11 +425,17 @@ class Store:
 
     def snapshot(self) -> dict:
         with self._connection() as connection:
-            revision = _validate(connection)
-            records = {}
-            for row in connection.execute("SELECT kind, key, value FROM records ORDER BY kind, key"):
-                records.setdefault(row["kind"], {})[row["key"]] = _load(row["value"], dict)
-            return {"revision": revision, "records": records}
+            return _snapshot(connection)
+
+    @contextmanager
+    def guarded_snapshot(self):
+        """Prevent common commits until the consumer releases this snapshot."""
+        with self._connection() as connection:
+            guard = _GuardedSnapshot(self.root, _snapshot(connection))
+            try:
+                yield guard
+            finally:
+                guard._value = None
 
     def mutate(self, operation: str, payload: dict, apply, *, expected_revision: int, request_id: str) -> dict:
         _text(operation, "Operation")

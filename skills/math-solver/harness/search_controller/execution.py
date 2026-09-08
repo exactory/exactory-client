@@ -291,11 +291,11 @@ def launch(controller, run):
         s.require((directory / "ready.json").exists(), "Launcher did not establish its identity", "recovery_required")
         identity = read_record(directory / "ready.json")
         s.require(identity["pid"] == process.pid and identity["token"] == run["token"], "Unexpected launcher identity", "recovery_conflict")
-        def audit_launch(state, content):
+        def audit_launch(state, content, *, common_guard=None):
             from .integration import audit_work
             from .research import effective_foundation
             node = state["nodes"][run["node_id"]]
-            audit_work(controller, state, node, content)
+            audit_work(controller, state, node, content, common_guard=common_guard)
             inputs = content.get_blob(run["input_digest"])
             s.require(inputs.get("foundation") == effective_foundation(state, node),
                       "The launch must use the foundation reviewed for this reserved run", "research_foundation_stale")
@@ -306,21 +306,23 @@ def launch(controller, run):
                 audit_research_plans(controller, state, state["service"]["moves"][run["reservation_id"]])
             return [{"kind": "run_launched", "payload": {"run_id": run["id"], "token": run["token"], "identity": identity}}]
         internal_operation(controller, "execution-launch", "launch-" + run["id"], prelaunch)
-        # Recheck after the launch record commits, then retain ownership until
-        # token delivery so another controller writer cannot change the context.
+        # Recheck after the launch record commits, then retain both native and
+        # common ownership until token delivery completes.
         with controller.store._writer_lock():
             from .model import replay
+            from .research import effective_foundation, guard_foundation
             state = replay(controller.store.read())
-            audit_launch(state, controller.store)
-            if run["kind"] == "command":
-                from .execution_state import require_producer_context
-                from .strategy_refresh_io import audit_research_plans
-                move = state["service"]["moves"][run["reservation_id"]]
-                require_producer_context(state, run, move)
-                audit_research_plans(controller, state, move)
-            process.stdin.write((run["token"] + "\n").encode())
-            process.stdin.flush()
-            released = True
+            with guard_foundation(controller.root, effective_foundation(state, state["nodes"][run["node_id"]])) as common_guard:
+                audit_launch(state, controller.store, common_guard=common_guard)
+                if run["kind"] == "command":
+                    from .execution_state import require_producer_context
+                    from .strategy_refresh_io import audit_research_plans
+                    move = state["service"]["moves"][run["reservation_id"]]
+                    require_producer_context(state, run, move)
+                    audit_research_plans(controller, state, move)
+                process.stdin.write((run["token"] + "\n").encode())
+                process.stdin.flush()
+                released = True
         process.stdin.close()
         process.wait(timeout=run["timeout_seconds"] + 10)
     except SearchError:
