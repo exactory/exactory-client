@@ -13,6 +13,10 @@ selects the latest attempt for (exact work, original HTML SHA, resolved URL).
 New bytes or a failed current attempt leave earlier readings partial; identical
 bytes from a new receipt may be reused. Images and self-contained SVG are
 supported. This performs no browsing, OCR, rendering or execution.
+
+Current checks revalidate the saved image container, including historical
+captures admitted by an earlier validator. Such history stays immutable while
+an unsupported or malformed container produces a current pending obligation.
 """
 
 import copy
@@ -54,7 +58,20 @@ def visual_context(records, artifacts, link, source, capture):
     assets = link["locator"].get("assets", [])
     if not isinstance(assets, list):
         raise ResearchError("invalid_visual_asset", "Visual assets must be an array of captured byte links")
-    linked = {}
+    linked, pending, checked = {}, list(inventory["pending"]), {}
+
+    def validation_status(asset):
+        artifact = asset["artifact"]
+        key = (artifact["sha256"], artifact["media_type"])
+        if key not in checked:
+            data = artifacts.read(artifact)
+            try:
+                validate_visual(data, artifact["media_type"])
+                checked[key] = "verified_container"
+            except ResearchError as error:
+                checked[key] = error.code
+        return checked[key]
+
     for asset in assets:
         fields(asset, ("url", "source_id", "artifact"), code="invalid_visual_asset")
         url = safe_url(asset["url"])
@@ -67,15 +84,19 @@ def visual_context(records, artifacts, link, source, capture):
                 or captured["artifact"] != asset["artifact"] or asset["artifact"] != saved["response"]
                 or captured["availability"] != "available" or saved["capture_method"] != "http" or saved["origin_verified"] is not True):
             raise ResearchError("invalid_visual_asset", "Visual bytes must be acquired for this exact work and original HTML resource")
-        artifacts.read(asset["artifact"])
+        status = validation_status(captured)
+        if status != "verified_container":
+            pending.append({"code": "visual_asset_pending", "url": url, "reason": status, "source_ids": captured["source_ids"]})
         linked[url] = asset
-    pending = list(inventory["pending"])
     for url in sorted(urls):
         current = current_asset(records, link["version_id"], capture["original"]["sha256"], url)
         if current is None:
             pending.append({"code": "visual_asset_missing", "url": url})
         elif current["availability"] != "available":
             pending.append({"code": "visual_asset_pending", "url": url, "reason": current["validation_status"],
+                            "source_ids": current["source_ids"]})
+        elif validation_status(current) != "verified_container":
+            pending.append({"code": "visual_asset_pending", "url": url, "reason": validation_status(current),
                             "source_ids": current["source_ids"]})
         elif url not in linked:
             pending.append({"code": "visual_asset_unlinked", "url": url, "path": current["artifact"]["path"]})

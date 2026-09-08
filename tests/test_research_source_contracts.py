@@ -4,6 +4,8 @@ import copy
 import json
 import struct
 import zlib
+from pathlib import Path
+from unittest.mock import patch
 
 from literature_fixtures import LiteratureCase
 from research_fixtures import client
@@ -166,16 +168,143 @@ class SourceContractTests(LiteratureCase):
             self.assert_error("invalid_reading", lambda: self.mutate(record_reading, bad))
             self.assertEqual(before, self.store.snapshot())
 
-    def external_figure(self):
+    def external_figure(self, figure=None, before="", after=""):
         a = self.metadata()
         self.scope([a])
-        figure = '<figure id="f1"><img src="/assets/required.png"><figcaption>Figure one.</figcaption></figure>'
-        capture = self.capture(a, "The result uses Figure one. References: none.</p>" + figure + "<p>")
+        figure = figure or '<figure id="f1"><img src="/assets/required.png"><figcaption>Figure one.</figcaption></figure>'
+        capture = self.capture(a, "The result uses Figure one. References: none.</p>" + before + figure + after + "<p>")
         bundle = self.bundle(a, capture)
         link = {"version_id": a, "source_id": capture["source_id"], "artifact": capture["original"],
                 "locator": {"kind": "html", "anchor": self.span(capture["original"], figure)}}
         bundle["units"].append({"id": "figure1", "kind": "figure", "required": True, "link": link})
         return a, bundle, link
+
+    def test_document_style_outside_the_selected_figure_keeps_visual_pending(self):
+        figure = '<figure id="f1"><div class="plot">Authored plot.</div><figcaption>Figure one.</figcaption></figure>'
+        style = '<style>.plot { background-image: url("https://example.org/uncaptured-plot.png"); width: 100px; height: 100px; }</style>'
+        a, bundle, link = self.external_figure(figure, before=style)
+        self.mutate(import_bundle, bundle)
+        result = self.mutate(record_reading, self.full_note(bundle))["result"]
+        self.assertEqual(result["status"], "partial")
+        self.assertIn("visual_document_style_unsupported", {p["code"] for p in result["pending"]})
+        self.assertIn("fulltext_reading_missing", self.codes())
+        self.assert_error("reading_missing", lambda: validate_read_evidence(self.store.snapshot()["records"], self.artifacts, link))
+        self.assertFalse(next(i for i in foundation_report(self.store, "research")["inventory"] if i["version_id"] == a)["fulltext_read"])
+
+    def test_inline_svg_animation_stays_pending_after_its_base_image_is_captured(self):
+        figure = ('<figure id="f1"><svg xmlns="http://www.w3.org/2000/svg"><image href="/assets/required.png">'
+                  '<animate attributeName="href" values="/assets/required.png;https://example.org/uncaptured-frame.png" '
+                  'dur="1s" repeatCount="indefinite"/></image></svg></figure>')
+        _, bundle, link = self.external_figure(figure)
+        asset, _ = self.asset(link)
+        link["locator"]["assets"] = [asset["asset_link"]]
+        self.mutate(import_bundle, bundle)
+        result = self.mutate(record_reading, self.full_note(bundle))["result"]
+        self.assertEqual(result["status"], "partial")
+        self.assertIn("dynamic_visual_unsupported", {p["code"] for p in result["pending"]})
+        self.assertIn("fulltext_reading_missing", self.codes())
+
+    def test_jpeg_without_frame_or_scan_is_saved_as_pending(self):
+        _, bundle, link = self.external_figure()
+        response = (200, {"Content-Type": "image/jpeg"}, b"\xff\xd8\xff\xff\xd9")
+        asset, _ = self.asset(link, responses=[response])
+        self.assertEqual(asset["status"], "pending")
+        self.assertEqual(asset["capture"]["validation_status"], "malformed_visual_asset")
+        self.assertIsNone(asset["asset_link"])
+        self.assertEqual(self.artifacts.read(asset["capture"]["artifact"]), response[2])
+        self.mutate(import_bundle, bundle)
+        self.assertEqual(self.mutate(record_reading, self.full_note(bundle))["result"]["status"], "partial")
+        self.assertIn("visual_asset_pending", self.codes())
+
+    def test_no_image_gif_webp_and_png_responses_stay_saved_and_pending(self):
+        from test_research_visual_formats import no_image_containers
+        _, bundle, link = self.external_figure()
+        self.mutate(import_bundle, bundle)
+        for media_type, data in no_image_containers():
+            with self.subTest(media_type=media_type):
+                asset, _ = self.asset(link, responses=[(200, {"Content-Type": media_type}, data)])
+                self.assertEqual(asset["status"], "pending")
+                self.assertEqual(asset["capture"]["validation_status"], "malformed_visual_asset")
+                self.assertEqual(self.artifacts.read(asset["capture"]["artifact"]), data)
+                self.assertIsNone(asset["asset_link"])
+                self.assertIn("visual_asset_pending", self.codes())
+
+    def test_valid_authored_raster_containers_support_complete_visual_inspections(self):
+        _, bundle, link = self.external_figure()
+        for index, (name, media_type) in enumerate((("authored-grid.jpg", "image/jpeg"),
+                ("authored-grid-progressive.jpg", "image/jpeg"), ("authored-grid.gif", "image/gif"),
+                ("authored-grid.webp", "image/webp"), ("authored-grid-lossless.webp", "image/webp"))):
+            with self.subTest(name=name):
+                body = (Path(__file__).parent / "fixtures/research" / name).read_bytes()
+                asset, _ = self.asset(link, responses=[(200, {"Content-Type": media_type}, body)])
+                self.assertEqual(asset["status"], "complete")
+                bundle["id"] = "raster-" + str(index)
+                link["locator"]["assets"] = [asset["asset_link"]]
+                self.mutate(import_bundle, bundle)
+                self.assertEqual(self.mutate(record_reading, self.full_note(bundle, "raster-read-" + str(index)))["result"]["status"], "complete")
+                self.assertNotIn("fulltext_reading_missing", self.codes())
+
+    def test_prior_admitted_malformed_visual_is_rechecked_without_rewriting_history(self):
+        from research_harness.reading import current_readings, required_unit_obligations
+        from research_harness.visual_assets import acquire_visual_asset
+        a, bundle, link = self.external_figure()
+        original_link = copy.deepcopy(link)
+        revision = self.store.revision
+        # Reproduce a historical receipt created before structural validation.
+        with patch("research_harness.visual_assets.validate_visual", return_value=None):
+            asset, _ = self.asset(link, responses=[(200, {"Content-Type": "image/jpeg"}, b"\xff\xd8\xff\xff\xd9")])
+            link["locator"]["assets"] = [asset["asset_link"]]
+            self.mutate(import_bundle, bundle)
+            self.assertEqual(self.mutate(record_reading, self.full_note(bundle))["result"]["status"], "complete")
+        before = self.store.snapshot()
+        records = before["records"]
+        accepted, partial = current_readings(records, self.artifacts, a)
+        self.assertFalse(accepted)
+        self.assertEqual(partial[0]["assessment"]["status"], "partial")
+        pending = required_unit_obligations(records, self.artifacts, records["source_bundle"][bundle["id"]])
+        self.assertTrue(any(p["code"] == "visual_asset_pending" and p["reason"] == "malformed_visual_asset" for p in pending))
+        self.assert_error("reading_missing", lambda: validate_read_evidence(records, self.artifacts, link))
+        self.assertIn("fulltext_reading_missing", self.codes())
+        self.assertEqual(acquire_visual_asset(self.store, original_link, "https://arxiv.org/assets/required.png",
+            expected_revision=revision, request_id=asset["request_id"]), asset)
+        self.assertEqual(before, self.store.snapshot())
+
+    def legacy_visual_reading(self, bundle, link, pending_code):
+        from research_harness.html_visuals import resource_inventory
+        from research_harness.reading import current_readings, required_unit_obligations
+        source = self.store.snapshot()["records"]["source"][link["source_id"]]
+        inventory = resource_inventory(self.artifacts.read(link["artifact"]).decode(), source["url"], link["locator"]["anchor"])
+        # Retain the same omission as a previously admitted source inventory.
+        inventory["pending"] = []
+        inventory["resources"] = [r for r in inventory["resources"] if r["url"] == "https://arxiv.org/assets/required.png"]
+        with patch("research_harness.visual_assets.resource_inventory", return_value=inventory):
+            self.mutate(import_bundle, bundle)
+            self.assertEqual(self.mutate(record_reading, self.full_note(bundle))["result"]["status"], "complete")
+            previous_digest = foundation_report(self.store, "research")["digest"]
+        before = self.store.snapshot()
+        records = before["records"]
+        accepted, partial = current_readings(records, self.artifacts, bundle["version_id"])
+        self.assertFalse(accepted)
+        self.assertEqual(partial[0]["assessment"]["status"], "partial")
+        pending = required_unit_obligations(records, self.artifacts, records["source_bundle"][bundle["id"]])
+        self.assertIn(pending_code, {p["code"] for p in pending})
+        self.assert_error("reading_missing", lambda: validate_read_evidence(records, self.artifacts, link))
+        self.assertIn("fulltext_reading_missing", self.codes())
+        self.assertNotEqual(previous_digest, foundation_report(self.store, "research")["digest"])
+        self.assertEqual(before, self.store.snapshot())
+
+    def test_previous_document_style_reading_is_rechecked_from_original_html(self):
+        figure = '<figure id="f1"><div class="plot">Authored plot.</div></figure>'
+        _, bundle, link = self.external_figure(figure, before='<style>.plot { background-image: url(/hidden.png) }</style>')
+        self.legacy_visual_reading(bundle, link, "visual_document_style_unsupported")
+
+    def test_previous_inline_svg_reading_is_rechecked_from_original_html(self):
+        figure = ('<figure id="f1"><svg><image href="/assets/required.png">'
+                  '<animate attributeName="href" values="/assets/required.png;/hidden.png" dur="1s"/></image></svg></figure>')
+        _, bundle, link = self.external_figure(figure)
+        asset, _ = self.asset(link)
+        link["locator"]["assets"] = [asset["asset_link"]]
+        self.legacy_visual_reading(bundle, link, "dynamic_visual_unsupported")
 
     def test_external_figure_anchor_without_image_bytes_remains_pending(self):
         _, bundle, _ = self.external_figure()
