@@ -40,7 +40,7 @@ Split a responsibility further when it makes the interface clearer. Do not creat
 
 ## 2. Durable storage contract
 
-Use SQLite from the standard library at .exactory/research.sqlite3. A metadata row holds schema version, global revision, task profile, target, and constitution digest. Records have a kind, stable key, canonical JSON value, and content digest. Events and request receipts are append-only. Transactions use BEGIN IMMEDIATE, a finite busy timeout, rollback on failure, and compare-and-swap revisions. Reject unknown future schemas and malformed/corrupt state explicitly.
+Use SQLite from the standard library at .exactory/research.sqlite3. A metadata row holds schema version and global revision. The authoritative configuration record (kind configuration, key research) holds task profile, target, and constitution digest, through the same transaction API as other records. Storage initialization alone creates no scientific configuration or readiness. Records have a kind, stable key, canonical JSON value, and content digest. Events and request receipts are append-only. Transactions use BEGIN IMMEDIATE, a finite busy timeout, rollback on failure, and compare-and-swap revisions. Reject unknown future schemas and malformed/corrupt state explicitly.
 
 Public storage API:
 
@@ -135,4 +135,3 @@ Test failures before implementation, then prove expected behavior with fixtures 
 Run all existing test suites, generated-entrypoint checks, compile checks, and CI. New required behavior may update tests that intentionally asserted the old weak behavior; preserve their transport/date/proof assertions with valid fixtures rather than disabling tests. Make a real small corpus acquisition and research workflow demonstration in the local research directory. Record source access failures as failures, not empty data. Assess source-faithfulness and prototype contribution evidence independently; do not promise general research quality improvement from unit tests alone.
 
 Use task-specific independent reviews and a final whole-branch review. Fix findings in code. Publish release/upgrade documentation covering new CLI use, migration, workload implications, enforcement limits, and checks run. Merge through local-dev, dev, main without force pushes or deleting permanent branches. User authorization already covers this integration; do not ask again.
-
