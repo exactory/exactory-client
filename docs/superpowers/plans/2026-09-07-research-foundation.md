@@ -97,9 +97,9 @@ self.assertFalse(foundation_report(store, "research")["ready"])
 
 Files: create RESEARCH_CONSTITUTION.md, research_harness/principles.py, synthesis.py; tests/test_research_synthesis.py and tests/test_research_principles.py.
 
-Consumes: current foundation report, work/source/reading records. Produces `record_rationale`, `record_innovation`, `record_context`, and `synthesis_report(store, profile)` with the same explicit mutation envelope/report conventions. Initialize profile/target/constitution via a named configuration record, not an untyped loose file.
+Consumes: current foundation report, work/source/reading records. Produces `record_standards`, `record_rationale`, `record_innovation`, `record_context`, and `synthesis_report(store, profile)` with the same explicit mutation envelope/report conventions. Initialize profile/target/constitution via a named configuration record, not an untyped loose file.
 
-- [ ] Write failing tests requiring cited established context and bottleneck, study-specific source-linked innovation notes, five to ten full-read external cases for research, within-field cases, dated current/historical context, and unknown-application uncertainty.
+- [ ] Write failing tests requiring source-linked field standards and cohort doctrine, cited established context and bottleneck, study-specific source-linked innovation notes, five to ten full-read external cases for research, within-field cases, dated current/historical context, and unknown-application uncertainty.
 
 ```python
 report = synthesis_report(store, "research")
@@ -139,7 +139,7 @@ self.assertTrue(store.snapshot()["records"]["cycle"][cycle_id]["remaining_obliga
 
 Files: create bin/exactory-research, research_harness/cli.py, gates.py, integration.py; modify bin/exactory-lab, bin/exactory-draft, bin/exactory, relevant hooks, native math-controller admission/integration boundaries, and their existing tests; add tests/test_research_cli.py and tests/test_research_gates.py.
 
-Consumes: all domain APIs. Produces executable init/adopt, acquire/import, roots/expand, reading/search, rationale/innovation/context, cycle/result/assessment/checkpoint/review, status/next/export/gate operations. Command help and typed JSON examples specify exact input shapes. Every mutating command supports optimistic revision and idempotency; long collectors persist their operation and page receipts.
+Consumes: all domain APIs. Produces executable init/adopt, acquire/import, roots/expand, reading/search, standards/rationale/innovation/context, cycle/result/assessment/checkpoint/review, status/next/export/gate operations. Command help and typed JSON examples specify exact input shapes. Every mutating command supports optimistic revision and idempotency; long collectors persist their operation and page receipts.
 
 - [ ] Write failing subprocess tests proving a bare draft marker and a direct state jump cannot satisfy prerequisites, cohort cannot advance without actual abstract reading, source changes invalidate readiness, wrong PDF/DOI/verification target fails before mutation, and external verification-request creation still works.
 
@@ -179,4 +179,3 @@ Files: add focused end-to-end/adversarial tests where gaps remain, docs/releases
 Task interfaces and shared files are reviewed in the SDD ledger before execution. Task 2 owns initial cohort CLI acquisition; Task 6 integrates common gates; Task 7 documents the final APIs. The package's public store/error contracts are fixed by Task 1. Domain operation details are documented in each implementation report and carried to the next brief; the spec, rather than example fixture naming, governs correctness.
 
 The user already authorized execution, resource expenditure, independent quality work through superpowers, and integration. The controller resolves routine details using the approved design and records them; no additional permission checkpoint is required for the planned merge flow.
-
