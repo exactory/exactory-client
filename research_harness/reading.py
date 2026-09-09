@@ -234,11 +234,36 @@ def require_fulltext(store, payload, *, expected_revision, request_id):
                              expected_revision=expected_revision, request_id=request_id)
 
 
+TERMINAL_ORIGIN_STATUSES = (403, 404, 410, 451)
+REGISTRY_PROVIDERS = ("crossref", "openalex")
+
+
+def _terminal_origin_capture(records, source, version_id, depth, policy):
+    return (source.get("capture_method") == "http" and source.get("requested_identifier") == version_id
+            and source.get("http_status") in policy["allowed_statuses"] and source.get("response_complete") is True
+            and source.get("response") is not None and source.get("status") == "failed"
+            and source.get("provider") == ("fulltext" if depth == "fulltext" else "arxiv"))
+
+
+def registry_abstract_present(records, source):
+    """Whether the work a registry capture observed carries a complete abstract."""
+    observed = records.get("work", {}).get(source.get("observed_identifier"))
+    return observed is not None and any(a["completeness"] == "complete" for a in observed["abstracts"])
+
+
+def _registry_capture_without_abstract(records, source, work):
+    return (source.get("capture_method") == "http" and source.get("provider") in REGISTRY_PROVIDERS
+            and source.get("requested_identifier") in [work["id"], *work["aliases"]]
+            and source.get("http_status") == 200 and source.get("response_complete") is True
+            and source.get("response") is not None and source.get("status") == "captured"
+            and not registry_abstract_present(records, source))
+
+
 def record_availability(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
         fields(value, ("id", "profile", "version_id", "depth", "source_ids", "reason", "policy"), code="invalid_availability")
         profile_name(value["profile"])
-        exact_work(records, value["version_id"])
+        work = exact_work(records, value["version_id"])
         text(value["reason"], "Unavailability reason", code="invalid_availability")
         if value["depth"] not in ("abstract", "fulltext"):
             raise ResearchError("invalid_availability", "Availability policy covers abstract or fulltext retrieval")
@@ -247,17 +272,21 @@ def record_availability(store, payload, *, expected_revision, request_id):
         fields(policy, ("id", "minimum_attempts", "allowed_statuses", "rationale"), code="invalid_availability")
         text(policy["id"], "Policy ID", code="invalid_availability")
         text(policy["rationale"], "Policy rationale", code="invalid_availability")
+        statuses = policy["allowed_statuses"]
         if (type(policy["minimum_attempts"]) is not int or not 1 <= policy["minimum_attempts"] <= len(value["source_ids"])
-                or not isinstance(policy["allowed_statuses"], list) or not policy["allowed_statuses"]
-                or any(type(status) is not int or status not in (403, 404, 410, 451) for status in policy["allowed_statuses"])):
-            raise ResearchError("invalid_availability", "The policy must require captured terminal origin failures")
-        for source_id in value["source_ids"]:
-            source = records.get("source", {}).get(source_id, {})
-            if (source.get("capture_method") != "http" or source.get("requested_identifier") != value["version_id"]
-                    or source.get("http_status") not in policy["allowed_statuses"] or source.get("response_complete") is not True
-                    or source.get("response") is None or source.get("status") != "failed"
-                    or source.get("provider") != ("fulltext" if value["depth"] == "fulltext" else "arxiv")):
+                or not isinstance(statuses, list) or not statuses or any(type(status) is not int for status in statuses)):
+            raise ResearchError("invalid_availability", "The policy must state a minimum attempt count and the captured HTTP statuses it accepts")
+        sources = [records.get("source", {}).get(source_id, {}) for source_id in value["source_ids"]]
+        if all(status in TERMINAL_ORIGIN_STATUSES for status in statuses):
+            if not all(_terminal_origin_capture(records, s, value["version_id"], value["depth"], policy) for s in sources):
                 raise ResearchError("invalid_availability", "Rate limits, resource pauses, timeouts, partial captures and unrelated failures are not source unavailability")
+        elif statuses == [200] and value["depth"] == "abstract" and not value["version_id"].startswith("arxiv:"):
+            if (not all(_registry_capture_without_abstract(records, s, work) for s in sources)
+                    or not set(REGISTRY_PROVIDERS) <= {s["provider"] for s in sources}):
+                raise ResearchError("invalid_availability", "Registry abstract absence needs a complete HTTP 200 capture of this work from every supported registry, none carrying an abstract")
+        else:
+            raise ResearchError("invalid_availability", "The policy must require captured terminal origin failures, or registry abstract absence at abstract depth for a non-arXiv work")
+        for source in sources:
             ArtifactStore(store.root).read(source["response"])
         return [immutable_record(records, "availability", value["id"], value)], dict(value, qualification="noncritical_only")
 

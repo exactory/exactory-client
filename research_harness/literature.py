@@ -33,7 +33,7 @@ from .http import safe_url
 from .imports import _pointer
 from .operations import fields, immutable_record, iso_date, prepared_mutation, profile_name, strings, text, timestamp
 from .providers import _json
-from .reading import bundle_digest, current_readings, fulltext_coverage, required_unit_obligations
+from .reading import bundle_digest, current_readings, fulltext_coverage, registry_abstract_present, required_unit_obligations
 from .search_pages import enumerate_pages, native_page
 from .source_links import captured_source, complete_original, contains, covers_text, exact_work, fulltext_capture, original_identity, read_locator, validate_link
 
@@ -424,6 +424,8 @@ def foundation_state(records, artifacts, profile):
                      any(a["completeness"] == "complete" for a in work["abstracts"]))
         if available:
             qualified = []
+        if depth == "abstract":
+            qualified = [q for q in qualified if not any(registry_abstract_present(records, records["source"][s]) for s in q["source_ids"])]
         for item in qualified:
             for source_id in item["source_ids"]:
                 artifacts.read(records["source"][source_id]["response"])

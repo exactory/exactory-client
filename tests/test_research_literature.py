@@ -96,6 +96,43 @@ class LiteratureTests(LiteratureCase):
         bad["id"], bad["source_ids"] = "rate-limit", [limited["source_id"]]
         self.assert_error("invalid_availability", lambda: self.mutate(record_availability, bad))
 
+    def test_registry_abstract_absence_qualifies_noncritical_abstract_depth(self):
+        from research_harness.acquisition import acquire_work
+        from research_fixtures import client, json_response, crossref, openalex
+        a = self.metadata(references=[{"id": "openalex:W123"}])
+        self.scope([a])
+        without_crossref, without_openalex = crossref(), openalex()
+        del without_crossref["message"]["abstract"]
+        del without_openalex["abstract_inverted_index"]
+        http, _, _ = client([json_response(without_openalex), json_response(without_crossref), json_response(crossref())])
+        acquire_work(self.store, "W123", request_id="oa-absent", expected_revision=self.store.revision, http=http)
+        acquire_work(self.store, "10.1234/example", request_id="cr-absent", expected_revision=self.store.revision, http=http)
+        self.assertIn("abstract_reading_missing", self.codes())
+        records = self.store.snapshot()["records"]
+        sources = {s["provider"]: s["id"] for s in records["source"].values()}
+        payload = {"id": "registry-absent", "profile": "research", "version_id": "openalex:W123", "depth": "abstract",
+                   "source_ids": [sources["openalex"], sources["crossref"]],
+                   "reason": "Neither registry publishes an abstract for this journal article.",
+                   "policy": {"id": "registry-abstract-absent", "minimum_attempts": 2, "allowed_statuses": [200],
+                              "rationale": "Complete records from every supported registry without an abstract document that none is available."}}
+        one_registry = copy.deepcopy(payload)
+        one_registry["id"], one_registry["source_ids"], one_registry["policy"]["minimum_attempts"] = "one-registry", [sources["openalex"]], 1
+        self.assert_error("invalid_availability", lambda: self.mutate(record_availability, one_registry))
+        arxiv_version = copy.deepcopy(payload)
+        arxiv_version["id"], arxiv_version["version_id"] = "arxiv-absent", a
+        self.assert_error("invalid_availability", lambda: self.mutate(record_availability, arxiv_version))
+        self.mutate(record_availability, payload)
+        self.assertNotIn("abstract_reading_missing", self.codes())
+        report = foundation_report(self.store, "research")
+        self.assertEqual(report["availability_qualified"][0]["qualification"], "noncritical_only")
+        self.assertEqual(report["availability_qualified"][0]["policy"]["allowed_statuses"], [200])
+        acquire_work(self.store, "10.1234/example", request_id="cr-present", expected_revision=self.store.revision, http=http)
+        self.assertIn("abstract_reading_missing", self.codes())
+        present = next(s["id"] for s in self.store.snapshot()["records"]["source"].values() if s["operation_id"] == "cr-present")
+        with_abstract = copy.deepcopy(payload)
+        with_abstract["id"], with_abstract["source_ids"] = "abstract-present", [sources["openalex"], present]
+        self.assert_error("invalid_availability", lambda: self.mutate(record_availability, with_abstract))
+
     def test_complete_mechanical_foundation_and_untrusted_human_exports(self):
         collection = self.cohort((1,))
         a = "arxiv:2601.00001v1"
