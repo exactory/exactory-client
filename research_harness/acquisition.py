@@ -345,7 +345,8 @@ def _page_update(transaction, collection, partition_id, page, prepared, sources,
             partition["restart"] = True
     page_record = {"collection_id": collection["id"], "sequence": collection["sequence"], "requested": requested,
                    "source_ids": [s["id"] for s in sources], "reported_total": page.total if page else None,
-                   "returned_count": page.returned_count if page else 0, "disposition": disposition, "failures": failures}
+                   "returned_count": page.returned_count if page else 0, "disposition": disposition, "failures": failures,
+                   "warnings": list(page.warnings) if page else []}
     transaction.put("collection_page", derived_id(collection["id"], "page", collection["sequence"]), page_record)
     collection["sequence"] += 1
     transaction.put("collection", collection["id"], collection)
@@ -429,12 +430,13 @@ def acquire_work(store, identifier, *, request_id, expected_revision, http=None,
         return replay
     snapshot = store.snapshot()
     http, artifacts = http or HttpClient(), ArtifactStore(store.root)
-    attempts, pending, works, observed_identifier = [], [], [], None
+    attempts, pending, works, observed_identifier, warnings = [], [], [], None, []
     try:
         response = http.get(request.url, headers=request.headers, accept=request.accept, budget=budget)
         attempts = response.attempts
         page = provider.parse(response.body)
         pending.extend(page.failures)
+        warnings = list(page.warnings)
         if len(page.works) == 1:
             observed_identifier = page.works[0]["id"]
         if len(page.works) != 1 or not _matches(identifier, page.works[0]):
@@ -461,7 +463,7 @@ def acquire_work(store, identifier, *, request_id, expected_revision, http=None,
             put_work(transaction, item)
 
     return _finish(store, request_id, snapshot["revision"],
-                   {"status": "pending" if pending else "complete", "scope": "metadata", "pending": pending,
+                   {"status": "pending" if pending else "complete", "scope": "metadata", "pending": pending, "warnings": warnings,
                     "work_ids": [w["id"] for w in works], "source_ids": [s["id"] for s in sources], "attempts_used": budget.used}, apply=commit)
 
 

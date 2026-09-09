@@ -5,7 +5,12 @@ historical_cutoff?}. Verification target is {kind: work, id, source_id, sha256};
 an incomplete pin may be prepared but cannot complete the foundation. Scope
 changes replace literature_scope/{profile}; Store events preserve prior scopes.
 
-Graph traversal includes every occurrence from Tier 1/2 captured versions.
+Graph traversal includes every occurrence from Tier 1/2 captured versions. A root
+(Tier 1) is read in full with its complete bibliography. Its references are Tier 3
+(abstract) unless the author selected them with require-fulltext for this profile;
+a selected reference is Tier 2 (full reading and complete bibliography) wherever it
+appears in the network, and its own references are Tier 3 unless selected too. The author therefore reads few papers in full while every
+reference of those papers is still inventoried and read at abstract depth.
 Registry observations never establish a complete article bibliography. Aliases
 resolve families only; an unversioned reference includes all captured versions
 of its unambiguous family without claiming their contents are interchangeable.
@@ -106,6 +111,11 @@ def citation_graph(records, profile):
         return {"nodes": [], "references": [], "obligations": [obligation("roots_missing", "Select one to five exact starting works.")]}
     versions, tiers = {}, {}
     obligations, references = [], {}
+    selected_families = set()
+    for requirement in records.get("fulltext_requirement", {}).values():
+        work = records.get("work", {}).get(requirement["version_id"])
+        if requirement["profile"] == profile and work is not None:
+            selected_families.add(work["work_id"])
     for identifier in scope["roots"]:
         work = records.get("work", {}).get(identifier)
         if work is None:
@@ -145,7 +155,8 @@ def citation_graph(records, profile):
                         target_family = records["work"][candidates[0]]["work_id"]
                         row.update(target_family=target_family, status="resolved", version_ids=sorted(candidates))
                         versions.setdefault(target_family, set()).update(candidates)
-                        tiers[target_family] = min(tiers.get(target_family, 4), tier + 1)
+                        target_tier = 2 if target_family in selected_families else 3
+                        tiers[target_family] = min(tiers.get(target_family, 4), target_tier)
                     except ResearchError as error:
                         row["status"] = error.code
                 references[occurrence["id"]] = row

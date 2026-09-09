@@ -2,7 +2,7 @@ import copy
 
 from literature_fixtures import LiteratureCase
 from research_harness.literature import foundation_report, import_bundle
-from research_harness.reading import record_reading, validate_read_evidence
+from research_harness.reading import require_fulltext, record_reading, validate_read_evidence
 
 
 class ReadingTests(LiteratureCase):
@@ -199,6 +199,9 @@ class ReadingTests(LiteratureCase):
         self.metadata(2, references=[{"id": c}])
         self.metadata(3)
         self.scope([a])
+        # B is selected for full reading, so its reference C enters the network at abstract depth.
+        self.mutate(require_fulltext, {"id": "selected-b", "profile": "research", "version_id": b,
+                                     "purpose": "major_claim", "reason": "The claim rests on B."})
         bundle = self.bundle(c)
         self.mutate(import_bundle, bundle)
         self.mutate(record_reading, self.full_note(bundle))

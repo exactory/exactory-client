@@ -17,15 +17,25 @@ class GraphTests(LiteratureCase):
         self.scope([a, b])
         graph = citation_graph(self.store.snapshot()["records"], "research")
         tiers = {node["work_id"]: node["tier"] for node in graph["nodes"]}
-        self.assertEqual(tiers, {a[:-2]: 1, b[:-2]: 1, c[:-2]: 2, d[:-2]: 2, e[:-2]: 3})
-        self.assertEqual(len(graph["references"]), 8)
+        # References of a root are Tier 3 (abstract) until the author selects them.
+        self.assertEqual(tiers, {a[:-2]: 1, b[:-2]: 1, c[:-2]: 3, d[:-2]: 3})
+        self.assertEqual(len(graph["references"]), 5)
         self.assertIn("reference_unresolved", self.codes())
         self.assertIn("bibliography_incomplete", self.codes())
+        self.assertNotIn(c, [x["version_id"] for x in self.store_obligations() if x["code"] == "bibliography_incomplete"])
+        # Selecting C with require-fulltext makes it Tier 2: read in full, bibliography expanded, its references Tier 3.
+        self.mutate(require_fulltext, {"id": "selected-c", "profile": "research", "version_id": c,
+                                     "purpose": "major_claim", "reason": "The transfer rests on C's mechanism."})
+        graph = citation_graph(self.store.snapshot()["records"], "research")
+        tiers = {node["work_id"]: node["tier"] for node in graph["nodes"]}
+        self.assertEqual(tiers, {a[:-2]: 1, b[:-2]: 1, c[:-2]: 2, d[:-2]: 3, e[:-2]: 3})
+        self.assertEqual(len(graph["references"]), 8)
+        self.assertIn(c, [x["version_id"] for x in self.store_obligations() if x["code"] == "bibliography_incomplete"])
         self.mutate(require_fulltext, {"id": "major", "profile": "research", "version_id": e,
                                      "purpose": "major_claim", "reason": "The main result uses E's assumption."})
         report = foundation_report(self.store, "research")
         item = next(x for x in report["inventory"] if x["version_id"] == e)
-        self.assertEqual(item["tier"], 3)
+        self.assertEqual(item["tier"], 2)
         self.assertEqual(item["required_depth"], "fulltext")
 
     def test_article_bibliography_expansion_preserves_repeated_unresolved_and_nonpaper(self):

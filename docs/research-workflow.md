@@ -79,10 +79,13 @@ Handwritten completion flags are not reading evidence.
 
 Acquire one to five exact root paper families. Record `roots` with the actual
 selected collection IDs. Follow captured bibliography occurrences through the
-three-tier network: read Tier 1 and Tier 2 papers in full, and every Tier 3
-abstract. Preserve all occurrences and exact versions. Work supporting a major
-claim, novelty judgment, innovation transfer, or validity decision needs full
-reading even outside those tiers. Use `require-fulltext` to record that dependency.
+three-tier network: a root is Tier 1, read in full with its complete bibliography;
+its references are Tier 3, read at abstract depth, until the author selects a
+reference with `require-fulltext` for a major claim, novelty judgment, innovation
+transfer, or validity decision. A selected reference is Tier 2 wherever it appears:
+read in full with its complete bibliography, and its own references become Tier 3.
+Few papers are read in full; every reference of those papers is still inventoried
+and read at abstract depth. Preserve all occurrences and exact versions.
 
 ```sh
 exactory-research acquire --file root-query.json --expected-revision REVISION --request-id acquire-root-001

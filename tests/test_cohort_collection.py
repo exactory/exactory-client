@@ -57,6 +57,25 @@ class CollectionTests(unittest.TestCase):
         self.assertEqual(collect_cohort(self.store, DEFINITION, request_id="collect-1", expected_revision=0,
                                       max_requests=1, http=http, page_size=2), result)
 
+    def test_malformed_provider_doi_is_retained_as_warning_and_does_not_restart_partition(self):
+        page = atom([entry(abstract="First member."), entry("2601.00002v1", abstract="Second member.", doi="0.1016/j.rinp.2022.105691")], total=2, size=2)
+        http, wire, _ = client([xml_response(page)])
+        result = collect_cohort(self.store, DEFINITION, request_id="collect-doi", expected_revision=0,
+                                max_requests=2, http=http, page_size=2)
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual(result["pending"], [])
+        self.assertEqual(result["member_count"], 2)
+        self.assertEqual(result["extraction_failures"], 0)
+        self.assertEqual(len(wire.requests), 1)
+        records = self.store.snapshot()["records"]
+        self.assertEqual(records["work"]["arxiv:2601.00002v1"]["aliases"], [])
+        page_record = next(iter(records["collection_page"].values()))
+        self.assertEqual(page_record["disposition"], "accepted")
+        self.assertEqual(page_record["warnings"], [{"index": 1, "code": "invalid_alias", "id": "arxiv:2601.00002v1", "raw": "0.1016/j.rinp.2022.105691"}])
+        partition = records["collection"][result["collection_id"]]["partitions"][0]
+        self.assertEqual(partition["status"], "complete")
+        self.assertFalse(partition["restart"])
+
     def test_empty_intermediate_page_pauses_without_losing_cursor(self):
         http, wire, _ = client([xml_response(atom([entry()], total=2, size=1)),
                                 xml_response(atom([], total=2, start=1, size=1)),

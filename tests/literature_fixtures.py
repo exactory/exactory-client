@@ -124,6 +124,10 @@ class LiteratureCase(unittest.TestCase):
         from research_harness.graph import set_roots
         return self.mutate(set_roots, dict(profile=profile, roots=roots, collection_ids=list(collections), **kwargs))
 
+    def store_obligations(self, profile="research"):
+        from research_harness.literature import foundation_report
+        return foundation_report(self.store, profile)["obligations"]
+
     def codes(self, profile="research"):
         from research_harness.literature import foundation_report
         return {item["code"] for item in foundation_report(self.store, profile)["obligations"]}

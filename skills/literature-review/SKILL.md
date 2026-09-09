@@ -16,9 +16,12 @@ complete objective or exact target, original source versions, and resource limit
 
 Complete the frozen cohort enumeration and every member's actual full abstract
 reading. Select one to five distinct exact root paper families and expand their
-captured bibliography occurrences through three tiers. Read Tier 1 and Tier 2 in
-full and Tier 3 abstracts. Require full text for every consequential claim,
-novelty, innovation, or validity dependency wherever it appears in the network.
+captured bibliography occurrences through three tiers. Read Tier 1 (the roots) in
+full with complete bibliographies. Their references are Tier 3, read at abstract
+depth, until you select a reference with `require-fulltext` for a consequential
+claim, novelty, innovation, or validity dependency; a selected reference is Tier 2
+wherever it appears, read in full with its complete bibliography, and its own
+references become Tier 3. Choose the few papers that the claims actually rest on.
 
 Capture and inventory each original body and inspect its required text, proofs,
 equations, figures, tables, appendices, bibliography, and supplements. Keep source
