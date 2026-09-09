@@ -289,7 +289,11 @@ class CollectionTests(unittest.TestCase):
                              xml_response(atom([entry(category="math.PR")], total=1, size=1))])
         first = collect_cohort(self.store, DEFINITION, request_id="category-old", expected_revision=0, http=http, page_size=1)
         later = resume_cohort(self.store, first["collection_id"], request_id="category-new", expected_revision=self.store.revision, http=http)
-        self.assertIn("primary_category_conflict", {p["code"] for p in later["pending"]})
+        # A provider that reports a different primary category for the same family on a later capture
+        # produces an explicit, retained conflict; it does not leave the frozen collection paused forever.
+        self.assertEqual(later["conflicts"], [{"code": "primary_category_conflict", "work_ids": ["arxiv:2601.00001"]}])
+        self.assertNotIn("primary_category_conflict", {p["code"] for p in later["pending"]})
+        self.assertEqual(later["status"], "complete")
         self.assertEqual(later["member_count"], 1)
         self.assertEqual(later["exclusion_count"], 1)
 

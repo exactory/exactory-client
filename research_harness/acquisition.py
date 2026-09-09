@@ -139,9 +139,11 @@ def _collection_summary(records, collection):
     exclusions = _collection_members(records, collection_id, "cohort_exclusion")
     seen = _collection_members(records, collection_id, "cohort_seen")
     pending = copy.deepcopy(collection["pending"])
+    # A family observed as a member on one capture and as an exclusion on another (the provider
+    # changed its primary category between captures) is an explicit, retained conflict. Both
+    # observations stay recorded; the member obligations remain; the collection is not paused.
     category_conflicts = sorted({m["work_id"] for m in members} & {m["work_id"] for m in exclusions})
-    if category_conflicts:
-        pending.append({"code": "primary_category_conflict", "work_ids": category_conflicts})
+    conflicts = [{"code": "primary_category_conflict", "work_ids": category_conflicts}] if category_conflicts else []
     obligations, historical = [], []
     for member in sorted(members, key=lambda m: m["work_id"]):
         for identifier in member["version_ids"]:
@@ -180,7 +182,7 @@ def _collection_summary(records, collection):
             "unique_count": len(seen), "member_count": len(members), "exclusion_count": len(exclusions),
             "extraction_failures": collection["extraction_failures"], "pending_partitions": unenumerated,
             "next_eligible_at": collection.get("next_eligible_at"),
-            "historical_unresolved": historical,
+            "historical_unresolved": historical, "conflicts": conflicts,
             "reading_obligations": obligations, "next_abstract": next((o for o in obligations if o["artifact"]), None)}
 
 
