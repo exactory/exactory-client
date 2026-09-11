@@ -23,7 +23,7 @@ from .evaluation import Evaluation
 from .evidence import digest
 from .graph import main_captures, obligation, selected_bundle
 from .operations import fields, immutable_record, iso_date, prepared_mutation, profile_name, strings, text
-from .source_links import complete_original, contains, covers_text, exact_work, link_identity, original_identity, validate_link
+from .source_links import TEXT_KINDS, complete_original, contains, covers_text, exact_work, link_identity, original_identity, validate_link
 from .visual_assets import asset_dependencies
 
 
@@ -120,7 +120,7 @@ def _assess(records, artifacts, value):
                 pending.append(obligation("required_unit_uninspected", "Inspect the complete required text or visual unit.",
                                           version_id=value["version_id"], unit_id=unit["id"], paths=[unit["link"]["artifact"]["path"]]))
         included_abstract = bundle.get("includes_abstract") is not False and any(
-            u["kind"] == "abstract" and u["link"] is not None and u["link"]["locator"]["kind"] == "text"
+            u["kind"] == "abstract" and u["link"] is not None and u["link"]["locator"]["kind"] in TEXT_KINDS
             and original_identity(records, u["link"]) == bundle["original_sha256"]
             and complete_original(evaluation.link(u["link"])) and any(
                 i["unit_id"] == u["id"] and contains(i["link"], u["link"], records) for i in inspections) for u in units.values())

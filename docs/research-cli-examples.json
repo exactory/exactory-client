@@ -103,10 +103,11 @@
             "media_type": "text/plain"
           },
           "locator": {
-            "kind": "text",
+            "kind": "span",
             "start": 0,
             "end": 15,
-            "quote": "Source passage."
+            "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+            "excerpt": "Source passage."
           }
         }
       },
@@ -124,10 +125,11 @@
             "media_type": "text/plain"
           },
           "locator": {
-            "kind": "text",
+            "kind": "span",
             "start": 0,
             "end": 15,
-            "quote": "Source passage."
+            "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+            "excerpt": "Source passage."
           }
         }
       }
@@ -145,10 +147,11 @@
             "media_type": "text/plain"
           },
           "locator": {
-            "kind": "text",
+            "kind": "span",
             "start": 0,
             "end": 15,
-            "quote": "Source passage."
+            "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+            "excerpt": "Source passage."
           }
         }
       ]
@@ -177,10 +180,11 @@
             "media_type": "text/plain"
           },
           "locator": {
-            "kind": "text",
+            "kind": "span",
             "start": 0,
             "end": 15,
-            "quote": "Source passage."
+            "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+            "excerpt": "Source passage."
           }
         },
         "note": "Replace with the actual inspection."
@@ -312,10 +316,11 @@
         "media_type": "text/plain"
       },
       "locator": {
-        "kind": "text",
+        "kind": "span",
         "start": 0,
         "end": 15,
-        "quote": "Source passage."
+        "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+        "excerpt": "Source passage."
       }
     },
     "url": "https://example.org/figure.png",
@@ -346,10 +351,11 @@
               "media_type": "text/plain"
             },
             "locator": {
-              "kind": "text",
+              "kind": "span",
               "start": 0,
               "end": 15,
-              "quote": "Source passage."
+              "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+              "excerpt": "Source passage."
             }
           }
         ],
@@ -378,10 +384,11 @@
               "media_type": "text/plain"
             },
             "locator": {
-              "kind": "text",
+              "kind": "span",
               "start": 0,
               "end": 15,
-              "quote": "Source passage."
+              "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+              "excerpt": "Source passage."
             }
           }
         ],
@@ -410,10 +417,11 @@
               "media_type": "text/plain"
             },
             "locator": {
-              "kind": "text",
+              "kind": "span",
               "start": 0,
               "end": 15,
-              "quote": "Source passage."
+              "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+              "excerpt": "Source passage."
             }
           }
         ],
@@ -442,10 +450,11 @@
               "media_type": "text/plain"
             },
             "locator": {
-              "kind": "text",
+              "kind": "span",
               "start": 0,
               "end": 15,
-              "quote": "Source passage."
+              "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+              "excerpt": "Source passage."
             }
           }
         ],
@@ -474,10 +483,11 @@
               "media_type": "text/plain"
             },
             "locator": {
-              "kind": "text",
+              "kind": "span",
               "start": 0,
               "end": 15,
-              "quote": "Source passage."
+              "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+              "excerpt": "Source passage."
             }
           }
         ],
@@ -511,10 +521,11 @@
             "media_type": "text/plain"
           },
           "locator": {
-            "kind": "text",
+            "kind": "span",
             "start": 0,
             "end": 15,
-            "quote": "Source passage."
+            "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+            "excerpt": "Source passage."
           }
         }
       ],
@@ -541,10 +552,11 @@
             "media_type": "text/plain"
           },
           "locator": {
-            "kind": "text",
+            "kind": "span",
             "start": 0,
             "end": 15,
-            "quote": "Source passage."
+            "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+            "excerpt": "Source passage."
           }
         }
       ],
@@ -604,10 +616,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           ],
@@ -634,10 +647,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           ],
@@ -664,10 +678,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           ],
@@ -694,10 +709,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           ],
@@ -745,10 +761,11 @@
                   "media_type": "text/plain"
                 },
                 "locator": {
-                  "kind": "text",
+                  "kind": "span",
                   "start": 0,
                   "end": 15,
-                  "quote": "Source passage."
+                  "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                  "excerpt": "Source passage."
                 }
               }
             ],
@@ -797,10 +814,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           ],
@@ -827,10 +845,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           ],
@@ -857,10 +876,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           ],
@@ -887,10 +907,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           ],
@@ -938,10 +959,11 @@
                   "media_type": "text/plain"
                 },
                 "locator": {
-                  "kind": "text",
+                  "kind": "span",
                   "start": 0,
                   "end": 15,
-                  "quote": "Source passage."
+                  "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                  "excerpt": "Source passage."
                 }
               }
             ],
@@ -991,10 +1013,11 @@
               "media_type": "text/plain"
             },
             "locator": {
-              "kind": "text",
+              "kind": "span",
               "start": 0,
               "end": 15,
-              "quote": "Source passage."
+              "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+              "excerpt": "Source passage."
             }
           }
         ],
@@ -1023,10 +1046,11 @@
               "media_type": "text/plain"
             },
             "locator": {
-              "kind": "text",
+              "kind": "span",
               "start": 0,
               "end": 15,
-              "quote": "Source passage."
+              "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+              "excerpt": "Source passage."
             }
           }
         ],
@@ -1134,10 +1158,11 @@
             "media_type": "text/plain"
           },
           "locator": {
-            "kind": "text",
+            "kind": "span",
             "start": 0,
             "end": 15,
-            "quote": "Source passage."
+            "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+            "excerpt": "Source passage."
           }
         }
       ],
@@ -1424,10 +1449,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           },
@@ -1469,10 +1495,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           },
@@ -1595,10 +1622,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           },
@@ -1657,10 +1685,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           },
@@ -1719,10 +1748,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           },
@@ -1781,10 +1811,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           },
@@ -1843,10 +1874,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           },
@@ -1905,10 +1937,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           },
@@ -2047,10 +2080,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           ]
@@ -2069,10 +2103,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           ]
@@ -2091,10 +2126,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           ]

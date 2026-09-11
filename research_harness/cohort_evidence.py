@@ -20,7 +20,7 @@ from .graph import obligation
 from .identities import resolve_family
 from .operations import fields, prepared_mutation, strings, text, timestamp
 from .reading import current_readings
-from .source_links import captured_source, contains, covers_text, exact_work
+from .source_links import TEXT_KINDS, captured_source, contains, covers_text, exact_work, read_locator
 
 
 def _selection_values(records, value):
@@ -107,8 +107,8 @@ def abstract_reading(records, artifacts, readings, item):
         if reading["depth"] == "fulltext":
             bundle = records["source_bundle"][reading["bundle_id"]]
             for unit in bundle["units"]:
-                if (unit["kind"] == "abstract" and unit["link"] is not None and unit["link"]["locator"]["kind"] == "text"
-                        and " ".join(unit["link"]["locator"]["quote"].split()) == abstract_text
+                if (unit["kind"] == "abstract" and unit["link"] is not None and unit["link"]["locator"]["kind"] in TEXT_KINDS
+                        and " ".join(read_locator(evaluation, unit["link"]["artifact"], unit["link"]["locator"]).split()) == abstract_text
                         and any(i["unit_id"] == unit["id"] and contains(i["link"], unit["link"], records) for i in reading["inspections"])):
                     return reading
     return None

@@ -36,7 +36,8 @@ The recurring types are:
 | --- | --- |
 | `ArtifactRef` | `{ "sha256": string, "path": string, "size": integer, "media_type": string }`. The path is `research/sources/objects/SHA256`. The actual bytes must match size and SHA-256. |
 | `Link` | `{ "version_id": string, "source_id": string, "artifact": ArtifactRef, "locator": Locator }`. It binds a captured exact version, source, and inspected location. |
-| Text locator | `{ "kind": "text", "start": integer, "end": integer, "quote": string }`, with exact character offsets and saved text. |
+| Span locator | `{ "kind": "span", "start": integer, "end": integer, "sha256": string, "excerpt"?: string }`. Offsets are Unicode code points into the saved UTF-8 text; `sha256` is the SHA-256 of the UTF-8 encoding of that exact substring; `excerpt` is at most 200 characters of its start, for display only. This is the recommended form: the harness already holds the bytes. |
+| Text locator | `{ "kind": "text", "start": integer, "end": integer, "quote": string }`, the legacy form carrying the substring itself. It stays valid; a text and a span locator over the same bytes have the same content identity. |
 | JSON locator | `{ "kind": "json", "pointer": string, "value": any JSON value }`, naming an exact value in the saved JSON. |
 | Objective | `{ "kind": "objective", "id": string, "statement": string }`, preserving the complete original research objective. |
 | Verification target | `{ "kind": "work", "id": string, "source_id": string or null, "sha256": string or null }`. The two nullable fields are both null during incomplete preparation or both identify the available original main body. |
@@ -205,7 +206,7 @@ evidence shapes accepted by the command.
               "size": 15,
               "media_type": "text/plain"
             },
-            "locator": {"kind": "text", "start": 0, "end": 15, "quote": "Source passage."}
+            "locator": {"kind": "span", "start": 0, "end": 15, "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9", "excerpt": "Source passage."}
           }
         }
       ]
@@ -342,7 +343,7 @@ Common author research preparation supports native research and an author's nati
       "size": 15,
       "media_type": "text/plain"
     },
-    "locator": {"kind": "text", "start": 0, "end": 15, "quote": "Source passage."}
+    "locator": {"kind": "span", "start": 0, "end": 15, "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9", "excerpt": "Source passage."}
   }],
   "reason": "Explain the exact paper-source correspondence and its limits."
 }
