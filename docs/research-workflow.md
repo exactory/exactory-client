@@ -312,7 +312,7 @@ request identity; retry an interrupted identical mutation with its original
 identity. A noncritical availability qualification requires the actual permitted
 HTTP evidence and policy, and does not complete a reading: either captured terminal
 origin failures, or, for the abstract of a non-arXiv work, complete registry captures
-from every supported registry with no abstract in any of them. Critical sources stay
+from every registry that addresses its identifiers (or the saved import of a `url:` work) with no abstract in any of them. Critical sources stay
 pending until the actual dependency is resolved.
 
 On resume, read `status`, `next`, the search tree and relevant checkpoint records,

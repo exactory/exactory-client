@@ -133,6 +133,36 @@ class LiteratureTests(LiteratureCase):
         with_abstract["id"], with_abstract["source_ids"] = "abstract-present", [sources["openalex"], present]
         self.assert_error("invalid_availability", lambda: self.mutate(record_availability, with_abstract))
 
+    def test_registry_abstract_absence_requires_only_the_registries_that_address_the_work(self):
+        from research_harness.acquisition import acquire_work, import_response
+        from research_fixtures import client, json_response, openalex
+        a = self.metadata(references=[{"id": "openalex:W123"}, {"id": "url:https://inspirehep.net/api/literature/198154"}])
+        self.scope([a])
+        without_doi = openalex()
+        del without_doi["abstract_inverted_index"], without_doi["doi"], without_doi["ids"]["doi"]
+        http, _, _ = client([json_response(without_doi)])
+        acquire_work(self.store, "W123", request_id="oa-only", expected_revision=self.store.revision, http=http)
+        raw = {"hits": [{"links": {"json": "https://inspirehep.net/api/literature/198154"},
+                         "metadata": {"titles": [{"title": "Quantum creation of an inflationary universe"}]}}]}
+        import_response(self.store, "web", json.dumps(raw).encode(), source_url="https://inspirehep.net/api/literature?q=recid+198154",
+                        captured_at="2026-09-09T12:00:00Z", media_type="application/json",
+                        mappings=[{"id": "/hits/0/links/json", "title": "/hits/0/metadata/titles/0/title"}],
+                        expected_revision=self.store.revision, request_id="inspire-198154")
+        self.assertEqual(len([o for o in self.store_obligations() if o["code"] == "abstract_reading_missing"]), 2)
+        records = self.store.snapshot()["records"]
+        openalex_source = next(s["id"] for s in records["source"].values() if s["provider"] == "openalex")
+        web_source = next(s["id"] for s in records["source"].values() if s["provider"] == "web")
+        policy = {"id": "registry-abstract-absent", "minimum_attempts": 1, "allowed_statuses": [200],
+                  "rationale": "Every registry that addresses the work's identifiers returned a complete record without an abstract."}
+        self.mutate(record_availability, {"id": "openalex-only", "profile": "research", "version_id": "openalex:W123", "depth": "abstract",
+                                          "source_ids": [openalex_source], "reason": "OpenAlex is the only registry that knows this work.", "policy": policy})
+        self.mutate(record_availability, {"id": "inspire-only", "profile": "research", "version_id": "url:https://inspirehep.net/api/literature/198154",
+                                          "depth": "abstract", "source_ids": [web_source], "reason": "The saved INSPIRE record carries no abstract and no registry identifier.", "policy": policy})
+        self.assertNotIn("abstract_reading_missing", self.codes())
+        swapped = {"id": "swapped", "profile": "research", "version_id": "openalex:W123", "depth": "abstract", "source_ids": [web_source],
+                   "reason": "A capture of another work.", "policy": policy}
+        self.assert_error("invalid_availability", lambda: self.mutate(record_availability, swapped))
+
     def test_complete_mechanical_foundation_and_untrusted_human_exports(self):
         collection = self.cohort((1,))
         a = "arxiv:2601.00001v1"

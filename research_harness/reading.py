@@ -251,12 +251,23 @@ def registry_abstract_present(records, source):
     return observed is not None and any(a["completeness"] == "complete" for a in observed["abstracts"])
 
 
+def registries_addressing(work):
+    """Registries the harness can query for the work's own identifiers: Crossref for a DOI, OpenAlex for a DOI or OpenAlex id."""
+    identifiers = [work["id"], *work["aliases"]]
+    registries = set()
+    if any(i.startswith("doi:") for i in identifiers):
+        registries.update(REGISTRY_PROVIDERS)
+    if any(i.startswith("openalex:") for i in identifiers):
+        registries.add("openalex")
+    return registries
+
+
 def _registry_capture_without_abstract(records, source, work):
-    return (source.get("capture_method") == "http" and source.get("provider") in REGISTRY_PROVIDERS
-            and source.get("requested_identifier") in [work["id"], *work["aliases"]]
-            and source.get("http_status") == 200 and source.get("response_complete") is True
-            and source.get("response") is not None and source.get("status") == "captured"
-            and not registry_abstract_present(records, source))
+    imported = source.get("provider") in ("web", "mcp") and source.get("imported") is True and source.get("id") in work["source_ids"]
+    registry = (source.get("capture_method") == "http" and source.get("provider") in REGISTRY_PROVIDERS
+                and source.get("requested_identifier") in [work["id"], *work["aliases"]] and source.get("http_status") == 200)
+    return ((imported or registry) and source.get("status") == "captured" and source.get("response_complete") is True
+            and source.get("response") is not None and not registry_abstract_present(records, source))
 
 
 def record_availability(store, payload, *, expected_revision, request_id):
@@ -282,8 +293,8 @@ def record_availability(store, payload, *, expected_revision, request_id):
                 raise ResearchError("invalid_availability", "Rate limits, resource pauses, timeouts, partial captures and unrelated failures are not source unavailability")
         elif statuses == [200] and value["depth"] == "abstract" and not value["version_id"].startswith("arxiv:"):
             if (not all(_registry_capture_without_abstract(records, s, work) for s in sources)
-                    or not set(REGISTRY_PROVIDERS) <= {s["provider"] for s in sources}):
-                raise ResearchError("invalid_availability", "Registry abstract absence needs a complete HTTP 200 capture of this work from every supported registry, none carrying an abstract")
+                    or not registries_addressing(work) <= {s["provider"] for s in sources}):
+                raise ResearchError("invalid_availability", "Registry abstract absence needs a complete capture of this work from every registry that addresses its identifiers, none carrying an abstract")
         else:
             raise ResearchError("invalid_availability", "The policy must require captured terminal origin failures, or registry abstract absence at abstract depth for a non-arXiv work")
         for source in sources:
