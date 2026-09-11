@@ -7,6 +7,13 @@ limitations/relevance is {text, status: present|absent|not_applicable,
 inspections: [zero-based indices]}. Absence notes need source anchors, not invented
 methods or word-count padding. Partial inspections remain recorded as partial.
 
+record_reading_batch accepts {id, depth: abstract, items, usage?}. Each item is
+{version_id, note, notes: {seven fields: {text, status}}, screening?, audit?,
+consequential?}. The harness derives the inspection as the whole complete
+abstract artifact with a span locator, then applies the single-reading rules to
+every item. One failing item rejects the whole batch with its index; one event
+records every reading. Reading ids are reading:<sha256 of [batch id, version]>.
+
 require_fulltext accepts {id, profile, version_id, purpose, reason,
 historical_cutoff?}; purposes are major_claim, novelty, innovation, validity.
 These are critical exact-version dependencies, independent of citation tier.
@@ -23,12 +30,14 @@ from .evaluation import Evaluation
 from .evidence import digest
 from .graph import main_captures, obligation, selected_bundle
 from .operations import fields, immutable_record, iso_date, prepared_mutation, profile_name, strings, text
-from .source_links import TEXT_KINDS, complete_original, contains, covers_text, exact_work, link_identity, original_identity, validate_link
+from .source_links import TEXT_KINDS, complete_original, contains, covers_text, exact_work, link_identity, original_identity, span_locator, validate_link
 from .visual_assets import asset_dependencies
 
 
 NOTE_FIELDS = ("problem", "claims", "assumptions", "methods", "evidence", "limitations", "relevance")
 FULLTEXT_PURPOSES = ("major_claim", "novelty", "innovation", "validity")
+BATCH_LIMIT = 100
+RELEVANCE = ("none", "weak", "strong")
 
 
 def unit_digest(bundle, records):
@@ -155,6 +164,102 @@ def record_reading(store, payload, *, expected_revision, request_id):
         return [immutable_record(records, "reading", value["id"], value)], dict(id=value["id"], **assessment)
 
     return prepared_mutation(store, "literature.reading", payload, prepare,
+                             expected_revision=expected_revision, request_id=request_id)
+
+
+def _usage(value):
+    if value is None:
+        return {"model": None, "input_tokens": None, "output_tokens": None, "wall_seconds": None}
+    fields(value, ("model", "input_tokens", "output_tokens", "wall_seconds"), code="invalid_batch")
+    if value["model"] is not None:
+        text(value["model"], "Usage model", code="invalid_batch")
+    for key in ("input_tokens", "output_tokens"):
+        if value[key] is not None and (type(value[key]) is not int or value[key] < 0):
+            raise ResearchError("invalid_batch", "Token usage is a nonnegative integer or null when unknown")
+    seconds = value["wall_seconds"]
+    if seconds is not None and (type(seconds) not in (int, float) or seconds < 0):
+        raise ResearchError("invalid_batch", "Wall seconds are a nonnegative number or null when unknown")
+    return dict(value)
+
+
+def _batch_extras(item):
+    extras = {}
+    if "screening" in item:
+        screening = item["screening"]
+        fields(screening, ("relevance", "reason", "conventions"), code="invalid_batch")
+        if screening["relevance"] not in RELEVANCE:
+            raise ResearchError("invalid_batch", "Screening relevance is none, weak or strong")
+        text(screening["reason"], "Screening reason", code="invalid_batch")
+        strings(screening["conventions"], "Observed conventions", code="invalid_batch")
+        extras["screening"] = screening
+    if "audit" in item:
+        audit = item["audit"]
+        fields(audit, ("relevance", "reason"), code="invalid_batch")
+        if audit["relevance"] not in RELEVANCE:
+            raise ResearchError("invalid_batch", "Audit relevance is none, weak or strong")
+        text(audit["reason"], "Audit reason", code="invalid_batch")
+        extras["audit"] = audit
+    if "consequential" in item:
+        if type(item["consequential"]) is not bool:
+            raise ResearchError("invalid_batch", "consequential is a boolean")
+        extras["consequential"] = item["consequential"]
+    return extras
+
+
+def _batch_item(records, evaluation, batch_id, item):
+    fields(item, ("version_id", "note", "notes"), ("screening", "audit", "consequential"), code="invalid_batch")
+    work = exact_work(records, text(item["version_id"], "Version", code="invalid_batch"))
+    text(item["note"], "Inspection note", code="invalid_batch")
+    fields(item["notes"], NOTE_FIELDS, code="invalid_batch")
+    for name, note in item["notes"].items():
+        fields(note, ("text", "status"), code="invalid_batch")
+    extras = _batch_extras(item)
+    abstract = next((a for a in work["abstracts"] if a["completeness"] == "complete"), None)
+    if abstract is None:
+        raise ResearchError("abstract_missing", "The version has no complete saved abstract to read", {"version_id": work["id"]})
+    content = evaluation.text(abstract["artifact"])
+    link = {"version_id": work["id"], "source_id": abstract["source_id"], "artifact": abstract["artifact"],
+            "locator": span_locator(content, 0, len(content))}
+    payload = {"id": "reading:" + digest([batch_id, work["id"]]), "version_id": work["id"], "depth": "abstract",
+               "inspections": [{"unit_id": None, "link": link, "note": item["note"]}],
+               "notes": {name: dict(note, inspections=[0]) for name, note in item["notes"].items()}}
+    assessment = _assess(records, evaluation, payload)
+    record = dict(payload, assessment=assessment)
+    if extras:
+        record["batch"] = dict(extras, batch_id=batch_id)
+    return record
+
+
+def record_reading_batch(store, payload, *, expected_revision, request_id):
+    """Record up to BATCH_LIMIT abstract readings in one event, all or none."""
+    def prepare(records, value):
+        fields(value, ("id", "depth", "items"), ("usage",), code="invalid_batch")
+        text(value["id"], "Batch ID", code="invalid_batch")
+        if value["depth"] != "abstract":
+            raise ResearchError("invalid_batch", "Batches record abstract readings; a full reading uses read")
+        items = value["items"]
+        if not isinstance(items, list) or not 1 <= len(items) <= BATCH_LIMIT:
+            raise ResearchError("invalid_batch", "A batch holds 1 to " + str(BATCH_LIMIT) + " items")
+        usage = _usage(value.get("usage"))
+        evaluation = Evaluation(records, ArtifactStore(store.root))
+        seen, changes, results, failures = set(), [], [], []
+        for index, item in enumerate(items):
+            try:
+                version = item.get("version_id") if isinstance(item, dict) else None
+                if version in seen:
+                    raise ResearchError("invalid_batch", "Each version appears once per batch")
+                seen.add(version)
+                record = _batch_item(records, evaluation, value["id"], item)
+                changes.append(immutable_record(records, "reading", record["id"], record))
+                results.append({"version_id": record["version_id"], "reading_id": record["id"],
+                                "status": record["assessment"]["status"], "includes_abstract": record["assessment"]["includes_abstract"]})
+            except ResearchError as error:
+                failures.append({"index": index, "code": error.code, "message": error.message})
+        if failures:
+            raise ResearchError("invalid_batch", "Correct the failing items and resubmit the whole batch", {"items": failures})
+        return changes, {"id": value["id"], "count": len(results), "items": results, "usage": usage}
+
+    return prepared_mutation(store, "literature.read_batch", payload, prepare,
                              expected_revision=expected_revision, request_id=request_id)
 
 

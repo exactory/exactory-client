@@ -2140,5 +2140,58 @@
         }
       ]
     }
+  },
+  "read-batch": {
+    "id": "batch-001",
+    "depth": "abstract",
+    "items": [
+      {
+        "version_id": "arxiv:2601.00001v1",
+        "note": "Read the complete saved abstract.",
+        "notes": {
+          "problem": {
+            "text": "Record what the abstract says about problem.",
+            "status": "present"
+          },
+          "claims": {
+            "text": "Record what the abstract says about claims.",
+            "status": "present"
+          },
+          "assumptions": {
+            "text": "Record what the abstract says about assumptions.",
+            "status": "present"
+          },
+          "methods": {
+            "text": "Record what the abstract says about methods.",
+            "status": "present"
+          },
+          "evidence": {
+            "text": "Record what the abstract says about evidence.",
+            "status": "present"
+          },
+          "limitations": {
+            "text": "Record what the abstract says about limitations.",
+            "status": "present"
+          },
+          "relevance": {
+            "text": "Record what the abstract says about relevance.",
+            "status": "present"
+          }
+        },
+        "screening": {
+          "relevance": "weak",
+          "reason": "The abstract touches the objective's setting without addressing its claim.",
+          "conventions": [
+            "Reports a numerical bound with its assumptions."
+          ]
+        }
+      }
+    ],
+    "usage": {
+      "model": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "wall_seconds": null
+    }
   }
 }

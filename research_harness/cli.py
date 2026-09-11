@@ -28,6 +28,7 @@ OPERATIONS = {
     "roots": graph.set_roots,
     "bundle": literature.import_bundle,
     "read": reading.record_reading,
+    "read-batch": reading.record_reading_batch,
     "search": literature.record_search,
     "require-fulltext": reading.require_fulltext,
     "availability": reading.record_availability,
@@ -72,10 +73,11 @@ def build_parser():
         item.add_argument("--workspace", default=".")
         item.add_argument("--file", required=True, help="UTF-8 JSON input, without duplicate keys or nonfinite numbers.")
         add_identity(item)
-    for command in ("status", "next", "obligations", "gate", "export", "recover"):
+    for command in ("status", "next", "obligations", "batches", "gate", "export", "recover"):
         item = commands.add_parser(command, allow_abbrev=False,
             help={"status": "Read current obligations and source paths.", "next": "Read actionable current preparation obligations.",
                   "obligations": "Read one revision-bound page of the obligations that carry a code.",
+                  "batches": "Write the current unread abstracts as reader batch files without changing the store.",
                   "gate": "Validate a current gate without mutation.", "export": "Rebuild disposable projections or deliver exact reviewer bytes.",
                   "recover": "Explicitly recover a hot SQLite journal without migrating or certifying research."}[command])
         item.add_argument("--workspace", default=".")
@@ -86,6 +88,11 @@ def build_parser():
             item.add_argument("--code", required=True, help="Obligation code to list, for example abstract_reading_missing.")
             item.add_argument("--limit", type=int, default=50, help="Obligations per page, 1 to 500.")
             item.add_argument("--cursor", help="REVISION:OFFSET from the previous page; fails when the store changed.")
+        if command == "batches":
+            item.add_argument("--depth", choices=("abstract",), default="abstract")
+            item.add_argument("--size", type=int, default=60, help="Items per batch file, 1 to 100.")
+            item.add_argument("--destination", required=True, help="New directory for batch-NNN.json files.")
+            item.add_argument("--profile", choices=("research", "verification"), help="Defaults to the configured profile.")
         if command == "gate":
             item.add_argument("action", choices=GATES)
         if command == "export":
@@ -188,6 +195,9 @@ def run(args):
         return report
     if args.command == "obligations":
         return obligations_page(status_report(store), args.code, limit=args.limit, cursor=args.cursor)
+    if args.command == "batches":
+        from .batches import export_batches
+        return export_batches(store, depth=args.depth, size=args.size, destination=args.destination, profile=args.profile)
     if args.command == "gate":
         report = gate_report(store, args.action)
         require_ready(report, args.action)

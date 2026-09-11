@@ -66,6 +66,9 @@ and omit `bundle_id` for an abstract reading. Its inspection uses `unit_id: null
 and covers the whole saved abstract.
 
 ```sh
+exactory-research batches --depth abstract --size 60 --destination cohort/batches
+exactory-research example read-batch > notes-001.json
+exactory-research read-batch --file notes-001.json --expected-revision REVISION --request-id read-batch-001
 exactory-research example read > abstract-reading.json
 exactory-research read --file abstract-reading.json --expected-revision REVISION --request-id read-abstract-001
 exactory-research gate cohort
@@ -73,8 +76,11 @@ exactory-lab decide --stage cohort --decision "Enter literature" --why "The capt
 exactory-lab state set --stage literature --status pending
 ```
 
-Repeat the reading mutation with distinct actual records for all members before
-the gate. Complete abstracts reveal field coverage; consequential claims and
+`batches` writes the unread abstracts as files for reader agents; each reader
+returns one notes file and one coordinator records it with `read-batch`, which
+derives the whole-abstract inspection and applies the single-reading rules to
+every item. Repeat the reading mutations with distinct actual records for all
+members before the gate. Complete abstracts reveal field coverage; consequential claims and
 doctrine from a paper require its applicable full reading in the next stage.
 Handwritten completion flags are not reading evidence.
 
