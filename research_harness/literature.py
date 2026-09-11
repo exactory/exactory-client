@@ -10,8 +10,16 @@ link, reason}]}. Kinds are paper, nonpaper, unknown. Resolutions use the same
 fields plus reference_id and explicitly account for earlier observations.
 
 record_search accepts {id, profile, purpose, queries, responses, captured_at,
-scope, found_work_ids, verdict, cited_work_ids, impact, gaps}. Responses contain
-{source_id, query, query_locator?, results_pointer?}. Native registry captures
+scope, found_work_ids, verdict, cited_work_ids, impact, gaps, dispositions,
+resolved?}. Responses contain {source_id, query, query_locator?, results_pointer?}.
+Every found work carries one disposition (relevant, contradictory,
+potentially_relevant, out_of_scope, duplicate, unresolved) with a reason; cited
+works are relevant or contradictory. A new search for a purpose carries forward
+every contradictory or unresolved work of the selected search, or names it under
+resolved with a reason. A judgment stays current while its scope, the content of
+the works it rests on (roots, required full texts, found and cited works) and the
+citation frontier (graph families and tiers) are unchanged; a new version of an
+unrelated reference does not invalidate it. Native registry captures
 use their parser; web/MCP JSON requires results_pointer into the actual array
 and the original import mappings for every result. Query provenance is a saved
 response locator or the exact query in its captured URL. Search records describe
@@ -41,6 +49,8 @@ from .source_links import captured_source, complete_original, contains, covers_t
 
 SEARCH_PURPOSES = ("direct", "originals", "theory", "adjacent", "recent")
 NOVELTY_VERDICTS = ("nothing-new", "scooped", "replicate-extend", "contradicted", "novel-confirmed")
+DISPOSITIONS = ("relevant", "contradictory", "potentially_relevant", "out_of_scope", "duplicate", "unresolved")
+CARRIED_DISPOSITIONS = ("contradictory", "unresolved")
 UNIT_KINDS = ("text", "abstract", "figure", "table", "equation", "supplement", "bibliography")
 
 
@@ -227,11 +237,36 @@ def _graph(evaluation, profile):
     return evaluation.once(("graph", profile), compute)
 
 
-def _search_evidence_digest(evaluation, scope, found):
-    """Relevant content changes invalidate judgments; receipt-only repeats do not."""
+def frontier(evaluation, profile):
+    """The citation frontier a judgment was made against: graph families and tiers."""
+    return [[node["work_id"], node["tier"]] for node in _graph(evaluation, profile)["nodes"]]
+
+
+def frontier_digest(evaluation, profile):
+    return digest(frontier(evaluation, profile))
+
+
+def _relevant_versions(records, scope, found, cited):
+    """Versions whose content a judgment rests on: roots, required full texts, found and cited works."""
+    families = set()
+    for version in list(scope.get("roots", [])) + list(found) + list(cited):
+        work = records.get("work", {}).get(version)
+        families.add(work["work_id"] if work else version)
+    for requirement in records.get("fulltext_requirement", {}).values():
+        work = records.get("work", {}).get(requirement["version_id"])
+        if requirement["profile"] == scope["profile"] and work:
+            families.add(work["work_id"])
+    versions = set(found) | set(cited)
+    for family in families:
+        versions.update(records.get("work_family", {}).get(family, {}).get("version_ids", []))
+    return versions
+
+
+def _search_evidence_digest(evaluation, scope, found, cited=()):
+    """Relevant content changes invalidate judgments; receipt-only repeats and unrelated references do not."""
     records = evaluation.records
     graph = _graph(evaluation, scope["profile"])
-    versions = set(found) | {v for n in graph["nodes"] for v in n["version_ids"]}
+    versions = _relevant_versions(records, scope, found, cited)
     works = {}
     for version in sorted(versions):
         work = records.get("work", {}).get(version, {})
@@ -249,12 +284,47 @@ def _search_evidence_digest(evaluation, scope, found):
         content["visual_assets"] = sorted({digest([a["html_sha256"], a["url"], a["availability"],
             a["artifact"]["sha256"] if a["artifact"] else None]) for a in records.get("visual_asset", {}).values() if a["version_id"] == version})
         works[version] = content
-    return digest([scope, works, graph["nodes"]])
+    return digest([scope, works])
+
+
+def _dispositions(records, value):
+    found = set(value["found_work_ids"])
+    judged = {}
+    for item in _items_list(value["dispositions"], "Dispositions"):
+        fields(item, ("work_id", "disposition", "reason"), code="invalid_search")
+        text(item["reason"], "Disposition reason", code="invalid_search")
+        if item["disposition"] not in DISPOSITIONS or item["work_id"] not in found or item["work_id"] in judged:
+            raise ResearchError("invalid_search", "Judge each found work exactly once with a supported disposition")
+        judged[item["work_id"]] = item["disposition"]
+    if set(judged) != found:
+        raise ResearchError("invalid_search", "Every found work needs a disposition")
+    if any(judged[w] not in ("relevant", "contradictory") for w in value["cited_work_ids"]):
+        raise ResearchError("invalid_search", "Cited works are the relevant or contradictory found works")
+    resolved = {}
+    for item in _items_list(value.get("resolved", []), "Resolved findings"):
+        fields(item, ("work_id", "reason"), code="invalid_search")
+        text(item["work_id"], "Resolved work", code="invalid_search")
+        text(item["reason"], "Resolution", code="invalid_search")
+        resolved[item["work_id"]] = item["reason"]
+    selection = records.get("search_selection", {}).get(value["profile"] + ":" + value["purpose"])
+    previous = records.get("literature_search", {}).get(selection["search_id"]) if selection else None
+    for item in (previous or {}).get("dispositions", []):
+        if item["disposition"] in CARRIED_DISPOSITIONS and item["work_id"] not in judged and item["work_id"] not in resolved:
+            raise ResearchError("search_findings_dropped", "Carry forward or explicitly resolve the selected search's contradictory and unresolved findings",
+                                {"work_id": item["work_id"], "disposition": item["disposition"], "search_id": previous["id"]})
+    return judged
+
+
+def _items_list(value, name):
+    if not isinstance(value, list):
+        raise ResearchError("invalid_search", name + " must be an array")
+    return value
 
 
 def record_search(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
-        fields(value, ("id", "profile", "purpose", "queries", "responses", "captured_at", "scope", "found_work_ids", "verdict", "cited_work_ids", "impact", "gaps"), code="invalid_search")
+        fields(value, ("id", "profile", "purpose", "queries", "responses", "captured_at", "scope", "found_work_ids", "verdict",
+                       "cited_work_ids", "impact", "gaps", "dispositions"), ("resolved",), code="invalid_search")
         profile_name(value["profile"])
         if value["purpose"] not in SEARCH_PURPOSES or value["verdict"] not in NOVELTY_VERDICTS:
             raise ResearchError("invalid_search", "Use the five search purposes and the existing novelty verdict vocabulary")
@@ -287,8 +357,10 @@ def record_search(store, payload, *, expected_revision, request_id):
         current_scope = records.get("literature_scope", {}).get(value["profile"])
         if current_scope is None:
             raise ResearchError("roots_missing", "Define the literature scope before recording a dependent search")
+        _dispositions(records, value)
         record = dict(value, scope_digest=digest(current_scope), pending=pending, page_groups=page_groups,
-                      evidence_digest=_search_evidence_digest(evaluation, current_scope, found))
+                      evidence_digest=_search_evidence_digest(evaluation, current_scope, found, value["cited_work_ids"]),
+                      frontier_digest=frontier_digest(evaluation, value["profile"]))
         changes = [immutable_record(records, "literature_search", value["id"], record)]
         changes.append(("search_selection", value["profile"] + ":" + value["purpose"], {"search_id": value["id"]}))
         for version in value["cited_work_ids"]:
@@ -407,8 +479,14 @@ def _foundation_state(evaluation, profile):
             if search["pending"]:
                 obligations.append(obligation("search_pending", "Complete the captured search enumeration or parser obligations.",
                                               purpose=purpose, search_id=search["id"], pending=search["pending"]))
-            if search["evidence_digest"] != _search_evidence_digest(evaluation, scope, search["found_work_ids"]):
+            if "dispositions" not in search:
+                obligations.append(obligation("search_dispositions_missing", "Re-record this search with a disposition for every found work.",
+                                              purpose=purpose, search_id=search["id"]))
+            if search["evidence_digest"] != _search_evidence_digest(evaluation, scope, search["found_work_ids"], search["cited_work_ids"]):
                 obligations.append(obligation("search_evidence_stale", "Reassess this search judgment after relevant source, identity or version changes.",
+                                              purpose=purpose, search_id=search["id"]))
+            if search.get("frontier_digest") != frontier_digest(evaluation, profile):
+                obligations.append(obligation("search_frontier_stale", "Assess the works that entered the citation frontier since this judgment.",
                                               purpose=purpose, search_id=search["id"]))
     relevant = set(requirements) | {v for s in searches.values() for v in s["found_work_ids"]}
     inventory, used_readings, bundles, availability = [], dict(cohort_state["readings"]), {}, []

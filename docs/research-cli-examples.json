@@ -274,7 +274,15 @@
       "arxiv:2601.00001v1"
     ],
     "impact": "State what the retrieved work changes about the comparison.",
-    "gaps": []
+    "gaps": [],
+    "dispositions": [
+      {
+        "work_id": "arxiv:2601.00001v1",
+        "disposition": "relevant",
+        "reason": "The retrieved work addresses the same bound under the same assumptions."
+      }
+    ],
+    "resolved": []
   },
   "require-fulltext": {
     "id": "dependency-1",

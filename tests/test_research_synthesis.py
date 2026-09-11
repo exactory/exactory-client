@@ -103,7 +103,8 @@ class SynthesisCase(LiteratureCase):
                 "responses": [{"source_id": captured["source_ids"][0], "query": query,
                     "query_locator": {"kind": "json", "pointer": "/q", "value": query}, "results_pointer": "/results"}],
                 "captured_at": "2026-09-07T12:00:00Z", "scope": "The finite-bound comparison.",
-                "found_work_ids": [], "verdict": "nothing-new", "cited_work_ids": [], "impact": "No matching result in this capture.", "gaps": []})
+                "found_work_ids": [], "verdict": "nothing-new", "cited_work_ids": [], "impact": "No matching result in this capture.",
+                "gaps": [], "dispositions": []})
 
     def synthesis_codes(self, profile="research"):
         return {x["code"] for x in self.api().synthesis_report(self.store, profile)["obligations"]}

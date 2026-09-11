@@ -23,6 +23,7 @@ class LiteratureTests(LiteratureCase):
                                "results_pointer": "/results"}],
                 "captured_at": "2026-09-07T12:00:00Z", "scope": "The bounded-sequence contribution in this study.",
                 "found_work_ids": list(found), "verdict": verdict, "cited_work_ids": [],
+                "dispositions": [{"work_id": w, "disposition": "relevant", "reason": "Found by the authored search."} for w in found],
                 "impact": "No matching prior contribution was exposed in this saved search.", "gaps": []}
 
     def test_graph_reading_does_not_discharge_all_cohort_abstracts(self):
@@ -342,3 +343,71 @@ class LiteratureTests(LiteratureCase):
         self.assertFalse(report["availability_qualified"])
         self.assertIn("collection_pending", {x["code"] for x in report["obligations"]})
         self.assertEqual(report["inventory"][0]["retrievals"][0]["extraction_status"], "request_budget")
+
+
+class SearchDispositionTests(LiteratureCase):
+    def search(self, *args, **kwargs):
+        return LiteratureTests.search(self, *args, **kwargs)
+
+    def test_dispositions_are_required_complete_and_bound_to_citations(self):
+        a = self.metadata()
+        self.scope([a])
+        search = self.search("direct", ["arxiv:2602.00009v1", "arxiv:2602.00010v1"])
+        missing = copy.deepcopy(search)
+        del missing["dispositions"]
+        self.assert_error("invalid_search", lambda: self.mutate(record_search, missing))
+        partial = copy.deepcopy(search)
+        partial["dispositions"] = partial["dispositions"][:1]
+        self.assert_error("invalid_search", lambda: self.mutate(record_search, partial))
+        out = copy.deepcopy(search)
+        out["dispositions"][0]["disposition"] = "out_of_scope"
+        out["cited_work_ids"] = ["arxiv:2602.00009v1"]
+        self.assert_error("invalid_search", lambda: self.mutate(record_search, out))
+        out["cited_work_ids"] = ["arxiv:2602.00010v1"]
+        self.mutate(record_search, out)
+        self.assertNotIn("search_dispositions_missing", self.codes())
+
+    def test_contradictory_findings_are_carried_forward_or_resolved(self):
+        a = self.metadata()
+        self.scope([a])
+        first = self.search("direct", ["arxiv:2602.00009v1", "arxiv:2602.00010v1"])
+        first["dispositions"][0]["disposition"] = "contradictory"
+        self.mutate(record_search, first)
+        second = self.search("direct", ["arxiv:2602.00010v1"])
+        second["id"] = "direct-2"
+        self.assert_error("search_findings_dropped", lambda: self.mutate(record_search, second))
+        second["resolved"] = [{"work_id": "arxiv:2602.00009v1", "reason": "The contradiction concerns a different regime; recorded in the rationale."}]
+        self.mutate(record_search, second)
+        third = self.search("direct", ["arxiv:2602.00009v1", "arxiv:2602.00010v1"])
+        third["id"] = "direct-3"
+        third["dispositions"][0]["disposition"] = "unresolved"
+        self.mutate(record_search, third)
+        fourth = self.search("direct", ["arxiv:2602.00009v1", "arxiv:2602.00010v1"])
+        fourth["id"] = "direct-4"
+        self.mutate(record_search, fourth)
+
+    def test_legacy_search_without_dispositions_is_an_obligation_not_a_crash(self):
+        a = self.metadata()
+        self.scope([a])
+        search = self.search("direct")
+        self.mutate(record_search, search)
+        records = self.store.snapshot()["records"]
+        legacy = dict(records["literature_search"]["direct"])
+        del legacy["dispositions"]
+        self.store.mutate("legacy", {}, lambda tx: tx.put("literature_search", "direct", legacy),
+                          expected_revision=self.store.revision, request_id="legacy-search")
+        self.assertIn("search_dispositions_missing", self.codes())
+
+    def test_unrelated_reference_changes_do_not_stale_but_a_new_frontier_family_does(self):
+        a = self.metadata(1, references=[{"id": "arxiv:2601.00002v1"}])
+        b = self.metadata(2)
+        self.scope([a])
+        self.mutate(record_search, self.search("direct"))
+        self.assertNotIn("search_evidence_stale", self.codes())
+        self.capture(b, "The referenced paper's body. References: none.")
+        self.assertNotIn("search_evidence_stale", self.codes())
+        self.assertNotIn("search_frontier_stale", self.codes())
+        self.metadata(1, references=[{"id": "arxiv:2601.00002v1"}, {"id": "arxiv:2601.00003v1"}])
+        self.metadata(3)
+        self.assertIn("search_frontier_stale", self.codes())
+

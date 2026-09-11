@@ -124,7 +124,10 @@ Conduct and record each search purpose separately against the current scope:
 
 These are five purposes, independently required from the five to ten external
 innovation papers below. Save the actual query, original response, enumeration,
-source dates, found works, exact scope, judgment, and remaining gaps. Tool or web
+source dates, found works, exact scope, judgment, and remaining gaps. Judge every
+found work with a disposition (relevant, contradictory, potentially relevant, out
+of scope, duplicate, unresolved) and a reason; a later search for the same purpose
+carries its contradictory and unresolved findings forward or resolves them by name. Tool or web
 responses can be retained through `import-response` with original JSON pointer
 mappings. A `nothing-new` result still needs the captured search, including an
 actual empty results array when that is what the search returned.
