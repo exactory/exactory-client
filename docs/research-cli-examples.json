@@ -57,7 +57,10 @@
   "fulltext": {
     "identifier": "arxiv:2601.00001v1",
     "url": "https://arxiv.org/html/2601.00001v1",
-    "max_requests": 2
+    "max_requests": 2,
+    "extraction_options": {
+      "layout": true
+    }
   },
   "import-response": {
     "provider": "mcp",

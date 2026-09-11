@@ -262,3 +262,36 @@ class ReadingFreshnessTests(LiteratureCase):
         accepted, _ = current_readings(records, self.artifacts, a)
         self.assertEqual([r["id"] for r in accepted], ["full"])
 
+
+class ExtractionOptionTests(LiteratureCase):
+    def test_capture_records_extraction_diagnostics_and_options(self):
+        from research_harness.acquisition import acquire_fulltext
+        from research_fixtures import client
+        a = self.metadata()
+        http, _, _ = client([(200, {"Content-Type": "application/pdf"}, b"%PDF-1.4\n% Authored fixture.\n%%EOF")], max_retries=0)
+        result = acquire_fulltext(self.store, a, "https://arxiv.org/pdf/" + a[6:], http=http,
+                                  extractor=lambda data: {"status": "extracted", "text": "Body text.\n\fMore.\n"},
+                                  extraction_options={"layout": False},
+                                  expected_revision=self.store.revision, request_id="fulltext-options")
+        extraction = result["capture"]["extraction"]
+        self.assertEqual(extraction["options"], {"layout": False})
+        self.assertEqual(extraction["extractor"], "pdftotext")
+        self.assertEqual(extraction["page_count"], 2)
+        self.assertEqual(extraction["text_bytes"], len("Body text.\n\fMore.\n".encode()))
+        self.assert_error("invalid_input", lambda: acquire_fulltext(self.store, a, "https://arxiv.org/pdf/" + a[6:], http=http,
+                                                                    extraction_options={"layout": "no"},
+                                                                    expected_revision=self.store.revision, request_id="bad-options"))
+
+    def test_a_reading_on_any_capture_of_the_same_original_covers_it(self):
+        from research_harness.literature import import_bundle
+        from research_harness.reading import fulltext_coverage, record_reading
+        a = self.metadata()
+        first = self.capture(a, pdf_text="Layout padded    text. References: none.")
+        second = self.capture(a, pdf_text="Plain text. References: none.")
+        self.assertEqual(first["original"]["sha256"], second["original"]["sha256"])
+        bundle = self.bundle(a, second, bundle_id="bundle-plain")
+        self.mutate(import_bundle, bundle)
+        self.mutate(record_reading, self.full_note(bundle))
+        coverage = fulltext_coverage(self.store.snapshot()["records"], self.artifacts, a)
+        self.assertTrue(coverage["complete"])
+

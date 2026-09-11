@@ -26,7 +26,34 @@ class FulltextTests(unittest.TestCase):
             "assert sys.argv[5] == '-'\n"
             "sys.stdout.write('The complete authored extraction.\\n')\n")
         result = extractor(b"Authored PDF bytes")
-        self.assertEqual(result, {"status": "extracted", "text": "The complete authored extraction.\n"})
+        self.assertEqual(result, {"status": "extracted", "text": "The complete authored extraction.\n",
+                                  "extractor": "pdftotext", "version": None, "options": {"layout": True}})
+
+    def test_extraction_measures_describe_layout_padding(self):
+        from research_harness.fulltext import extraction_measures
+        text = "a" + " " * 999 + "\n\fb\n"
+        measures = extraction_measures(text, original_size=100)
+        self.assertEqual(measures["page_count"], 2)
+        self.assertEqual(measures["max_line_length"], 1000)
+        self.assertGreater(measures["whitespace_fraction"], 0.99)
+        self.assertAlmostEqual(measures["expansion_ratio"], len(text.encode()) / 100)
+        self.assertEqual(extraction_measures("", 0), {"text_bytes": 0, "page_count": 1, "max_line_length": 0,
+                                                     "whitespace_fraction": 0.0, "expansion_ratio": None})
+
+    def test_pdf_extractor_records_options_and_version(self):
+        code = ("import sys\n"
+                "if sys.argv[1:] == ['-v']:\n"
+                "    sys.stderr.write('pdftotext version 9.9\\n'); raise SystemExit(0)\n"
+                "assert '-layout' not in sys.argv\n"
+                "sys.stdout.write('Plain reading order.\\n')\n")
+        extractor = self.extractor(code, layout=False)
+        self.assertEqual(extractor.version(), "9.9")
+        result = extractor(b"Authored PDF bytes")
+        self.assertEqual(result["status"], "extracted")
+        self.assertEqual((result["extractor"], result["version"], result["options"]), ("pdftotext", "9.9", {"layout": False}))
+        with self.assertRaises(ResearchError):
+            PdfExtractor(layout="yes")
+        self.assertIsNone(self.extractor("raise SystemExit(1)\n").version())
 
     def test_subprocess_timeout_and_oversized_output_are_pending(self):
         hanging = self.extractor("import signal\nsignal.pause()\n", timeout=0.05)

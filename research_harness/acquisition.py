@@ -9,7 +9,7 @@ collection_status(store, collection_id=None)
 acquire_work(store, identifier, *, request_id, expected_revision, http=None,
              provider=None, max_requests=None)
 acquire_fulltext(store, identifier, url, *, request_id, expected_revision,
-                 http=None, max_requests=None, extractor=None)
+                 http=None, max_requests=None, extractor=None, extraction_options=None)
 import_response(store, provider, response: bytes, *, source_url, captured_at,
                 request_id, expected_revision, media_type=None, mappings=None)
 
@@ -45,7 +45,9 @@ have been read. Registry acquisition's scope is metadata, not full-text reading
 or verified bibliography completeness. Fulltext availability is source-specific.
 Fulltext capture values contain source_id, requested_version_id, observed version,
 url, original/text artifacts, availability (available|pending), extraction_status,
-includes_abstract, and visual_inspection_required. Missing bytes, extraction or
+includes_abstract, visual_inspection_required, and extraction (extractor, version,
+options, and the measures of the extracted text). A capture with different
+extraction options is a distinct capture of the same original. Missing bytes, extraction or
 exact-version agreement remain pending. All PDF/HTML captures retain a separate
 visual inspection obligation for non-text content.
 
@@ -62,7 +64,7 @@ from datetime import date, datetime, timedelta, timezone
 from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evidence import derived_id, digest, media_type as response_media_type, prepare_sources, prepare_work, put_sources, put_work
-from .fulltext import extract
+from .fulltext import extract, extraction_measures
 from .http import HttpClient, HttpFailure, RequestBudget, safe_url
 from .identities import family_id, normalize_identifier, version_of
 from .imports import parse_mapped
@@ -471,16 +473,28 @@ def acquire_work(store, identifier, *, request_id, expected_revision, http=None,
                     "work_ids": [w["id"] for w in works], "source_ids": [s["id"] for s in sources], "attempts_used": budget.used}, apply=commit)
 
 
-def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, http=None, max_requests=None, extractor=None):
+def _extraction_options(value):
+    if value is None:
+        return {}
+    if not isinstance(value, dict) or not set(value) <= {"layout"} or any(type(v) is not bool for v in value.values()):
+        raise ResearchError("invalid_input", "Extraction options accept only a boolean layout flag")
+    return dict(value)
+
+
+def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, http=None, max_requests=None, extractor=None,
+                     extraction_options=None):
     identifier, url = normalize_identifier(identifier), safe_url(url)
     budget = RequestBudget(max_requests)
+    options = _extraction_options(extraction_options)
 
     def admission(transaction):
         if transaction.get("work", identifier) is None:
             raise ResearchError("unknown_work", "Acquire metadata for the exact version before acquiring its full text")
 
-    replay = _begin(store, "fulltext.acquire", {"identifier": identifier, "url": url, "max_requests": max_requests},
-                    request_id, expected_revision, target=identifier, apply=admission)
+    payload = {"identifier": identifier, "url": url, "max_requests": max_requests}
+    if options:
+        payload["extraction_options"] = options
+    replay = _begin(store, "fulltext.acquire", payload, request_id, expected_revision, target=identifier, apply=admission)
     if replay is not None:
         return replay
     snapshot = store.snapshot()
@@ -493,7 +507,8 @@ def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, h
             observed_identifier = normalize_identifier(response.url)
             if observed_identifier != identifier or version_of(observed_identifier) is None:
                 raise ResearchError("version_mismatch", "Full-text destination differs from the requested arXiv version")
-        extracted = extract(response.body, response_media_type(response.headers), extractor=extractor)
+        extracted = extract(response.body, response_media_type(response.headers), extractor=extractor,
+                            layout=options.get("layout", True))
         if extracted["status"] != "extracted":
             pending.append({"code": extracted["status"]})
     except HttpFailure as error:
@@ -509,7 +524,14 @@ def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, h
                "text": artifacts.put(extracted["text"].encode(), "text/plain; charset=utf-8") if extracted and extracted["text"] is not None else None,
                "availability": "available" if not pending else "pending", "extraction_status": extracted["status"] if extracted else pending[0]["code"],
                "includes_abstract": extracted["includes_abstract"] if extracted else None,
-               "visual_inspection_required": extracted["visual_inspection_required"] if extracted else True}
+               "visual_inspection_required": extracted["visual_inspection_required"] if extracted else True,
+               "extraction": dict({"extractor": extracted["extractor"] if extracted else None,
+                                   "version": extracted["version"] if extracted else None,
+                                   "options": extracted["options"] if extracted else options},
+                                  **(extraction_measures(extracted["text"], len(response.body))
+                                     if extracted and extracted["text"] is not None else
+                                     {"text_bytes": None, "page_count": None, "max_line_length": None,
+                                      "whitespace_fraction": None, "expansion_ratio": None}))}
 
     def commit(transaction):
         put_sources(transaction, sources)
