@@ -6,6 +6,7 @@ from pathlib import Path
 from .artifacts import ArtifactStore
 from .execution_evidence import author_readiness_state
 from .errors import ResearchError
+from .evaluation import Evaluation
 from .publication import publication_report
 from .workspace import write_projection
 
@@ -41,7 +42,8 @@ def _deliver(store, destination, manifest):
 
 def deliver_readiness(store, destination):
     snapshot = store.snapshot()
-    report = dict(author_readiness_state(snapshot["records"], ArtifactStore(store.root)), revision=snapshot["revision"])
+    evaluation = Evaluation(snapshot["records"], ArtifactStore(store.root))
+    report = dict(author_readiness_state(snapshot["records"], evaluation), revision=snapshot["revision"])
     if report["review_inputs"] is None:
         raise ResearchError("candidate_checkpoint_missing", "Select an actual assessed candidate before independent delivery")
     return _deliver(store, destination, {"kind": "readiness", "revision": report["revision"], "inputs": report["review_inputs"],

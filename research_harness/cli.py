@@ -4,10 +4,12 @@ import argparse
 import json
 from pathlib import Path
 import sys
+import time
 
 from . import acquisition, cohort_evidence, development, graph, literature, principles, reading, synthesis, visual_assets
 from .artifacts import ArtifactStore
 from .errors import ResearchError
+from .evaluation import Evaluation
 from .gates import gate_report, gate_state, require_ready
 from .integration import adopt_workspace, current_store, export_workspace, pin_artifact
 from .operations import fields
@@ -114,20 +116,23 @@ def acquisition_command(store, command, payload, identity):
     return acquisition.import_response(store, **values, **identity)
 
 
-def status_report(store):
+def status_report(store, *, counters=False):
+    started = time.monotonic()
     snapshot = store.snapshot()
     records = snapshot["records"]
+    evaluation = Evaluation(records, ArtifactStore(store.root))
     config = records.get("configuration", {}).get("research")
     profile = config["profile"] if config else "research"
     study = records.get("workspace", {}).get("study")
     action = "verification" if profile == "verification" else "readiness"
-    report = gate_state(records, ArtifactStore(store.root), action, profile=profile)
+    report = gate_state(records, evaluation, action, profile=profile)
     # Before later gates are applicable, expose the actual next unread cohort
     # abstract instead of asking for a root or completed development too early.
-    preparation = gate_state(records, ArtifactStore(store.root), "cohort" if study and study["stage"] == "cohort" else "preparation", profile=profile)
+    preparation = gate_state(records, evaluation, "cohort" if study and study["stage"] == "cohort" else "preparation", profile=profile)
     obligations = preparation["obligations"] or report["obligations"]
+    diagnostics = {"evaluation": dict(evaluation.counters, elapsed_seconds=round(time.monotonic() - started, 3))} if counters else {}
     return dict(report, revision=snapshot["revision"], profile=profile, runtime=runtime_provenance(),
-                study=study, preparation=preparation,
+                study=study, preparation=preparation, **diagnostics,
                 next=preparation.get("next") or (obligations[0] if obligations else None),
                 pending_executions=[key for key in records.get("execution_admission", {}) if key not in records.get("execution_outcome", {})],
                 remote_intents=list(records.get("remote_intent", {}).values()),

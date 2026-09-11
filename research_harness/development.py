@@ -19,6 +19,7 @@ import math
 
 from .artifacts import ArtifactStore
 from .errors import ResearchError
+from .evaluation import Evaluation
 from .evidence import digest
 from .execution_accounting import require_accounted_usage
 from .graph import obligation
@@ -105,7 +106,8 @@ def _scope(value, objective):
 
 class _Context:
     def __init__(self, records, artifacts):
-        self.records, self.artifacts = records, artifacts
+        self.records, self.artifacts = records, Evaluation.of(records, artifacts)
+        artifacts = self.artifacts
         config = records.get("configuration", {}).get("research")
         if config and config["profile"] != "research":
             raise ResearchError("profile_inapplicable", "Author development does not apply to the verification profile")
@@ -166,7 +168,7 @@ class _Evidence:
         context = self.context
         if isinstance(value, dict) and value.get("kind") == "source":
             _fields(value, ("kind", "link"))
-            linked = validate_link(context.records, context.artifacts, value["link"])
+            linked = context.artifacts.link(value["link"])
             reading = validate_read_evidence(context.records, context.artifacts, value["link"], depth="fulltext")
             work = linked["work"]
             # Common source validation also checks source-backed metadata and
@@ -1110,4 +1112,5 @@ substitutes for these requirements.
 
 def readiness_report(store):
     snapshot = store.snapshot()
-    return dict(readiness_state(snapshot["records"], ArtifactStore(store.root)), revision=snapshot["revision"])
+    evaluation = Evaluation(snapshot["records"], ArtifactStore(store.root))
+    return dict(readiness_state(snapshot["records"], evaluation), revision=snapshot["revision"])

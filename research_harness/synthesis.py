@@ -13,6 +13,7 @@ study-specific field relationship.
 
 from .artifacts import ArtifactStore
 from .errors import ResearchError
+from .evaluation import Evaluation
 from .evidence import digest
 from .graph import obligation
 from .identities import resolve_family
@@ -55,13 +56,13 @@ def _gaps(value, name, nonempty=False):
 
 class _Assessment:
     def __init__(self, records, artifacts, target):
-        self.records, self.artifacts, self.target = records, artifacts, target
+        self.records, self.artifacts, self.target = records, Evaluation.of(records, artifacts), target
         self.obligations, self.evidence = [], {}
 
     def linked(self, link, path):
         key = digest(link)
         if key not in self.evidence:
-            context = validate_link(self.records, self.artifacts, link)
+            context = self.artifacts.link(link)
             work, source = context["work"], context["source"]
             pin = self.target if self.target and self.target.get("kind") == "work" and self.target["id"] == work["id"] else None
             reading, pending = None, []
@@ -311,9 +312,8 @@ def _unique(obligations):
 
 
 def _record(store, kind, payload, *, expected_revision, request_id):
-    artifacts = ArtifactStore(store.root)
-
     def prepare(records, value):
+        artifacts = Evaluation(records, ArtifactStore(store.root))
         profile = profile_name(value.get("profile"))
         configuration = configuration_state(records, artifacts, profile)
         for item in configuration["obligations"]:
@@ -350,6 +350,12 @@ def record_context(store, payload, *, expected_revision, request_id):
 def synthesis_state(records, artifacts, profile):
     """Current synthesis on one snapshot, for later managed gates and cycles."""
     profile_name(profile)
+    evaluation = Evaluation.of(records, artifacts)
+    return evaluation.once(("synthesis", profile), lambda: _synthesis_state(evaluation, profile))
+
+
+def _synthesis_state(evaluation, profile):
+    records, artifacts = evaluation.records, evaluation
     configuration = configuration_state(records, artifacts, profile)
     foundation = foundation_state(records, artifacts, profile)
     obligations = list(configuration["obligations"]) + list(foundation["obligations"])
@@ -383,4 +389,5 @@ def synthesis_state(records, artifacts, profile):
 
 
 def synthesis_report(store, profile):
-    return synthesis_state(store.snapshot()["records"], ArtifactStore(store.root), profile)
+    records = store.snapshot()["records"]
+    return synthesis_state(records, Evaluation(records, ArtifactStore(store.root)), profile)

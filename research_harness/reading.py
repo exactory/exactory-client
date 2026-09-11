@@ -19,6 +19,7 @@ is not reading and cannot satisfy critical dependencies or bibliography coverage
 
 from .artifacts import ArtifactStore
 from .errors import ResearchError
+from .evaluation import Evaluation
 from .evidence import digest
 from .graph import main_captures, obligation, selected_bundle
 from .operations import fields, immutable_record, iso_date, prepared_mutation, profile_name, strings, text
@@ -51,6 +52,7 @@ Adding/changing a unit, abstract inclusion or bibliography changes this digest.
 
 def required_unit_obligations(records, artifacts, bundle):
     """Shared completeness boundary, actionable before any reading is written."""
+    evaluation = Evaluation.of(records, artifacts)
     pending = []
     for unit in bundle["units"]:
         if not unit["required"]:
@@ -60,17 +62,19 @@ def required_unit_obligations(records, artifacts, bundle):
             pending.append(obligation("required_unit_missing", "Acquire the required source unit and import the extended bundle.",
                                       url=unit.get("url"), **affected))
             continue
-        context = validate_link(records, artifacts, unit["link"])
+        context = evaluation.link(unit["link"])
         if context["visual"] is not None:
             pending.extend(obligation(p["code"], "Acquire, link and inspect the complete static visual bytes.",
                 **dict(affected, **{k: v for k, v in p.items() if k != "code"})) for p in context["visual"]["pending"])
-        if not complete_original(context) or (unit["kind"] == "supplement" and not covers_text(artifacts, unit["link"])):
+        if not complete_original(context) or (unit["kind"] == "supplement" and not covers_text(evaluation, unit["link"])):
             pending.append(obligation("required_unit_incomplete", "Acquire the complete original required unit; a scoped passage remains partial.",
                                       paths=[unit["link"]["artifact"]["path"]], **affected))
     return pending
 
 
 def _assess(records, artifacts, value):
+    evaluation = Evaluation.of(records, artifacts)
+    evaluation.counters["readings_assessed"] += 1
     fields(value, ("id", "version_id", "depth", "inspections", "notes"), ("bundle_id", "assessment"), code="invalid_reading")
     text(value["id"], "Reading ID", code="invalid_reading")
     exact_work(records, value["version_id"])
@@ -85,7 +89,7 @@ def _assess(records, artifacts, value):
         if inspection["unit_id"] is not None:
             text(inspection["unit_id"], "Inspection unit ID", code="invalid_reading")
         text(inspection["note"], "Inspection note", code="invalid_reading")
-        context = validate_link(records, artifacts, inspection["link"])
+        context = evaluation.link(inspection["link"])
         if context["work"]["id"] != value["version_id"]:
             raise ResearchError("source_mismatch", "Each inspection must bind the reading's exact version")
         contexts.append(context)
@@ -109,7 +113,7 @@ def _assess(records, artifacts, value):
                 raise ResearchError("outside_reading_unit", "An inspection must stay within its declared article unit")
         if bundle["scope"] != "article" or bundle["completeness"] != "complete":
             pending.append(obligation("source_bundle_incomplete", "Complete the article's source bundle before claiming full depth.", version_id=value["version_id"]))
-        pending.extend(required_unit_obligations(records, artifacts, bundle))
+        pending.extend(required_unit_obligations(records, evaluation, bundle))
         for unit in units.values():
             if unit["required"] and unit["link"] is not None and not any(
                     i["unit_id"] == unit["id"] and contains(i["link"], unit["link"], records) for i in inspections):
@@ -118,14 +122,14 @@ def _assess(records, artifacts, value):
         included_abstract = bundle.get("includes_abstract") is not False and any(
             u["kind"] == "abstract" and u["link"] is not None and u["link"]["locator"]["kind"] == "text"
             and original_identity(records, u["link"]) == bundle["original_sha256"]
-            and complete_original(validate_link(records, artifacts, u["link"])) and any(
+            and complete_original(evaluation.link(u["link"])) and any(
                 i["unit_id"] == u["id"] and contains(i["link"], u["link"], records) for i in inspections) for u in units.values())
         dependency = bundle_digest(bundle, records)
     elif value["depth"] == "abstract":
         if value.get("bundle_id") is not None:
             raise ResearchError("invalid_reading", "Abstract reading links the original abstract directly")
         complete = [c["abstract"] is not None and c["abstract"]["completeness"] == "complete"
-                    and covers_text(artifacts, i["link"]) for c, i in zip(contexts, inspections)]
+                    and covers_text(evaluation, i["link"]) for c, i in zip(contexts, inspections)]
         if not any(complete):
             pending.append(obligation("abstract_reading_incomplete", "Read the complete acquired original abstract; excerpts remain partial.", version_id=value["version_id"]))
         included_abstract = any(complete)
@@ -146,12 +150,11 @@ def record_reading(store, payload, *, expected_revision, request_id):
 
 def current_readings(records, artifacts, version_id, *, target=None):
     """Recheck current source bytes and return complete readings of this version."""
+    evaluation = Evaluation.of(records, artifacts)
     selected = selected_bundle(records, version_id, target)
     accepted, partial = [], []
-    for value in records.get("reading", {}).values():
-        if value["version_id"] != version_id:
-            continue
-        assessment = _assess(records, artifacts, value)
+    for value in evaluation.readings_for(version_id):
+        assessment = evaluation.once(("assessed", value["id"]), lambda value=value: _assess(records, evaluation, value))
         if value["depth"] == "fulltext":
             if selected is None or assessment["bundle_digest"] != bundle_digest(selected, records):
                 partial.append(dict(value, assessment=dict(assessment, status="partial", pending=[obligation(
@@ -169,7 +172,8 @@ def validate_read_evidence(records, artifacts, link, *, depth="fulltext", target
 Returns {reading_id, digest, depth, mechanical_only}. This validates documented
 source inspection, not comprehension, entailment, or the truth of a claim.
 """
-    context = validate_link(records, artifacts, link)
+    evaluation = Evaluation.of(records, artifacts)
+    context = evaluation.link(link)
     if depth not in ("fulltext", "abstract", "passage"):
         raise ResearchError("invalid_reading", "Unsupported required evidence depth")
     targets = [target]
@@ -184,7 +188,7 @@ source inspection, not comprehension, entailment, or the truth of a claim.
                 originals.add(bundle["original_sha256"])
         targets = [{"id": link["version_id"], "sha256": sha} for sha in sorted(originals)]
     for pin in targets:
-        readings, _ = current_readings(records, artifacts, link["version_id"], target=pin)
+        readings, _ = current_readings(records, evaluation, link["version_id"], target=pin)
         for reading in readings:
             eligible = (reading["depth"] == "fulltext" and complete_original(context) if depth == "fulltext" else
                         reading["assessment"]["includes_abstract"] if depth == "abstract" else True)
@@ -196,13 +200,14 @@ source inspection, not comprehension, entailment, or the truth of a claim.
 
 def fulltext_coverage(records, artifacts, version_id, *, target=None):
     """Every distinct available main body needs its current required-unit bundle."""
+    evaluation = Evaluation.of(records, artifacts)
     work = exact_work(records, version_id)
     accepted, missing = {}, []
     captures = main_captures(records, work, target)
     for capture in captures:
         pin = {"id": version_id, "sha256": capture["original"]["sha256"]}
         bundle = selected_bundle(records, version_id, pin)
-        readings, partial = current_readings(records, artifacts, version_id, target=pin)
+        readings, partial = current_readings(records, evaluation, version_id, target=pin)
         full = next((r for r in readings if r["depth"] == "fulltext"), None)
         if full is not None:
             accepted[full["id"]] = full

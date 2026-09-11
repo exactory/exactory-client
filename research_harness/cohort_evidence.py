@@ -14,6 +14,7 @@ explicit selection while preserving historical unresolved provenance.
 
 from .artifacts import ArtifactStore
 from .errors import ResearchError
+from .evaluation import Evaluation
 from .evidence import digest
 from .graph import obligation
 from .identities import resolve_family
@@ -95,12 +96,13 @@ def abstract_reading(records, artifacts, readings, item):
     """Match the selected abstract bytes or the identical included body abstract."""
     if item["artifact"] is None:
         return None
-    abstract_text = " ".join(artifacts.read(item["artifact"]).decode("utf-8").split())
+    evaluation = Evaluation.of(records, artifacts)
+    abstract_text = " ".join(evaluation.text(item["artifact"]).split())
     for reading in readings:
         if reading["version_id"] != item["version_id"] or not reading["assessment"]["includes_abstract"]:
             continue
         if reading["depth"] == "abstract" and any(i["link"]["artifact"]["sha256"] == item["artifact"]["sha256"]
-                and covers_text(artifacts, i["link"]) for i in reading["inspections"]):
+                and covers_text(evaluation, i["link"]) for i in reading["inspections"]):
             return reading
         if reading["depth"] == "fulltext":
             bundle = records["source_bundle"][reading["bundle_id"]]
@@ -113,8 +115,16 @@ def abstract_reading(records, artifacts, readings, item):
 
 
 def cohort_report(records, artifacts, collection_ids, *, target=None):
-    from .acquisition import _collection_summary
+    evaluation = Evaluation.of(records, artifacts)
     strings(collection_ids, "Selected collections")
+    return evaluation.once(("cohort", tuple(collection_ids), digest(target)),
+                           lambda: _cohort_report(evaluation, collection_ids, target))
+
+
+def _cohort_report(evaluation, collection_ids, target):
+    from .acquisition import _collection_summary
+    evaluation.counters["cohort_reports"] += 1
+    records, artifacts = evaluation.records, evaluation
     summaries, obligations, inventory, dependencies, readings = [], [], [], {}, {}
     if not collection_ids:
         obligations.append(obligation("cohort_missing", "Select the complete frozen cohort collection."))
@@ -165,4 +175,4 @@ def cohort_reading_report(store, collection_ids):
     records = store.snapshot()["records"]
     configured = records.get("configuration", {}).get("research", {})
     target = configured.get("target") if configured.get("profile") == "verification" else None
-    return cohort_report(records, ArtifactStore(store.root), collection_ids, target=target)
+    return cohort_report(records, Evaluation(records, ArtifactStore(store.root)), collection_ids, target=target)

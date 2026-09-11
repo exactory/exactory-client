@@ -27,6 +27,7 @@ from urllib.parse import parse_qsl, urlsplit
 from .artifacts import ArtifactStore, _Workspace
 from .cohort_evidence import cohort_report
 from .errors import ResearchError
+from .evaluation import Evaluation
 from .evidence import digest
 from .graph import citation_graph, obligation, selected_bundle, validate_target
 from .http import safe_url
@@ -65,7 +66,7 @@ def import_bundle(store, payload, *, expected_revision, request_id):
         fields(value, ("id", "version_id", "source_id", "scope", "completeness", "units", "inventory", "bibliography", "resolutions"), code="invalid_bundle")
         text(value["id"], "Bundle ID", code="invalid_bundle")
         work = exact_work(records, value["version_id"])
-        artifacts = ArtifactStore(store.root)
+        artifacts = Evaluation(records, ArtifactStore(store.root))
         source = captured_source(records, artifacts, value["source_id"])
         capture = fulltext_capture(work, source["id"])
         if value["scope"] not in ("article", "passage") or value["completeness"] not in ("complete", "partial"):
@@ -219,9 +220,17 @@ def _search_response(records, artifacts, response, scope):
     return source, found, pending, page
 
 
-def _search_evidence_digest(records, scope, found):
+def _graph(evaluation, profile):
+    def compute():
+        evaluation.counters["graph_builds"] += 1
+        return citation_graph(evaluation.records, profile)
+    return evaluation.once(("graph", profile), compute)
+
+
+def _search_evidence_digest(evaluation, scope, found):
     """Relevant content changes invalidate judgments; receipt-only repeats do not."""
-    graph = citation_graph(records, scope["profile"])
+    records = evaluation.records
+    graph = _graph(evaluation, scope["profile"])
     versions = set(found) | {v for n in graph["nodes"] for v in n["version_ids"]}
     works = {}
     for version in sorted(versions):
@@ -259,8 +268,9 @@ def record_search(store, payload, *, expected_revision, request_id):
         if not isinstance(value["responses"], list) or not value["responses"]:
             raise ResearchError("invalid_search", "An empty user list without original captured responses is not a search")
         found, pending, queries, pages = set(), [], set(), []
+        evaluation = Evaluation(records, ArtifactStore(store.root))
         for response in value["responses"]:
-            source, identifiers, gaps, page = _search_response(records, ArtifactStore(store.root), response, value["scope"])
+            source, identifiers, gaps, page = _search_response(records, evaluation, response, value["scope"])
             if timestamp(source["captured_at"]) > date:
                 raise ResearchError("invalid_search", "A search cannot precede its captured responses")
             found.update(identifiers)
@@ -278,7 +288,7 @@ def record_search(store, payload, *, expected_revision, request_id):
         if current_scope is None:
             raise ResearchError("roots_missing", "Define the literature scope before recording a dependent search")
         record = dict(value, scope_digest=digest(current_scope), pending=pending, page_groups=page_groups,
-                      evidence_digest=_search_evidence_digest(records, current_scope, found))
+                      evidence_digest=_search_evidence_digest(evaluation, current_scope, found))
         changes = [immutable_record(records, "literature_search", value["id"], record)]
         changes.append(("search_selection", value["profile"] + ":" + value["purpose"], {"search_id": value["id"]}))
         for version in value["cited_work_ids"]:
@@ -334,14 +344,21 @@ identity/source assertions, active bundles, used readings, selected collections,
 reference resolutions, consequential requirements and purpose-specific searches.
 """
     profile_name(profile)
-    return foundation_state(store.snapshot()["records"], ArtifactStore(store.root), profile)
+    records = store.snapshot()["records"]
+    return foundation_state(records, Evaluation(records, ArtifactStore(store.root)), profile)
 
 
 def foundation_state(records, artifacts, profile):
     """The same foundation assessment on a caller-owned consistent snapshot."""
     profile_name(profile)
+    evaluation = Evaluation.of(records, artifacts)
+    return evaluation.once(("foundation", profile), lambda: _foundation_state(evaluation, profile))
+
+
+def _foundation_state(evaluation, profile):
+    records, artifacts = evaluation.records, evaluation
     scope = records.get("literature_scope", {}).get(profile, {})
-    graph = citation_graph(records, profile)
+    graph = _graph(evaluation, profile)
     obligations = list(graph["obligations"])
     target = scope.get("target")
     if profile == "verification" and scope:
@@ -390,7 +407,7 @@ def foundation_state(records, artifacts, profile):
             if search["pending"]:
                 obligations.append(obligation("search_pending", "Complete the captured search enumeration or parser obligations.",
                                               purpose=purpose, search_id=search["id"], pending=search["pending"]))
-            if search["evidence_digest"] != _search_evidence_digest(records, scope, search["found_work_ids"]):
+            if search["evidence_digest"] != _search_evidence_digest(evaluation, scope, search["found_work_ids"]):
                 obligations.append(obligation("search_evidence_stale", "Reassess this search judgment after relevant source, identity or version changes.",
                                               purpose=purpose, search_id=search["id"]))
     relevant = set(requirements) | {v for s in searches.values() for v in s["found_work_ids"]}
@@ -410,7 +427,7 @@ def foundation_state(records, artifacts, profile):
             bundles[version] = bundle
             for unit in bundle["units"]:
                 if unit["link"]:
-                    validate_link(records, artifacts, unit["link"])
+                    evaluation.link(unit["link"])
         coverage = fulltext_coverage(records, artifacts, version, target=target) if depth_is_exact_fulltext(requirements, work) else None
         if coverage is not None:
             full = next(iter(coverage["readings"].values()), None) if coverage["complete"] else None

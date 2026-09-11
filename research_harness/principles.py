@@ -12,6 +12,7 @@ from pathlib import Path
 
 from .artifacts import ArtifactStore
 from .errors import ResearchError
+from .evaluation import Evaluation
 from .evidence import digest
 from .graph import main_captures, obligation, validate_target
 from .operations import fields, immutable_record, prepared_mutation, profile_name, text
@@ -148,6 +149,12 @@ the current contract. Re-recording an assessment preserves its predecessor.
 def configuration_state(records, artifacts, profile):
     """Snapshot-level configuration check shared by downstream managed gates."""
     profile_name(profile)
+    evaluation = Evaluation.of(records, artifacts)
+    return evaluation.once(("configuration", profile), lambda: _configuration_state(evaluation, profile))
+
+
+def _configuration_state(evaluation, profile):
+    records, artifacts = evaluation.records, evaluation
     contract = constitution_contract()
     config = records.get("configuration", {}).get("research")
     obligations = []
@@ -186,4 +193,5 @@ def configuration_state(records, artifacts, profile):
 
 
 def configuration_report(store, profile):
-    return configuration_state(store.snapshot()["records"], ArtifactStore(store.root), profile)
+    records = store.snapshot()["records"]
+    return configuration_state(records, Evaluation(records, ArtifactStore(store.root)), profile)
