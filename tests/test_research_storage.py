@@ -653,7 +653,33 @@ print(json.dumps(Store(Path(sys.argv[1])).snapshot()))
                     receipt = connection.execute("SELECT response, digest FROM receipts").fetchone()
                     self.assertEqual(receipt, (changed_response, changed_digest))
                 os.replace(corrupted, self.database)
-                self.assert_error("corrupt_state", lambda: Store(self.workspace))
+                self.assert_error("corrupt_state", lambda: Store(self.workspace).snapshot())
+
+    def test_construction_checks_structure_and_first_read_replays_history(self):
+        from unittest import mock
+        from research_harness import storage
+        Store(self.workspace, create=True)
+        calls = []
+        original = storage._validate
+
+        def counting(connection, **kwargs):
+            calls.append(kwargs.get("replay", True))
+            return original(connection, **kwargs)
+
+        with mock.patch.object(storage, "_validate", counting):
+            store = storage.Store(self.workspace)
+            store.snapshot()
+        self.assertEqual(calls, [False, True])
+
+    def test_record_tampering_is_caught_at_first_use_not_at_construction(self):
+        store = Store(self.workspace, create=True)
+        self.add(store)
+        with self.database_connection() as connection:
+            connection.execute("UPDATE records SET value = ?, digest = ?", ('{"title":"Forged"}', "0" * 64))
+        reopened = Store(self.workspace)
+        self.assert_error("corrupt_state", reopened.snapshot)
+        self.assert_error("corrupt_state", lambda: reopened.revision)
+        self.assert_error("corrupt_state", lambda: reopened.mutate("add", {}, lambda tx: None, expected_revision=1, request_id="later"))
 
     def test_events_and_receipts_reject_updates_and_deletions(self):
         store = Store(self.workspace, create=True)

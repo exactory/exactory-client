@@ -135,7 +135,13 @@ def _request_row(connection: sqlite3.Connection, request_id: str):
         (request_id,)).fetchone()
 
 
-def _validate(connection: sqlite3.Connection) -> int:
+def _validate(connection: sqlite3.Connection, *, replay: bool = True) -> int:
+    """Check the store's structure, and with replay, its complete history.
+
+Construction checks the structure so unsupported, corrupt or hot stores fail
+before use. Every read, write and receipt lookup replays the history, so a
+process validates it once per use and never trusts a cached replay.
+"""
     metadata = connection.execute("SELECT id, schema_version, revision FROM metadata").fetchall()
     if len(metadata) != 1 or metadata[0]["id"] != 1:
         raise ResearchError("corrupt_state", "Research metadata must contain exactly one row")
@@ -149,10 +155,12 @@ def _validate(connection: sqlite3.Connection) -> int:
         "SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL")}
     if schema != _SCHEMA:
         raise ResearchError("corrupt_state", "Research database schema or history guards were changed")
-    if [row[0] for row in connection.execute("PRAGMA quick_check")] != ["ok"]:
-        raise ResearchError("corrupt_state", "Research SQLite integrity check failed")
     if connection.execute("PRAGMA journal_mode").fetchone()[0] != "delete":
         raise ResearchError("corrupt_state", "Research store must use rollback journaling")
+    if not replay:
+        return revision
+    if [row[0] for row in connection.execute("PRAGMA quick_check")] != ["ok"]:
+        raise ResearchError("corrupt_state", "Research SQLite integrity check failed")
 
     projections = {}
     event_count = 0
@@ -262,7 +270,7 @@ class Store:
                 with self._locked(directory):
                     self._create(directory)
         with self._connection(writable=create) as connection:
-            _validate(connection)
+            _validate(connection, replay=False)
 
     @contextmanager
     def _locked(self, directory: int):
