@@ -31,11 +31,13 @@ NOTE_FIELDS = ("problem", "claims", "assumptions", "methods", "evidence", "limit
 FULLTEXT_PURPOSES = ("major_claim", "novelty", "innovation", "validity")
 
 
-def bundle_digest(bundle, records):
-    """Reading dependency: original bytes and exact required-unit inventory.
+def unit_digest(bundle, records):
+    """Reading dependency: original bytes and the exact required-unit inventory.
 
 Capture receipt IDs and bundle labels do not require rereading identical bytes.
-Adding/changing a unit, abstract inclusion or bibliography changes this digest.
+Adding or changing a unit, its link identity, abstract inclusion or a visual
+dependency changes this digest. Parsed bibliography entries do not: they are
+reference evidence with their own obligations, not inspected reading units.
 """
     return digest({"version_id": bundle["version_id"], "original_sha256": bundle.get("original_sha256"),
                    "scope": bundle["scope"], "completeness": bundle["completeness"],
@@ -44,10 +46,17 @@ Adding/changing a unit, abstract inclusion or bibliography changes this digest.
                        records, bundle["version_id"], u["original_sha256"], u["resources"])} for u in bundle.get("visual_resources", [])],
                    "units": [{"id": u["id"], "kind": u["kind"], "required": u["required"],
                               "link": link_identity(u["link"], records) if u["link"] else None,
-                              "reason": u.get("reason"), "url": u.get("url")} for u in bundle["units"]],
-                   "bibliography": {"complete": bundle["bibliography"]["complete"], "unit_id": bundle["bibliography"]["unit_id"],
-                                    "entries": [{"target": e["target"], "kind": e["kind"], "link": link_identity(e["link"], records)}
-                                                for e in bundle["bibliography"]["entries"]]}})
+                              "reason": u.get("reason"), "url": u.get("url")} for u in bundle["units"]]})
+
+
+def bibliography_digest(bundle, records):
+    """Reference evidence identity: completeness, its unit, and every located entry."""
+    return digest({"complete": bundle["bibliography"]["complete"], "unit_id": bundle["bibliography"]["unit_id"],
+                   "entries": [{"target": e["target"], "kind": e["kind"], "link": link_identity(e["link"], records)}
+                               for e in bundle["bibliography"]["entries"]]})
+
+
+bundle_digest = unit_digest
 
 
 def required_unit_obligations(records, artifacts, bundle):
@@ -124,7 +133,7 @@ def _assess(records, artifacts, value):
             and original_identity(records, u["link"]) == bundle["original_sha256"]
             and complete_original(evaluation.link(u["link"])) and any(
                 i["unit_id"] == u["id"] and contains(i["link"], u["link"], records) for i in inspections) for u in units.values())
-        dependency = bundle_digest(bundle, records)
+        dependency = unit_digest(bundle, records)
     elif value["depth"] == "abstract":
         if value.get("bundle_id") is not None:
             raise ResearchError("invalid_reading", "Abstract reading links the original abstract directly")
@@ -134,7 +143,8 @@ def _assess(records, artifacts, value):
             pending.append(obligation("abstract_reading_incomplete", "Read the complete acquired original abstract; excerpts remain partial.", version_id=value["version_id"]))
         included_abstract = any(complete)
     return {"status": "partial" if pending else "complete", "pending": pending,
-            "includes_abstract": included_abstract, "bundle_digest": dependency}
+            "includes_abstract": included_abstract, "bundle_digest": dependency,
+            "bibliography_digest": bibliography_digest(bundle, records) if value["depth"] == "fulltext" else None}
 
 
 def record_reading(store, payload, *, expected_revision, request_id):
@@ -156,7 +166,11 @@ def current_readings(records, artifacts, version_id, *, target=None):
     for value in evaluation.readings_for(version_id):
         assessment = evaluation.once(("assessed", value["id"]), lambda value=value: _assess(records, evaluation, value))
         if value["depth"] == "fulltext":
-            if selected is None or assessment["bundle_digest"] != bundle_digest(selected, records):
+            # Both digests are recomputed with the current identity function, so
+            # a reading recorded under an earlier representation stays current
+            # while its inspected units are the units required today.
+            own = records.get("source_bundle", {}).get(value.get("bundle_id"))
+            if selected is None or own is None or unit_digest(own, records) != unit_digest(selected, records):
                 partial.append(dict(value, assessment=dict(assessment, status="partial", pending=[obligation(
                     "reading_bundle_stale", "Inspect the currently required source bundle; historical readings are preserved.", version_id=version_id)])))
                 continue

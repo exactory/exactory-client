@@ -217,3 +217,48 @@ class ReadingTests(LiteratureCase):
                                 self.store.snapshot()["records"]["work"][a]["abstract"]["sha256"])):
             self.assert_error("invalid_target", lambda: self.scope([a], profile="verification", target={
                 "kind": "work", "id": a, "source_id": source_id, "sha256": sha}))
+
+
+class ReadingFreshnessTests(LiteratureCase):
+    def test_parsed_bibliography_does_not_invalidate_a_fulltext_reading(self):
+        from research_harness.literature import import_bundle
+        from research_harness.reading import current_readings, record_reading
+        a = self.metadata()
+        capture = self.capture(a)
+        bundle = self.bundle(a, capture)
+        self.mutate(import_bundle, bundle)
+        self.mutate(record_reading, self.full_note(bundle))
+        entry = {"target": None, "kind": "nonpaper", "reason": "A book.", "link": bundle["units"][1]["link"]}
+        self.mutate(import_bundle, dict(bundle, id="bundle-bib", bibliography=dict(bundle["bibliography"], entries=[entry])))
+        accepted, partial = current_readings(self.store.snapshot()["records"], self.artifacts, a)
+        self.assertEqual([r["id"] for r in accepted], ["full"])
+        self.assertEqual(partial, [])
+        self.assertNotIn("reading_bundle_stale", self.codes())
+
+    def test_a_new_required_unit_still_stales_the_reading(self):
+        from research_harness.literature import import_bundle
+        from research_harness.reading import current_readings, record_reading
+        a = self.metadata()
+        capture = self.capture(a)
+        bundle = self.bundle(a, capture)
+        self.mutate(import_bundle, bundle)
+        self.mutate(record_reading, self.full_note(bundle))
+        extra = {"id": "supplement", "kind": "supplement", "required": True, "link": None,
+                 "reason": "The data appendix is published separately.", "url": "https://example.org/supplement"}
+        self.mutate(import_bundle, dict(bundle, id="bundle-2", units=bundle["units"] + [extra]))
+        accepted, partial = current_readings(self.store.snapshot()["records"], self.artifacts, a)
+        self.assertEqual(accepted, [])
+        self.assertEqual(partial[0]["assessment"]["pending"][0]["code"], "reading_bundle_stale")
+
+    def test_legacy_assessment_digest_is_not_compared(self):
+        from research_harness.literature import import_bundle
+        from research_harness.reading import current_readings, record_reading
+        a = self.metadata()
+        bundle = self.bundle(a)
+        self.mutate(import_bundle, bundle)
+        self.mutate(record_reading, self.full_note(bundle))
+        records = self.store.snapshot()["records"]
+        records["reading"]["full"]["assessment"]["bundle_digest"] = "0" * 64
+        accepted, _ = current_readings(records, self.artifacts, a)
+        self.assertEqual([r["id"] for r in accepted], ["full"])
+
