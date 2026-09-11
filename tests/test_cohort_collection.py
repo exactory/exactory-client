@@ -180,20 +180,59 @@ class CollectionTests(unittest.TestCase):
         self.assertEqual(resumed_clock.sleeps, [5.0])
         self.assertEqual(len(wire.requests), 1)
 
-    def test_missing_abstract_and_category_are_pending_with_saved_originals(self):
+    def test_missing_abstract_is_pending_and_missing_category_is_a_retained_exclusion(self):
         http, _, _ = client([xml_response(atom([entry(abstract=None), entry("2601.00002v1", category=None)], total=2))])
         result = collect_cohort(self.store, DEFINITION, request_id="missing", expected_revision=0, http=http)
         self.assertNotEqual(result["status"], "complete")
-        self.assertIn("missing_abstract", {p["code"] for p in result["pending"]})
-        self.assertIn("missing_primary_category", {p["code"] for p in result["pending"]})
+        self.assertEqual({p["code"] for p in result["pending"]}, {"missing_abstract"})
+        self.assertEqual(result["exclusion_reasons"], {"missing_primary_category": 1})
         self.assertEqual(len(self.store.snapshot()["records"]["work"]), 2)
+        partition = self.store.snapshot()["records"]["collection"][result["collection_id"]]["partitions"][0]
+        self.assertEqual((partition["status"], partition["entries_seen"], partition["restart"]), ("complete", 2, False))
 
-    def test_duplicate_results_do_not_inflate_members_or_certify_coverage(self):
+    def test_two_versions_of_one_family_are_two_entries_and_one_member(self):
         http, _, _ = client([xml_response(atom([entry(), entry("2601.00001v2")], total=2))])
         result = collect_cohort(self.store, DEFINITION, request_id="duplicate", expected_revision=0, http=http)
         self.assertEqual(result["member_count"], 1)
         self.assertEqual(len(self.store.snapshot()["records"]["work"]), 2)
-        self.assertNotEqual(result["status"], "complete")
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual(len(result["reading_obligations"]), 2)
+
+    def test_failure_on_the_last_page_resumes_from_that_page_only(self):
+        http, wire, _ = client([xml_response(atom([entry()], total=2, size=1)),
+                                (500, {"Content-Type": "text/plain"}, b"Server error."),
+                                xml_response(atom([entry("2601.00002v1")], total=2, start=1, size=1))], max_retries=0)
+        first = collect_cohort(self.store, DEFINITION, request_id="last-page", expected_revision=0, http=http, page_size=1)
+        self.assertEqual(first["status"], "paused")
+        self.assertEqual(first["pending"][0]["code"], "http_status")
+        done = resume_cohort(self.store, first["collection_id"], request_id="last-page-resume",
+                             expected_revision=self.store.revision, http=http)
+        self.assertEqual(done["status"], "complete")
+        self.assertEqual(len(wire.requests), 3)
+        self.assertEqual(parse_qs(urlsplit(wire.requests[-1][0]).query)["start"], ["1"])
+
+    def test_a_repeated_page_is_pending_without_restarting_the_partition(self):
+        http, wire, _ = client([xml_response(atom([entry()], total=2, size=1)),
+                                xml_response(atom([entry()], total=2, start=1, size=1)),
+                                xml_response(atom([entry("2601.00002v1")], total=2, start=1, size=1))])
+        first = collect_cohort(self.store, DEFINITION, request_id="repeat", expected_revision=0, http=http, page_size=1)
+        self.assertEqual(first["pending"][0]["code"], "duplicate_page")
+        partition = self.store.snapshot()["records"]["collection"][first["collection_id"]]["partitions"][0]
+        self.assertEqual((partition["offset"], partition["restart"]), (1, False))
+        done = resume_cohort(self.store, first["collection_id"], request_id="repeat-resume", expected_revision=self.store.revision, http=http)
+        self.assertEqual(done["status"], "complete")
+        self.assertEqual(done["member_count"], 2)
+        self.assertEqual(parse_qs(urlsplit(wire.requests[-1][0]).query)["start"], ["1"])
+
+    def test_single_work_acquisition_honors_a_persisted_retry_deadline(self):
+        http, wire, _ = client([(429, {"Retry-After": "3600", "Content-Type": "text/plain"}, b"Please wait.")], max_retries=0)
+        first = acquire_work(self.store, "arxiv:2601.00001v1", request_id="limited-work", expected_revision=0, http=http)
+        self.assertEqual(first["status"], "pending")
+        http2, wire2, _ = client([xml_response(atom([entry()], total=1))])
+        second = acquire_work(self.store, "arxiv:2601.00001v1", request_id="limited-work-2", expected_revision=self.store.revision, http=http2)
+        self.assertEqual(second["status"], "pending")
+        self.assertEqual(second["pending"][0]["code"], "rate_limited")
+        self.assertEqual(wire2.requests, [])
 
     def test_stale_admission_and_conflicting_replay_do_not_fetch(self):
         http, wire, _ = client([])
@@ -297,12 +336,16 @@ class CollectionTests(unittest.TestCase):
         self.assertEqual(later["member_count"], 1)
         self.assertEqual(later["exclusion_count"], 1)
 
-    def test_split_response_outside_its_partition_does_not_certify_enumeration(self):
+    def test_split_response_outside_its_partition_is_a_retained_warning_and_a_member(self):
         http, _, _ = client([xml_response(atom([], total=30001)),
                              xml_response(atom([entry()], total=1)),
                              xml_response(atom([entry("2601.00002v1")], total=1))])
         result = collect_cohort(self.store, DEFINITION, request_id="bad-partition", expected_revision=0, http=http)
-        self.assertIn("out_of_partition_date", {p["code"] for p in result["pending"]})
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual(result["member_count"], 2)
+        pages = self.store.snapshot()["records"]["collection_page"].values()
+        warnings = [w for page in pages for w in page["warnings"]]
+        self.assertEqual(warnings, [{"code": "out_of_partition_date", "id": "arxiv:2601.00002v1"}])
 
     def test_versionless_arxiv_response_cannot_certify_exact_source_capture(self):
         http, _, _ = client([xml_response(atom([entry("2601.00001")], total=1))])
