@@ -28,11 +28,14 @@ Change into `study`, read the user's context and constraints, and inspect the
 authoritative state. Read these first when resuming any managed stage:
 
 ```sh
-exactory-research status
-exactory-research next
+exactory-research status --summary
+exactory-research next --summary
+exactory-research obligations --code abstract_reading_missing --limit 20
 ```
 
-The common SQLite history is authoritative. JSON views, stage names, notes, and
+The compact views are bounded advisory summaries of the same current evaluation;
+`obligations` pages one obligation code at a time. Run the default `status` or
+`next` only when the full nested report is needed. The common SQLite history is authoritative. JSON views, stage names, notes, and
 old receipts describe work but do not replace a current gate. Retain existing
 checkpoints, unsuccessful branches, original observations, costs, and user files.
 Use `adopt` explicitly for legacy work; use `recover` only when the Store reports

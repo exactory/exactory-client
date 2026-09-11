@@ -14,6 +14,7 @@ from .gates import gate_report, gate_state, require_ready
 from .integration import adopt_workspace, current_store, export_workspace, pin_artifact
 from .operations import fields
 from .provenance import runtime_provenance
+from .report_views import next_summary, obligations_page, order_obligations, status_summary
 from .storage import Store
 from .workspace import find_workspace, strict_json
 
@@ -71,12 +72,20 @@ def build_parser():
         item.add_argument("--workspace", default=".")
         item.add_argument("--file", required=True, help="UTF-8 JSON input, without duplicate keys or nonfinite numbers.")
         add_identity(item)
-    for command in ("status", "next", "gate", "export", "recover"):
+    for command in ("status", "next", "obligations", "gate", "export", "recover"):
         item = commands.add_parser(command, allow_abbrev=False,
             help={"status": "Read current obligations and source paths.", "next": "Read actionable current preparation obligations.",
+                  "obligations": "Read one revision-bound page of the obligations that carry a code.",
                   "gate": "Validate a current gate without mutation.", "export": "Rebuild disposable projections or deliver exact reviewer bytes.",
                   "recover": "Explicitly recover a hot SQLite journal without migrating or certifying research."}[command])
         item.add_argument("--workspace", default=".")
+        if command in ("status", "next"):
+            item.add_argument("--summary", action="store_true",
+                              help="Return a bounded advisory view; the same current evaluation still runs.")
+        if command == "obligations":
+            item.add_argument("--code", required=True, help="Obligation code to list, for example abstract_reading_missing.")
+            item.add_argument("--limit", type=int, default=50, help="Obligations per page, 1 to 500.")
+            item.add_argument("--cursor", help="REVISION:OFFSET from the previous page; fails when the store changed.")
         if command == "gate":
             item.add_argument("action", choices=GATES)
         if command == "export":
@@ -131,9 +140,12 @@ def status_report(store, *, counters=False):
     preparation = gate_state(records, evaluation, "cohort" if study and study["stage"] == "cohort" else "preparation", profile=profile)
     obligations = preparation["obligations"] or report["obligations"]
     diagnostics = {"evaluation": dict(evaluation.counters, elapsed_seconds=round(time.monotonic() - started, 3))} if counters else {}
+    # The cohort inventory names the next unread abstract; every other stage
+    # takes the highest-priority current obligation in preparation order.
+    upcoming = preparation.get("next") if study and study["stage"] == "cohort" else None
     return dict(report, revision=snapshot["revision"], profile=profile, runtime=runtime_provenance(),
                 study=study, preparation=preparation, **diagnostics,
-                next=preparation.get("next") or (obligations[0] if obligations else None),
+                next=upcoming or (order_obligations(obligations)[0] if obligations else None),
                 pending_executions=[key for key in records.get("execution_admission", {}) if key not in records.get("execution_outcome", {})],
                 remote_intents=list(records.get("remote_intent", {}).values()),
                 remote_observations=list(records.get("remote_observation", {}).values()),
@@ -170,7 +182,12 @@ def run(args):
             return OPERATIONS[args.command](store, payload, **identity)
         return acquisition_command(store, args.command, payload, identity)
     if args.command in ("status", "next"):
-        return status_report(store)
+        report = status_report(store, counters=args.summary)
+        if args.summary:
+            return (next_summary if args.command == "next" else status_summary)(report)
+        return report
+    if args.command == "obligations":
+        return obligations_page(status_report(store), args.code, limit=args.limit, cursor=args.cursor)
     if args.command == "gate":
         report = gate_report(store, args.action)
         require_ready(report, args.action)
