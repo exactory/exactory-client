@@ -67,6 +67,7 @@ from .http import HttpClient, HttpFailure, RequestBudget, safe_url
 from .identities import family_id, normalize_identifier, version_of
 from .imports import parse_mapped
 from .providers import Arxiv, Crossref, OpenAlex
+from .provenance import runtime_provenance
 
 
 def _definition(value):
@@ -92,6 +93,7 @@ def _partition(identifier, start, end):
 
 def _begin(store, operation, payload, request_id, expected_revision, *, target=None, apply=None):
     admitted = []
+    runtime = runtime_provenance()
 
     def admission(transaction):
         if apply:
@@ -100,7 +102,7 @@ def _begin(store, operation, payload, request_id, expected_revision, *, target=N
                   "target": target, "pending": [{"code": "operation_incomplete"}]}
         transaction.put("acquisition_operation", request_id,
                         {"operation": operation, "payload": payload, "state": "admitted", "target": target,
-                         "admission_revision": expected_revision + 1, "result": result})
+                         "admission_revision": expected_revision + 1, "result": result, "runtime": runtime})
         admitted.append(True)
         return result
 

@@ -11,6 +11,7 @@ from .errors import ResearchError
 from .gates import gate_report, gate_state, require_ready
 from .integration import adopt_workspace, current_store, export_workspace, pin_artifact
 from .operations import fields
+from .provenance import runtime_provenance
 from .storage import Store
 from .workspace import find_workspace, strict_json
 
@@ -125,7 +126,7 @@ def status_report(store):
     # abstract instead of asking for a root or completed development too early.
     preparation = gate_state(records, ArtifactStore(store.root), "cohort" if study and study["stage"] == "cohort" else "preparation", profile=profile)
     obligations = preparation["obligations"] or report["obligations"]
-    return dict(report, revision=snapshot["revision"], profile=profile,
+    return dict(report, revision=snapshot["revision"], profile=profile, runtime=runtime_provenance(),
                 study=study, preparation=preparation,
                 next=preparation.get("next") or (obligations[0] if obligations else None),
                 pending_executions=[key for key in records.get("execution_admission", {}) if key not in records.get("execution_outcome", {})],

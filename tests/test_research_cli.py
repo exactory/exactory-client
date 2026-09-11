@@ -47,6 +47,15 @@ class ResearchCliTests(unittest.TestCase):
         self.assertEqual(records["configuration"]["research"]["profile"], "research")
         self.assertIsNone(records["configuration"]["research"]["target"])
 
+    def test_status_and_receipts_carry_runtime_provenance(self):
+        self.init_lab()
+        status = json.loads(self.run_cli("exactory-research", "status").stdout)
+        self.assertEqual(status["runtime"]["schema_version"], 1)
+        self.assertEqual(len(status["runtime"]["package_digest"]), 64)
+        records = Store(self.root).snapshot()["records"]
+        receipt = next(iter(records["literature_operation"].values()))
+        self.assertEqual(receipt["runtime"]["plugin_version"], status["runtime"]["plugin_version"])
+
     def test_fresh_verifier_can_acquire_before_exact_target_initialization(self):
         from research_fixtures import atom, entry
         pending = self.research_mutation("acquire", {"identifier": "arxiv:2601.00001v1", "max_requests": 0}, 0, "acquire-first")
