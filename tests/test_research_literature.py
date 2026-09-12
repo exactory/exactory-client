@@ -56,6 +56,13 @@ class LiteratureTests(LiteratureCase):
         self.assertIsNone(item["tier"])
         self.assertTrue(item["source_paths"])
 
+    def test_a_development_purpose_is_a_search_purpose_and_an_unknown_purpose_is_not(self):
+        a = self.metadata()
+        self.scope([a])
+        self.assert_error("invalid_search", lambda: self.mutate(record_search, self.search("consequences")))
+        self.mutate(record_search, self.search("changes"))
+        self.assertEqual(self.store.snapshot()["records"]["search_selection"]["research:changes"], {"search_id": "changes"})
+
     def test_scope_digest_ignores_unrelated_notes_and_tracks_relevant_versions_and_aliases(self):
         a, b = self.metadata(), self.metadata(2)
         self.scope([a])

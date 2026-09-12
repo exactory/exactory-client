@@ -370,3 +370,33 @@ class RoundAdmissionTests(RoundsCase):
         self.write_round_assessment(admission["id"], True, decision["bundle_digest"])
         payload = {"id": "round-2b", "round_id": decision["id"], "review_id": review["id"], "reason": "Round 1 is closed."}
         self.assert_error("round_number_mismatch", lambda: self.mutate(rounds.admit_round, payload))
+
+
+class RoundLiteratureTests(RoundsCase):
+    def test_a_development_purpose_is_a_search_purpose(self):
+        self.record_purpose("downstream", "downstream-early")
+        self.assertEqual(self.store.snapshot()["records"]["search_selection"]["research:downstream"], {"search_id": "downstream-early"})
+
+    def test_an_active_round_requires_fresh_consequence_searches_and_an_exemplar(self):
+        self.record_purpose("downstream", "downstream-early")
+        self.assertNotIn("round_search_missing", self.codes())
+        self.assertNotIn("round_exemplar_missing", self.codes())
+        self.open_round()
+        missing = [o for o in self.store_obligations("research") if o["code"] == "round_search_missing"]
+        self.assertEqual(sorted(o["purpose"] for o in missing), ["changes", "downstream", "exemplars", "next_step"])
+        self.assertIn("round_exemplar_missing", self.codes())
+        for purpose in ("downstream", "next_step", "exemplars"):
+            self.record_purpose(purpose, purpose + "-round-2")
+        missing = [o for o in self.store_obligations("research") if o["code"] == "round_search_missing"]
+        self.assertEqual([o["purpose"] for o in missing], ["changes"])
+        self.record_purpose("changes", "changes-round-2")
+        self.assertNotIn("round_search_missing", self.codes())
+        self.exemplar_requirement("round-2")
+        self.assertNotIn("round_exemplar_missing", self.codes())
+
+    def test_development_searches_enter_the_judgments_that_synthesis_depends_on(self):
+        from research_harness.synthesis import synthesis_report
+        self.open_round()
+        before = synthesis_report(self.store, "research")["literature_digest"]
+        self.record_purpose("downstream", "downstream-round-2")
+        self.assertNotEqual(synthesis_report(self.store, "research")["literature_digest"], before)

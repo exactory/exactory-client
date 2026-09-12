@@ -6,8 +6,6 @@ import json
 from development_fixtures import DevelopmentCase
 from integration_fixtures import observed_candidate
 from research_harness import publication, rounds
-from research_harness.acquisition import import_response
-from research_harness.literature import record_search
 from test_research_publication import ResearchPublicationTests
 
 DEVELOPMENT_SEARCHES = ("downstream", "next_step", "exemplars", "changes")
@@ -182,20 +180,6 @@ class RoundsCase(DevelopmentCase):
                                                      "round_id": decision["id"], "review_id": review["id"],
                                                      "reason": "The approved goal opens the round."})["result"]
         return decision, review, admission
-
-    def record_purpose(self, purpose, identifier, profile="research"):
-        """One search purpose with a captured empty result, as `SynthesisCase.foundation_searches` records each of its five."""
-        query = purpose + " finite bound"
-        self.sequence += 1
-        captured = import_response(self.store, "mcp", json.dumps({"q": query, "results": []}).encode(),
-            source_url="https://example.org/search", captured_at="2026-09-07T12:00:00Z", media_type="application/json", mappings=[],
-            expected_revision=self.store.revision, request_id="search-" + str(self.sequence))
-        self.mutate(record_search, {"id": identifier, "profile": profile, "purpose": purpose, "queries": [query],
-            "responses": [{"source_id": captured["source_ids"][0], "query": query,
-                "query_locator": {"kind": "json", "pointer": "/q", "value": query}, "results_pointer": "/results"}],
-            "captured_at": "2026-09-07T12:00:00Z", "scope": "The finite-bound comparison.",
-            "found_work_ids": [], "verdict": "nothing-new", "cited_work_ids": [], "impact": "No matching result in this capture.",
-            "gaps": [], "dispositions": []})
 
     def development_searches(self, suffix):
         """Record the four consequence purposes with captured empty results, as `foundation_searches` does."""

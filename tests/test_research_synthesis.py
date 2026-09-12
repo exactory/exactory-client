@@ -94,17 +94,21 @@ class SynthesisCase(LiteratureCase):
 
     def foundation_searches(self, profile="research", identifier_suffix=""):
         for purpose in ("direct", "originals", "theory", "adjacent", "recent"):
-            query = purpose + " finite bound"
-            self.sequence += 1
-            captured = import_response(self.store, "mcp", json.dumps({"q": query, "results": []}).encode(),
-                source_url="https://example.org/search", captured_at="2026-09-07T12:00:00Z", media_type="application/json", mappings=[],
-                expected_revision=self.store.revision, request_id="search-" + str(self.sequence))
-            self.mutate(record_search, {"id": purpose + identifier_suffix, "profile": profile, "purpose": purpose, "queries": [query],
-                "responses": [{"source_id": captured["source_ids"][0], "query": query,
-                    "query_locator": {"kind": "json", "pointer": "/q", "value": query}, "results_pointer": "/results"}],
-                "captured_at": "2026-09-07T12:00:00Z", "scope": "The finite-bound comparison.",
-                "found_work_ids": [], "verdict": "nothing-new", "cited_work_ids": [], "impact": "No matching result in this capture.",
-                "gaps": [], "dispositions": []})
+            self.record_purpose(purpose, purpose + identifier_suffix, profile)
+
+    def record_purpose(self, purpose, identifier, profile="research"):
+        """One search purpose with a captured empty result and a nothing-new judgment."""
+        query = purpose + " finite bound"
+        self.sequence += 1
+        captured = import_response(self.store, "mcp", json.dumps({"q": query, "results": []}).encode(),
+            source_url="https://example.org/search", captured_at="2026-09-07T12:00:00Z", media_type="application/json", mappings=[],
+            expected_revision=self.store.revision, request_id="search-" + str(self.sequence))
+        return self.mutate(record_search, {"id": identifier, "profile": profile, "purpose": purpose, "queries": [query],
+            "responses": [{"source_id": captured["source_ids"][0], "query": query,
+                "query_locator": {"kind": "json", "pointer": "/q", "value": query}, "results_pointer": "/results"}],
+            "captured_at": "2026-09-07T12:00:00Z", "scope": "The finite-bound comparison.",
+            "found_work_ids": [], "verdict": "nothing-new", "cited_work_ids": [], "impact": "No matching result in this capture.",
+            "gaps": [], "dispositions": []})
 
     def synthesis_codes(self, profile="research"):
         return {x["code"] for x in self.api().synthesis_report(self.store, profile)["obligations"]}
