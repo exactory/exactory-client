@@ -136,9 +136,9 @@ def _carried_key(item):
 
 def _carried(records, latest, values):
     """The developments carried by the closing round: those its cycle assessments recorded since the round was admitted."""
-    admitted = latest["admitted_revision"] if latest else 0
+    admitted_revision = latest["admitted_revision"] if latest else 0
     expected = {_carried_key(item): item for item in development.carried_developments(records)
-                if records["cycle_assessment"][item["assessment_id"]]["assessed_revision"] > admitted}
+                if records["cycle_assessment"][item["assessment_id"]]["assessed_revision"] > admitted_revision}
     seen = {}
     for item in _items(values, "Carried developments", nonempty=False):
         _fields(item, ("assessment_id", "kind", "disposition", "reason"), ("question", "cycle_id"))
@@ -219,19 +219,19 @@ def _reopening(records, value, evidence):
     return admission["id"]
 
 
-def _distinct(records, goal, reopened):
+def _distinct(records, goal, reopened_round_id):
     """The goal repeats no rejected candidate, and repeats an earlier round's goal only by reopening that round."""
     statement = _normalized(goal["statement"])
     for decision in records.get("round_decision", {}).values():
         if any(_normalized(c["statement"]) == statement for c in decision["payload"]["candidates"] if c["disposition"] == "rejected"):
             raise ResearchError("round_goal_repeated", "A goal cannot repeat a rejected candidate")
     repeated = [a["id"] for a in admissions(records) if _normalized(a["goal"]["statement"]) == statement]
-    if repeated and reopened not in repeated:
+    if repeated and reopened_round_id not in repeated:
         raise ResearchError("round_goal_repeated", "A goal that repeats an earlier round's goal reopens that round with changed evidence",
                             {"round_ids": repeated})
 
 
-def _direction_open(records, goal, reopened):
+def _direction_open(records, goal, reopened_round_id):
     """After two consecutive unsuccessful rounds, their direction continues only by reopening one of them."""
     unsuccessful = []
     for admission in reversed(admissions(records)):
@@ -240,7 +240,7 @@ def _direction_open(records, goal, reopened):
             break
         unsuccessful.append(admission)
     exhausted = unsuccessful[:2]
-    if len(exhausted) == 2 and goal["direction"] in {a["goal"]["direction"] for a in exhausted} and reopened not in {a["id"] for a in exhausted}:
+    if len(exhausted) == 2 and goal["direction"] in {a["goal"]["direction"] for a in exhausted} and reopened_round_id not in {a["id"] for a in exhausted}:
         raise ResearchError("round_direction_exhausted", "Two consecutive rounds in this direction were unsuccessful; change direction or reopen with changed evidence",
                             {"round_ids": [a["id"] for a in exhausted]})
 
@@ -256,9 +256,9 @@ def _next(records, context, evidence, value, number, pursued):
         principles.widen_objective(records, value["objective"], value["objective_lineage"], "proposed")
     goal = _goal(value["goal"], evidence, pursued)
     _limits(value["resource_limits"], goal)
-    reopened = _reopening(records, value["reopening"], evidence)
-    _distinct(records, goal, reopened)
-    _direction_open(records, goal, reopened)
+    reopened_round_id = _reopening(records, value["reopening"], evidence)
+    _distinct(records, goal, reopened_round_id)
+    _direction_open(records, goal, reopened_round_id)
     exhausted = [o for o in resources.obligations(records, "research") if o.get("purpose") == "development"]
     if exhausted:
         raise ResearchError("resource_budget_exhausted", "The development budget has no room for another round", exhausted[0])
@@ -338,8 +338,10 @@ def record_round_review(store, payload, *, expected_revision, request_id):
             if saved["round_id"] == decision["id"]:
                 if publication._assessor_key(saved["payload"]["assessor"]["id"]) == key:
                     raise ResearchError("round_review_duplicate", "This assessor already reviewed this decision", {"review_id": saved["id"]})
-            elif value["verdict"] == "approved" and saved["verdict"] == "approved" and saved["closes"] == decision["closes"]:
-                raise ResearchError("round_decision_duplicate", "This closing round already has an approved decision", {"review_id": saved["id"]})
+            elif (value["verdict"] == "approved" and saved["verdict"] == "approved" and saved["closes"] == decision["closes"]
+                  and records["round_decision"][saved["round_id"]]["bundle_digest"] == bundle["digest"]):
+                raise ResearchError("round_decision_duplicate", "This closing round already has an approved decision on this bundle",
+                                    {"review_id": saved["id"]})
         record = {"id": value["id"], "payload": value, "round_id": decision["id"], "round_digest": decision["digest"],
                   "closes": decision["closes"], "decision": decision["decision"], "verdict": value["verdict"],
                   "reviewed_revision": expected_revision + 1, "request_id": request_id}

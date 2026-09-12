@@ -240,3 +240,13 @@ class RoundReviewTests(RoundsCase):
         second = self.mutate(rounds.record_round, self.decision_payload(bundle, decision="stop"))["result"]
         self.assert_error("round_decision_duplicate",
                           lambda: self.mutate(rounds.record_round_review, self.review_payload(second, assessor="other-assessor")))
+
+    def test_an_approved_decision_on_a_superseded_bundle_does_not_block_the_round(self):
+        first = self.pin()
+        stopped = self.mutate(rounds.record_round, self.decision_payload(first, decision="stop"))["result"]
+        self.mutate(rounds.record_round_review, self.review_payload(stopped))
+        (self.root / "draft/abstract.txt").write_text("The exact finite bound was enumerated, revised after the plateau.")
+        revised = self.pin()
+        again = self.mutate(rounds.record_round, self.decision_payload(revised, decision="stop"))["result"]
+        approved = self.mutate(rounds.record_round_review, self.review_payload(again, assessor="second-assessor"))["result"]
+        self.assertEqual((approved["round_id"], approved["verdict"]), (again["id"], "approved"))

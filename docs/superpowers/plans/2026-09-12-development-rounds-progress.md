@@ -39,7 +39,7 @@ baseline 901 tests OK in 1025 s). Commit messages go through a file
 | 1 | Resource purpose `development` and unit `rounds` | done, reviewed | `faa7b71`, `a0e72f3` |
 | 2 | The `next_round` disposition and carried developments | done, reviewed | `2d46d94` |
 | 3 | Objective lineage | done, reviewed | `e92b4aa`, `fdfb4ba`, `92ec000`, `97d536f` |
-| 4 | `rounds.py`: the round decision and its independent review | done, reviewed three times, fixed three times (third fixes in the commit that carries this row) | `523beb2`, `987806e`, `4d352c7`, `5399725` |
+| 4 | `rounds.py`: the round decision and its independent review | done, reviewed four times, fixed four times (fourth fixes in the commit that carries this row) | `523beb2`, `987806e`, `4d352c7`, `5399725`, `e9a8757` |
 | 5 | `round-admit` opens the next round | pending | |
 | 6 | Consequence purposes and the exemplar reading in the literature stage | pending | |
 | 7 | `manuscript-prediction`: the blind cohort prediction | pending | |
@@ -57,6 +57,7 @@ baseline 901 tests OK in 1025 s). Commit messages go through a file
 - [x] Task 4 implemented and first review fixed (`cycle_authors` union for independence; reopening, stop and review bindings)
 - [x] Task 4 second-review findings fixed (see "Pending findings" below), tests green (`test_research_rounds.py` 19, `test_research_publication.py` 8, `test_research_review_packets.py` 20), this file updated
 - [x] Task 4 third-review findings fixed (see "Third review of Task 4" below), tests green (`test_research_rounds.py` 20, `test_research_development.py` 65, `test_research_publication.py` 8, `test_research_review_packets.py` 20), this file updated
+- [x] Task 4 fourth-review findings fixed (see "Fourth review of Task 4" below), tests green (`test_research_rounds.py` 21, `test_research_publication.py` 8, `test_research_review_packets.py` 20), this file updated
 - [ ] Task 5 implemented, reviewed, fixed
 - [ ] Task 6 implemented, reviewed, fixed
 - [ ] Task 7 implemented, reviewed, fixed
@@ -80,6 +81,14 @@ baseline 901 tests OK in 1025 s). Commit messages go through a file
 - Task 4: `development.cycle_authors(records)` is the union of plan and assessment authors and is used by readiness, round reviews and (later) predictions; a stop decision on a bundle is refused while an admitted round is unassessed; reopening and review bindings follow the spec text.
 - Task 4, second fixes: `rounds._carried` selects the closing round's carried developments by assessment time (`cycle_assessment.assessed_revision` after the latest admission's `admitted_revision`), not by the plan's cycle-id filter, so a re-assessment of an earlier round's cycle is disposed of by the round gate (spec 1 and 5.1). `development.carried_developments` first kept its `cycle_ids` parameter; the third review removed it (see below). Task 5's `admit_round` must write `admitted_revision` on the admission (spec 5.3 lists it); `opening.cycle_ids` stays for the freshness rules of Tasks 8 and 10. The fixture `write_round` writes `admitted_revision` instead of `opening.cycle_ids`, and `write_round_assessment` writes a round's assessment on its own (both through `write_record`). A reopening names a round assessed unsuccessful; a successful round's goal stays `round_goal_repeated` with no reopening path.
 - Task 4, third fixes: `development.carried_developments(records)` has no `cycle_ids` parameter (the plan's Task 2 signature had one; its only production caller, `rounds._carried`, selects by assessment revision instead, so the parameter was dead surface, CLAUDE.md sections 6 and 9-I). The deferred-candidate permission of spec 5.1 has a regression test.
+- Task 4, fourth fixes: spec 5.1's sentence "`round-review` refuses to approve a second decision for a closing round that already has an approved one (`round_decision_duplicate`)" is applied per bundle: `record_round_review` refuses the approval only when the earlier approved decision binds the current bundle. The spec's own gate (section 6 item 3, the plan's Task 5 `admit_round` with `round_review_stale`, Task 9 `_decision_obligations`) reads only a decision on the current bundle, so an approved decision on a superseded bundle is unreachable for the gate, and the literal reading left a study with no exit after the section 9 park (stop approved on bundle X, publication gate fails, the user revises and pins Y, the stop on Y cannot be approved), contradicting section 10's complete exit table. This narrows a spec rule, so it is reported to the user (CLAUDE.md product philosophy 3). The error text now reads "This closing round already has an approved decision on this bundle". Names: `admitted` became `admitted_revision` in `_carried`; `reopened` became `reopened_round_id` in `_next`, `_distinct` and `_direction_open` (CLAUDE.md sections 12 and 13; no behavior change).
+
+## Fourth review of Task 4
+
+Two findings, both major, both fixed in the commit that carries this section. No finding was found wrong.
+
+- Finding 1 (`research_harness/rounds.py`, `round_decision_duplicate` blocked a closing round for good once an approved decision existed on a superseded bundle): fixed by adding the condition `records["round_decision"][saved["round_id"]]["bundle_digest"] == bundle["digest"]` to the refusal. Regression test `test_an_approved_decision_on_a_superseded_bundle_does_not_block_the_round` in `RoundReviewTests`: pin, record and approve a stop, rewrite `draft/abstract.txt`, pin again, record a stop on the new bundle, approve it with `second-assessor`, assert `verdict == "approved"`. Checked by reverting the code fix in isolation: the test then fails with `round_decision_duplicate`. `test_one_approved_decision_per_closing_round` (same bundle) is unchanged and still passes. The spec rule is narrowed per bundle; see the deviations list.
+- Finding 2 (`research_harness/rounds.py`, CLAUDE.md section 12: `admitted` bound a revision number, `reopened` bound a round id or None): renamed `admitted_revision` and `reopened_round_id`, including the `_distinct` and `_direction_open` parameters. No behavior change; the existing rounds tests cover the renamed paths.
 
 ## Third review of Task 4
 
