@@ -378,10 +378,14 @@ def admit_round(store, payload, *, expected_revision, request_id):
     artifacts = ArtifactStore(store.root)
 
     def prepare(records, value):
-        context, bundle = _prepare_context(records, artifacts)
         _fields(value, ("id", "round_id", "review_id", "reason"))
         _text(value["id"], "Round admission ID")
         _text(value["reason"], "Admission reason")
+        # Checked before readiness: an active round's own literature obligations keep readiness
+        # from passing, and the reason to refuse is the open round, not the work it still owes.
+        if active_round(records) is not None:
+            raise ResearchError("round_active", "Assess the current round before opening another")
+        context, bundle = _prepare_context(records, artifacts)
         decision = records.get("round_decision", {}).get(value["round_id"])
         if decision is None:
             raise ResearchError("unknown_round_decision", "Admit a recorded round decision", {"id": value["round_id"]})
@@ -394,8 +398,6 @@ def admit_round(store, payload, *, expected_revision, request_id):
             raise ResearchError(_ERROR, "Admit a continue decision")
         if decision["bundle_digest"] != bundle["digest"]:
             raise ResearchError("round_review_stale", "The decision's bundle is no longer current")
-        if active_round(records) is not None:
-            raise ResearchError("round_active", "Assess the current round before opening another")
         number = current_number(records)
         if decision["closes"] != number:
             raise ResearchError("round_number_mismatch", "Admit a decision that closes the current round", {"current": number})

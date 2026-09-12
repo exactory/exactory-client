@@ -105,10 +105,14 @@ class RoundsCase(DevelopmentCase):
     def write_round(self, decision, identifier, *, successful=None, bundle_digest=None):
         """Write the admission of the round `decision` proposed directly, with its assessment when `successful` is given.
 
-        A stand-in until `admit_round` and `assess_round` exist; it carries only the fields the decision rules read."""
+        A stand-in for `admit_round` without the review; it carries the fields the decision and literature rules read."""
+        from research_harness.evaluation import Evaluation
         proposal = decision["payload"]["next"]
+        records = self.store.snapshot()["records"]
+        opening = rounds._opening(records, Evaluation(records, self.artifacts), records["publication_bundle"][decision["bundle_id"]])
         admission = self.write_record("round_admission", {"id": identifier, "number": proposal["number"], "decision_id": decision["id"],
-                                                          "goal": proposal["goal"], "admitted_revision": self.store.revision + 1})
+                                                          "goal": proposal["goal"], "opening": opening,
+                                                          "admitted_revision": self.store.revision + 1})
         if successful is not None:
             self.write_round_assessment(identifier, successful, bundle_digest)
         return admission
@@ -185,6 +189,14 @@ class RoundsCase(DevelopmentCase):
         """Record the four consequence purposes with captured empty results, as `foundation_searches` does."""
         for purpose in DEVELOPMENT_SEARCHES:
             self.record_purpose(purpose, purpose + "-" + suffix)
+
+    def round_literature(self, suffix):
+        """The active round's literature work: an exemplar requirement, then every search judged against the widened
+        frontier (the five purposes again and the four consequence purposes), then the sections re-recorded."""
+        self.exemplar_requirement(suffix)
+        self.foundation_searches(identifier_suffix="-" + suffix)
+        self.development_searches(suffix)
+        self.refresh_synthesis(suffix)
 
     def exemplar_requirement(self, suffix):
         from research_harness.reading import require_fulltext

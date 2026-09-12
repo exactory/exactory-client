@@ -75,6 +75,7 @@ class RoundDecisionTests(RoundsCase):
         first = self.pin()
         decision = self.mutate(rounds.record_round, self.decision_payload(first))["result"]
         self.write_round(decision, "round-2")
+        self.round_literature("late")
         self.recandidate("late")
         second = self.pin()
         self.write_round_assessment("round-2", True, second["digest"])
@@ -90,7 +91,9 @@ class RoundDecisionTests(RoundsCase):
         bundle = self.pin()
         decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
         self.write_round(decision, "round-2")
-        second = self.decision_payload(bundle, closes=2, statement="Extend the finite bound to every integer in [0, 7].")
+        self.round_literature("round-2")
+        self.recandidate("round-2")
+        second = self.decision_payload(self.pin(), closes=2, statement="Extend the finite bound to every integer in [0, 7].")
         self.assert_error("round_assessment_missing", lambda: self.mutate(rounds.record_round, second))
 
     def test_an_admitted_round_is_assessed_on_this_bundle_before_the_next_decision(self):
@@ -374,13 +377,19 @@ class RoundAdmissionTests(RoundsCase):
 
 class RoundLiteratureTests(RoundsCase):
     def test_a_development_purpose_is_a_search_purpose(self):
+        from research_harness.synthesis import synthesis_report
+        before = synthesis_report(self.store, "research")["literature_digest"]
         self.record_purpose("downstream", "downstream-early")
         self.assertEqual(self.store.snapshot()["records"]["search_selection"]["research:downstream"], {"search_id": "downstream-early"})
+        # Before any round, a consequence search is history, not a judgment the sections rest on.
+        self.assertEqual(synthesis_report(self.store, "research")["literature_digest"], before)
 
     def test_an_active_round_requires_fresh_consequence_searches_and_an_exemplar(self):
         self.record_purpose("downstream", "downstream-early")
         self.assertNotIn("round_search_missing", self.codes())
         self.assertNotIn("round_exemplar_missing", self.codes())
+        # The readiness review binds the search sources, so the early search is reviewed again before the pin.
+        self.mutate(self.development().record_readiness_review, self.review(self.execution_payload, identifier="review-early"))
         self.open_round()
         missing = [o for o in self.store_obligations("research") if o["code"] == "round_search_missing"]
         self.assertEqual(sorted(o["purpose"] for o in missing), ["changes", "downstream", "exemplars", "next_step"])
@@ -396,7 +405,11 @@ class RoundLiteratureTests(RoundsCase):
 
     def test_development_searches_enter_the_judgments_that_synthesis_depends_on(self):
         from research_harness.synthesis import synthesis_report
-        self.open_round()
+        decision, _, admission = self.open_round()
         before = synthesis_report(self.store, "research")["literature_digest"]
         self.record_purpose("downstream", "downstream-round-2")
-        self.assertNotEqual(synthesis_report(self.store, "research")["literature_digest"], before)
+        inside = synthesis_report(self.store, "research")["literature_digest"]
+        self.assertNotEqual(inside, before)
+        # The round's judgments stay when the round is assessed, so what bound them inside the round stays current.
+        self.write_round_assessment(admission["id"], True, decision["bundle_digest"])
+        self.assertEqual(synthesis_report(self.store, "research")["literature_digest"], inside)
