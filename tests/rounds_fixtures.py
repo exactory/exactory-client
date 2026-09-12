@@ -5,7 +5,7 @@ import json
 
 from development_fixtures import DevelopmentCase
 from integration_fixtures import observed_candidate
-from research_harness import publication, rounds
+from research_harness import predictions, publication, rounds
 from test_research_publication import ResearchPublicationTests
 
 DEVELOPMENT_SEARCHES = ("downstream", "next_step", "exemplars", "changes")
@@ -63,7 +63,6 @@ class RoundsCase(DevelopmentCase):
 
     def measure(self, bundle, suffix, percentiles=(30, 25, 40)):
         """Three blind reviews and three predictions on the bundle, as one measurement."""
-        from research_harness import predictions
         for number, percentile in enumerate(percentiles, 1):
             assessor = "measure-" + suffix + "-" + str(number)
             self.mutate(publication.record_manuscript_review, self.manuscript_review(bundle, assessor))
