@@ -50,6 +50,7 @@ from .source_links import captured_source, complete_original, contains, covers_t
 
 
 SEARCH_PURPOSES = ("direct", "originals", "theory", "adjacent", "recent")
+DEVELOPMENT_PURPOSES = ("downstream", "next_step", "exemplars", "changes")
 NOVELTY_VERDICTS = ("nothing-new", "scooped", "replicate-extend", "contradicted", "novel-confirmed")
 DISPOSITIONS = ("relevant", "contradictory", "potentially_relevant", "out_of_scope", "duplicate", "unresolved")
 CARRIED_DISPOSITIONS = ("contradictory", "unresolved")

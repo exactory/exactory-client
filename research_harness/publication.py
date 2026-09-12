@@ -100,21 +100,31 @@ def _bundle(records, artifacts):
     return bundle
 
 
+def _assessor_key(assessor_id):
+    return " ".join(assessor_id.casefold().split())
+
+
+def validate_assessor(artifacts, assessor, authors):
+    """An identified human or agent assessor with pinned provenance who is not an author."""
+    fields(assessor, ("id", "kind", "provenance", "relationship", "independence_basis"))
+    for key in ("id", "relationship", "independence_basis"):
+        text(assessor[key], "Independent assessor " + key)
+    if assessor["kind"] not in ("human", "agent"):
+        raise ResearchError("review_not_independent", "Supply an identified independent reviewer")
+    artifacts.read(assessor["provenance"])
+    if _assessor_key(assessor["id"]) in {_assessor_key(a) for a in authors}:
+        raise ResearchError("review_not_independent", "An author cannot provide an independent assessment")
+    return assessor
+
+
 def _review(records, artifacts, value, bundle):
     fields(value, ("id", "bundle_digest", "assessor", "review", "blind"))
     text(value["id"], "Manuscript review ID")
     if value["bundle_digest"] != bundle["digest"]:
         raise ResearchError("publication_review_stale", "Review the exact current manuscript bundle")
-    assessor = value["assessor"]
-    fields(assessor, ("id", "kind", "provenance", "relationship", "independence_basis"))
-    for key in ("id", "relationship", "independence_basis"):
-        text(assessor[key], "Independent assessor " + key)
-    if assessor["kind"] not in ("human", "agent") or value["blind"] is not True:
+    if value["blind"] is not True:
         raise ResearchError("review_not_independent", "Supply an identified independent blind reviewer")
-    artifacts.read(assessor["provenance"])
-    normalize = lambda s: " ".join(s.casefold().split())
-    if normalize(assessor["id"]) in {normalize(a) for a in bundle["candidate"]["authors"]}:
-        raise ResearchError("review_not_independent", "An author cannot provide the independent manuscript gate")
+    validate_assessor(artifacts, value["assessor"], bundle["candidate"]["authors"])
     core = strict_json(artifacts.read(value["review"]))
     fields(core, ("summary", "strengths", "weaknesses", "soundness", "presentation", "contribution", "overall", "decision"))
     text(core["summary"], "Review summary")
@@ -126,10 +136,6 @@ def _review(records, artifacts, value, bundle):
     if core["decision"] not in ("accept", "reject"):
         raise ResearchError("invalid_review", "The rubric decision must be accept or reject")
     return core
-
-
-def _assessor_key(assessor_id):
-    return " ".join(assessor_id.casefold().split())
 
 
 def record_manuscript_review(store, payload, *, expected_revision, request_id):
