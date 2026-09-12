@@ -1,4 +1,9 @@
-"""Copy exact candidate/source bytes into a new independent reviewer directory."""
+"""Copy exact candidate/source bytes into a new independent reviewer directory.
+
+The manifest is a neutral packet (review_packets): no revision labels, request
+identities, launcher tokens, author names, assessment history or author plans
+reach a manuscript reviewer, and a readiness reviewer sees the six checks'
+evidence without labels."""
 
 import json
 from pathlib import Path
@@ -6,7 +11,9 @@ from pathlib import Path
 from .artifacts import ArtifactStore
 from .execution_evidence import author_readiness_state
 from .errors import ResearchError
-from .publication import publication_report
+from .evaluation import Evaluation
+from .publication import publication_state
+from .review_packets import manuscript_packet, readiness_packet
 from .workspace import write_projection
 
 
@@ -41,20 +48,16 @@ def _deliver(store, destination, manifest):
 
 def deliver_readiness(store, destination):
     snapshot = store.snapshot()
-    report = dict(author_readiness_state(snapshot["records"], ArtifactStore(store.root)), revision=snapshot["revision"])
+    evaluation = Evaluation(snapshot["records"], ArtifactStore(store.root))
+    report = dict(author_readiness_state(snapshot["records"], evaluation), revision=snapshot["revision"])
     if report["review_inputs"] is None:
         raise ResearchError("candidate_checkpoint_missing", "Select an actual assessed candidate before independent delivery")
-    return _deliver(store, destination, {"kind": "readiness", "revision": report["revision"], "inputs": report["review_inputs"],
-        "execution_observations": report["execution_observations"]})
+    return _deliver(store, destination, readiness_packet(report))
 
 
 def deliver_manuscript(store, destination):
-    report = publication_report(store, "manuscript")
+    snapshot = store.snapshot()
+    report = publication_state(snapshot["records"], Evaluation(snapshot["records"], ArtifactStore(store.root)), "manuscript")
     if not report["ready"]:
         raise ResearchError("readiness_required", "Prepare a current manuscript bundle before independent delivery", {"obligations": report["obligations"]})
-    bundle = report["bundle"]
-    manifest = {"kind": "manuscript", "revision": report["revision"], "bundle_digest": bundle["digest"],
-                "files": bundle["files"], "claim_evidence": bundle["claim_evidence"], "candidate": bundle["candidate"],
-                "execution_observations": bundle["execution_observations"],
-                "inputs": bundle["review_inputs"]}
-    return _deliver(store, destination, manifest)
+    return _deliver(store, destination, manuscript_packet(snapshot["records"], report["bundle"]))

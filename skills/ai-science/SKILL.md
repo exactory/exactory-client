@@ -20,7 +20,7 @@ prerequisites and provenance; scientific validity still needs actual assessment.
 | Stage | Workflow | Required product |
 | --- | --- | --- |
 | `initiate` | This skill | Managed workspace, user context, authorization and resources |
-| `cohort` | [Cohort](../cohort/SKILL.md) | Enumerated frozen population and every required abstract reading |
+| `cohort` | [Cohort](../cohort/SKILL.md) | Enumerated frozen population and the abstract readings its recorded preparation policy requires |
 | `literature` | [Literature review](../literature-review/SKILL.md) | Three-tier source network, five searches, full objective, standards, rationale, innovation, context |
 | `ideate` | [Ideate](../ideate/SKILL.md) | Prospective scoped cycle, pinned inputs, current admission and binding |
 | `experiment` | [Experiment](../experiment/SKILL.md) | Actual outcomes, validity assessment, checkpoints, independent current research readiness |
@@ -37,7 +37,11 @@ A stage name or historical receipt does not establish readiness.
 ## Initiate
 
 Create the workspace once with `exactory-lab init --dir PATH --slug SLUG`,
-retaining explicit revision/request identity for reliable retries. Change into
+retaining explicit revision/request identity for reliable retries. The default
+preparation policy is `exhaustive-v1` (every cohort member and Tier 3 reference
+is read); pass `--preparation-policy screened-v1` only when the user chose the
+screened policy, and record the approved resource budget with
+`exactory-research budget` before the costly stages. Change into
 that workspace. Read the user's context and resource limits, preserve original
 material, and record the complete requested scope and pacing. A bare invocation
 permits choosing a research direction; any supplied question or bounds remain
@@ -82,7 +86,7 @@ authorized budget. When a required condition prevents further progress, preserve
 its exact obligation, evidence, next action, and named wait. Missing credentials
 belong at the stage that uses them; do not ask for secret values in chat.
 
-On resume, read `exactory-research status` and `next` first, then the search tree,
+On resume, read `exactory-research status --summary` and `next --summary`, then the `obligations` page for the code in hand first, then the search tree,
 checkpoints, pending admissions or remote intents, decisions, and user context.
 Reconcile existing work before dispatching more. Use the current gate for the
 next action. Preserve original objective, budgets, managed history, and uncommitted

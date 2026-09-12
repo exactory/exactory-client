@@ -19,6 +19,7 @@ import math
 
 from .artifacts import ArtifactStore
 from .errors import ResearchError
+from .evaluation import Evaluation
 from .evidence import digest
 from .execution_accounting import require_accounted_usage
 from .graph import obligation
@@ -105,7 +106,8 @@ def _scope(value, objective):
 
 class _Context:
     def __init__(self, records, artifacts):
-        self.records, self.artifacts = records, artifacts
+        self.records, self.artifacts = records, Evaluation.of(records, artifacts)
+        artifacts = self.artifacts
         config = records.get("configuration", {}).get("research")
         if config and config["profile"] != "research":
             raise ResearchError("profile_inapplicable", "Author development does not apply to the verification profile")
@@ -131,8 +133,7 @@ class _Context:
 
     def dependencies(self):
         return {"configuration": self.configuration["digest"], "constitution": self.configuration["constitution"],
-                "objective": self.objective, "foundation": self.foundation["digest"],
-                "synthesis": self.synthesis["digest"]}
+                "objective": self.objective, "preparation": self.synthesis["preparation_digest"]}
 
     def assessment(self, identifier):
         if identifier not in self.assessments:
@@ -166,7 +167,7 @@ class _Evidence:
         context = self.context
         if isinstance(value, dict) and value.get("kind") == "source":
             _fields(value, ("kind", "link"))
-            linked = validate_link(context.records, context.artifacts, value["link"])
+            linked = context.artifacts.link(value["link"])
             reading = validate_read_evidence(context.records, context.artifacts, value["link"], depth="fulltext")
             work = linked["work"]
             # Common source validation also checks source-backed metadata and
@@ -219,12 +220,13 @@ def _labelled(values, name, kinds=None):
 
 
 def _literature(context, evidence, value, scope):
-    _fields(value, ("scope", "foundation_digest", "comparison", "sources", "gaps"))
+    # A comparison recorded under the foundation digest (before 0.38.0) is stale, not malformed.
+    _fields(value, ("scope", "comparison", "sources", "gaps"), ("literature_digest", "foundation_digest"))
     _text(value["comparison"], "Claim-specific literature comparison")
     _strings(value["gaps"], "Literature gaps")
     evidence.many([{"kind": "source", "link": link} for link in _items(value["sources"], "Related full-read sources", True)], "Literature evidence")
-    if value["scope"] != scope or value["foundation_digest"] != context.foundation["digest"] or value["gaps"]:
-        raise ResearchError("literature_comparison_stale", "Record the literature comparison for this exact claim/scope against the current foundation")
+    if value["scope"] != scope or value.get("literature_digest") != context.synthesis["literature_digest"] or value["gaps"]:
+        raise ResearchError("literature_comparison_stale", "Record the literature comparison for this exact claim/scope against the current literature_digest")
 
 
 def _plan_evidence(evidence, value):
@@ -652,14 +654,14 @@ def _development(context, evidence, value, scope, cycle_id):
     else:
         _text(value["next_question"], "Next useful development question")
     novelty = value["novelty"]
-    _fields(novelty, ("scope", "foundation_digest", "comparison", "evidence", "gaps"))
+    _fields(novelty, ("scope", "comparison", "evidence", "gaps"), ("literature_digest", "foundation_digest"))
     _text(novelty["comparison"], "Current novelty comparison")
     _strings(novelty["gaps"], "Unresolved novelty comparison")
     linked = evidence.many(novelty["evidence"], "Novelty evidence")
     obligations = []
     if not any(x["reference"]["kind"] == "source" for x in linked):
         obligations.append(obligation("novelty_source_missing", "Compare the candidate with actual current full-read sources."))
-    if novelty["scope"] != scope or novelty["foundation_digest"] != context.foundation["digest"] or novelty["gaps"]:
+    if novelty["scope"] != scope or novelty.get("literature_digest") != context.synthesis["literature_digest"] or novelty["gaps"]:
         obligations.append(obligation("novelty_comparison_stale", "Refresh the novelty decision for this exact result claim/scope and current literature."))
     contribution = value["contribution"]
     _fields(contribution, ("and", "but", "therefore", "evidence"))
@@ -990,7 +992,7 @@ def _candidate(context):
     candidate = {"objective": context.objective, "scope": assessment["payload"]["scope"],
                  "checkpoint_id": checkpoint["id"], "checkpoint_digest": checkpoint["digest"],
                  "assessment_id": assessment["id"], "assessment_digest": assessment["digest"],
-                 "literature_digest": context.foundation["digest"], "synthesis_digest": context.synthesis["digest"],
+                 "preparation_digest": context.synthesis["preparation_digest"],
                  "constitution": context.configuration["constitution"], "result_hashes": result_hashes,
                  "evidence": [e["reference"] for e in evidence], "branches_digest": digest(context.branches),
                  "strategy_accounts_digest": digest(context.records.get("strategy_account", {})),
@@ -1110,4 +1112,5 @@ substitutes for these requirements.
 
 def readiness_report(store):
     snapshot = store.snapshot()
-    return dict(readiness_state(snapshot["records"], ArtifactStore(store.root)), revision=snapshot["revision"])
+    evaluation = Evaluation(snapshot["records"], ArtifactStore(store.root))
+    return dict(readiness_state(snapshot["records"], evaluation), revision=snapshot["revision"])

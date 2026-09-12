@@ -9,26 +9,44 @@ Read the [research constitution](../../RESEARCH_CONSTITUTION.md) and execute the
 [managed research workflow](../../docs/research-workflow.md). It contains the
 actual acquisition, reading, synthesis, gate, and continuation commands; the
 [CLI reference](../../docs/research-cli.md) gives complete payload shapes.
-Start with `exactory-research status` and `next`, and retain the current profile,
+Start with `exactory-research status --summary` and `next --summary`, and retain the current profile,
 complete objective or exact target, original source versions, and resource limits.
 
 ## Establish the foundation
 
-Complete the frozen cohort enumeration and every member's actual full abstract
-reading. Select one to five distinct exact root paper families and expand their
-captured bibliography occurrences through three tiers. Read Tier 1 and Tier 2 in
-full and Tier 3 abstracts. Require full text for every consequential claim,
-novelty, innovation, or validity dependency wherever it appears in the network.
+Complete the frozen cohort enumeration and the abstract readings the recorded
+preparation policy requires. Select one to five distinct exact root paper families
+and expand their captured bibliography occurrences through three tiers. Read
+Tier 1 (the roots) in full with complete bibliographies. Their references are
+Tier 3, read at abstract depth, until you select a reference with
+`require-fulltext` for a consequential claim, novelty, innovation, or validity
+dependency; a selected reference is Tier 2 wherever it appears, read in full with
+its complete bibliography, and its own references become Tier 3. Choose the few
+papers that the claims actually rest on. Under `screened-v1`, Tier 3 families are
+screened by family with their citation context before reading; promoted,
+doctrine and pending families are read at abstract depth, excluded families are
+sampled and audited, and `require-fulltext` families and unresolved references
+keep their obligations whatever the screen says.
 
 Capture and inventory each original body and inspect its required text, proofs,
 equations, figures, tables, appendices, bibliography, and supplements. Keep source
-bytes and exact inspection locations. A download is acquisition; a source-linked
-reading records the actual inspection. Record critical missing sources as pending.
+bytes and exact inspection locations as `span` locators (offsets and the hash of
+the exact substring), never as whole-document quotes. Read the extraction
+diagnostics on a capture before dispatching a reader; re-capture with
+`extraction_options` when layout padding makes the text unreadable. A download is
+acquisition; a source-linked reading records the actual inspection. A reading
+stays current while its bundle's units are unchanged; parsed bibliography entries
+do not require re-reading. Record critical missing sources as pending.
 
 Run all five distinct search purposes: `direct`, `originals`, `theory`, `adjacent`,
 and `recent`. Save original queries, responses, complete enumeration, versions,
-dates, scope, judgments, and gaps. Retain a captured empty result when a search
-finds nothing. Distinguish earlier original results from later validation,
+dates, scope, judgments, and gaps. Judge every found work with a disposition
+(relevant, contradictory, potentially relevant, out of scope, duplicate,
+unresolved) and a reason; a later search for the same purpose carries its
+contradictory and unresolved findings forward or resolves them by name. A
+judgment is reassessed when its scope, the content of the works it rests on, or
+the citation frontier changes, not when an unrelated reference gains a version.
+Retain a captured empty result when a search finds nothing. Distinguish earlier original results from later validation,
 improvement, or use; a later paper is not evidence that its content existed earlier.
 
 ## Synthesize before ideation

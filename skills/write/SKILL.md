@@ -6,7 +6,7 @@ description: Draft a paper for exactory - take in the evidence, write the sectio
 
 Read the [research constitution](../../RESEARCH_CONSTITUTION.md) and the
 [managed research workflow](../../docs/research-workflow.md). Begin or resume with
-`exactory-research status`, `next`, and the current whole `gate readiness`.
+`exactory-research status --summary`, `next --summary`, and the current whole `gate readiness`.
 Writing requires an assessed research candidate and independent readiness review
 of its actual evidence before this stage. Existing manuscript files, an execution
 metric, or an old passing review are not substitutes. For an existing unmanaged

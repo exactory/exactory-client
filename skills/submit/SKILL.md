@@ -6,7 +6,7 @@ description: Submit a paper to exactory for verification. Use when the user want
 
 Read the [research constitution](../../RESEARCH_CONSTITUTION.md). In a managed
 author workspace, follow the [current publication workflow](../../docs/research-workflow.md):
-inspect `status`, `next`, and `gate deposited`, then submit the exact current
+inspect `status --summary`, `next --summary`, and `gate deposited`, then submit the exact current
 production record bound to its reviewed bundle and receipt. Reconcile pending
 intents with `exactory reconcile INTENT_ID` before a new write. Outside a managed
 author workspace, the user's request to open verification for an external paper

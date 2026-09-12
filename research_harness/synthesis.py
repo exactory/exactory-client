@@ -1,8 +1,12 @@
 """Evidence-linked field standards, ABT reasoning, innovation and context.
 
 Each record_* operation accepts an immutable {id, profile, scope, ...} payload,
-binds current configuration/foundation/source-reading dependencies, and selects
-it through synthesis_selection/{profile}:{kind}. A new assessment needs a new
+binds the dependencies that section uses, and selects it through
+synthesis_selection/{profile}:{kind}. Standards bind the cohort population;
+rationale, innovation and context bind the citation frontier and the selected
+search judgments; every section binds its own evidence, the scope, the
+configuration and the constitution. preparation_digest summarizes the current
+preparation for plans, admissions, assessments, checkpoints and candidates. A new assessment needs a new
 ID; old records and operation results remain unchanged. Section readiness is
 mechanical only. synthesis_report additionally requires the current foundation,
 configuration and all profile-applicable sections.
@@ -13,6 +17,7 @@ study-specific field relationship.
 
 from .artifacts import ArtifactStore
 from .errors import ResearchError
+from .evaluation import Evaluation
 from .evidence import digest
 from .graph import obligation
 from .identities import resolve_family
@@ -55,13 +60,13 @@ def _gaps(value, name, nonempty=False):
 
 class _Assessment:
     def __init__(self, records, artifacts, target):
-        self.records, self.artifacts, self.target = records, artifacts, target
+        self.records, self.artifacts, self.target = records, Evaluation.of(records, artifacts), target
         self.obligations, self.evidence = [], {}
 
     def linked(self, link, path):
         key = digest(link)
         if key not in self.evidence:
-            context = validate_link(self.records, self.artifacts, link)
+            context = self.artifacts.link(link)
             work, source = context["work"], context["source"]
             pin = self.target if self.target and self.target.get("kind") == "work" and self.target["id"] == work["id"] else None
             reading, pending = None, []
@@ -295,8 +300,13 @@ def _assess(records, artifacts, kind, value, configuration, foundation):
         _gaps(value["speculative_links"], "Speculative applications")
     evidence = [state.evidence[k] for k in sorted(state.evidence)]
     dependencies = {"configuration": configuration["digest"], "constitution": configuration["constitution"],
-                    "foundation": foundation["digest"], "scope": digest(records.get("literature_scope", {}).get(value["profile"])),
+                    "scope": digest(records.get("literature_scope", {}).get(value["profile"])),
                     "evidence": digest(evidence)}
+    if kind == "standards":
+        dependencies["population"] = foundation["population_digest"]
+    else:
+        dependencies["frontier"] = foundation["frontier_digest"]
+        dependencies["searches"] = foundation["judgments_digest"]
     if kind == "innovation":
         standard = _selected(records, value["profile"], "standards")
         dependencies["standards"] = digest(standard) if standard else None
@@ -311,9 +321,8 @@ def _unique(obligations):
 
 
 def _record(store, kind, payload, *, expected_revision, request_id):
-    artifacts = ArtifactStore(store.root)
-
     def prepare(records, value):
+        artifacts = Evaluation(records, ArtifactStore(store.root))
         profile = profile_name(value.get("profile"))
         configuration = configuration_state(records, artifacts, profile)
         for item in configuration["obligations"]:
@@ -350,6 +359,12 @@ def record_context(store, payload, *, expected_revision, request_id):
 def synthesis_state(records, artifacts, profile):
     """Current synthesis on one snapshot, for later managed gates and cycles."""
     profile_name(profile)
+    evaluation = Evaluation.of(records, artifacts)
+    return evaluation.once(("synthesis", profile), lambda: _synthesis_state(evaluation, profile))
+
+
+def _synthesis_state(evaluation, profile):
+    records, artifacts = evaluation.records, evaluation
     configuration = configuration_state(records, artifacts, profile)
     foundation = foundation_state(records, artifacts, profile)
     obligations = list(configuration["obligations"]) + list(foundation["obligations"])
@@ -374,7 +389,14 @@ def synthesis_state(records, artifacts, profile):
     obligations = _unique(obligations)
     counts = {"sections": len(sections), "current_sections": sum(s["ready"] for s in sections.values()), "obligations": len(obligations)}
     counts.update({k: v for k, v in sections.get("innovation", {}).get("counts", {}).items() if k != "obligations"})
+    # The literature digest names what a claim comparison rests on; the preparation
+    # digest adds the configuration and the current sections for plans and candidates.
+    literature = digest({"scope": digest(records.get("literature_scope", {}).get(profile)), "frontier": foundation["frontier_digest"],
+                         "searches": foundation["judgments_digest"], "requirements": foundation["requirements_digest"]})
+    preparation = {"configuration": configuration["digest"], "literature": literature,
+                   "sections": {kind: section.get("digest") if section["ready"] else None for kind, section in sections.items()}}
     return {"ready": not obligations, "digest": digest({"configuration": configuration["digest"], "foundation": foundation["digest"], "sections": sections}),
+            "literature_digest": literature, "preparation_digest": digest(preparation),
             "obligations": obligations, "counts": counts, "profile": profile, "configuration": configuration,
             "foundation": foundation, "sections": sections,
             "history": [{"id": r["id"], "kind": r["kind"], "dependencies": r["dependencies"]}
@@ -383,4 +405,5 @@ def synthesis_state(records, artifacts, profile):
 
 
 def synthesis_report(store, profile):
-    return synthesis_state(store.snapshot()["records"], ArtifactStore(store.root), profile)
+    records = store.snapshot()["records"]
+    return synthesis_state(records, Evaluation(records, ArtifactStore(store.root)), profile)

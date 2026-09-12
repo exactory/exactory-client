@@ -109,3 +109,41 @@ class PrinciplesTests(LiteratureCase):
                 {"profile": "research", "target": {"kind": "objective", "id": "root", "statement": "The complete original objective."}},
                 expected_revision=0, request_id="racing-init"))
         self.assertEqual(self.store.snapshot()["records"], {"note": {"one": {"text": "Concurrent work."}}})
+
+
+class PreparationPolicyTests(LiteratureCase):
+    def api(self):
+        return importlib.import_module("research_harness.principles")
+
+    def test_default_policy_is_exhaustive_and_screened_is_recorded_explicitly(self):
+        api = self.api()
+        self.mutate(api.initialize_research, {"profile": "research", "target": None})
+        records = self.store.snapshot()["records"]
+        self.assertEqual(records["configuration"]["research"]["preparation_policy"], {"id": "exhaustive-v1"})
+        self.assertEqual(api.preparation_policy(records), "exhaustive-v1")
+        legacy = dict(records["configuration"]["research"])
+        del legacy["preparation_policy"]
+        self.assertEqual(api.preparation_policy({"configuration": {"research": legacy}}), "exhaustive-v1")
+        self.assertEqual(api.configuration_report(self.store, "research")["preparation_policy"], "exhaustive-v1")
+
+    def test_screened_policy_at_initialization_and_unknown_policies(self):
+        api = self.api()
+        self.assert_error("invalid_input", lambda: self.mutate(api.initialize_research,
+                                                                {"profile": "research", "target": None, "preparation_policy": "fast"}))
+        self.mutate(api.initialize_research, {"profile": "research", "target": None, "preparation_policy": "screened-v1"})
+        self.assertEqual(api.preparation_policy(self.store.snapshot()["records"]), "screened-v1")
+
+    def test_policy_change_names_the_current_policy_and_changes_the_configuration_digest(self):
+        api = self.api()
+        self.mutate(api.initialize_research, {"profile": "research", "target": None})
+        before = api.configuration_report(self.store, "research")["digest"]
+        self.assert_error("policy_conflict", lambda: self.mutate(api.change_policy,
+                                                                  {"previous": "screened-v1", "policy": "exhaustive-v1", "reason": "x"}))
+        self.mutate(api.change_policy, {"previous": "exhaustive-v1", "policy": "screened-v1", "reason": "The user chose screening."})
+        report = api.configuration_report(self.store, "research")
+        self.assertEqual(report["preparation_policy"], "screened-v1")
+        self.assertNotEqual(report["digest"], before)
+
+    def test_distributed_constitution_is_version_two(self):
+        self.assertEqual(self.api().constitution_contract()["version"], "2")
+

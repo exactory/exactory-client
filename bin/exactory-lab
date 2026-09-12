@@ -192,7 +192,8 @@ def _run_init(args: argparse.Namespace) -> None:
     try:
         store = Store(workspace_dir, create=not database.exists())
         identity = command_identity(store, args)
-        payload = initialization_payload(store, "study", state, identity["request_id"])
+        payload = initialization_payload(store, "study", state, identity["request_id"],
+                                         preparation_policy=args.preparation_policy)
         initialize_workspace(store, payload, **identity)
     except ResearchError as error:
         _exit_with_error(json.dumps({"error": error.as_dict()}))
@@ -403,6 +404,8 @@ def _build_parser() -> argparse.ArgumentParser:
                       help="Directory to create the workspace in. Default: here.")
     init.add_argument("--slug", required=True,
                       help="Short name of the study, used in job ids and records.")
+    init.add_argument("--preparation-policy", choices=("exhaustive-v1", "screened-v1"), default=None,
+                      help="Which cohort members owe structured reading. Default: exhaustive-v1 (every member).")
     init.set_defaults(handler=_run_init)
     add_identity(init, required=False)
 

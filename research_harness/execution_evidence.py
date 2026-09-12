@@ -7,6 +7,7 @@ mathematical proof acceptance has its separate controller and is unchanged.
 
 from .development import readiness_state
 from .errors import ResearchError
+from .evaluation import Evaluation
 from .evidence import digest
 from .execution_outputs import validate_observed_outputs
 from .graph import obligation
@@ -55,6 +56,7 @@ def _observed(records, artifacts, identifier):
 
 
 def author_readiness_state(records, artifacts):
+    artifacts = Evaluation.of(records, artifacts)
     report = readiness_state(records, artifacts)
     candidate = report["candidate"]
     observations = {}

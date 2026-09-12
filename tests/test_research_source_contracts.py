@@ -506,3 +506,62 @@ class SourceContractTests(LiteratureCase):
             self.mutate(import_bundle, bundle)
             status = self.mutate(record_reading, self.full_note(bundle, "srcset-read-" + str(index)))["result"]["status"]
             self.assertEqual(status, "partial" if index == 0 else "complete")
+
+
+class SpanLocatorTests(LiteratureCase):
+    def test_span_locator_validates_by_hash_and_shares_identity_with_text(self):
+        import hashlib
+        from research_harness.source_links import contains, covers_text, link_identity, read_locator, span_locator
+        a = self.metadata()
+        records = self.store.snapshot()["records"]
+        item = records["work"][a]["abstracts"][0]
+        content = self.artifacts.read(item["artifact"]).decode()
+        span = span_locator(content, 0, len(content))
+        self.assertEqual(span["sha256"], hashlib.sha256(content.encode()).hexdigest())
+        self.assertEqual(read_locator(self.artifacts, item["artifact"], span), content)
+        text = {"kind": "text", "start": 0, "end": len(content), "quote": content}
+        as_text = {"version_id": a, "source_id": item["source_id"], "artifact": item["artifact"], "locator": text}
+        as_span = dict(as_text, locator=span)
+        self.assertEqual(link_identity(as_text, records), link_identity(as_span, records))
+        self.assertTrue(contains(as_text, as_span, records) and contains(as_span, as_text, records))
+        self.assertTrue(covers_text(self.artifacts, as_span))
+        self.assert_error("invalid_locator", lambda: read_locator(self.artifacts, item["artifact"], dict(span, sha256="0" * 64)))
+        self.assert_error("invalid_locator", lambda: read_locator(self.artifacts, item["artifact"], dict(span, excerpt="x" * 201)))
+        self.assert_error("invalid_locator", lambda: read_locator(self.artifacts, item["artifact"], dict(span, excerpt="not the start")))
+        self.assert_error("invalid_locator", lambda: read_locator(self.artifacts, item["artifact"], dict(span, quote=content)))
+
+    def test_span_offsets_are_code_points_across_combining_marks_and_crlf(self):
+        from research_harness.source_links import read_locator, span_locator
+        content = "A\u0301b\r\nc\u2603\fd"
+        artifact = self.artifacts.put(content.encode("utf-8"), "text/plain; charset=utf-8")
+        span = span_locator(content, 2, 7)
+        self.assertEqual(read_locator(self.artifacts, artifact, span), content[2:7])
+        self.assertEqual(span["end"] - span["start"], 5)
+
+    def test_span_abstract_reading_discharges_a_cohort_member(self):
+        from research_harness.cohort_evidence import cohort_reading_report
+        from research_harness.reading import record_reading
+        collection = self.cohort((1,))
+        a = "arxiv:2601.00001v1"
+        note = self.abstract_note(a)
+        link = note["inspections"][0]["link"]
+        note["inspections"][0]["link"] = self.link(a, link["source_id"], link["artifact"], kind="span")
+        self.mutate(record_reading, note)
+        self.assertTrue(cohort_reading_report(self.store, [collection])["ready"])
+
+    def test_span_fulltext_reading_with_abstract_unit_discharges_a_cohort_member(self):
+        from research_harness.cohort_evidence import cohort_reading_report
+        from research_harness.literature import import_bundle
+        from research_harness.reading import record_reading
+        collection = self.cohort((1,))
+        a = "arxiv:2601.00001v1"
+        capture = self.capture(a)
+        bundle = self.bundle(a, capture)
+        for unit in bundle["units"]:
+            unit["link"] = self.link(a, capture["source_id"], capture["text"],
+                                     unit["link"]["locator"]["quote"], kind="span")
+        bundle["inventory"]["links"] = [bundle["units"][0]["link"]]
+        self.mutate(import_bundle, bundle)
+        self.mutate(record_reading, self.full_note(bundle))
+        self.assertTrue(cohort_reading_report(self.store, [collection])["ready"])
+

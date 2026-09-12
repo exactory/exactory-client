@@ -6,6 +6,7 @@ from pathlib import Path
 from .artifacts import ArtifactStore
 from .execution_evidence import author_readiness_state
 from .errors import ResearchError
+from .evaluation import Evaluation
 from .evidence import digest
 from .graph import obligation
 from .operations import fields, immutable_record, prepared_mutation, strings, text
@@ -26,8 +27,8 @@ def _ready(records, artifacts):
 
 def prepare_publication(store, payload, *, expected_revision, request_id):
     """Pin {id, files:{pdf,abstract,bibliography,claims,sources}, claim_evidence}."""
-    artifacts = ArtifactStore(store.root)
     def prepare(records, value):
+        artifacts = Evaluation(records, ArtifactStore(store.root))
         fields(value, ("id", "files", "claim_evidence"))
         text(value["id"], "Publication bundle ID")
         fields(value["files"], tuple(FILE_TYPES))
@@ -127,11 +128,20 @@ def _review(records, artifacts, value, bundle):
     return core
 
 
+def _assessor_key(assessor_id):
+    return " ".join(assessor_id.casefold().split())
+
+
 def record_manuscript_review(store, payload, *, expected_revision, request_id):
-    artifacts = ArtifactStore(store.root)
     def prepare(records, value):
+        artifacts = Evaluation(records, ArtifactStore(store.root))
         bundle = _bundle(records, artifacts)
         core = _review(records, artifacts, value, bundle)
+        key = _assessor_key(value["assessor"]["id"])
+        for saved in records.get("manuscript_review", {}).values():
+            if saved["bundle_digest"] == bundle["digest"] and _assessor_key(saved["assessor"]["id"]) == key:
+                raise ResearchError("manuscript_review_duplicate", "This assessor already reviewed this exact bundle; a rejection stands until the manuscript changes",
+                                    {"review_id": saved["id"]})
         record = dict(value, core=core, reviewed_revision=expected_revision, digest=digest(value))
         return [immutable_record(records, "manuscript_review", value["id"], record)], record
     return prepared_mutation(store, "publication.review", payload, prepare,
@@ -139,6 +149,7 @@ def record_manuscript_review(store, payload, *, expected_revision, request_id):
 
 
 def publication_state(records, artifacts, action="publication"):
+    artifacts = Evaluation.of(records, artifacts)
     bundle, reviews, obligations = None, [], []
     try:
         bundle = _bundle(records, artifacts)
@@ -146,7 +157,9 @@ def publication_state(records, artifacts, action="publication"):
         for saved in records.get("manuscript_review", {}).values():
             if saved["bundle_digest"] == bundle["digest"]:
                 core = _review(records, artifacts, {k: saved[k] for k in ("id", "bundle_digest", "assessor", "review", "blind")}, bundle)
-                key = " ".join(saved["assessor"]["id"].casefold().split())
+                key = _assessor_key(saved["assessor"]["id"])
+                # Recording refuses a second review per assessor per exact bundle; for reviews
+                # recorded before that rule the assessor's latest stands.
                 if key not in latest or saved["reviewed_revision"] > latest[key][0]["reviewed_revision"]:
                     latest[key] = (saved, core)
         reviews = [item[0] for item in latest.values()]
@@ -169,12 +182,13 @@ def publication_state(records, artifacts, action="publication"):
 
 def publication_report(store, action="publication"):
     snapshot = store.snapshot()
-    return dict(publication_state(snapshot["records"], ArtifactStore(store.root), action), revision=snapshot["revision"])
+    evaluation = Evaluation(snapshot["records"], ArtifactStore(store.root))
+    return dict(publication_state(snapshot["records"], evaluation, action), revision=snapshot["revision"])
 
 
 def validate_upload(store, pdf, abstract, sources):
     snapshot = store.snapshot()
-    artifacts = ArtifactStore(store.root)
+    artifacts = Evaluation(snapshot["records"], ArtifactStore(store.root))
     report = publication_state(snapshot["records"], artifacts)
     if not report["ready"]:
         raise ResearchError("readiness_required", "Publication requires the exact manuscript and dual review gate", {"obligations": report["obligations"]})

@@ -103,7 +103,8 @@ class SynthesisCase(LiteratureCase):
                 "responses": [{"source_id": captured["source_ids"][0], "query": query,
                     "query_locator": {"kind": "json", "pointer": "/q", "value": query}, "results_pointer": "/results"}],
                 "captured_at": "2026-09-07T12:00:00Z", "scope": "The finite-bound comparison.",
-                "found_work_ids": [], "verdict": "nothing-new", "cited_work_ids": [], "impact": "No matching result in this capture.", "gaps": []})
+                "found_work_ids": [], "verdict": "nothing-new", "cited_work_ids": [], "impact": "No matching result in this capture.",
+                "gaps": [], "dispositions": []})
 
     def synthesis_codes(self, profile="research"):
         return {x["code"] for x in self.api().synthesis_report(self.store, profile)["obligations"]}
@@ -673,3 +674,52 @@ class SynthesisTests(SynthesisCase):
         section = api.synthesis_report(self.store, "research")["sections"]["innovation"]
         self.assertEqual(section["counts"]["external_papers"], 0)
         self.assertIn("innovation_paper_type_unresolved", {x["code"] for x in section["obligations"]})
+
+
+class SectionDependencyTests(SynthesisCase):
+    def test_unrelated_readings_leave_sections_current_and_new_judgments_stale_them(self):
+        from research_harness.literature import record_search
+        from research_harness.reading import record_reading
+        from development_fixtures import DevelopmentCase
+        case = DevelopmentCase("prepared_study")
+        case.setUp()
+        self.addCleanup(case.temporary.cleanup)
+        case.prepared_study()
+        self.assertEqual(case.synthesis_codes(), set())
+        work = case.links[0]["version_id"]
+        case.mutate(record_reading, case.abstract_note(work, "second-abstract-note"))
+        self.assertEqual(case.synthesis_codes(), set())
+        report = case.api().synthesis_report(case.store, "research")
+        self.assertIn("population", report["sections"]["standards"]["bound_dependencies"])
+        self.assertIn("frontier", report["sections"]["rationale"]["bound_dependencies"])
+        before = report["preparation_digest"]
+        case.sequence += 1
+        query = "direct finite bound again"
+        captured = import_response(case.store, "mcp", json.dumps({"q": query, "results": []}).encode(),
+            source_url="https://example.org/search", captured_at="2026-09-07T12:00:00Z", media_type="application/json", mappings=[],
+            expected_revision=case.store.revision, request_id="search-again-" + str(case.sequence))
+        case.mutate(record_search, {"id": "direct-again", "profile": "research", "purpose": "direct", "queries": [query],
+            "responses": [{"source_id": captured["source_ids"][0], "query": query,
+                "query_locator": {"kind": "json", "pointer": "/q", "value": query}, "results_pointer": "/results"}],
+            "captured_at": "2026-09-07T12:00:00Z", "scope": "The finite-bound comparison.", "found_work_ids": [],
+            "verdict": "novel-confirmed", "cited_work_ids": [], "impact": "No competing result was found this time either.",
+            "gaps": [], "dispositions": []})
+        stale = {o["section"] for o in case.api().synthesis_report(case.store, "research")["obligations"]
+                 if o["code"] == "synthesis_dependencies_stale"}
+        self.assertEqual(stale, {"rationale", "innovation", "context"})
+        self.assertNotEqual(case.api().synthesis_report(case.store, "research")["preparation_digest"], before)
+
+    def test_population_digest_tracks_cohort_membership(self):
+        from research_harness.literature import foundation_report
+        a = self.metadata()
+        collection = self.cohort((1,))
+        self.scope([a], [collection])
+        first = foundation_report(self.store, "research")["population_digest"]
+        other = SynthesisCase("setUp")
+        other.setUp()
+        self.addCleanup(other.temporary.cleanup)
+        b = other.metadata()
+        wider = other.cohort((1, 2))
+        other.scope([b], [wider])
+        self.assertNotEqual(first, foundation_report(other.store, "research")["population_digest"])
+

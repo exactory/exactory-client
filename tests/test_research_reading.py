@@ -2,7 +2,7 @@ import copy
 
 from literature_fixtures import LiteratureCase
 from research_harness.literature import foundation_report, import_bundle
-from research_harness.reading import record_reading, validate_read_evidence
+from research_harness.reading import require_fulltext, record_reading, validate_read_evidence
 
 
 class ReadingTests(LiteratureCase):
@@ -199,6 +199,9 @@ class ReadingTests(LiteratureCase):
         self.metadata(2, references=[{"id": c}])
         self.metadata(3)
         self.scope([a])
+        # B is selected for full reading, so its reference C enters the network at abstract depth.
+        self.mutate(require_fulltext, {"id": "selected-b", "profile": "research", "version_id": b,
+                                     "purpose": "major_claim", "reason": "The claim rests on B."})
         bundle = self.bundle(c)
         self.mutate(import_bundle, bundle)
         self.mutate(record_reading, self.full_note(bundle))
@@ -214,3 +217,81 @@ class ReadingTests(LiteratureCase):
                                 self.store.snapshot()["records"]["work"][a]["abstract"]["sha256"])):
             self.assert_error("invalid_target", lambda: self.scope([a], profile="verification", target={
                 "kind": "work", "id": a, "source_id": source_id, "sha256": sha}))
+
+
+class ReadingFreshnessTests(LiteratureCase):
+    def test_parsed_bibliography_does_not_invalidate_a_fulltext_reading(self):
+        from research_harness.literature import import_bundle
+        from research_harness.reading import current_readings, record_reading
+        a = self.metadata()
+        capture = self.capture(a)
+        bundle = self.bundle(a, capture)
+        self.mutate(import_bundle, bundle)
+        self.mutate(record_reading, self.full_note(bundle))
+        entry = {"target": None, "kind": "nonpaper", "reason": "A book.", "link": bundle["units"][1]["link"]}
+        self.mutate(import_bundle, dict(bundle, id="bundle-bib", bibliography=dict(bundle["bibliography"], entries=[entry])))
+        accepted, partial = current_readings(self.store.snapshot()["records"], self.artifacts, a)
+        self.assertEqual([r["id"] for r in accepted], ["full"])
+        self.assertEqual(partial, [])
+        self.assertNotIn("reading_bundle_stale", self.codes())
+
+    def test_a_new_required_unit_still_stales_the_reading(self):
+        from research_harness.literature import import_bundle
+        from research_harness.reading import current_readings, record_reading
+        a = self.metadata()
+        capture = self.capture(a)
+        bundle = self.bundle(a, capture)
+        self.mutate(import_bundle, bundle)
+        self.mutate(record_reading, self.full_note(bundle))
+        extra = {"id": "supplement", "kind": "supplement", "required": True, "link": None,
+                 "reason": "The data appendix is published separately.", "url": "https://example.org/supplement"}
+        self.mutate(import_bundle, dict(bundle, id="bundle-2", units=bundle["units"] + [extra]))
+        accepted, partial = current_readings(self.store.snapshot()["records"], self.artifacts, a)
+        self.assertEqual(accepted, [])
+        self.assertEqual(partial[0]["assessment"]["pending"][0]["code"], "reading_bundle_stale")
+
+    def test_legacy_assessment_digest_is_not_compared(self):
+        from research_harness.literature import import_bundle
+        from research_harness.reading import current_readings, record_reading
+        a = self.metadata()
+        bundle = self.bundle(a)
+        self.mutate(import_bundle, bundle)
+        self.mutate(record_reading, self.full_note(bundle))
+        records = self.store.snapshot()["records"]
+        records["reading"]["full"]["assessment"]["bundle_digest"] = "0" * 64
+        accepted, _ = current_readings(records, self.artifacts, a)
+        self.assertEqual([r["id"] for r in accepted], ["full"])
+
+
+class ExtractionOptionTests(LiteratureCase):
+    def test_capture_records_extraction_diagnostics_and_options(self):
+        from research_harness.acquisition import acquire_fulltext
+        from research_fixtures import client
+        a = self.metadata()
+        http, _, _ = client([(200, {"Content-Type": "application/pdf"}, b"%PDF-1.4\n% Authored fixture.\n%%EOF")], max_retries=0)
+        result = acquire_fulltext(self.store, a, "https://arxiv.org/pdf/" + a[6:], http=http,
+                                  extractor=lambda data: {"status": "extracted", "text": "Body text.\n\fMore.\n"},
+                                  extraction_options={"layout": False},
+                                  expected_revision=self.store.revision, request_id="fulltext-options")
+        extraction = result["capture"]["extraction"]
+        self.assertEqual(extraction["options"], {"layout": False})
+        self.assertEqual(extraction["extractor"], "pdftotext")
+        self.assertEqual(extraction["page_count"], 2)
+        self.assertEqual(extraction["text_bytes"], len("Body text.\n\fMore.\n".encode()))
+        self.assert_error("invalid_input", lambda: acquire_fulltext(self.store, a, "https://arxiv.org/pdf/" + a[6:], http=http,
+                                                                    extraction_options={"layout": "no"},
+                                                                    expected_revision=self.store.revision, request_id="bad-options"))
+
+    def test_a_reading_on_any_capture_of_the_same_original_covers_it(self):
+        from research_harness.literature import import_bundle
+        from research_harness.reading import fulltext_coverage, record_reading
+        a = self.metadata()
+        first = self.capture(a, pdf_text="Layout padded    text. References: none.")
+        second = self.capture(a, pdf_text="Plain text. References: none.")
+        self.assertEqual(first["original"]["sha256"], second["original"]["sha256"])
+        bundle = self.bundle(a, second, bundle_id="bundle-plain")
+        self.mutate(import_bundle, bundle)
+        self.mutate(record_reading, self.full_note(bundle))
+        coverage = fulltext_coverage(self.store.snapshot()["records"], self.artifacts, a)
+        self.assertTrue(coverage["complete"])
+

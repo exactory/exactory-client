@@ -23,6 +23,7 @@ class LiteratureTests(LiteratureCase):
                                "results_pointer": "/results"}],
                 "captured_at": "2026-09-07T12:00:00Z", "scope": "The bounded-sequence contribution in this study.",
                 "found_work_ids": list(found), "verdict": verdict, "cited_work_ids": [],
+                "dispositions": [{"work_id": w, "disposition": "relevant", "reason": "Found by the authored search."} for w in found],
                 "impact": "No matching prior contribution was exposed in this saved search.", "gaps": []}
 
     def test_graph_reading_does_not_discharge_all_cohort_abstracts(self):
@@ -95,6 +96,73 @@ class LiteratureTests(LiteratureCase):
         bad = copy.deepcopy(payload)
         bad["id"], bad["source_ids"] = "rate-limit", [limited["source_id"]]
         self.assert_error("invalid_availability", lambda: self.mutate(record_availability, bad))
+
+    def test_registry_abstract_absence_qualifies_noncritical_abstract_depth(self):
+        from research_harness.acquisition import acquire_work
+        from research_fixtures import client, json_response, crossref, openalex
+        a = self.metadata(references=[{"id": "openalex:W123"}])
+        self.scope([a])
+        without_crossref, without_openalex = crossref(), openalex()
+        del without_crossref["message"]["abstract"]
+        del without_openalex["abstract_inverted_index"]
+        http, _, _ = client([json_response(without_openalex), json_response(without_crossref), json_response(crossref())])
+        acquire_work(self.store, "W123", request_id="oa-absent", expected_revision=self.store.revision, http=http)
+        acquire_work(self.store, "10.1234/example", request_id="cr-absent", expected_revision=self.store.revision, http=http)
+        self.assertIn("abstract_reading_missing", self.codes())
+        records = self.store.snapshot()["records"]
+        sources = {s["provider"]: s["id"] for s in records["source"].values()}
+        payload = {"id": "registry-absent", "profile": "research", "version_id": "openalex:W123", "depth": "abstract",
+                   "source_ids": [sources["openalex"], sources["crossref"]],
+                   "reason": "Neither registry publishes an abstract for this journal article.",
+                   "policy": {"id": "registry-abstract-absent", "minimum_attempts": 2, "allowed_statuses": [200],
+                              "rationale": "Complete records from every supported registry without an abstract document that none is available."}}
+        one_registry = copy.deepcopy(payload)
+        one_registry["id"], one_registry["source_ids"], one_registry["policy"]["minimum_attempts"] = "one-registry", [sources["openalex"]], 1
+        self.assert_error("invalid_availability", lambda: self.mutate(record_availability, one_registry))
+        arxiv_version = copy.deepcopy(payload)
+        arxiv_version["id"], arxiv_version["version_id"] = "arxiv-absent", a
+        self.assert_error("invalid_availability", lambda: self.mutate(record_availability, arxiv_version))
+        self.mutate(record_availability, payload)
+        self.assertNotIn("abstract_reading_missing", self.codes())
+        report = foundation_report(self.store, "research")
+        self.assertEqual(report["availability_qualified"][0]["qualification"], "noncritical_only")
+        self.assertEqual(report["availability_qualified"][0]["policy"]["allowed_statuses"], [200])
+        acquire_work(self.store, "10.1234/example", request_id="cr-present", expected_revision=self.store.revision, http=http)
+        self.assertIn("abstract_reading_missing", self.codes())
+        present = next(s["id"] for s in self.store.snapshot()["records"]["source"].values() if s["operation_id"] == "cr-present")
+        with_abstract = copy.deepcopy(payload)
+        with_abstract["id"], with_abstract["source_ids"] = "abstract-present", [sources["openalex"], present]
+        self.assert_error("invalid_availability", lambda: self.mutate(record_availability, with_abstract))
+
+    def test_registry_abstract_absence_requires_only_the_registries_that_address_the_work(self):
+        from research_harness.acquisition import acquire_work, import_response
+        from research_fixtures import client, json_response, openalex
+        a = self.metadata(references=[{"id": "openalex:W123"}, {"id": "url:https://inspirehep.net/api/literature/198154"}])
+        self.scope([a])
+        without_doi = openalex()
+        del without_doi["abstract_inverted_index"], without_doi["doi"], without_doi["ids"]["doi"]
+        http, _, _ = client([json_response(without_doi)])
+        acquire_work(self.store, "W123", request_id="oa-only", expected_revision=self.store.revision, http=http)
+        raw = {"hits": [{"links": {"json": "https://inspirehep.net/api/literature/198154"},
+                         "metadata": {"titles": [{"title": "Quantum creation of an inflationary universe"}]}}]}
+        import_response(self.store, "web", json.dumps(raw).encode(), source_url="https://inspirehep.net/api/literature?q=recid+198154",
+                        captured_at="2026-09-09T12:00:00Z", media_type="application/json",
+                        mappings=[{"id": "/hits/0/links/json", "title": "/hits/0/metadata/titles/0/title"}],
+                        expected_revision=self.store.revision, request_id="inspire-198154")
+        self.assertEqual(len([o for o in self.store_obligations() if o["code"] == "abstract_reading_missing"]), 2)
+        records = self.store.snapshot()["records"]
+        openalex_source = next(s["id"] for s in records["source"].values() if s["provider"] == "openalex")
+        web_source = next(s["id"] for s in records["source"].values() if s["provider"] == "web")
+        policy = {"id": "registry-abstract-absent", "minimum_attempts": 1, "allowed_statuses": [200],
+                  "rationale": "Every registry that addresses the work's identifiers returned a complete record without an abstract."}
+        self.mutate(record_availability, {"id": "openalex-only", "profile": "research", "version_id": "openalex:W123", "depth": "abstract",
+                                          "source_ids": [openalex_source], "reason": "OpenAlex is the only registry that knows this work.", "policy": policy})
+        self.mutate(record_availability, {"id": "inspire-only", "profile": "research", "version_id": "url:https://inspirehep.net/api/literature/198154",
+                                          "depth": "abstract", "source_ids": [web_source], "reason": "The saved INSPIRE record carries no abstract and no registry identifier.", "policy": policy})
+        self.assertNotIn("abstract_reading_missing", self.codes())
+        swapped = {"id": "swapped", "profile": "research", "version_id": "openalex:W123", "depth": "abstract", "source_ids": [web_source],
+                   "reason": "A capture of another work.", "policy": policy}
+        self.assert_error("invalid_availability", lambda: self.mutate(record_availability, swapped))
 
     def test_complete_mechanical_foundation_and_untrusted_human_exports(self):
         collection = self.cohort((1,))
@@ -275,3 +343,83 @@ class LiteratureTests(LiteratureCase):
         self.assertFalse(report["availability_qualified"])
         self.assertIn("collection_pending", {x["code"] for x in report["obligations"]})
         self.assertEqual(report["inventory"][0]["retrievals"][0]["extraction_status"], "request_budget")
+
+
+class SearchDispositionTests(LiteratureCase):
+    def search(self, *args, **kwargs):
+        return LiteratureTests.search(self, *args, **kwargs)
+
+    def test_dispositions_are_required_complete_and_bound_to_citations(self):
+        a = self.metadata()
+        self.scope([a])
+        search = self.search("direct", ["arxiv:2602.00009v1", "arxiv:2602.00010v1"])
+        missing = copy.deepcopy(search)
+        del missing["dispositions"]
+        self.assert_error("invalid_search", lambda: self.mutate(record_search, missing))
+        partial = copy.deepcopy(search)
+        partial["dispositions"] = partial["dispositions"][:1]
+        self.assert_error("invalid_search", lambda: self.mutate(record_search, partial))
+        out = copy.deepcopy(search)
+        out["dispositions"][0]["disposition"] = "out_of_scope"
+        out["cited_work_ids"] = ["arxiv:2602.00009v1"]
+        self.assert_error("invalid_search", lambda: self.mutate(record_search, out))
+        out["cited_work_ids"] = ["arxiv:2602.00010v1"]
+        self.mutate(record_search, out)
+        self.assertNotIn("search_dispositions_missing", self.codes())
+
+    def test_contradictory_findings_are_carried_forward_or_resolved(self):
+        a = self.metadata()
+        self.scope([a])
+        first = self.search("direct", ["arxiv:2602.00009v1", "arxiv:2602.00010v1"])
+        first["dispositions"][0]["disposition"] = "contradictory"
+        self.mutate(record_search, first)
+        second = self.search("direct", ["arxiv:2602.00010v1"])
+        second["id"] = "direct-2"
+        self.assert_error("search_findings_dropped", lambda: self.mutate(record_search, second))
+        second["resolved"] = [{"work_id": "arxiv:2602.00009v1", "reason": "The contradiction concerns a different regime; recorded in the rationale."}]
+        self.mutate(record_search, second)
+        third = self.search("direct", ["arxiv:2602.00009v1", "arxiv:2602.00010v1"])
+        third["id"] = "direct-3"
+        third["dispositions"][0]["disposition"] = "unresolved"
+        self.mutate(record_search, third)
+        fourth = self.search("direct", ["arxiv:2602.00009v1", "arxiv:2602.00010v1"])
+        fourth["id"] = "direct-4"
+        fourth["dispositions"][0]["disposition"] = "contradictory"
+        self.mutate(record_search, fourth)
+        dismissed = self.search("direct", ["arxiv:2602.00009v1", "arxiv:2602.00010v1"])
+        dismissed["id"] = "direct-5"
+        dismissed["dispositions"][0]["disposition"] = "out_of_scope"
+        self.assert_error("search_findings_dropped", lambda: self.mutate(record_search, dismissed))
+
+    def test_recording_another_purpose_does_not_stale_a_selected_search(self):
+        a = self.metadata()
+        self.scope([a])
+        self.mutate(record_search, self.search("direct"))
+        self.mutate(record_search, self.search("adjacent", ["arxiv:2602.00011v1"]))
+        self.assertFalse({"search_frontier_stale", "search_evidence_stale", "search_scope_stale"} & self.codes())
+
+    def test_legacy_search_without_dispositions_is_an_obligation_not_a_crash(self):
+        a = self.metadata()
+        self.scope([a])
+        search = self.search("direct")
+        self.mutate(record_search, search)
+        records = self.store.snapshot()["records"]
+        legacy = dict(records["literature_search"]["direct"])
+        del legacy["dispositions"]
+        self.store.mutate("legacy", {}, lambda tx: tx.put("literature_search", "direct", legacy),
+                          expected_revision=self.store.revision, request_id="legacy-search")
+        self.assertIn("search_dispositions_missing", self.codes())
+
+    def test_unrelated_reference_changes_do_not_stale_but_a_new_frontier_family_does(self):
+        a = self.metadata(1, references=[{"id": "arxiv:2601.00002v1"}])
+        b = self.metadata(2)
+        self.scope([a])
+        self.mutate(record_search, self.search("direct"))
+        self.assertNotIn("search_evidence_stale", self.codes())
+        self.capture(b, "The referenced paper's body. References: none.")
+        self.assertNotIn("search_evidence_stale", self.codes())
+        self.assertNotIn("search_frontier_stale", self.codes())
+        self.metadata(1, references=[{"id": "arxiv:2601.00002v1"}, {"id": "arxiv:2601.00003v1"}])
+        self.metadata(3)
+        self.assertIn("search_frontier_stale", self.codes())
+

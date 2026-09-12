@@ -1,9 +1,12 @@
 """Conservative full-text extraction, independent of acquisition and reading.
 
-extract(data, media_type, *, extractor=None) -> {status, text: str|None,
-includes_abstract: bool|None, visual_inspection_required: bool}. PDF extractor
-injection accepts bytes and returns {status, text}; its successful status is
-'extracted'. Missing, scanned, malformed or timed-out extraction remains pending.
+extract(data, media_type, *, extractor=None, layout=True) -> {status, text,
+includes_abstract, visual_inspection_required, extractor, version, options}. PDF
+extractor injection accepts bytes and returns {status, text}; its successful
+status is 'extracted'. extraction_measures(text, original_size) describes an
+extraction (bytes, pages, longest line, whitespace fraction, expansion) so a
+coordinator sees layout padding before a reader does; a high value is a signal
+to inspect, never a reason to truncate. Missing, scanned, malformed or timed-out extraction remains pending.
 The default pdftotext invocation uses explicit argv, a timeout, a private temp
 directory, and a bounded output read. HTML requires article-body structure with
 nonempty content blocks beyond titles, metadata and abstracts. includes_abstract
@@ -26,14 +29,42 @@ from pathlib import Path
 from .errors import ResearchError
 
 
+def extraction_measures(text, original_size):
+    """Describe an extraction so oversized or padded text is visible before reading."""
+    pages = text.split("\f")
+    if pages and not pages[-1].strip():
+        pages.pop()
+    encoded = len(text.encode("utf-8"))
+    return {"text_bytes": encoded, "page_count": max(1, len(pages)),
+            "max_line_length": max((len(line) for line in text.splitlines()), default=0),
+            "whitespace_fraction": round(sum(c.isspace() for c in text) / len(text), 4) if text else 0.0,
+            "expansion_ratio": round(encoded / original_size, 3) if original_size else None}
+
+
 class PdfExtractor:
-    def __init__(self, *, executable=None, timeout=30, max_text_bytes=32 * 1024 * 1024):
+    name = "pdftotext"
+
+    def __init__(self, *, executable=None, timeout=30, max_text_bytes=32 * 1024 * 1024, layout=True):
         if not isinstance(timeout, (float, int)) or not math.isfinite(timeout) or timeout <= 0:
             raise ResearchError("invalid_input", "PDF extraction timeout must be positive and finite")
         if type(max_text_bytes) is not int or max_text_bytes < 0:
             raise ResearchError("invalid_input", "PDF extraction output limit must be a nonnegative integer")
+        if type(layout) is not bool:
+            raise ResearchError("invalid_input", "PDF layout mode must be a boolean")
         self.executable = executable if executable is not None else shutil.which("pdftotext")
-        self.timeout, self.max_text_bytes = timeout, max_text_bytes
+        self.timeout, self.max_text_bytes, self.layout = timeout, max_text_bytes, layout
+
+    def version(self):
+        """The extractor's reported version, or None when it cannot be determined."""
+        if not self.executable:
+            return None
+        try:
+            result = subprocess.run([self.executable, "-v"], capture_output=True, text=True, timeout=5,
+                                    stdin=subprocess.DEVNULL)
+        except (OSError, subprocess.SubprocessError, UnicodeError):
+            return None
+        match = re.search(r"version\s+(\S+)", result.stdout + result.stderr)
+        return match.group(1) if match else None
 
     def __call__(self, data):
         if not self.executable:
@@ -44,8 +75,8 @@ class PdfExtractor:
             process = None
             try:
                 deadline = time.monotonic() + self.timeout
-                process = subprocess.Popen([self.executable, "-enc", "UTF-8", "-layout", str(original), "-"],
-                                           stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                argv = [self.executable, "-enc", "UTF-8"] + (["-layout"] if self.layout else []) + [str(original), "-"]
+                process = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
                 text = bytearray()
                 with selectors.DefaultSelector() as selector:
                     selector.register(process.stdout, selectors.EVENT_READ)
@@ -65,7 +96,8 @@ class PdfExtractor:
                 if process.wait(timeout=remaining) != 0:
                     return {"status": "malformed_pdf", "text": None}
                 text = text.decode("utf-8")
-                return {"status": "extracted" if text.strip() else "empty_text", "text": text if text.strip() else None}
+                return {"status": "extracted" if text.strip() else "empty_text", "text": text if text.strip() else None,
+                        "extractor": self.name, "version": self.version(), "options": {"layout": self.layout}}
             except subprocess.TimeoutExpired:
                 return {"status": "extraction_timeout", "text": None}
             except FileNotFoundError:
@@ -144,14 +176,17 @@ class _Article(HTMLParser):
                 self.body_text.append(data)
 
 
-def extract(data, media_type, *, extractor=None):
-    result = {"status": "unsupported_fulltext", "text": None, "includes_abstract": None, "visual_inspection_required": True}
+def extract(data, media_type, *, extractor=None, layout=True):
+    result = {"status": "unsupported_fulltext", "text": None, "includes_abstract": None, "visual_inspection_required": True,
+              "extractor": None, "version": None, "options": {}}
     if media_type == "application/pdf":
+        result.update({"extractor": PdfExtractor.name, "options": {"layout": layout}})
         if not data.startswith(b"%PDF-") or b"%%EOF" not in data[-4096:]:
             result["status"] = "malformed_pdf"
             return result
-        extracted = (extractor or PdfExtractor())(data)
-        result.update({"status": extracted["status"], "text": extracted["text"]})
+        extracted = (extractor or PdfExtractor(layout=layout))(data)
+        result.update({"status": extracted["status"], "text": extracted["text"],
+                       "version": extracted.get("version"), "options": extracted.get("options", {"layout": layout})})
         if result["status"] == "extracted" and (not isinstance(result["text"], str) or not result["text"].strip()):
             result["status"], result["text"] = "empty_text", None
         return result
@@ -162,6 +197,7 @@ def extract(data, media_type, *, extractor=None):
     except UnicodeError:
         result["status"] = "invalid_encoding"
         return result
+    result["extractor"] = "html"
     parser = _Article()
     parser.feed(text)
     parser.close()

@@ -9,7 +9,7 @@ collection_status(store, collection_id=None)
 acquire_work(store, identifier, *, request_id, expected_revision, http=None,
              provider=None, max_requests=None)
 acquire_fulltext(store, identifier, url, *, request_id, expected_revision,
-                 http=None, max_requests=None, extractor=None)
+                 http=None, max_requests=None, extractor=None, extraction_options=None)
 import_response(store, provider, response: bytes, *, source_url, captured_at,
                 request_id, expected_revision, media_type=None, mappings=None)
 
@@ -25,17 +25,25 @@ are disjoint; a query above 30000 is bisected until enumerable or explicitly
 pending at a single minute. cohort_member/cohort_exclusion/cohort_seen records
 are keyed by a hash of collection/family and hold collection_id, work_id,
 version_ids and source_ids. Family counts never count versions twice.
-cohort_partition_member binds family membership to an enumeration epoch.
+cohort_partition_member binds family membership to an enumeration epoch;
+cohort_partition_entry binds every listed entry (exact id, or the listing
+position of an entry without one) so a partition completes when the entries
+seen equal the reported total. Entries outside the frozen window, without a
+usable primary category, or without a parseable identity are retained as
+exclusions with a reason, never as a reason to re-fetch the partition.
 collection_page records every response/failed attempt, requested cursor,
-reported counts, disposition and exact source_ids. Historical pages never change.
+reported counts, disposition, exact source_ids and excluded entries.
+Historical pages never change.
 
 acquisition_operation/{request_id} holds operation, payload, state, target,
 admission_revision and original result. Admission uses the supplied revision;
 every later commit uses a consistent snapshot and explicit revision CAS.
 Deterministic derived request IDs identify pages and finalization. A replay
 returns the original finalized result (or committed admission after a crash)
-without further network I/O. Explicit resume with a NEW request id can supersede
-an interrupted collector. Its predecessor cannot subsequently commit a page.
+without further network I/O. A NEW request id for the same operation and target
+supersedes an interrupted predecessor: a resumed collector's predecessor cannot
+commit a page, a superseded work or full-text acquisition cannot finish, and a
+superseded operation holds no request reservation.
 
 max_requests counts all HTTP attempts, including retry/redirect/resolution
 failures, across this invocation. Exhaustion is resumable and never complete.
@@ -45,7 +53,9 @@ have been read. Registry acquisition's scope is metadata, not full-text reading
 or verified bibliography completeness. Fulltext availability is source-specific.
 Fulltext capture values contain source_id, requested_version_id, observed version,
 url, original/text artifacts, availability (available|pending), extraction_status,
-includes_abstract, and visual_inspection_required. Missing bytes, extraction or
+includes_abstract, visual_inspection_required, and extraction (extractor, version,
+options, and the measures of the extracted text). A capture with different
+extraction options is a distinct capture of the same original. Missing bytes, extraction or
 exact-version agreement remain pending. All PDF/HTML captures retain a separate
 visual inspection obligation for non-text content.
 
@@ -62,11 +72,13 @@ from datetime import date, datetime, timedelta, timezone
 from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evidence import derived_id, digest, media_type as response_media_type, prepare_sources, prepare_work, put_sources, put_work
-from .fulltext import extract
+from .fulltext import extract, extraction_measures
 from .http import HttpClient, HttpFailure, RequestBudget, safe_url
 from .identities import family_id, normalize_identifier, version_of
 from .imports import parse_mapped
 from .providers import Arxiv, Crossref, OpenAlex
+from .provenance import runtime_provenance
+from . import resources
 
 
 def _definition(value):
@@ -85,22 +97,35 @@ def _definition(value):
     return dict(value)
 
 
+_ENTRY_FAILURES = ("invalid_identifier", "invalid_response")
+_CATEGORY_FAILURES = ("missing_primary_category", "invalid_primary_category")
+
+
 def _partition(identifier, start, end):
     return {"id": identifier, "start": start, "end": end, "offset": 0, "total": None,
-            "seen_count": 0, "epoch": 0, "status": "pending", "restart": False}
+            "seen_count": 0, "entries_seen": 0, "epoch": 0, "status": "pending", "restart": False}
+
+
+def _supersede(transaction, operation, target, request_id):
+    for identifier, record in transaction.records("acquisition_operation").items():
+        if record["state"] == "admitted" and record["operation"] == operation and record["target"] == target and identifier != request_id:
+            transaction.put("acquisition_operation", identifier, dict(record, state="superseded"))
 
 
 def _begin(store, operation, payload, request_id, expected_revision, *, target=None, apply=None):
     admitted = []
+    runtime = runtime_provenance()
 
     def admission(transaction):
         if apply:
             apply(transaction)
+        _supersede(transaction, operation, target, request_id)
+        resources.admit(transaction, "literature", payload.get("max_requests"))
         result = {"status": "admitted", "request_id": request_id, "revision": expected_revision + 1,
                   "target": target, "pending": [{"code": "operation_incomplete"}]}
         transaction.put("acquisition_operation", request_id,
                         {"operation": operation, "payload": payload, "state": "admitted", "target": target,
-                         "admission_revision": expected_revision + 1, "result": result})
+                         "admission_revision": expected_revision + 1, "result": result, "runtime": runtime})
         admitted.append(True)
         return result
 
@@ -122,6 +147,12 @@ def _finish(store, request_id, revision, result, *, apply=None):
             raise ResearchError("operation_conflict", "Acquisition operation is no longer admitted")
         operation.update({"state": "finished", "result": final})
         transaction.put("acquisition_operation", request_id, operation)
+        captured = sum(s["response"]["size"] for s in transaction.records("source").values()
+                       if s.get("operation_id") == request_id and s.get("response") is not None)
+        change = resources.charge(transaction, "literature", {"network_requests": final.get("attempts_used", 0), "source_bytes": captured},
+                                  refuse=False)
+        if change is not None:
+            transaction.put(*change)
         return final
 
     return store.mutate("acquisition.finish", {"operation_id": request_id, "result": final}, commit,
@@ -139,9 +170,11 @@ def _collection_summary(records, collection):
     exclusions = _collection_members(records, collection_id, "cohort_exclusion")
     seen = _collection_members(records, collection_id, "cohort_seen")
     pending = copy.deepcopy(collection["pending"])
+    # A family observed as a member on one capture and as an exclusion on another (the provider
+    # changed its primary category between captures) is an explicit, retained conflict. Both
+    # observations stay recorded; the member obligations remain; the collection is not paused.
     category_conflicts = sorted({m["work_id"] for m in members} & {m["work_id"] for m in exclusions})
-    if category_conflicts:
-        pending.append({"code": "primary_category_conflict", "work_ids": category_conflicts})
+    conflicts = [{"code": "primary_category_conflict", "work_ids": category_conflicts}] if category_conflicts else []
     obligations, historical = [], []
     for member in sorted(members, key=lambda m: m["work_id"]):
         for identifier in member["version_ids"]:
@@ -174,13 +207,18 @@ def _collection_summary(records, collection):
             pending.append({"code": "population_changed", "retained_work_ids": lost})
     if unenumerated and not pending:
         pending.append({"code": "collection_incomplete", "partitions": unenumerated})
+    exclusion_reasons = {}
+    for exclusion in exclusions:
+        for reason in exclusion.get("exclusion_reasons", ["other_primary_category"]):
+            exclusion_reasons[reason] = exclusion_reasons.get(reason, 0) + 1
     return {"collection_id": collection_id, "definition": collection["definition"],
             "status": "paused" if pending else "complete", "pending": pending,
             "source_count": collection["source_count"], "returned_count": collection["returned_count"],
             "unique_count": len(seen), "member_count": len(members), "exclusion_count": len(exclusions),
+            "exclusion_reasons": dict(sorted(exclusion_reasons.items())),
             "extraction_failures": collection["extraction_failures"], "pending_partitions": unenumerated,
             "next_eligible_at": collection.get("next_eligible_at"),
-            "historical_unresolved": historical,
+            "historical_unresolved": historical, "conflicts": conflicts,
             "reading_obligations": obligations, "next_abstract": next((o for o in obligations if o["artifact"]), None)}
 
 
@@ -236,12 +274,17 @@ def resume_cohort(store, collection_id, *, request_id, expected_revision, max_re
         collection = transaction.get("collection", collection_id)
         if collection is None:
             raise ResearchError("unknown_collection", "No collection has this identifier")
+        previous = transaction.get("acquisition_operation", collection["active_operation"]) if collection["active_operation"] else None
+        if previous is not None and previous["state"] == "admitted":
+            transaction.put("acquisition_operation", collection["active_operation"], dict(previous, state="superseded"))
         collection["active_operation"] = request_id
         collection["pending"] = []
         for partition in collection["partitions"]:
             if partition["restart"]:
                 partition.update({"offset": 0, "total": None, "seen_count": 0, "epoch": partition["epoch"] + 1,
                                   "status": "pending", "restart": False})
+                if "entries_seen" in partition:
+                    partition["entries_seen"] = 0
         transaction.put("collection", collection_id, collection)
 
     replay = _begin(store, "cohort.resume", {"collection_id": collection_id, "max_requests": max_requests},
@@ -249,13 +292,15 @@ def resume_cohort(store, collection_id, *, request_id, expected_revision, max_re
     return replay if replay is not None else _run_collection(store, collection_id, request_id, budget, http or HttpClient())
 
 
-def _member(transaction, collection_id, work, source_id, kind):
+def _member(transaction, collection_id, work, source_id, kind, reason=None):
     key = digest([collection_id, work["work_id"]])
     member = transaction.get(kind, key) or {"collection_id": collection_id, "work_id": work["work_id"], "version_ids": [], "source_ids": []}
     if work["id"] not in member["version_ids"]:
         member["version_ids"].append(work["id"])
     if source_id not in member["source_ids"]:
         member["source_ids"].append(source_id)
+    if reason is not None and reason not in member.get("exclusion_reasons", []):
+        member["exclusion_reasons"] = member.get("exclusion_reasons", []) + [reason]
     transaction.put(kind, key, member)
 
 
@@ -272,14 +317,20 @@ def _page_update(transaction, collection, partition_id, page, prepared, sources,
         eligible_times.append(collection["next_eligible_at"])
     collection["next_eligible_at"] = max(eligible_times) if eligible_times else None
     put_sources(transaction, sources)
-    failures = [] if page is None else list(page.failures)
+    page_failures = [] if page is None else list(page.failures)
+    failures = [f for f in page_failures if f["code"] not in _ENTRY_FAILURES + _CATEGORY_FAILURES]
+    excluded_entries = [f for f in page_failures if f["code"] in _ENTRY_FAILURES]
+    category_failures = {f.get("id"): f["code"] for f in page_failures if f["code"] in _CATEGORY_FAILURES}
+    warnings = list(page.warnings) if page else []
+    entry_keys = []
     if page is not None:
         collection["returned_count"] += page.returned_count
-        collection["extraction_failures"] += len(page.failures)
+        collection["extraction_failures"] += len(page_failures)
     for item in prepared:
         work = put_work(transaction, item)
         source_id = item[0]["source_id"]
         _member(transaction, collection["id"], work, source_id, "cohort_seen")
+        entry_keys.append(work["id"])
         category = item[0]["category"]
         published = item[0]["publication_date"]
         try:
@@ -287,14 +338,22 @@ def _page_update(transaction, collection, partition_id, page, prepared, sources,
             published_date = published_time.date().isoformat()
             within_window = collection["definition"]["windowStart"] <= published_date <= collection["definition"]["windowEnd"]
             if not partition["start"] <= published_time.strftime("%Y%m%d%H%M") <= partition["end"]:
-                failures.append({"code": "out_of_partition_date", "id": work["id"]})
+                warnings.append({"code": "out_of_partition_date", "id": work["id"]})
         except (TypeError, ValueError, AttributeError):
             within_window = False
+        # An entry the frozen window or the category rule excludes is retained with
+        # its reason. It counts as seen; it is never a reason to re-fetch the partition.
         if not within_window:
-            failures.append({"code": "out_of_scope_date", "id": work["id"]})
-        elif category:
-            kind = "cohort_member" if category == collection["definition"]["primaryCategory"] else "cohort_exclusion"
-            _member(transaction, collection["id"], work, source_id, kind)
+            _member(transaction, collection["id"], work, source_id, "cohort_exclusion", "out_of_scope_date")
+        elif not category:
+            _member(transaction, collection["id"], work, source_id, "cohort_exclusion",
+                    category_failures.get(work["id"], "missing_primary_category"))
+        elif category == collection["definition"]["primaryCategory"]:
+            _member(transaction, collection["id"], work, source_id, "cohort_member")
+        else:
+            _member(transaction, collection["id"], work, source_id, "cohort_exclusion", "other_primary_category")
+    for failure in excluded_entries:
+        entry_keys.append("position:" + str(partition["offset"] + failure["index"]))
     disposition = "accepted"
     if error:
         failures.insert(0, {"code": error.code})
@@ -323,6 +382,14 @@ def _page_update(transaction, collection, partition_id, page, prepared, sources,
         partition["restart"] = True
     else:
         partition["total"] = page.total
+        new_entries = 0
+        for entry in entry_keys:
+            key = digest([collection["id"], partition["id"], partition["epoch"], "entry", entry])
+            if transaction.get("cohort_partition_entry", key) is None:
+                new_entries += 1
+                transaction.put("cohort_partition_entry", key,
+                    {"collection_id": collection["id"], "partition_id": partition["id"],
+                     "epoch": partition["epoch"], "entry": entry})
         for item in prepared:
             key = digest([collection["id"], partition["id"], partition["epoch"], item[0]["work_id"]])
             if transaction.get("cohort_partition_member", key) is None:
@@ -330,22 +397,28 @@ def _page_update(transaction, collection, partition_id, page, prepared, sources,
                 transaction.put("cohort_partition_member", key,
                     {"collection_id": collection["id"], "partition_id": partition["id"],
                      "epoch": partition["epoch"], "work_id": item[0]["work_id"]})
-        partition["offset"] += page.returned_count
-        if partition["offset"] == partition["total"]:
-            if partition["seen_count"] != partition["total"]:
-                failures.append({"code": "duplicate_or_missing_results"})
-                partition["restart"] = True
-            elif not failures:
-                partition["status"] = "complete"
+        if page.returned_count and new_entries == 0:
+            # The provider repeated a page it already served; keep the cursor and ask again.
+            failures.append({"code": "duplicate_page"})
+        else:
+            if "entries_seen" in partition:
+                partition["entries_seen"] += new_entries
+            partition["offset"] += page.returned_count
+            if partition["offset"] == partition["total"]:
+                # Partitions from earlier releases counted families; new partitions count entries.
+                counted = partition["entries_seen"] if "entries_seen" in partition else partition["seen_count"]
+                if counted != partition["total"]:
+                    failures.append({"code": "duplicate_or_missing_results"})
+                    partition["restart"] = True
+                elif not failures:
+                    partition["status"] = "complete"
     if failures:
         disposition = "pending"
         collection["pending"] = failures
-        if any(f.get("code") in ("missing_primary_category", "invalid_primary_category", "invalid_identifier", "invalid_response",
-                                 "out_of_scope_date", "out_of_partition_date", "invalid_alias") for f in failures):
-            partition["restart"] = True
     page_record = {"collection_id": collection["id"], "sequence": collection["sequence"], "requested": requested,
                    "source_ids": [s["id"] for s in sources], "reported_total": page.total if page else None,
-                   "returned_count": page.returned_count if page else 0, "disposition": disposition, "failures": failures}
+                   "returned_count": page.returned_count if page else 0, "disposition": disposition, "failures": failures,
+                   "warnings": warnings, "excluded_entries": excluded_entries}
     transaction.put("collection_page", derived_id(collection["id"], "page", collection["sequence"]), page_record)
     collection["sequence"] += 1
     transaction.put("collection", collection["id"], collection)
@@ -403,6 +476,13 @@ def _run_collection(store, collection_id, request_id, budget, http):
     return _finish(store, request_id, snapshot["revision"], result, apply=finish)
 
 
+def _next_eligible(records, identifier):
+    """The latest persisted Retry-After deadline for this identifier, honored across processes."""
+    deadlines = [s["next_eligible_at"] for s in records.get("source", {}).values()
+                 if s.get("requested_identifier") == identifier and s.get("next_eligible_at")]
+    return max(deadlines) if deadlines else None
+
+
 def _provider(name):
     providers = {"arxiv": Arxiv, "openalex": OpenAlex, "crossref": Crossref}
     if name not in providers:
@@ -429,12 +509,14 @@ def acquire_work(store, identifier, *, request_id, expected_revision, http=None,
         return replay
     snapshot = store.snapshot()
     http, artifacts = http or HttpClient(), ArtifactStore(store.root)
-    attempts, pending, works, observed_identifier = [], [], [], None
+    attempts, pending, works, observed_identifier, warnings = [], [], [], None, []
     try:
-        response = http.get(request.url, headers=request.headers, accept=request.accept, budget=budget)
+        response = http.get(request.url, headers=request.headers, accept=request.accept, budget=budget,
+                            not_before=_next_eligible(snapshot["records"], identifier))
         attempts = response.attempts
         page = provider.parse(response.body)
         pending.extend(page.failures)
+        warnings = list(page.warnings)
         if len(page.works) == 1:
             observed_identifier = page.works[0]["id"]
         if len(page.works) != 1 or not _matches(identifier, page.works[0]):
@@ -461,33 +543,48 @@ def acquire_work(store, identifier, *, request_id, expected_revision, http=None,
             put_work(transaction, item)
 
     return _finish(store, request_id, snapshot["revision"],
-                   {"status": "pending" if pending else "complete", "scope": "metadata", "pending": pending,
-                    "work_ids": [w["id"] for w in works], "source_ids": [s["id"] for s in sources], "attempts_used": budget.used}, apply=commit)
+                   {"status": "pending" if pending else "complete", "scope": "metadata", "pending": pending, "warnings": warnings,
+                    "work_ids": [w["id"] for w in works], "source_ids": [s["id"] for s in sources], "attempts_used": budget.used},
+                   apply=commit)
 
 
-def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, http=None, max_requests=None, extractor=None):
+def _extraction_options(value):
+    if value is None:
+        return {}
+    if not isinstance(value, dict) or not set(value) <= {"layout"} or any(type(v) is not bool for v in value.values()):
+        raise ResearchError("invalid_input", "Extraction options accept only a boolean layout flag")
+    return dict(value)
+
+
+def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, http=None, max_requests=None, extractor=None,
+                     extraction_options=None):
     identifier, url = normalize_identifier(identifier), safe_url(url)
     budget = RequestBudget(max_requests)
+    options = _extraction_options(extraction_options)
 
     def admission(transaction):
         if transaction.get("work", identifier) is None:
             raise ResearchError("unknown_work", "Acquire metadata for the exact version before acquiring its full text")
 
-    replay = _begin(store, "fulltext.acquire", {"identifier": identifier, "url": url, "max_requests": max_requests},
-                    request_id, expected_revision, target=identifier, apply=admission)
+    payload = {"identifier": identifier, "url": url, "max_requests": max_requests}
+    if options:
+        payload["extraction_options"] = options
+    replay = _begin(store, "fulltext.acquire", payload, request_id, expected_revision, target=identifier, apply=admission)
     if replay is not None:
         return replay
     snapshot = store.snapshot()
     http, artifacts = http or HttpClient(), ArtifactStore(store.root)
     attempts, pending, extracted, observed_identifier = [], [], None, None
     try:
-        response = http.get(url, accept=("application/pdf", "text/html", "application/xhtml+xml"), budget=budget)
+        response = http.get(url, accept=("application/pdf", "text/html", "application/xhtml+xml"), budget=budget,
+                            not_before=_next_eligible(snapshot["records"], identifier))
         attempts = response.attempts
         if identifier.startswith("arxiv:"):
             observed_identifier = normalize_identifier(response.url)
             if observed_identifier != identifier or version_of(observed_identifier) is None:
                 raise ResearchError("version_mismatch", "Full-text destination differs from the requested arXiv version")
-        extracted = extract(response.body, response_media_type(response.headers), extractor=extractor)
+        extracted = extract(response.body, response_media_type(response.headers), extractor=extractor,
+                            layout=options.get("layout", True))
         if extracted["status"] != "extracted":
             pending.append({"code": extracted["status"]})
     except HttpFailure as error:
@@ -503,7 +600,14 @@ def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, h
                "text": artifacts.put(extracted["text"].encode(), "text/plain; charset=utf-8") if extracted and extracted["text"] is not None else None,
                "availability": "available" if not pending else "pending", "extraction_status": extracted["status"] if extracted else pending[0]["code"],
                "includes_abstract": extracted["includes_abstract"] if extracted else None,
-               "visual_inspection_required": extracted["visual_inspection_required"] if extracted else True}
+               "visual_inspection_required": extracted["visual_inspection_required"] if extracted else True,
+               "extraction": dict({"extractor": extracted["extractor"] if extracted else None,
+                                   "version": extracted["version"] if extracted else None,
+                                   "options": extracted["options"] if extracted else options},
+                                  **(extraction_measures(extracted["text"], len(response.body))
+                                     if extracted and extracted["text"] is not None else
+                                     {"text_bytes": None, "page_count": None, "max_line_length": None,
+                                      "whitespace_fraction": None, "expansion_ratio": None}))}
 
     def commit(transaction):
         put_sources(transaction, sources)

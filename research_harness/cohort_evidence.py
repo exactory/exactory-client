@@ -14,12 +14,14 @@ explicit selection while preserving historical unresolved provenance.
 
 from .artifacts import ArtifactStore
 from .errors import ResearchError
+from .evaluation import Evaluation
 from .evidence import digest
 from .graph import obligation
 from .identities import resolve_family
 from .operations import fields, prepared_mutation, strings, text, timestamp
+from .principles import preparation_policy
 from .reading import current_readings
-from .source_links import captured_source, contains, covers_text, exact_work
+from .source_links import TEXT_KINDS, captured_source, contains, covers_text, exact_work, read_locator
 
 
 def _selection_values(records, value):
@@ -95,27 +97,38 @@ def abstract_reading(records, artifacts, readings, item):
     """Match the selected abstract bytes or the identical included body abstract."""
     if item["artifact"] is None:
         return None
-    abstract_text = " ".join(artifacts.read(item["artifact"]).decode("utf-8").split())
+    evaluation = Evaluation.of(records, artifacts)
+    abstract_text = " ".join(evaluation.text(item["artifact"]).split())
     for reading in readings:
         if reading["version_id"] != item["version_id"] or not reading["assessment"]["includes_abstract"]:
             continue
         if reading["depth"] == "abstract" and any(i["link"]["artifact"]["sha256"] == item["artifact"]["sha256"]
-                and covers_text(artifacts, i["link"]) for i in reading["inspections"]):
+                and covers_text(evaluation, i["link"]) for i in reading["inspections"]):
             return reading
         if reading["depth"] == "fulltext":
             bundle = records["source_bundle"][reading["bundle_id"]]
             for unit in bundle["units"]:
-                if (unit["kind"] == "abstract" and unit["link"] is not None and unit["link"]["locator"]["kind"] == "text"
-                        and " ".join(unit["link"]["locator"]["quote"].split()) == abstract_text
+                if (unit["kind"] == "abstract" and unit["link"] is not None and unit["link"]["locator"]["kind"] in TEXT_KINDS
+                        and " ".join(read_locator(evaluation, unit["link"]["artifact"], unit["link"]["locator"]).split()) == abstract_text
                         and any(i["unit_id"] == unit["id"] and contains(i["link"], unit["link"], records) for i in reading["inspections"])):
                     return reading
     return None
 
 
 def cohort_report(records, artifacts, collection_ids, *, target=None):
-    from .acquisition import _collection_summary
+    evaluation = Evaluation.of(records, artifacts)
     strings(collection_ids, "Selected collections")
+    return evaluation.once(("cohort", tuple(collection_ids), digest(target)),
+                           lambda: _cohort_report(evaluation, collection_ids, target))
+
+
+def _cohort_report(evaluation, collection_ids, target):
+    from .acquisition import _collection_summary
+    evaluation.counters["cohort_reports"] += 1
+    records, artifacts = evaluation.records, evaluation
     summaries, obligations, inventory, dependencies, readings = [], [], [], {}, {}
+    screened = preparation_policy(records) == "screened-v1"
+    screening_counts = {}
     if not collection_ids:
         obligations.append(obligation("cohort_missing", "Select the complete frozen cohort collection."))
     for collection_id in collection_ids:
@@ -128,6 +141,7 @@ def cohort_report(records, artifacts, collection_ids, *, target=None):
         for pending in summary["pending"]:
             obligations.append(obligation("collection_pending", "Resume or resolve acquisition without shrinking the frozen corpus.",
                 collection_id=collection_id, reason=pending, next_eligible_at=summary["next_eligible_at"]))
+        items, accepted_by_version = [], {}
         for item in summary["reading_obligations"]:
             paths = [item["artifact"]["path"]] if item["artifact"] is not None else []
             for source_id in item["source_ids"]:
@@ -140,13 +154,19 @@ def cohort_report(records, artifacts, collection_ids, *, target=None):
                 accepted, _ = current_readings(records, artifacts, version, target=target)
             else:
                 accepted = []
+            accepted_by_version[version] = accepted
             matched = abstract_reading(records, artifacts, accepted, item)
             if matched:
                 readings[matched["id"]] = matched
-            else:
+            elif not screened:
                 obligations.append(obligation("cohort_abstract_reading_missing", "Read the selected complete cohort abstract; downloaded content is not a reading.",
                     version_id=version, work_id=item["work_id"], collection_id=collection_id, paths=paths))
-            inventory.append(dict(item, collection_id=collection_id, paths=paths, reading_id=matched["id"] if matched else None))
+            items.append(dict(item, collection_id=collection_id, paths=paths, reading_id=matched["id"] if matched else None))
+        if screened:
+            from .screening import member_obligations
+            found, screening_counts[collection_id] = member_obligations(records, collection, items, accepted_by_version)
+            obligations.extend(found)
+        inventory.extend(items)
         for historical in summary.get("historical_unresolved", []):
             for source_id in historical["source_ids"]:
                 captured_source(records, artifacts, source_id)
@@ -155,9 +175,13 @@ def cohort_report(records, artifacts, collection_ids, *, target=None):
                 artifacts.read(historical["artifact"])
     counts = {"cohort_families": len({x["work_id"] for x in inventory}), "abstract_obligations": len(inventory),
               "abstracts_read": sum(x["reading_id"] is not None for x in inventory), "obligations": len(obligations)}
-    return {"ready": not obligations, "digest": digest([summaries, dependencies, readings]), "obligations": obligations,
+    if screened:
+        counts["screening"] = screening_counts
+    unread = {o.get("version_id") for o in obligations}
+    return {"ready": not obligations, "digest": digest([summaries, dependencies, readings, preparation_policy(records)]), "obligations": obligations,
             "counts": counts, "collections": summaries, "inventory": inventory, "readings": readings,
-            "next": next((i for i in inventory if i["reading_id"] is None and i["paths"]), obligations[0] if obligations else None),
+            "next": next((i for i in inventory if i["reading_id"] is None and i["paths"] and i["version_id"] in unread),
+                         obligations[0] if obligations else None),
             "limits": "Mechanical source anchoring records inspection; it does not establish comprehension."}
 
 
@@ -165,4 +189,4 @@ def cohort_reading_report(store, collection_ids):
     records = store.snapshot()["records"]
     configured = records.get("configuration", {}).get("research", {})
     target = configured.get("target") if configured.get("profile") == "verification" else None
-    return cohort_report(records, ArtifactStore(store.root), collection_ids, target=target)
+    return cohort_report(records, Evaluation(records, ArtifactStore(store.root)), collection_ids, target=target)

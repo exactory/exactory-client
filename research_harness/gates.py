@@ -3,6 +3,7 @@
 from .artifacts import ArtifactStore
 from .cohort_evidence import cohort_report
 from .development import validate_admitted_execution
+from .evaluation import Evaluation
 from .execution_evidence import author_readiness_state
 from .errors import ResearchError
 from .evidence import digest
@@ -31,6 +32,7 @@ def require_ready(report, action):
 
 
 def gate_state(records, artifacts, action, *, profile=None):
+    artifacts = Evaluation.of(records, artifacts)
     config = records.get("configuration", {}).get("research")
     if config is None:
         return _report([obligation("migration_required", "Initialize or explicitly adopt the current research contract.")])
@@ -39,9 +41,7 @@ def gate_state(records, artifacts, action, *, profile=None):
         return _report([obligation("profile_mismatch", "Use a separate workspace with the applicable profile.")])
     if action == "cohort":
         scope = records.get("literature_scope", {}).get(profile, {})
-        selected = records.get("cohort_selection", {}).get(profile)
-        ids = selected["collection_ids"] if selected else scope.get("collection_ids", sorted(records.get("collection", {})))
-        return cohort_report(records, artifacts, ids)
+        return cohort_report(records, artifacts, scope.get("collection_ids", sorted(records.get("collection", {}))))
     if action == "foundation":
         return foundation_state(records, artifacts, profile)
     if action in {"preparation", "verification"}:
@@ -75,11 +75,12 @@ def gate_state(records, artifacts, action, *, profile=None):
 
 def gate_report(store, action, *, profile=None):
     snapshot = store.snapshot()
-    report = gate_state(snapshot["records"], ArtifactStore(store.root), action, profile=profile)
+    report = gate_state(snapshot["records"], Evaluation(snapshot["records"], ArtifactStore(store.root)), action, profile=profile)
     return dict(report, revision=snapshot["revision"])
 
 
 def validate_transition(records, artifacts, previous, proposed):
+    artifacts = Evaluation.of(records, artifacts)
     source, target = previous["stage"], proposed["stage"]
     if source not in STAGES or target not in STAGES:
         raise ResearchError("invalid_stage", "Unsupported study stage")

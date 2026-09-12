@@ -71,7 +71,7 @@ class DevelopmentCase(SynthesisCase):
                 "failure_signals": [{"id": "counterexample", "statement": "An admissible input violates the claimed bound."}],
                 "evidence_requirements": [{"id": "measurements", "kind": "result", "description": "The enumerated inputs and values."},
                                           {"id": "checks", "kind": "validation", "description": "The comparison against the proposed bound."}],
-                "literature": {"scope": scope, "foundation_digest": self.api().synthesis_report(self.store, "research")["foundation"]["digest"],
+                "literature": {"scope": scope, "literature_digest": self.api().synthesis_report(self.store, "research")["literature_digest"],
                                "comparison": "The authored source describes bounded cases; this test checks the exact finite claim.",
                                "sources": [self.links[0]], "gaps": []},
                 "resource_limits": {"max_executions": max_executions, "max_units": max_units, "unit": "fixture_step"}}
@@ -136,7 +136,7 @@ class DevelopmentCase(SynthesisCase):
                 "disposition": "continue" if partial else "complete",
                 "development": {"bottleneck_change": "The exact finite range and its extremum have been checked.",
                     "next_question": None, "strategy": "none", "reason": "No useful unresolved branch remains within this complete finite objective.",
-                    "novelty": {"scope": scope, "foundation_digest": self.api().synthesis_report(self.store, "research")["foundation"]["digest"],
+                    "novelty": {"scope": scope, "literature_digest": self.api().synthesis_report(self.store, "research")["literature_digest"],
                                 "comparison": "The evidence is specific to the stated finite target and does not claim an unbounded theorem.",
                                 "evidence": [source, result], "gaps": []},
                     "contribution": {"and": "Finite domains permit exhaustive checks.", "but": "The exact bound still needed testing.",

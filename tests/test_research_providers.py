@@ -125,7 +125,8 @@ class ProviderTests(unittest.TestCase):
         self.assertTrue(page.failures)
         page = Arxiv().parse(atom([entry(doi="W123")], total=1))
         self.assertEqual(page.works[0]["aliases"], [])
-        self.assertEqual(page.failures[0]["code"], "invalid_alias")
+        self.assertEqual(page.failures, [])
+        self.assertEqual(page.warnings, [{"index": 0, "code": "invalid_alias", "id": "arxiv:2601.00001v1", "raw": "W123"}])
 
     def test_json_invalid_unicode_and_excessive_nesting_raise_typed_errors(self):
         for raw in (b'{"unused":"\\ud800"}', b'{"unused":' + b'[' * 1500 + b'0' + b']' * 1500 + b'}'):

@@ -7,6 +7,7 @@ requestedByViewer flag is not an authorship declaration.
 
 from .artifacts import ArtifactStore
 from .errors import ResearchError
+from .evaluation import Evaluation
 from .evidence import digest
 from .identities import normalize_identifier
 from .operations import fields, immutable_record, prepared_mutation, text
@@ -57,8 +58,8 @@ def _preparation(records, artifacts, task):
 
 def record_task(store, payload, *, expected_revision, request_id):
     """Capture a task-only response after acquiring its configured exact body."""
-    artifacts = ArtifactStore(store.root)
     def prepare(records, value):
+        artifacts = Evaluation(records, ArtifactStore(store.root))
         fields(value, ("task",))
         report, target, identity = _preparation(records, artifacts, value["task"])
         record = {"task": value["task"], "target": target, "identity": identity,
@@ -83,8 +84,8 @@ def _body(artifacts, reference):
 
 def bind_verdict(store, payload, *, expected_revision, request_id):
     """Bind {id, task_digest, body:ArtifactRef, assessment} without changing the wire schema."""
-    artifacts = ArtifactStore(store.root)
     def prepare(records, value):
+        artifacts = Evaluation(records, ArtifactStore(store.root))
         fields(value, ("id", "task_digest", "body", "assessment"))
         text(value["id"], "Verdict assessment ID")
         task = records.get("verification_task", {}).get(value["task_digest"])
@@ -128,7 +129,8 @@ def bind_verdict(store, payload, *, expected_revision, request_id):
 
 def validate_verdict(store, task, body):
     snapshot = store.snapshot()
-    records, artifacts = snapshot["records"], ArtifactStore(store.root)
+    records = snapshot["records"]
+    artifacts = Evaluation(records, ArtifactStore(store.root))
     report, target, identity = _preparation(records, artifacts, task)
     selection = records.get("verification_selection", {}).get("verdict")
     if selection is None:

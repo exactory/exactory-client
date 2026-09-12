@@ -1,6 +1,6 @@
 # Research constitution
 
-Version: 1
+Version: 2
 
 This is the common research-policy document for this plugin. System, host, and
 user constraints continue to govern. A managed study records this document's
@@ -71,6 +71,20 @@ is distinct from contemporaneous evidence. A manufactured product, operational
 use, observed adoption, clinical outcome, regulatory decision, and projected
 benefit support different claims. No valuable original paper is required to
 have achieved social adoption. State unevidenced later links as scoped gaps.
+
+## Population and preparation policy
+
+Inventory the complete population that defines the field comparison and retain
+it with its identities, exclusions and collection completeness. A recorded,
+versioned preparation policy decides which members receive structured reading.
+Under the exhaustive policy every member is read. Under a screened policy a
+screen selects the preparation set, and a screen is never a reading: papers that
+may establish prior art, contradict a claim, define an assumption or method,
+correct a source, set a field standard, or resolve an identity conflict are
+promoted; doctrine representatives cover the population; every exclusion keeps
+its reason; excluded members are audited by reading a sample; a failed audit
+reopens the screen. Saturation and exhausted resources are recorded checkpoints
+and never certify that preparation is sufficient.
 
 ## Cumulative inquiry and resources
 

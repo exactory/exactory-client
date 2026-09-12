@@ -1,7 +1,8 @@
 {
   "init": {
     "profile": "research",
-    "target": null
+    "target": null,
+    "preparation_policy": "exhaustive-v1"
   },
   "adopt": {
     "id": "legacy-import-1",
@@ -57,7 +58,10 @@
   "fulltext": {
     "identifier": "arxiv:2601.00001v1",
     "url": "https://arxiv.org/html/2601.00001v1",
-    "max_requests": 2
+    "max_requests": 2,
+    "extraction_options": {
+      "layout": true
+    }
   },
   "import-response": {
     "provider": "mcp",
@@ -103,10 +107,11 @@
             "media_type": "text/plain"
           },
           "locator": {
-            "kind": "text",
+            "kind": "span",
             "start": 0,
             "end": 15,
-            "quote": "Source passage."
+            "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+            "excerpt": "Source passage."
           }
         }
       },
@@ -124,10 +129,11 @@
             "media_type": "text/plain"
           },
           "locator": {
-            "kind": "text",
+            "kind": "span",
             "start": 0,
             "end": 15,
-            "quote": "Source passage."
+            "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+            "excerpt": "Source passage."
           }
         }
       }
@@ -145,10 +151,11 @@
             "media_type": "text/plain"
           },
           "locator": {
-            "kind": "text",
+            "kind": "span",
             "start": 0,
             "end": 15,
-            "quote": "Source passage."
+            "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+            "excerpt": "Source passage."
           }
         }
       ]
@@ -177,10 +184,11 @@
             "media_type": "text/plain"
           },
           "locator": {
-            "kind": "text",
+            "kind": "span",
             "start": 0,
             "end": 15,
-            "quote": "Source passage."
+            "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+            "excerpt": "Source passage."
           }
         },
         "note": "Replace with the actual inspection."
@@ -267,7 +275,15 @@
       "arxiv:2601.00001v1"
     ],
     "impact": "State what the retrieved work changes about the comparison.",
-    "gaps": []
+    "gaps": [],
+    "dispositions": [
+      {
+        "work_id": "arxiv:2601.00001v1",
+        "disposition": "relevant",
+        "reason": "The retrieved work addresses the same bound under the same assumptions."
+      }
+    ],
+    "resolved": []
   },
   "require-fulltext": {
     "id": "dependency-1",
@@ -312,10 +328,11 @@
         "media_type": "text/plain"
       },
       "locator": {
-        "kind": "text",
+        "kind": "span",
         "start": 0,
         "end": 15,
-        "quote": "Source passage."
+        "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+        "excerpt": "Source passage."
       }
     },
     "url": "https://example.org/figure.png",
@@ -346,10 +363,11 @@
               "media_type": "text/plain"
             },
             "locator": {
-              "kind": "text",
+              "kind": "span",
               "start": 0,
               "end": 15,
-              "quote": "Source passage."
+              "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+              "excerpt": "Source passage."
             }
           }
         ],
@@ -378,10 +396,11 @@
               "media_type": "text/plain"
             },
             "locator": {
-              "kind": "text",
+              "kind": "span",
               "start": 0,
               "end": 15,
-              "quote": "Source passage."
+              "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+              "excerpt": "Source passage."
             }
           }
         ],
@@ -410,10 +429,11 @@
               "media_type": "text/plain"
             },
             "locator": {
-              "kind": "text",
+              "kind": "span",
               "start": 0,
               "end": 15,
-              "quote": "Source passage."
+              "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+              "excerpt": "Source passage."
             }
           }
         ],
@@ -442,10 +462,11 @@
               "media_type": "text/plain"
             },
             "locator": {
-              "kind": "text",
+              "kind": "span",
               "start": 0,
               "end": 15,
-              "quote": "Source passage."
+              "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+              "excerpt": "Source passage."
             }
           }
         ],
@@ -474,10 +495,11 @@
               "media_type": "text/plain"
             },
             "locator": {
-              "kind": "text",
+              "kind": "span",
               "start": 0,
               "end": 15,
-              "quote": "Source passage."
+              "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+              "excerpt": "Source passage."
             }
           }
         ],
@@ -511,10 +533,11 @@
             "media_type": "text/plain"
           },
           "locator": {
-            "kind": "text",
+            "kind": "span",
             "start": 0,
             "end": 15,
-            "quote": "Source passage."
+            "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+            "excerpt": "Source passage."
           }
         }
       ],
@@ -541,10 +564,11 @@
             "media_type": "text/plain"
           },
           "locator": {
-            "kind": "text",
+            "kind": "span",
             "start": 0,
             "end": 15,
-            "quote": "Source passage."
+            "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+            "excerpt": "Source passage."
           }
         }
       ],
@@ -604,10 +628,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           ],
@@ -634,10 +659,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           ],
@@ -664,10 +690,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           ],
@@ -694,10 +721,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           ],
@@ -745,10 +773,11 @@
                   "media_type": "text/plain"
                 },
                 "locator": {
-                  "kind": "text",
+                  "kind": "span",
                   "start": 0,
                   "end": 15,
-                  "quote": "Source passage."
+                  "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                  "excerpt": "Source passage."
                 }
               }
             ],
@@ -797,10 +826,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           ],
@@ -827,10 +857,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           ],
@@ -857,10 +888,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           ],
@@ -887,10 +919,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           ],
@@ -938,10 +971,11 @@
                   "media_type": "text/plain"
                 },
                 "locator": {
-                  "kind": "text",
+                  "kind": "span",
                   "start": 0,
                   "end": 15,
-                  "quote": "Source passage."
+                  "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                  "excerpt": "Source passage."
                 }
               }
             ],
@@ -991,10 +1025,11 @@
               "media_type": "text/plain"
             },
             "locator": {
-              "kind": "text",
+              "kind": "span",
               "start": 0,
               "end": 15,
-              "quote": "Source passage."
+              "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+              "excerpt": "Source passage."
             }
           }
         ],
@@ -1023,10 +1058,11 @@
               "media_type": "text/plain"
             },
             "locator": {
-              "kind": "text",
+              "kind": "span",
               "start": 0,
               "end": 15,
-              "quote": "Source passage."
+              "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+              "excerpt": "Source passage."
             }
           }
         ],
@@ -1121,7 +1157,7 @@
         ],
         "remaining_obligations": []
       },
-      "foundation_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "literature_digest": "0000000000000000000000000000000000000000000000000000000000000000",
       "comparison": "The authored source describes bounded cases; this test checks the exact finite claim.",
       "sources": [
         {
@@ -1134,10 +1170,11 @@
             "media_type": "text/plain"
           },
           "locator": {
-            "kind": "text",
+            "kind": "span",
             "start": 0,
             "end": 15,
-            "quote": "Source passage."
+            "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+            "excerpt": "Source passage."
           }
         }
       ],
@@ -1409,7 +1446,7 @@
           ],
           "remaining_obligations": []
         },
-        "foundation_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+        "literature_digest": "0000000000000000000000000000000000000000000000000000000000000000",
         "comparison": "The evidence is specific to the stated finite target and does not claim an unbounded theorem.",
         "evidence": [
           {
@@ -1424,10 +1461,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           },
@@ -1469,10 +1507,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           },
@@ -1595,10 +1634,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           },
@@ -1657,10 +1697,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           },
@@ -1719,10 +1760,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           },
@@ -1781,10 +1823,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           },
@@ -1843,10 +1886,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           },
@@ -1905,10 +1949,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           },
@@ -2047,10 +2092,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           ]
@@ -2069,10 +2115,11 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           ]
@@ -2091,15 +2138,136 @@
                 "media_type": "text/plain"
               },
               "locator": {
-                "kind": "text",
+                "kind": "span",
                 "start": 0,
                 "end": 15,
-                "quote": "Source passage."
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
               }
             }
           ]
         }
       ]
     }
+  },
+  "read-batch": {
+    "id": "batch-001",
+    "depth": "abstract",
+    "items": [
+      {
+        "version_id": "arxiv:2601.00001v1",
+        "note": "Read the complete saved abstract.",
+        "notes": {
+          "problem": {
+            "text": "Record what the abstract says about problem.",
+            "status": "present"
+          },
+          "claims": {
+            "text": "Record what the abstract says about claims.",
+            "status": "present"
+          },
+          "assumptions": {
+            "text": "Record what the abstract says about assumptions.",
+            "status": "present"
+          },
+          "methods": {
+            "text": "Record what the abstract says about methods.",
+            "status": "present"
+          },
+          "evidence": {
+            "text": "Record what the abstract says about evidence.",
+            "status": "present"
+          },
+          "limitations": {
+            "text": "Record what the abstract says about limitations.",
+            "status": "present"
+          },
+          "relevance": {
+            "text": "Record what the abstract says about relevance.",
+            "status": "present"
+          }
+        },
+        "screening": {
+          "relevance": "weak",
+          "reason": "The abstract touches the objective's setting without addressing its claim.",
+          "conventions": [
+            "Reports a numerical bound with its assumptions."
+          ]
+        }
+      }
+    ],
+    "usage": {
+      "model": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "wall_seconds": null
+    }
+  },
+  "budget": {
+    "profile": "research",
+    "purpose": "literature",
+    "limits": {
+      "network_requests": 2000,
+      "source_bytes": null,
+      "readings": 600,
+      "screenings": null,
+      "model_input_tokens": null,
+      "model_output_tokens": null,
+      "wall_seconds": null
+    },
+    "reason": "The user approved this preparation budget before the cohort readings."
+  },
+  "policy": {
+    "previous": "exhaustive-v1",
+    "policy": "screened-v1",
+    "reason": "The user chose the screened preparation policy for this narrow study; sections and plans are reassessed."
+  },
+  "screen-batch": {
+    "id": "screen-001",
+    "screener": {
+      "kind": "agent",
+      "model": null
+    },
+    "round": 1,
+    "items": [
+      {
+        "collection_id": "COLLECTION_ID",
+        "work_id": "arxiv:2601.00001",
+        "version_id": "arxiv:2601.00001v1",
+        "disposition": "promote",
+        "promotion_reasons": [
+          "prior_art"
+        ],
+        "relevance": "strong",
+        "reason": "The abstract states the same bound under the same assumptions.",
+        "conventions": [
+          "Reports a numerical bound with its assumptions."
+        ]
+      },
+      {
+        "collection_id": null,
+        "work_id": "arxiv:2601.00002",
+        "version_id": "arxiv:2601.00002v1",
+        "disposition": "exclude",
+        "relevance": "none",
+        "reason": "The reference concerns an unrelated instrument calibration.",
+        "conventions": [],
+        "context": "Cited once in the root's introduction as background."
+      }
+    ],
+    "usage": {
+      "model": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "wall_seconds": null
+    }
+  },
+  "screening-checkpoint": {
+    "id": "saturation-001",
+    "batch_ids": [
+      "batch-007",
+      "batch-008"
+    ],
+    "reason": "Two consecutive batches of pending members added no prior art, contradiction, method or standard."
   }
 }

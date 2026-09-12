@@ -24,6 +24,13 @@ class DevelopmentTests(DevelopmentCase):
         self.assertFalse(api.readiness_report(self.store)["ready"])
         self.assertIn("expected_outcome_unresolved", self.readiness_codes())
 
+    def test_a_plan_bound_to_the_foundation_digest_is_stale_not_malformed(self):
+        api = self.development()
+        self.prepared_study()
+        legacy = self.plan()
+        legacy["literature"]["foundation_digest"] = legacy["literature"].pop("literature_digest")
+        self.assert_error("literature_comparison_stale", lambda: self.mutate(api.plan_cycle, legacy))
+
     def test_a_not_observed_expected_outcome_can_establish_a_valid_negative_result(self):
         api = self.development()
         self.prepared_study()

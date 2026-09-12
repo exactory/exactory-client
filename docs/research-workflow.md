@@ -22,17 +22,26 @@ establish the complete objective before ideation.
 
 ```sh
 exactory-lab init --dir study --slug study --expected-revision 0 --request-id initialize-study
+exactory-lab init --dir screened-study --slug screened-study --preparation-policy screened-v1 --expected-revision 0 --request-id initialize-screened-study
 ```
+
+The preparation policy is recorded at initialization: `exhaustive-v1` (default)
+reads every cohort member and every Tier 3 reference; `screened-v1` selects the
+preparation set through recorded screenings, audits, and doctrine coverage as
+the cohort section describes. Change it later only with `policy` and a reason.
 
 Change into `study`, read the user's context and constraints, and inspect the
 authoritative state. Read these first when resuming any managed stage:
 
 ```sh
-exactory-research status
-exactory-research next
+exactory-research status --summary
+exactory-research next --summary
+exactory-research obligations --code abstract_reading_missing --limit 20
 ```
 
-The common SQLite history is authoritative. JSON views, stage names, notes, and
+The compact views are bounded advisory summaries of the same current evaluation;
+`obligations` pages one obligation code at a time. Run the default `status` or
+`next` only when the full nested report is needed. The common SQLite history is authoritative. JSON views, stage names, notes, and
 old receipts describe work but do not replace a current gate. Retain existing
 checkpoints, unsuccessful branches, original observations, costs, and user files.
 Use `adopt` explicitly for legacy work; use `recover` only when the Store reports
@@ -40,7 +49,7 @@ that native rollback recovery is required. A crash does not initialize a new
 study or reset an account. The original initialization request can repair an
 interrupted layout without overwriting later state or user material.
 
-## Cohort: enumerate and read every abstract
+## Cohort: enumerate the population and read its abstracts
 
 Select the corpus and category from the field and context. The freeze command
 computes a population definition, including the six complete calendar months
@@ -50,19 +59,27 @@ study use the current date, then reconcile the publication date at deposit.
 ```sh
 exactory-lab state set --waiting none --stage cohort --status pending
 exactory-cohort freeze --corpus arxiv --category cs.LG --published 2026-09-08 > cohort-definition.json
+exactory-research example budget > budget.json
+exactory-research budget --file budget.json --expected-revision REVISION --request-id set-budget-001
 exactory-research example collect > collect.json
 exactory-research collect --file collect.json --expected-revision REVISION --request-id collect-cohort-001
 ```
 
-Put the actual frozen definition into `collect.json`. Inspect the retained
+Set the preparation budget the user approved with `budget` before the costly
+work; reservation and reconciliation are automatic, and exhaustion is a
+checkpoint condition, never completion. Put the actual frozen definition into `collect.json`. Inspect the retained
 collection/page receipts and resume its collection ID until enumeration is
-complete. Read every member's complete captured abstract, including exact-version
-resolution where required. For each, author a `read` payload from actual
+complete. Under `exhaustive-v1` read every member's complete captured abstract,
+including exact-version resolution where required; under `screened-v1` read the
+members the screen selects, as described below. For each, author a `read` payload from actual
 inspections and the seven source-grounded note fields. Set `depth: "abstract"`
 and omit `bundle_id` for an abstract reading. Its inspection uses `unit_id: null`
 and covers the whole saved abstract.
 
 ```sh
+exactory-research batches --depth abstract --size 60 --destination cohort/batches
+exactory-research example read-batch > notes-001.json
+exactory-research read-batch --file notes-001.json --expected-revision REVISION --request-id read-batch-001
 exactory-research example read > abstract-reading.json
 exactory-research read --file abstract-reading.json --expected-revision REVISION --request-id read-abstract-001
 exactory-research gate cohort
@@ -70,8 +87,32 @@ exactory-lab decide --stage cohort --decision "Enter literature" --why "The capt
 exactory-lab state set --stage literature --status pending
 ```
 
-Repeat the reading mutation with distinct actual records for all members before
-the gate. Complete abstracts reveal field coverage; consequential claims and
+`batches` writes the unread abstracts as files for reader agents; each reader
+returns one notes file and one coordinator records it with `read-batch`, which
+derives the whole-abstract inspection and applies the single-reading rules to
+every item. Repeat the reading mutations with distinct actual records for all
+members before the gate.
+
+Under `screened-v1`, screen every member first: `batches --screen` exports the
+unscreened members, a screener judges each one (promote with reasons, doctrine,
+exclude with no relevance, or pending), and `screen-batch` records the batch.
+Read every promoted, doctrine and pending member; read the audit sample of
+excluded members with an `audit` judgment; cover every month with doctrine
+representatives. After two consecutive batches of pending members with no
+consequential item, `screening-checkpoint` lets the remaining pending members
+stay inventoried and unread. `policy-report` shows the preparation set and,
+against an adjudicated reference file, its recall.
+
+```sh
+exactory-research batches --depth abstract --size 60 --destination cohort/screen --screen
+exactory-research example screen-batch > screen-001.json
+exactory-research screen-batch --file screen-001.json --expected-revision REVISION --request-id screen-batch-001
+exactory-research example screening-checkpoint > saturation.json
+exactory-research screening-checkpoint --file saturation.json --expected-revision REVISION --request-id saturation-001
+exactory-research policy-report --policy screened-v1
+```
+
+Complete abstracts reveal field coverage; consequential claims and
 doctrine from a paper require its applicable full reading in the next stage.
 Handwritten completion flags are not reading evidence.
 
@@ -79,10 +120,13 @@ Handwritten completion flags are not reading evidence.
 
 Acquire one to five exact root paper families. Record `roots` with the actual
 selected collection IDs. Follow captured bibliography occurrences through the
-three-tier network: read Tier 1 and Tier 2 papers in full, and every Tier 3
-abstract. Preserve all occurrences and exact versions. Work supporting a major
-claim, novelty judgment, innovation transfer, or validity decision needs full
-reading even outside those tiers. Use `require-fulltext` to record that dependency.
+three-tier network: a root is Tier 1, read in full with its complete bibliography;
+its references are Tier 3, read at abstract depth, until the author selects a
+reference with `require-fulltext` for a major claim, novelty judgment, innovation
+transfer, or validity decision. A selected reference is Tier 2 wherever it appears:
+read in full with its complete bibliography, and its own references become Tier 3.
+Few papers are read in full; every reference of those papers is still inventoried
+and read at abstract depth. Preserve all occurrences and exact versions.
 
 ```sh
 exactory-research acquire --file root-query.json --expected-revision REVISION --request-id acquire-root-001
@@ -112,7 +156,10 @@ Conduct and record each search purpose separately against the current scope:
 
 These are five purposes, independently required from the five to ten external
 innovation papers below. Save the actual query, original response, enumeration,
-source dates, found works, exact scope, judgment, and remaining gaps. Tool or web
+source dates, found works, exact scope, judgment, and remaining gaps. Judge every
+found work with a disposition (relevant, contradictory, potentially relevant, out
+of scope, duplicate, unresolved) and a reason; a later search for the same purpose
+carries its contradictory and unresolved findings forward or resolves them by name. Tool or web
 responses can be retained through `import-response` with original JSON pointer
 mappings. A `nothing-new` result still needs the captured search, including an
 actual empty results array when that is what the search returned.
@@ -307,10 +354,14 @@ work, a pending retry deadline, and exhausted resources. Preserve each source
 attempt and failure. Resume an eligible collection with its retained ID and new
 request identity; retry an interrupted identical mutation with its original
 identity. A noncritical availability qualification requires the actual permitted
-HTTP evidence and policy, and does not complete a reading. Critical sources stay
+HTTP evidence and policy, and does not complete a reading: either captured terminal
+origin failures, or, for the abstract of a non-arXiv work, complete registry captures
+from every registry that addresses its identifiers (or the saved import of a `url:` work) with no abstract in any of them. Critical sources stay
 pending until the actual dependency is resolved.
 
-On resume, read `status`, `next`, the search tree and relevant checkpoint records,
-and the current gate for the intended next action. Continue independent work
+On resume, read `status --summary`, `next --summary`, the `obligations` page for
+the code in hand, the search tree and relevant checkpoint records, and the
+current gate for the intended next action; run the default `status` only when
+the full nested report is needed. Continue independent work
 within the remaining authorized resources. When a required condition prevents
 progress, record its exact obligation, preserved evidence, and next action.

@@ -8,7 +8,7 @@ description: Verify a paper on exactory - read the pinned version, decide whethe
 Read the [research constitution](../../RESEARCH_CONSTITUTION.md) and the
 [managed research workflow](../../docs/research-workflow.md). Use a separate
 verification workspace for an external paper. Start or resume with the exact task
-identity and current `exactory-research status` and `next` when the Store exists.
+identity and current `exactory-research status --summary` and `next --summary` when the Store exists.
 The verification profile requires source reading and field standards, independent
 of author goals, innovation quotas, and desired contribution or impact scores.
 

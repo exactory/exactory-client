@@ -74,15 +74,18 @@ class LiteratureCase(unittest.TestCase):
             expected_revision=self.store.revision, request_id="body-" + str(self.sequence))
         return result["capture"]
 
-    def span(self, artifact, quote=None):
+    def span(self, artifact, quote=None, kind="text"):
+        from research_harness.source_links import span_locator
         text = self.artifacts.read(artifact).decode()
         quote = text if quote is None else quote
         start = text.index(quote)
+        if kind == "span":
+            return span_locator(text, start, start + len(quote))
         return {"kind": "text", "start": start, "end": start + len(quote), "quote": quote}
 
-    def link(self, identifier, source_id, artifact, quote=None):
+    def link(self, identifier, source_id, artifact, quote=None, kind="text"):
         return {"version_id": identifier, "source_id": source_id, "artifact": artifact,
-                "locator": self.span(artifact, quote)}
+                "locator": self.span(artifact, quote, kind)}
 
     def abstract_note(self, identifier, note_id="abstract", absent=False):
         item = self.store.snapshot()["records"]["work"][identifier]["abstracts"][0]
@@ -123,6 +126,10 @@ class LiteratureCase(unittest.TestCase):
     def scope(self, roots, collections=(), profile="research", **kwargs):
         from research_harness.graph import set_roots
         return self.mutate(set_roots, dict(profile=profile, roots=roots, collection_ids=list(collections), **kwargs))
+
+    def store_obligations(self, profile="research"):
+        from research_harness.literature import foundation_report
+        return foundation_report(self.store, profile)["obligations"]
 
     def codes(self, profile="research"):
         from research_harness.literature import foundation_report

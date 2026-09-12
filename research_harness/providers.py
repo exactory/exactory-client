@@ -49,6 +49,7 @@ class Request:
 class Page:
     works: list = field(default_factory=list)
     failures: list = field(default_factory=list)
+    warnings: list = field(default_factory=list)
     returned_count: int = 0
     total: object = None
     start: object = None
@@ -283,7 +284,10 @@ class Arxiv:
                             _invalid("doi")
                         work["aliases"] = [alias]
                     except ResearchError:
-                        page.failures.append({"index": index, "code": "invalid_alias", "id": work["id"]})
+                        # A malformed provider DOI is retained as a warning on the page. It does not
+                        # identify the work, so the alias is dropped; the entry itself is complete and
+                        # the collection continues without restarting its partition.
+                        page.warnings.append({"index": index, "code": "invalid_alias", "id": work["id"], "raw": doi.strip()})
                 # These are constructed from the captured exact identifier, never
                 # a mutable unversioned link or an unchecked provider URL.
                 if work["version"]:

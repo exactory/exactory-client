@@ -30,7 +30,8 @@ exactory whoami
 Use the path of this installed copy. Do not assume a fixed cache location.
 `exactory-math skill-dir` returns the shared math-solver directory.
 
-Use `exactory-research status` and `next` on resume. Cohort collection, actual
+Use `exactory-research status --summary` and `next --summary` on resume, and the
+`obligations` page for one code at a time. Cohort collection, actual
 reading, and the installed literature-review stage precede ideation. The complete
 objective and current synthesis precede prospective cycle admission and exact run
 binding. Independent research readiness review of the actual candidate precedes
@@ -75,6 +76,7 @@ unreported wrappers and internal solver calls remain outside that boundary.
 | Write or edit a file | Use `apply_patch`; the Codex hooks check each file in the patch |
 | Ask the user | Use the session's question tool or a direct question |
 | Independent reviewers | Use separate agents with fresh contexts and only the prescribed review material |
+| Reader or screener agents | Use one agent per `batches` file; each returns one notes file and one coordinator records it with `read-batch` or `screen-batch` |
 
 When a workflow requires independent reviewers, confirm that the session has
 agent tools. If those tools are unavailable, report that requirement before

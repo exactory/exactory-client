@@ -47,6 +47,51 @@ class ResearchCliTests(unittest.TestCase):
         self.assertEqual(records["configuration"]["research"]["profile"], "research")
         self.assertIsNone(records["configuration"]["research"]["target"])
 
+    def test_status_and_receipts_carry_runtime_provenance(self):
+        self.init_lab()
+        status = json.loads(self.run_cli("exactory-research", "status").stdout)
+        self.assertEqual(status["runtime"]["schema_version"], 1)
+        self.assertEqual(len(status["runtime"]["package_digest"]), 64)
+        records = Store(self.root).snapshot()["records"]
+        receipt = next(iter(records["literature_operation"].values()))
+        self.assertEqual(receipt["runtime"]["plugin_version"], status["runtime"]["plugin_version"])
+
+    def test_compact_reports_are_opt_in_and_read_only(self):
+        self.init_lab()
+        before = Store(self.root).snapshot()
+        for command, limit in (("status", 16 * 1024), ("next", 4 * 1024)):
+            legacy = self.run_cli("exactory-research", command)
+            compact = self.run_cli("exactory-research", command, "--summary")
+            self.assertEqual(legacy.returncode, 0, legacy.stderr)
+            self.assertEqual(compact.returncode, 0, compact.stderr)
+            original = json.loads(legacy.stdout)
+            view = json.loads(compact.stdout)
+            self.assertEqual(view["revision"], original["revision"])
+            self.assertEqual(view["ready"], original["ready"])
+            self.assertEqual(view["preparation_ready"], original["preparation"]["ready"])
+            self.assertTrue(view["advisory_only"])
+            self.assertNotIn("schema", original)
+            self.assertLessEqual(len(compact.stdout.encode("utf-8")), limit)
+        status = json.loads(self.run_cli("exactory-research", "status", "--summary").stdout)
+        self.assertEqual(status["runtime"]["schema_version"], 1)
+        self.assertGreaterEqual(status["evaluation"]["computed"], 1)
+        code = status["next_hint"]["code"]
+        page = self.run_cli("exactory-research", "obligations", "--code", code, "--limit", "1")
+        self.assertEqual(page.returncode, 0, page.stderr)
+        listing = json.loads(page.stdout)
+        self.assertEqual(listing["returned"], 1)
+        self.assertEqual(listing["obligations"][0]["code"], code)
+        stale = self.run_cli("exactory-research", "obligations", "--code", code, "--cursor", "999:0")
+        self.assertNotEqual(stale.returncode, 0)
+        self.assertIn("stale_cursor", stale.stderr)
+        self.assertEqual(Store(self.root).snapshot(), before)
+
+    def test_lab_init_records_the_chosen_preparation_policy(self):
+        result = self.run_cli("exactory-lab", "init", "--slug", "screened", "--preparation-policy", "screened-v1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        config = Store(self.root).snapshot()["records"]["configuration"]["research"]
+        self.assertEqual(config["preparation_policy"], {"id": "screened-v1"})
+
     def test_fresh_verifier_can_acquire_before_exact_target_initialization(self):
         from research_fixtures import atom, entry
         pending = self.research_mutation("acquire", {"identifier": "arxiv:2601.00001v1", "max_requests": 0}, 0, "acquire-first")

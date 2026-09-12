@@ -10,6 +10,7 @@ import json
 from datetime import date, datetime
 
 from .errors import ResearchError
+from .provenance import runtime_provenance
 from .storage import _canonical, _text
 
 
@@ -79,11 +80,12 @@ def prepared_mutation(store, operation, payload, prepare, *, expected_revision, 
         raise ResearchError("stale_revision", "Research state changed; read the current revision before a new mutation",
                             {"expected_revision": expected_revision, "revision": snapshot["revision"]})
     changes, result = prepare(snapshot["records"], payload)
+    runtime = runtime_provenance()
 
     def apply(transaction):
         for kind, key, value in changes:
             transaction.put(kind, key, value)
-        transaction.put("literature_operation", request_id, {"operation": operation})
+        transaction.put("literature_operation", request_id, {"operation": operation, "runtime": runtime})
         return result
 
     return store.mutate(operation, payload, apply, expected_revision=expected_revision, request_id=request_id)

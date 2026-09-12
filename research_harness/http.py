@@ -239,7 +239,7 @@ class _PinnedConnection(http.client.HTTPSConnection):
 class HttpClient:
     def __init__(self, *, transport=None, resolver=None, clock=None, timeout=30,
                  total_timeout=120, max_bytes=32 * 1024 * 1024, max_redirects=5,
-                 max_retries=2, max_retry_after=60, user_agent="exactory-research/1"):
+                 max_retries=2, max_retry_after=60, user_agent=None):
         for number in (timeout, total_timeout, max_retry_after):
             if not isinstance(number, (float, int)) or not math.isfinite(number) or number <= 0:
                 raise ResearchError("invalid_input", "HTTP time limits must be positive and finite")
@@ -251,7 +251,9 @@ class HttpClient:
         self.resolver = resolver or _resolve
         self.timeout, self.total_timeout, self.max_bytes = timeout, total_timeout, max_bytes
         self.max_redirects, self.max_retries = max_redirects, max_retries
-        self.max_retry_after, self.user_agent = max_retry_after, user_agent
+        from .provenance import plugin_version
+        self.max_retry_after = max_retry_after
+        self.user_agent = user_agent or "exactory-research/" + plugin_version()
         self._last_request = {}
 
     def _open(self, url, headers, *, address, timeout):
