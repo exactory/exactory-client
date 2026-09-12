@@ -148,3 +148,22 @@ class ResourceTests(LiteratureCase):
         del incomplete["rounds"]
         self.assert_error("invalid_input", lambda: self.mutate(set_budget, {"profile": "research", "purpose": "literature",
                                                                              "limits": incomplete, "reason": "Incomplete."}))
+
+    def test_an_account_stored_before_the_rounds_unit_keeps_its_credit(self):
+        from research_harness.cli import status_report
+        from research_harness.operations import prepared_mutation
+        from research_harness.resources import account_report, charge, obligations, set_budget
+        legacy = {"key": "research:literature", "charged": {u: 0 for u in limits() if u != "rounds"},
+                  "unknown": {u: 0 for u in limits() if u != "rounds"}}
+        legacy["charged"]["readings"] = 1
+        records = dict(self.store.snapshot()["records"], resource_account={"research:literature": legacy})
+        self.assertEqual(account_report(records, "research")["literature"]["rounds"],
+                         {"limit": None, "charged": 0, "reserved": 0, "unknown": 0})
+        self.assertEqual(account_report(records, "research")["literature"]["readings"]["charged"], 1)
+        self.assertEqual(obligations(records, "research"), [])
+        self.assertEqual(charge(records, "literature", {"readings": 1})[2]["charged"], dict(legacy["charged"], readings=2, rounds=0))
+        prepared_mutation(self.store, "test.legacy-account", {}, lambda stored, value: ([("resource_account", "research:literature", legacy)], None),
+                          expected_revision=self.store.revision, request_id="legacy-account")
+        self.assertEqual(status_report(self.store)["resources"]["literature"]["readings"]["charged"], 1)
+        self.budget(rounds=2)
+        self.assertEqual(self.account(), legacy)
