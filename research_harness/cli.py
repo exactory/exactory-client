@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 import time
 
-from . import acquisition, cohort_evidence, development, graph, literature, principles, reading, synthesis, visual_assets
+from . import acquisition, cohort_evidence, development, graph, literature, principles, reading, resources, synthesis, visual_assets
 from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evaluation import Evaluation
@@ -42,6 +42,7 @@ OPERATIONS = {
     "assess": development.assess_cycle,
     "checkpoint": development.checkpoint,
     "review": development.record_readiness_review,
+    "budget": resources.set_budget,
 }
 
 from .execution import bind_execution, reconcile_execution, record_imported_execution
@@ -151,7 +152,7 @@ def status_report(store, *, counters=False):
     # takes the highest-priority current obligation in preparation order.
     upcoming = preparation.get("next") if study and study["stage"] == "cohort" else None
     return dict(report, revision=snapshot["revision"], profile=profile, runtime=runtime_provenance(),
-                study=study, preparation=preparation, **diagnostics,
+                study=study, preparation=preparation, resources=resources.account_report(records, profile), **diagnostics,
                 next=upcoming or (order_obligations(obligations)[0] if obligations else None),
                 pending_executions=[key for key in records.get("execution_admission", {}) if key not in records.get("execution_outcome", {})],
                 remote_intents=list(records.get("remote_intent", {}).values()),

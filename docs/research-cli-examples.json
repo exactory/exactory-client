@@ -2201,5 +2201,19 @@
       "output_tokens": null,
       "wall_seconds": null
     }
+  },
+  "budget": {
+    "profile": "research",
+    "purpose": "literature",
+    "limits": {
+      "network_requests": 2000,
+      "source_bytes": null,
+      "readings": 600,
+      "screenings": null,
+      "model_input_tokens": null,
+      "model_output_tokens": null,
+      "wall_seconds": null
+    },
+    "reason": "The user approved this preparation budget before the cohort readings."
   }
 }

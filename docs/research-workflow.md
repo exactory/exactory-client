@@ -53,11 +53,15 @@ study use the current date, then reconcile the publication date at deposit.
 ```sh
 exactory-lab state set --waiting none --stage cohort --status pending
 exactory-cohort freeze --corpus arxiv --category cs.LG --published 2026-09-08 > cohort-definition.json
+exactory-research example budget > budget.json
+exactory-research budget --file budget.json --expected-revision REVISION --request-id set-budget-001
 exactory-research example collect > collect.json
 exactory-research collect --file collect.json --expected-revision REVISION --request-id collect-cohort-001
 ```
 
-Put the actual frozen definition into `collect.json`. Inspect the retained
+Set the preparation budget the user approved with `budget` before the costly
+work; reservation and reconciliation are automatic, and exhaustion is a
+checkpoint condition, never completion. Put the actual frozen definition into `collect.json`. Inspect the retained
 collection/page receipts and resume its collection ID until enumeration is
 complete. Read every member's complete captured abstract, including exact-version
 resolution where required. For each, author a `read` payload from actual

@@ -42,6 +42,7 @@ from .http import safe_url
 from .imports import _pointer
 from .operations import fields, immutable_record, iso_date, prepared_mutation, profile_name, strings, text, timestamp
 from .providers import _json
+from . import resources
 from .reading import bundle_digest, current_readings, fulltext_coverage, registry_abstract_present, required_unit_obligations
 from .search_pages import enumerate_pages, native_page
 from .source_links import captured_source, complete_original, contains, covers_text, exact_work, fulltext_capture, original_identity, read_locator, validate_link
@@ -568,6 +569,7 @@ def _foundation_state(evaluation, profile):
                                           "extraction_status": c["extraction_status"], "url": c["url"],
                                           "next_eligible_at": records.get("source", {}).get(c["source_id"], {}).get("next_eligible_at")}
                                          for c in work["fulltexts"]]})
+    obligations.extend(resources.obligations(records, profile))
     # Deduplicate repeated unit obligations while retaining each occurrence and
     # each independent cohort/version obligation.
     obligations = sorted({digest(o): o for o in obligations}.values(), key=lambda o: (o["code"], o.get("version_id", ""), digest(o)))
