@@ -128,11 +128,20 @@ def _review(records, artifacts, value, bundle):
     return core
 
 
+def _assessor_key(assessor_id):
+    return " ".join(assessor_id.casefold().split())
+
+
 def record_manuscript_review(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
         artifacts = Evaluation(records, ArtifactStore(store.root))
         bundle = _bundle(records, artifacts)
         core = _review(records, artifacts, value, bundle)
+        key = _assessor_key(value["assessor"]["id"])
+        for saved in records.get("manuscript_review", {}).values():
+            if saved["bundle_digest"] == bundle["digest"] and _assessor_key(saved["assessor"]["id"]) == key:
+                raise ResearchError("manuscript_review_duplicate", "This assessor already reviewed this exact bundle; a rejection stands until the manuscript changes",
+                                    {"review_id": saved["id"]})
         record = dict(value, core=core, reviewed_revision=expected_revision, digest=digest(value))
         return [immutable_record(records, "manuscript_review", value["id"], record)], record
     return prepared_mutation(store, "publication.review", payload, prepare,
@@ -148,8 +157,9 @@ def publication_state(records, artifacts, action="publication"):
         for saved in records.get("manuscript_review", {}).values():
             if saved["bundle_digest"] == bundle["digest"]:
                 core = _review(records, artifacts, {k: saved[k] for k in ("id", "bundle_digest", "assessor", "review", "blind")}, bundle)
-                key = " ".join(saved["assessor"]["id"].casefold().split())
-                if key not in latest or saved["reviewed_revision"] > latest[key][0]["reviewed_revision"]:
+                key = _assessor_key(saved["assessor"]["id"])
+                # One review per assessor per exact bundle: the first stands.
+                if key not in latest or saved["reviewed_revision"] < latest[key][0]["reviewed_revision"]:
                     latest[key] = (saved, core)
         reviews = [item[0] for item in latest.values()]
         if action != "manuscript" and (len(latest) < 2 or any(core["decision"] != "accept" for _, core in latest.values())):

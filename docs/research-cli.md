@@ -296,7 +296,9 @@ exactory-research export --kind readiness --destination /new/independent/candida
 exactory-research export --kind manuscript --destination /new/independent/manuscript
 ```
 
-Delivery copies the actual candidate/source/program/output bytes and an `inputs.json` manifest into a new directory. It includes the observed managed execution chain when applicable and excludes existing assessor scores and verdicts. Give these bytes to the separate reviewer; a digest list alone is insufficient. Export does not certify comprehension or independence.
+Delivery copies the actual candidate/source/program/output bytes and an `inputs.json` manifest into a new directory. The manifest is a neutral packet: no revision labels, request identities, launcher tokens, author names, assessment history, prior scores or verdicts. A readiness packet carries the candidate, branches, plans, assessments, checkpoints, sources and synthesis sections that the six checks need. A manuscript packet carries only the exact files, the claim-to-evidence map, the works, readings, bundles and sources those claims cite, the observed executions behind result evidence, and the selected field standards. Give these bytes to the separate reviewer; a digest list alone is insufficient. Export does not certify comprehension or independence.
+
+`manuscript-review` accepts one review per assessor per exact bundle; a second review by the same assessor on the same `bundle_digest` fails with `manuscript_review_duplicate`, so a rejection stands until the manuscript changes and a new bundle is prepared.
 
 The original manuscript rubric JSON has exactly `summary`, `strengths`, `weaknesses`, `soundness`, `presentation`, `contribution`, `overall`, and `decision`; the three dimension scores use 1 through 4, overall uses 1 through 10, and decision is `accept` or `reject`. `manuscript-review` adds the external assessor/bundle envelope without changing those original bytes. Changed PDF, abstract, bibliography, claims, optional source archive, current evidence, or review dependencies invalidate the current publication gate.
 
