@@ -391,7 +391,7 @@ Message: `feat(research): carry a next_round development to the round gate`
 - Test: `tests/test_research_development.py`
 
 **Interfaces:**
-- Produces: `principles.widen_objective(records, artifacts, target, lineage, round_id) -> list[change]` where `target` is a research objective `{kind: "objective", id, statement}`, `lineage` is `{"previous_id", "containment"}`; changes: `("configuration", "research", config with target)`, `immutable_record(records, "research_objective", target["id"], target)`, `immutable_record(records, "objective_lineage", target["id"], {"id": target["id"], "predecessor": previous_id, "containment", "round_id"})`. Raises `objective_locked` when `previous_id` is not the current objective id or the statement is unchanged, `invalid_target` for a malformed target.
+- Produces: `principles.widen_objective(records, target, lineage, round_id) -> list[change]` where `target` is a research objective `{kind: "objective", id, statement}`, `lineage` is `{"previous_id", "containment"}`; changes: `("configuration", "research", config with target)`, `immutable_record(records, "research_objective", target["id"], target)`, `immutable_record(records, "objective_lineage", target["id"], {"id": target["id"], "predecessor": previous_id, "containment", "round_id"})`. Raises `objective_locked` when `previous_id` is not the current objective id, the statement is unchanged, or the target id is already an objective; `invalid_target` for a malformed (including null) target or lineage. Containment is not checked mechanically (the spec's section 5.1 leaves it to the round reviewer). The review of this task dropped the `artifacts` parameter: the research-profile objective check does not read artifacts.
 - Produces: `development._objective_lineage(context) -> list[objective]` from the current objective back through `objective_lineage` predecessors; `_inheritance` accepts a checkpoint whose `objective` is in that list.
 
 - [ ] **Step 1: Write the failing tests**
@@ -405,7 +405,7 @@ Append to `tests/test_research_development.py`:
         target = {"kind": "objective", "id": "wider-square-bound", "statement": statement}
 
         def prepare(records, value):
-            changes = principles.widen_objective(records, self.artifacts, target,
+            changes = principles.widen_objective(records, target,
                                                  {"previous_id": self.objective["id"], "containment": "The range [0, 3] is contained in [0, 5]."},
                                                  "round-2")
             return changes, target
@@ -448,16 +448,20 @@ Append to `tests/test_research_development.py`:
         stale.update(question="A plan that still carries the old objective.", distinguishing_test="Old objective test.")
         self.assert_error("objective_mismatch", lambda: self.mutate(api.plan_cycle, stale))
 
-    def test_a_narrower_or_unlinked_objective_is_refused(self):
+    def test_an_unlinked_unchanged_or_malformed_objective_is_refused(self):
         self.prepared_study()
         principles = self.api("principles")
         records = self.store.snapshot()["records"]
-        narrower = {"kind": "objective", "id": "narrow", "statement": "At n = 0 the square is at most 9."}
-        self.assert_error("objective_locked", lambda: principles.widen_objective(records, self.artifacts, narrower,
+        unlinked = {"kind": "objective", "id": "narrow", "statement": "At n = 0 the square is at most 9."}
+        self.assert_error("objective_locked", lambda: principles.widen_objective(records, unlinked,
             {"previous_id": "someone-else", "containment": "x"}, "round-2"))
-        self.assert_error("objective_locked", lambda: principles.widen_objective(records, self.artifacts, dict(self.objective, id="same"),
+        self.assert_error("objective_locked", lambda: principles.widen_objective(records, dict(self.objective, id="same"),
             {"previous_id": self.objective["id"], "containment": "x"}, "round-2"))
+        # The review of this task added the reused-id, null-target, wrong-kind, missing-containment and
+        # empty-containment cases; see tests/test_research_development.py for the complete test.
 ```
+
+Note for the executor: a widened objective changes the configuration digest that every synthesis section binds (`synthesis._assess` binds `configuration["digest"]` for `standards` too), so all four sections (`standards`, `rationale`, `context`, `innovation`) report `synthesis_dependencies_stale` after widening and are re-recorded before `plan_cycle` passes `require_ready`. The spec's section 7 records this. The test asserts the stale set and then calls `refresh_synthesis`.
 
 Note for the executor: `validated_result` inheritance requires the inherited assessment to be currently validated. A widened objective changes `context.dependencies()` (objective and configuration digest), so every earlier assessment reports `development_dependencies_stale` until it is assessed again under the current objective. That is the existing rule for any dependency change and it stays: a later round re-assesses the earlier cycles with the same payloads under new ids (in a real round the preparation digest changes anyway, because the round records new searches). What Task 3 changes is that the re-assessment and the inheritance succeed under the widened objective: `_assess` checks an assessment's scope against the objective its plan carried, and `_inheritance` accepts a checkpoint whose objective is an ancestor.
 
@@ -471,13 +475,13 @@ Expected: FAIL with `AttributeError: widen_objective`.
 In `research_harness/principles.py`:
 
 ```python
-def widen_objective(records, artifacts, target, lineage, round_id):
+def widen_objective(records, target, lineage, round_id):
     """Changes that widen the research objective through an admitted round; the old objective stays retained."""
     config = _configuration(records)
     current = config["target"]
     fields(lineage, ("previous_id", "containment"), code="invalid_target")
     text(lineage["containment"], "Objective containment", code="invalid_target")
-    _validate_target(records, artifacts, "research", target)
+    _validate_objective(target)  # the research-profile shape check extracted from _validate_target; refuses None
     if config["profile"] != "research" or current is None or lineage["previous_id"] != current["id"]:
         raise ResearchError("objective_locked", "Widen the current complete objective through its recorded predecessor")
     if target["id"] == current["id"] or target["statement"] == current["statement"] or target["id"] in records.get("research_objective", {}):
@@ -954,7 +958,7 @@ def _next(records, context, evidence, value, number, pursued):
         if value["objective_lineage"] is not None:
             raise ResearchError(_ERROR, "An unchanged objective has no lineage")
     else:
-        principles.widen_objective(records, context.artifacts, value["objective"], value["objective_lineage"], "proposed")
+        principles.widen_objective(records, value["objective"], value["objective_lineage"], "proposed")
     goal = _goal(value["goal"], evidence, pursued)
     _limits(value["resource_limits"], goal)
     _reopening(records, value["reopening"], evidence)
@@ -1149,7 +1153,7 @@ class RoundAdmissionTests(RoundsCase):
         self.assert_error("round_field_change_refused", lambda: self.mutate(rounds.record_round, bare))
 ```
 
-The narrower-objective case reaches `round_assessment_missing` because round 2 is active and unassessed; the objective narrowing itself is refused earlier in the widen path (covered by `test_a_narrower_or_unlinked_objective_is_refused` in Task 3). The first test expects `rounds.OPENING_PURPOSES`, the tuple of the nine search purposes the opening state snapshots.
+The narrower-objective case reaches `round_assessment_missing` because round 2 is active and unassessed; the unlinked objective itself is refused earlier in the widen path (covered by `test_an_unlinked_unchanged_or_malformed_objective_is_refused` in Task 3; containment is the author's assertion and is not checked from statement text). When the admitted round widened the objective, all four synthesis sections are stale until the round's literature stage re-records them (the Task 3 note and the spec's section 7); `run_round_work` in Task 8 refreshes all four. The first test expects `rounds.OPENING_PURPOSES`, the tuple of the nine search purposes the opening state snapshots.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -1214,7 +1218,7 @@ def admit_round(store, payload, *, expected_revision, request_id):
         if charge is not None:
             changes.append(charge)
         if proposal["objective"] != context.objective:
-            changes.extend(principles.widen_objective(records, context.artifacts, proposal["objective"],
+            changes.extend(principles.widen_objective(records, proposal["objective"],
                                                       proposal["objective_lineage"], value["id"]))
         record = {"id": value["id"], "number": proposal["number"], "decision_id": decision["id"], "review_id": review["id"],
                   "goal": proposal["goal"], "objective": proposal["objective"], "objective_lineage": proposal["objective_lineage"],

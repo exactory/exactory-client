@@ -1047,7 +1047,7 @@ class DevelopmentTests(DevelopmentCase):
         target = {"kind": "objective", "id": "wider-square-bound", "statement": statement}
 
         def prepare(records, value):
-            changes = principles.widen_objective(records, self.artifacts, target,
+            changes = principles.widen_objective(records, target,
                                                  {"previous_id": self.objective["id"], "containment": "The range [0, 3] is contained in [0, 5]."},
                                                  "round-2")
             return changes, target
@@ -1068,7 +1068,9 @@ class DevelopmentTests(DevelopmentCase):
         # The widened objective changes the configuration digest every synthesis section and every
         # earlier assessment bound, so the synthesis is recorded again and the earlier cycle is
         # assessed again under the current objective before it is inherited.
-        self.assertFalse(self.api().synthesis_report(self.store, "research")["ready"])
+        stale = {o["section"] for o in self.api().synthesis_report(self.store, "research")["obligations"]
+                 if o["code"] == "synthesis_dependencies_stale"}
+        self.assertEqual(stale, {"standards", "rationale", "context", "innovation"})
         self.refresh_synthesis("wider")
         again = self.assessment(plan, execution, identifier="assessment-1b")
         reassessed = self.mutate(api.assess_cycle, again)["result"]
@@ -1093,12 +1095,22 @@ class DevelopmentTests(DevelopmentCase):
         stale.update(question="A plan that still carries the old objective.", distinguishing_test="Old objective test.")
         self.assert_error("objective_mismatch", lambda: self.mutate(api.plan_cycle, stale))
 
-    def test_a_narrower_or_unlinked_objective_is_refused(self):
+    def test_an_unlinked_unchanged_or_malformed_objective_is_refused(self):
+        # Containment is the author's recorded assertion, judged by the round reviewer; the harness
+        # refuses an unlinked predecessor, an unchanged statement, a reused objective id, and a
+        # malformed target or lineage.
         self.prepared_study()
         principles = self.api("principles")
         records = self.store.snapshot()["records"]
-        narrower = {"kind": "objective", "id": "narrow", "statement": "At n = 0 the square is at most 9."}
-        self.assert_error("objective_locked", lambda: principles.widen_objective(records, self.artifacts, narrower,
+        linked = {"previous_id": self.objective["id"], "containment": "x"}
+        unlinked = {"kind": "objective", "id": "narrow", "statement": "At n = 0 the square is at most 9."}
+        self.assert_error("objective_locked", lambda: principles.widen_objective(records, unlinked,
             {"previous_id": "someone-else", "containment": "x"}, "round-2"))
-        self.assert_error("objective_locked", lambda: principles.widen_objective(records, self.artifacts, dict(self.objective, id="same"),
-            {"previous_id": self.objective["id"], "containment": "x"}, "round-2"))
+        self.assert_error("objective_locked", lambda: principles.widen_objective(records, dict(self.objective, id="same"), linked, "round-2"))
+        reused = {"kind": "objective", "id": self.objective["id"], "statement": "For every integer n in [0, 5], n squared is at most 25."}
+        self.assert_error("objective_locked", lambda: principles.widen_objective(records, reused, linked, "round-2"))
+        wider = {"kind": "objective", "id": "wider", "statement": "For every integer n in [0, 5], n squared is at most 25."}
+        self.assert_error("invalid_target", lambda: principles.widen_objective(records, None, linked, "round-2"))
+        self.assert_error("invalid_target", lambda: principles.widen_objective(records, dict(wider, kind="scope"), linked, "round-2"))
+        self.assert_error("invalid_target", lambda: principles.widen_objective(records, wider, {"previous_id": self.objective["id"]}, "round-2"))
+        self.assert_error("invalid_target", lambda: principles.widen_objective(records, wider, dict(linked, containment=""), "round-2"))

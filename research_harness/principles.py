@@ -58,15 +58,18 @@ def constitution_contract():
     return _constitution()[0]
 
 
+def _validate_objective(target):
+    fields(target, ("kind", "id", "statement"), code="invalid_target")
+    if target["kind"] != "objective":
+        raise ResearchError("invalid_target", "A research target must identify the complete objective")
+    for key in ("id", "statement"):
+        text(target[key], "Objective " + key, code="invalid_target")
+
+
 def _validate_target(records, artifacts, profile, target):
     if profile == "research":
-        if target is None:
-            return
-        fields(target, ("kind", "id", "statement"), code="invalid_target")
-        if target["kind"] != "objective":
-            raise ResearchError("invalid_target", "A research target must identify the complete objective")
-        for key in ("id", "statement"):
-            text(target[key], "Objective " + key, code="invalid_target")
+        if target is not None:
+            _validate_objective(target)
         return
     fields(target, ("kind", "id", "source_id", "sha256"), code="invalid_target")
     work = exact_work(records, target["id"])
@@ -143,19 +146,21 @@ pending until set_roots selects the same target. It preserves earlier events.
                              expected_revision=expected_revision, request_id=request_id)
 
 
-def widen_objective(records, artifacts, target, lineage, round_id):
+def widen_objective(records, target, lineage, round_id):
     """Changes that widen the research objective through an admitted round; the old objective stays retained.
 
     `target` is the wider objective, `lineage` is {previous_id, containment}
     naming the current objective and why the wider one contains it. The
     configuration target becomes `target`; research_objective/{target id} and
-    objective_lineage/{target id} record the widening.
+    objective_lineage/{target id} record the widening. Containment is the
+    author's recorded assertion, judged by the round reviewer: the statement
+    text gives no mechanical containment check.
     """
     config = _configuration(records)
     current = config["target"]
     fields(lineage, ("previous_id", "containment"), code="invalid_target")
     text(lineage["containment"], "Objective containment", code="invalid_target")
-    _validate_target(records, artifacts, "research", target)
+    _validate_objective(target)
     if config["profile"] != "research" or current is None or lineage["previous_id"] != current["id"]:
         raise ResearchError("objective_locked", "Widen the current complete objective through its recorded predecessor")
     if target["id"] == current["id"] or target["statement"] == current["statement"] or target["id"] in records.get("research_objective", {}):
