@@ -1,6 +1,6 @@
 """Development rounds: decisions, reviews, admissions, assessments and the round gate."""
 
-from research_harness import resources, rounds
+from research_harness import predictions, resources, rounds
 from rounds_fixtures import RoundsCase
 
 
@@ -441,3 +441,43 @@ class RoundLiteratureTests(RoundsCase):
         self.assertIn("round_exemplar_missing", self.codes())
         self.exemplar_requirement("round-2")
         self.assertNotIn("round_exemplar_missing", self.codes())
+
+
+class PredictionTests(RoundsCase):
+    def test_a_prediction_binds_the_bundle_the_cohort_and_a_blind_assessor(self):
+        self.assert_error("publication_bundle_missing", lambda: self.mutate(predictions.record_prediction,
+                                                                            self.prediction_payload({"digest": "0" * 64}, "predictor-0")))
+        bundle = self.pin()
+        recorded = self.mutate(predictions.record_prediction, self.prediction_payload(bundle, "predictor-a"))["result"]
+        self.assertEqual(recorded["prediction"]["percentile"], 30)
+        self.assertEqual(recorded["bundle_digest"], bundle["digest"])
+        wrong_cohort = self.prediction_payload(bundle, "predictor-b")
+        wrong_cohort["prediction"]["category"] = "cs.CL"
+        self.assert_error("prediction_cohort_mismatch", lambda: self.mutate(predictions.record_prediction, wrong_cohort))
+        wrong_band = self.prediction_payload(bundle, "predictor-c", percentile=10, band=(20, 40))
+        self.assert_error("invalid_prediction", lambda: self.mutate(predictions.record_prediction, wrong_band))
+        out_of_range = self.prediction_payload(bundle, "predictor-c", percentile=100, band=(90, 101))
+        self.assert_error("invalid_prediction", lambda: self.mutate(predictions.record_prediction, out_of_range))
+        again = self.prediction_payload(bundle, "Predictor-A")
+        self.assert_error("manuscript_prediction_duplicate", lambda: self.mutate(predictions.record_prediction, again))
+        author = self.prediction_payload(bundle, "cycle-author")
+        self.assert_error("review_not_independent", lambda: self.mutate(predictions.record_prediction, author))
+        sighted = self.prediction_payload(bundle, "predictor-d")
+        sighted["blind"] = False
+        self.assert_error("review_not_independent", lambda: self.mutate(predictions.record_prediction, sighted))
+        stale = self.prediction_payload(bundle, "predictor-e")
+        stale["bundle_digest"] = "0" * 64
+        self.assert_error("publication_review_stale", lambda: self.mutate(predictions.record_prediction, stale))
+
+    def test_measurement_summary_reports_medians_and_spreads(self):
+        bundle = self.pin()
+        self.measure(bundle, "one", percentiles=(30, 25, 40))
+        summary = predictions.measurement_summary(self.store.snapshot()["records"], bundle)
+        self.assertEqual(summary["predictions"], {"count": 3, "percentile": {"median": 30, "spread": [25, 40]}})
+        self.assertEqual(summary["reviews"]["count"], 5)
+        self.assertEqual(summary["reviews"]["overall"], {"median": 6, "spread": [6, 6]})
+        self.assertEqual(summary["reviews"]["contribution"], {"median": 3, "spread": [3, 3]})
+        empty = predictions.measurement_summary(self.store.snapshot()["records"], {"digest": "0" * 64})
+        self.assertEqual(empty["predictions"], {"count": 0, "percentile": {"median": None, "spread": None}})
+        self.assertEqual(empty["reviews"]["count"], 0)
+        self.assertEqual(empty["reviews"]["overall"], {"median": None, "spread": None})
