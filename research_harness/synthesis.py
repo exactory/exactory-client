@@ -1,8 +1,12 @@
 """Evidence-linked field standards, ABT reasoning, innovation and context.
 
 Each record_* operation accepts an immutable {id, profile, scope, ...} payload,
-binds current configuration/foundation/source-reading dependencies, and selects
-it through synthesis_selection/{profile}:{kind}. A new assessment needs a new
+binds the dependencies that section uses, and selects it through
+synthesis_selection/{profile}:{kind}. Standards bind the cohort population;
+rationale, innovation and context bind the citation frontier and the selected
+search judgments; every section binds its own evidence, the scope, the
+configuration and the constitution. preparation_digest summarizes the current
+preparation for plans, admissions, assessments, checkpoints and candidates. A new assessment needs a new
 ID; old records and operation results remain unchanged. Section readiness is
 mechanical only. synthesis_report additionally requires the current foundation,
 configuration and all profile-applicable sections.
@@ -296,8 +300,13 @@ def _assess(records, artifacts, kind, value, configuration, foundation):
         _gaps(value["speculative_links"], "Speculative applications")
     evidence = [state.evidence[k] for k in sorted(state.evidence)]
     dependencies = {"configuration": configuration["digest"], "constitution": configuration["constitution"],
-                    "foundation": foundation["digest"], "scope": digest(records.get("literature_scope", {}).get(value["profile"])),
+                    "scope": digest(records.get("literature_scope", {}).get(value["profile"])),
                     "evidence": digest(evidence)}
+    if kind == "standards":
+        dependencies["population"] = foundation["population_digest"]
+    else:
+        dependencies["frontier"] = foundation["frontier_digest"]
+        dependencies["searches"] = foundation["judgments_digest"]
     if kind == "innovation":
         standard = _selected(records, value["profile"], "standards")
         dependencies["standards"] = digest(standard) if standard else None
@@ -380,7 +389,14 @@ def _synthesis_state(evaluation, profile):
     obligations = _unique(obligations)
     counts = {"sections": len(sections), "current_sections": sum(s["ready"] for s in sections.values()), "obligations": len(obligations)}
     counts.update({k: v for k, v in sections.get("innovation", {}).get("counts", {}).items() if k != "obligations"})
+    # The literature digest names what a claim comparison rests on; the preparation
+    # digest adds the configuration and the current sections for plans and candidates.
+    literature = digest({"scope": digest(records.get("literature_scope", {}).get(profile)), "frontier": foundation["frontier_digest"],
+                         "searches": foundation["judgments_digest"], "requirements": foundation["requirements_digest"]})
+    preparation = {"configuration": configuration["digest"], "literature": literature,
+                   "sections": {kind: section.get("digest") if section["ready"] else None for kind, section in sections.items()}}
     return {"ready": not obligations, "digest": digest({"configuration": configuration["digest"], "foundation": foundation["digest"], "sections": sections}),
+            "literature_digest": literature, "preparation_digest": digest(preparation),
             "obligations": obligations, "counts": counts, "profile": profile, "configuration": configuration,
             "foundation": foundation, "sections": sections,
             "history": [{"id": r["id"], "kind": r["kind"], "dependencies": r["dependencies"]}

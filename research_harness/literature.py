@@ -586,11 +586,18 @@ def _foundation_state(evaluation, profile):
     dependencies["visual_assets"] = {k: a for k, a in records.get("visual_asset", {}).items() if a["version_id"] in relevant}
     dependencies["visual_asset_selection"] = {k: s for k, s in records.get("visual_asset_selection", {}).items()
                                                 if s["asset_id"] in dependencies["visual_assets"]}
+    population = [{"definition": records["collection"][c]["definition"],
+                   "members": sorted(m["work_id"] for m in records.get("cohort_member", {}).values() if m["collection_id"] == c)}
+                  for c in scope.get("collection_ids", []) if c in records.get("collection", {})]
+    judgments = [{k: s.get(k) for k in ("id", "purpose", "verdict", "found_work_ids", "cited_work_ids", "dispositions", "gaps", "impact")}
+                 for s in sorted((searches[i] for i in selected_searches.values() if i in searches), key=lambda s: s["purpose"])]
     counts = {"works": len(families), "versions": len(inventory), "cohort_families": len({x["work_id"] for x in cohort}),
               "reference_occurrences": len(graph["references"]), "obligations": len(obligations),
               "fulltext_read": sum(x["fulltext_read"] for x in inventory), "abstract_read": sum(x["abstract_read"] for x in inventory)}
     counts.update({"tier_" + str(t): sum(n["tier"] == t for n in graph["nodes"]) for t in (1, 2, 3)})
     return {"ready": not obligations, "digest": digest(dependencies), "obligations": obligations, "counts": counts,
+            "population_digest": digest(population), "frontier_digest": frontier_digest(evaluation, profile),
+            "judgments_digest": digest(judgments), "requirements_digest": digest(full_requirements),
             "passed": {"graph": not graph["obligations"], "cohort": bool(collections) and not any(o["code"] in ("collection_pending", "cohort_abstract_reading_missing") for o in obligations),
                        "searches": not any(o["code"].startswith("search_") for o in obligations)},
             "invalid_references": [r for r in graph["references"] if r["status"] not in ("resolved", "nonpaper")],

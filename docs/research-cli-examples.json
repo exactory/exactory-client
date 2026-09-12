@@ -1156,7 +1156,7 @@
         ],
         "remaining_obligations": []
       },
-      "foundation_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "literature_digest": "0000000000000000000000000000000000000000000000000000000000000000",
       "comparison": "The authored source describes bounded cases; this test checks the exact finite claim.",
       "sources": [
         {
@@ -1445,7 +1445,7 @@
           ],
           "remaining_obligations": []
         },
-        "foundation_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+        "literature_digest": "0000000000000000000000000000000000000000000000000000000000000000",
         "comparison": "The evidence is specific to the stated finite target and does not claim an unbounded theorem.",
         "evidence": [
           {

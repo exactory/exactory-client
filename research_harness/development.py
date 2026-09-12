@@ -133,8 +133,7 @@ class _Context:
 
     def dependencies(self):
         return {"configuration": self.configuration["digest"], "constitution": self.configuration["constitution"],
-                "objective": self.objective, "foundation": self.foundation["digest"],
-                "synthesis": self.synthesis["digest"]}
+                "objective": self.objective, "preparation": self.synthesis["preparation_digest"]}
 
     def assessment(self, identifier):
         if identifier not in self.assessments:
@@ -221,12 +220,12 @@ def _labelled(values, name, kinds=None):
 
 
 def _literature(context, evidence, value, scope):
-    _fields(value, ("scope", "foundation_digest", "comparison", "sources", "gaps"))
+    _fields(value, ("scope", "literature_digest", "comparison", "sources", "gaps"))
     _text(value["comparison"], "Claim-specific literature comparison")
     _strings(value["gaps"], "Literature gaps")
     evidence.many([{"kind": "source", "link": link} for link in _items(value["sources"], "Related full-read sources", True)], "Literature evidence")
-    if value["scope"] != scope or value["foundation_digest"] != context.foundation["digest"] or value["gaps"]:
-        raise ResearchError("literature_comparison_stale", "Record the literature comparison for this exact claim/scope against the current foundation")
+    if value["scope"] != scope or value["literature_digest"] != context.synthesis["literature_digest"] or value["gaps"]:
+        raise ResearchError("literature_comparison_stale", "Record the literature comparison for this exact claim/scope against the current literature")
 
 
 def _plan_evidence(evidence, value):
@@ -654,14 +653,14 @@ def _development(context, evidence, value, scope, cycle_id):
     else:
         _text(value["next_question"], "Next useful development question")
     novelty = value["novelty"]
-    _fields(novelty, ("scope", "foundation_digest", "comparison", "evidence", "gaps"))
+    _fields(novelty, ("scope", "literature_digest", "comparison", "evidence", "gaps"))
     _text(novelty["comparison"], "Current novelty comparison")
     _strings(novelty["gaps"], "Unresolved novelty comparison")
     linked = evidence.many(novelty["evidence"], "Novelty evidence")
     obligations = []
     if not any(x["reference"]["kind"] == "source" for x in linked):
         obligations.append(obligation("novelty_source_missing", "Compare the candidate with actual current full-read sources."))
-    if novelty["scope"] != scope or novelty["foundation_digest"] != context.foundation["digest"] or novelty["gaps"]:
+    if novelty["scope"] != scope or novelty["literature_digest"] != context.synthesis["literature_digest"] or novelty["gaps"]:
         obligations.append(obligation("novelty_comparison_stale", "Refresh the novelty decision for this exact result claim/scope and current literature."))
     contribution = value["contribution"]
     _fields(contribution, ("and", "but", "therefore", "evidence"))
@@ -992,7 +991,7 @@ def _candidate(context):
     candidate = {"objective": context.objective, "scope": assessment["payload"]["scope"],
                  "checkpoint_id": checkpoint["id"], "checkpoint_digest": checkpoint["digest"],
                  "assessment_id": assessment["id"], "assessment_digest": assessment["digest"],
-                 "literature_digest": context.foundation["digest"], "synthesis_digest": context.synthesis["digest"],
+                 "preparation_digest": context.synthesis["preparation_digest"],
                  "constitution": context.configuration["constitution"], "result_hashes": result_hashes,
                  "evidence": [e["reference"] for e in evidence], "branches_digest": digest(context.branches),
                  "strategy_accounts_digest": digest(context.records.get("strategy_account", {})),

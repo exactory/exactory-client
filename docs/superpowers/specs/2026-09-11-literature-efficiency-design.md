@@ -177,7 +177,7 @@ A search is `search_scope_stale` when the scope digest differs, `search_evidence
 | innovation | as rationale, plus the selected standards digest |
 | context | as rationale |
 
-`preparation_digest(profile)` is the digest of the configuration digest, scope digest, frontier digest, selected search judgments, the four section digests, and the requirement set. Plans, admissions, assessments, checkpoints, candidates, and literature comparisons bind `preparation_digest` where they bound the foundation digest. The foundation digest remains computed for the foundation report.
+`literature_digest(profile)` is the digest of the scope digest, the frontier digest, the selected search judgments, and the requirement set; a plan's literature comparison and a development's novelty comparison bind it. `preparation_digest(profile)` is the digest of the configuration digest, `literature_digest`, and the four section digests; plans, admissions, assessments, checkpoints, and candidates bind it where they bound the foundation digest. The foundation digest remains computed for the foundation report.
 
 ## 8. Review packets (P7)
 
