@@ -163,7 +163,7 @@ def widen_objective(records, target, lineage, round_id):
     _validate_objective(target)
     if config["profile"] != "research" or current is None or lineage["previous_id"] != current["id"]:
         raise ResearchError("objective_locked", "Widen the current complete objective through its recorded predecessor")
-    if target["id"] == current["id"] or target["statement"] == current["statement"] or target["id"] in records.get("research_objective", {}):
+    if target["statement"] == current["statement"] or target["id"] in records.get("research_objective", {}):
         raise ResearchError("objective_locked", "A widened objective needs a new identity and a wider statement")
     record = {"id": target["id"], "predecessor": current["id"], "containment": lineage["containment"], "round_id": round_id}
     return [("configuration", "research", dict(config, target=target)),

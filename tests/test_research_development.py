@@ -1114,3 +1114,17 @@ class DevelopmentTests(DevelopmentCase):
         self.assert_error("invalid_target", lambda: principles.widen_objective(records, dict(wider, kind="scope"), linked, "round-2"))
         self.assert_error("invalid_target", lambda: principles.widen_objective(records, wider, {"previous_id": self.objective["id"]}, "round-2"))
         self.assert_error("invalid_target", lambda: principles.widen_objective(records, wider, dict(linked, containment=""), "round-2"))
+
+    def test_an_ancestor_objective_id_cannot_be_reused_after_a_widening(self):
+        # After a widening the root id is no longer the current objective, so only the retained
+        # research_objective record refuses its reuse; a reused ancestor id would otherwise close
+        # the lineage into a loop.
+        self.prepared_study()
+        principles = self.api("principles")
+        target = self.widen()
+        records = self.store.snapshot()["records"]
+        lineage = {"previous_id": target["id"], "containment": "[0, 5] is contained in [0, 9]."}
+        reused = {"kind": "objective", "id": self.objective["id"], "statement": "For every integer n in [0, 9], n squared is at most 81."}
+        self.assert_error("objective_locked", lambda: principles.widen_objective(records, reused, lineage, "round-3"))
+        # The unchanged root record is identical content, so only this guard stands between it and the loop.
+        self.assert_error("objective_locked", lambda: principles.widen_objective(records, dict(self.objective), lineage, "round-3"))
