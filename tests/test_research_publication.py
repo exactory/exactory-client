@@ -200,3 +200,13 @@ class ResearchPublicationTests(DevelopmentCase):
         self.assertEqual(receipt["request_body"], {"doi": publication["doi"]})
         self.assertEqual(receipt["record_doi"], publication["doi"])
         self.assertEqual(sum(call[0] == "POST" for call in calls), 1)
+
+    def test_validate_assessor_is_shared_and_refuses_authors(self):
+        api = self.publication()
+        from research_harness.evaluation import Evaluation
+        records = self.store.snapshot()["records"]
+        evaluation = Evaluation(records, self.artifacts)
+        assessor = self.manuscript_review({"digest": "x"}, "reviewer-a")["assessor"]
+        self.assertEqual(api.validate_assessor(evaluation, assessor, ["cycle-author"]), assessor)
+        self.assert_error("review_not_independent", lambda: api.validate_assessor(evaluation, dict(assessor, id="CYCLE-AUTHOR "), ["cycle-author"]))
+        self.assert_error("review_not_independent", lambda: api.validate_assessor(evaluation, dict(assessor, kind="robot"), []))

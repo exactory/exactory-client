@@ -5,7 +5,7 @@ import json
 
 from development_fixtures import DevelopmentCase
 from integration_fixtures import observed_candidate
-from research_harness import publication
+from research_harness import publication, rounds
 from research_harness.acquisition import import_response
 from research_harness.literature import record_search
 from test_research_publication import ResearchPublicationTests
@@ -127,7 +127,6 @@ class RoundsCase(DevelopmentCase):
         return payload
 
     def review_payload(self, decision, verdict="approved", assessor="round-assessor", checks=None):
-        from research_harness import rounds
         kinds = rounds.CHECKS_CONTINUE if decision["decision"] == "continue" else rounds.CHECKS_STOP
         return {"id": decision["id"] + "-review-" + assessor, "round_id": decision["id"], "round_digest": decision["digest"],
                 "assessor": {"id": assessor, "kind": "agent",
@@ -141,7 +140,6 @@ class RoundsCase(DevelopmentCase):
 
     def open_round(self, bundle=None, closes=1, **decision_kwargs):
         """Decide continue, approve it and admit the next round; returns (decision, review, admission)."""
-        from research_harness import rounds
         bundle = bundle or self.pin()
         decision = self.mutate(rounds.record_round, self.decision_payload(bundle, closes, **decision_kwargs))["result"]
         review = self.mutate(rounds.record_round_review, self.review_payload(decision))["result"]
