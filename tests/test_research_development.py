@@ -1011,3 +1011,32 @@ class DevelopmentTests(DevelopmentCase):
         self.assertTrue(report["ready"])
         self.assertEqual(records, snapshot["records"])
         self.assertEqual(self.store.snapshot(), snapshot)
+
+    def test_a_next_round_alternative_is_carried_and_does_not_block_readiness(self):
+        api = self.development()
+        self.prepared_study()
+        plan, execution = self.run_cycle()
+        payload = self.assessment(plan, execution)
+        payload["development"]["alternatives"][0].update(disposition="next_round",
+            reason="The wider range exceeds this round's admitted scope.")
+        assessed = self.mutate(api.assess_cycle, payload)["result"]
+        self.assertNotIn("useful_development_remaining", {o["code"] for o in assessed["obligations"]})
+        self.save_checkpoint()
+        self.mutate(api.record_readiness_review, self.review(execution))
+        self.assertTrue(api.readiness_report(self.store)["ready"])
+        carried = api.carried_developments(self.store.snapshot()["records"])
+        self.assertEqual(carried, [{"assessment_id": "assessment-1", "kind": "alternative",
+                                    "question": "Does the bound extend beyond n = 3?", "strategy": "generalization",
+                                    "reason": "The wider range exceeds this round's admitted scope."}])
+
+    def test_a_next_round_branch_is_carried_by_cycle_id(self):
+        api = self.development()
+        self.prepared_study()
+        plan, execution = self.run_cycle()
+        payload = self.assessment(plan, execution)
+        payload["development"]["branches"][0].update(disposition="next_round", reason="Carried to the round gate.")
+        self.mutate(api.assess_cycle, payload)
+        carried = api.carried_developments(self.store.snapshot()["records"], ["cycle-1"])
+        self.assertEqual(carried, [{"assessment_id": "assessment-1", "kind": "branch", "cycle_id": "cycle-1",
+                                    "reason": "Carried to the round gate."}])
+        self.assertEqual(api.carried_developments(self.store.snapshot()["records"], ["other"]), [])

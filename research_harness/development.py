@@ -31,6 +31,7 @@ from .synthesis import synthesis_state
 
 STRATEGIES = ("generalization", "weaker_assumptions", "mechanism", "tightness_limits", "unification",
               "representation_change", "transfer", "practical_usefulness", "other")
+DISPOSITIONS = ("pursue", "not_useful", "resolved", "budget_paused", "next_round")
 _REVIEW_CHECKS = ("validity", "scope", "novelty", "contribution", "development", "branches")
 _LIMITS = ("This is mechanical evidence anchoring and documented research assessment, not scientific truth or native "
            "mathematical proof acceptance. The launcher must execute the admitted artifact and preserve the actual run "
@@ -673,7 +674,7 @@ def _development(context, evidence, value, scope, cycle_id):
     for option in _items(value["alternatives"], "Useful alternative developments", True):
         _fields(option, ("strategy", "question", "disposition", "reason", "evidence"))
         _choice(option["strategy"], STRATEGIES, "Alternative strategy")
-        _choice(option["disposition"], ("pursue", "not_useful", "resolved", "budget_paused"), "Alternative disposition")
+        _choice(option["disposition"], DISPOSITIONS, "Alternative disposition")
         _text(option["question"], "Alternative question")
         _text(option["reason"], "Alternative scientific value or limitation")
         evidence.many(option["evidence"], "Alternative decision evidence")
@@ -686,7 +687,7 @@ def _development(context, evidence, value, scope, cycle_id):
         if branch["cycle_id"] in seen:
             raise ResearchError("invalid_development", "Assess each actual branch once")
         seen.add(branch["cycle_id"])
-        _choice(branch["disposition"], ("pursue", "not_useful", "resolved", "budget_paused"), "Branch disposition")
+        _choice(branch["disposition"], DISPOSITIONS, "Branch disposition")
         _text(branch["reason"], "Branch disposition reason")
         evidence.many(branch["evidence"], "Branch disposition evidence")
         if branch["disposition"] in ("pursue", "budget_paused"):
@@ -696,6 +697,26 @@ def _development(context, evidence, value, scope, cycle_id):
     if value["strategy"] != "none":
         obligations.append(obligation("useful_development_remaining", "Develop the stated next useful question before concluding this candidate.", question=value["next_question"]))
     return obligations
+
+
+def carried_developments(records, cycle_ids=None):
+    """The `next_round` alternatives and branches of each cycle's current assessment."""
+    carried = []
+    for cycle in records.get("cycle", {}).values():
+        if cycle["assessment_id"] is None or cycle_ids is not None and cycle["id"] not in cycle_ids:
+            continue
+        development = records["cycle_assessment"][cycle["assessment_id"]]["payload"]["development"]
+        if development is None:
+            continue
+        for option in development["alternatives"]:
+            if option["disposition"] == "next_round":
+                carried.append({"assessment_id": cycle["assessment_id"], "kind": "alternative", "question": option["question"],
+                                "strategy": option["strategy"], "reason": option["reason"]})
+        for branch in development["branches"]:
+            if branch["disposition"] == "next_round":
+                carried.append({"assessment_id": cycle["assessment_id"], "kind": "branch", "cycle_id": branch["cycle_id"],
+                                "reason": branch["reason"]})
+    return sorted(carried, key=lambda item: (item["assessment_id"], item["kind"], item.get("question") or item.get("cycle_id")))
 
 
 def _assess(context, value):
