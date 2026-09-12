@@ -19,6 +19,7 @@ from .evidence import digest
 from .graph import obligation
 from .identities import resolve_family
 from .operations import fields, prepared_mutation, strings, text, timestamp
+from .principles import preparation_policy
 from .reading import current_readings
 from .source_links import TEXT_KINDS, captured_source, contains, covers_text, exact_work, read_locator
 
@@ -126,6 +127,8 @@ def _cohort_report(evaluation, collection_ids, target):
     evaluation.counters["cohort_reports"] += 1
     records, artifacts = evaluation.records, evaluation
     summaries, obligations, inventory, dependencies, readings = [], [], [], {}, {}
+    screened = preparation_policy(records) == "screened-v1"
+    screening_counts = {}
     if not collection_ids:
         obligations.append(obligation("cohort_missing", "Select the complete frozen cohort collection."))
     for collection_id in collection_ids:
@@ -138,6 +141,7 @@ def _cohort_report(evaluation, collection_ids, target):
         for pending in summary["pending"]:
             obligations.append(obligation("collection_pending", "Resume or resolve acquisition without shrinking the frozen corpus.",
                 collection_id=collection_id, reason=pending, next_eligible_at=summary["next_eligible_at"]))
+        items, matched_by_version = [], {}
         for item in summary["reading_obligations"]:
             paths = [item["artifact"]["path"]] if item["artifact"] is not None else []
             for source_id in item["source_ids"]:
@@ -153,10 +157,16 @@ def _cohort_report(evaluation, collection_ids, target):
             matched = abstract_reading(records, artifacts, accepted, item)
             if matched:
                 readings[matched["id"]] = matched
-            else:
+                matched_by_version[version] = matched
+            elif not screened:
                 obligations.append(obligation("cohort_abstract_reading_missing", "Read the selected complete cohort abstract; downloaded content is not a reading.",
                     version_id=version, work_id=item["work_id"], collection_id=collection_id, paths=paths))
-            inventory.append(dict(item, collection_id=collection_id, paths=paths, reading_id=matched["id"] if matched else None))
+            items.append(dict(item, collection_id=collection_id, paths=paths, reading_id=matched["id"] if matched else None))
+        if screened:
+            from .screening import member_obligations
+            found, screening_counts[collection_id] = member_obligations(records, collection, items, matched_by_version)
+            obligations.extend(found)
+        inventory.extend(items)
         for historical in summary.get("historical_unresolved", []):
             for source_id in historical["source_ids"]:
                 captured_source(records, artifacts, source_id)
@@ -165,9 +175,13 @@ def _cohort_report(evaluation, collection_ids, target):
                 artifacts.read(historical["artifact"])
     counts = {"cohort_families": len({x["work_id"] for x in inventory}), "abstract_obligations": len(inventory),
               "abstracts_read": sum(x["reading_id"] is not None for x in inventory), "obligations": len(obligations)}
-    return {"ready": not obligations, "digest": digest([summaries, dependencies, readings]), "obligations": obligations,
+    if screened:
+        counts["screening"] = screening_counts
+    unread = {o.get("version_id") for o in obligations}
+    return {"ready": not obligations, "digest": digest([summaries, dependencies, readings, preparation_policy(records)]), "obligations": obligations,
             "counts": counts, "collections": summaries, "inventory": inventory, "readings": readings,
-            "next": next((i for i in inventory if i["reading_id"] is None and i["paths"]), obligations[0] if obligations else None),
+            "next": next((i for i in inventory if i["reading_id"] is None and i["paths"] and i["version_id"] in unread),
+                         obligations[0] if obligations else None),
             "limits": "Mechanical source anchoring records inspection; it does not establish comprehension."}
 
 

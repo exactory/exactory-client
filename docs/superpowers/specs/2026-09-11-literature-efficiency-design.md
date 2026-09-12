@@ -138,7 +138,7 @@ The `batches` export includes the diagnostics so a coordinator sees an anomalous
  "usage": {"model": "string or null", "input_tokens": null, "output_tokens": null, "wall_seconds": null}}
 ```
 
-Each item is expanded to a complete abstract reading: the harness derives the inspection as the whole abstract artifact of the version with a `span` locator, then validates it with the same rules as `read`. Reading ids are `reading:<sha256 of [batch id, version_id]>`. Items with `screening` also produce a screening record (section 9). At most 100 items per batch. The batch fails as a whole when any item fails; the error `invalid_batch` lists `{index, code, message}` for every failing item. Duplicate `version_id` values within a batch fail. One event, one receipt, N reading records, and one resource charge.
+Each item is expanded to a complete abstract reading: the harness derives the inspection as the whole abstract artifact of the version with a `span` locator, then validates it with the same rules as `read`. Reading ids are `reading:<sha256 of [batch id, version_id]>`. `screening`, `audit`, and `consequential` are retained on the reading; dispositions are recorded only by `screen-batch` (section 9). Each batch also records `reading_batch/<id>` (count, members with their screening disposition at record time, consequential flag) for the saturation rule. At most 100 items per batch. The batch fails as a whole when any item fails; the error `invalid_batch` lists `{index, code, message}` for every failing item. Duplicate `version_id` values within a batch fail. One event, one receipt, N reading records, and one resource charge.
 
 Fulltext readings keep the single `read` operation.
 

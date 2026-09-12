@@ -90,7 +90,26 @@ exactory-lab state set --stage literature --status pending
 returns one notes file and one coordinator records it with `read-batch`, which
 derives the whole-abstract inspection and applies the single-reading rules to
 every item. Repeat the reading mutations with distinct actual records for all
-members before the gate. Complete abstracts reveal field coverage; consequential claims and
+members before the gate.
+
+Under `screened-v1`, screen every member first: `batches --screen` exports the
+unscreened members, a screener judges each one (promote with reasons, doctrine,
+exclude with no relevance, or pending), and `screen-batch` records the batch.
+Read every promoted, doctrine and pending member; read the audit sample of
+excluded members with an `audit` judgment; cover every month with doctrine
+representatives. After two consecutive batches of pending members with no
+consequential item, `screening-checkpoint` lets the remaining pending members
+stay inventoried and unread. `policy-report` shows the preparation set and,
+against an adjudicated reference file, its recall.
+
+```sh
+exactory-research batches --depth abstract --size 60 --destination cohort/screen --screen
+exactory-research example screen-batch > screen-001.json
+exactory-research screen-batch --file screen-001.json --expected-revision REVISION --request-id screen-batch-001
+exactory-research example screening-checkpoint > saturation.json
+exactory-research screening-checkpoint --file saturation.json --expected-revision REVISION --request-id saturation-001
+exactory-research policy-report --policy screened-v1
+``` Complete abstracts reveal field coverage; consequential claims and
 doctrine from a paper require its applicable full reading in the next stage.
 Handwritten completion flags are not reading evidence.
 

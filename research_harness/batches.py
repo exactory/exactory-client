@@ -37,21 +37,30 @@ def _entry(records, evaluation, version_id):
             "extraction": None}
 
 
-def unread_abstracts(records, evaluation, profile):
-    """Current unread abstracts: cohort members first, then Tier 3 references."""
+def unread_abstracts(records, evaluation, profile, *, screen=False):
+    """Current unread (or, with screen, unscreened) abstracts: cohort members first, then Tier 3 references."""
     versions = []
     cohort = gate_state(records, evaluation, "cohort", profile=profile)
+    wanted = {"screening_missing"} if screen else {"cohort_abstract_reading_missing", "screening_audit_reading_missing"}
+    pending = {o.get("version_id") for o in cohort.get("obligations", []) if o["code"] in wanted}
     for item in cohort.get("inventory", []):
-        if item["reading_id"] is None and item["artifact"] is not None:
+        if item["artifact"] is not None and (item["version_id"] in pending or (not screen and item["reading_id"] is None
+                                                                               and not cohort.get("counts", {}).get("screening"))):
             versions.append(item["version_id"])
     if records.get("literature_scope", {}).get(profile):
         for item in foundation_state(records, evaluation, profile)["obligations"]:
-            if item["code"] == "abstract_reading_missing" and item["version_id"] not in versions:
+            if item["code"] in wanted | ({"abstract_reading_missing"} if not screen else set()) and item.get("version_id") and item["version_id"] not in versions:
                 versions.append(item["version_id"])
     return versions
 
 
-def export_batches(store, *, depth="abstract", size=60, destination, profile=None):
+SCREEN_SHAPE = {"id": "screen-001", "screener": {"kind": "agent", "model": None},
+                "items": [{"collection_id": "COLLECTION_ID_OR_NULL", "work_id": "FAMILY_ID", "version_id": "EXACT_VERSION_ID",
+                           "disposition": "promote|doctrine|exclude|pending", "promotion_reasons": ["prior_art"],
+                           "relevance": "none|weak|strong", "reason": "Why.", "conventions": [], "context": "Citation context for a reference."}]}
+
+
+def export_batches(store, *, depth="abstract", size=60, destination, profile=None, screen=False):
     if depth != "abstract":
         raise ResearchError("invalid_input", "Batches export abstract readings")
     if type(size) is not int or not 1 <= size <= 100:
@@ -66,16 +75,28 @@ def export_batches(store, *, depth="abstract", size=60, destination, profile=Non
         raise ResearchError("migration_required", "Initialize or adopt the research contract before exporting batches")
     profile = profile or config["profile"]
     evaluation = Evaluation(records, ArtifactStore(store.root))
-    entries = [e for e in (_entry(records, evaluation, v) for v in unread_abstracts(records, evaluation, profile)) if e]
+    entries = []
+    for version in unread_abstracts(records, evaluation, profile, screen=screen):
+        entry = _entry(records, evaluation, version)
+        if entry is None:
+            continue
+        if screen:
+            work = records["work"][version]
+            entry["work_id"] = work["work_id"]
+            entry["collection_id"] = next((m["collection_id"] for m in records.get("cohort_member", {}).values()
+                                           if m["work_id"] == work["work_id"]), None)
+        entries.append(entry)
     destination.mkdir(parents=True, mode=0o700)
     files = []
     for number, start in enumerate(range(0, len(entries), size), 1):
-        name = "batch-%03d.json" % number
-        content = {"id": "batch-%03d" % number, "depth": depth, "revision": snapshot["revision"],
-                   "items": entries[start:start + size]}
+        prefix = "screen-%03d" if screen else "batch-%03d"
+        name = prefix % number + ".json"
+        content = {"id": prefix % number, "depth": depth, "revision": snapshot["revision"],
+                   "screen": screen, "items": entries[start:start + size]}
         (destination / name).write_text(json.dumps(content, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         files.append(str(destination / name))
-    (destination / "README.json").write_text(json.dumps({"notes_shape": NOTES_SHAPE,
-        "submit": "exactory-research read-batch --file NOTES.json --expected-revision REVISION --request-id ID"},
+    (destination / "README.json").write_text(json.dumps(
+        {"notes_shape": SCREEN_SHAPE if screen else NOTES_SHAPE,
+         "submit": "exactory-research " + ("screen-batch" if screen else "read-batch") + " --file NOTES.json --expected-revision REVISION --request-id ID"},
         indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return {"revision": snapshot["revision"], "entries": len(entries), "files": files, "mechanical_only": True}

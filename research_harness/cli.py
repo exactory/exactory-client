@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 import time
 
-from . import acquisition, cohort_evidence, development, graph, literature, principles, reading, resources, synthesis, visual_assets
+from . import acquisition, cohort_evidence, development, graph, literature, principles, reading, resources, screening, synthesis, visual_assets
 from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evaluation import Evaluation
@@ -44,6 +44,8 @@ OPERATIONS = {
     "checkpoint": development.checkpoint,
     "review": development.record_readiness_review,
     "budget": resources.set_budget,
+    "screen-batch": screening.record_screening_batch,
+    "screening-checkpoint": screening.record_screening_checkpoint,
 }
 
 from .execution import bind_execution, reconcile_execution, record_imported_execution
@@ -75,11 +77,12 @@ def build_parser():
         item.add_argument("--workspace", default=".")
         item.add_argument("--file", required=True, help="UTF-8 JSON input, without duplicate keys or nonfinite numbers.")
         add_identity(item)
-    for command in ("status", "next", "obligations", "batches", "gate", "export", "recover"):
+    for command in ("status", "next", "obligations", "batches", "policy-report", "gate", "export", "recover"):
         item = commands.add_parser(command, allow_abbrev=False,
             help={"status": "Read current obligations and source paths.", "next": "Read actionable current preparation obligations.",
                   "obligations": "Read one revision-bound page of the obligations that carry a code.",
                   "batches": "Write the current unread abstracts as reader batch files without changing the store.",
+                  "policy-report": "Describe the preparation set under the recorded or a hypothetical policy, without changing the store.",
                   "gate": "Validate a current gate without mutation.", "export": "Rebuild disposable projections or deliver exact reviewer bytes.",
                   "recover": "Explicitly recover a hot SQLite journal without migrating or certifying research."}[command])
         item.add_argument("--workspace", default=".")
@@ -95,6 +98,10 @@ def build_parser():
             item.add_argument("--size", type=int, default=60, help="Items per batch file, 1 to 100.")
             item.add_argument("--destination", required=True, help="New directory for batch-NNN.json files.")
             item.add_argument("--profile", choices=("research", "verification"), help="Defaults to the configured profile.")
+            item.add_argument("--screen", action="store_true", help="Export the unscreened members for screen-batch instead of unread abstracts.")
+        if command == "policy-report":
+            item.add_argument("--policy", choices=("exhaustive-v1", "screened-v1"), help="Report a hypothetical policy instead of the recorded one.")
+            item.add_argument("--reference", help="JSON file {prior_art, contradictions, methods, doctrine} of family ids for recall.")
         if command == "gate":
             item.add_argument("action", choices=GATES)
         if command == "export":
@@ -199,7 +206,10 @@ def run(args):
         return obligations_page(status_report(store), args.code, limit=args.limit, cursor=args.cursor)
     if args.command == "batches":
         from .batches import export_batches
-        return export_batches(store, depth=args.depth, size=args.size, destination=args.destination, profile=args.profile)
+        return export_batches(store, depth=args.depth, size=args.size, destination=args.destination, profile=args.profile, screen=args.screen)
+    if args.command == "policy-report":
+        reference = strict_json(Path(args.reference).read_bytes()) if args.reference else None
+        return screening.policy_report(store, policy=args.policy, reference=reference)
     if args.command == "gate":
         report = gate_report(store, args.action)
         require_ready(report, args.action)

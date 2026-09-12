@@ -43,6 +43,7 @@ from .imports import _pointer
 from .operations import fields, immutable_record, iso_date, prepared_mutation, profile_name, strings, text, timestamp
 from .providers import _json
 from . import resources
+from . import screening
 from .reading import bundle_digest, current_readings, fulltext_coverage, registry_abstract_present, required_unit_obligations
 from .search_pages import enumerate_pages, native_page
 from .source_links import captured_source, complete_original, contains, covers_text, exact_work, fulltext_capture, original_identity, read_locator, validate_link
@@ -491,6 +492,7 @@ def _foundation_state(evaluation, profile):
                                               purpose=purpose, search_id=search["id"]))
     relevant = set(requirements) | {v for s in searches.values() for v in s["found_work_ids"]}
     inventory, used_readings, bundles, availability = [], dict(cohort_state["readings"]), {}, []
+    reference_sample = screening.reference_sample(records, profile)
     for version in sorted(relevant):
         work = records.get("work", {}).get(version)
         if work is None:
@@ -543,8 +545,8 @@ def _foundation_state(evaluation, profile):
                     obligations.extend(required_unit_obligations(records, artifacts, bundle))
                 for reading in partial:
                     obligations.extend(reading["assessment"]["pending"])
-        if depth == "abstract" and abstract is None and not qualified and "cohort" not in reasons.get(version, []):
-            obligations.append(obligation("abstract_reading_missing", "Read the complete saved abstract for this exact version.", version_id=version, paths=paths))
+        if depth == "abstract" and "cohort" not in reasons.get(version, []):
+            obligations.extend(screening.reference_obligations(records, profile, version, work, abstract, qualified, reference_sample, paths))
         cutoff = scope.get("historical_cutoff") if version in historical else None
         cutoffs = [r["historical_cutoff"] for r in full_requirements.values() if r["version_id"] == version and r.get("historical_cutoff")]
         if cutoffs:

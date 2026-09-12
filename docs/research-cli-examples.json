@@ -2221,5 +2221,53 @@
     "previous": "exhaustive-v1",
     "policy": "screened-v1",
     "reason": "The user chose the screened preparation policy for this narrow study; sections and plans are reassessed."
+  },
+  "screen-batch": {
+    "id": "screen-001",
+    "screener": {
+      "kind": "agent",
+      "model": null
+    },
+    "round": 1,
+    "items": [
+      {
+        "collection_id": "COLLECTION_ID",
+        "work_id": "arxiv:2601.00001",
+        "version_id": "arxiv:2601.00001v1",
+        "disposition": "promote",
+        "promotion_reasons": [
+          "prior_art"
+        ],
+        "relevance": "strong",
+        "reason": "The abstract states the same bound under the same assumptions.",
+        "conventions": [
+          "Reports a numerical bound with its assumptions."
+        ]
+      },
+      {
+        "collection_id": null,
+        "work_id": "arxiv:2601.00002",
+        "version_id": "arxiv:2601.00002v1",
+        "disposition": "exclude",
+        "relevance": "none",
+        "reason": "The reference concerns an unrelated instrument calibration.",
+        "conventions": [],
+        "context": "Cited once in the root's introduction as background."
+      }
+    ],
+    "usage": {
+      "model": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "wall_seconds": null
+    }
+  },
+  "screening-checkpoint": {
+    "id": "saturation-001",
+    "batch_ids": [
+      "batch-007",
+      "batch-008"
+    ],
+    "reason": "Two consecutive batches of pending members added no prior art, contradiction, method or standard."
   }
 }

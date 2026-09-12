@@ -94,7 +94,7 @@ def required_unit_obligations(records, artifacts, bundle):
 def _assess(records, artifacts, value):
     evaluation = Evaluation.of(records, artifacts)
     evaluation.counters["readings_assessed"] += 1
-    fields(value, ("id", "version_id", "depth", "inspections", "notes"), ("bundle_id", "assessment"), code="invalid_reading")
+    fields(value, ("id", "version_id", "depth", "inspections", "notes"), ("bundle_id", "assessment", "batch"), code="invalid_reading")
     text(value["id"], "Reading ID", code="invalid_reading")
     exact_work(records, value["version_id"])
     if value["depth"] not in ("abstract", "fulltext", "passage"):
@@ -231,6 +231,21 @@ def _batch_item(records, evaluation, batch_id, item):
     return record
 
 
+def _batch_members(records, results, items):
+    from .screening import screenings
+    members = []
+    by_collection = {}
+    for result, item in zip(results, items):
+        work_id = records["work"][result["version_id"]]["work_id"]
+        collection_id = next((m["collection_id"] for m in records.get("cohort_member", {}).values() if m["work_id"] == work_id), None)
+        if collection_id not in by_collection:
+            by_collection[collection_id] = screenings(records, collection_id)
+        screening = by_collection[collection_id].get(work_id)
+        members.append({"version_id": result["version_id"], "work_id": work_id,
+                        "disposition": screening["disposition"] if screening else None})
+    return members
+
+
 def record_reading_batch(store, payload, *, expected_revision, request_id):
     """Record up to BATCH_LIMIT abstract readings in one event, all or none."""
     def prepare(records, value):
@@ -262,6 +277,10 @@ def record_reading_batch(store, payload, *, expected_revision, request_id):
                                                           "model_output_tokens": usage["output_tokens"], "wall_seconds": usage["wall_seconds"]})
         if charge is not None:
             changes.append(charge)
+        batch = {"id": value["id"], "depth": "abstract", "count": len(results), "revision": expected_revision + 1,
+                 "consequential": any(item.get("consequential") is True for item in items),
+                 "members": _batch_members(records, results, items)}
+        changes.append(immutable_record(records, "reading_batch", value["id"], batch))
         return changes, {"id": value["id"], "count": len(results), "items": results, "usage": usage}
 
     return prepared_mutation(store, "literature.read_batch", payload, prepare,
