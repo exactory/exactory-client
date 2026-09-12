@@ -49,7 +49,7 @@ Use `artifact` to pin authored program files, original review JSON, assessor pro
 
 ## Preparation order
 
-1. Initialize the author workspace with `exactory-lab init --slug STUDY`, or initialize only the common store with `init` and `{ "profile": "research", "target": null }`. A draft initialized by `exactory-draft init` also receives a pending current contract. Use a separate verification workspace for an external paper.
+1. Initialize the author workspace with `exactory-lab init --slug STUDY [--preparation-policy exhaustive-v1|screened-v1]`, or initialize only the common store with `init` and `{ "profile": "research", "target": null }`. A draft initialized by `exactory-draft init` also receives a pending current contract. Use a separate verification workspace for an external paper.
 2. Enter `cohort`, collect its frozen population, and record actual complete abstract readings. `cohort -> literature` checks enumeration and the selected cohort's abstract reading coverage. It does not require literature work that is still being prepared.
 3. In `literature`, acquire one to five exact root paper families, expand captured citation references, inventory source bundles, read the required units, and record all five search purposes: `direct`, `originals`, `theory`, `adjacent`, and `recent`. Whole-cohort abstract coverage remains required. An incomplete bibliography or unread critical source remains pending.
 4. Set the complete objective with `target`, then record `standards`, `rationale`, `innovation`, and `context`. These commands are available while preparing literature. `literature -> ideate` requires the applicable complete synthesis; it does not require entering ideate before setting the objective. Once fixed, the complete objective cannot be replaced with a special case.
@@ -84,7 +84,8 @@ The example for each operation contains all its required keys and shows the comp
 
 | Operation | Required payload fields | Optional fields and variants |
 | --- | --- | --- |
-| `init` | `profile`, `target` | Profiles are `research` and `verification`. Acquire exact metadata before initializing a verification target. |
+| `init` | `profile`, `target` | `preparation_policy`: `exhaustive-v1` (default; every cohort member and Tier 3 reference owes an abstract reading) or `screened-v1` (a recorded screen selects the preparation set; see `screen-batch`). Profiles are `research` and `verification`. Acquire exact metadata before initializing a verification target. A configuration recorded before this field existed is `exhaustive-v1`. |
+| `policy` | `previous`, `policy`, `reason` | Changes the preparation policy; `previous` must name the recorded policy (`policy_conflict` otherwise). Synthesis sections and plans bind the configuration, so they need current reassessment afterwards. |
 | `adopt` | `id`, `profile`, `target`, `files: string[]`, `reason` | Archive selected legacy bytes; no implicit completed readings or new execution credit. |
 | `target` | `target`, `reason` | Verification repinning is explicit and requires matching subsequent roots. |
 | `constitution` | `previous_sha256`, `reason` | Adopts the current distributed policy; dependent decisions need explicit reassessment. |

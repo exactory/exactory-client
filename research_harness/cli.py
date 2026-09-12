@@ -25,6 +25,7 @@ OPERATIONS = {
     "artifact": pin_artifact,
     "target": principles.set_target,
     "constitution": principles.revalidate_constitution,
+    "policy": principles.change_policy,
     "roots": graph.set_roots,
     "bundle": literature.import_bundle,
     "read": reading.record_reading,

@@ -1,7 +1,8 @@
 {
   "init": {
     "profile": "research",
-    "target": null
+    "target": null,
+    "preparation_policy": "exhaustive-v1"
   },
   "adopt": {
     "id": "legacy-import-1",
@@ -2215,5 +2216,10 @@
       "wall_seconds": null
     },
     "reason": "The user approved this preparation budget before the cohort readings."
+  },
+  "policy": {
+    "previous": "exhaustive-v1",
+    "policy": "screened-v1",
+    "reason": "The user chose the screened preparation policy for this narrow study; sections and plans are reassessed."
   }
 }

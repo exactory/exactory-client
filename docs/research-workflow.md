@@ -22,7 +22,13 @@ establish the complete objective before ideation.
 
 ```sh
 exactory-lab init --dir study --slug study --expected-revision 0 --request-id initialize-study
+exactory-lab init --dir screened-study --slug screened-study --preparation-policy screened-v1 --expected-revision 0 --request-id initialize-screened-study
 ```
+
+The preparation policy is recorded at initialization: `exhaustive-v1` (default)
+reads every cohort member and every Tier 3 reference; `screened-v1` selects the
+preparation set through recorded screenings, audits, and doctrine coverage as
+the cohort section describes. Change it later only with `policy` and a reason.
 
 Change into `study`, read the user's context and constraints, and inspect the
 authoritative state. Read these first when resuming any managed stage:

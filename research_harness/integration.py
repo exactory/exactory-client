@@ -48,9 +48,11 @@ def pin_artifact(store, payload, *, expected_revision, request_id):
                              expected_revision=expected_revision, request_id=request_id)
 
 
-def initialization_payload(store, kind, state, request_id):
+def initialization_payload(store, kind, state, request_id, *, preparation_policy=None):
     """Reuse CLI-generated times while preserving every current user argument."""
     payload = {"kind": kind, "state": copy.deepcopy(state)}
+    if preparation_policy is not None:
+        payload["preparation_policy"] = preparation_policy
     original = store.committed_request(request_id)
     if original is None:
         if (store.root / (".exactory/" + kind + ".json")).exists():
@@ -68,7 +70,7 @@ def initialize_workspace(store, payload, *, expected_revision, request_id):
     """{kind: study|draft, state: initial marker}; attach the current contract."""
     artifacts = ArtifactStore(store.root)
     def prepare(records, value):
-        fields(value, ("kind", "state"))
+        fields(value, ("kind", "state"), ("preparation_policy",))
         kind = value["kind"]
         if kind not in ("study", "draft") or not isinstance(value["state"], dict):
             raise ResearchError("invalid_workspace", "Expected study or draft initial state")
@@ -77,7 +79,10 @@ def initialize_workspace(store, payload, *, expected_revision, request_id):
         changes = []
         config = records.get("configuration", {}).get("research")
         if config is None:
-            changes, config = prepare_initialization(records, artifacts, {"profile": "research", "target": None})
+            initial = {"profile": "research", "target": None}
+            if value.get("preparation_policy") is not None:
+                initial["preparation_policy"] = value["preparation_policy"]
+            changes, config = prepare_initialization(records, artifacts, initial)
         if config["profile"] != "research":
             raise ResearchError("profile_mismatch", "Author layout cannot replace an independent verification contract")
         state = dict(value["state"], version=2, research={"store": ".exactory/research.sqlite3", "profile": "research"})

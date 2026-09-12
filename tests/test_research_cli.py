@@ -86,6 +86,12 @@ class ResearchCliTests(unittest.TestCase):
         self.assertIn("stale_cursor", stale.stderr)
         self.assertEqual(Store(self.root).snapshot(), before)
 
+    def test_lab_init_records_the_chosen_preparation_policy(self):
+        result = self.run_cli("exactory-lab", "init", "--slug", "screened", "--preparation-policy", "screened-v1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        config = Store(self.root).snapshot()["records"]["configuration"]["research"]
+        self.assertEqual(config["preparation_policy"], {"id": "screened-v1"})
+
     def test_fresh_verifier_can_acquire_before_exact_target_initialization(self):
         from research_fixtures import atom, entry
         pending = self.research_mutation("acquire", {"identifier": "arxiv:2601.00001v1", "max_requests": 0}, 0, "acquire-first")

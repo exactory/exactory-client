@@ -1,9 +1,12 @@
 """Authoritative study configuration and explicit constitution adoption.
 
-configuration/research contains {profile, target, constitution}. Policy bytes
-are archived in constitution/{sha256}; research_objective/{id} fixes the full
-objective independently of branches. A policy adoption does not relabel old
-decisions: their bound dependencies require new current assessments.
+configuration/research contains {profile, target, constitution,
+preparation_policy}. Policy bytes are archived in constitution/{sha256};
+research_objective/{id} fixes the full objective independently of branches.
+The preparation policy (exhaustive-v1 by default, or screened-v1) decides which
+population members owe structured reading; a configuration without the field is
+exhaustive-v1. A policy adoption or change does not relabel old decisions: their
+bound dependencies require new current assessments.
 """
 
 import hashlib
@@ -20,6 +23,20 @@ from .source_links import captured_source, exact_work
 
 
 CONSTITUTION_PATH = Path(__file__).resolve().parent.parent / "RESEARCH_CONSTITUTION.md"
+POLICIES = ("exhaustive-v1", "screened-v1")
+DEFAULT_POLICY = "exhaustive-v1"
+
+
+def preparation_policy(records):
+    """The study's recorded preparation policy; studies from earlier releases are exhaustive."""
+    config = records.get("configuration", {}).get("research") or {}
+    return (config.get("preparation_policy") or {}).get("id", DEFAULT_POLICY)
+
+
+def _policy(value):
+    if value not in POLICIES:
+        raise ResearchError("invalid_input", "Preparation policy must be one of: " + ", ".join(POLICIES))
+    return {"id": value}
 
 
 def _constitution():
@@ -67,13 +84,14 @@ def _archive_policy(records, artifacts, contract, data):
 
 def prepare_initialization(records, artifacts, value):
     """Prepare configuration for an atomic workspace initialization or adoption."""
-    fields(value, ("profile", "target"))
+    fields(value, ("profile", "target"), ("preparation_policy",))
     if records.get("configuration", {}).get("research") is not None:
         raise ResearchError("configuration_exists", "Use explicit target or constitution operations for the existing study")
     profile_name(value["profile"])
     _validate_target(records, artifacts, value["profile"], value["target"])
     contract, data = _constitution()
-    config = dict(value, constitution=contract)
+    config = {"profile": value["profile"], "target": value["target"], "constitution": contract,
+              "preparation_policy": _policy(value.get("preparation_policy", DEFAULT_POLICY))}
     changes = [_archive_policy(records, artifacts, contract, data), ("configuration", "research", config)]
     if value["profile"] == "research" and value["target"] is not None:
         changes.append(immutable_record(records, "research_objective", value["target"]["id"], value["target"]))
@@ -146,6 +164,22 @@ the current contract. Re-recording an assessment preserves its predecessor.
                              expected_revision=expected_revision, request_id=request_id)
 
 
+def change_policy(store, payload, *, expected_revision, request_id):
+    """Change the preparation policy with {previous, policy, reason}; dependent assessments become stale."""
+    def prepare(records, value):
+        fields(value, ("previous", "policy", "reason"))
+        text(value["reason"], "Policy change reason")
+        config = _configuration(records)
+        if value["previous"] != preparation_policy(records):
+            raise ResearchError("policy_conflict", "Name the policy currently recorded for this study",
+                                {"current": preparation_policy(records)})
+        updated = dict(config, preparation_policy=_policy(value["policy"]))
+        return [("configuration", "research", updated)], dict(updated, decisions_revalidated=False)
+
+    return prepared_mutation(store, "research.policy", payload, prepare,
+                             expected_revision=expected_revision, request_id=request_id)
+
+
 def configuration_state(records, artifacts, profile):
     """Snapshot-level configuration check shared by downstream managed gates."""
     profile_name(profile)
@@ -186,6 +220,7 @@ def _configuration_state(evaluation, profile):
                 obligations.append(obligation("target_mismatch", "Set the literature roots and target to the configured exact source pin."))
     return {"ready": not obligations, "digest": digest({"configuration": config, "current_constitution": contract}),
             "obligations": obligations, "counts": {"obligations": len(obligations)},
+            "preparation_policy": preparation_policy(records),
             "profile": profile, "target": config["target"] if config and config["profile"] == profile else None,
             "constitution": contract, "configuration": config if config and config["profile"] == profile else None,
             "next": obligations[0] if obligations else None,

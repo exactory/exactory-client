@@ -21,7 +21,7 @@ class ProvenanceTests(unittest.TestCase):
         self.assertEqual(value["plugin_version"], json.loads((PLUGIN / ".claude-plugin/plugin.json").read_text())["version"])
         self.assertEqual(value["schema_version"], 1)
         self.assertEqual(len(value["package_digest"]), 64)
-        self.assertEqual(value["constitution"]["version"], "1")
+        self.assertEqual(value["constitution"]["version"], "2")
         self.assertEqual(len(value["constitution"]["sha256"]), 64)
         self.assertTrue(value["executable"].endswith("bin/exactory-research"))
         self.assertEqual(value, runtime_provenance())
