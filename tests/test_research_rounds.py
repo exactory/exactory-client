@@ -250,3 +250,67 @@ class RoundReviewTests(RoundsCase):
         again = self.mutate(rounds.record_round, self.decision_payload(revised, decision="stop"))["result"]
         approved = self.mutate(rounds.record_round_review, self.review_payload(again, assessor="second-assessor"))["result"]
         self.assertEqual((approved["round_id"], approved["verdict"]), (again["id"], "approved"))
+
+
+class RoundAdmissionTests(RoundsCase):
+    def test_admission_needs_an_approved_continue_decision_and_records_the_opening_state(self):
+        bundle = self.pin()
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        early = {"id": "round-2", "round_id": decision["id"], "review_id": "absent", "reason": "Too early."}
+        self.assert_error("unknown_round_review", lambda: self.mutate(rounds.admit_round, early))
+        review = self.mutate(rounds.record_round_review, self.review_payload(decision, verdict="not_approved"))["result"]
+        pending = dict(early, review_id=review["id"])
+        self.assert_error("round_review_required", lambda: self.mutate(rounds.admit_round, pending))
+        approved = self.mutate(rounds.record_round_review, self.review_payload(decision, assessor="second-assessor"))["result"]
+        admission = self.mutate(rounds.admit_round, dict(early, review_id=approved["id"]))["result"]
+        self.assertEqual((admission["number"], admission["objective"]), (2, self.objective))
+        opening = admission["opening"]
+        self.assertEqual((opening["bundle_id"], opening["claim_ids"], opening["cycle_ids"]), (bundle["id"], ["bound"], ["cycle-1"]))
+        self.assertEqual(set(opening["search_selection"]), set(rounds.OPENING_PURPOSES))
+        self.assertEqual(opening["search_selection"]["downstream"], None)
+        self.assertEqual(opening["search_selection"]["direct"], "direct")
+        records = self.store.snapshot()["records"]
+        self.assertEqual(rounds.current_number(records), 2)
+        self.assertEqual(rounds.active_round(records)["id"], "round-2")
+        again = {"id": "round-2b", "round_id": decision["id"], "review_id": approved["id"], "reason": "Twice."}
+        self.assert_error("round_active", lambda: self.mutate(rounds.admit_round, again))
+
+    def test_admission_widens_the_objective_and_charges_the_development_budget(self):
+        from research_harness.resources import set_budget
+        limits = {unit: None for unit in ("network_requests", "source_bytes", "readings", "screenings",
+                                          "model_input_tokens", "model_output_tokens", "wall_seconds", "rounds")}
+        self.mutate(set_budget, {"profile": "research", "purpose": "development", "limits": dict(limits, rounds=1),
+                                 "reason": "One development round at most."})
+        wider = {"kind": "objective", "id": "wider-square-bound",
+                 "statement": "For every integer n in [0, 5], n squared is at most 25, with equality at n = 5."}
+        lineage = {"previous_id": self.objective["id"], "containment": "The range [0, 3] is contained in [0, 5]."}
+        decision, review, admission = self.open_round(objective=wider, lineage=lineage)
+        records = self.store.snapshot()["records"]
+        self.assertEqual(records["configuration"]["research"]["target"], wider)
+        self.assertEqual(records["objective_lineage"][wider["id"]]["round_id"], admission["id"])
+        self.assertEqual(records["resource_account"]["research:development"]["charged"]["rounds"], 1)
+        self.assertEqual(records["research_objective"][self.objective["id"]], self.objective)
+
+    def test_an_exhausted_development_budget_refuses_the_decision(self):
+        from research_harness.resources import set_budget
+        limits = {unit: None for unit in ("network_requests", "source_bytes", "readings", "screenings",
+                                          "model_input_tokens", "model_output_tokens", "wall_seconds", "rounds")}
+        self.mutate(set_budget, {"profile": "research", "purpose": "development", "limits": dict(limits, rounds=0),
+                                 "reason": "No development round."})
+        bundle = self.pin()
+        self.assert_error("resource_budget_exhausted", lambda: self.mutate(rounds.record_round, self.decision_payload(bundle)))
+
+    def test_a_field_change_stays_in_the_corpus_and_needs_literature_room(self):
+        bundle = self.pin()
+        moved = self.decision_payload(bundle, direction="horizontal", statement="Transfer the bound to a neighbouring category.")
+        moved["candidates"][0]["direction"] = "horizontal"
+        moved["next"]["goal"]["field_change"] = {"corpus": "pubmed", "primaryCategory": "q-bio.QM"}
+        decision = self.mutate(rounds.record_round, moved)["result"]
+        review = self.mutate(rounds.record_round_review, self.review_payload(decision))["result"]
+        payload = {"id": "round-2", "round_id": decision["id"], "review_id": review["id"], "reason": "Move fields."}
+        self.assert_error("round_field_change_refused", lambda: self.mutate(rounds.admit_round, payload))
+        bare = self.decision_payload(bundle, direction="horizontal", statement="Transfer the bound to a neighbouring category.")
+        bare["candidates"][0]["direction"] = "horizontal"
+        bare["next"]["goal"]["field_change"] = {"corpus": "arxiv", "primaryCategory": "math.CO"}
+        bare["next"]["resource_limits"] = {"experiment": {"wall_seconds": 10}}
+        self.assert_error("round_field_change_refused", lambda: self.mutate(rounds.record_round, bare))
