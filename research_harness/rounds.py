@@ -360,7 +360,7 @@ def _opening(records, evaluation, bundle):
     return {"bundle_id": bundle["id"], "bundle_digest": bundle["digest"], "claim_ids": sorted(c["id"] for c in claims),
             "search_selection": {p: selection.get("research:" + p, {}).get("search_id") for p in OPENING_PURPOSES},
             "requirement_ids": sorted(records.get("fulltext_requirement", {})),
-            "cycle_ids": sorted(records.get("cycle_plan", {})), "reading_count": len(records.get("reading", {})),
+            "cycle_ids": sorted(records.get("cycle", {})), "reading_count": len(records.get("reading", {})),
             "accounts": resources.account_report(records, "research")}
 
 

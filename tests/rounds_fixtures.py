@@ -162,11 +162,22 @@ class RoundsCase(DevelopmentCase):
                     for kind in kinds],
                 "limitations": ["This authored receipt does not establish comprehension or impartiality."]}
 
+    def field_change_payload(self, bundle, corpus, category):
+        """A horizontal decision whose goal adds `category` of `corpus` to the study's field."""
+        payload = self.decision_payload(bundle, direction="horizontal", statement="Transfer the bound to a neighbouring category.")
+        payload["candidates"][0]["direction"] = "horizontal"
+        payload["next"]["goal"]["field_change"] = {"corpus": corpus, "primaryCategory": category}
+        return payload
+
+    def approve(self, payload):
+        """Record the decision `payload` and approve it; returns (decision, review)."""
+        decision = self.mutate(rounds.record_round, payload)["result"]
+        review = self.mutate(rounds.record_round_review, self.review_payload(decision))["result"]
+        return decision, review
+
     def open_round(self, bundle=None, closes=1, **decision_kwargs):
         """Decide continue, approve it and admit the next round; returns (decision, review, admission)."""
-        bundle = bundle or self.pin()
-        decision = self.mutate(rounds.record_round, self.decision_payload(bundle, closes, **decision_kwargs))["result"]
-        review = self.mutate(rounds.record_round_review, self.review_payload(decision))["result"]
+        decision, review = self.approve(self.decision_payload(bundle or self.pin(), closes, **decision_kwargs))
         admission = self.mutate(rounds.admit_round, {"id": "round-" + str(decision["payload"]["next"]["number"]),
                                                      "round_id": decision["id"], "review_id": review["id"],
                                                      "reason": "The approved goal opens the round."})["result"]
