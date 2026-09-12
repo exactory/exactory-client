@@ -2213,7 +2213,8 @@
       "screenings": null,
       "model_input_tokens": null,
       "model_output_tokens": null,
-      "wall_seconds": null
+      "wall_seconds": null,
+      "rounds": null
     },
     "reason": "The user approved this preparation budget before the cohort readings."
   },

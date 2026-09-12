@@ -14,7 +14,7 @@ def item(version_id):
 
 def limits(**values):
     base = {"network_requests": None, "source_bytes": None, "readings": None, "screenings": None,
-            "model_input_tokens": None, "model_output_tokens": None, "wall_seconds": None}
+            "model_input_tokens": None, "model_output_tokens": None, "wall_seconds": None, "rounds": None}
     base.update(values)
     return base
 
@@ -128,3 +128,23 @@ class ResourceTests(LiteratureCase):
         report = status_report(self.store)
         self.assertEqual(report["resources"]["literature"]["readings"], {"limit": 1, "charged": 1, "reserved": 0, "unknown": 0})
         self.assertIn("resource_budget_exhausted", {o["code"] for o in report["obligations"]})
+
+    def test_development_rounds_are_a_budgeted_unit(self):
+        from research_harness.resources import PURPOSES, UNITS, charge, obligations, set_budget
+        self.assertIn("rounds", UNITS)
+        self.assertIn("development", PURPOSES)
+        self.mutate(set_budget, {"profile": "research", "purpose": "development", "limits": limits(rounds=1),
+                                 "reason": "The user wants at most one development round."})
+        records = self.store.snapshot()["records"]
+        kind, key, account = charge(records, "development", {"rounds": 1})
+        self.assertEqual((kind, key, account["charged"]["rounds"]), ("resource_account", "research:development", 1))
+        charged = dict(records, resource_account={key: account})
+        self.assert_error("resource_budget_exhausted", lambda: charge(charged, "development", {"rounds": 1}))
+        self.assertEqual([o["code"] for o in obligations(charged, "research")], ["resource_budget_exhausted"])
+
+    def test_a_budget_payload_names_the_rounds_unit(self):
+        from research_harness.resources import set_budget
+        incomplete = limits()
+        del incomplete["rounds"]
+        self.assert_error("invalid_input", lambda: self.mutate(set_budget, {"profile": "research", "purpose": "literature",
+                                                                             "limits": incomplete, "reason": "Incomplete."}))

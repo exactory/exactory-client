@@ -8,7 +8,9 @@ allowance of every acquisition operation that is still admitted, so an
 interrupted or superseded operation holds nothing once it is no longer
 admitted. Admission refuses work that has no room for one request; batches
 charge their counts and any reported model usage. Usage already spent is
-always recorded; exhaustion is an obligation, never readiness.
+always recorded; exhaustion is an obligation, never readiness. The
+`development` purpose counts admitted development rounds in the `rounds`
+unit; `round-admit` charges one round.
 """
 
 from .errors import ResearchError
@@ -16,8 +18,8 @@ from .graph import obligation
 from .operations import fields, prepared_mutation, profile_name, text
 
 
-UNITS = ("network_requests", "source_bytes", "readings", "screenings", "model_input_tokens", "model_output_tokens", "wall_seconds")
-PURPOSES = ("literature", "screening", "experiment")
+UNITS = ("network_requests", "source_bytes", "readings", "screenings", "model_input_tokens", "model_output_tokens", "wall_seconds", "rounds")
+PURPOSES = ("literature", "screening", "experiment", "development")
 _ACCOUNT = "resource_account"
 _BUDGET = "resource_budget"
 
