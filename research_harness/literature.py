@@ -583,7 +583,8 @@ def _foundation_state(evaluation, profile):
                                           "extraction_status": c["extraction_status"], "url": c["url"],
                                           "next_eligible_at": records.get("source", {}).get(c["source_id"], {}).get("next_eligible_at")}
                                          for c in work["fulltexts"]]})
-    obligations.extend(resources.obligations(records, profile))
+    # An exhausted development budget is the round gate's obligation, never a foundation or readiness one.
+    obligations.extend(o for o in resources.obligations(records, profile) if o["purpose"] != "development")
     # Deduplicate repeated unit obligations while retaining each occurrence and
     # each independent cohort/version obligation.
     obligations = sorted({digest(o): o for o in obligations}.values(), key=lambda o: (o["code"], o.get("version_id", ""), digest(o)))

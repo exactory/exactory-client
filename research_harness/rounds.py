@@ -14,7 +14,8 @@ from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
 from .operations import fields, immutable_record, prepared_mutation, strings, text
-from . import development, principles, publication, resources
+from .workspace import strict_json
+from . import development, literature, principles, publication, resources
 
 
 DECISIONS = ("continue", "stop")
@@ -25,6 +26,7 @@ CHECKS_CONTINUE = ("impact", "demand", "novelty_risk", "feasibility", "distinctn
 CHECKS_STOP = ("stop", "demand")
 VERDICTS = ("approved", "not_approved", "unresolved")
 CHECK_STATUSES = ("passed", "failed", "unresolved")
+OPENING_PURPOSES = literature.SEARCH_PURPOSES + literature.DEVELOPMENT_PURPOSES
 _ERROR = "invalid_round"
 
 
@@ -349,3 +351,67 @@ def record_round_review(store, payload, *, expected_revision, request_id):
         return [immutable_record(records, "round_review", value["id"], record)], record
 
     return prepared_mutation(store, "round.review", payload, prepare, expected_revision=expected_revision, request_id=request_id)
+
+
+def _opening(records, evaluation, bundle):
+    """What the round starts from; freshness inside the round is judged against it."""
+    claims = strict_json(evaluation.read(bundle["files"]["claims"]["artifact"]))
+    selection = records.get("search_selection", {})
+    return {"bundle_id": bundle["id"], "bundle_digest": bundle["digest"], "claim_ids": sorted(c["id"] for c in claims),
+            "search_selection": {p: selection.get("research:" + p, {}).get("search_id") for p in OPENING_PURPOSES},
+            "requirement_ids": sorted(records.get("fulltext_requirement", {})),
+            "cycle_ids": sorted(records.get("cycle_plan", {})), "reading_count": len(records.get("reading", {})),
+            "accounts": resources.account_report(records, "research")}
+
+
+def _field_change(records, change):
+    """A field change adds a category inside the study's corpus; a new corpus is a migration, not a round."""
+    definitions = [c["definition"] for c in records.get("collection", {}).values()]
+    if change["corpus"] not in {d["corpus"] for d in definitions}:
+        raise ResearchError("round_field_change_refused", "A field change stays in the study's corpus; a new corpus is not a development round")
+    if change["primaryCategory"] in {d["primaryCategory"] for d in definitions}:
+        raise ResearchError("round_field_change_refused", "The category is already part of the study's cohort")
+
+
+def admit_round(store, payload, *, expected_revision, request_id):
+    """Open the approved next round: charge the development budget, widen the objective, record the opening state."""
+    artifacts = ArtifactStore(store.root)
+
+    def prepare(records, value):
+        context, bundle = _prepare_context(records, artifacts)
+        _fields(value, ("id", "round_id", "review_id", "reason"))
+        _text(value["id"], "Round admission ID")
+        _text(value["reason"], "Admission reason")
+        decision = records.get("round_decision", {}).get(value["round_id"])
+        if decision is None:
+            raise ResearchError("unknown_round_decision", "Admit a recorded round decision", {"id": value["round_id"]})
+        review = records.get("round_review", {}).get(value["review_id"])
+        if review is None:
+            raise ResearchError("unknown_round_review", "Admit a reviewed round decision", {"id": value["review_id"]})
+        if review["round_id"] != decision["id"] or review["verdict"] != "approved":
+            raise ResearchError("round_review_required", "An approved independent review of this decision is required")
+        if decision["decision"] != "continue":
+            raise ResearchError(_ERROR, "Admit a continue decision")
+        if decision["bundle_digest"] != bundle["digest"]:
+            raise ResearchError("round_review_stale", "The decision's bundle is no longer current")
+        if active_round(records) is not None:
+            raise ResearchError("round_active", "Assess the current round before opening another")
+        number = current_number(records)
+        if decision["closes"] != number:
+            raise ResearchError("round_number_mismatch", "Admit a decision that closes the current round", {"current": number})
+        proposal = decision["payload"]["next"]
+        if proposal["goal"]["field_change"] is not None:
+            _field_change(records, proposal["goal"]["field_change"])
+        changes = [resources.charge(records, "development", {"rounds": 1})]
+        if proposal["objective_lineage"] is not None:
+            changes.extend(principles.widen_objective(records, proposal["objective"], proposal["objective_lineage"], value["id"]))
+        record = {"id": value["id"], "number": proposal["number"], "decision_id": decision["id"], "review_id": review["id"],
+                  "goal": proposal["goal"], "objective": proposal["objective"], "objective_lineage": proposal["objective_lineage"],
+                  "resource_limits": proposal["resource_limits"], "reopening": proposal["reopening"],
+                  "opening": _opening(records, context.artifacts, bundle), "reason": value["reason"],
+                  "admitted_revision": expected_revision + 1, "request_id": request_id}
+        record["digest"] = digest(record)
+        changes.append(immutable_record(records, "round_admission", value["id"], record))
+        return changes, record
+
+    return prepared_mutation(store, "round.admit", payload, prepare, expected_revision=expected_revision, request_id=request_id)
