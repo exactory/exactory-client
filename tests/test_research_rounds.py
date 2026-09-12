@@ -1,6 +1,6 @@
 """Development rounds: decisions, reviews, admissions, assessments and the round gate."""
 
-from research_harness import predictions, resources, rounds
+from research_harness import predictions, publication, resources, rounds
 from rounds_fixtures import RoundsCase
 
 
@@ -477,6 +477,20 @@ class PredictionTests(RoundsCase):
         self.assertEqual(summary["reviews"]["count"], 5)
         self.assertEqual(summary["reviews"]["overall"], {"median": 6, "spread": [6, 6]})
         self.assertEqual(summary["reviews"]["contribution"], {"median": 3, "spread": [3, 3]})
+        # Two more reviews by one assessor on this bundle, as records written before the duplicate
+        # rule existed: the assessor's latest stands, as the publication gate selects it.
+        saved = self.store.snapshot()["records"]["manuscript_review"]["measure-one-1"]
+        self.write_record("manuscript_review", dict(saved, id="measure-one-1-later", reviewed_revision=self.store.revision + 1,
+                                                    assessor=dict(saved["assessor"], id="Measure-One-1"), core=dict(saved["core"], overall=10)))
+        summary = predictions.measurement_summary(self.store.snapshot()["records"], bundle)
+        self.assertEqual(summary["reviews"]["count"], 5)
+        self.assertEqual(summary["reviews"]["overall"], {"median": 6, "spread": [6, 10]})
+        self.write_record("manuscript_review", dict(saved, id="measure-one-1-superseded", reviewed_revision=0, core=dict(saved["core"], overall=1)))
+        summary = predictions.measurement_summary(self.store.snapshot()["records"], bundle)
+        self.assertEqual(summary["reviews"]["count"], 5)
+        self.assertEqual(summary["reviews"]["overall"], {"median": 6, "spread": [6, 10]})
+        self.assertEqual({r["id"] for r in publication.publication_report(self.store)["reviews"] if r["id"].startswith("measure-one-1")},
+                         {"measure-one-1-later"})
         empty = predictions.measurement_summary(self.store.snapshot()["records"], {"digest": "0" * 64})
         self.assertEqual(empty["predictions"], {"count": 0, "percentile": {"median": None, "spread": None}})
         self.assertEqual(empty["reviews"]["count"], 0)

@@ -104,6 +104,22 @@ def _assessor_key(assessor_id):
     return " ".join(assessor_id.casefold().split())
 
 
+def latest_reviews(records, bundle_digest):
+    """The latest manuscript review per assessor on the bundle, keyed by assessor.
+
+    Recording refuses a second review per assessor per exact bundle; for reviews recorded
+    before that rule the assessor's latest stands. The gate and the measurement summary
+    both read this selection.
+    """
+    latest = {}
+    for saved in records.get("manuscript_review", {}).values():
+        if saved["bundle_digest"] == bundle_digest:
+            key = _assessor_key(saved["assessor"]["id"])
+            if key not in latest or saved["reviewed_revision"] > latest[key]["reviewed_revision"]:
+                latest[key] = saved
+    return latest
+
+
 def validate_assessor(artifacts, assessor, authors):
     """An identified human or agent assessor with pinned provenance who is not an author."""
     fields(assessor, ("id", "kind", "provenance", "relationship", "independence_basis"))
@@ -159,17 +175,12 @@ def publication_state(records, artifacts, action="publication"):
     bundle, reviews, obligations = None, [], []
     try:
         bundle = _bundle(records, artifacts)
-        latest = {}
+        cores = {}
         for saved in records.get("manuscript_review", {}).values():
             if saved["bundle_digest"] == bundle["digest"]:
-                core = _review(records, artifacts, {k: saved[k] for k in ("id", "bundle_digest", "assessor", "review", "blind")}, bundle)
-                key = _assessor_key(saved["assessor"]["id"])
-                # Recording refuses a second review per assessor per exact bundle; for reviews
-                # recorded before that rule the assessor's latest stands.
-                if key not in latest or saved["reviewed_revision"] > latest[key][0]["reviewed_revision"]:
-                    latest[key] = (saved, core)
-        reviews = [item[0] for item in latest.values()]
-        if action != "manuscript" and (len(latest) < 2 or any(core["decision"] != "accept" for _, core in latest.values())):
+                cores[saved["id"]] = _review(records, artifacts, {k: saved[k] for k in ("id", "bundle_digest", "assessor", "review", "blind")}, bundle)
+        reviews = list(latest_reviews(records, bundle["digest"]).values())
+        if action != "manuscript" and (len(reviews) < 2 or any(cores[saved["id"]]["decision"] != "accept" for saved in reviews)):
             obligations.append(obligation("manuscript_reviews_required", "Obtain two independent accepting reviews of this exact manuscript and resolve current rejections."))
         if action == "deposited":
             if not any(r.get("bundle_digest") == bundle["digest"] and r.get("doi") and r.get("environment") == "production"

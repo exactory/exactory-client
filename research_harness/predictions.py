@@ -13,7 +13,7 @@ from .evaluation import Evaluation
 from .evidence import digest
 from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .development import cycle_authors
-from .publication import _assessor_key, _bundle, validate_assessor
+from .publication import _assessor_key, _bundle, latest_reviews, validate_assessor
 
 _ERROR = "invalid_prediction"
 _COHORT_ERROR = "prediction_cohort_mismatch"
@@ -81,13 +81,7 @@ def _measure(values):
 
 def measurement_summary(records, bundle):
     """Latest review per assessor and every prediction on the bundle, as medians and spreads."""
-    latest = {}
-    for saved in records.get("manuscript_review", {}).values():
-        if saved["bundle_digest"] == bundle["digest"]:
-            key = _assessor_key(saved["assessor"]["id"])
-            if key not in latest or saved["reviewed_revision"] > latest[key]["reviewed_revision"]:
-                latest[key] = saved
-    cores = [saved["core"] for saved in latest.values()]
+    cores = [saved["core"] for saved in latest_reviews(records, bundle["digest"]).values()]
     percentiles = [saved["prediction"]["percentile"] for saved in records.get("manuscript_prediction", {}).values()
                    if saved["bundle_digest"] == bundle["digest"]]
     reviews = {"count": len(cores)}
