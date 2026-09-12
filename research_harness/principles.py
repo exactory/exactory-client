@@ -2,7 +2,9 @@
 
 configuration/research contains {profile, target, constitution,
 preparation_policy}. Policy bytes are archived in constitution/{sha256};
-research_objective/{id} fixes the full objective independently of branches.
+research_objective/{id} fixes the full objective independently of branches;
+objective_lineage/{id} records a widening admitted by a round, with the
+predecessor objective id, so the earlier objective stays retained.
 The preparation policy (exhaustive-v1 by default, or screened-v1) decides which
 population members owe structured reading; a configuration without the field is
 exhaustive-v1. A policy adoption or change does not relabel old decisions: their
@@ -139,6 +141,29 @@ pending until set_roots selects the same target. It preserves earlier events.
 
     return prepared_mutation(store, "research.target", payload, prepare,
                              expected_revision=expected_revision, request_id=request_id)
+
+
+def widen_objective(records, artifacts, target, lineage, round_id):
+    """Changes that widen the research objective through an admitted round; the old objective stays retained.
+
+    `target` is the wider objective, `lineage` is {previous_id, containment}
+    naming the current objective and why the wider one contains it. The
+    configuration target becomes `target`; research_objective/{target id} and
+    objective_lineage/{target id} record the widening.
+    """
+    config = _configuration(records)
+    current = config["target"]
+    fields(lineage, ("previous_id", "containment"), code="invalid_target")
+    text(lineage["containment"], "Objective containment", code="invalid_target")
+    _validate_target(records, artifacts, "research", target)
+    if config["profile"] != "research" or current is None or lineage["previous_id"] != current["id"]:
+        raise ResearchError("objective_locked", "Widen the current complete objective through its recorded predecessor")
+    if target["id"] == current["id"] or target["statement"] == current["statement"] or target["id"] in records.get("research_objective", {}):
+        raise ResearchError("objective_locked", "A widened objective needs a new identity and a wider statement")
+    record = {"id": target["id"], "predecessor": current["id"], "containment": lineage["containment"], "round_id": round_id}
+    return [("configuration", "research", dict(config, target=target)),
+            immutable_record(records, "research_objective", target["id"], target),
+            immutable_record(records, "objective_lineage", target["id"], record)]
 
 
 def revalidate_constitution(store, payload, *, expected_revision, request_id):

@@ -270,14 +270,24 @@ def _unresolved_plan_sources(context, checkpoint, value):
     return True
 
 
+def _objective_lineage(context):
+    """The current objective and every recorded predecessor, newest first."""
+    lineage, current = [], context.objective
+    while current is not None:
+        lineage.append(current)
+        link = context.records.get("objective_lineage", {}).get(current["id"])
+        current = context.records.get("research_objective", {}).get(link["predecessor"]) if link else None
+    return lineage
+
+
 def _inheritance(context, evidence, value):
     dependencies = []
     predecessor = value["predecessor"]
     if predecessor is not None:
         parent = _get(context.records, "checkpoint", predecessor, "unknown_checkpoint")
         context.artifacts.read(parent["artifact"])
-        if parent["objective"] != context.objective:
-            raise ResearchError("objective_mismatch", "A successor checkpoint must retain the same complete objective")
+        if parent["objective"] not in _objective_lineage(context):
+            raise ResearchError("objective_mismatch", "A successor checkpoint must retain the complete objective or a recorded ancestor of it")
         if _normalized(value["question"]) == _normalized(context.records["cycle_plan"][parent["cycle_id"]]["payload"]["question"]):
             raise ResearchError("development_question_repeated", "A successor must pose a distinct development question")
     inherited = set()
@@ -285,7 +295,7 @@ def _inheritance(context, evidence, value):
         _fields(item, ("checkpoint_id", "assessment_id", "use", "evidence", "assumptions", "deduction"))
         checkpoint = _get(context.records, "checkpoint", item["checkpoint_id"], "unknown_checkpoint")
         context.artifacts.read(checkpoint["artifact"])
-        if checkpoint["objective"] != context.objective or checkpoint["assessment_id"] != item["assessment_id"]:
+        if checkpoint["objective"] not in _objective_lineage(context) or checkpoint["assessment_id"] != item["assessment_id"]:
             raise ResearchError("inheritance_mismatch", "Inherit the assessment actually preserved by the named checkpoint")
         _choice(item["use"], ("validated_result", "failure", "unresolved"), "Inherited evidence use")
         _strings(item["assumptions"], "Inherited assumptions")
@@ -726,7 +736,7 @@ def _assess(context, value):
         _text(value[key], "Assessment " + key)
     plan = _get(context.records, "cycle_plan", value["cycle_id"], "unknown_cycle")
     cycle = context.records["cycle"][value["cycle_id"]]
-    _scope(value["scope"], context.objective)
+    _scope(value["scope"], plan["payload"]["objective"])
     _strings(value["assumptions"], "Result assumptions")
     if not set(value["scope"]["assumptions"]) <= set(value["assumptions"]):
         raise ResearchError("scope_assumptions_missing", "Retain the declared scope assumptions in the assessed result")
@@ -842,7 +852,8 @@ def _assess(context, value):
                 obligations.append(obligation("resource_limit_exceeded", "Retain the result and the actual overrun without satisfying the admitted resource contract.",
                                               admission_id=admission["id"], reserved_units=admission["reserved_units"], used_units=units))
                 remaining.append("Resolve the exceeded resource contract for run " + admission["id"] + ".")
-    if value["scope"]["kind"] != "full" or plan["payload"]["scope"]["kind"] != "full":
+    # A full scope of an ancestor objective is a special case of the widened current one.
+    if value["scope"]["kind"] != "full" or plan["payload"]["scope"]["kind"] != "full" or plan["payload"]["objective"] != context.objective:
         obligations.append(obligation("objective_scope_incomplete", "A special case contributes to the fixed complete objective but cannot close it."))
         remaining = list(dict.fromkeys(remaining + plan["payload"]["scope"]["remaining_obligations"]))
         if not remaining:
@@ -887,7 +898,7 @@ def assess_cycle(store, payload, *, expected_revision, request_id):
         failures = account["failures"] + [{"assessment_id": value["id"], "signal_id": f["signal_id"]}
                                              for f in value["failures"] if f["status"] == "observed"]
         changes = [immutable_record(records, "cycle_assessment", value["id"], record),
-                   immutable_record(records, "development_scope", value["scope"]["id"], {"objective": context.objective, "scope": value["scope"]}),
+                   immutable_record(records, "development_scope", value["scope"]["id"], {"objective": plan["payload"]["objective"], "scope": value["scope"]}),
                    ("cycle", cycle["id"], cycle), ("strategy_account", plan["strategy_key"], dict(account, failures=failures))]
         if paused:
             checkpoint = _checkpoint_record(records, artifacts, context.dependencies(), "paused:" + value["id"], cycle, report,

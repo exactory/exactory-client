@@ -1065,8 +1065,11 @@ class DevelopmentTests(DevelopmentCase):
         self.assertEqual(records["configuration"]["research"]["target"], target)
         self.assertEqual(records["research_objective"][self.objective["id"]], self.objective)
         self.assertEqual(records["objective_lineage"][target["id"]]["predecessor"], self.objective["id"])
-        # The widened objective changes the dependencies every earlier assessment bound, so the
-        # earlier cycle is assessed again under the current objective before it is inherited.
+        # The widened objective changes the configuration digest every synthesis section and every
+        # earlier assessment bound, so the synthesis is recorded again and the earlier cycle is
+        # assessed again under the current objective before it is inherited.
+        self.assertFalse(self.api().synthesis_report(self.store, "research")["ready"])
+        self.refresh_synthesis("wider")
         again = self.assessment(plan, execution, identifier="assessment-1b")
         reassessed = self.mutate(api.assess_cycle, again)["result"]
         self.assertTrue(reassessed["validated_result"])
