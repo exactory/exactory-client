@@ -1,6 +1,6 @@
 """Development rounds: decisions, reviews, admissions, assessments and the round gate."""
 
-from research_harness import rounds
+from research_harness import resources, rounds
 from rounds_fixtures import RoundsCase
 
 
@@ -262,6 +262,7 @@ class RoundAdmissionTests(RoundsCase):
         pending = dict(early, review_id=review["id"])
         self.assert_error("round_review_required", lambda: self.mutate(rounds.admit_round, pending))
         approved = self.mutate(rounds.record_round_review, self.review_payload(decision, assessor="second-assessor"))["result"]
+        before = self.store.snapshot()["records"]
         admission = self.mutate(rounds.admit_round, dict(early, review_id=approved["id"]))["result"]
         self.assertEqual((admission["number"], admission["objective"]), (2, self.objective))
         opening = admission["opening"]
@@ -269,11 +270,26 @@ class RoundAdmissionTests(RoundsCase):
         self.assertEqual(set(opening["search_selection"]), set(rounds.OPENING_PURPOSES))
         self.assertEqual(opening["search_selection"]["downstream"], None)
         self.assertEqual(opening["search_selection"]["direct"], "direct")
+        self.assertEqual(opening["requirement_ids"], sorted(before.get("fulltext_requirement", {})))
+        self.assertEqual(opening["reading_count"], len(before["reading"]))
+        self.assertEqual(opening["accounts"], resources.account_report(before, "research"))
+        self.assertEqual(opening["accounts"]["literature"]["network_requests"]["charged"], 7)
         records = self.store.snapshot()["records"]
         self.assertEqual(rounds.current_number(records), 2)
         self.assertEqual(rounds.active_round(records)["id"], "round-2")
         again = {"id": "round-2b", "round_id": decision["id"], "review_id": approved["id"], "reason": "Twice."}
         self.assert_error("round_active", lambda: self.mutate(rounds.admit_round, again))
+
+    def test_admission_needs_a_review_of_this_decision(self):
+        bundle = self.pin()
+        first, approving = self.approve(self.decision_payload(bundle))
+        other = self.mutate(rounds.record_round, self.decision_payload(bundle, statement="Extend the finite bound to every integer in [0, 7]."))["result"]
+        absent = {"id": "round-2", "round_id": "absent", "review_id": approving["id"], "reason": "No such decision."}
+        self.assert_error("unknown_round_decision", lambda: self.mutate(rounds.admit_round, absent))
+        borrowed = dict(absent, round_id=other["id"], reason="Borrowed approval.")
+        self.assert_error("round_review_required", lambda: self.mutate(rounds.admit_round, borrowed))
+        admitted = self.mutate(rounds.admit_round, dict(absent, round_id=first["id"], reason="The approved decision."))["result"]
+        self.assertEqual(admitted["decision_id"], first["id"])
 
     def test_admission_widens_the_objective_and_charges_the_development_budget(self):
         from research_harness.resources import set_budget
