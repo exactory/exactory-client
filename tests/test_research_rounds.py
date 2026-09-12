@@ -394,6 +394,8 @@ class RoundLiteratureTests(RoundsCase):
         missing = [o for o in self.store_obligations("research") if o["code"] == "round_search_missing"]
         self.assertEqual(sorted(o["purpose"] for o in missing), ["changes", "downstream", "exemplars", "next_step"])
         self.assertIn("round_exemplar_missing", self.codes())
+        # The round's obligations belong to the research profile; the verification profile has no rounds.
+        self.assertFalse({"round_search_missing", "round_exemplar_missing"} & self.codes("verification"))
         for purpose in ("downstream", "next_step", "exemplars"):
             self.record_purpose(purpose, purpose + "-round-2")
         missing = [o for o in self.store_obligations("research") if o["code"] == "round_search_missing"]
