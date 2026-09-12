@@ -490,10 +490,10 @@ def _foundation_state(evaluation, profile):
             selected = selections.get(profile + ":" + purpose, {}).get("search_id")
             if selected is not None and selected != latest["opening"]["search_selection"][purpose]:
                 selected_searches[purpose] = selected
-    for purpose in SEARCH_PURPOSES + (DEVELOPMENT_PURPOSES if active else ()):
-        if purpose not in selected_searches:
-            obligations.append(obligation("round_search_missing", "Record this development round's captured search for the purpose.", purpose=purpose))
-            continue
+    if active is not None:
+        obligations.extend(obligation("round_search_missing", "Record this development round's captured search for the purpose.", purpose=purpose)
+                           for purpose in DEVELOPMENT_PURPOSES if purpose not in selected_searches)
+    for purpose in selected_searches:
         matches = [s for s in searches.values() if s["id"] == selected_searches[purpose] and s["purpose"] == purpose]
         current = [s for s in matches if s["scope_digest"] == digest(scope)]
         if not current:

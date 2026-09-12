@@ -413,3 +413,29 @@ class RoundLiteratureTests(RoundsCase):
         # The round's judgments stay when the round is assessed, so what bound them inside the round stays current.
         self.write_round_assessment(admission["id"], True, decision["bundle_digest"])
         self.assertEqual(synthesis_report(self.store, "research")["literature_digest"], inside)
+        # A judgment that stays is still checked after the assessment: a new full-text requirement stales it too.
+        self.exemplar_requirement("late")
+        self.assertIn("downstream", [o["purpose"] for o in self.store_obligations() if o["code"] == "search_evidence_stale"])
+
+    def test_a_fresh_consequence_search_is_judged_like_the_five_purposes(self):
+        self.open_round()
+        self.record_purpose("downstream", "downstream-round-2")
+        self.exemplar_requirement("round-2")
+        stale = sorted(o["purpose"] for o in self.store_obligations() if o["code"] == "search_evidence_stale")
+        self.assertEqual(stale, ["adjacent", "direct", "downstream", "originals", "recent", "theory"])
+        self.record_purpose("downstream", "downstream-round-2b")
+        self.assertNotIn("downstream", [o["purpose"] for o in self.store_obligations() if o["code"] == "search_evidence_stale"])
+
+    def test_an_exemplar_the_round_opened_with_does_not_count(self):
+        self.exemplar_requirement("early")
+        self.foundation_searches(identifier_suffix="-early")
+        self.refresh_synthesis("early")
+        self.recandidate("early")
+        bundle = self.pin()
+        carried = [{"assessment_id": "assessment-early", "kind": "alternative", "question": "Does the bound extend beyond n = 3?",
+                    "disposition": "deferred", "reason": "The wider range comes first."}]
+        _, _, admission = self.open_round(bundle, carried=carried)
+        self.assertEqual(admission["opening"]["requirement_ids"], ["exemplar-early"])
+        self.assertIn("round_exemplar_missing", self.codes())
+        self.exemplar_requirement("round-2")
+        self.assertNotIn("round_exemplar_missing", self.codes())
