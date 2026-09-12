@@ -715,11 +715,11 @@ def cycle_authors(records):
                   | {a["payload"]["author"] for a in records.get("cycle_assessment", {}).values()})
 
 
-def carried_developments(records, cycle_ids=None):
+def carried_developments(records):
     """The `next_round` alternatives and branches of each cycle's current assessment."""
     carried = []
     for cycle in records.get("cycle", {}).values():
-        if cycle["assessment_id"] is None or cycle_ids is not None and cycle["id"] not in cycle_ids:
+        if cycle["assessment_id"] is None:
             continue
         development = records["cycle_assessment"][cycle["assessment_id"]]["payload"]["development"]
         if development is None:

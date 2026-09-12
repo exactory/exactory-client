@@ -1029,17 +1029,16 @@ class DevelopmentTests(DevelopmentCase):
                                     "question": "Does the bound extend beyond n = 3?", "strategy": "generalization",
                                     "reason": "The wider range exceeds this round's admitted scope."}])
 
-    def test_a_next_round_branch_is_carried_by_cycle_id(self):
+    def test_a_next_round_branch_is_carried(self):
         api = self.development()
         self.prepared_study()
         plan, execution = self.run_cycle()
         payload = self.assessment(plan, execution)
         payload["development"]["branches"][0].update(disposition="next_round", reason="Carried to the round gate.")
         self.mutate(api.assess_cycle, payload)
-        carried = api.carried_developments(self.store.snapshot()["records"], ["cycle-1"])
+        carried = api.carried_developments(self.store.snapshot()["records"])
         self.assertEqual(carried, [{"assessment_id": "assessment-1", "kind": "branch", "cycle_id": "cycle-1",
                                     "reason": "Carried to the round gate."}])
-        self.assertEqual(api.carried_developments(self.store.snapshot()["records"], ["other"]), [])
 
     def widen(self, statement="For every integer n in [0, 5], n squared is at most 25, with equality at n = 5."):
         from research_harness.operations import prepared_mutation

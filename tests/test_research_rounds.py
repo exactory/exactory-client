@@ -108,6 +108,20 @@ class RoundDecisionTests(RoundsCase):
         repeated["candidates"][0]["direction"] = repeated["next"]["goal"]["direction"] = "horizontal"
         self.assert_error("round_goal_repeated", lambda: self.mutate(rounds.record_round, repeated))
 
+    def test_a_deferred_candidate_may_become_a_later_goal(self):
+        bundle = self.pin()
+        first = self.decision_payload(bundle)
+        first["candidates"][1]["disposition"] = "deferred"
+        first["candidates"][1]["reason"] = "Demand is not evidenced yet."
+        decision = self.mutate(rounds.record_round, first)["result"]
+        self.write_round(decision, "round-2", successful=True, bundle_digest=bundle["digest"])
+        pursued = {"id": "cand-transfer", "direction": "horizontal", "statement": "Transfer the bound to real inputs.",
+                   "disposition": "pursue", "reason": "Deferred earlier; demand is now evidenced.", "evidence": self.round_evidence()}
+        later = self.decision_payload(bundle, closes=2, direction="horizontal", statement="Transfer the bound to real inputs.",
+                                      candidates=[pursued])
+        recorded = self.mutate(rounds.record_round, later)["result"]
+        self.assertEqual(recorded["payload"]["next"]["goal"]["statement"], "Transfer the bound to real inputs.")
+
     def test_a_repeated_round_goal_reopens_that_round_with_changed_evidence(self):
         bundle = self.pin()
         first = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
