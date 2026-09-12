@@ -16,6 +16,23 @@ class RoundDecisionTests(RoundsCase):
         self.assertEqual((decision["closes"], decision["decision"], decision["bundle_digest"]), (1, "continue", bundle["digest"]))
         self.assertEqual(rounds.current_number(self.store.snapshot()["records"]), 1)
 
+    def test_a_decision_needs_a_pinned_bundle(self):
+        unpinned = self.decision_payload({"digest": "0" * 64})
+        self.assert_error("publication_bundle_missing", lambda: self.mutate(rounds.record_round, unpinned))
+
+    def test_the_next_round_is_well_formed(self):
+        bundle = self.pin()
+        for edit in (lambda p: p["next"].update(number=3),
+                     lambda p: p["next"]["goal"].update(statement="Another statement than the pursued candidate's."),
+                     lambda p: p["next"].update(objective_lineage={"previous_id": self.objective["id"], "containment": "Unchanged."}),
+                     lambda p: p["next"]["goal"].update(field_change={"corpus": "arxiv", "primaryCategory": "math.CO"})):
+            payload = self.decision_payload(bundle)
+            edit(payload)
+            self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round, payload))
+        wider = dict(self.objective, id="objective-wide", statement=self.objective["statement"] + " The bound also holds at n = 4.")
+        locked = self.decision_payload(bundle, objective=wider, lineage={"previous_id": "absent", "containment": "The wider range contains [0, 3]."})
+        self.assert_error("objective_locked", lambda: self.mutate(rounds.record_round, locked))
+
     def test_continue_pursues_exactly_one_candidate_and_stop_pursues_none(self):
         bundle = self.pin()
         none = self.decision_payload(bundle)
@@ -53,6 +70,21 @@ class RoundDecisionTests(RoundsCase):
         self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round, stop))
         decision = self.mutate(rounds.record_round, self.decision_payload(bundle, carried=carried))["result"]
         self.assertEqual(decision["payload"]["carried"], carried)
+
+    def test_a_late_reassessment_of_an_earlier_cycle_is_carried_by_the_closing_round(self):
+        first = self.pin()
+        decision = self.mutate(rounds.record_round, self.decision_payload(first))["result"]
+        self.write_round(decision, "round-2")
+        self.recandidate("late")
+        second = self.pin()
+        self.write_round_assessment("round-2", True, second["digest"])
+        statement = "Extend the finite bound to every integer in [0, 7]."
+        omitted = self.decision_payload(second, closes=2, statement=statement)
+        self.assert_error("carried_development_missing", lambda: self.mutate(rounds.record_round, omitted))
+        carried = [{"assessment_id": "assessment-late", "kind": "alternative", "question": "Does the bound extend beyond n = 3?",
+                    "disposition": "deferred", "reason": "The wider range comes first."}]
+        recorded = self.mutate(rounds.record_round, self.decision_payload(second, closes=2, statement=statement, carried=carried))["result"]
+        self.assertEqual(recorded["payload"]["carried"], carried)
 
     def test_an_admitted_round_is_assessed_before_the_next_decision(self):
         bundle = self.pin()
@@ -94,6 +126,14 @@ class RoundDecisionTests(RoundsCase):
         reopened = self.decision_payload(bundle, closes=3, reopening={"round_id": "round-2", "reason": "The picture changed.", "evidence": changed})
         recorded = self.mutate(rounds.record_round, reopened)["result"]
         self.assertEqual(recorded["payload"]["next"]["reopening"]["round_id"], "round-2")
+
+    def test_a_successful_round_is_not_reopened(self):
+        bundle = self.pin()
+        first = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        self.write_round(first, "round-2", successful=True, bundle_digest=bundle["digest"])
+        changed = [{"kind": "review", "review_id": bundle["id"] + "-gate-1"}]
+        repeated = self.decision_payload(bundle, closes=2, reopening={"round_id": "round-2", "reason": "The picture changed.", "evidence": changed})
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round, repeated))
 
     def test_an_exhausted_direction_reopens_one_of_its_two_unsuccessful_rounds(self):
         bundle = self.pin()
@@ -153,6 +193,13 @@ class RoundReviewTests(RoundsCase):
         self.assertEqual(review["verdict"], "not_approved")
         again = self.review_payload(decision, verdict="approved")
         self.assert_error("round_review_duplicate", lambda: self.mutate(rounds.record_round_review, again))
+
+    def test_a_review_binds_the_current_bundle(self):
+        first = self.pin()
+        decision = self.mutate(rounds.record_round, self.decision_payload(first))["result"]
+        (self.root / "draft/abstract.txt").write_text("The exact finite bound was enumerated, revised.")
+        self.pin()
+        self.assert_error("round_review_stale", lambda: self.mutate(rounds.record_round_review, self.review_payload(decision)))
 
     def test_an_author_of_a_cycle_assessment_cannot_review_the_round(self):
         self.recandidate("second", alternative="not_useful", author="assessment-only-author")

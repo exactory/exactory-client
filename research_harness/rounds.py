@@ -135,9 +135,10 @@ def _carried_key(item):
 
 
 def _carried(records, latest, values):
-    opening = latest["opening"]["cycle_ids"] if latest else []
-    closing = [identifier for identifier in records.get("cycle", {}) if identifier not in opening]
-    expected = {_carried_key(item): item for item in development.carried_developments(records, closing)}
+    """The developments carried by the closing round: those its cycle assessments recorded since the round was admitted."""
+    admitted = latest["admitted_revision"] if latest else 0
+    expected = {_carried_key(item): item for item in development.carried_developments(records)
+                if records["cycle_assessment"][item["assessment_id"]]["assessed_revision"] > admitted}
     seen = {}
     for item in _items(values, "Carried developments", nonempty=False):
         _fields(item, ("assessment_id", "kind", "disposition", "reason"), ("question", "cycle_id"))
@@ -202,14 +203,15 @@ def _limits(value, goal):
 
 
 def _reopening(records, value, evidence):
-    """A reopening names an assessed earlier round and carries evidence its decision did not; returns that round's id."""
+    """A reopening names an earlier round assessed unsuccessful and carries evidence its decision did not; returns that round's id."""
     if value is None:
         return None
     _fields(value, ("round_id", "reason", "evidence"))
     _text(value["reason"], "Reopening reason")
     admission = records.get("round_admission", {}).get(value["round_id"])
-    if admission is None or assessment_for(records, admission["id"]) is None:
-        raise ResearchError(_ERROR, "Reopen an assessed earlier round")
+    assessment = assessment_for(records, admission["id"]) if admission else None
+    if assessment is None or assessment["successful"]:
+        raise ResearchError(_ERROR, "Reopen an earlier round that was assessed unsuccessful")
     known = {digest(e["reference"]) for e in records["round_decision"][admission["decision_id"]]["evidence"]}
     changed = evidence.many(value["evidence"], "Reopening evidence")
     if all(digest(item["reference"]) in known for item in changed):

@@ -39,7 +39,7 @@ baseline 901 tests OK in 1025 s). Commit messages go through a file
 | 1 | Resource purpose `development` and unit `rounds` | done, reviewed | `faa7b71`, `a0e72f3` |
 | 2 | The `next_round` disposition and carried developments | done, reviewed | `2d46d94` |
 | 3 | Objective lineage | done, reviewed | `e92b4aa`, `fdfb4ba`, `92ec000`, `97d536f` |
-| 4 | `rounds.py`: the round decision and its independent review | implemented, first fixes applied (`4d352c7`); second review's findings pending (below) | `523beb2`, `987806e`, `4d352c7` |
+| 4 | `rounds.py`: the round decision and its independent review | done, reviewed twice, fixed twice (second fixes in the commit that carries this row) | `523beb2`, `987806e`, `4d352c7` |
 | 5 | `round-admit` opens the next round | pending | |
 | 6 | Consequence purposes and the exemplar reading in the literature stage | pending | |
 | 7 | `manuscript-prediction`: the blind cohort prediction | pending | |
@@ -55,7 +55,7 @@ baseline 901 tests OK in 1025 s). Commit messages go through a file
 - [x] Task 2 implemented, reviewed
 - [x] Task 3 implemented, reviewed, fixed twice (null wider objective refused; lineage contract recorded; reused ancestor id refused)
 - [x] Task 4 implemented and first review fixed (`cycle_authors` union for independence; reopening, stop and review bindings)
-- [ ] Task 4 second-review findings fixed (see "Pending findings" below), tests green, this file updated
+- [x] Task 4 second-review findings fixed (see "Pending findings" below), tests green (`test_research_rounds.py` 19, `test_research_publication.py` 8, `test_research_review_packets.py` 20), this file updated
 - [ ] Task 5 implemented, reviewed, fixed
 - [ ] Task 6 implemented, reviewed, fixed
 - [ ] Task 7 implemented, reviewed, fixed
@@ -77,14 +77,15 @@ baseline 901 tests OK in 1025 s). Commit messages go through a file
 - Task 1: `tests/test_research_resources.py` has a module-level `limits()` helper, not a method; a legacy `resource_account` persisted with seven units is normalized at the read seam (`resources._account`) so upgraded stores keep working.
 - Task 3: `principles._validate_objective` was extracted; `widen_objective` refuses a null target, an unchanged statement, and any objective id that already exists (the current one or an ancestor); the lineage record carries the containment contract.
 - Task 4: `development.cycle_authors(records)` is the union of plan and assessment authors and is used by readiness, round reviews and (later) predictions; a stop decision on a bundle is refused while an admitted round is unassessed; reopening and review bindings follow the spec text.
+- Task 4, second fixes: `rounds._carried` selects the closing round's carried developments by assessment time (`cycle_assessment.assessed_revision` after the latest admission's `admitted_revision`), not by the plan's cycle-id filter, so a re-assessment of an earlier round's cycle is disposed of by the round gate (spec 1 and 5.1). `development.carried_developments` keeps its `cycle_ids` parameter (Task 2's reviewed interface, tested in `test_research_development.py`); `rounds.py` no longer passes it. Task 5's `admit_round` must write `admitted_revision` on the admission (spec 5.3 lists it); `opening.cycle_ids` stays for the freshness rules of Tasks 8 and 10. The fixture `write_round` writes `admitted_revision` instead of `opening.cycle_ids`, and `write_round_assessment` writes a round's assessment on its own (both through `write_record`). A reopening names a round assessed unsuccessful; a successful round's goal stays `round_goal_repeated` with no reopening path.
 
 ## Pending findings
 
-Recorded verbatim from the second review of Task 4 (two independent reviewers). Each is fixed in code with a regression test, never by weakening a test.
+Recorded verbatim from the second review of Task 4 (two independent reviewers). Each is fixed in code with a regression test, never by weakening a test. All five are fixed in the commit that ticks them; the two behavior changes (Findings 1/3 and 4) were checked by reverting each fix in isolation and watching its test fail with "ResearchError not raised".
 
 ### Finding 1 (major): `research_harness/rounds.py`:211
 
-- [ ] fixed
+- [x] fixed: `_reopening` reads the named round's assessment and refuses a missing or successful one; regression test `test_a_successful_round_is_not_reopened` (a new test rather than a case inside `test_a_repeated_round_goal_reopens_that_round_with_changed_evidence`, whose rounds are both unsuccessful). Same defect as Finding 3.
 
 Summary: _reopening accepts a reopening of any assessed round, including one assessed successful. Spec 5.1: 'A goal that repeats an earlier withdrawn or unsuccessful goal is accepted only with next.reopening'; a successful round's goal has no reopening path and must be round_goal_repeated. Commit 4d352c7's message claims 'only a withdrawn or unsuccessful goal reopens' but the code never reads assessment['successful']. Confirmed empirically: with round-2 written successful=True on the current bundle, record_round accepted a closes=2 decision whose goal repeats round-2's goal with reopening round_id=round-2 (probe in the scratchpad, built on RoundsCase.write_round).
 
@@ -92,7 +93,7 @@ Fix: In _reopening replace lines 210-212 with: admission = records.get('round_ad
 
 ### Finding 2 (major): `research_harness/rounds.py`:250
 
-- [ ] fixed
+- [x] fixed: the unchanged-objective-with-lineage case is asserted in the new `test_the_next_round_is_well_formed` (Finding 5's test), not inside `test_a_decision_binds_the_exact_current_bundle_and_the_current_round`; one assertion covers both findings. No code change.
 
 Summary: The guard 'An unchanged objective has no lineage' (lines 250-252; spec 5.1: next.objective identical to the configured objective has objective_lineage null) has no test in this task or in any later plan task (Task 5 tests only the widened path via open_round(objective=wider, lineage=lineage)). A stated behavior without a test.
 
@@ -100,7 +101,7 @@ Fix: In tests/test_research_rounds.py, RoundDecisionTests, add: same = self.deci
 
 ### Finding 3 (major): `research_harness/rounds.py`:211
 
-- [ ] fixed
+- [x] fixed: same defect and same fix as Finding 1 (the error text is this finding's: "Reopen an earlier round that was assessed unsuccessful").
 
 Summary: _reopening accepts any assessed round, including a successful one, as the reopened round. Spec 5.1 admits a repeated goal only when it repeats an earlier withdrawn or unsuccessful goal (both end as an assessment with successful: false); a goal that repeats a successful round's goal must stay round_goal_repeated. Today: write_round(..., successful=True) for round-2, then a decision closing 2 that repeats round-2's statement with reopening {round_id: 'round-2'} plus one review evidence item is accepted. The commit message applies the spec sentence only to rejected candidates.
 
@@ -108,7 +109,7 @@ Fix: In _reopening replace lines 210-212 with: admission = records.get('round_ad
 
 ### Finding 4 (major): `research_harness/rounds.py`:138
 
-- [ ] fixed
+- [x] fixed: `_carried` selects by `assessed_revision > latest["admitted_revision"]` (0 when no round was admitted); regression test `test_a_late_reassessment_of_an_earlier_cycle_is_carried_by_the_closing_round` follows the finding's scenario (decide, admit round 2 without assessment, re-assess cycle-1 with `next_round`, pin, assess round 2 on the new bundle, then `carried_development_missing` until the item is in `carried`). The finding calls this a plan-level choice the user may confirm: the spec text (sections 1 and 5.1) was followed; the plan's cycle-id filter is the deviation. `carried_developments` keeps its `cycle_ids` parameter (see "Deviations").
 
 Summary: _carried selects the closing round's carried developments by cycle id (cycles absent from the admission's opening cycle_ids). A next_round item written during the closing round by a re-assessment of a cycle planned in an earlier round is therefore neither required (no carried_development_missing) nor accepted (key not in expected -> invalid_round), so the round gate cannot dispose of it. Spec 1 says 'The round gate must dispose of it' and 5.1 says 'every carried development recorded by any cycle assessment of the closing round'; section 7's `changes`/`contradicted` path returns claims to a cycle, which can be an earlier round's cycle, so the case is reachable. The plan's reference code prescribed the cycle-id filter, so this is a plan-level choice the user may confirm; the spec wording favors selecting by assessment time.
 
@@ -116,7 +117,7 @@ Fix: Select by assessment revision instead of cycle id: expected = {_carried_key
 
 ### Finding 5 (major): `tests/test_research_rounds.py`:7
 
-- [ ] fixed
+- [x] fixed: `test_the_next_round_is_well_formed` covers (a) number, (b) goal statement, (c) unchanged objective with lineage and `objective_locked` for a wrong `previous_id`, (d) `field_change` on a vertical goal; `test_a_review_binds_the_current_bundle` (a new test in `RoundReviewTests`) covers (e); `test_a_decision_needs_a_pinned_bundle` covers (f). All six passed against the existing code, so no code changed for this finding. The two other spec validations in `rounds.py` without a test here, `round_field_change_refused` and `resource_budget_exhausted` from `record_round`, are tested by the plan's Task 5.
 
 Summary: Spec-stated validations of section 5.1/5.2 that rounds.py implements have no test in this task and none in a later plan task: (a) next.number must equal closes + 1 (rounds.py:248); (b) the goal must state the pursued candidate, same direction and normalized statement (rounds.py:163); (c) an unchanged objective with non-null objective_lineage is refused, and a widened objective goes through principles.widen_objective so a wrong previous_id raises objective_locked from record_round (rounds.py:250-254; Task 5 later tests only the happy path via open_round); (d) field_change on a vertical goal is refused (rounds.py:169); (e) round_review_stale when the decision's bundle is no longer the current bundle (second half of rounds.py:315; only the digest half is tested); (f) publication_bundle_missing for a decision recorded before any pin (spec: 'There is no decision without an exact manuscript').
 

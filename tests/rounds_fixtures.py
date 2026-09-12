@@ -97,22 +97,28 @@ class RoundsCase(DevelopmentCase):
                     lambda records, value: ([("workspace", "study", state)], state), **identity), {})
         export_workspace(self.store)
 
+    def write_record(self, kind, record):
+        """Write one record of `kind` directly, as a stand-in for an operation that does not exist yet."""
+        from research_harness.operations import prepared_mutation
+        self.mutate(lambda store, payload, **identity: prepared_mutation(store, "test." + kind, payload,
+                    lambda records, value: ([(kind, record["id"], record)], record), **identity), {})
+        return record
+
     def write_round(self, decision, identifier, *, successful=None, bundle_digest=None):
         """Write the admission of the round `decision` proposed directly, with its assessment when `successful` is given.
 
         A stand-in until `admit_round` and `assess_round` exist; it carries only the fields the decision rules read."""
-        from research_harness.operations import prepared_mutation
         proposal = decision["payload"]["next"]
-        cycle_ids = sorted(self.store.snapshot()["records"].get("cycle", {}))
-        admission = {"id": identifier, "number": proposal["number"], "decision_id": decision["id"], "goal": proposal["goal"],
-                     "opening": {"cycle_ids": cycle_ids}}
-        changes = [("round_admission", identifier, admission)]
+        admission = self.write_record("round_admission", {"id": identifier, "number": proposal["number"], "decision_id": decision["id"],
+                                                          "goal": proposal["goal"], "admitted_revision": self.store.revision + 1})
         if successful is not None:
-            assessment = {"id": identifier + "-assessment", "round_id": identifier, "bundle_digest": bundle_digest, "successful": successful}
-            changes.append(("round_assessment", assessment["id"], assessment))
-        self.mutate(lambda store, payload, **identity: prepared_mutation(store, "test.round", payload,
-                    lambda records, value: (changes, admission), **identity), {})
+            self.write_round_assessment(identifier, successful, bundle_digest)
         return admission
+
+    def write_round_assessment(self, round_id, successful, bundle_digest):
+        """Write the assessment of an admitted round directly, bound to `bundle_digest`; a stand-in until `assess_round` exists."""
+        return self.write_record("round_assessment", {"id": round_id + "-assessment", "round_id": round_id,
+                                                      "bundle_digest": bundle_digest, "successful": successful})
 
     def goal(self, direction="vertical", statement="Extend the finite bound to every integer in [0, 5]."):
         return {"direction": direction, "field_change": None, "statement": statement,
