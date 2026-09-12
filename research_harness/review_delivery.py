@@ -12,7 +12,7 @@ from .artifacts import ArtifactStore
 from .execution_evidence import author_readiness_state
 from .errors import ResearchError
 from .evaluation import Evaluation
-from .publication import publication_report
+from .publication import publication_state
 from .review_packets import manuscript_packet, readiness_packet
 from .workspace import write_projection
 
@@ -56,7 +56,8 @@ def deliver_readiness(store, destination):
 
 
 def deliver_manuscript(store, destination):
-    report = publication_report(store, "manuscript")
+    snapshot = store.snapshot()
+    report = publication_state(snapshot["records"], Evaluation(snapshot["records"], ArtifactStore(store.root)), "manuscript")
     if not report["ready"]:
         raise ResearchError("readiness_required", "Prepare a current manuscript bundle before independent delivery", {"obligations": report["obligations"]})
-    return _deliver(store, destination, manuscript_packet(store.snapshot()["records"], report["bundle"]))
+    return _deliver(store, destination, manuscript_packet(snapshot["records"], report["bundle"]))

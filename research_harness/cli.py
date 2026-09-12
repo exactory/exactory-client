@@ -14,7 +14,7 @@ from .gates import gate_report, gate_state, require_ready
 from .integration import adopt_workspace, current_store, export_workspace, pin_artifact
 from .operations import fields
 from .provenance import runtime_provenance
-from .report_views import next_summary, obligations_page, order_obligations, status_summary
+from .report_views import current_obligations, next_summary, obligations_page, order_obligations, status_summary
 from .storage import Store
 from .workspace import find_workspace, strict_json
 
@@ -154,11 +154,11 @@ def status_report(store, *, counters=False):
     # Before later gates are applicable, expose the actual next unread cohort
     # abstract instead of asking for a root or completed development too early.
     preparation = gate_state(records, evaluation, "cohort" if study and study["stage"] == "cohort" else "preparation", profile=profile)
-    obligations = preparation["obligations"] or report["obligations"]
     diagnostics = {"evaluation": dict(evaluation.counters, elapsed_seconds=round(time.monotonic() - started, 3))} if counters else {}
     # The cohort inventory names the next unread abstract; every other stage
     # takes the highest-priority current obligation in preparation order.
     upcoming = preparation.get("next") if study and study["stage"] == "cohort" else None
+    obligations = current_obligations({"obligations": report["obligations"], "preparation": preparation})
     return dict(report, revision=snapshot["revision"], profile=profile, runtime=runtime_provenance(),
                 study=study, preparation=preparation, resources=resources.account_report(records, profile), **diagnostics,
                 next=upcoming or (order_obligations(obligations)[0] if obligations else None),

@@ -52,6 +52,7 @@ class PacketTests(ResearchPublicationTests):
         inputs = manifest["inputs"]
         self.assertEqual(set(inputs) >= {"candidate", "branches", "sources", "synthesis", "strategy_accounts", "plan", "assessment", "checkpoint"}, True)
         self.assertNotIn("authors", inputs["candidate"])
+        self.assertNotIn('"authors"', text)
         self.assertNotIn("history", inputs["synthesis"])
         for forbidden in ('"request_id"', '"token"', '_revision"', '"readiness_review"'):
             self.assertNotIn(forbidden, text)
@@ -67,6 +68,14 @@ class PacketTests(ResearchPublicationTests):
         report = api.publication_report(self.store)
         self.assertFalse(report["ready"])
         self.assertEqual({r["assessor"]["id"] for r in report["reviews"]}, {"reviewer-a", "reviewer-b"})
+        # A second review of the same bundle by reviewer-a recorded before the duplicate rule
+        # existed: the assessor's latest review stands.
+        records = self.store.snapshot()["records"]
+        legacy = dict(records["manuscript_review"]["reviewer-a"], id="reviewer-a-legacy", reviewed_revision=self.store.revision,
+                      review=self.artifacts.put(json.dumps(self.core("accept")).encode(), "application/json"))
+        self.store.mutate("legacy", {}, lambda tx: tx.put("manuscript_review", "reviewer-a-legacy", legacy),
+                          expected_revision=self.store.revision, request_id="legacy-review")
+        self.assertTrue(api.publication_report(self.store)["ready"])
         (self.root / "draft/paper.pdf").write_bytes(b"%PDF-1.4\n% Revised after the rejection.\n%%EOF")
         revised = self.mutate(api.prepare_publication, dict(self.bundle_payload(), id="paper-2"))["result"]
         self.assertNotEqual(revised["digest"], bundle["digest"])

@@ -40,8 +40,10 @@ admission_revision and original result. Admission uses the supplied revision;
 every later commit uses a consistent snapshot and explicit revision CAS.
 Deterministic derived request IDs identify pages and finalization. A replay
 returns the original finalized result (or committed admission after a crash)
-without further network I/O. Explicit resume with a NEW request id can supersede
-an interrupted collector. Its predecessor cannot subsequently commit a page.
+without further network I/O. A NEW request id for the same operation and target
+supersedes an interrupted predecessor: a resumed collector's predecessor cannot
+commit a page, a superseded work or full-text acquisition cannot finish, and a
+superseded operation holds no request reservation.
 
 max_requests counts all HTTP attempts, including retry/redirect/resolution
 failures, across this invocation. Exhaustion is resumable and never complete.
@@ -104,17 +106,21 @@ def _partition(identifier, start, end):
             "seen_count": 0, "entries_seen": 0, "epoch": 0, "status": "pending", "restart": False}
 
 
-def _begin(store, operation, payload, request_id, expected_revision, *, target=None, apply=None, reserve=None):
+def _supersede(transaction, operation, target, request_id):
+    for identifier, record in transaction.records("acquisition_operation").items():
+        if record["state"] == "admitted" and record["operation"] == operation and record["target"] == target and identifier != request_id:
+            transaction.put("acquisition_operation", identifier, dict(record, state="superseded"))
+
+
+def _begin(store, operation, payload, request_id, expected_revision, *, target=None, apply=None):
     admitted = []
     runtime = runtime_provenance()
 
     def admission(transaction):
         if apply:
             apply(transaction)
-        if reserve:
-            change = resources.reserve(transaction, "literature", {"network_requests": reserve})
-            if change is not None:
-                transaction.put(*change)
+        _supersede(transaction, operation, target, request_id)
+        resources.admit(transaction, "literature", payload.get("max_requests"))
         result = {"status": "admitted", "request_id": request_id, "revision": expected_revision + 1,
                   "target": target, "pending": [{"code": "operation_incomplete"}]}
         transaction.put("acquisition_operation", request_id,
@@ -130,7 +136,7 @@ def _begin(store, operation, payload, request_id, expected_revision, *, target=N
     return receipt["result"] if record is None else record["result"]
 
 
-def _finish(store, request_id, revision, result, *, apply=None, reserve=None):
+def _finish(store, request_id, revision, result, *, apply=None):
     final = dict(result, request_id=request_id, revision=revision + 1)
 
     def commit(transaction):
@@ -144,7 +150,7 @@ def _finish(store, request_id, revision, result, *, apply=None, reserve=None):
         captured = sum(s["response"]["size"] for s in transaction.records("source").values()
                        if s.get("operation_id") == request_id and s.get("response") is not None)
         change = resources.charge(transaction, "literature", {"network_requests": final.get("attempts_used", 0), "source_bytes": captured},
-                                  reserved={"network_requests": reserve} if reserve else None, refuse=False)
+                                  refuse=False)
         if change is not None:
             transaction.put(*change)
         return final
@@ -257,8 +263,8 @@ def collect_cohort(store, definition, *, request_id, expected_revision, max_requ
                                                 definition["windowEnd"].replace("-", "") + "2359")]}
         transaction.put("collection", collection_id, collection)
 
-    replay = _begin(store, "cohort.collect", payload, request_id, expected_revision, target=collection_id, apply=admission, reserve=max_requests)
-    return replay if replay is not None else _run_collection(store, collection_id, request_id, budget, http or HttpClient(), reserve=max_requests)
+    replay = _begin(store, "cohort.collect", payload, request_id, expected_revision, target=collection_id, apply=admission)
+    return replay if replay is not None else _run_collection(store, collection_id, request_id, budget, http or HttpClient())
 
 
 def resume_cohort(store, collection_id, *, request_id, expected_revision, max_requests=None, http=None):
@@ -268,6 +274,9 @@ def resume_cohort(store, collection_id, *, request_id, expected_revision, max_re
         collection = transaction.get("collection", collection_id)
         if collection is None:
             raise ResearchError("unknown_collection", "No collection has this identifier")
+        previous = transaction.get("acquisition_operation", collection["active_operation"]) if collection["active_operation"] else None
+        if previous is not None and previous["state"] == "admitted":
+            transaction.put("acquisition_operation", collection["active_operation"], dict(previous, state="superseded"))
         collection["active_operation"] = request_id
         collection["pending"] = []
         for partition in collection["partitions"]:
@@ -279,8 +288,8 @@ def resume_cohort(store, collection_id, *, request_id, expected_revision, max_re
         transaction.put("collection", collection_id, collection)
 
     replay = _begin(store, "cohort.resume", {"collection_id": collection_id, "max_requests": max_requests},
-                    request_id, expected_revision, target=collection_id, apply=admission, reserve=max_requests)
-    return replay if replay is not None else _run_collection(store, collection_id, request_id, budget, http or HttpClient(), reserve=max_requests)
+                    request_id, expected_revision, target=collection_id, apply=admission)
+    return replay if replay is not None else _run_collection(store, collection_id, request_id, budget, http or HttpClient())
 
 
 def _member(transaction, collection_id, work, source_id, kind, reason=None):
@@ -416,7 +425,7 @@ def _page_update(transaction, collection, partition_id, page, prepared, sources,
     return {"collection_id": collection["id"], "sequence": collection["sequence"], "disposition": disposition}
 
 
-def _run_collection(store, collection_id, request_id, budget, http, reserve=None):
+def _run_collection(store, collection_id, request_id, budget, http):
     artifacts, provider = ArtifactStore(store.root), Arxiv()
     while True:
         snapshot = store.snapshot()
@@ -464,7 +473,7 @@ def _run_collection(store, collection_id, request_id, budget, http, reserve=None
         collection["active_operation"] = None
         transaction.put("collection", collection_id, collection)
 
-    return _finish(store, request_id, snapshot["revision"], result, apply=finish, reserve=reserve)
+    return _finish(store, request_id, snapshot["revision"], result, apply=finish)
 
 
 def _next_eligible(records, identifier):
@@ -495,7 +504,7 @@ def acquire_work(store, identifier, *, request_id, expected_revision, http=None,
     request = provider.work_request(identifier)
     budget = RequestBudget(max_requests)
     replay = _begin(store, "work.acquire", {"identifier": identifier, "provider": provider.name, "max_requests": max_requests},
-                    request_id, expected_revision, target=identifier, reserve=max_requests)
+                    request_id, expected_revision, target=identifier)
     if replay is not None:
         return replay
     snapshot = store.snapshot()
@@ -536,7 +545,7 @@ def acquire_work(store, identifier, *, request_id, expected_revision, http=None,
     return _finish(store, request_id, snapshot["revision"],
                    {"status": "pending" if pending else "complete", "scope": "metadata", "pending": pending, "warnings": warnings,
                     "work_ids": [w["id"] for w in works], "source_ids": [s["id"] for s in sources], "attempts_used": budget.used},
-                   apply=commit, reserve=max_requests)
+                   apply=commit)
 
 
 def _extraction_options(value):
@@ -560,7 +569,7 @@ def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, h
     payload = {"identifier": identifier, "url": url, "max_requests": max_requests}
     if options:
         payload["extraction_options"] = options
-    replay = _begin(store, "fulltext.acquire", payload, request_id, expected_revision, target=identifier, apply=admission, reserve=max_requests)
+    replay = _begin(store, "fulltext.acquire", payload, request_id, expected_revision, target=identifier, apply=admission)
     if replay is not None:
         return replay
     snapshot = store.snapshot()
@@ -608,7 +617,7 @@ def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, h
 
     return _finish(store, request_id, snapshot["revision"],
                    {"status": "pending" if pending else "complete", "scope": "fulltext_acquisition", "pending": pending,
-                    "work_id": identifier, "capture": capture, "attempts_used": budget.used}, apply=commit, reserve=max_requests)
+                    "work_id": identifier, "capture": capture, "attempts_used": budget.used}, apply=commit)
 
 
 def import_response(store, provider, response, *, source_url, captured_at, request_id, expected_revision, media_type=None, mappings=None):

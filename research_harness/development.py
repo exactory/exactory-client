@@ -220,12 +220,13 @@ def _labelled(values, name, kinds=None):
 
 
 def _literature(context, evidence, value, scope):
-    _fields(value, ("scope", "literature_digest", "comparison", "sources", "gaps"))
+    # A comparison recorded under the foundation digest (before 0.38.0) is stale, not malformed.
+    _fields(value, ("scope", "comparison", "sources", "gaps"), ("literature_digest", "foundation_digest"))
     _text(value["comparison"], "Claim-specific literature comparison")
     _strings(value["gaps"], "Literature gaps")
     evidence.many([{"kind": "source", "link": link} for link in _items(value["sources"], "Related full-read sources", True)], "Literature evidence")
-    if value["scope"] != scope or value["literature_digest"] != context.synthesis["literature_digest"] or value["gaps"]:
-        raise ResearchError("literature_comparison_stale", "Record the literature comparison for this exact claim/scope against the current literature")
+    if value["scope"] != scope or value.get("literature_digest") != context.synthesis["literature_digest"] or value["gaps"]:
+        raise ResearchError("literature_comparison_stale", "Record the literature comparison for this exact claim/scope against the current literature_digest")
 
 
 def _plan_evidence(evidence, value):
@@ -653,14 +654,14 @@ def _development(context, evidence, value, scope, cycle_id):
     else:
         _text(value["next_question"], "Next useful development question")
     novelty = value["novelty"]
-    _fields(novelty, ("scope", "literature_digest", "comparison", "evidence", "gaps"))
+    _fields(novelty, ("scope", "comparison", "evidence", "gaps"), ("literature_digest", "foundation_digest"))
     _text(novelty["comparison"], "Current novelty comparison")
     _strings(novelty["gaps"], "Unresolved novelty comparison")
     linked = evidence.many(novelty["evidence"], "Novelty evidence")
     obligations = []
     if not any(x["reference"]["kind"] == "source" for x in linked):
         obligations.append(obligation("novelty_source_missing", "Compare the candidate with actual current full-read sources."))
-    if novelty["scope"] != scope or novelty["literature_digest"] != context.synthesis["literature_digest"] or novelty["gaps"]:
+    if novelty["scope"] != scope or novelty.get("literature_digest") != context.synthesis["literature_digest"] or novelty["gaps"]:
         obligations.append(obligation("novelty_comparison_stale", "Refresh the novelty decision for this exact result claim/scope and current literature."))
     contribution = value["contribution"]
     _fields(contribution, ("and", "but", "therefore", "evidence"))

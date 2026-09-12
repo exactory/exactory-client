@@ -88,6 +88,28 @@ class ScreeningRuleTests(ScreenedCase):
         self.assertEqual(report["counts"]["screening"][self.collection]["promote"], 2)
         self.assertEqual(report["counts"]["screening"][self.collection]["audit_sample"], 0)
 
+    def test_an_audit_counts_on_any_accepted_reading_of_the_version(self):
+        self.screen([self.item(n, "doctrine", "weak") for n in range(1, 10)] + [self.item(10, "exclude", "none")])
+        self.read(range(1, 10), "batch-doctrine")
+        self.read([10], "batch-plain")
+        self.assertEqual(self.cohort_codes(), ["screening_audit_reading_missing"])
+        self.read([10], "batch-audit", audit={"relevance": "none", "reason": "Confirmed irrelevant on a second reading."})
+        self.assertEqual(self.cohort_codes(), [])
+
+    def test_a_strong_audit_reopens_every_excluded_member_in_a_new_round(self):
+        self.screen([self.item(n, "doctrine", "weak") for n in range(1, 9)] + [self.item(n, "exclude", "none") for n in (9, 10)])
+        self.read(range(1, 9), "batch-doctrine")
+        self.read([9], "batch-audit-9", audit={"relevance": "none", "reason": "Confirmed irrelevant."})
+        self.read([10], "batch-audit-10", audit={"relevance": "strong", "reason": "It addresses the objective directly."})
+        self.assertEqual(self.cohort_codes(), ["screening_audit_failed"])
+        self.assert_error("invalid_screening", lambda: self.screen([self.item(10, "promote", "strong", promotion_reasons=["prior_art"])], "screen-same"))
+        self.screen([self.item(10, "promote", "strong", promotion_reasons=["prior_art"])], "screen-2", round_number=2)
+        self.assertEqual(self.cohort_codes(), ["screening_audit_failed"])
+        self.screen([self.item(9, "exclude", "none")], "screen-3", round_number=3)
+        self.assertEqual(self.cohort_codes(), [])
+        reading = next(r for r in self.store.snapshot()["records"]["reading"].values() if r.get("batch", {}).get("batch_id") == "batch-audit-10")
+        self.assertEqual(reading["batch"]["audit"]["round"], 1)
+
     def test_audit_none_discharges_the_sample_and_gate_reads_with_the_policy(self):
         self.screen([self.item(n, "doctrine", "weak") for n in range(1, 9)] + [self.item(n, "exclude", "none") for n in (9, 10)])
         self.read(range(1, 9), "batch-doctrine")
@@ -103,7 +125,10 @@ class SaturationTests(ScreenedCase):
         self.screen([self.item(n, "doctrine", "weak") for n in range(1, 9)] + [self.item(n, "pending", "weak") for n in (9, 10, 11, 12)])
         self.read(range(1, 9), "batch-doctrine")
         self.assertEqual(self.cohort_codes().count("cohort_abstract_reading_missing"), 4)
+        self.read([9], "batch-unjudged")
         self.read([9], "batch-a", consequential=False)
+        unjudged = {"id": "sat-unjudged", "batch_ids": ["batch-unjudged", "batch-a"], "reason": "x"}
+        self.assert_error("invalid_screening", lambda: self.mutate(record_screening_checkpoint, unjudged))
         self.read([10], "batch-b", consequential=False)
         bad = {"id": "sat-bad", "batch_ids": ["batch-doctrine", "batch-a"], "reason": "x"}
         self.assert_error("invalid_screening", lambda: self.mutate(record_screening_checkpoint, bad))
@@ -171,6 +196,7 @@ class ReportTests(ScreenedCase):
         report = policy_report(self.store)
         summary = report["collections"][self.collection]
         self.assertEqual(summary["dispositions"], {"promote": 0, "doctrine": 5, "exclude": 1, "pending": 0})
+        self.assertEqual((summary["families"], summary["versions"], summary["read"]), (10, 10, 0))
         self.assertEqual((summary["unscreened"], summary["selected"], summary["audit_sample"]), (4, 5, ["arxiv:2601.00006"]))
         reference = {"prior_art": ["arxiv:2601.00006"], "contradictions": [], "methods": ["arxiv:2601.00001"], "doctrine": []}
         recall = policy_report(self.store, reference=reference)["recall"]

@@ -6,7 +6,7 @@ description: Evaluate a paper locally without submitting anything - citation int
 
 Read the [research constitution](../../RESEARCH_CONSTITUTION.md) and the
 [managed research workflow](../../docs/research-workflow.md). For a managed author
-study, inspect `status`, `next`, and current whole research `gate readiness` before
+study, inspect `status --summary`, `next --summary`, and current whole research `gate readiness` before
 manuscript assessment. Research readiness review precedes writing; the manuscript
 review below is a separate assessment. An external paper uses the verification
 profile's exact-source preparation and field standards, independent of author
@@ -105,7 +105,11 @@ it, the rubric's soundness scale governs.
 
 **The review is blind.** The reviewer receives the artifact only: the paper, plus
 the evidence files its numbers point at (the `evidence/claims.json` targets, in a
-workspace). The reviewer is never told which revision this is and never sees
+workspace). In a managed study that is the neutral packet written by
+`exactory-research export --kind manuscript`; it carries no plan, author list,
+revision label, prior score or assessment history, and the harness accepts one
+review per assessor per exact bundle, so a rejection stands until the manuscript
+changes. The reviewer is never told which revision this is and never sees
 `reviews/`, `learnings/`, a prior score, or an expected score. The paper itself must
 carry no revision markers: no "v2", no changelog, no response-to-reviewers text. A
 score anchored on "it has improved" is not a measurement.

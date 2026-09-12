@@ -66,13 +66,14 @@ class ReadBatchTests(LiteratureCase):
     def test_screening_audit_and_consequential_are_retained_on_the_reading(self):
         from research_harness.reading import record_reading_batch
         a = self.metadata()
-        extras = {"screening": {"relevance": "weak", "reason": "Peripheral.", "conventions": ["Reports a bound."]},
-                  "audit": {"relevance": "none", "reason": "Confirmed peripheral."}, "consequential": False}
+        extras = {"screening": {"relevance": "weak", "reason": "Peripheral.", "conventions": ["Reports a bound."]}, "consequential": False}
         result = self.mutate(record_reading_batch, {"id": "batch-4", "depth": "abstract", "items": [item(a, **extras)]})
         reading = self.store.snapshot()["records"]["reading"][result["result"]["items"][0]["reading_id"]]
         self.assertEqual(reading["batch"], dict(extras, batch_id="batch-4"))
         bad = item(a, screening={"relevance": "high", "reason": "x", "conventions": []})
         self.assert_error("invalid_batch", lambda: self.mutate(record_reading_batch, {"id": "batch-5", "depth": "abstract", "items": [bad]}))
+        audited = item(a, audit={"relevance": "none", "reason": "Confirmed peripheral."})
+        self.assert_error("invalid_batch", lambda: self.mutate(record_reading_batch, {"id": "batch-6", "depth": "abstract", "items": [audited]}))
 
 
 class BatchExportTests(LiteratureCase):
@@ -89,13 +90,14 @@ class BatchExportTests(LiteratureCase):
         self.assertEqual(len(result["files"]), 2)
         first = json.loads((self.root / "cohort/batches/batch-001.json").read_text())
         self.assertEqual(first["id"], "batch-001")
-        self.assertEqual(set(first["items"][0]), {"version_id", "title", "authors", "published", "categories", "text", "link", "extraction"})
+        self.assertEqual(set(first["items"][0]), {"version_id", "title", "authors", "published", "categories", "text", "link"})
         self.assertEqual({json.loads((self.root / "cohort/batches" / name).read_text())["items"][0]["version_id"]
                           for name in ("batch-001.json", "batch-002.json")}, {"arxiv:2601.00001v1", "arxiv:2601.00003v1"})
         readme = json.loads((self.root / "cohort/batches/README.json").read_text())
         self.assertEqual(set(readme["notes_shape"]["items"][0]["notes"]), set(FIELDS))
         self.assertEqual(self.store.snapshot(), before)
         self.assert_error("review_destination_exists", lambda: export_batches(self.store, destination=self.root / "cohort/batches"))
+        self.assert_error("policy_inapplicable", lambda: export_batches(self.store, destination=self.root / "cohort/screens", screen=True))
 
     def test_export_includes_tier_3_abstracts_after_the_cohort(self):
         from research_harness.batches import export_batches

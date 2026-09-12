@@ -18,7 +18,7 @@ studies, proof rules, finite task admission, or resource accounts.
 
 For external-paper native verification, use the exact-source verification profile
 and reviewed claim binding. Preserve scientific independence from author goals.
-On resume, read common `status` and `next` alongside the native search tree and
+On resume, read common `status --summary` and `next --summary` alongside the native search tree and
 controller actions. Complete retained run/journal reconciliation first. Historical
 replay remains available; fresh work after changed preparation needs a reviewed
 `search amend-foundation` and any separately required computation or strategy

@@ -28,8 +28,8 @@ below are what the ai-science loop (LOOP.md) refers to.
 ```
 
 `.exactory/draft.json` projects the managed draft fields, including its common
-research Store reference. The CLI writes it. Read `exactory-research status` and
-`next` for authoritative obligations rather than editing the projection.
+research Store reference. The CLI writes it. Read `exactory-research status --summary`
+and `next --summary` for authoritative obligations rather than editing the projection.
 
 ## research/literature.md: the survey log
 
@@ -128,7 +128,11 @@ readable after the fact.
 Blind-review hygiene: the draft carries no revision markers (no "v2",
 "revised", no changelog, no response-to-reviewers text), and the reviewer is
 never shown `reviews/`, `learnings/`, or a prior score. Those directories
-exist for the user and for the next iteration, not for the reviewer.
+exist for the user and for the next iteration, not for the reviewer. In a
+managed study, `exactory-research export --kind manuscript` delivers a neutral
+packet: the exact files, the claim-to-evidence map, the cited evidence, the
+observed executions and the field standards, with no plan, author list,
+revision label or assessment history. Give the reviewer that directory.
 
 ## The measurement (the improvement loop)
 

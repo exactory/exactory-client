@@ -207,6 +207,21 @@ def _batch_extras(item):
     return extras
 
 
+def selected_abstract(work):
+    """The complete saved abstract a cohort item or batch reads: the version's selected one, else the first complete one."""
+    complete = [a for a in work["abstracts"] if a["completeness"] == "complete"]
+    return next((a for a in complete if a["artifact"] == work.get("abstract")), complete[0] if complete else None)
+
+
+def _audit_round(records, work):
+    """An audit judges a current exclusion; the reading stores the round it was made against."""
+    from .screening import current_screening
+    screening = current_screening(records, work["work_id"])
+    if screening is None or screening["disposition"] != "exclude":
+        raise ResearchError("invalid_batch", "An audit judgment belongs to the reading of a currently excluded member")
+    return screening["round"]
+
+
 def _batch_item(records, evaluation, batch_id, item):
     fields(item, ("version_id", "note", "notes"), ("screening", "audit", "consequential"), code="invalid_batch")
     work = exact_work(records, text(item["version_id"], "Version", code="invalid_batch"))
@@ -215,7 +230,9 @@ def _batch_item(records, evaluation, batch_id, item):
     for name, note in item["notes"].items():
         fields(note, ("text", "status"), code="invalid_batch")
     extras = _batch_extras(item)
-    abstract = next((a for a in work["abstracts"] if a["completeness"] == "complete"), None)
+    if "audit" in extras:
+        extras["audit"] = dict(extras["audit"], round=_audit_round(records, work))
+    abstract = selected_abstract(work)
     if abstract is None:
         raise ResearchError("abstract_missing", "The version has no complete saved abstract to read", {"version_id": work["id"]})
     content = evaluation.text(abstract["artifact"])
@@ -279,6 +296,7 @@ def record_reading_batch(store, payload, *, expected_revision, request_id):
             changes.append(charge)
         batch = {"id": value["id"], "depth": "abstract", "count": len(results), "revision": expected_revision + 1,
                  "consequential": any(item.get("consequential") is True for item in items),
+                 "judged": all("consequential" in item for item in items),
                  "members": _batch_members(records, results, items)}
         changes.append(immutable_record(records, "reading_batch", value["id"], batch))
         return changes, {"id": value["id"], "count": len(results), "items": results, "usage": usage}

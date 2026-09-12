@@ -158,8 +158,9 @@ def publication_state(records, artifacts, action="publication"):
             if saved["bundle_digest"] == bundle["digest"]:
                 core = _review(records, artifacts, {k: saved[k] for k in ("id", "bundle_digest", "assessor", "review", "blind")}, bundle)
                 key = _assessor_key(saved["assessor"]["id"])
-                # One review per assessor per exact bundle: the first stands.
-                if key not in latest or saved["reviewed_revision"] < latest[key][0]["reviewed_revision"]:
+                # Recording refuses a second review per assessor per exact bundle; for reviews
+                # recorded before that rule the assessor's latest stands.
+                if key not in latest or saved["reviewed_revision"] > latest[key][0]["reviewed_revision"]:
                     latest[key] = (saved, core)
         reviews = [item[0] for item in latest.values()]
         if action != "manuscript" and (len(latest) < 2 or any(core["decision"] != "accept" for _, core in latest.values())):

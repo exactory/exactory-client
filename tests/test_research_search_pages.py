@@ -27,6 +27,8 @@ class SearchPageTests(LiteratureCase):
             "queries": ["bounded"], "responses": [{"source_id": p["source_ids"][0], "query": "bounded"} for p in pages],
             "captured_at": "2026-09-07T12:00:00Z", "scope": "All results of the specified authored query and filters.",
             "found_work_ids": sorted({w for p in pages for w in p["work_ids"]}), "verdict": "nothing-new", "cited_work_ids": [],
+            "dispositions": [{"work_id": w, "disposition": "out_of_scope", "reason": "Authored result outside the objective."}
+                             for w in sorted({w for p in pages for w in p["work_ids"]})],
             "impact": "This judgment covers only the saved query scope.", "gaps": []})["result"]
 
     def crossref(self, numbers, total=4, cursor="*", next_cursor="second", **extra):

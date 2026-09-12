@@ -6,7 +6,7 @@ description: Develop a falsifiable hypothesis and prospective research cycle wit
 
 Read the [research constitution](../../RESEARCH_CONSTITUTION.md) and follow the
 [managed research workflow](../../docs/research-workflow.md). Start with current
-`exactory-research status`, `next`, and `gate preparation`. The complete original
+`exactory-research status --summary`, `next --summary`, and `gate preparation`. The complete original
 objective, five search purposes, field synthesis, and required innovation reading
 are established in [literature review](../literature-review/SKILL.md) before this
 stage. If preparation is pending, complete its named obligations first.

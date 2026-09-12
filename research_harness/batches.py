@@ -14,7 +14,9 @@ from .errors import ResearchError
 from .evaluation import Evaluation
 from .gates import gate_state
 from .literature import foundation_state
-from .reading import NOTE_FIELDS
+from .principles import preparation_policy
+from .reading import NOTE_FIELDS, selected_abstract
+from .screening import SCREENED
 from .source_links import span_locator
 
 
@@ -26,15 +28,14 @@ NOTES_SHAPE = {"id": "batch-001", "depth": "abstract",
 
 def _entry(records, evaluation, version_id):
     work = records["work"][version_id]
-    abstract = next((a for a in work["abstracts"] if a["completeness"] == "complete"), None)
+    abstract = selected_abstract(work)
     if abstract is None:
         return None
     content = evaluation.text(abstract["artifact"])
     return {"version_id": work["id"], "title": work.get("title"), "authors": work.get("authors", []),
             "published": work.get("publication_date"), "categories": work.get("categories", []), "text": content,
             "link": {"version_id": work["id"], "source_id": abstract["source_id"], "artifact": abstract["artifact"],
-                     "locator": span_locator(content, 0, len(content))},
-            "extraction": None}
+                     "locator": span_locator(content, 0, len(content))}}
 
 
 def unread_abstracts(records, evaluation, profile, *, screen=False):
@@ -74,6 +75,8 @@ def export_batches(store, *, depth="abstract", size=60, destination, profile=Non
     if config is None:
         raise ResearchError("migration_required", "Initialize or adopt the research contract before exporting batches")
     profile = profile or config["profile"]
+    if screen and preparation_policy(records) != SCREENED:
+        raise ResearchError("policy_inapplicable", "Screening batches need the screened-v1 preparation policy")
     evaluation = Evaluation(records, ArtifactStore(store.root))
     entries = []
     for version in unread_abstracts(records, evaluation, profile, screen=screen):

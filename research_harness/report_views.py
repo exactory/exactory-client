@@ -12,8 +12,8 @@ from .evidence import digest
 
 
 PRIORITY = ("migration_required", "profile_mismatch", "configuration_missing", "constitution_revalidation_required",
-            "constitution_archive_missing", "collection_pending", "cohort_missing", "cohort_abstract_reading_missing",
-            "screening_missing", "screening_audit_reading_missing", "screening_audit_failed", "doctrine_coverage_missing",
+            "constitution_archive_missing", "collection_pending", "cohort_missing", "screening_missing",
+            "cohort_abstract_reading_missing", "screening_audit_reading_missing", "screening_audit_failed", "doctrine_coverage_missing",
             "objective_missing", "objective_mismatch", "roots_missing", "root_missing", "target_source_pin_missing",
             "target_source_pin_invalid", "target_mismatch", "critical_source_unavailable", "fulltext_reading_missing",
             "source_bundle_missing", "source_bundle_incomplete", "required_unit_missing", "required_unit_incomplete",
@@ -84,8 +84,13 @@ def status_summary(report):
     return result
 
 
+def current_obligations(report):
+    """The obligations `next` follows: the preparation stage's while it has any, else readiness."""
+    return report.get("preparation", {}).get("obligations") or report["obligations"]
+
+
 def obligations_page(report, code, *, limit, cursor):
-    """One revision-bound page of the obligations that carry this code."""
+    """One revision-bound page of the current obligations that carry this code."""
     if type(limit) is not int or not 1 <= limit <= _MAX_PAGE:
         raise ResearchError("invalid_input", "Page limit must be between 1 and " + str(_MAX_PAGE))
     offset = 0
@@ -96,7 +101,7 @@ def obligations_page(report, code, *, limit, cursor):
             raise ResearchError("invalid_input", "Cursor must be REVISION:OFFSET") from error
         if revision != report["revision"] or offset < 0:
             raise ResearchError("stale_cursor", "The store changed; restart the listing", {"revision": report["revision"]})
-    items = [o for o in order_obligations(report["obligations"]) if o.get("code") == code]
+    items = [o for o in order_obligations(current_obligations(report)) if o.get("code") == code]
     page = items[offset:offset + limit]
     end = offset + len(page)
     return {"schema": "research-obligations-page-v1", "revision": report["revision"], "code": code, "total": len(items),

@@ -240,8 +240,16 @@ def _graph(evaluation, profile):
 
 
 def frontier(evaluation, profile):
-    """The citation frontier a judgment was made against: graph families and tiers."""
-    return [[node["work_id"], node["tier"]] for node in _graph(evaluation, profile)["nodes"]]
+    """The candidate frontier a judgment was made against: graph families with their tiers and the
+families of required full texts. The works other purposes found enter a section through the
+judgments digest, so recording one purpose does not stale the others."""
+    records = evaluation.records
+    rows = {(node["work_id"], str(node["tier"])) for node in _graph(evaluation, profile)["nodes"]}
+    for requirement in records.get("fulltext_requirement", {}).values():
+        work = records.get("work", {}).get(requirement["version_id"])
+        if requirement["profile"] == profile and work:
+            rows.add((work["work_id"], "requirement"))
+    return sorted([family, tier] for family, tier in rows)
 
 
 def frontier_digest(evaluation, profile):
@@ -311,7 +319,8 @@ def _dispositions(records, value):
     selection = records.get("search_selection", {}).get(value["profile"] + ":" + value["purpose"])
     previous = records.get("literature_search", {}).get(selection["search_id"]) if selection else None
     for item in (previous or {}).get("dispositions", []):
-        if item["disposition"] in CARRIED_DISPOSITIONS and item["work_id"] not in judged and item["work_id"] not in resolved:
+        carried = judged.get(item["work_id"]) in CARRIED_DISPOSITIONS + ("relevant",)
+        if item["disposition"] in CARRIED_DISPOSITIONS and not carried and item["work_id"] not in resolved:
             raise ResearchError("search_findings_dropped", "Carry forward or explicitly resolve the selected search's contradictory and unresolved findings",
                                 {"work_id": item["work_id"], "disposition": item["disposition"], "search_id": previous["id"]})
     return judged
@@ -493,6 +502,7 @@ def _foundation_state(evaluation, profile):
     relevant = set(requirements) | {v for s in searches.values() for v in s["found_work_ids"]}
     inventory, used_readings, bundles, availability = [], dict(cohort_state["readings"]), {}, []
     reference_sample = screening.reference_sample(records, profile)
+    reference_round = screening.lowest_excluded_round(screening.screenings(records, None))
     for version in sorted(relevant):
         work = records.get("work", {}).get(version)
         if work is None:
@@ -546,7 +556,8 @@ def _foundation_state(evaluation, profile):
                 for reading in partial:
                     obligations.extend(reading["assessment"]["pending"])
         if depth == "abstract" and "cohort" not in reasons.get(version, []):
-            obligations.extend(screening.reference_obligations(records, profile, version, work, abstract, qualified, reference_sample, paths))
+            obligations.extend(screening.reference_obligations(records, profile, version, work, abstract, accepted, qualified,
+                                                               reference_sample, reference_round, paths))
         cutoff = scope.get("historical_cutoff") if version in historical else None
         cutoffs = [r["historical_cutoff"] for r in full_requirements.values() if r["version_id"] == version and r.get("historical_cutoff")]
         if cutoffs:

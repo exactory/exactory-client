@@ -384,7 +384,19 @@ class SearchDispositionTests(LiteratureCase):
         self.mutate(record_search, third)
         fourth = self.search("direct", ["arxiv:2602.00009v1", "arxiv:2602.00010v1"])
         fourth["id"] = "direct-4"
+        fourth["dispositions"][0]["disposition"] = "contradictory"
         self.mutate(record_search, fourth)
+        dismissed = self.search("direct", ["arxiv:2602.00009v1", "arxiv:2602.00010v1"])
+        dismissed["id"] = "direct-5"
+        dismissed["dispositions"][0]["disposition"] = "out_of_scope"
+        self.assert_error("search_findings_dropped", lambda: self.mutate(record_search, dismissed))
+
+    def test_recording_another_purpose_does_not_stale_a_selected_search(self):
+        a = self.metadata()
+        self.scope([a])
+        self.mutate(record_search, self.search("direct"))
+        self.mutate(record_search, self.search("adjacent", ["arxiv:2602.00011v1"]))
+        self.assertFalse({"search_frontier_stale", "search_evidence_stale", "search_scope_stale"} & self.codes())
 
     def test_legacy_search_without_dispositions_is_an_obligation_not_a_crash(self):
         a = self.metadata()

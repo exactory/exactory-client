@@ -35,14 +35,15 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
-Version 0.37.0 connects the shared research foundation to every skill's workflow:
-cohort collection, literature synthesis, prospective experiment admission,
-independent research readiness before writing, and review of the exact manuscript.
-It retains the mathematical strategy reassessment, failed-method history,
-investigation priorities, and deferrals introduced in
-[0.35.0](docs/releases/0.35.0.md) and the common foundation introduced in
-[0.36.0](docs/releases/0.36.0.md).
-Read the [release and upgrade notes](docs/releases/0.37.0.md)
+Version 0.38.0 makes literature preparation proportionate to its scientific
+value: one evaluation per command, bounded status and next views, span locators
+that reference saved text by hash, typed reading batches, dependency-specific
+freshness for searches and synthesis, neutral reviewer packets, resource
+budgets, and an opt-in screened preparation policy with audited exclusions.
+It retains the shared research foundation of
+[0.36.0](docs/releases/0.36.0.md) and [0.37.0](docs/releases/0.37.0.md) and the
+mathematical strategy reassessment of [0.35.0](docs/releases/0.35.0.md).
+Read the [release and upgrade notes](docs/releases/0.38.0.md)
 before updating a waiting agent or adopting an existing attack. An update does
 not resume paused research or reset its budget.
 
@@ -212,8 +213,11 @@ receipts. Actual reading records are separate from acquisition.
 **`exactory-research`** owns the shared SQLite research record. It acquires exact
 sources, records reading and synthesis, plans and admits cycles, binds actual
 execution, retains assessments and checkpoints, and exports real review inputs.
-`status` and `next` expose current obligations; `gate` evaluates the intended
-action. `example OPERATION` returns the actual payload shape. See the
+`status --summary` and `next --summary` expose current obligations in a bounded
+form, `obligations` pages one code, and `gate` evaluates the intended action.
+`example OPERATION` returns the actual payload shape. Reading batches, search
+dispositions, resource budgets, the screened preparation policy, and neutral
+reviewer packets are described in the CLI reference. See the
 [CLI reference](docs/research-cli.md) for all operations, reliable request retries,
 explicit legacy adoption, recovery, and native mathematical foundation delivery.
 

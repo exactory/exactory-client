@@ -144,7 +144,7 @@ Fulltext readings keep the single `read` operation.
 
 ### 6.2 `batches` export
 
-`batches --depth abstract --size N --destination DIR [--screen]` writes `batch-NNN.json` files for the current unread abstract obligations (cohort items first, then Tier 3). Each entry carries `version_id`, `title`, `authors`, `published`, `categories`, `text`, the abstract `link`, and, for fulltext-derived texts, the extraction diagnostics. With `--screen`, entries are the members that lack a screening record under the screened policy. The command reads the store and writes only under the destination.
+`batches --depth abstract --size N --destination DIR [--screen]` writes `batch-NNN.json` files for the current unread abstract obligations (cohort items first, then Tier 3). Each entry carries `version_id`, `title`, `authors`, `published`, `categories`, `text` (the version's selected complete abstract), and the abstract `link`. With `--screen`, the recorded policy must be `screened-v1` (`policy_inapplicable` otherwise) and entries are the members that lack a screening record under the screened policy. The command reads the store and writes only under the destination.
 
 ### 6.3 Collection completeness
 
@@ -160,7 +160,7 @@ A partition completes when the set of exact entry ids seen across its pages equa
 
 ### 7.2 Digests
 
-For a profile, the `frontier` is the sorted list of `(family_id, tier)` for graph nodes plus the families of fulltext requirements plus the families of found and cited works of selected searches.
+For a profile, the `frontier` is the sorted list of `(family_id, tier)` for graph nodes plus the families of fulltext requirements, tier `requirement`. The found and cited works of selected searches are not part of the frontier: they reach a section through the selected search judgments digest, and a search binds its own found and cited works through its content digest. Including every purpose's found works would make recording one purpose stale the other four.
 
 - `scope_digest`: unchanged.
 - `content_digest(search)`: metadata scalars, known versions, abstract shas, fulltext shas, aliases, and bundle unit digests of the families in roots, fulltext requirements, and the search's found and cited works.
@@ -187,7 +187,7 @@ A search is `search_scope_stale` when the scope digest differs, `search_evidence
 
 `deliver_readiness` and `deliver_manuscript` write these packets as `inputs.json` and copy exactly the artifacts they reference.
 
-`manuscript-review` refuses a second review from the same normalized assessor on the same `bundle_digest` with `manuscript_review_duplicate`. A changed bundle accepts a new review.
+`manuscript-review` refuses a second review from the same normalized assessor on the same `bundle_digest` with `manuscript_review_duplicate`. A changed bundle accepts a new review. For reviews recorded before this rule, the publication state counts each assessor's latest review of the bundle.
 
 ## 9. Screened preparation policy (P6)
 
@@ -217,7 +217,7 @@ Dispositions are authored as `promote`, `doctrine`, `exclude`, or `pending`. Rel
 
 - Every member version has a screening record, else `screening_missing`.
 - Every `promote`, `doctrine`, and `pending` member has an accepted abstract reading, else `cohort_abstract_reading_missing`. A `pending` member is exempt only while a saturation checkpoint covers it (9.5).
-- Audit sample: the harness derives a deterministic sample of `exclude` members, seeded by the collection id, of size `min(150, excluded count)`. Each sampled member owes an abstract reading whose batch item carries `audit: {"relevance": "none|weak|strong", "reason": "..."}`; the judgment is stored on the reading's assessment. A sampled member without such a reading produces `screening_audit_reading_missing`. A sampled reading with audit relevance `strong` produces `screening_audit_failed` until a new screening round (higher `round`) re-screens every excluded member and its own sample passes.
+- Audit sample: the harness derives a deterministic sample of `exclude` members, seeded by the collection id, of size `min(150, excluded count)`. Each sampled member owes an abstract reading whose batch item carries `audit: {"relevance": "none|weak|strong", "reason": "..."}`; the judgment is stored on the reading's assessment. A sampled member without such a reading produces `screening_audit_reading_missing`. A sampled reading with audit relevance `strong` produces `screening_audit_failed` until the paper is no longer excluded and every excluded member of the collection has a screening round above the round the audit was made against (the audit stores that round). An audit is accepted only on the reading of a currently excluded member (`invalid_batch` otherwise), and any accepted reading of the version can carry it. A `screen-batch` item for a member whose current round is not below the batch round fails with `invalid_screening`; rounds only rise.
 - Doctrine coverage: every calendar month of the window has at least 8 members with disposition `doctrine` or `promote` that are read, else `doctrine_coverage_missing`.
 
 The population, its identities, exclusions, and collection completeness are unchanged by the policy.
@@ -228,7 +228,7 @@ Tier 3 families need a screening record keyed by family with `context`. `promote
 
 ### 9.5 Saturation
 
-Each `read-batch` under `screened-v1` may declare `consequential: true|false` per item. `screening-checkpoint` records `{"batch_ids": [two ids], "reason": "..."}` and is accepted only when both batches are the two most recent abstract batches for the profile, both contain only `pending` members, and neither has a `consequential: true` item. While a checkpoint exists, unread `pending` members carry no reading obligation and are listed in `counts.inventoried_unread`. A later batch with a consequential item, a new screening round, or a policy change removes the checkpoint's effect.
+Each `read-batch` under `screened-v1` may declare `consequential: true|false` per item. `screening-checkpoint` records `{"batch_ids": [two ids], "reason": "..."}` and is accepted only when both batches are the two most recent abstract batches for the profile, both contain only `pending` members, and every item of both carries `consequential: false` (a batch stores `judged`, true when every item was judged). While a checkpoint exists, unread `pending` members carry no reading obligation and are listed in `counts.inventoried_unread`. A later batch with a consequential item, a new screening round, or a policy change removes the checkpoint's effect.
 
 ### 9.6 Policy report
 
@@ -242,9 +242,9 @@ Each `read-batch` under `screened-v1` may declare `consequential: true|false` pe
 
 `budget` records `resource_budget/<profile>:<purpose>` with `{"profile", "purpose": "literature|screening|experiment", "limits": {"network_requests", "source_bytes", "readings", "screenings", "model_input_tokens", "model_output_tokens", "wall_seconds"}, "reason"}`. Any limit may be null. A later `budget` for the same key needs `reason` and may not set a limit below the charged amount.
 
-`resource_account/<profile>:<purpose>` holds `charged`, `reserved`, and `unknown` per unit. Acquisition operations reserve `max_requests` network requests at admission and reconcile to `attempts_used` and captured bytes at finish. `read-batch` and `screen-batch` charge item counts and the reported `usage`; null usage increments `unknown`. `search` charges nothing.
+`resource_account/<profile>:<purpose>` holds `charged` and `unknown` per unit. The reserved amount is derived, never stored: it is the sum of `max_requests` over acquisition operations whose state is `admitted`. Admission refuses an acquisition when `charged + reserved + max(max_requests, 1)` exceeds the limit, so an acquisition without an allowance still needs room for one request; finish charges `attempts_used` and captured bytes and the operation leaves the reserved sum by leaving the admitted state. A new request id for the same operation and target marks an admitted predecessor `superseded`, which releases its reservation and stops it from finishing; a resumed collection supersedes its previous active operation the same way. `read-batch` and `screen-batch` charge item counts and the reported `usage`; null usage increments `unknown`. `search` charges nothing.
 
-A charging mutation whose charge would exceed a limit fails with `resource_budget_exhausted`. Gates report `resource_budget_exhausted` as an obligation while any charged amount is at or above its limit. `status --summary` shows the accounts. Read commands write nothing.
+A charging mutation whose charge would exceed a limit fails with `resource_budget_exhausted`. Gates report `resource_budget_exhausted` as an obligation while charged plus reserved is at or above a limit. `status --summary` shows the accounts. Read commands write nothing.
 
 ## 11. Hosts, skills, and documentation
 
@@ -255,7 +255,7 @@ A charging mutation whose charge would exceed a limit fails with `resource_budge
 
 ## 12. Acceptance and measurement
 
-- Every change lands with failing tests first. The validation protocol's cases M01 to M28 have fixtures. Existing tests stay enabled.
+- Every change lands with failing tests first. The validation protocol's cases M01 to M28 have fixtures; the testing record maps each case to its tests. Existing tests stay enabled.
 - Report equivalence: identical snapshot, identical readiness, obligations, and digests between the previous and new evaluators.
 - Bounds: 16 KiB and 4 KiB measured on adversarial reports.
 - Integrity: corrupt records, changed bytes, hot journals, and stale cursors fail as before or as specified.

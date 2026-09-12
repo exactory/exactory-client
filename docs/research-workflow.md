@@ -49,7 +49,7 @@ that native rollback recovery is required. A crash does not initialize a new
 study or reset an account. The original initialization request can repair an
 interrupted layout without overwriting later state or user material.
 
-## Cohort: enumerate and read every abstract
+## Cohort: enumerate the population and read its abstracts
 
 Select the corpus and category from the field and context. The freeze command
 computes a population definition, including the six complete calendar months
@@ -69,8 +69,9 @@ Set the preparation budget the user approved with `budget` before the costly
 work; reservation and reconciliation are automatic, and exhaustion is a
 checkpoint condition, never completion. Put the actual frozen definition into `collect.json`. Inspect the retained
 collection/page receipts and resume its collection ID until enumeration is
-complete. Read every member's complete captured abstract, including exact-version
-resolution where required. For each, author a `read` payload from actual
+complete. Under `exhaustive-v1` read every member's complete captured abstract,
+including exact-version resolution where required; under `screened-v1` read the
+members the screen selects, as described below. For each, author a `read` payload from actual
 inspections and the seven source-grounded note fields. Set `depth: "abstract"`
 and omit `bundle_id` for an abstract reading. Its inspection uses `unit_id: null`
 and covers the whole saved abstract.
@@ -109,7 +110,9 @@ exactory-research screen-batch --file screen-001.json --expected-revision REVISI
 exactory-research example screening-checkpoint > saturation.json
 exactory-research screening-checkpoint --file saturation.json --expected-revision REVISION --request-id saturation-001
 exactory-research policy-report --policy screened-v1
-``` Complete abstracts reveal field coverage; consequential claims and
+```
+
+Complete abstracts reveal field coverage; consequential claims and
 doctrine from a paper require its applicable full reading in the next stage.
 Handwritten completion flags are not reading evidence.
 
@@ -356,7 +359,9 @@ origin failures, or, for the abstract of a non-arXiv work, complete registry cap
 from every registry that addresses its identifiers (or the saved import of a `url:` work) with no abstract in any of them. Critical sources stay
 pending until the actual dependency is resolved.
 
-On resume, read `status`, `next`, the search tree and relevant checkpoint records,
-and the current gate for the intended next action. Continue independent work
+On resume, read `status --summary`, `next --summary`, the `obligations` page for
+the code in hand, the search tree and relevant checkpoint records, and the
+current gate for the intended next action; run the default `status` only when
+the full nested report is needed. Continue independent work
 within the remaining authorized resources. When a required condition prevents
 progress, record its exact obligation, preserved evidence, and next action.

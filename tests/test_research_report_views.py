@@ -106,6 +106,7 @@ class ReportViewTests(unittest.TestCase):
 
     def test_obligations_page_is_bound_to_the_revision(self):
         report = report_fixture()
+        report["preparation"]["obligations"] = []
         report["obligations"] = [{"code": "abstract_reading_missing", "version_id": "arxiv:2601.%05dv1" % i} for i in range(30)]
         page = obligations_page(report, "abstract_reading_missing", limit=10, cursor=None)
         self.assertEqual((page["total"], page["offset"], page["returned"]), (30, 0, 10))
@@ -119,6 +120,15 @@ class ReportViewTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, "stale_cursor")
         with self.assertRaises(ResearchError):
             obligations_page(report, "abstract_reading_missing", limit=0, cursor=None)
+
+    def test_obligations_page_lists_the_preparation_stage_while_it_has_obligations(self):
+        report = report_fixture()
+        report["preparation"]["obligations"] = [{"code": "cohort_abstract_reading_missing", "version_id": "arxiv:2601.%05dv1" % i} for i in range(3)]
+        report["obligations"] = [{"code": "roots_missing"}]
+        self.assertEqual(obligations_page(report, "cohort_abstract_reading_missing", limit=10, cursor=None)["total"], 3)
+        self.assertEqual(obligations_page(report, "roots_missing", limit=10, cursor=None)["total"], 0)
+        report["preparation"]["obligations"] = []
+        self.assertEqual(obligations_page(report, "roots_missing", limit=10, cursor=None)["total"], 1)
 
     def test_next_prefers_earlier_preparation_stages(self):
         items = [{"code": "synthesis_dependencies_stale"}, {"code": "abstract_reading_missing", "version_id": "b"},

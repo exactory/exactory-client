@@ -18,22 +18,22 @@ _FORBIDDEN_KEYS = ("request_id", "token")
 _FORBIDDEN_SUFFIX = "_revision"
 
 
-def scrub(value):
-    """Remove request identities, launcher tokens and revision labels at every depth."""
+def scrub(value, keys=_FORBIDDEN_KEYS):
+    """Remove request identities, launcher tokens, revision labels and the named keys at every depth."""
     if isinstance(value, dict):
-        return {key: scrub(item) for key, item in value.items()
-                if key not in _FORBIDDEN_KEYS and not key.endswith(_FORBIDDEN_SUFFIX)}
+        return {key: scrub(item, keys) for key, item in value.items()
+                if key not in keys and not key.endswith(_FORBIDDEN_SUFFIX)}
     if isinstance(value, list):
-        return [scrub(item) for item in value]
+        return [scrub(item, keys) for item in value]
     return value
 
 
 def readiness_packet(report):
-    """The six readiness checks' evidence, without labels, history or author names."""
+    """The six readiness checks' evidence, without labels, history or author names at any depth."""
     inputs = dict(report["review_inputs"])
-    inputs["candidate"] = {key: value for key, value in inputs["candidate"].items() if key != "authors"}
     inputs["synthesis"] = {key: value for key, value in inputs["synthesis"].items() if key != "history"}
-    return scrub({"kind": "readiness", "inputs": inputs, "execution_observations": report["execution_observations"]})
+    return scrub({"kind": "readiness", "inputs": inputs, "execution_observations": report["execution_observations"]},
+                 _FORBIDDEN_KEYS + ("authors",))
 
 
 def _source_closure(records, version_ids):

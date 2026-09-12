@@ -6,7 +6,7 @@ description: Execute admitted research cycles, assess actual results and validit
 
 Read the [research constitution](../../RESEARCH_CONSTITUTION.md) and execute the
 [managed research workflow](../../docs/research-workflow.md). Begin or resume with
-`exactory-research status` and `next`. Keep the complete objective, admitted cycle,
+`exactory-research status --summary` and `next --summary`. Keep the complete objective, admitted cycle,
 resource account, current preparation, and exact output contract in view.
 
 ## Plan and execute each cycle

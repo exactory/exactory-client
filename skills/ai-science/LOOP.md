@@ -7,7 +7,7 @@ review of the exact manuscript afterward. Scores do not replace either gate.
 
 ## Develop the research before writing
 
-1. Read current `status`, `next`, the complete objective, source-grounded
+1. Read current `status --summary`, `next --summary`, the complete objective, source-grounded
    synthesis, user context, checkpoint lineage, failures, and remaining resources.
 2. Form the next hypothesis within an explicit scope. Link inherited evidence
    and its assumptions. Revisit a failed method only when new evidence addresses
@@ -82,7 +82,7 @@ Resolve a rejection with appropriate changes and fresh applicable reviews. Proce
 through authorized deposit and submission only with current gates and required
 credentials; reconcile an unknown remote intent before any new write.
 
-On resume, read authoritative `status` and `next`, the search tree and checkpoint
+On resume, read authoritative `status --summary` and `next --summary`, the search tree and checkpoint
 records, pending admissions or intents, review history, source state, and context.
 Inspect unfinished work and reconcile actual operations. Preserve uncommitted
 source changes, user material, immutable evidence, failures, and account history.

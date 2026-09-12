@@ -141,7 +141,7 @@ def _cohort_report(evaluation, collection_ids, target):
         for pending in summary["pending"]:
             obligations.append(obligation("collection_pending", "Resume or resolve acquisition without shrinking the frozen corpus.",
                 collection_id=collection_id, reason=pending, next_eligible_at=summary["next_eligible_at"]))
-        items, matched_by_version = [], {}
+        items, accepted_by_version = [], {}
         for item in summary["reading_obligations"]:
             paths = [item["artifact"]["path"]] if item["artifact"] is not None else []
             for source_id in item["source_ids"]:
@@ -154,17 +154,17 @@ def _cohort_report(evaluation, collection_ids, target):
                 accepted, _ = current_readings(records, artifacts, version, target=target)
             else:
                 accepted = []
+            accepted_by_version[version] = accepted
             matched = abstract_reading(records, artifacts, accepted, item)
             if matched:
                 readings[matched["id"]] = matched
-                matched_by_version[version] = matched
             elif not screened:
                 obligations.append(obligation("cohort_abstract_reading_missing", "Read the selected complete cohort abstract; downloaded content is not a reading.",
                     version_id=version, work_id=item["work_id"], collection_id=collection_id, paths=paths))
             items.append(dict(item, collection_id=collection_id, paths=paths, reading_id=matched["id"] if matched else None))
         if screened:
             from .screening import member_obligations
-            found, screening_counts[collection_id] = member_obligations(records, collection, items, matched_by_version)
+            found, screening_counts[collection_id] = member_obligations(records, collection, items, accepted_by_version)
             obligations.extend(found)
         inventory.extend(items)
         for historical in summary.get("historical_unresolved", []):
