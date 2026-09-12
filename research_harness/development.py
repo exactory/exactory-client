@@ -709,6 +709,12 @@ def _development(context, evidence, value, scope, cycle_id):
     return obligations
 
 
+def cycle_authors(records):
+    """Every author of a cycle plan or cycle assessment; none of them reviews independently."""
+    return sorted({p["payload"]["author"] for p in records.get("cycle_plan", {}).values()}
+                  | {a["payload"]["author"] for a in records.get("cycle_assessment", {}).values()})
+
+
 def carried_developments(records, cycle_ids=None):
     """The `next_round` alternatives and branches of each cycle's current assessment."""
     carried = []
@@ -1029,8 +1035,7 @@ def _candidate(context):
                  "evidence": [e["reference"] for e in evidence], "branches_digest": digest(context.branches),
                  "strategy_accounts_digest": digest(context.records.get("strategy_account", {})),
                  "source_records_digest": digest(context.sources),
-                 "authors": sorted({p["payload"]["author"] for p in context.records.get("cycle_plan", {}).values()}
-                                   | {a["payload"]["author"] for a in context.records.get("cycle_assessment", {}).values()})}
+                 "authors": cycle_authors(context.records)}
     candidate["digest"] = digest(candidate)
     return candidate, _unique(obligations)
 

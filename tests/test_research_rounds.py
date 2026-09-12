@@ -49,10 +49,26 @@ class RoundDecisionTests(RoundsCase):
         self.assert_error("carried_development_missing", lambda: self.mutate(rounds.record_round, omitted))
         carried = [{"assessment_id": "assessment-carry", "kind": "alternative", "question": "Does the bound extend beyond n = 3?",
                     "disposition": "pursue", "reason": "It is the round's goal."}]
+        stop = self.decision_payload(bundle, decision="stop", carried=carried)
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round, stop))
         decision = self.mutate(rounds.record_round, self.decision_payload(bundle, carried=carried))["result"]
         self.assertEqual(decision["payload"]["carried"], carried)
 
-    def test_a_repeated_goal_or_rejected_candidate_needs_reopening_with_changed_evidence(self):
+    def test_an_admitted_round_is_assessed_before_the_next_decision(self):
+        bundle = self.pin()
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        self.write_round(decision, "round-2")
+        second = self.decision_payload(bundle, closes=2, statement="Extend the finite bound to every integer in [0, 7].")
+        self.assert_error("round_assessment_missing", lambda: self.mutate(rounds.record_round, second))
+
+    def test_an_admitted_round_is_assessed_on_this_bundle_before_the_next_decision(self):
+        bundle = self.pin()
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        self.write_round(decision, "round-2", successful=True, bundle_digest="0" * 64)
+        second = self.decision_payload(bundle, closes=2, statement="Extend the finite bound to every integer in [0, 7].")
+        self.assert_error("round_assessment_missing", lambda: self.mutate(rounds.record_round, second))
+
+    def test_a_rejected_candidate_cannot_become_a_goal(self):
         bundle = self.pin()
         first = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
         self.mutate(rounds.record_round_review, self.review_payload(first, verdict="not_approved", assessor="first-assessor"))
@@ -60,16 +76,59 @@ class RoundDecisionTests(RoundsCase):
         repeated["candidates"][0]["direction"] = repeated["next"]["goal"]["direction"] = "horizontal"
         self.assert_error("round_goal_repeated", lambda: self.mutate(rounds.record_round, repeated))
 
-    def test_review_evidence_names_a_manuscript_review_of_this_bundle(self):
+    def test_a_repeated_round_goal_reopens_that_round_with_changed_evidence(self):
         bundle = self.pin()
-        review_id = bundle["id"] + "-gate-1"
-        payload = self.decision_payload(bundle)
+        first = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        self.write_round(first, "round-2", successful=False, bundle_digest=bundle["digest"])
+        second = self.mutate(rounds.record_round, self.decision_payload(
+            bundle, closes=2, statement="Extend the finite bound to every integer in [0, 7]."))["result"]
+        self.write_round(second, "round-3", successful=False, bundle_digest=bundle["digest"])
+        changed = [{"kind": "review", "review_id": bundle["id"] + "-gate-1"}]
+        repeated = self.decision_payload(bundle, closes=3)
+        self.assert_error("round_goal_repeated", lambda: self.mutate(rounds.record_round, repeated))
+        other = self.decision_payload(bundle, closes=3, reopening={"round_id": "round-3", "reason": "The picture changed.", "evidence": changed})
+        self.assert_error("round_goal_repeated", lambda: self.mutate(rounds.record_round, other))
+        unchanged = self.decision_payload(bundle, closes=3, reopening={"round_id": "round-2", "reason": "The picture changed.",
+                                                                       "evidence": self.round_evidence()})
+        self.assert_error("round_reopening_unchanged", lambda: self.mutate(rounds.record_round, unchanged))
+        reopened = self.decision_payload(bundle, closes=3, reopening={"round_id": "round-2", "reason": "The picture changed.", "evidence": changed})
+        recorded = self.mutate(rounds.record_round, reopened)["result"]
+        self.assertEqual(recorded["payload"]["next"]["reopening"]["round_id"], "round-2")
+
+    def test_an_exhausted_direction_reopens_one_of_its_two_unsuccessful_rounds(self):
+        bundle = self.pin()
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        self.write_round(decision, "round-2", successful=False, bundle_digest=bundle["digest"])
+        for closes, direction, statement in ((2, "vertical", "Extend the finite bound to every integer in [0, 7]."),
+                                             (3, "horizontal", "Apply the bound to a neighbouring category.")):
+            decision = self.mutate(rounds.record_round, self.decision_payload(bundle, closes=closes, direction=direction, statement=statement))["result"]
+            self.write_round(decision, "round-" + str(closes + 1), successful=False, bundle_digest=bundle["digest"])
+        statement = "Extend the finite bound to every integer in [0, 11]."
+        changed = [{"kind": "review", "review_id": bundle["id"] + "-gate-1"}]
+        same = self.decision_payload(bundle, closes=4, statement=statement)
+        self.assert_error("round_direction_exhausted", lambda: self.mutate(rounds.record_round, same))
+        earlier = self.decision_payload(bundle, closes=4, statement=statement,
+                                        reopening={"round_id": "round-2", "reason": "The picture changed.", "evidence": changed})
+        self.assert_error("round_direction_exhausted", lambda: self.mutate(rounds.record_round, earlier))
+        reopened = self.decision_payload(bundle, closes=4, statement=statement,
+                                         reopening={"round_id": "round-3", "reason": "The picture changed.", "evidence": changed})
+        self.assertEqual(self.mutate(rounds.record_round, reopened)["result"]["payload"]["next"]["reopening"]["round_id"], "round-3")
+
+    def test_review_evidence_names_a_manuscript_review_of_this_bundle(self):
+        first = self.pin()
+        review_id = first["id"] + "-gate-1"
+        payload = self.decision_payload(first)
         payload["candidates"][0]["evidence"].append({"kind": "review", "review_id": review_id})
         decision = self.mutate(rounds.record_round, payload)["result"]
         self.assertIn(review_id, [e["reference"].get("review_id") for e in decision["evidence"]])
-        wrong = self.decision_payload(bundle)
+        wrong = self.decision_payload(first)
         wrong["candidates"][0]["evidence"].append({"kind": "review", "review_id": "absent"})
         self.assert_error("round_evidence_mismatch", lambda: self.mutate(rounds.record_round, wrong))
+        (self.root / "draft/abstract.txt").write_text("The exact finite bound was enumerated, revised.")
+        second = self.pin()
+        other = self.decision_payload(second)
+        other["candidates"][0]["evidence"].append({"kind": "review", "review_id": review_id})
+        self.assert_error("round_evidence_mismatch", lambda: self.mutate(rounds.record_round, other))
 
 
 class RoundReviewTests(RoundsCase):
@@ -78,6 +137,9 @@ class RoundReviewTests(RoundsCase):
         decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
         author = self.review_payload(decision, assessor="cycle-author")
         self.assert_error("review_not_independent", lambda: self.mutate(rounds.record_round_review, author))
+        unknown = self.review_payload(decision)
+        unknown["round_id"] = "absent"
+        self.assert_error("unknown_round_decision", lambda: self.mutate(rounds.record_round_review, unknown))
         short = self.review_payload(decision)
         short["checks"] = short["checks"][:-1]
         self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round_review, short))
@@ -92,6 +154,13 @@ class RoundReviewTests(RoundsCase):
         again = self.review_payload(decision, verdict="approved")
         self.assert_error("round_review_duplicate", lambda: self.mutate(rounds.record_round_review, again))
 
+    def test_an_author_of_a_cycle_assessment_cannot_review_the_round(self):
+        self.recandidate("second", alternative="not_useful", author="assessment-only-author")
+        bundle = self.pin()
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        author = self.review_payload(decision, assessor="assessment-only-author")
+        self.assert_error("review_not_independent", lambda: self.mutate(rounds.record_round_review, author))
+
     def test_a_stop_review_has_its_own_checks(self):
         bundle = self.pin()
         decision = self.mutate(rounds.record_round, self.decision_payload(bundle, decision="stop"))["result"]
@@ -105,6 +174,8 @@ class RoundReviewTests(RoundsCase):
         bundle = self.pin()
         first = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
         self.mutate(rounds.record_round_review, self.review_payload(first))
+        agreed = self.mutate(rounds.record_round_review, self.review_payload(first, assessor="second-assessor"))["result"]
+        self.assertEqual((agreed["round_id"], agreed["verdict"]), (first["id"], "approved"))
         second = self.mutate(rounds.record_round, self.decision_payload(bundle, decision="stop"))["result"]
         self.assert_error("round_decision_duplicate",
                           lambda: self.mutate(rounds.record_round_review, self.review_payload(second, assessor="other-assessor")))

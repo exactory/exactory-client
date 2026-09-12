@@ -74,11 +74,12 @@ class RoundsCase(DevelopmentCase):
     def round_evidence(self):
         return [self.source_evidence(), self.result_evidence(self.execution_payload)]
 
-    def recandidate(self, suffix, *, alternative="next_round"):
+    def recandidate(self, suffix, *, alternative="next_round", author="cycle-author"):
         """Assess cycle-1 again with its alternative carried, checkpoint it and review readiness again."""
         api = self.development()
         plan = self.store.snapshot()["records"]["cycle_plan"]["cycle-1"]["payload"]
         payload = self.assessment(plan, self.execution_payload, identifier="assessment-" + suffix)
+        payload["author"] = author
         payload["development"]["alternatives"][0].update(disposition=alternative, reason="Exceeds this round's admitted scope.")
         self.mutate(api.assess_cycle, payload)
         self.save_checkpoint("cycle-1", "assessment-" + suffix, "checkpoint-" + suffix)
@@ -95,6 +96,23 @@ class RoundsCase(DevelopmentCase):
         self.mutate(lambda store, payload, **identity: prepared_mutation(store, "test.stage", payload,
                     lambda records, value: ([("workspace", "study", state)], state), **identity), {})
         export_workspace(self.store)
+
+    def write_round(self, decision, identifier, *, successful=None, bundle_digest=None):
+        """Write the admission of the round `decision` proposed directly, with its assessment when `successful` is given.
+
+        A stand-in until `admit_round` and `assess_round` exist; it carries only the fields the decision rules read."""
+        from research_harness.operations import prepared_mutation
+        proposal = decision["payload"]["next"]
+        cycle_ids = sorted(self.store.snapshot()["records"].get("cycle", {}))
+        admission = {"id": identifier, "number": proposal["number"], "decision_id": decision["id"], "goal": proposal["goal"],
+                     "opening": {"cycle_ids": cycle_ids}}
+        changes = [("round_admission", identifier, admission)]
+        if successful is not None:
+            assessment = {"id": identifier + "-assessment", "round_id": identifier, "bundle_digest": bundle_digest, "successful": successful}
+            changes.append(("round_assessment", assessment["id"], assessment))
+        self.mutate(lambda store, payload, **identity: prepared_mutation(store, "test.round", payload,
+                    lambda records, value: (changes, admission), **identity), {})
+        return admission
 
     def goal(self, direction="vertical", statement="Extend the finite bound to every integer in [0, 5]."):
         return {"direction": direction, "field_change": None, "statement": statement,
