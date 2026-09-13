@@ -22,7 +22,7 @@ class TestCodexPackage(unittest.TestCase):
         claude = json.loads((ROOT / ".claude-plugin/plugin.json").read_text())
         self.assertEqual(manifest["name"], claude["name"])
         self.assertEqual(manifest["version"], claude["version"])
-        self.assertEqual(manifest["version"], "0.38.0")
+        self.assertEqual(manifest["version"], "0.39.0")
         self.assertEqual(manifest["skills"], "./codex/skills/")
         self.assertEqual(manifest["hooks"], "./codex/hooks.json")
 

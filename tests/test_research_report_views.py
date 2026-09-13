@@ -19,7 +19,7 @@ def report_fixture():
             "obligations": obligations, "preparation": {"ready": False, "obligations": obligations},
             "next": {"code": "reading_missing", "version_id": "arxiv:2601.00001v1"},
             "readings": {"large": {"notes": "PRIVATE_SOURCE_SENTINEL" * 10000}},
-            "runtime": {"plugin_version": "0.38.0"}, "counts": {"obligations": 20}}
+            "runtime": {"plugin_version": "0.39.0"}, "counts": {"obligations": 20}}
 
 
 def round_view():
@@ -68,9 +68,9 @@ class ReportViewTests(unittest.TestCase):
         report["next"] = {key: long_text for key in ("code", "version_id", "work_id", "collection_id", "unit_id", "explanation")}
         report["obligations"] = [{"code": long_text + str(i)} for i in range(100)]
         report["preparation"]["obligations"] = report["obligations"]
-        report["runtime"] = {"plugin_version": "0.38.0", "source_commit": "a" * 40, "dirty": True,
+        report["runtime"] = {"plugin_version": "0.39.0", "source_commit": "a" * 40, "dirty": True,
                              "executable": "/x" * 100, "package_digest": "b" * 64, "schema_version": 1,
-                             "constitution": {"version": "2", "sha256": "c" * 64}}
+                             "constitution": {"version": "3", "sha256": "c" * 64}}
         report["evaluation"] = {"reads": 10 ** 9, "artifacts_verified": 10 ** 9, "bytes_verified": 10 ** 12, "computed": 10 ** 6,
                                 "readings_assessed": 10 ** 6, "links_validated": 10 ** 6, "graph_builds": 3, "cohort_reports": 1,
                                 "elapsed_seconds": 123456.789}
