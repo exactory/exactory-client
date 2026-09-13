@@ -477,7 +477,7 @@ def _foundation_state(evaluation, profile):
         requirements.setdefault(item["version_id"], "abstract")
         reasons.setdefault(item["version_id"], []).append("cohort")
         historical.add(item["version_id"])
-    from .rounds import active_round, fresh_searches, has_round_exemplar, latest_admission
+    from .rounds import active_round, fresh_searches, has_round_exemplar, latest_admission, literature_obligations
     latest = latest_admission(records) if profile == "research" else None
     active = active_round(records) if latest is not None else None
     searches = {k: s for k, s in records.get("literature_search", {}).items() if s["profile"] == profile}
@@ -488,8 +488,7 @@ def _foundation_state(evaluation, profile):
     if latest is not None:
         selected_searches.update(fresh_searches(records, latest))
     if active is not None:
-        obligations.extend(obligation("round_search_missing", "Record this development round's captured search for the purpose.", purpose=purpose)
-                           for purpose in DEVELOPMENT_PURPOSES if purpose not in selected_searches)
+        obligations.extend(literature_obligations(fresh_searches(records, active), has_round_exemplar(records, active)))
     for purpose in selected_searches:
         matches = [s for s in searches.values() if s["id"] == selected_searches[purpose] and s["purpose"] == purpose]
         current = [s for s in matches if s["scope_digest"] == digest(scope)]
@@ -511,8 +510,6 @@ def _foundation_state(evaluation, profile):
             if search.get("frontier_digest") != frontier_digest(evaluation, profile):
                 obligations.append(obligation("search_frontier_stale", "Assess the works that entered the citation frontier since this judgment.",
                                               purpose=purpose, search_id=search["id"]))
-    if active and not has_round_exemplar(records, active):
-        obligations.append(obligation("round_exemplar_missing", "Select a development exemplar with require-fulltext (purpose exemplar) and read it in full."))
     relevant = set(requirements) | {v for s in searches.values() for v in s["found_work_ids"]}
     inventory, used_readings, bundles, availability = [], dict(cohort_state["readings"]), {}, []
     reference_sample = screening.reference_sample(records, profile)

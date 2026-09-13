@@ -114,10 +114,8 @@ def validate_transition(records, artifacts, previous, proposed):
     require_ready(gate_state(records, artifacts, completed[source]), source + " completion")
     if (source, target) == ("evaluate", "deposit"):
         from .rounds import round_state
-        report = require_ready(round_state(records, artifacts), "entering deposit")
-        if report["decision"] != "stop":
-            raise ResearchError("readiness_required", "Deposit follows an approved decision to stop developing the paper",
-                                {"action": "entering deposit", "decision": report["decision"], "next": "exactory-research gate round"})
+        # A ready round gate is an approved stop: an active round owes its assessment, and an approved continue owes its admission.
+        require_ready(round_state(records, artifacts), "entering deposit")
     prerequisites = {"ideate": "preparation", "experiment": "execution", "write": "readiness",
                      "evaluate": "manuscript", "deposit": "publication", "submit": "deposited", "complete": "submitted"}
     if target in prerequisites:

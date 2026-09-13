@@ -161,7 +161,7 @@ def status_report(store, *, counters=False):
             from .publication import publication_state
             merged = report["obligations"] + publication_state(records, evaluation, "publication")["obligations"] + round_report["obligations"]
             obligations = order_obligations({digest(o): o for o in merged}.values())
-            report = dict(report, ready=not obligations, obligations=obligations)
+            report = dict(report, ready=not obligations, obligations=obligations, counts=dict(report["counts"], obligations=len(obligations)))
     # Before later gates are applicable, expose the actual next unread cohort
     # abstract instead of asking for a root or completed development too early.
     preparation = gate_state(records, evaluation, "cohort" if study and study["stage"] == "cohort" else "preparation", profile=profile)
