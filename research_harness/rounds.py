@@ -279,6 +279,11 @@ def _direction_open(records, goal, reopened_round_id):
                             {"round_ids": [a["id"] for a in exhausted]})
 
 
+def _development_exhausted(records):
+    """The development budget's exhausted obligations (spec section 12): read by the decision and the gate."""
+    return [o for o in resources.obligations(records, "research") if o["purpose"] == "development"]
+
+
 def _next(records, context, evidence, value, number, pursued):
     _fields(value, ("number", "objective", "objective_lineage", "goal", "resource_limits", "reopening"))
     if value["number"] != number + 1:
@@ -293,7 +298,7 @@ def _next(records, context, evidence, value, number, pursued):
     reopened_round_id = _reopening(records, value["reopening"], evidence)
     _distinct(records, goal, reopened_round_id)
     _direction_open(records, goal, reopened_round_id)
-    exhausted = [o for o in resources.obligations(records, "research") if o.get("purpose") == "development"]
+    exhausted = _development_exhausted(records)
     if exhausted:
         raise ResearchError("resource_budget_exhausted", "The development budget has no room for another round", exhausted[0])
     return value
@@ -594,7 +599,7 @@ def _decision_obligations(records, bundle, number):
     reviews = records.get("round_review", {}).values()
     candidates = [d for d in records.get("round_decision", {}).values() if d["bundle_digest"] == bundle["digest"] and d["closes"] == number]
     approved = next((d for d in candidates if any(r["round_id"] == d["id"] and r["verdict"] == "approved" for r in reviews)), None)
-    exhausted = [o for o in resources.obligations(records, "research") if o["purpose"] == "development"]
+    exhausted = _development_exhausted(records)
     if approved is not None:
         if approved["decision"] == "stop":
             return approved, []
@@ -627,15 +632,16 @@ def round_state(records, artifacts):
     except ResearchError as error:
         decision_obligations.append(obligation(error.code, error.message, **(error.details or {})))
     assessed = bundle is not None and assessment is not None and assessment["bundle_digest"] == bundle["digest"]
-    if latest is not None and (active is not None or bundle is not None):
+    if latest is not None:
+        # The round's counts are reported whenever a round was admitted, with or without a current bundle (spec section 14).
         progress = derive_progress(records, evaluation, latest, bundle)
-    if active is not None:
-        progress_obligations = _progress_obligations(progress, active, bundle)
-    elif latest is not None and bundle is not None:
-        if not assessed:
-            decision_obligations.append(obligation("round_assessment_missing", "Assess the current round against its goal on this bundle before deciding.",
-                                                   round_id=latest["id"]))
-        progress_obligations = _continuity_obligations(progress)
+        if active is not None:
+            progress_obligations = _progress_obligations(progress, active, bundle)
+        elif bundle is not None:
+            if not assessed:
+                decision_obligations.append(obligation("round_assessment_missing", "Assess the current round against its goal on this bundle before deciding.",
+                                                       round_id=latest["id"]))
+            progress_obligations = _continuity_obligations(progress)
     decision = None
     if bundle is not None and not decision_obligations and not progress_obligations:
         decision, pending = _decision_obligations(records, bundle, number)
@@ -647,12 +653,15 @@ def round_state(records, artifacts):
             "next": decision["payload"]["next"] if decision and decision["decision"] == "continue" else None,
             "progress": progress,
             "measurement": predictions.measurement_summary(records, bundle) if bundle else None,
+            "limits": latest["resource_limits"] if latest is not None else None,
+            "budget": resources.account_report(records, "research").get("development"),
             "digest": digest({"round": number, "decision": decision["digest"] if decision else None, "obligations": obligations}),
             "counts": {"obligations": len(obligations)}, "mechanical_only": True}
 
 
 def round_summary(report):
-    """A bounded view of the round gate for status reports: numbers, booleans, purpose names and the measurement."""
+    """A bounded view of the round gate for status reports: numbers, booleans, purpose names, the measurement,
+    the admitted round's limits, the development budget line and the usage since the admission (spec sections 12 and 14)."""
     progress = report["progress"]
     return {"number": report["round"], "active": report["active"], "assessed": report["assessed"],
             "decision": report["decision"], "obligations": len(report["obligations"]),
@@ -660,4 +669,5 @@ def round_summary(report):
                 "fresh_purposes": progress["fresh_purposes"], "exemplar": progress["exemplar"], "cycles": len(progress["cycles"]),
                 "new_claims": len(progress["new_claim_ids"]), "dropped_claims": len(progress["dropped_claim_ids"]),
                 "readings": progress["readings"]},
-            "measurement": report["measurement"]}
+            "measurement": report["measurement"], "limits": report["limits"], "budget": report["budget"],
+            "usage": None if progress is None else {p: progress["usage"][p] for p in ("literature", "experiment") if p in progress["usage"]}}

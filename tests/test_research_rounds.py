@@ -836,6 +836,7 @@ class RoundGateTests(RoundsCase):
         report = self.gate()
         self.assertEqual(self.gate_codes(report), ["resource_budget_exhausted", "round_decision_missing"])
         self.assertEqual((report["obligations"][0]["purpose"], report["obligations"][0]["unit"]), ("development", "rounds"))
+        self.assertEqual(report["budget"]["rounds"], {"limit": 1, "charged": 1, "reserved": 0, "unknown": 0})
         another = self.decision_payload(bundle, closes=2, statement="Extend the finite bound to every integer in [0, 7].")
         self.assert_error("resource_budget_exhausted", lambda: self.mutate(rounds.record_round, another))
         stop =self.mutate(rounds.record_round, self.decision_payload(bundle, closes=2, decision="stop"))["result"]
@@ -899,7 +900,12 @@ class RoundStatusTests(RoundsCase):
 
     def test_the_round_summary_is_bounded_and_carries_the_active_round(self):
         from research_harness.cli import status_report
+        from research_harness.operations import prepared_mutation
         self.set_stage("evaluate")
+        # Before any admission: no limits, no development account, no progress and no usage.
+        summary = status_report(self.store)["round"]
+        self.assertEqual((summary["number"], summary["active"], summary["limits"], summary["budget"], summary["progress"],
+                          summary["usage"]), (1, False, None, None, None, None))
         decision, review, admission = self.open_round()
         self.record_purpose("downstream", "downstream-r2")
         summary = status_report(self.store)["round"]
@@ -907,12 +913,26 @@ class RoundStatusTests(RoundsCase):
         self.assertEqual(summary["progress"], {"fresh_purposes": ["downstream"], "exemplar": False, "cycles": 0,
                                                "new_claims": 0, "dropped_claims": 0, "readings": 0})
         self.assertIsNone(summary["measurement"])
-        self.assertEqual(sorted(summary), ["active", "assessed", "decision", "measurement", "number", "obligations", "progress"])
+        # The admitted round's limits, the development budget line and the usage since the admission (spec sections 12 and 14).
+        self.assertEqual(summary["limits"], admission["resource_limits"])
+        self.assertEqual(summary["budget"]["rounds"], {"limit": None, "charged": 1, "reserved": 0, "unknown": 0})
+        self.assertEqual(summary["usage"]["literature"]["network_requests"], 0)
+        self.assertTrue(set(summary["usage"]) <= {"literature", "experiment"})
+        self.assertEqual(sorted(summary), ["active", "assessed", "budget", "decision", "limits", "measurement", "number",
+                                           "obligations", "progress", "usage"])
         self.run_round_work("r2-work")
         bundle = self.pin(self.claims("wider"), identifier="paper-r2")
+        # A charge inside the round, through the real account: the usage is the difference since the admission.
+        self.mutate(lambda store, payload, **identity: prepared_mutation(store, "test.charge", payload,
+                    lambda records, value: ([resources.charge(records, "literature", {"network_requests": 3})], {}), **identity), {})
         summary = status_report(self.store)["round"]
         self.assertEqual((summary["active"], summary["decision"], summary["assessed"]), (True, None, False))
+        self.assertEqual(summary["usage"]["literature"]["network_requests"], 3)
         self.mutate(rounds.assess_round, self.assess_payload(admission, bundle))
         summary = status_report(self.store)["round"]
         self.assertEqual((summary["active"], summary["decision"], summary["assessed"]), (False, None, True))
         self.assertEqual((summary["progress"]["cycles"], summary["progress"]["new_claims"]), (1, 1))
+        # The manuscript changed after the assessment: no bundle is current, and the round's counts are still reported.
+        (self.root / "draft/paper.pdf").write_bytes(b"%PDF-1.4\n% changed\n%%EOF")
+        summary = status_report(self.store)["round"]
+        self.assertEqual((summary["active"], summary["assessed"], summary["progress"]["cycles"]), (False, False, 1))

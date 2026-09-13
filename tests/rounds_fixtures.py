@@ -110,8 +110,8 @@ class RoundsCase(DevelopmentCase):
         records = self.store.snapshot()["records"]
         opening = rounds._opening(records, Evaluation(records, self.artifacts), records["publication_bundle"][decision["bundle_id"]])
         admission = self.write_record("round_admission", {"id": identifier, "number": proposal["number"], "decision_id": decision["id"],
-                                                          "goal": proposal["goal"], "opening": opening,
-                                                          "admitted_revision": self.store.revision + 1})
+                                                          "goal": proposal["goal"], "resource_limits": proposal["resource_limits"],
+                                                          "opening": opening, "admitted_revision": self.store.revision + 1})
         if successful is not None:
             self.write_round_assessment(identifier, successful, bundle_digest)
         return admission

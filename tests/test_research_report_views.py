@@ -25,12 +25,18 @@ def report_fixture():
 def round_view():
     """A round summary at its widest: every purpose fresh, every count and measure at a large value."""
     measure = {"median": 10 ** 9 + 0.5, "spread": [10 ** 9, 10 ** 9]}
+    units = ("network_requests", "source_bytes", "readings", "screenings", "model_input_tokens", "model_output_tokens",
+             "wall_seconds", "rounds")
+    amounts = {unit: 10 ** 9 for unit in units}
     return {"number": 10 ** 9, "active": True, "assessed": False, "decision": "continue", "obligations": 10 ** 9,
             "progress": {"fresh_purposes": ["changes", "downstream", "exemplars", "next_step"], "exemplar": True,
                          "cycles": 10 ** 9, "new_claims": 10 ** 9, "dropped_claims": 10 ** 9, "readings": 10 ** 9},
             "measurement": {"reviews": {"count": 10 ** 9, "soundness": measure, "presentation": measure, "contribution": measure,
                                         "overall": measure},
-                            "predictions": {"count": 10 ** 9, "percentile": measure}}}
+                            "predictions": {"count": 10 ** 9, "percentile": measure}},
+            "limits": {"literature": dict(amounts), "experiment": dict(amounts)},
+            "budget": {unit: {"limit": 10 ** 9, "charged": 10 ** 9, "reserved": 10 ** 9, "unknown": 10 ** 9} for unit in units},
+            "usage": {"literature": dict(amounts), "experiment": dict(amounts)}}
 
 
 class ReportViewTests(unittest.TestCase):
