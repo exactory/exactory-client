@@ -13,21 +13,10 @@ from .evaluation import Evaluation
 from .evidence import digest
 from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .development import cycle_authors
-from .publication import _assessor_key, _bundle, latest_reviews, validate_assessor
+from .publication import SCORE_SCALES, _assessor_key, _bundle, latest_reviews, validate_assessor
 
 _ERROR = "invalid_prediction"
 _COHORT_ERROR = "prediction_cohort_mismatch"
-_SCORE_KEYS = ("overall", "contribution", "soundness", "presentation")
-
-
-def _cohort(records):
-    """The study's primary cohort definition: the first collection of the research scope."""
-    scope = records.get("literature_scope", {}).get("research", {})
-    for identifier in scope.get("collection_ids", []):
-        collection = records.get("collection", {}).get(identifier)
-        if collection is not None:
-            return collection["definition"]
-    raise ResearchError(_COHORT_ERROR, "The study has no frozen cohort to predict against")
 
 
 def _prediction(records, value):
@@ -38,7 +27,8 @@ def _prediction(records, value):
         raise ResearchError(_ERROR, "Percentile and band are integers from 1 to 100")
     if not value["band"]["best"] <= value["percentile"] <= value["band"]["worst"]:
         raise ResearchError(_ERROR, "The band contains the percentile: best <= percentile <= worst")
-    definition = _cohort(records)
+    # The study's primary cohort: the first collection of the research scope, which the pinned bundle's readiness proved exists.
+    definition = records["collection"][records["literature_scope"]["research"]["collection_ids"][0]]["definition"]
     expected = {"corpus": definition["corpus"], "category": definition["primaryCategory"],
                 "windowStart": definition["windowStart"], "windowEnd": definition["windowEnd"]}
     if {k: value[k] for k in expected} != expected:
@@ -85,5 +75,5 @@ def measurement_summary(records, bundle):
     percentiles = [saved["prediction"]["percentile"] for saved in records.get("manuscript_prediction", {}).values()
                    if saved["bundle_digest"] == bundle["digest"]]
     reviews = {"count": len(cores)}
-    reviews.update({key: _measure([core[key] for core in cores]) for key in _SCORE_KEYS})
+    reviews.update({key: _measure([core[key] for core in cores]) for key, _ in SCORE_SCALES})
     return {"reviews": reviews, "predictions": {"count": len(percentiles), "percentile": _measure(percentiles)}}

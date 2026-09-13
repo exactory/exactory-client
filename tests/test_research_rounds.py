@@ -475,6 +475,7 @@ class PredictionTests(RoundsCase):
         summary = predictions.measurement_summary(self.store.snapshot()["records"], bundle)
         self.assertEqual(summary["predictions"], {"count": 3, "percentile": {"median": 30, "spread": [25, 40]}})
         self.assertEqual(summary["reviews"]["count"], 5)
+        self.assertEqual(sorted(summary["reviews"]), ["contribution", "count", "overall", "presentation", "soundness"])
         self.assertEqual(summary["reviews"]["overall"], {"median": 6, "spread": [6, 6]})
         self.assertEqual(summary["reviews"]["contribution"], {"median": 3, "spread": [3, 3]})
         # Two more reviews by one assessor on this bundle, as records written before the duplicate

@@ -15,6 +15,8 @@ from .workspace import read_file, strict_json
 
 FILE_TYPES = {"pdf": "application/pdf", "abstract": "text/plain", "bibliography": "text/plain",
               "claims": "application/json", "sources": "application/octet-stream"}
+# The rubric's numeric scores and their unchanged maximum (every scale starts at 1).
+SCORE_SCALES = (("soundness", 4), ("presentation", 4), ("contribution", 4), ("overall", 10))
 
 
 def _ready(records, artifacts):
@@ -146,7 +148,7 @@ def _review(records, artifacts, value, bundle):
     text(core["summary"], "Review summary")
     for key in ("strengths", "weaknesses"):
         strings(core[key], key, nonempty=True)
-    for key, maximum in (("soundness", 4), ("presentation", 4), ("contribution", 4), ("overall", 10)):
+    for key, maximum in SCORE_SCALES:
         if type(core[key]) not in (int, float) or not 1 <= core[key] <= maximum:
             raise ResearchError("invalid_review", "Review scores must use the unchanged rubric scales")
     if core["decision"] not in ("accept", "reject"):
