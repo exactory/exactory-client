@@ -13,6 +13,7 @@ from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
+from .graph import obligation
 from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .workspace import strict_json
 from . import development, literature, predictions, principles, publication, resources
@@ -544,3 +545,90 @@ def assess_round(store, payload, *, expected_revision, request_id):
         return [immutable_record(records, "round_assessment", value["id"], record)], record
 
     return prepared_mutation(store, "round.assess", payload, prepare, expected_revision=expected_revision, request_id=request_id)
+
+
+def _progress_obligations(records, evaluation, admission, bundle):
+    """What the active round still owes before its assessment (spec sections 7, 8 and 9)."""
+    progress = derive_progress(records, evaluation, admission, bundle)
+    obligations = [obligation("round_search_missing", "Record this development round's captured search for the purpose.", purpose=p)
+                   for p in literature.DEVELOPMENT_PURPOSES if p not in progress["fresh_purposes"]]
+    if not progress["exemplar"]:
+        obligations.append(obligation("round_exemplar_missing", "Select a development exemplar with require-fulltext (purpose exemplar) and read it in full."))
+    if not progress["cycles"]:
+        obligations.append(obligation("round_cycle_missing", "Plan, execute and assess at least one cycle in this round."))
+    if bundle is not None:
+        # A claim that disappeared, or whose text changed without a marker, breaks the continuity rule the same way.
+        unkept = sorted(progress["dropped_claim_ids"] + progress["changed_claim_ids"])
+        if unkept:
+            obligations.append(obligation("round_claims_dropped", "Keep, revise or supersede every claim of the round's opening bundle.", claim_ids=unkept))
+        if not progress["new_claim_ids"]:
+            obligations.append(obligation("round_claim_missing", "The round's manuscript needs at least one new evidenced claim."))
+    obligations.append(obligation("round_assessment_missing", "Assess the current round against its goal before deciding.", round_id=admission["id"]))
+    return obligations, progress
+
+
+def _decision_obligations(records, bundle, number):
+    """The approved decision closing round `number` on the bundle, whether it was admitted, and what is missing for it."""
+    reviews = records.get("round_review", {}).values()
+    candidates = [d for d in records.get("round_decision", {}).values() if d["bundle_digest"] == bundle["digest"] and d["closes"] == number]
+    approved = next((d for d in candidates if any(r["round_id"] == d["id"] and r["verdict"] == "approved" for r in reviews)), None)
+    if approved is not None:
+        admitted = any(a["decision_id"] == approved["id"] for a in admissions(records))
+        if approved["decision"] == "continue" and not admitted:
+            return approved, admitted, [obligation("round_admission_missing", "Admit the approved next round with round-admit.", decision_id=approved["id"])]
+        return approved, admitted, []
+    if candidates:
+        latest = max(candidates, key=lambda d: d["decided_revision"])
+        pending = any(r["round_id"] == latest["id"] for r in reviews)
+        code = "round_review_pending" if pending else "round_review_missing"
+        return None, False, [obligation(code, "Obtain an approving independent review of the round decision.", decision_id=latest["id"])]
+    return None, False, [obligation("round_decision_missing", "Decide on this exact manuscript: continue with a goal, or stop.", round=number)]
+
+
+def round_state(records, artifacts):
+    """The gate between evaluate and either a new development round or deposit (spec section 6).
+
+    In order: the current bundle; for an admitted round, its assessment on this bundle and, while
+    it is active, what it still owes; then the decision closing the current round, its approving
+    review and, for a continue, its admission. `decision` is set only when an approved decision
+    binds the current bundle."""
+    evaluation = Evaluation.of(records, artifacts)
+    latest = latest_admission(records)
+    number = current_number(records)
+    active = active_round(records)
+    decision_obligations, progress_obligations, progress = [], [], None
+    bundle = None
+    try:
+        bundle = publication._bundle(records, evaluation)
+    except ResearchError as error:
+        decision_obligations.append(obligation(error.code, error.message, **(error.details or {})))
+    if active is not None:
+        progress_obligations, progress = _progress_obligations(records, evaluation, active, bundle)
+    elif latest is not None and bundle is not None and assessment_for(records, latest["id"])["bundle_digest"] != bundle["digest"]:
+        decision_obligations.append(obligation("round_assessment_missing", "Assess the current round against its goal on this bundle before deciding.",
+                                               round_id=latest["id"]))
+    decision, admitted = None, False
+    if bundle is not None and not decision_obligations and not progress_obligations:
+        decision, admitted, pending = _decision_obligations(records, bundle, number)
+        decision_obligations.extend(pending)
+    obligations = decision_obligations + progress_obligations
+    return {"ready": not obligations, "obligations": obligations, "decision_obligations": decision_obligations,
+            "progress_obligations": progress_obligations, "round": number, "active": active is not None,
+            "decision": decision["decision"] if decision else None, "decision_id": decision["id"] if decision else None,
+            "next": decision["payload"]["next"] if decision and decision["decision"] == "continue" else None,
+            "admitted": admitted, "progress": progress,
+            "measurement": predictions.measurement_summary(records, bundle) if bundle else None,
+            "digest": digest({"round": number, "decision": decision["digest"] if decision else None, "obligations": obligations}),
+            "counts": {"obligations": len(obligations)}, "mechanical_only": True}
+
+
+def round_summary(report):
+    """A bounded view of the round gate for status reports: numbers, booleans, purpose names and the measurement."""
+    progress = report["progress"]
+    return {"number": report["round"], "active": report["active"], "decision": report["decision"], "admitted": report["admitted"],
+            "obligations": len(report["obligations"]),
+            "progress": None if progress is None else {
+                "fresh_purposes": progress["fresh_purposes"], "exemplar": progress["exemplar"], "cycles": len(progress["cycles"]),
+                "new_claims": len(progress["new_claim_ids"]), "dropped_claims": len(progress["dropped_claim_ids"]),
+                "readings": progress["readings"]},
+            "measurement": report["measurement"]}

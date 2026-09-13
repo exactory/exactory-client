@@ -66,6 +66,9 @@ def gate_state(records, artifacts, action, *, profile=None):
     if action in {"manuscript", "publication", "deposited", "submitted"}:
         from .publication import publication_state
         return publication_state(records, artifacts, action)
+    if action == "round":
+        from .rounds import round_state
+        return round_state(records, artifacts)
     if action == "initiate":
         # Fixing the objective is a supported preparation operation before
         # literature -> ideate. Intake itself does not require that objective.
@@ -92,6 +95,14 @@ def validate_transition(records, artifacts, previous, proposed):
             raise ResearchError("readiness_required", "Assess the experiment before returning to ideate")
         if proposed["status"] == "done":
             raise ResearchError("readiness_required", "A return for more work cannot assert that work is done")
+        if (source, target) == ("evaluate", "literature"):
+            # The round entry: round-admit opened the next round, which is then active until its assessment.
+            from .rounds import active_round, round_state
+            if active_round(records) is None:
+                report = round_state(records, artifacts)
+                raise ResearchError("readiness_required", "A development round is entered after round-admit opens an approved continue decision",
+                                    {"action": "entering a development round", "decision": report["decision"],
+                                     "obligations": report["obligations"], "next": "exactory-research gate round"})
         return
     if target == source and proposed["status"] != "done":
         return
@@ -101,6 +112,12 @@ def validate_transition(records, artifacts, previous, proposed):
         "evaluate": "publication", "deposit": "deposited", "submit": "submitted", "complete": "submitted",
     }
     require_ready(gate_state(records, artifacts, completed[source]), source + " completion")
+    if (source, target) == ("evaluate", "deposit"):
+        from .rounds import round_state
+        report = require_ready(round_state(records, artifacts), "entering deposit")
+        if report["decision"] != "stop":
+            raise ResearchError("readiness_required", "Deposit follows an approved decision to stop developing the paper",
+                                {"action": "entering deposit", "decision": report["decision"], "next": "exactory-research gate round"})
     prerequisites = {"ideate": "preparation", "experiment": "execution", "write": "readiness",
                      "evaluate": "manuscript", "deposit": "publication", "submit": "deposited", "complete": "submitted"}
     if target in prerequisites:

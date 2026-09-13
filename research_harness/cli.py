@@ -10,6 +10,7 @@ from . import acquisition, cohort_evidence, development, graph, literature, prin
 from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evaluation import Evaluation
+from .evidence import digest
 from .gates import gate_report, gate_state, require_ready
 from .integration import adopt_workspace, current_store, export_workspace, pin_artifact
 from .operations import fields
@@ -55,7 +56,7 @@ from .verification import bind_verdict
 OPERATIONS.update({"manuscript": prepare_publication, "manuscript-review": record_manuscript_review, "bind-verdict": bind_verdict})
 
 ACQUISITION = ("collect", "resume", "acquire", "expand", "fulltext", "import-response", "visual")
-GATES = ("cohort", "foundation", "preparation", "readiness", "execution", "verification", "manuscript", "publication", "deposited", "submitted")
+GATES = ("cohort", "foundation", "preparation", "readiness", "execution", "verification", "manuscript", "publication", "deposited", "submitted", "round")
 
 
 def add_identity(parser, *, required=True):
@@ -151,6 +152,16 @@ def status_report(store, *, counters=False):
     study = records.get("workspace", {}).get("study")
     action = "verification" if profile == "verification" else "readiness"
     report = gate_state(records, evaluation, action, profile=profile)
+    round_report = None
+    if config is not None and profile == "research":
+        from .rounds import round_state, round_summary
+        round_report = round_state(records, evaluation)
+        if study and study["stage"] == "evaluate":
+            # At evaluate the study is led first through the manuscript measurement, then to the round decision.
+            from .publication import publication_state
+            merged = report["obligations"] + publication_state(records, evaluation, "publication")["obligations"] + round_report["obligations"]
+            obligations = order_obligations({digest(o): o for o in merged}.values())
+            report = dict(report, ready=not obligations, obligations=obligations)
     # Before later gates are applicable, expose the actual next unread cohort
     # abstract instead of asking for a root or completed development too early.
     preparation = gate_state(records, evaluation, "cohort" if study and study["stage"] == "cohort" else "preparation", profile=profile)
@@ -161,6 +172,7 @@ def status_report(store, *, counters=False):
     obligations = current_obligations({"obligations": report["obligations"], "preparation": preparation})
     return dict(report, revision=snapshot["revision"], profile=profile, runtime=runtime_provenance(),
                 study=study, preparation=preparation, resources=resources.account_report(records, profile), **diagnostics,
+                round=round_summary(round_report) if round_report else None,
                 next=upcoming or (order_obligations(obligations)[0] if obligations else None),
                 pending_executions=[key for key in records.get("execution_admission", {}) if key not in records.get("execution_outcome", {})],
                 remote_intents=list(records.get("remote_intent", {}).values()),
