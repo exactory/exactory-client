@@ -6,7 +6,8 @@ from pathlib import Path
 import sys
 import time
 
-from . import acquisition, cohort_evidence, development, graph, literature, principles, reading, resources, screening, synthesis, visual_assets
+from . import (acquisition, cohort_evidence, development, graph, literature, predictions, principles, reading, resources, rounds,
+                screening, synthesis, visual_assets)
 from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evaluation import Evaluation
@@ -47,6 +48,11 @@ OPERATIONS = {
     "budget": resources.set_budget,
     "screen-batch": screening.record_screening_batch,
     "screening-checkpoint": screening.record_screening_checkpoint,
+    "round": rounds.record_round,
+    "round-review": rounds.record_round_review,
+    "round-admit": rounds.admit_round,
+    "round-assess": rounds.assess_round,
+    "manuscript-prediction": predictions.record_prediction,
 }
 
 from .execution import bind_execution, reconcile_execution, record_imported_execution
@@ -106,8 +112,8 @@ def build_parser():
         if command == "gate":
             item.add_argument("action", choices=GATES)
         if command == "export":
-            item.add_argument("--kind", choices=("workspace", "foundation", "readiness", "manuscript", "native"), default="workspace")
-            item.add_argument("--destination", help="New independent reviewer directory for readiness inputs and actual source bytes.")
+            item.add_argument("--kind", choices=("workspace", "foundation", "readiness", "manuscript", "round", "native"), default="workspace")
+            item.add_argument("--destination", help="New independent reviewer directory for the readiness, manuscript or round packet and its actual source bytes.")
             item.add_argument("--attack-root", help="Native attack root for an immutable foundation delivery.")
             item.add_argument("--claim-binding", help="JSON source correspondence for an external native verification claim.")
         if command == "recover":
@@ -237,10 +243,11 @@ def run(args):
             raise ResearchError("invalid_input", "Native export requires --attack-root and a new --destination")
         binding = strict_json(Path(args.claim_binding).read_bytes()) if args.claim_binding else None
         return export_native(store, Path(args.attack_root), Path(args.destination), claim_binding=binding)
-    from .review_delivery import deliver_readiness, deliver_manuscript
+    from .review_delivery import deliver_manuscript, deliver_readiness, deliver_round
     if not args.destination:
-        raise ResearchError("invalid_input", "Readiness delivery requires --destination for the separate reviewer")
-    return (deliver_manuscript if args.kind == "manuscript" else deliver_readiness)(store, Path(args.destination))
+        raise ResearchError("invalid_input", "Reviewer delivery requires --destination for the separate reviewer")
+    deliver = {"readiness": deliver_readiness, "manuscript": deliver_manuscript, "round": deliver_round}[args.kind]
+    return deliver(store, Path(args.destination))
 
 
 def main(argv=None):

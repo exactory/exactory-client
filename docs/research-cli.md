@@ -98,7 +98,7 @@ The example for each operation contains all its required keys and shows the comp
 | `roots` | `profile`, `roots: string[]`, `collection_ids: string[]` | `target` is required for verification; optional `historical_cutoff`. Research objective identity is set by `target`, not by this scope. |
 | `bundle` | `id`, `version_id`, `source_id`, `scope`, `completeness`, `units`, `inventory`, `bibliography`, `resolutions` | Each unit has `id`, `kind`, `required`, `link`, and optional `reason`/`url`; inventory and bibliography must reflect the original article. |
 | `read` | `id`, `version_id`, `depth`, `inspections`, `notes` | Fulltext reading also supplies `bundle_id`; each inspection has `unit_id`, `link`, `note`. All seven note fields shown in the example are required. |
-| `budget` | `profile`, `purpose`, `limits`, `reason` | Purposes are `literature`, `screening`, `experiment`. `limits` names every unit (`network_requests`, `source_bytes`, `readings`, `screenings`, `model_input_tokens`, `model_output_tokens`, `wall_seconds`); null means unlimited. A later budget for the same key needs a reason and cannot drop a limit below the charged amount (`resource_budget_below_charged`). Acquisition admission needs room for `max_requests` (at least one request) beside the reservations of every acquisition that is still admitted, and finish charges the attempts and bytes actually used; the reserved amount is the allowance of the admitted operations, so an interrupted acquisition holds its allowance until a new request id for the same operation and target supersedes it. `read-batch` and `screen-batch` charge their counts and reported usage, counting null usage as unknown. New work over a limit is refused with `resource_budget_exhausted`; usage already spent is always recorded; charged plus reserved at or above a limit is a preparation obligation and `status --summary` shows every account. |
+| `budget` | `profile`, `purpose`, `limits`, `reason` | Purposes are `literature`, `screening`, `experiment`, `development`. `limits` names every unit (`network_requests`, `source_bytes`, `readings`, `screenings`, `model_input_tokens`, `model_output_tokens`, `wall_seconds`, `rounds`); null means unlimited. A `development` budget bounds the number of rounds with the `rounds` unit; `round-admit` charges one round, and a charged limit refuses the next `continue` with `resource_budget_exhausted`. A later budget for the same key needs a reason and cannot drop a limit below the charged amount (`resource_budget_below_charged`). Acquisition admission needs room for `max_requests` (at least one request) beside the reservations of every acquisition that is still admitted, and finish charges the attempts and bytes actually used; the reserved amount is the allowance of the admitted operations, so an interrupted acquisition holds its allowance until a new request id for the same operation and target supersedes it. `read-batch` and `screen-batch` charge their counts and reported usage, counting null usage as unknown. New work over a limit is refused with `resource_budget_exhausted`; usage already spent is always recorded; charged plus reserved at or above a limit is a preparation obligation and `status --summary` shows every account. |
 | `read-batch` | `id`, `depth`, `items` | `usage`. Records 1 to 100 abstract readings in one event, all or none. Each item is `{version_id, note, notes: {seven fields: {text, status}}}` with optional `screening: {relevance, reason, conventions}`, `audit: {relevance, reason}`, and `consequential: bool`; the harness derives the whole-abstract span inspection itself. Reading ids are `reading:<sha256 of [batch id, version]>`. The reading covers the version's selected complete abstract; a version without one fails with `abstract_missing`. An `audit` belongs to a currently excluded member (`invalid_batch` otherwise) and is stored with the member's screening `round` at the time of reading. A failing item rejects the batch with `invalid_batch` and the failing `items` (`index`, `code`, `message`). `usage` is `{model, input_tokens, output_tokens, wall_seconds}`, each null when unknown. |
 | `screen-batch` | `id`, `items`, `screener` | `round` (default 1), `usage`. Under `screened-v1` only (`policy_inapplicable` otherwise). Records 1 to 200 screenings, all or none; a failing item rejects the batch with `invalid_screening` and the failing `items`. A re-screen needs a round above the member's current round and replaces the member's screening. Each item is `{collection_id (null for a Tier 3 family), work_id, version_id, disposition, relevance, reason, conventions}` with `promotion_reasons` for `promote` and `context` for a reference. Rules: `strong` relevance requires `promote`; `exclude` requires `none` relevance and a complete abstract; `weak` stays `pending`, `doctrine`, or `promote`. `screener` is `{kind: agent|human, model}`. A screen is never a reading. |
 | `screening-checkpoint` | `id`, `batch_ids`, `reason` | Under `screened-v1` only. Accepted when the two named batches are the two most recent `read-batch` records, both contain only `pending` members, and every item of both was judged `consequential: false`; otherwise `invalid_screening`. While it covers, unread `pending` members carry no obligation and are counted as `inventoried_unread`; a later consequential batch, a higher screening round, or a policy change removes the effect. |
@@ -122,6 +122,11 @@ The example for each operation contains all its required keys and shows the comp
 | `manuscript` | `id`, `files`, `claim_evidence` | Files contains `pdf`, `abstract`, `bibliography`, `claims`, `sources`; `sources` may be null. Each claim mapping has `claim_id`, `evidence`. |
 | `manuscript-review` | `id`, `bundle_digest`, `assessor`, `review: ArtifactRef`, `blind: true` | The referenced original rubric JSON is unchanged. Latest applicable reviews from two distinct independent assessors must accept. |
 | `bind-verdict` | `id`, `task_digest`, `body: ArtifactRef`, `assessment` | Assessment has `assessor`, `provenance`, `independence_basis`, `blind: true`, and separate `soundness`, `novelty`, `impact` checks with full-read links. |
+| `manuscript-prediction` | `id`, `bundle_digest`, `blind: true`, `assessor`, `prediction`, `reasons` | `prediction` is `{corpus, category, windowStart, windowEnd, percentile, band: {best, worst}}`; the four cohort fields equal the study's frozen collection definition (`prediction_cohort_mismatch` otherwise) and `best <= percentile <= worst` within 1 to 100. One prediction per assessor per exact bundle (`manuscript_prediction_duplicate`); the assessor is not a cycle author. Recorded and summarized as a result; no gate rule reads it. |
+| `round` | `id`, `closes`, `decision`, `bundle_digest`, `candidates`, `carried`, `next`, `reason` | `decision` is `continue` (exactly one `pursue` candidate and `next` present) or `stop` (no `pursue` candidate and `next: null`). Candidates are `{id, direction: vertical|horizontal, statement, disposition: pursue|rejected|deferred, reason, evidence}`; evidence takes the `source` and `result` shapes or `{kind: "review", review_id}` naming a manuscript review of this bundle. `carried` disposes of every `next_round` development the closing round's cycle assessments recorded: `{assessment_id, kind: alternative|branch, question or cycle_id, disposition, reason}`. `next` is `{number, objective, objective_lineage, goal, resource_limits, reopening}`; the goal has `direction`, `field_change`, `statement`, `contribution_delta`, `beneficiaries`, `success_criteria` (`kind` `claim` or `scope`), `stop_conditions`, `continuity`, `route`, `risks`, `evidence`. See "Development rounds". |
+| `round-review` | `id`, `round_id`, `round_digest`, `assessor`, `verdict`, `checks`, `limitations` | `verdict` is `approved`, `not_approved`, or `unresolved`. For a `continue` decision the checks are `impact`, `demand`, `novelty_risk`, `feasibility`, `distinctness`, `continuity`; for `stop` they are `stop` and `demand`; each is addressed once with `status` (`passed`, `failed`, `unresolved`), a reason and evidence. One review per assessor per decision (`round_review_duplicate`); the assessor is not a cycle author. |
+| `round-admit` | `id`, `round_id`, `review_id`, `reason` | Opens the round of an approved `continue` decision on the current bundle. Records the round's number, goal, objective, limits and opening state; applies a widened objective through its lineage. |
+| `round-assess` | `id`, `round_id`, `bundle_digest`, `criteria`, `stop_conditions`, `summary` | Judges every success criterion and stop condition of the admitted goal once with `status` (`observed`, `not_observed`, `unresolved`), an explanation and evidence, on the exact current bundle. The harness derives and stores the round's progress with the record. |
 
 A fulltext note uses `depth: "fulltext"`, its current `bundle_id`, and inspections for the actual required units. Abstract inspections use `unit_id: null` and cover the complete saved abstract. Notes report `present`, `absent`, or `not_applicable` as supported by the source. Saving text about a paper without matching its captured location cannot satisfy a reading.
 
@@ -248,12 +253,13 @@ the assessed scope, every actual execution, and the remaining obligations.
 | --- | --- |
 | `objective_status` | `open`: the complete original objective has unfinished obligations. `achieved`: the assessment claims that the whole objective is established; all current evidence and scope requirements still apply. |
 | `disposition` | `continue`: further work remains on this cycle's branch. `complete`: the branch is claimed complete. `failed`: retain a failed branch and its actual failure assessment. `budget_paused`: retain unfinished work under its resource limit. |
-| `development.alternatives[].disposition` | `pursue`: a useful development remains. `not_useful`: the stated question is not useful for this candidate, with a reason and evidence. `resolved`: the question is substantively resolved, with evidence. `budget_paused`: useful development remains and is paused for its budget. |
-| `development.branches[].disposition` | The same four values as alternatives: `pursue`, `not_useful`, `resolved`, `budget_paused`. Each entry names an actual `cycle_id` and retains its reason and evidence. At readiness, a `resolved` branch requires its own current assessment with `validated_result: true`. |
+| `development.alternatives[].disposition` | `pursue`: a useful development remains. `not_useful`: the stated question is not useful for this candidate, with a reason and evidence. `resolved`: the question is substantively resolved, with evidence. `budget_paused`: useful development remains and is paused for its budget. `next_round`: a useful development that exceeds this round's admitted scope; it leaves no readiness obligation and is carried to the round gate, which must dispose of it. |
+| `development.branches[].disposition` | The same five values as alternatives: `pursue`, `not_useful`, `resolved`, `budget_paused`, `next_round`. Each entry names an actual `cycle_id` and retains its reason and evidence. At readiness, a `resolved` branch requires its own current assessment with `validated_result: true`. |
 
 The top-level `disposition` and the two nested disposition fields use different
 vocabularies. A retained `pursue` or `budget_paused` alternative or branch leaves
-an unmet development obligation. Neither `not_useful` nor `resolved` is a way to
+an unmet development obligation; a `next_round` one leaves none and is disposed
+of by the next `round` decision. Neither `not_useful` nor `resolved` is a way to
 erase a failed branch, its evidence, or its resource account. Readiness includes
 the candidate's own branch and every other retained cycle.
 
@@ -324,6 +330,103 @@ UUID, DOI, and arXiv routes all fetch the task-only target. The server supplies 
 
 The task endpoint may reveal only an own-verdict ID after a lost POST response; it cannot establish the exact body that was accepted. Such an intent remains pending even when that ID exists, and a second POST for the uncertain submission is refused. A verification-level owner serializes the complete verdict decision and write, including distinct assessment IDs. Other verification targets retain independent owners. Known-success receipts and explicitly bound revisions remain supported. A stale task response cannot erase a locally confirmed prior verdict or permit a revision that omits the latest known predecessor. The server's `requestedByViewer` means the request opener, not the paper author, and supplies no authorship proof.
 
+## Development rounds
+
+A development round is one pass of the paper-level loop: a goal that the current
+paper does not yet meet, the literature, cycles and manuscript that pursue it, and
+an assessment against that goal. Every record binds the exact current publication
+bundle; the loop is bounded by records and it ends only through a recorded exit.
+
+`round` closes the current round on the exact bundle (`round_bundle_mismatch`
+otherwise) and decides: `continue` with one pursued candidate and `next`, or `stop`.
+`closes` is the current round number, 1 before any admission (`round_number_mismatch`
+otherwise). A round of number 2 or more needs its assessment on this bundle first
+(`round_assessment_missing`) and every claim of its opening bundle kept, revised or
+superseded (`round_claims_dropped` with the claim ids). Every `next_round`
+development of the closing round's cycle assessments is disposed of in `carried`
+(`carried_development_missing`). `next.number` is `closes + 1`. `next.objective` is the
+configured objective with `objective_lineage: null`, or a wider statement with
+`objective_lineage: {previous_id, containment}` (`objective_locked` for a wrong
+`previous_id`, an unchanged statement or a reused id; `invalid_target` for a malformed
+objective). The goal states the pursued candidate; its statement differs from every
+earlier round's goal and every earlier `rejected` candidate (`round_goal_repeated`),
+unless `next.reopening: {round_id, reason, evidence}` names an earlier round assessed
+unsuccessful and carries evidence the earlier decision did not
+(`round_reopening_unchanged`). After two consecutive unsuccessful rounds in one
+direction, `continue` needs the other direction or a reopening
+(`round_direction_exhausted`). A `field_change` is a horizontal goal that stays in the
+study's corpus and adds a category; its literature limits carry `network_requests`
+and `readings` for the collected difference (`round_field_change_refused`). A
+recorded `development` budget needs room for one more round
+(`resource_budget_exhausted`). Malformed payloads fail with `invalid_round`.
+
+`round-review` is the independent judgment of one decision. It binds the decision's
+digest on the current bundle (`unknown_round_decision`, `round_review_stale`), takes an
+assessor who is not a cycle author (`review_not_independent`), and addresses every
+check of the decision's kind once. One review per assessor per decision
+(`round_review_duplicate`); a closing round with an approved decision on this bundle
+takes no second approval (`round_decision_duplicate`).
+
+`round-admit` opens the round of an approved `continue` decision. It needs the
+decision and its review (`unknown_round_decision`, `unknown_round_review`), an
+approving review of that decision (`round_review_required`), the decision's bundle
+still current (`round_review_stale`), the decision closing the current round
+(`round_number_mismatch`), and no admitted round without an assessment
+(`round_active`). It charges one round to the `development` account, applies a
+widened objective (the configuration target, `research_objective` and
+`objective_lineage` records), and stores the opening state the round is judged
+against: the bundle and its claim ids, the selected search per purpose, the full-text
+requirement ids, the cycle ids, the full reading count and the resource accounts.
+
+While a round is active, `status`, `gate foundation` and `gate round` carry its
+obligations: `round_search_missing` for each consequence purpose (`downstream`,
+`next_step`, `exemplars`, `changes`) whose selected search is the opening one,
+`round_exemplar_missing` until a `require-fulltext` with purpose `exemplar` recorded
+in the round is read in full, `round_cycle_missing` until a cycle is planned in the
+round, `round_claims_dropped` and `round_claim_missing` once a bundle is pinned, and
+`round_assessment_missing`. Consequence searches keep the shape and checks of the
+five foundation purposes. The manuscript keeps every opening claim id; a changed
+claim carries `revised: {previous, reason}` and a withdrawn one `superseded: {reason}`.
+A rewritten text without a marker counts as dropped, and a superseded claim does
+not count as new.
+
+`round-assess` judges the admitted round on the exact current bundle
+(`unknown_round`, `round_bundle_mismatch`; `invalid_round` for a round that is not
+the latest admitted one; `round_already_assessed` for a second assessment on the
+same bundle). The harness derives and stores with the record the round's new,
+dropped and changed claim ids, its fresh purposes and exemplar, its cycles, searches
+and full readings since admission, its resource usage, and the bundle's review and
+prediction medians and spreads. A round with no `observed` success criterion is
+unsuccessful; a round without a new claim, the four searches, the exemplar or a cycle
+is unproductive and therefore unsuccessful. The medians are information for the user
+and the round assessor; no rule reads them.
+
+`manuscript-prediction` records one blind assessor's cohort prediction on the exact
+bundle (`publication_review_stale` otherwise): the percentile the paper is expected
+to reach in the study's frozen cohort, in the shape the market's verdict carries.
+Each blind measurement reviewer returns the rubric core and, separately, this
+prediction. `status --summary`, `round-assess` and the round packet report the
+review and prediction medians.
+
+`gate round` evaluates, in order: the current bundle (`publication_bundle_missing`,
+`publication_readiness_stale`, `publication_artifact_changed`); for an admitted
+round its assessment on this bundle, its productivity obligations and its claims
+continuity; then the decision closing the current round (`round_decision_missing`),
+its approving review (`round_review_missing`, `round_review_pending`) and, for
+`continue`, the `development` budget and the admission (`round_admission_missing`).
+The report carries `decision`, `round`, `active`, `assessed`, `next`, `progress`,
+`measurement`, `limits` and `budget`. Two transition rules read it: `evaluate ->
+literature` needs the gate ready with `decision: continue` and the admission
+recorded, and `evaluate -> deposit` needs the publication gate and the round gate
+ready with `decision: stop`.
+
+`export --kind round --destination DIR` delivers the latest decision on the current
+bundle (`round_decision_missing` without one) to the independent round assessor: the
+manuscript packet, the bundle's reviews and predictions with their measurement, the
+decision, every earlier round's goal, assessment and decision, the closing round's
+carried developments, the synthesis sections, the selected searches and the
+literature account, with the actual source bytes and an `inputs.json` manifest.
+
 ## Native math preparation
 
 New native proposals use schema version 3 with the existing computation field and a `foundation` reference. Export current complete preparation before independent proposal review:
@@ -364,7 +467,7 @@ Complete retained run/journal reconciliation before an amendment. Recovery, paus
 
 ## Status, projections, and recovery
 
-`status` and `next` expose the current revision, study, preparation, actionable obligations, pending admissions, remote intents/observations, retained adoptions, and the `runtime` that produced the report (plugin version, source commit, dirty flag, package digest, constitution digest). `next` is the highest-priority current obligation in preparation order (configuration, collection, cohort abstracts, objective and roots, critical full text, bundles and units, searches, Tier 3 abstracts, synthesis); at the cohort stage it is the next unread cohort abstract.
+`status` and `next` expose the current revision, study, preparation, actionable obligations, pending admissions, remote intents/observations, retained adoptions, the `round` (number, active, assessed, decision, progress counts, measurement medians, the admitted round's limits, the `development` budget line and the usage since admission), and the `runtime` that produced the report (plugin version, source commit, dirty flag, package digest, constitution digest). `next` is the highest-priority current obligation in preparation order (configuration, collection, cohort abstracts, objective and roots, critical full text, bundles and units, searches, Tier 3 abstracts, synthesis); at the cohort stage it is the next unread cohort abstract. At the `evaluate` stage the status obligations also carry the publication gate's and the round gate's obligations, publication first, so the study finishes the manuscript measurement before the round decision.
 
 The optional `--summary` flag on `status` and `next` returns a bounded advisory view. It runs the same current-state evaluation as the default command. It does not change research obligations, authorize a transition, or reduce required reading. `status --summary` is limited to 16 KiB and `next --summary` to 4 KiB of UTF-8 JSON. Counts distinguish displayed and omitted obligations. Hints may omit or truncate details and must not be used directly as mutation payloads. `status --summary` also reports `evaluation` counters (objects verified, readings assessed, graph builds, elapsed seconds); they describe this invocation and are never stored. The default `status` and `next` responses are unchanged.
 
@@ -376,7 +479,7 @@ Under `screened-v1` the cohort gate requires a screening for every member (`scre
 
 `obligations --code CODE [--limit N] [--cursor CURSOR]` returns one page of the current obligations that carry `CODE`, ordered by exact version. The current obligations are the ones `next` follows: the cohort stage's while it has any, otherwise the readiness obligations. A page carries `total`, `offset`, `returned`, and `next_cursor`. A cursor is `REVISION:OFFSET`; a cursor whose revision differs from the current store fails with `stale_cursor`, so a listing never mixes revisions. On resume, read `status --summary`, then `next --summary`, then the `obligations` page for the code you are working on; run the default detailed command only when the full nested report is needed.
 
-`gate ACTION` supports `cohort`, `foundation`, `preparation`, `readiness`, `execution`, `verification`, `manuscript`, `publication`, `deposited`, and `submitted` and exits nonzero for unmet obligations.
+`gate ACTION` supports `cohort`, `foundation`, `preparation`, `readiness`, `execution`, `verification`, `manuscript`, `publication`, `deposited`, `submitted`, and `round` and exits nonzero for unmet obligations.
 
 SQLite is authoritative. Workspace JSON, decision logs, and familiar result views are projections. Editing them cannot authorize work. `export --kind workspace` rebuilds workspace projections from current history; run reconciliation repairs execution projections. `exactory-lab decide` retains immutable decisions with revision/request identity and preserves any old decision-log bytes. Explicit `adopt` archives selected legacy paths and exposes pending obligations without rewriting their old scientific claims.
 
