@@ -500,10 +500,14 @@ class PredictionTests(RoundsCase):
 
 class RoundAssessmentTests(RoundsCase):
     def test_a_productive_round_is_assessed_with_derived_progress(self):
+        from research_harness.operations import prepared_mutation
         decision, review, admission = self.open_round()
         self.run_round_work("r2")
         bundle = self.pin(self.claims("wider"), identifier="paper-r2")
         self.measure(bundle, "r2")
+        # A charge inside the round, through the real account: the round's usage is the difference since its opening.
+        self.mutate(lambda store, payload, **identity: prepared_mutation(store, "test.charge", payload,
+                    lambda records, value: ([resources.charge(records, "literature", {"network_requests": 3})], {}), **identity), {})
         assessed = self.mutate(rounds.assess_round, self.assess_payload(admission, bundle))["result"]
         derived = assessed["derived"]
         self.assertEqual(sorted(derived["fresh_purposes"]), ["changes", "downstream", "exemplars", "next_step"])
@@ -513,10 +517,10 @@ class RoundAssessmentTests(RoundsCase):
         self.assertEqual((derived["revised_claim_ids"], derived["superseded_claim_ids"]), ([], []))
         self.assertEqual(derived["measurement"]["predictions"]["count"], 3)
         self.assertEqual(derived["measurement"], predictions.measurement_summary(self.store.snapshot()["records"], bundle))
-        # The round read its exemplar in full once; the nine searches it captured are its network requests.
+        # The round read its exemplar in full once; its admission charged the round, and the charge above its requests.
         self.assertEqual(derived["readings"], 1)
-        self.assertEqual(derived["usage"]["literature"]["readings"], 1)
-        self.assertEqual(derived["usage"]["literature"]["network_requests"], 9)
+        self.assertEqual(derived["usage"]["literature"]["network_requests"], 3)
+        self.assertEqual(derived["usage"]["development"]["rounds"], 1)
         self.assertEqual((assessed["successful"], assessed["unproductive"]), (True, False))
         self.assertEqual((assessed["round_id"], assessed["bundle_digest"]), (admission["id"], bundle["digest"]))
         self.assertEqual(assessed["assessed_revision"], self.store.revision)

@@ -15,7 +15,7 @@ from .evaluation import Evaluation
 from .evidence import digest
 from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .workspace import strict_json
-from . import development, literature, principles, publication, resources
+from . import development, literature, predictions, principles, publication, resources
 
 
 DECISIONS = ("continue", "stop")
@@ -26,6 +26,7 @@ CHECKS_CONTINUE = ("impact", "demand", "novelty_risk", "feasibility", "distinctn
 CHECKS_STOP = ("stop", "demand")
 VERDICTS = ("approved", "not_approved", "unresolved")
 CHECK_STATUSES = ("passed", "failed", "unresolved")
+CRITERION_STATUSES = ("observed", "not_observed", "unresolved")
 OPENING_PURPOSES = literature.SEARCH_PURPOSES + literature.DEVELOPMENT_PURPOSES
 _ERROR = "invalid_round"
 
@@ -79,6 +80,23 @@ def active_round(records):
     """The admitted round without an assessment, or None."""
     latest = latest_admission(records)
     return latest if latest is not None and assessment_for(records, latest["id"]) is None else None
+
+
+def fresh_searches(records, admission):
+    """The development purposes whose selected search is not the one the round opened with: {purpose: search_id}."""
+    selection = records.get("search_selection", {})
+    fresh = {}
+    for purpose in literature.DEVELOPMENT_PURPOSES:
+        selected = selection.get("research:" + purpose, {}).get("search_id")
+        if selected is not None and selected != admission["opening"]["search_selection"][purpose]:
+            fresh[purpose] = selected
+    return fresh
+
+
+def has_round_exemplar(records, admission):
+    """Whether a research full-text requirement with the exemplar purpose was recorded after the round opened."""
+    return any(r["profile"] == "research" and r["purpose"] == "exemplar" and r["id"] not in admission["opening"]["requirement_ids"]
+               for r in records.get("fulltext_requirement", {}).values())
 
 
 class _RoundEvidence:
@@ -417,3 +435,85 @@ def admit_round(store, payload, *, expected_revision, request_id):
         return changes, record
 
     return prepared_mutation(store, "round.admit", payload, prepare, expected_revision=expected_revision, request_id=request_id)
+
+
+def _compute_usage(records, opening_accounts):
+    """What each purpose charged since the round opened, per unit."""
+    usage = {}
+    for purpose, units in resources.account_report(records, "research").items():
+        before = opening_accounts.get(purpose, {})
+        usage[purpose] = {unit: value["charged"] - before.get(unit, {}).get("charged", 0) for unit, value in units.items()}
+    return usage
+
+
+def derive_progress(records, evaluation, admission, bundle):
+    """What the round did since its admission, judged against the opening state it recorded.
+
+    Information about the round for its assessment, the gate report and the round packet; no
+    rule reads the measurement. `bundle` is None when no bundle is pinned: the claim lists are
+    then empty and there is no measurement."""
+    opening = admission["opening"]
+    fresh = sorted(fresh_searches(records, admission))
+    exemplar = has_round_exemplar(records, admission)
+    cycles = sorted(c["id"] for c in records.get("cycle", {}).values()
+                    if c["id"] not in opening["cycle_ids"] and c["assessment_id"] is not None)
+    claims = {}
+    if bundle is not None:
+        claims = {c["id"]: c for c in strict_json(evaluation.read(bundle["files"]["claims"]["artifact"]))}
+    new = sorted(i for i, c in claims.items() if i not in opening["claim_ids"] and "superseded" not in c)
+    return {"fresh_purposes": fresh, "exemplar": exemplar, "cycles": cycles,
+            "readings": len(records.get("reading", {})) - opening["reading_count"],
+            "new_claim_ids": new,
+            "revised_claim_ids": sorted(i for i, c in claims.items() if "revised" in c),
+            "superseded_claim_ids": sorted(i for i, c in claims.items() if "superseded" in c),
+            "dropped_claim_ids": sorted(i for i in opening["claim_ids"] if i not in claims) if bundle else [],
+            "usage": _compute_usage(records, opening["accounts"]),
+            "measurement": predictions.measurement_summary(records, bundle) if bundle else None,
+            "unproductive": not (new and len(fresh) == len(literature.DEVELOPMENT_PURPOSES) and exemplar and cycles)}
+
+
+def _validate_judgments(values, expected, name, evidence):
+    """Every item of the goal (`expected` ids) judged exactly once with a status, an explanation and evidence."""
+    seen = []
+    for item in _items(values, name):
+        _fields(item, ("id", "status", "explanation", "evidence"))
+        if item["id"] not in expected or item["id"] in seen:
+            raise ResearchError(_ERROR, "Judge each of the goal's " + name.lower() + " exactly once")
+        seen.append(item["id"])
+        _choice(item["status"], CRITERION_STATUSES, name + " status")
+        _text(item["explanation"], name + " explanation")
+        evidence.many(item["evidence"], name + " evidence")
+    if set(seen) != set(expected):
+        raise ResearchError(_ERROR, "Judge every one of the goal's " + name.lower())
+    return values
+
+
+def assess_round(store, payload, *, expected_revision, request_id):
+    """Judge the current round against its goal on the exact current bundle, and derive what the round did."""
+    artifacts = ArtifactStore(store.root)
+
+    def prepare(records, value):
+        context, bundle = _prepare_context(records, artifacts)
+        _fields(value, ("id", "round_id", "bundle_digest", "criteria", "stop_conditions", "summary"))
+        _text(value["id"], "Round assessment ID")
+        _text(value["summary"], "Round summary")
+        admission = records.get("round_admission", {}).get(value["round_id"])
+        if admission is None:
+            raise ResearchError("unknown_round", "Assess an admitted round", {"id": value["round_id"]})
+        if assessment_for(records, admission["id"]) is not None:
+            raise ResearchError("round_already_assessed", "This round already has its assessment", {"round_id": admission["id"]})
+        if value["bundle_digest"] != bundle["digest"]:
+            raise ResearchError("round_bundle_mismatch", "Assess the round on the exact current manuscript bundle")
+        evidence = _RoundEvidence(context, bundle)
+        goal = admission["goal"]
+        criteria = _validate_judgments(value["criteria"], {c["id"] for c in goal["success_criteria"]}, "Success criteria", evidence)
+        _validate_judgments(value["stop_conditions"], {s["id"] for s in goal["stop_conditions"]}, "Stop conditions", evidence)
+        derived = derive_progress(records, context.artifacts, admission, bundle)
+        successful = any(c["status"] == "observed" for c in criteria) and not derived["unproductive"]
+        record = {"id": value["id"], "payload": value, "round_id": admission["id"], "bundle_digest": bundle["digest"],
+                  "derived": derived, "successful": successful, "unproductive": derived["unproductive"],
+                  "assessed_revision": expected_revision + 1, "request_id": request_id}
+        record["digest"] = digest(record)
+        return [immutable_record(records, "round_assessment", value["id"], record)], record
+
+    return prepared_mutation(store, "round.assess", payload, prepare, expected_revision=expected_revision, request_id=request_id)
