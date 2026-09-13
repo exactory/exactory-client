@@ -38,12 +38,13 @@ class RoundsCase(DevelopmentCase):
             item["superseded"] = {"reason": "Replaced by a wider claim."}
         return items
 
-    def pin(self, claims=None, identifier=None, reviews=2):
-        """Write claims.json, pin the bundle and record `reviews` accepting blind reviews."""
+    def pin(self, claims=None, identifier=None, reviews=2, *, evidence=None):
+        """Write claims.json, pin the bundle with `evidence` on every claim (the candidate's result by default)
+        and record `reviews` accepting blind reviews."""
         claims = self.claims() if claims is None else claims
         (self.root / "evidence/claims.json").write_text(json.dumps(claims))
         identifier = identifier or ("paper-" + str(self.store.revision))
-        evidence = [self.result_evidence(self.execution_payload)]
+        evidence = [self.result_evidence(self.execution_payload)] if evidence is None else evidence
         bundle = self.mutate(publication.prepare_publication, {"id": identifier,
             "files": {"pdf": "draft/paper.pdf", "abstract": "draft/abstract.txt", "bibliography": "draft/references.bib",
                       "claims": "evidence/claims.json", "sources": None},

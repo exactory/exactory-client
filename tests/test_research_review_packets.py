@@ -91,7 +91,8 @@ class RoundPacketTests(RoundsCase):
         from research_harness.review_delivery import deliver_round
         directory = self.root / "reviews" / "round-1"
         self.assert_error("publication_bundle_missing", lambda: deliver_round(self.store, directory))
-        bundle = self.pin()
+        # A source closure enters the packet through the claim's source evidence: its work carries the author names.
+        bundle = self.pin(evidence=[self.result_evidence(self.execution_payload), self.source_evidence()])
         self.assert_error("round_decision_missing", lambda: deliver_round(self.store, directory))
         self.measure(bundle, "one")
         decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
@@ -105,6 +106,9 @@ class RoundPacketTests(RoundsCase):
         self.assertEqual(manifest["decision"]["payload"]["id"], decision["id"])
         self.assertEqual(len(manifest["reviews"]), 5)
         self.assertEqual({r["kind"] for r in manifest["reviews"]}, {"agent"})
+        # Review ids stay: a candidate's review evidence names one of them.
+        self.assertEqual({r["id"] for r in manifest["reviews"]},
+                         {bundle["id"] + "-gate-1", bundle["id"] + "-gate-2", "measure-one-1", "measure-one-2", "measure-one-3"})
         self.assertEqual(len(manifest["predictions"]), 3)
         self.assertEqual(sorted(p["percentile"] for p in manifest["predictions"]), [25, 30, 40])
         records = self.store.snapshot()["records"]
@@ -112,6 +116,10 @@ class RoundPacketTests(RoundsCase):
         self.assertIn("overall", text)
         self.assertIn("percentile", text)
         self.assertIn("candidates", text)
+        work_id = self.links[0]["version_id"]
+        self.assertIn(work_id, manifest["manuscript"]["evidence"]["work"])
+        self.assertEqual(records["work"][work_id]["authors"], ["A. Researcher"])
+        self.assertNotIn("A. Researcher", text)
         for forbidden in ('"request_id"', '"token"', '_revision"', '"authors"', '"author"'):
             self.assertNotIn(forbidden, text)
         # Before any admission the closing round is the study so far: every cycle assessment, no round history.

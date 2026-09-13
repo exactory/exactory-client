@@ -73,6 +73,14 @@ def assessment_for(records, admission_id):
                key=lambda a: a["assessed_revision"], default=None)
 
 
+def closing_round_assessments(records):
+    """The cycle assessments recorded after the latest admission (every assessment before any round was admitted): the closing round's."""
+    latest = latest_admission(records)
+    admitted_revision = latest["admitted_revision"] if latest is not None else 0
+    return {identifier: assessment for identifier, assessment in records.get("cycle_assessment", {}).items()
+            if assessment["assessed_revision"] > admitted_revision}
+
+
 def current_number(records):
     latest = latest_admission(records)
     return latest["number"] if latest else 1
@@ -162,11 +170,10 @@ def _carried_key(item):
     return (item["assessment_id"], item["kind"], item.get("question") or item.get("cycle_id"))
 
 
-def _carried(records, latest, values):
+def _carried(records, values):
     """The developments carried by the closing round: those its cycle assessments recorded since the round was admitted."""
-    admitted_revision = latest["admitted_revision"] if latest else 0
-    expected = {_carried_key(item): item for item in development.carried_developments(records)
-                if records["cycle_assessment"][item["assessment_id"]]["assessed_revision"] > admitted_revision}
+    closing = closing_round_assessments(records)
+    expected = {_carried_key(item): item for item in development.carried_developments(records) if item["assessment_id"] in closing}
     seen = {}
     for item in _items(values, "Carried developments", nonempty=False):
         _fields(item, ("assessment_id", "kind", "disposition", "reason"), ("question", "cycle_id"))
@@ -329,7 +336,7 @@ def record_round(store, payload, *, expected_revision, request_id):
                 raise ResearchError("round_claims_dropped", "Keep, revise or supersede every claim of the round's opening bundle", {"claim_ids": unkept})
         evidence = _RoundEvidence(context, bundle)
         pursued = _candidates(value["candidates"], evidence)
-        carried = _carried(records, latest, value["carried"])
+        carried = _carried(records, value["carried"])
         if value["decision"] == "continue":
             if len(pursued) != 1:
                 raise ResearchError(_ERROR, "A continue decision pursues exactly one candidate")

@@ -21,7 +21,7 @@ from .evidence import digest
 from .predictions import measurement_summary
 from .publication import latest_reviews
 from .resources import account_report
-from .rounds import admissions, assessment_for, latest_admission
+from .rounds import admissions, assessment_for, closing_round_assessments
 
 
 _FORBIDDEN_KEYS = ("request_id", "token")
@@ -89,7 +89,8 @@ def manuscript_packet(records, bundle):
 
 def round_packet(records, bundle, decision):
     """The paper, its reviews and predictions, the decision under review, and the program's history."""
-    reviews = [{"kind": saved["assessor"]["kind"], "core": saved["core"]} for saved in latest_reviews(records, bundle["digest"]).values()]
+    reviews = [{"id": saved["id"], "kind": saved["assessor"]["kind"], "core": saved["core"]}
+               for saved in latest_reviews(records, bundle["digest"]).values()]
     predictions = [saved["prediction"] for saved in records.get("manuscript_prediction", {}).values()
                    if saved["bundle_digest"] == bundle["digest"]]
     history = []
@@ -100,12 +101,8 @@ def round_packet(records, bundle, decision):
                         "resource_limits": admission["resource_limits"],
                         "decision": {k: opened_by[k] for k in ("id", "payload", "digest")},
                         "assessment": None if assessment is None else {k: assessment[k] for k in ("payload", "derived", "successful", "unproductive")}})
-    # The closing round's cycle assessments are those after the latest admission (every assessment before any
-    # round was admitted): the selection the decision's carried developments are checked against.
-    latest = latest_admission(records)
-    admitted_revision = latest["admitted_revision"] if latest is not None else 0
-    development = {identifier: assessment["payload"]["development"] for identifier, assessment in records.get("cycle_assessment", {}).items()
-                   if assessment["assessed_revision"] > admitted_revision}
+    development = {identifier: assessment["payload"]["development"]
+                   for identifier, assessment in closing_round_assessments(records).items()}
     selection = records.get("synthesis_selection", {})
     synthesis = {kind: records["synthesis"][selection["research:" + kind]["id"]]["payload"]
                  for kind in ("context", "innovation") if "research:" + kind in selection}
