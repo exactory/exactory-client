@@ -54,6 +54,21 @@ class ResearchPublicationTests(DevelopmentCase):
         self.mutate(api.record_manuscript_review, self.manuscript_review(bundle, "reviewer-b"))
         self.assertTrue(api.publication_report(self.store)["ready"])
 
+    def test_claim_continuity_markers_have_the_stated_shape(self):
+        api = self.publication()
+        claim = {"id": "bound", "claim": "The maximum is 9.", "source": "The recorded finite enumeration."}
+        for marker in ({"revised": None}, {"revised": True}, {"revised": {}}, {"revised": {"previous": "", "reason": "Sharpened."}},
+                       {"revised": {"previous": "The maximum is 8.", "reason": "Sharpened.", "extra": 1}},
+                       {"superseded": {}}, {"superseded": {"reason": None}},
+                       {"revised": {"previous": "The maximum is 8.", "reason": "Sharpened."}, "superseded": {"reason": "Widened."}}):
+            (self.root / "evidence/claims.json").write_text(json.dumps([dict(claim, **marker)]))
+            with self.subTest(marker=marker):
+                self.assert_error("publication_claims_missing", lambda: self.mutate(api.prepare_publication, self.bundle_payload()))
+        for marker in ({"revised": {"previous": "The maximum is 8.", "reason": "Sharpened."}}, {"superseded": {"reason": "Widened."}}):
+            (self.root / "evidence/claims.json").write_text(json.dumps([dict(claim, **marker)]))
+            payload = dict(self.bundle_payload(), id="paper-" + next(iter(marker)))
+            self.assertEqual(self.mutate(api.prepare_publication, payload)["result"]["id"], payload["id"])
+
     def test_changed_pdf_abstract_bibliography_and_claims_invalidate_the_exact_bundle(self):
         api = self.publication()
         bundle = self.mutate(api.prepare_publication, self.bundle_payload())["result"]

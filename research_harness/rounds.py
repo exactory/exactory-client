@@ -26,7 +26,6 @@ CHECKS_CONTINUE = ("impact", "demand", "novelty_risk", "feasibility", "distinctn
 CHECKS_STOP = ("stop", "demand")
 VERDICTS = ("approved", "not_approved", "unresolved")
 CHECK_STATUSES = ("passed", "failed", "unresolved")
-CRITERION_STATUSES = ("observed", "not_observed", "unresolved")
 OPENING_PURPOSES = literature.SEARCH_PURPOSES + literature.DEVELOPMENT_PURPOSES
 _ERROR = "invalid_round"
 
@@ -91,6 +90,11 @@ def fresh_searches(records, admission):
         if selected is not None and selected != admission["opening"]["search_selection"][purpose]:
             fresh[purpose] = selected
     return fresh
+
+
+def count_full_readings(records):
+    """How many readings of full depth the store holds; abstract and passage readings are not counted."""
+    return sum(1 for r in records.get("reading", {}).values() if r["depth"] == "fulltext")
 
 
 def has_round_exemplar(records, admission):
@@ -228,6 +232,7 @@ def _reopening(records, value, evidence):
         return None
     _fields(value, ("round_id", "reason", "evidence"))
     _text(value["reason"], "Reopening reason")
+    _text(value["round_id"], "Reopened round ID")
     admission = records.get("round_admission", {}).get(value["round_id"])
     assessment = assessment_for(records, admission["id"]) if admission else None
     if assessment is None or assessment["successful"]:
@@ -331,6 +336,7 @@ def record_round_review(store, payload, *, expected_revision, request_id):
         context, bundle = _prepare_context(records, artifacts)
         _fields(value, ("id", "round_id", "round_digest", "assessor", "verdict", "checks", "limitations"))
         _text(value["id"], "Round review ID")
+        _text(value["round_id"], "Reviewed decision ID")
         decision = records.get("round_decision", {}).get(value["round_id"])
         if decision is None:
             raise ResearchError("unknown_round_decision", "Review a recorded round decision", {"id": value["round_id"]})
@@ -378,7 +384,7 @@ def _opening(records, evaluation, bundle):
     return {"bundle_id": bundle["id"], "bundle_digest": bundle["digest"], "claim_ids": sorted(c["id"] for c in claims),
             "search_selection": {p: selection.get("research:" + p, {}).get("search_id") for p in OPENING_PURPOSES},
             "requirement_ids": sorted(records.get("fulltext_requirement", {})),
-            "cycle_ids": sorted(records.get("cycle", {})), "reading_count": len(records.get("reading", {})),
+            "cycle_ids": sorted(records.get("cycle", {})), "fulltext_reading_count": count_full_readings(records),
             "accounts": resources.account_report(records, "research")}
 
 
@@ -398,6 +404,8 @@ def admit_round(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
         _fields(value, ("id", "round_id", "review_id", "reason"))
         _text(value["id"], "Round admission ID")
+        _text(value["round_id"], "Admitted decision ID")
+        _text(value["review_id"], "Admitting review ID")
         _text(value["reason"], "Admission reason")
         # Checked before readiness: an active round's own literature obligations keep readiness
         # from passing, and the reason to refuse is the open round, not the work it still owes.
@@ -467,7 +475,7 @@ def derive_progress(records, evaluation, admission, bundle):
     changed = sorted(i for i, c in claims.items() if i in opening_claims and c["claim"] != opening_claims[i]
                      and "revised" not in c and "superseded" not in c)
     return {"fresh_purposes": fresh, "exemplar": exemplar, "cycles": cycles,
-            "readings": len(records.get("reading", {})) - opening["reading_count"],
+            "readings": count_full_readings(records) - opening["fulltext_reading_count"],
             "new_claim_ids": new,
             "revised_claim_ids": sorted(i for i, c in claims.items() if "revised" in c),
             "superseded_claim_ids": sorted(i for i, c in claims.items() if "superseded" in c),
@@ -487,7 +495,7 @@ def _validate_judgments(values, expected, name, evidence):
         if item["id"] not in expected or item["id"] in seen:
             raise ResearchError(_ERROR, "Judge each of the goal's " + name.lower() + " exactly once")
         seen.append(item["id"])
-        _choice(item["status"], CRITERION_STATUSES, name + " status")
+        _choice(item["status"], development.OBSERVATION_STATUSES, name + " status")
         _text(item["explanation"], name + " explanation")
         evidence.many(item["evidence"], name + " evidence")
     if set(seen) != set(expected):
@@ -504,6 +512,7 @@ def assess_round(store, payload, *, expected_revision, request_id):
         _fields(value, ("id", "round_id", "bundle_digest", "criteria", "stop_conditions", "summary"))
         _text(value["id"], "Round assessment ID")
         _text(value["summary"], "Round summary")
+        _text(value["round_id"], "Assessed round ID")
         admission = records.get("round_admission", {}).get(value["round_id"])
         if admission is None:
             raise ResearchError("unknown_round", "Assess an admitted round", {"id": value["round_id"]})

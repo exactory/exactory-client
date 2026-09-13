@@ -143,6 +143,8 @@ class RoundDecisionTests(RoundsCase):
         unchanged = self.decision_payload(bundle, closes=3, reopening={"round_id": "round-2", "reason": "The picture changed.",
                                                                        "evidence": self.round_evidence()})
         self.assert_error("round_reopening_unchanged", lambda: self.mutate(rounds.record_round, unchanged))
+        listed = self.decision_payload(bundle, closes=3, reopening={"round_id": ["round-2"], "reason": "The picture changed.", "evidence": changed})
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round, listed))
         reopened = self.decision_payload(bundle, closes=3, reopening={"round_id": "round-2", "reason": "The picture changed.", "evidence": changed})
         recorded = self.mutate(rounds.record_round, reopened)["result"]
         self.assertEqual(recorded["payload"]["next"]["reopening"]["round_id"], "round-2")
@@ -200,6 +202,9 @@ class RoundReviewTests(RoundsCase):
         unknown = self.review_payload(decision)
         unknown["round_id"] = "absent"
         self.assert_error("unknown_round_decision", lambda: self.mutate(rounds.record_round_review, unknown))
+        listed = self.review_payload(decision)
+        listed["round_id"] = [decision["id"]]
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round_review, listed))
         short = self.review_payload(decision)
         short["checks"] = short["checks"][:-1]
         self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round_review, short))
@@ -277,7 +282,7 @@ class RoundAdmissionTests(RoundsCase):
         self.assertEqual(opening["search_selection"]["downstream"], None)
         self.assertEqual(opening["search_selection"]["direct"], "direct")
         self.assertEqual(opening["requirement_ids"], sorted(before.get("fulltext_requirement", {})))
-        self.assertEqual(opening["reading_count"], len(before["reading"]))
+        self.assertEqual(opening["fulltext_reading_count"], sum(1 for r in before["reading"].values() if r["depth"] == "fulltext"))
         self.assertEqual(opening["accounts"], resources.account_report(before, "research"))
         self.assertEqual(opening["accounts"]["literature"]["network_requests"]["charged"], 7)
         records = self.store.snapshot()["records"]
@@ -292,6 +297,8 @@ class RoundAdmissionTests(RoundsCase):
         other = self.mutate(rounds.record_round, self.decision_payload(bundle, statement="Extend the finite bound to every integer in [0, 7]."))["result"]
         absent = {"id": "round-2", "round_id": "absent", "review_id": approving["id"], "reason": "No such decision."}
         self.assert_error("unknown_round_decision", lambda: self.mutate(rounds.admit_round, absent))
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.admit_round, dict(absent, round_id=[first["id"]])))
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.admit_round, dict(absent, round_id=first["id"], review_id=[approving["id"]])))
         borrowed = dict(absent, round_id=other["id"], reason="Borrowed approval.")
         self.assert_error("round_review_required", lambda: self.mutate(rounds.admit_round, borrowed))
         admitted = self.mutate(rounds.admit_round, dict(absent, round_id=first["id"], reason="The approved decision."))["result"]
@@ -504,7 +511,10 @@ class PredictionTests(RoundsCase):
 class RoundAssessmentTests(RoundsCase):
     def test_a_productive_round_is_assessed_with_derived_progress(self):
         from research_harness.operations import prepared_mutation
+        from research_harness.reading import record_reading
         decision, review, admission = self.open_round()
+        # An abstract reading inside the round is not one of the round's full readings.
+        self.mutate(record_reading, self.abstract_note(self.links[1]["version_id"], "abstract-r2"))
         self.run_round_work("r2")
         bundle = self.pin(self.claims("wider"), identifier="paper-r2")
         self.measure(bundle, "r2")
@@ -558,6 +568,7 @@ class RoundAssessmentTests(RoundsCase):
         for edit in (lambda p: p.update(criteria=[]),
                      lambda p: p["criteria"].append(dict(p["criteria"][0])),
                      lambda p: p["criteria"][0].update(id=["sc-wider"]),
+                     lambda p: p.update(round_id=["round-2"]),
                      lambda p: p["criteria"][0].update(status="passed"),
                      lambda p: p["stop_conditions"][0].update(id="other")):
             payload = self.assess_payload(admission, bundle)
@@ -582,7 +593,7 @@ class RoundAssessmentTests(RoundsCase):
         self.assertEqual([c["id"] for c in assessed["payload"]["criteria"]], ["sc-wider", "sc-scope"])
         self.assertTrue(assessed["successful"])
 
-    def test_an_unproductive_round_lacks_a_fresh_search_or_the_round_exemplar(self):
+    def test_an_unproductive_round_lacks_a_fresh_search_the_round_exemplar_or_a_new_cycle(self):
         decision, review, admission = self.open_round()
         self.run_round_work("r2")
         bundle = self.pin(self.claims("wider"), identifier="paper-r2")
@@ -599,6 +610,11 @@ class RoundAssessmentTests(RoundsCase):
         stale_exemplar["opening"]["requirement_ids"].append("exemplar-r2")
         progress = rounds.derive_progress(records, evaluation, stale_exemplar, bundle)
         self.assertEqual((progress["exemplar"], progress["unproductive"]), (False, True))
+        # As if the round had opened with the cycle it planned and assessed.
+        stale_cycle = copy.deepcopy(admission)
+        stale_cycle["opening"]["cycle_ids"].append("cycle-r2")
+        progress = rounds.derive_progress(records, evaluation, stale_cycle, bundle)
+        self.assertEqual((progress["cycles"], progress["unproductive"]), ([], True))
 
     def test_claims_continuity_marks_revised_superseded_and_dropped_claims(self):
         decision, review, admission = self.open_round()

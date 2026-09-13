@@ -27,6 +27,19 @@ def _ready(records, artifacts):
     return report
 
 
+def _claim_markers(claim):
+    """A claim carries at most one continuity marker: `revised: {previous, reason}` or `superseded: {reason}`."""
+    if "revised" in claim and "superseded" in claim:
+        raise ResearchError("publication_claims_missing", "A claim is revised or superseded, not both")
+    if "revised" in claim:
+        fields(claim["revised"], ("previous", "reason"), code="publication_claims_missing")
+        text(claim["revised"]["previous"], "Revised claim previous text", code="publication_claims_missing")
+        text(claim["revised"]["reason"], "Revision reason", code="publication_claims_missing")
+    if "superseded" in claim:
+        fields(claim["superseded"], ("reason",), code="publication_claims_missing")
+        text(claim["superseded"]["reason"], "Supersession reason", code="publication_claims_missing")
+
+
 def prepare_publication(store, payload, *, expected_revision, request_id):
     """Pin {id, files:{pdf,abstract,bibliography,claims,sources}, claim_evidence}."""
     def prepare(records, value):
@@ -60,6 +73,7 @@ def prepare_publication(store, payload, *, expected_revision, request_id):
                 raise ResearchError("publication_claims_missing", "Claim records must have stable IDs and claim text")
             claim_ids.append(text(claim.get("id"), "Claim ID"))
             text(claim.get("claim"), "Claim text")
+            _claim_markers(claim)
         if len(set(claim_ids)) != len(claim_ids):
             raise ResearchError("publication_claims_missing", "Claim IDs must be unique")
         if not isinstance(value["claim_evidence"], list):

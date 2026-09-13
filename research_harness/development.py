@@ -32,6 +32,8 @@ from .synthesis import synthesis_state
 STRATEGIES = ("generalization", "weaker_assumptions", "mechanism", "tightness_limits", "unification",
               "representation_change", "transfer", "practical_usefulness", "other")
 DISPOSITIONS = ("pursue", "not_useful", "resolved", "budget_paused", "next_round")
+# The status of a predicted observable judged against evidence; round criteria reuse it.
+OBSERVATION_STATUSES = ("observed", "not_observed", "unresolved")
 _REVIEW_CHECKS = ("validity", "scope", "novelty", "contribution", "development", "branches")
 _LIMITS = ("This is mechanical evidence anchoring and documented research assessment, not scientific truth or native "
            "mathematical proof acceptance. The launcher must execute the admitted artifact and preserve the actual run "
@@ -640,7 +642,7 @@ def _assessed_checks(evidence, values, expected, identity, target_claim=None):
         if value[identity] in seen or value[identity] not in expected:
             raise ResearchError("invalid_development", "Assess each exact planned outcome/failure identity once")
         seen.add(value[identity])
-        _choice(value["status"], ("observed", "not_observed", "unresolved"), "Observed outcome/failure")
+        _choice(value["status"], OBSERVATION_STATUSES, "Observed outcome/failure")
         _text(value["explanation"], "Outcome/failure interpretation")
         evidence.many(value["evidence"], "Outcome/failure evidence")
         if target_claim is not None and value["target_claim"] != target_claim:
