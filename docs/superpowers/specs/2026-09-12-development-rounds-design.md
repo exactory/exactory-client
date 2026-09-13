@@ -216,7 +216,7 @@ The record is stored as `round/<id>` with `digest`, `decided_revision` and the b
 2. When the current round has number 2 or more: its `round_assessment` binds this bundle (`round_assessment_missing`); the round's productivity obligations are met (section 7 and 9: `round_search_missing` per consequence purpose, `round_exemplar_missing`, `round_cycle_missing`, `round_claim_missing`, `round_claims_dropped`).
 3. A `round` decision binds this bundle (`round_decision_missing`) and an approving `round_review` binds that decision (`round_review_missing`, `round_review_pending`).
 4. For `continue`: `resource_budget_exhausted` for the `development` purpose, `round_goal_repeated`, `round_direction_exhausted` as in section 5.1.
-5. The report carries `decision`, `round` (the closing round), `next` (the proposed round), and `admitted` (whether `round-admit` was recorded for the decision).
+5. The report carries `decision`, `round` (the closing round), `next` (the proposed round), `active` (an admitted round without an assessment), `assessed`, `progress`, `measurement`, `limits`, `budget` and the obligations; an approved `continue` decision without an admission reports `round_admission_missing`.
 
 `validate_transition` in `gates.py` gains two rules:
 
@@ -332,7 +332,7 @@ The round packet copies the manuscript files and the review JSON; sources are re
 
 ## 14. Reports
 
-- `status` and `status --summary` add `round`: `number`, `active`, `decision`, `admitted`, `assessed`, the current round's counts (searches, readings, cycles, new claims since admission), the latest measurement's review median and prediction median, and the `development` budget line. All strings are bounded as the other summary fields are.
+- `status` and `status --summary` add `round`: `number`, `active`, `assessed`, `decision`, the count of round obligations, the current round's counts (fresh purposes, exemplar, cycles, new and dropped claims, full readings since admission), the latest measurement's review and prediction medians, the admitted round's `limits`, the `development` budget line and the usage since admission. All strings are bounded as the other summary fields are.
 - At the `evaluate` stage the status obligations also carry the publication gate's and the round gate's obligations, and `PRIORITY` places the publication obligations before the round obligations, so a study at `evaluate` is led first to finish the manuscript measurement, then to the round decision. Before `evaluate` the round gate adds nothing to the status obligations.
 - `gate round` prints the report of section 6.
 

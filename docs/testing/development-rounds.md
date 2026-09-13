@@ -96,3 +96,9 @@ result are recorded below once run.
 
 Pending: to be recorded by the release step
 (`python3 -m unittest discover -s tests`).
+
+## Full suite on the release commit
+
+Full suite on `bca298b` (2026-09-12/13): 979 tests in 1,741 s, one failure: `test_research_provenance.ProvenanceTests.test_runtime_provenance_names_the_build` still expected constitution Version 2; the literal was updated to 3 (a test-only change) and the module re-ran 5 tests OK. The full suite was not re-run after that test-only change.
+
+Tasks 11 and 12 (CLI wiring, examples, documentation, constitution version, skills, release note, this record) were implemented with failing tests first but without a separate review pass, and no whole-branch review pass was run: the user asked on 2026-09-12 to release with the remaining budget. The per-task reviews of Tasks 1 to 10 (two independent reviewers each; findings and fixes in the progress record) are the review of this release.

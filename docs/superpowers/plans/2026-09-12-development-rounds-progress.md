@@ -78,12 +78,12 @@ baseline 901 tests OK in 1025 s). Commit messages go through a file
 - [x] Task 10 implemented (RED then GREEN; `test_research_review_packets.py` 24; `git diff --check` and `codex/generate.py --check` clean), this file updated
 - [x] Task 10 reviewed, fixed (see "Review of Task 10" below), tests green (`test_research_review_packets.py` 24, `test_research_rounds.py` 59), `git diff --check` and `codex/generate.py --check` clean, this file updated
 - [x] Task 11 implemented (RED then GREEN; `test_research_cli.py` 19, `test_research_guidance.py` 5; `git diff --check` and `codex/generate.py --check` clean), this file updated
-- [ ] Task 11 reviewed, fixed
+- [x] Task 11 review: not run; released on the user's instruction of 2026-09-12 with the remaining budget (the per-task reviews cover Tasks 1 to 10)
 - [x] Task 12 implemented (RED then GREEN; `test_manifest.py` 7, `test_codex.py` 29, `test_research_guidance.py` 5, `test_research_principles.py` 11, `test_hooks.py` 64, `test_research_report_views.py` 12; `git diff --check` and `codex/generate.py --check` clean), this file updated
-- [ ] Task 12 reviewed, fixed
-- [ ] Full suite green (`python3 -m unittest discover -s tests`), count and time recorded in `docs/testing/development-rounds.md`
-- [ ] Whole-branch two-reviewer pass (record integrity and gate semantics; specification conformance), every blocker and major fixed with a regression test, findings recorded in the testing record
-- [ ] `python3 codex/generate.py --check` and `git diff --check` clean; full suite again if code changed
+- [x] Task 12 review: not run; released on the user's instruction of 2026-09-12 with the remaining budget (the per-task reviews cover Tasks 1 to 10)
+- [x] Full suite on `bca298b` (2026-09-12/13): 979 tests in 1,741 s, one failure: `test_research_provenance.ProvenanceTests.test_runtime_provenance_names_the_build` still expected constitution Version 2; the literal was updated to 3 (a test-only change) and the module re-ran 5 tests OK. The full suite was not re-run after that test-only change. Recorded in `docs/testing/development-rounds.md`.
+- [x] Whole-branch two-reviewer pass: not run; released on the user's instruction of 2026-09-12 with the remaining budget; the per-task reviews of Tasks 1 to 10 (two reviewers each, findings and fixes above) are the review of this release
+- [x] `python3 codex/generate.py --check` and `git diff --check` clean on the release commit (2026-09-13)
 - [ ] Branch pushed; PR to `main` in `exactory/exactory-client` opened with the release summary and attribution; six CI jobs green; merged
 - [ ] `local-dev` and `dev` fast-forwarded to the merge commit; tag `exactory--v0.39.0` ("Exactory 0.39.0"); GitHub release created from `docs/releases/0.39.0.md` with absolute links
 - [ ] `main` pulled in the primary checkout `plugins/exactory-client`; the closed-gravity study's next command reports `constitution_revalidation_required`
