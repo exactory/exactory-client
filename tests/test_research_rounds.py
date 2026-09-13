@@ -496,3 +496,84 @@ class PredictionTests(RoundsCase):
         self.assertEqual(empty["predictions"], {"count": 0, "percentile": {"median": None, "spread": None}})
         self.assertEqual(empty["reviews"]["count"], 0)
         self.assertEqual(empty["reviews"]["overall"], {"median": None, "spread": None})
+
+
+class RoundAssessmentTests(RoundsCase):
+    def test_a_productive_round_is_assessed_with_derived_progress(self):
+        decision, review, admission = self.open_round()
+        self.run_round_work("r2")
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2")
+        self.measure(bundle, "r2")
+        assessed = self.mutate(rounds.assess_round, self.assess_payload(admission, bundle))["result"]
+        derived = assessed["derived"]
+        self.assertEqual(sorted(derived["fresh_purposes"]), ["changes", "downstream", "exemplars", "next_step"])
+        self.assertTrue(derived["exemplar"])
+        self.assertEqual(derived["cycles"], ["cycle-r2"])
+        self.assertEqual((derived["new_claim_ids"], derived["dropped_claim_ids"]), (["wider"], []))
+        self.assertEqual((derived["revised_claim_ids"], derived["superseded_claim_ids"]), ([], []))
+        self.assertEqual(derived["measurement"]["predictions"]["count"], 3)
+        self.assertEqual(derived["measurement"], predictions.measurement_summary(self.store.snapshot()["records"], bundle))
+        # The round read its exemplar in full once; the nine searches it captured are its network requests.
+        self.assertEqual(derived["readings"], 1)
+        self.assertEqual(derived["usage"]["literature"]["readings"], 1)
+        self.assertEqual(derived["usage"]["literature"]["network_requests"], 9)
+        self.assertEqual((assessed["successful"], assessed["unproductive"]), (True, False))
+        self.assertEqual((assessed["round_id"], assessed["bundle_digest"]), (admission["id"], bundle["digest"]))
+        self.assertEqual(assessed["assessed_revision"], self.store.revision)
+        self.assert_error("round_already_assessed", lambda: self.mutate(rounds.assess_round, self.assess_payload(admission, bundle)))
+
+    def test_an_unproductive_round_is_unsuccessful_even_when_a_criterion_is_observed(self):
+        decision, review, admission = self.open_round()
+        self.run_round_work("r2", new_cycle=False)
+        bundle = self.pin(identifier="paper-r2")
+        assessed = self.mutate(rounds.assess_round, self.assess_payload(admission, bundle, observed=True))["result"]
+        self.assertEqual((assessed["successful"], assessed["unproductive"]), (False, True))
+        self.assertEqual(assessed["derived"]["cycles"], [])
+        self.assertEqual(assessed["derived"]["new_claim_ids"], [])
+
+    def test_a_productive_round_without_an_observed_criterion_is_unsuccessful(self):
+        decision, review, admission = self.open_round()
+        self.run_round_work("r2")
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2")
+        assessed = self.mutate(rounds.assess_round, self.assess_payload(admission, bundle, observed=False))["result"]
+        self.assertEqual((assessed["successful"], assessed["unproductive"]), (False, False))
+
+    def test_every_criterion_and_stop_condition_is_judged_once_on_the_current_bundle(self):
+        decision, review, admission = self.open_round()
+        self.run_round_work("r2")
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2")
+        stale = self.assess_payload(admission, bundle)
+        stale["bundle_digest"] = "0" * 64
+        self.assert_error("round_bundle_mismatch", lambda: self.mutate(rounds.assess_round, stale))
+        absent = self.assess_payload(admission, bundle)
+        absent["round_id"] = "absent"
+        self.assert_error("unknown_round", lambda: self.mutate(rounds.assess_round, absent))
+        for edit in (lambda p: p.update(criteria=[]),
+                     lambda p: p["criteria"].append(dict(p["criteria"][0])),
+                     lambda p: p["criteria"][0].update(status="passed"),
+                     lambda p: p["stop_conditions"][0].update(id="other")):
+            payload = self.assess_payload(admission, bundle)
+            edit(payload)
+            self.assert_error("invalid_round", lambda: self.mutate(rounds.assess_round, payload))
+
+    def test_claims_continuity_marks_revised_superseded_and_dropped_claims(self):
+        decision, review, admission = self.open_round()
+        self.run_round_work("r2")
+        records = self.store.snapshot()["records"]
+        from research_harness.evaluation import Evaluation
+        evaluation = Evaluation(records, self.artifacts)
+        bundle = self.pin(self.claims("wider", revised=["bound"]), identifier="paper-revised")
+        progress = rounds.derive_progress(self.store.snapshot()["records"], evaluation, admission, bundle)
+        self.assertEqual((progress["new_claim_ids"], progress["revised_claim_ids"], progress["dropped_claim_ids"]), (["wider"], ["bound"], []))
+        bundle = self.pin(self.claims("wider", superseded=["bound"]), identifier="paper-superseded")
+        progress = rounds.derive_progress(self.store.snapshot()["records"], evaluation, admission, bundle)
+        self.assertEqual((progress["superseded_claim_ids"], progress["dropped_claim_ids"]), (["bound"], []))
+        (self.root / "evidence/claims.json").write_text('[{"id": "wider", "claim": "Claim wider holds."}]')
+        bundle = self.mutate(publication.prepare_publication, {"id": "paper-dropped", "files": {"pdf": "draft/paper.pdf",
+            "abstract": "draft/abstract.txt", "bibliography": "draft/references.bib", "claims": "evidence/claims.json", "sources": None},
+            "claim_evidence": [{"claim_id": "wider", "evidence": [self.result_evidence(self.execution_payload)]}]})["result"]
+        progress = rounds.derive_progress(self.store.snapshot()["records"], evaluation, admission, bundle)
+        self.assertEqual(progress["dropped_claim_ids"], ["bound"])
+        without = rounds.derive_progress(self.store.snapshot()["records"], evaluation, admission, None)
+        self.assertEqual((without["new_claim_ids"], without["dropped_claim_ids"], without["measurement"]), ([], [], None))
+        self.assertEqual((without["cycles"], without["unproductive"]), (["cycle-r2"], True))

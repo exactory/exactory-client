@@ -4,7 +4,7 @@ import copy
 import json
 
 from development_fixtures import DevelopmentCase
-from integration_fixtures import observed_candidate
+from integration_fixtures import observe_run, observed_candidate
 from research_harness import predictions, publication, rounds
 from test_research_publication import ResearchPublicationTests
 
@@ -189,13 +189,55 @@ class RoundsCase(DevelopmentCase):
         for purpose in DEVELOPMENT_SEARCHES:
             self.record_purpose(purpose, purpose + "-" + suffix)
 
-    def round_literature(self, suffix):
-        """The active round's literature work: an exemplar requirement, then every search judged against the widened
-        frontier (the five purposes again and the four consequence purposes), then the sections re-recorded."""
+    def round_literature(self, suffix, *, read_exemplar=False):
+        """The active round's literature work: an exemplar requirement (and its full reading when asked), then every
+        search judged against the widened frontier (the five purposes again and the four consequence purposes), then
+        the sections re-recorded."""
         self.exemplar_requirement(suffix)
+        if read_exemplar:
+            self.read_exemplar(suffix)
         self.foundation_searches(identifier_suffix="-" + suffix)
         self.development_searches(suffix)
         self.refresh_synthesis(suffix)
+
+    def read_exemplar(self, suffix):
+        """Read the exemplar's bundle in full again, as the round's own reading of it."""
+        from research_harness.reading import record_reading
+        bundles = self.store.snapshot()["records"]["source_bundle"].values()
+        bundle = next(b for b in bundles if b["version_id"] == self.links[1]["version_id"])
+        self.mutate(record_reading, self.full_note(bundle, note_id="exemplar-reading-" + suffix))
+
+    def run_round_work(self, suffix, *, new_cycle=True):
+        """What a development round does: consequence searches, an exemplar read in full, refreshed synthesis,
+        re-assessed earlier cycles, and (by default) one new assessed cycle selected as the readiness candidate."""
+        api = self.development()
+        self.round_literature(suffix, read_exemplar=True)
+        records = self.store.snapshot()["records"]
+        earlier = []
+        for cycle in sorted(records["cycle"].values(), key=lambda c: c["id"]):
+            plan = records["cycle_plan"][cycle["id"]]["payload"]
+            execution = records["execution"][cycle["execution_ids"][0]]["payload"]
+            payload = self.assessment(plan, execution, identifier="assessment-" + cycle["id"] + "-" + suffix)
+            self.mutate(api.assess_cycle, payload)
+            earlier.append((cycle["id"], execution))
+        if not new_cycle:
+            self.save_checkpoint("cycle-1", "assessment-cycle-1-" + suffix, "checkpoint-" + suffix)
+            self.mutate(api.record_readiness_review, self.review(self.execution_payload, identifier="review-" + suffix))
+            return None
+        # The launcher observes the run itself; readiness requires that observation of managed evidence.
+        plan = self.plan("cycle-" + suffix)
+        plan.update(question="Does the bound hold on the wider range " + suffix + "?",
+                    distinguishing_test="Enumerate the wider range " + suffix + ".")
+        execution = observe_run(self, plan=plan, script="code/program-" + suffix + ".py", run_id="run-" + suffix,
+                                request_id="launch-run-" + suffix)
+        payload = self.assessment(plan, execution, identifier="assessment-" + suffix)
+        payload["development"]["branches"].extend({"cycle_id": identifier, "disposition": "resolved",
+            "reason": "Assessed again under the current preparation.", "evidence": [self.result_evidence(old)]}
+            for identifier, old in earlier)
+        self.mutate(api.assess_cycle, payload)
+        self.save_checkpoint("cycle-" + suffix, "assessment-" + suffix, "checkpoint-" + suffix)
+        self.mutate(api.record_readiness_review, self.review(execution, identifier="review-" + suffix))
+        return execution
 
     def exemplar_requirement(self, suffix):
         from research_harness.reading import require_fulltext

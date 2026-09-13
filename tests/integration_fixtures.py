@@ -69,10 +69,7 @@ def prepare_research(root, objective=None, *, candidate=False):
     return case
 
 
-def observed_candidate(case):
-    """Create a full candidate through the actual managed producer and observer."""
-    from research_harness.execution import launch_execution
-    body = '''import json
+OBSERVED_PROGRAM = '''import json
 from pathlib import Path
 values = [n * n for n in range(4)]
 data = {"result": {"values": values, "bound": 9},
@@ -81,14 +78,24 @@ for name in ("result", "validation"):
     Path("results/" + name + ".json").write_text(json.dumps(data))
 print(json.dumps({"metric": max(values)}))
 '''
-    admission = admit_lab(case, body=body, outputs=[
+
+
+def observe_run(case, *, plan=None, script="code/program.py", run_id="lab-run", request_id="fixture-observed-run"):
+    """Admit, bind and launch one managed run of the finite program through the actual launcher; returns its execution payload."""
+    from research_harness.execution import launch_execution
+    admission = admit_lab(case, script, body=OBSERVED_PROGRAM, run_id=run_id, plan=plan, outputs=[
         {"id": "result", "requirement_id": "measurements", "path": "results/result.json", "media_type": "application/json"},
         {"id": "validation", "requirement_id": "checks", "path": "results/validation.json", "media_type": "application/json"}])
-    result = launch_execution(case.store, admission["id"], expected_revision=case.store.revision, request_id="fixture-observed-run")
+    result = launch_execution(case.store, admission["id"], expected_revision=case.store.revision, request_id=request_id)
     case.assertTrue(result["ok"])
     records = case.store.snapshot()["records"]
-    execution = records["execution"][records["execution_outcome"][admission["id"]]["execution_id"]]["payload"]
-    plan = records["cycle_plan"][admission["cycle_id"]]["payload"]
+    return records["execution"][records["execution_outcome"][admission["id"]]["execution_id"]]["payload"]
+
+
+def observed_candidate(case):
+    """Create a full candidate through the actual managed producer and observer."""
+    execution = observe_run(case)
+    plan = case.store.snapshot()["records"]["cycle_plan"][execution["cycle_id"]]["payload"]
     case.execution_payload = execution
     case.mutate(case.development().assess_cycle, case.assessment(plan, execution))
     case.save_checkpoint()
@@ -121,12 +128,12 @@ def prepare_manuscript(case, *, pdf="draft/paper.pdf", sources=None):
 
 
 def admit_lab(case, script="code/program.py", *, body=None, run_id="lab-run", backend="local", timeout=5, seed=None,
-              outputs=None, usage_unit="execution", reserved_units=1, max_units=8):
+              outputs=None, usage_unit="execution", reserved_units=1, max_units=8, plan=None):
     path = case.root / "experiment" / script
     if body is not None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(body)
-    plan = case.plan(max_units=max_units)
+    plan = plan or case.plan(max_units=max_units)
     plan["resource_limits"]["unit"] = usage_unit
     case.mutate(case.development().plan_cycle, plan)
     pinned = case.store.snapshot()["records"]["cycle_plan"][plan["id"]]
