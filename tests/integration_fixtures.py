@@ -103,7 +103,7 @@ def observed_candidate(case):
     return execution
 
 
-def prepare_manuscript(case, *, pdf="draft/paper.pdf", sources=None):
+def prepare_manuscript(case, *, pdf="draft/paper.pdf", sources=None, stop=False):
     """Pin the existing manuscript and record two actual independent reviews."""
     from research_harness import publication
     from test_research_publication import ResearchPublicationTests
@@ -124,7 +124,32 @@ def prepare_manuscript(case, *, pdf="draft/paper.pdf", sources=None):
             "review": case.artifacts.put(json.dumps(core).encode(), "application/json"), "blind": True}
         case.mutate(publication.record_manuscript_review, review)
     case.assertTrue(publication.publication_report(case.store)["ready"])
+    if stop:
+        approve_publication_stop(case, bundle)
     return bundle
+
+
+def approve_publication_stop(case, bundle):
+    """Close a publication fixture through the real independent round review."""
+    from research_harness import rounds
+    evidence = [case.result_evidence(case.execution_payload)]
+    decision = case.mutate(rounds.record_round, {
+        "id": "stop-" + bundle["id"], "closes": rounds.current_number(case.store.snapshot()["records"]),
+        "decision": "stop", "bundle_digest": bundle["digest"],
+        "candidates": [{"id": "wider-range", "direction": "vertical", "statement": "Extend the finite range.",
+                        "disposition": "rejected", "reason": "The fixture supports the stated finite result only.",
+                        "evidence": evidence}],
+        "carried": [], "next": None, "reason": "The fixture records its final bounded contribution."})["result"]
+    return case.mutate(rounds.record_round_review, {
+        "id": "review-" + decision["id"], "round_id": decision["id"], "round_digest": decision["digest"],
+        "assessor": {"id": "publication-round-assessor", "kind": "agent",
+                     "provenance": case.artifacts.put(b"Separate fixture round assessor.", "text/plain"),
+                     "relationship": "Independent fixture assessor.",
+                     "independence_basis": "A separate context received the round packet."},
+        "verdict": "approved", "checks": [
+            {"kind": kind, "status": "passed", "reason": "The fixture supports the final finite result.", "evidence": evidence}
+            for kind in ("stop", "demand")],
+        "limitations": ["Synthetic fixture evidence."]})["result"]
 
 
 def admit_lab(case, script="code/program.py", *, body=None, run_id="lab-run", backend="local", timeout=5, seed=None,

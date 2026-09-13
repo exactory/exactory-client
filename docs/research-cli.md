@@ -306,7 +306,9 @@ exactory-research export --kind readiness --destination /new/independent/candida
 exactory-research export --kind manuscript --destination /new/independent/manuscript
 ```
 
-Delivery copies the actual candidate/source/program/output bytes and an `inputs.json` manifest into a new directory. The manifest is a neutral packet: no revision labels, request identities, launcher tokens, author names, assessment history, prior scores or verdicts. A readiness packet carries the candidate, branches, plans, assessments, checkpoints, sources and synthesis sections that the six checks need. A manuscript packet carries only the exact files (the claims file as pinned, with any `revised` and `superseded` markers), the claim-to-evidence map, the works, readings, bundles and sources those claims cite, the observed executions behind result evidence, and the selected field standards. Give these bytes to the separate reviewer; a digest list alone is insufficient. Export does not certify comprehension or independence.
+Delivery copies the actual candidate/source/program/output bytes and an `inputs.json` manifest into a new directory. The manifest is a neutral packet: no revision labels, request identities, launcher tokens, author names, assessment history, prior scores or verdicts. A readiness packet carries the candidate, branches, plans, assessments, checkpoints, sources and synthesis sections that the six checks need.
+
+A manuscript packet carries the exact PDF, abstract, bibliography and optional source archive. It derives a separate claims file for the reviewer. This file contains current claims, with `revised` metadata and `superseded` entries omitted. The evidence map and its source/result closure contain only those current claims. The packet also carries the selected field standards. The derived claims file has its own content hash and exists only in the delivery directory. The original ledger and bundle digest remain unchanged. Give this directory to the separate reviewer. A digest list alone is insufficient. Export does not certify comprehension or independence.
 
 `manuscript-review` accepts one review per assessor per exact bundle; a second review by the same assessor on the same `bundle_digest` fails with `manuscript_review_duplicate`, so a rejection stands until the manuscript changes and a new bundle is prepared.
 
@@ -448,6 +450,14 @@ prediction and its reasons; the author gives the reviewer the study's cohort and
 `id`, `bundle_digest`, `blind: true` and `assessor` when recording it. `status --summary`,
 `round-assess` and the round packet report the review and prediction medians.
 
+The measurement pairs reviews and predictions by assessor identity on the exact
+bundle. Identity matching normalizes case and whitespace. Publication-only
+reviewers remain outside this group. `measurement.complete` is true when exactly
+three distinct prediction assessors each have a review. Duplicate or extra
+predictions make the group ambiguous. Incomplete or ambiguous groups retain their
+counts but report null medians and spreads. Earlier stored round assessments
+retain the measurement values that their original version computed.
+
 `gate round` evaluates, in order: the current bundle (`publication_bundle_missing`,
 `readiness_required`, `publication_readiness_stale`, `publication_artifact_changed`);
 for an admitted round, while it is active (admitted without an assessment) its
@@ -470,9 +480,14 @@ obligations. Without such a round the transition is refused with
 `evaluate -> deposit` needs the publication gate and a ready round gate, which is
 ready only with an approved `stop` on the current bundle.
 
+`exactory-draft deposit` also enforces the round gate at the publication boundary,
+including `--new-version` and resumed unfinished deposits. Each remote write
+requires the exact reviewed bundle and its approved stop. Completed receipt
+retrieval and reconciliation of remote outcomes remain available.
+
 `export --kind round --destination DIR` delivers the latest decision on the current
 bundle (`round_decision_missing` without one) to the independent round assessor: the
-manuscript packet, the bundle's reviews and predictions with their measurement, the
+manuscript files with the complete internal claims ledger, the bundle's reviews and predictions with their measurement, the
 decision, every earlier round's goal, assessment and decision, the `development`
 blocks of the closing round's cycle assessments, the `context` and `innovation`
 synthesis sections, the selected `downstream` and `next_step` searches, and the

@@ -218,6 +218,8 @@ class TestInit(unittest.TestCase):
 
 
 class _DepositTestCase(unittest.TestCase):
+    prepare_stop = True
+
     def setUp(self) -> None:
         scratch = tempfile.TemporaryDirectory()
         self.addCleanup(scratch.cleanup)
@@ -235,7 +237,7 @@ class _DepositTestCase(unittest.TestCase):
         )
         _write_passing_citation_report(self.workspace_dir)
         self.research = prepare_research(self.workspace_dir, candidate=True)
-        prepare_manuscript(self.research)
+        prepare_manuscript(self.research, stop=self.prepare_stop)
         self.addCleanup(os.chdir, os.getcwd())
         os.chdir(self.workspace_dir)
 
@@ -445,7 +447,7 @@ class TestDeposit(_DepositTestCase):
         (self.workspace_dir / "draft" / "paper.pdf").rename(
             self.workspace_dir / "draft" / "main.pdf"
         )
-        prepare_manuscript(self.research, pdf="draft/main.pdf")
+        prepare_manuscript(self.research, pdf="draft/main.pdf", stop=True)
         self._deposit(["--creator", "Shiroshita, Ryosuke"])
         upload_urls = [
             request.full_url for request in self.fake_api.requests
@@ -475,7 +477,7 @@ class TestDeposit(_DepositTestCase):
     def test_a_tarball_keeps_its_archive_suffix_in_the_supplementary_name(self) -> None:
         sources_path = self.workspace_dir / "code.tar.gz"
         sources_path.write_bytes(b"fake tarball")
-        prepare_manuscript(self.research, sources="code.tar.gz")
+        prepare_manuscript(self.research, sources="code.tar.gz", stop=True)
         self._deposit(["--creator", "Shiroshita, Ryosuke", "--sources", str(sources_path)])
         upload_urls = [
             request.full_url for request in self.fake_api.requests
@@ -501,7 +503,7 @@ class TestDeposit(_DepositTestCase):
     def test_sources_archive_uploads_under_the_supplementary_name(self) -> None:
         sources_path = self.workspace_dir / "sources.zip"
         sources_path.write_bytes(b"PK fake zip")
-        prepare_manuscript(self.research, sources="sources.zip")
+        prepare_manuscript(self.research, sources="sources.zip", stop=True)
         self._deposit(["--creator", "Shiroshita, Ryosuke", "--sources", str(sources_path)])
         upload_urls = [
             request.full_url for request in self.fake_api.requests

@@ -136,12 +136,12 @@ changelog, no response-to-reviewers text), and the reviewer is
 never shown `reviews/`, `learnings/`, or a prior score. Those directories
 exist for the user and for the next iteration, not for the reviewer. In a
 managed study, `exactory-research export --kind manuscript` delivers a neutral
-packet: the exact files, the claim-to-evidence map, the cited evidence, the
+packet: the exact paper files, the current claim-to-evidence map, the cited evidence, the
 observed executions and the field standards, with no plan, author list,
-revision label or assessment history. Give the reviewer that directory. The
-packet includes the claims ledger as pinned. Its `revised` and `superseded`
-markers, with each revised claim's earlier text and every reason, therefore reach
-the reviewer. The round gate requires those markers, so they stay in the ledger.
+revision label or assessment history. Give the reviewer that directory. Its
+separate claims file contains current claims, with `revised` metadata and
+`superseded` entries omitted. Their internal history stays in the pinned ledger
+for the round gate and round assessor. Export leaves that ledger unchanged.
 
 ## The measurement (the improvement loop)
 
@@ -162,6 +162,13 @@ file beside its rubric core, with the reviewer's `prediction` and `reasons`.
 Record it with `manuscript-prediction`: keep `prediction` and `reasons`
 unchanged and add `id`, the exact `bundle_digest`, `blind: true` and the
 reviewer's `assessor`.
+
+Use the same assessor identity for the review and prediction on the same bundle.
+The harness measures the three paired reviewers and excludes publication-only
+reviewers. `round.measurement.complete` is true when exactly three distinct
+prediction assessors each have a review. Duplicate or extra predictions make
+the group ambiguous. Counts remain visible, but incomplete or ambiguous groups
+have null medians. Save all raw responses before reporting the measurement.
 
 ## Commits and reverts (the improvement loop)
 

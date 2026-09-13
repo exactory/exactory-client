@@ -6,7 +6,7 @@ from pathlib import Path
 from research_harness.errors import ResearchError
 
 from development_fixtures import DevelopmentCase
-from integration_fixtures import observed_candidate
+from integration_fixtures import approve_publication_stop, observed_candidate
 
 
 PLUGIN = Path(__file__).resolve().parents[1]
@@ -113,6 +113,7 @@ class ResearchPublicationTests(DevelopmentCase):
         bundle = self.mutate(api.prepare_publication, self.bundle_payload())["result"]
         for assessor in ("reviewer-a", "reviewer-b"):
             self.mutate(api.record_manuscript_review, self.manuscript_review(bundle, assessor))
+        approve_publication_stop(self, bundle)
         return {"bundle_digest": bundle["digest"], "prepared_revision": bundle["prepared_revision"],
                 "base_url": "https://zenodo.org/api", "environment": "production", "new_version": False,
                 "publish": True, "metadata": {"title": "Authored finite result", "description": "The exact finite enumeration."},
@@ -141,12 +142,12 @@ class ResearchPublicationTests(DevelopmentCase):
         revision = self.store.revision
         if lost:
             with self.assertRaises(OSError):
-                deposit(self.store, binding, client, lambda *args: {}, expected_revision=revision, request_id="deposit-1")
-            self.assert_error("remote_reconciliation_required", lambda: deposit(self.store, binding, client, lambda *args: {},
+                deposit(self.store, binding, client, expected_revision=revision, request_id="deposit-1")
+            self.assert_error("remote_reconciliation_required", lambda: deposit(self.store, binding, client,
                 expected_revision=revision, request_id="deposit-1"))
-            receipt = continue_deposit(self.store, "deposit-1", client, lambda *args: {}, reconcile=True)
+            receipt = continue_deposit(self.store, "deposit-1", client, reconcile=True)
         else:
-            receipt = deposit(self.store, binding, client, lambda *args: {}, expected_revision=revision, request_id="deposit-1")
+            receipt = deposit(self.store, binding, client, expected_revision=revision, request_id="deposit-1")
         return receipt, calls, created, uploaded
 
     def test_lost_deposit_creation_is_reconciled_before_any_repeat_write(self):

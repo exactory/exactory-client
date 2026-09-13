@@ -519,7 +519,7 @@ class PredictionTests(RoundsCase):
         self.measure(bundle, "one", percentiles=(30, 25, 40))
         summary = predictions.measurement_summary(self.store.snapshot()["records"], bundle)
         self.assertEqual(summary["predictions"], {"count": 3, "percentile": {"median": 30, "spread": [25, 40]}})
-        self.assertEqual(summary["reviews"]["count"], 5)
+        self.assertEqual(summary["reviews"]["count"], 3)
         self.assertEqual(sorted(summary["reviews"]), ["contribution", "count", "overall", "presentation", "soundness"])
         self.assertEqual(summary["reviews"]["overall"], {"median": 6, "spread": [6, 6]})
         self.assertEqual(summary["reviews"]["contribution"], {"median": 3, "spread": [3, 3]})
@@ -529,11 +529,11 @@ class PredictionTests(RoundsCase):
         self.write_record("manuscript_review", dict(saved, id="measure-one-1-later", reviewed_revision=self.store.revision + 1,
                                                     assessor=dict(saved["assessor"], id="Measure-One-1"), core=dict(saved["core"], overall=10)))
         summary = predictions.measurement_summary(self.store.snapshot()["records"], bundle)
-        self.assertEqual(summary["reviews"]["count"], 5)
+        self.assertEqual(summary["reviews"]["count"], 3)
         self.assertEqual(summary["reviews"]["overall"], {"median": 6, "spread": [6, 10]})
         self.write_record("manuscript_review", dict(saved, id="measure-one-1-superseded", reviewed_revision=0, core=dict(saved["core"], overall=1)))
         summary = predictions.measurement_summary(self.store.snapshot()["records"], bundle)
-        self.assertEqual(summary["reviews"]["count"], 5)
+        self.assertEqual(summary["reviews"]["count"], 3)
         self.assertEqual(summary["reviews"]["overall"], {"median": 6, "spread": [6, 10]})
         self.assertEqual({r["id"] for r in publication.publication_report(self.store)["reviews"] if r["id"].startswith("measure-one-1")},
                          {"measure-one-1-later"})
@@ -757,7 +757,7 @@ class RoundGateTests(RoundsCase):
         self.mutate(rounds.record_round_review, self.review_payload(decision))
         report = self.gate()
         self.assertEqual((report["ready"], report["decision"], report["next"]), (True, "stop", None))
-        self.assertEqual(report["measurement"]["reviews"]["count"], 2)
+        self.assertEqual(report["measurement"]["reviews"]["count"], 0)
 
     def test_the_gate_reports_the_round_claims_and_the_stale_assessment(self):
         from research_harness.gates import validate_transition

@@ -70,10 +70,20 @@ def _measure(values):
 
 
 def measurement_summary(records, bundle):
-    """Latest review per assessor and every prediction on the bundle, as medians and spreads."""
-    cores = [saved["core"] for saved in latest_reviews(records, bundle["digest"]).values()]
-    percentiles = [saved["prediction"]["percentile"] for saved in records.get("manuscript_prediction", {}).values()
-                   if saved["bundle_digest"] == bundle["digest"]]
+    """Measure three paired blind reviews and predictions on the exact bundle.
+
+    Predictions identify the measurement assessors. Other manuscript reviews
+    remain available to the publication gate. An incomplete or ambiguous group
+    reports its counts, with no measurement value.
+    """
+    selected = [saved for saved in records.get("manuscript_prediction", {}).values()
+                if saved["bundle_digest"] == bundle["digest"]]
+    assessors = {_assessor_key(saved["payload"]["assessor"]["id"]) for saved in selected}
+    current_reviews = latest_reviews(records, bundle["digest"])
+    cores = [current_reviews[key]["core"] for key in sorted(assessors) if key in current_reviews]
+    complete = len(selected) == len(assessors) == len(cores) == 3
+    percentiles = [saved["prediction"]["percentile"] for saved in selected] if complete else []
     reviews = {"count": len(cores)}
-    reviews.update({key: _measure([core[key] for core in cores]) for key, _ in SCORE_SCALES})
-    return {"reviews": reviews, "predictions": {"count": len(percentiles), "percentile": _measure(percentiles)}}
+    reviews.update({key: _measure([core[key] for core in cores] if complete else []) for key, _ in SCORE_SCALES})
+    return {"complete": complete, "reviews": reviews,
+            "predictions": {"count": len(selected), "percentile": _measure(percentiles)}}
