@@ -21,6 +21,13 @@ test, failure signal, and feasible resource demand. Include ambitious hypotheses
 when their assumptions and tests can be made precise. A valid negative result can
 resolve an important uncertainty; contribution is assessed from evidence.
 
+In a development round, read the admitted goal, the carried developments it
+pursues, and the `downstream` and `next_step` records before forming hypotheses.
+Every hypothesis of the round names the success criterion it serves. A successor
+cycle inherits a checkpoint of an earlier round through objective lineage: a
+widened objective keeps the earlier one as its ancestor, so the inherited result
+and its assumptions stay valid under the round's objective.
+
 Use fresh captured searches to test each consequential novelty claim. The
 literature-review skill is part of this plugin and governs the refresh. Record
 `nothing-new`, `scooped`, `replicate-extend`, `contradicted`, or `novel-confirmed`

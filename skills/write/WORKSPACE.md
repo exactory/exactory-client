@@ -72,12 +72,17 @@ A JSON array, one object per quantitative claim:
 ```json
 [
   {
+    "id": "claim-1",
     "claim": "mean absolute error drops from 0.41 to 0.29",
     "source": "evidence/runs/summary_2026-08-01.json",
     "note": "mean over 5 seeds; run log provided by the user"
   }
 ]
 ```
+
+A claim keeps its `id` across rounds. A changed claim carries
+`revised: {previous, reason}`, a withdrawn one `superseded: {reason}`; an
+opening claim id that disappears is `round_claims_dropped` at the round gate.
 
 This compact example is a human note, not the complete managed evidence mapping.
 Pin the actual original source or execution output and its exact locator. Record
@@ -146,8 +151,10 @@ reviewer fails, relaunch that reviewer alone.
 Save each loop review as `reviews/review_NNN_rM.json` (M is 1 to 3). A
 manual single-pass review outside the loop keeps `reviews/review_NNN.json`.
 A loop iteration's `score_history.jsonl` line carries the iteration
-number, the three raw scores, the median, whether the revision was
-adopted, and the revision commit hash.
+number, the three raw scores, the median, the three cohort `predictions`
+(percentiles) and their `prediction_median`, whether the revision was
+adopted, and the revision commit hash. Each reviewer's prediction is a
+second file beside its rubric core, recorded with `manuscript-prediction`.
 
 ## Commits and reverts (the improvement loop)
 

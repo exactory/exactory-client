@@ -33,8 +33,11 @@ research preparation pending. Every path is relative to the workspace root.
 
 SQLite records configuration, source collections, versions, readings, synthesis,
 cycles, admissions, execution observations, assessments, checkpoints, reviews,
-and remote intents. Read `exactory-research status --summary` and `next --summary` for current
-obligations. Hand-editing a projection cannot authorize work. Explicit
+round decisions, round reviews, round admissions, round assessments, cohort
+predictions, and remote intents. Read `exactory-research status --summary` and
+`next --summary` for current obligations; `status` reports `round` with the
+current round number, whether it is active or assessed, its decision, its
+obligations, its derived progress and the bundle's measurement. Hand-editing a projection cannot authorize work. Explicit
 `export --kind workspace` rebuilds workspace views from current history; run
 reconciliation repairs execution views. Legacy work is adopted explicitly and
 does not inherit finished reading or execution credit from old labels.
