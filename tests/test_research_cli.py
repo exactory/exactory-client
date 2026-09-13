@@ -309,6 +309,21 @@ os._exit(23)
         self.assertFalse(json.loads(result.stdout)["scientific_validation"])
         self.assertEqual(Store(self.root).snapshot(), before)
 
+    def test_round_commands_are_registered_with_examples_and_the_round_gate(self):
+        from research_harness.cli import GATES, OPERATIONS
+        for command in ("round", "round-review", "round-admit", "round-assess", "manuscript-prediction"):
+            self.assertIn(command, OPERATIONS)
+            example = self.run_cli("exactory-research", "example", command)
+            self.assertEqual(example.returncode, 0, example.stderr)
+        self.assertIn("round", GATES)
+        self.init_lab()
+        gate = self.run_cli("exactory-research", "gate", "round")
+        self.assertNotEqual(gate.returncode, 0)
+        self.assertIn("publication_bundle_missing", gate.stderr)
+        export = self.run_cli("exactory-research", "export", "--kind", "round", "--destination", str(self.root / "round-packet"))
+        self.assertNotEqual(export.returncode, 0)
+        self.assertIn("publication_bundle_missing", export.stderr)
+
 
 class ResearchPreparationTests(DevelopmentCase):
     def cli(self, command, *args):
