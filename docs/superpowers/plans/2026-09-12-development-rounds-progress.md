@@ -88,7 +88,7 @@ baseline 901 tests OK in 1025 s). Commit messages go through a file
 - [x] `local-dev` and `dev` fast-forwarded to the merge commit; tag `exactory--v0.39.0` ("Exactory 0.39.0"); GitHub release created from `docs/releases/0.39.0.md` with absolute links (2026-09-13)
 - [x] `main` pulled in the primary checkout `plugins/exactory-client` (2026-09-13, recorded in `misc/harness-improvement/v3/HANDOVER.md` of the exactory repository)
 - [x] Tasks 11 and 12 reviewed on 2026-09-13 on `fix/review-tasks-11-12` (see "Review of Tasks 11 and 12"); fixes in `e7c2388` (tests) and `a3bf166` (documents, version 0.39.1), then two reviewers of the fix diff and the corrections in the commit that carries this item; touched modules green; `codex/generate.py --check` and `git diff --check` clean
-- [ ] Full suite on the 0.39.1 commit recorded in `docs/testing/development-rounds.md`
+- [x] Full suite on `1a9adc2` (0.39.1 review fixes): 983 tests in 1,727 s, OK; recorded in `docs/testing/development-rounds.md`
 - [ ] PR to `main` for 0.39.1; six CI jobs green; merged; `local-dev` and `dev` fast-forwarded; tag `exactory--v0.39.1`; GitHub release; `main` pulled in the primary checkout
 
 ## Deviations from the plan so far

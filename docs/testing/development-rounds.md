@@ -106,3 +106,28 @@ for the user are in the progress record, section "Review of Tasks 11 and 12".
 Full suite on `bca298b` (2026-09-12/13): 979 tests in 1,741 s, one failure: `test_research_provenance.ProvenanceTests.test_runtime_provenance_names_the_build` still expected constitution Version 2; the literal was updated to 3 (a test-only change) and the module re-ran 5 tests OK. The full suite was not re-run after that test-only change.
 
 Tasks 11 and 12 (CLI wiring, examples, documentation, constitution version, skills, release note, this record) were implemented with failing tests first but without a separate review pass before the release: the user asked on 2026-09-12 to release with the remaining budget.
+
+## Review fixes of Tasks 11 and 12 (0.39.1)
+
+Full suite on `1a9adc2` (2026-09-13; macOS, Python 3.9.6), the last commit of the
+review fixes before this record: 983 tests in 1,727 s, OK. The count is the 979
+tests of `bca298b` plus four new tests:
+`test_research_review_packets.test_export_round_through_the_cli_delivers_the_latest_decision`,
+`test_a_field_change_collects_only_the_category_difference`, and the two
+`ConstitutionUpgradeTests`. `test_research_cli.test_round_commands_are_registered_with_examples_and_the_round_gate`
+now checks each command's function.
+
+RED and GREEN, as run:
+
+- The version tests (`test_manifest`, `test_codex`, `test_research_guidance`)
+  failed with `'0.39.0' != '0.39.1'` before the manifests changed, then passed.
+- The two CLI wiring tests passed on the unchanged tree and failed on four
+  copies of `research_harness/cli.py` with one deliberate wiring error each:
+  `round` export to `deliver_manuscript`, `round-review` to `admit_round`,
+  `round-assess` to `record_round`, `manuscript-prediction` to `record_round`.
+- The R24 and R25 tests describe shipped behavior and passed on their first run.
+- Touched modules after the document fixes: `test_manifest` 7, `test_codex` 29,
+  `test_research_guidance` 5, `test_research_principles` 11, `test_hooks` 64,
+  `test_research_report_views` 12, `test_research_cli` 19,
+  `test_research_review_packets` 25, `test_research_rounds` 62, all OK.
+  `python3 codex/generate.py --check` and `git diff --check`: clean.
