@@ -5,6 +5,7 @@ import json
 import unittest
 
 from research_harness.errors import ResearchError
+from rounds_fixtures import RoundsCase
 from test_research_publication import ResearchPublicationTests
 
 
@@ -82,6 +83,78 @@ class PacketTests(ResearchPublicationTests):
         self.mutate(api.record_manuscript_review, dict(self.manuscript_review(revised, "reviewer-a"), id="reviewer-a-2"))
         self.mutate(api.record_manuscript_review, dict(self.manuscript_review(revised, "reviewer-b"), id="reviewer-b-2"))
         self.assertTrue(api.publication_report(self.store)["ready"])
+
+
+class RoundPacketTests(RoundsCase):
+    def test_the_round_packet_carries_history_and_reviews_but_no_labels_or_authors(self):
+        from research_harness import predictions, rounds
+        from research_harness.review_delivery import deliver_round
+        directory = self.root / "reviews" / "round-1"
+        self.assert_error("publication_bundle_missing", lambda: deliver_round(self.store, directory))
+        bundle = self.pin()
+        self.assert_error("round_decision_missing", lambda: deliver_round(self.store, directory))
+        self.measure(bundle, "one")
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        deliver_round(self.store, directory)
+        text = (directory / "inputs.json").read_text()
+        manifest = json.loads(text)
+        self.assertEqual(manifest["kind"], "round")
+        self.assertEqual(manifest["manuscript"]["bundle_digest"], bundle["digest"])
+        self.assertEqual(manifest["decision"]["digest"], decision["digest"])
+        self.assertEqual(manifest["decision"]["closes"], 1)
+        self.assertEqual(manifest["decision"]["payload"]["id"], decision["id"])
+        self.assertEqual(len(manifest["reviews"]), 5)
+        self.assertEqual({r["kind"] for r in manifest["reviews"]}, {"agent"})
+        self.assertEqual(len(manifest["predictions"]), 3)
+        self.assertEqual(sorted(p["percentile"] for p in manifest["predictions"]), [25, 30, 40])
+        records = self.store.snapshot()["records"]
+        self.assertEqual(manifest["measurement"], predictions.measurement_summary(records, bundle))
+        self.assertIn("overall", text)
+        self.assertIn("percentile", text)
+        self.assertIn("candidates", text)
+        for forbidden in ('"request_id"', '"token"', '_revision"', '"authors"', '"author"'):
+            self.assertNotIn(forbidden, text)
+        # Before any admission the closing round is the study so far: every cycle assessment, no round history.
+        self.assertEqual(list(manifest["development"]), ["assessment-1"])
+        self.assertIn("alternatives", manifest["development"]["assessment-1"])
+        self.assertEqual(manifest["rounds"], [])
+        self.assertEqual(sorted(manifest["synthesis"]), ["context", "innovation"])
+        self.assertEqual(manifest["searches"], {})
+        self.assertIn("literature", manifest["resources"])
+
+    def test_the_manuscript_packet_stays_blind_to_rounds_and_predictions(self):
+        from research_harness import rounds
+        from research_harness.review_delivery import deliver_manuscript, deliver_round
+        decision, review, admission = self.open_round()
+        self.run_round_work("r2")
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2")
+        self.measure(bundle, "r2")
+        directory = self.root / "reviews" / "manuscript-r2"
+        deliver_manuscript(self.store, directory)
+        text = (directory / "inputs.json").read_text()
+        for forbidden in ('"round', '"percentile"', '"core"', '"goal"', '"overall"'):
+            self.assertNotIn(forbidden, text)
+        # The round packet after the round: its history, the closing round's assessments and its consequence searches.
+        assessed = self.mutate(rounds.assess_round, self.assess_payload(admission, bundle))["result"]
+        stop = self.mutate(rounds.record_round, self.decision_payload(bundle, closes=2, decision="stop"))["result"]
+        deliver_round(self.store, self.root / "reviews" / "round-2")
+        manifest = json.loads((self.root / "reviews" / "round-2" / "inputs.json").read_text())
+        self.assertEqual(manifest["decision"]["digest"], stop["digest"])
+        self.assertEqual(manifest["decision"]["closes"], 2)
+        self.assertEqual(len(manifest["rounds"]), 1)
+        history = manifest["rounds"][0]
+        self.assertEqual(sorted(history), ["assessment", "decision", "goal", "number", "objective", "resource_limits"])
+        self.assertEqual((history["number"], history["goal"], history["objective"]), (2, admission["goal"], admission["objective"]))
+        self.assertEqual(history["resource_limits"], admission["resource_limits"])
+        self.assertEqual(history["decision"], {"id": decision["id"], "payload": decision["payload"], "digest": decision["digest"]})
+        self.assertEqual(sorted(history["assessment"]), ["derived", "payload", "successful", "unproductive"])
+        self.assertEqual(history["assessment"]["successful"], assessed["successful"])
+        self.assertEqual(history["assessment"]["derived"]["cycles"], ["cycle-r2"])
+        self.assertEqual(sorted(manifest["development"]), ["assessment-cycle-1-r2", "assessment-r2"])
+        self.assertEqual(sorted(manifest["searches"]), ["downstream", "next_step"])
+        self.assertEqual(sorted(manifest["searches"]["downstream"]), ["dispositions", "found_work_ids", "gaps", "impact", "purpose"])
+        self.assertEqual(manifest["searches"]["next_step"]["purpose"], "next_step")
+        self.assertEqual(manifest["resources"]["development"]["rounds"]["charged"], 1)
 
 
 if __name__ == "__main__":
