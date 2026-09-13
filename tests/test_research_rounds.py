@@ -1,8 +1,15 @@
 """Development rounds: decisions, reviews, admissions, assessments and the round gate."""
 
 import copy
+from pathlib import Path
+import tempfile
+from unittest.mock import patch
 
-from research_harness import predictions, publication, resources, rounds
+from research_fixtures import atom, client, entry, xml_response
+from research_harness import predictions, principles, publication, resources, rounds
+from research_harness.acquisition import collect_cohort
+from research_harness.cli import status_report
+from research_harness.cohort_evidence import cohort_report
 from research_harness.errors import ResearchError
 from research_harness.evaluation import Evaluation
 from rounds_fixtures import RoundsCase
@@ -359,6 +366,24 @@ class RoundAdmissionTests(RoundsCase):
         payload = {"id": "round-2", "round_id": decision["id"], "review_id": review["id"], "reason": "Add the category."}
         admission = self.mutate(rounds.admit_round, payload)["result"]
         self.assertEqual(admission["goal"]["field_change"], {"corpus": "arxiv", "primaryCategory": "math.CO"})
+
+    def test_a_field_change_collects_only_the_category_difference(self):
+        """Validation case R25: members the study already read keep their readings; only new members owe one."""
+        self.open_round(payload=self.field_change_payload(self.pin(), "arxiv", "math.CO"))
+        http, _, _ = client([xml_response(atom([entry("2601.%05dv1" % n, category="math.CO",
+            abstract="Source %d studies bounded sequences and reports a finite example." % n) for n in (1, 9)], total=2))])
+        added = collect_cohort(self.store, {"corpus": "arxiv", "primaryCategory": "math.CO", "windowStart": "2026-01-01",
+                                            "windowEnd": "2026-01-31"}, http=http,
+                               expected_revision=self.store.revision, request_id="cohort-difference")["collection_id"]
+        records = self.store.snapshot()["records"]
+        report = cohort_report(records, self.artifacts, sorted(records["collection"]))
+        difference = {item["version_id"]: item["reading_id"] for item in report["inventory"] if item["collection_id"] == added}
+        earlier = next(item for item in report["inventory"] if item["collection_id"] != added)
+        self.assertEqual(sorted(difference), ["arxiv:2601.00001v1", "arxiv:2601.00009v1"])
+        self.assertEqual(difference["arxiv:2601.00001v1"], earlier["reading_id"])
+        self.assertIsNone(difference["arxiv:2601.00009v1"])
+        self.assertEqual([(o["code"], o["version_id"]) for o in report["obligations"]],
+                         [("cohort_abstract_reading_missing", "arxiv:2601.00009v1")])
 
     def test_a_stop_decision_opens_no_round(self):
         stop, review = self.approve(self.decision_payload(self.pin(), decision="stop"))
@@ -936,3 +961,64 @@ class RoundStatusTests(RoundsCase):
         (self.root / "draft/paper.pdf").write_bytes(b"%PDF-1.4\n% changed\n%%EOF")
         summary = status_report(self.store)["round"]
         self.assertEqual((summary["active"], summary["assessed"], summary["progress"]["cycles"]), (False, False, 1))
+
+
+class ConstitutionUpgradeTests(RoundsCase):
+    """Validation case R24: a study prepared under the 0.38.0 constitution (Version 2) is opened under Version 3.
+
+    The configuration digest covers the constitution, so the update stales every decision that binds it; adopting
+    Version 3 clears only the constitution obligation."""
+
+    STALE = ["branch_resolution_unverified", "candidate_checkpoint_stale", "development_dependencies_stale",
+             "readiness_review_stale", "synthesis_dependencies_stale"]
+
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.shipped = principles.CONSTITUTION_PATH.read_text(encoding="utf-8")
+        self.policy = Path(directory.name) / "RESEARCH_CONSTITUTION.md"
+        earlier = self.shipped.split("\n## Development across rounds")[0].replace("Version: 3", "Version: 2", 1)
+        self.assertNotEqual(earlier, self.shipped)
+        self.policy.write_text(earlier, encoding="utf-8")
+        patcher = patch.object(principles, "CONSTITUTION_PATH", self.policy)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        super().setUp()
+
+    def codes(self):
+        return sorted({o["code"] for o in status_report(self.store)["obligations"]})
+
+    def upgrade(self):
+        """The plugin update: the distributed constitution becomes the shipped Version 3."""
+        self.policy.write_text(self.shipped, encoding="utf-8")
+
+    def adopt(self):
+        previous = self.store.snapshot()["records"]["configuration"]["research"]["constitution"]["sha256"]
+        self.mutate(principles.revalidate_constitution, {"previous_sha256": previous, "reason": "Adopt Version 3."})
+
+    def test_a_study_before_evaluate_reports_the_staleness_of_its_recorded_decisions(self):
+        self.set_stage("experiment")
+        self.assertEqual(self.codes(), [])
+        self.upgrade()
+        self.assertEqual(self.codes(), sorted(self.STALE + ["constitution_revalidation_required"]))
+        self.adopt()
+        self.assertEqual(self.codes(), self.STALE)
+
+    def test_a_study_at_evaluate_decides_after_fresh_readiness_and_a_new_pinned_bundle(self):
+        self.set_stage("evaluate")
+        bundle = self.pin()
+        self.assertEqual(self.codes(), ["round_decision_missing"])
+        self.upgrade()
+        self.assertEqual(self.codes(), sorted(self.STALE + ["constitution_revalidation_required", "readiness_required"]))
+        stop = lambda current: self.mutate(rounds.record_round, self.decision_payload(current, decision="stop"))
+        self.assert_error("configuration_not_ready", lambda: stop(bundle))
+        self.adopt()
+        self.assertEqual(self.codes(), sorted(self.STALE + ["readiness_required"]))
+        self.assert_error("readiness_required", lambda: stop(bundle))
+        self.refresh_synthesis("v3")
+        self.recandidate("v3", alternative="not_useful")
+        self.assertEqual(self.codes(), ["publication_readiness_stale"])
+        self.assert_error("publication_readiness_stale", lambda: stop(bundle))
+        current = self.pin(identifier="paper-v3")
+        self.assertEqual(self.codes(), ["round_decision_missing"])
+        self.assertEqual(stop(current)["result"]["decision"], "stop")

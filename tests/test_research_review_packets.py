@@ -2,11 +2,17 @@
 
 import importlib
 import json
+import os
+from pathlib import Path
+import subprocess
+import sys
 import unittest
 
 from research_harness.errors import ResearchError
 from rounds_fixtures import RoundsCase
 from test_research_publication import ResearchPublicationTests
+
+PLUGIN = Path(__file__).resolve().parents[1]
 
 
 class ScrubTests(unittest.TestCase):
@@ -129,6 +135,25 @@ class RoundPacketTests(RoundsCase):
         self.assertEqual(sorted(manifest["synthesis"]), ["context", "innovation"])
         self.assertEqual(manifest["searches"], {})
         self.assertIn("literature", manifest["resources"])
+
+    def test_export_round_through_the_cli_delivers_the_latest_decision(self):
+        from research_harness import rounds
+
+        def export(name):
+            return subprocess.run([sys.executable, str(PLUGIN / "bin/exactory-research"), "export", "--kind", "round",
+                                   "--destination", str(self.root / name)], cwd=self.root, capture_output=True, text=True,
+                                  env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+
+        bundle = self.pin(evidence=[self.result_evidence(self.execution_payload), self.source_evidence()])
+        refused = export("packet-1")
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("round_decision_missing", refused.stderr)
+        self.measure(bundle, "one")
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        delivered = export("packet-2")
+        self.assertEqual(delivered.returncode, 0, delivered.stderr)
+        manifest = json.loads((self.root / "packet-2/inputs.json").read_text())
+        self.assertEqual((manifest["kind"], manifest["decision"]["digest"]), ("round", decision["digest"]))
 
     def test_the_manuscript_packet_stays_blind_to_rounds_and_predictions(self):
         from research_harness import rounds
