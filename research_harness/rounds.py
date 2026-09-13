@@ -457,15 +457,21 @@ def derive_progress(records, evaluation, admission, bundle):
     exemplar = has_round_exemplar(records, admission)
     cycles = sorted(c["id"] for c in records.get("cycle", {}).values()
                     if c["id"] not in opening["cycle_ids"] and c["assessment_id"] is not None)
-    claims = {}
+    claims, opening_claims = {}, {}
     if bundle is not None:
         claims = {c["id"]: c for c in strict_json(evaluation.read(bundle["files"]["claims"]["artifact"]))}
+        opening_bundle = records["publication_bundle"][opening["bundle_id"]]
+        opening_claims = {c["id"]: c["claim"] for c in strict_json(evaluation.read(opening_bundle["files"]["claims"]["artifact"]))}
     new = sorted(i for i, c in claims.items() if i not in opening["claim_ids"] and "superseded" not in c)
+    # An opening claim keeps its text, or carries `revised` or `superseded`; a rewritten text without a marker is a change.
+    changed = sorted(i for i, c in claims.items() if i in opening_claims and c["claim"] != opening_claims[i]
+                     and "revised" not in c and "superseded" not in c)
     return {"fresh_purposes": fresh, "exemplar": exemplar, "cycles": cycles,
             "readings": len(records.get("reading", {})) - opening["reading_count"],
             "new_claim_ids": new,
             "revised_claim_ids": sorted(i for i, c in claims.items() if "revised" in c),
             "superseded_claim_ids": sorted(i for i, c in claims.items() if "superseded" in c),
+            "changed_claim_ids": changed,
             "dropped_claim_ids": sorted(i for i in opening["claim_ids"] if i not in claims) if bundle else [],
             "usage": _compute_usage(records, opening["accounts"]),
             "measurement": predictions.measurement_summary(records, bundle) if bundle else None,
@@ -477,6 +483,7 @@ def _validate_judgments(values, expected, name, evidence):
     seen = []
     for item in _items(values, name):
         _fields(item, ("id", "status", "explanation", "evidence"))
+        _text(item["id"], name + " ID")
         if item["id"] not in expected or item["id"] in seen:
             raise ResearchError(_ERROR, "Judge each of the goal's " + name.lower() + " exactly once")
         seen.append(item["id"])

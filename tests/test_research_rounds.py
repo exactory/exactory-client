@@ -1,6 +1,9 @@
 """Development rounds: decisions, reviews, admissions, assessments and the round gate."""
 
+import copy
+
 from research_harness import predictions, publication, resources, rounds
+from research_harness.evaluation import Evaluation
 from rounds_fixtures import RoundsCase
 
 
@@ -554,21 +557,62 @@ class RoundAssessmentTests(RoundsCase):
         self.assert_error("unknown_round", lambda: self.mutate(rounds.assess_round, absent))
         for edit in (lambda p: p.update(criteria=[]),
                      lambda p: p["criteria"].append(dict(p["criteria"][0])),
+                     lambda p: p["criteria"][0].update(id=["sc-wider"]),
                      lambda p: p["criteria"][0].update(status="passed"),
                      lambda p: p["stop_conditions"][0].update(id="other")):
             payload = self.assess_payload(admission, bundle)
             edit(payload)
             self.assert_error("invalid_round", lambda: self.mutate(rounds.assess_round, payload))
 
+    def test_every_criterion_of_a_two_criterion_goal_is_judged_with_evidence(self):
+        payload = self.decision_payload(self.pin())
+        payload["next"]["goal"]["success_criteria"].append(
+            {"id": "sc-scope", "kind": "scope", "statement": "The assessed scope covers [0, 5] under the stated assumptions."})
+        decision, review, admission = self.open_round(payload=payload)
+        self.run_round_work("r2")
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2")
+        # Only sc-wider judged; sc-wider judged without evidence.
+        for edit in (lambda p: p["criteria"].pop(), lambda p: p["criteria"][0].update(evidence=[])):
+            payload = self.assess_payload(admission, bundle)
+            edit(payload)
+            self.assert_error("invalid_round", lambda: self.mutate(rounds.assess_round, payload))
+        judged = self.assess_payload(admission, bundle)
+        judged["criteria"][1]["status"] = "unresolved"
+        assessed = self.mutate(rounds.assess_round, judged)["result"]
+        self.assertEqual([c["id"] for c in assessed["payload"]["criteria"]], ["sc-wider", "sc-scope"])
+        self.assertTrue(assessed["successful"])
+
+    def test_an_unproductive_round_lacks_a_fresh_search_or_the_round_exemplar(self):
+        decision, review, admission = self.open_round()
+        self.run_round_work("r2")
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2")
+        records = self.store.snapshot()["records"]
+        evaluation = Evaluation(records, self.artifacts)
+        self.assertFalse(rounds.derive_progress(records, evaluation, admission, bundle)["unproductive"])
+        # As if the round had opened with the `changes` search it recorded: three purposes fresh, not four.
+        stale_search = copy.deepcopy(admission)
+        stale_search["opening"]["search_selection"]["changes"] = records["search_selection"]["research:changes"]["search_id"]
+        progress = rounds.derive_progress(records, evaluation, stale_search, bundle)
+        self.assertEqual((progress["fresh_purposes"], progress["unproductive"]), (["downstream", "exemplars", "next_step"], True))
+        # As if the round had opened with the exemplar requirement it recorded.
+        stale_exemplar = copy.deepcopy(admission)
+        stale_exemplar["opening"]["requirement_ids"].append("exemplar-r2")
+        progress = rounds.derive_progress(records, evaluation, stale_exemplar, bundle)
+        self.assertEqual((progress["exemplar"], progress["unproductive"]), (False, True))
+
     def test_claims_continuity_marks_revised_superseded_and_dropped_claims(self):
         decision, review, admission = self.open_round()
         self.run_round_work("r2")
         records = self.store.snapshot()["records"]
-        from research_harness.evaluation import Evaluation
         evaluation = Evaluation(records, self.artifacts)
+        rewritten = [{"id": "bound", "claim": "The maximum is 10."}, {"id": "wider", "claim": "Claim wider holds."}]
+        bundle = self.pin(rewritten, identifier="paper-rewritten")
+        progress = rounds.derive_progress(self.store.snapshot()["records"], evaluation, admission, bundle)
+        self.assertEqual((progress["changed_claim_ids"], progress["revised_claim_ids"], progress["dropped_claim_ids"]), (["bound"], [], []))
         bundle = self.pin(self.claims("wider", revised=["bound"]), identifier="paper-revised")
         progress = rounds.derive_progress(self.store.snapshot()["records"], evaluation, admission, bundle)
         self.assertEqual((progress["new_claim_ids"], progress["revised_claim_ids"], progress["dropped_claim_ids"]), (["wider"], ["bound"], []))
+        self.assertEqual(progress["changed_claim_ids"], [])
         bundle = self.pin(self.claims("wider", superseded=["bound"]), identifier="paper-superseded")
         progress = rounds.derive_progress(self.store.snapshot()["records"], evaluation, admission, bundle)
         self.assertEqual((progress["superseded_claim_ids"], progress["dropped_claim_ids"]), (["bound"], []))
@@ -579,5 +623,6 @@ class RoundAssessmentTests(RoundsCase):
         progress = rounds.derive_progress(self.store.snapshot()["records"], evaluation, admission, bundle)
         self.assertEqual(progress["dropped_claim_ids"], ["bound"])
         without = rounds.derive_progress(self.store.snapshot()["records"], evaluation, admission, None)
-        self.assertEqual((without["new_claim_ids"], without["dropped_claim_ids"], without["measurement"]), ([], [], None))
+        self.assertEqual((without["new_claim_ids"], without["changed_claim_ids"], without["dropped_claim_ids"], without["measurement"]),
+                         ([], [], [], None))
         self.assertEqual((without["cycles"], without["unproductive"]), (["cycle-r2"], True))

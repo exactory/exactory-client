@@ -176,9 +176,11 @@ class RoundsCase(DevelopmentCase):
         review = self.mutate(rounds.record_round_review, self.review_payload(decision))["result"]
         return decision, review
 
-    def open_round(self, bundle=None, closes=1, **decision_kwargs):
-        """Decide continue, approve it and admit the next round; returns (decision, review, admission)."""
-        decision, review = self.approve(self.decision_payload(bundle or self.pin(), closes, **decision_kwargs))
+    def open_round(self, bundle=None, closes=1, *, payload=None, **decision_kwargs):
+        """Decide continue, approve it and admit the next round; returns (decision, review, admission).
+
+        `payload` is a prepared decision payload; without one the decision is built from the other arguments."""
+        decision, review = self.approve(payload or self.decision_payload(bundle or self.pin(), closes, **decision_kwargs))
         admission = self.mutate(rounds.admit_round, {"id": "round-" + str(decision["payload"]["next"]["number"]),
                                                      "round_id": decision["id"], "review_id": review["id"],
                                                      "reason": "The approved goal opens the round."})["result"]
