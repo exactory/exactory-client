@@ -22,6 +22,17 @@ def report_fixture():
             "runtime": {"plugin_version": "0.38.0"}, "counts": {"obligations": 20}}
 
 
+def round_view():
+    """A round summary at its widest: every purpose fresh, every count and measure at a large value."""
+    measure = {"median": 10 ** 9 + 0.5, "spread": [10 ** 9, 10 ** 9]}
+    return {"number": 10 ** 9, "active": True, "decision": "continue", "admitted": False, "obligations": 10 ** 9,
+            "progress": {"fresh_purposes": ["changes", "downstream", "exemplars", "next_step"], "exemplar": True,
+                         "cycles": 10 ** 9, "new_claims": 10 ** 9, "dropped_claims": 10 ** 9, "readings": 10 ** 9},
+            "measurement": {"reviews": {"count": 10 ** 9, "soundness": measure, "presentation": measure, "contribution": measure,
+                                        "overall": measure},
+                            "predictions": {"count": 10 ** 9, "percentile": measure}}}
+
+
 class ReportViewTests(unittest.TestCase):
     def test_views_preserve_state_and_exclude_source_bodies(self):
         report = report_fixture()
@@ -57,6 +68,7 @@ class ReportViewTests(unittest.TestCase):
         report["evaluation"] = {"reads": 10 ** 9, "artifacts_verified": 10 ** 9, "bytes_verified": 10 ** 12, "computed": 10 ** 6,
                                 "readings_assessed": 10 ** 6, "links_validated": 10 ** 6, "graph_builds": 3, "cohort_reports": 1,
                                 "elapsed_seconds": 123456.789}
+        report["round"] = round_view()
         status, upcoming = status_summary(report), next_summary(report)
         self.assertLessEqual(encoded_size(status), 16 * 1024)
         self.assertLessEqual(encoded_size(upcoming), 4 * 1024)
@@ -80,6 +92,16 @@ class ReportViewTests(unittest.TestCase):
         self.assertTrue(view["advisory_only"])
         self.assertEqual(view["obligations"]["total"], 0)
         self.assertEqual(view["obligations"]["omitted_obligations"], 0)
+
+    def test_the_round_object_is_copied_into_the_status_summary(self):
+        report = report_fixture()
+        self.assertIsNone(status_summary(report)["round"])
+        report["round"] = round_view()
+        view = status_summary(report)
+        self.assertEqual(view["round"], round_view())
+        self.assertEqual(view["round"]["number"], 10 ** 9)
+        self.assertLessEqual(encoded_size(view), 16 * 1024)
+        self.assertNotIn("round", next_summary(report))
 
     def test_missing_preparation_is_unknown_not_ready(self):
         report = report_fixture()

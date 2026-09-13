@@ -3,6 +3,7 @@
 import copy
 
 from research_harness import predictions, publication, resources, rounds
+from research_harness.errors import ResearchError
 from research_harness.evaluation import Evaluation
 from rounds_fixtures import RoundsCase
 
@@ -686,3 +687,171 @@ class RoundAssessmentTests(RoundsCase):
         self.assertEqual((without["new_claim_ids"], without["changed_claim_ids"], without["dropped_claim_ids"], without["measurement"]),
                          ([], [], [], None))
         self.assertEqual((without["cycles"], without["unproductive"]), (["cycle-r2"], True))
+
+
+class RoundGateTests(RoundsCase):
+    def gate(self):
+        from research_harness.gates import gate_report
+        return gate_report(self.store, "round")
+
+    @staticmethod
+    def gate_codes(report):
+        return [o["code"] for o in report["obligations"]]
+
+    def test_the_gate_walks_from_bundle_to_decision_to_review_to_admission(self):
+        self.assertIn("publication_bundle_missing", self.gate_codes(self.gate()))
+        bundle = self.pin()
+        self.assertEqual(self.gate_codes(self.gate()), ["round_decision_missing"])
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        self.assertEqual(self.gate_codes(self.gate()), ["round_review_missing"])
+        self.mutate(rounds.record_round_review, self.review_payload(decision, verdict="not_approved"))
+        self.assertEqual(self.gate_codes(self.gate()), ["round_review_pending"])
+        review = self.mutate(rounds.record_round_review, self.review_payload(decision, assessor="second"))["result"]
+        report = self.gate()
+        self.assertEqual((self.gate_codes(report), report["decision"], report["admitted"]), (["round_admission_missing"], "continue", False))
+        self.assertEqual((report["decision_id"], report["next"]), (decision["id"], decision["payload"]["next"]))
+        self.assertFalse(report["ready"])
+        self.mutate(rounds.admit_round, {"id": "round-2", "round_id": decision["id"], "review_id": review["id"], "reason": "Open."})
+        report = self.gate()
+        self.assertTrue(report["active"])
+        self.assertEqual(report["round"], 2)
+        self.assertIn("round_assessment_missing", self.gate_codes(report))
+        self.assertIn("round_cycle_missing", self.gate_codes(report))
+        self.assertIn("round_exemplar_missing", self.gate_codes(report))
+        self.assertEqual(sorted(o["purpose"] for o in report["obligations"] if o["code"] == "round_search_missing"),
+                         ["changes", "downstream", "exemplars", "next_step"])
+        self.assertEqual(report["progress"]["cycles"], [])
+
+    def test_a_stop_decision_makes_the_gate_ready(self):
+        bundle = self.pin()
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle, decision="stop"))["result"]
+        self.mutate(rounds.record_round_review, self.review_payload(decision))
+        report = self.gate()
+        self.assertEqual((report["ready"], report["decision"], report["next"]), (True, "stop", None))
+        self.assertEqual(report["measurement"]["reviews"]["count"], 2)
+
+    def test_the_gate_reports_the_round_claims_and_the_stale_assessment(self):
+        decision, review, admission = self.open_round()
+        self.run_round_work("r2")
+        bundle = self.pin(identifier="paper-r2")
+        report = self.gate()
+        self.assertEqual(self.gate_codes(report), ["round_claim_missing", "round_assessment_missing"])
+        (self.root / "evidence/claims.json").write_text('[{"id": "wider", "claim": "Claim wider holds."}]')
+        bundle = self.mutate(publication.prepare_publication, {"id": "paper-dropped", "files": {"pdf": "draft/paper.pdf",
+            "abstract": "draft/abstract.txt", "bibliography": "draft/references.bib", "claims": "evidence/claims.json", "sources": None},
+            "claim_evidence": [{"claim_id": "wider", "evidence": [self.result_evidence(self.execution_payload)]}]})["result"]
+        report = self.gate()
+        self.assertEqual(self.gate_codes(report), ["round_claims_dropped", "round_assessment_missing"])
+        self.assertEqual(report["obligations"][0]["claim_ids"], ["bound"])
+        bundle = self.pin([{"id": "bound", "claim": "The maximum is 10."}, {"id": "wider", "claim": "Claim wider holds."}], identifier="paper-changed")
+        self.assertEqual(self.gate_codes(self.gate()), ["round_claims_dropped", "round_assessment_missing"])
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2-final")
+        self.assertEqual(self.gate_codes(self.gate()), ["round_assessment_missing"])
+        self.mutate(rounds.assess_round, self.assess_payload(admission, bundle))
+        self.assertEqual(self.gate_codes(self.gate()), ["round_decision_missing"])
+        (self.root / "draft/abstract.txt").write_text("The exact finite bound was enumerated and extended.")
+        self.pin(self.claims("wider"), identifier="paper-r2-revised")
+        report = self.gate()
+        self.assertEqual((self.gate_codes(report), report["active"], report["round"]), (["round_assessment_missing"], False, 2))
+
+    def test_transitions_follow_the_round_gate(self):
+        from research_harness.gates import validate_transition
+        evaluate, literature = {"stage": "evaluate", "status": "pending"}, {"stage": "literature", "status": "pending"}
+        deposit = {"stage": "deposit", "status": "pending"}
+
+        def transition(target):
+            records = self.store.snapshot()["records"]
+            return validate_transition(records, Evaluation(records, self.artifacts), evaluate, target)
+        self.assert_error("readiness_required", lambda: transition(literature))
+        bundle = self.pin()
+        self.assert_error("readiness_required", lambda: transition(deposit))
+        decision, review, admission = self.open_round(bundle)
+        transition(literature)
+        self.assert_error("readiness_required", lambda: transition(deposit))
+
+    def test_a_stop_does_not_enter_a_development_round(self):
+        from research_harness.gates import validate_transition
+        bundle = self.pin()
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle, decision="stop"))["result"]
+        self.mutate(rounds.record_round_review, self.review_payload(decision))
+        records = self.store.snapshot()["records"]
+        with self.assertRaises(ResearchError) as raised:
+            validate_transition(records, Evaluation(records, self.artifacts), {"stage": "evaluate", "status": "pending"},
+                                {"stage": "literature", "status": "pending"})
+        self.assertEqual((raised.exception.code, raised.exception.details["decision"]), ("readiness_required", "stop"))
+
+    def test_a_stop_after_an_assessed_round_permits_deposit(self):
+        from research_harness.gates import validate_transition
+        decision, review, admission = self.open_round()
+        self.run_round_work("r2")
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2")
+        self.mutate(rounds.assess_round, self.assess_payload(admission, bundle))
+        stop = self.mutate(rounds.record_round, self.decision_payload(bundle, closes=2, decision="stop"))["result"]
+        self.mutate(rounds.record_round_review, self.review_payload(stop))
+        records = self.store.snapshot()["records"]
+        validate_transition(records, Evaluation(records, self.artifacts), {"stage": "evaluate", "status": "pending"},
+                            {"stage": "deposit", "status": "pending"})
+
+    def test_two_unsuccessful_rounds_exhaust_a_direction(self):
+        decision, review, admission = self.open_round()
+        self.run_round_work("r2", new_cycle=False)
+        bundle = self.pin(identifier="paper-r2")
+        self.mutate(rounds.assess_round, self.assess_payload(admission, bundle, observed=False))
+        decision, review, admission = self.open_round(bundle, closes=2, statement="Extend the finite bound to every integer in [0, 7].")
+        self.run_round_work("r3", new_cycle=False)
+        bundle = self.pin(identifier="paper-r3")
+        self.mutate(rounds.assess_round, self.assess_payload(admission, bundle, observed=False))
+        same = self.decision_payload(bundle, closes=3, statement="Extend the finite bound to every integer in [0, 9].")
+        self.assert_error("round_direction_exhausted", lambda: self.mutate(rounds.record_round, same))
+        other = self.decision_payload(bundle, closes=3, direction="horizontal", statement="Apply the bound to a neighbouring category.")
+        other["candidates"][0]["direction"] = "horizontal"
+        self.mutate(rounds.record_round, other)
+        reopened = self.decision_payload(bundle, closes=3, statement="Extend the finite bound to every integer in [0, 9].",
+                                         reopening={"round_id": "round-2", "reason": "A new measurement changed the picture.",
+                                                    "evidence": [{"kind": "review", "review_id": "paper-r3-gate-1"}]})
+        recorded = self.mutate(rounds.record_round, reopened)["result"]
+        self.assertEqual(recorded["payload"]["next"]["reopening"]["round_id"], "round-2")
+
+
+class RoundStatusTests(RoundsCase):
+    def gate_report(self):
+        from research_harness.gates import gate_report
+        return gate_report(self.store, "round")
+
+    def test_status_at_evaluate_carries_publication_and_round_obligations_in_priority_order(self):
+        from research_harness.cli import status_report
+        from research_harness.report_views import status_summary
+        self.set_stage("literature")
+        self.pin()
+        report = status_report(self.store)
+        self.assertNotIn("round_decision_missing", [o["code"] for o in report["obligations"]])
+        self.assertEqual(report["round"]["number"], 1)
+        self.set_stage("evaluate")
+        report = status_report(self.store)
+        self.assertEqual([o["code"] for o in report["obligations"]], ["round_decision_missing"])
+        self.assertFalse(report["ready"])
+        self.assertEqual(report["next"]["code"], "round_decision_missing")
+        (self.root / "draft/paper.pdf").write_bytes(b"%PDF-1.4\n% changed\n%%EOF")
+        codes = [o["code"] for o in status_report(self.store)["obligations"]]
+        self.assertEqual(codes, ["publication_artifact_changed"])
+        summary = status_summary(status_report(self.store))
+        self.assertEqual(summary["round"], rounds.round_summary(self.gate_report()))
+
+    def test_a_manuscript_awaiting_reviews_is_led_to_the_reviews_before_the_round(self):
+        from research_harness.cli import status_report
+        self.set_stage("evaluate")
+        self.pin(reviews=0)
+        codes = [o["code"] for o in status_report(self.store)["obligations"]]
+        self.assertEqual(codes, ["manuscript_reviews_required", "round_decision_missing"])
+
+    def test_the_round_summary_is_bounded_and_carries_the_active_round(self):
+        from research_harness.cli import status_report
+        self.set_stage("evaluate")
+        decision, review, admission = self.open_round()
+        self.record_purpose("downstream", "downstream-r2")
+        summary = status_report(self.store)["round"]
+        self.assertEqual((summary["number"], summary["active"], summary["decision"], summary["admitted"]), (2, True, None, False))
+        self.assertEqual(summary["progress"], {"fresh_purposes": ["downstream"], "exemplar": False, "cycles": 0,
+                                               "new_claims": 0, "dropped_claims": 0, "readings": 0})
+        self.assertIsNone(summary["measurement"])
+        self.assertEqual(sorted(summary), ["active", "admitted", "decision", "measurement", "number", "obligations", "progress"])
