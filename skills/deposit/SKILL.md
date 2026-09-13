@@ -92,8 +92,10 @@ exactory-draft deposit --production --publish --confirm-publish --new-version --
 same; a new version DOI is minted. The first version keeps its DOI and its
 place on the record.
 
-The revised PDF, abstract, bibliography, claim ledger, and optional sources need
-their own current bundle and applicable independent reviews. An uncertain
+Pin the revised PDF, abstract, bibliography, internal claim ledger and optional
+sources as a current bundle. Give manuscript assessors its neutral export,
+including the derived current-claims file. Obtain the applicable independent
+reviews and an approved stop on this bundle before deposit. An uncertain
 new-version creation remains pending when its remote draft ID cannot be recovered;
 retain its intent and reconcile rather than repeating creation.
 

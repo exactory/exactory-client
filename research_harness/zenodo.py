@@ -5,16 +5,22 @@ import hashlib
 from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .execution import _owner
+from .evaluation import Evaluation
+from .gates import require_ready
 from .integration import export_workspace
-from .publication import publication_report
+from .publication import publication_state
 from .remote import begin_intent, finish_intent, get_intent, remote_step, resolve_step
+from .rounds import round_state
 
 
 def _current(store, binding):
-    report = publication_report(store)
+    records = store.snapshot()["records"]
+    evaluation = Evaluation(records, ArtifactStore(store.root))
+    report = publication_state(records, evaluation)
     if not report["ready"] or report["bundle"]["digest"] != binding["bundle_digest"]:
         raise ResearchError("readiness_required", "The current manuscript and dual reviews must match the saved publication intent",
                             {"obligations": report["obligations"]})
+    require_ready(round_state(records, evaluation), "depositing the final development round")
     return report["bundle"]
 
 
@@ -78,7 +84,21 @@ def reconcile_pending(store, identifier, client):
     return get_intent(store, identifier)
 
 
-def continue_deposit(store, identifier, client, preview, *, reconcile=False):
+def _set_preview(store, identifier, binding, client, record_id):
+    """Fetch the draft before claiming the preview write, then validate its bundle."""
+    intent = get_intent(store, identifier)
+    if "preview" in intent["responses"]:
+        return intent["responses"]["preview"]["response"]
+    url = binding["base_url"] + "/records/" + str(record_id) + "/draft"
+    document = client("GET", url, accept="application/vnd.inveniordm.v1+json")
+    # The RDM PUT replaces the draft document, so retain its other fields.
+    updated = dict(document, files=dict(document.get("files", {}), default_preview="paper.pdf"))
+    _current(store, binding)
+    return remote_step(store, identifier, "preview", {"deposition_id": record_id, "filename": "paper.pdf"},
+                       lambda: client("PUT", url, json_body=updated))
+
+
+def continue_deposit(store, identifier, client, *, reconcile=False):
     with _owner(store.root, "remote:" + identifier):
         intent = get_intent(store, identifier)
         if intent["status"] == "complete":
@@ -114,8 +134,8 @@ def continue_deposit(store, identifier, client, preview, *, reconcile=False):
         _current(store, binding)
         remote_step(store, identifier, "metadata", {"metadata": metadata},
                     lambda: client("PUT", base + "/deposit/depositions/" + str(deposition["id"]), json_body={"metadata": metadata}))
-        remote_step(store, identifier, "preview", {"deposition_id": deposition["id"], "filename": "paper.pdf"},
-                    lambda: preview(base, deposition["id"]))
+        _current(store, binding)
+        _set_preview(store, identifier, binding, client, deposition["id"])
         published = None
         if binding["publish"]:
             _current(store, binding)
@@ -134,9 +154,9 @@ def continue_deposit(store, identifier, client, preview, *, reconcile=False):
         return result
 
 
-def deposit(store, binding, client, preview, *, expected_revision, request_id):
+def deposit(store, binding, client, *, expected_revision, request_id):
     _current(store, binding)
     if binding["new_version"] and (binding["prior"] is None or binding["prior"]["environment"] != binding["environment"]):
         raise ResearchError("publication_prior_required", "A revised deposit must use the prior concrete record in the same environment")
     intent = begin_intent(store, "deposit", binding, expected_revision=expected_revision, request_id=request_id)
-    return continue_deposit(store, intent["id"], client, preview)
+    return continue_deposit(store, intent["id"], client)

@@ -88,8 +88,13 @@ reasons. Give each reviewer the study's cohort with the packet: `corpus`,
 of the research scope's first collection. The reviewer copies them into the
 prediction. Record each prediction file with `manuscript-prediction` for the
 exact bundle: keep its `prediction` and `reasons` unchanged and add `id`,
-`bundle_digest`, `blind: true` and the reviewer's `assessor`. `status --summary` reports the review and prediction medians and spreads
-under `round`.
+`bundle_digest`, `blind: true` and the reviewer's `assessor`. Use the same assessor
+identity for the review and prediction on that bundle. `status --summary` reports
+the paired measurement under `round.measurement`. Its `complete` field is true
+when exactly three distinct prediction assessors each have a review.
+Duplicate or extra predictions make the group ambiguous. Incomplete or ambiguous
+groups report counts and null medians. Publication-only reviewers remain outside
+this measurement. The evaluate skill states the recording procedure.
 
 The round gate, at the end of `evaluate`:
 
@@ -154,12 +159,14 @@ success criterion it serves. A successor inherits a checkpoint of an earlier rou
 as a validated result only after that cycle is assessed again and checkpointed
 under the current objective and preparation; the ideate skill states the rule.
 
-Claims continuity: the manuscript keeps every claim id of the round's opening
+Claims continuity: the internal pinned ledger keeps every claim id of the round's opening
 bundle. A changed claim carries `revised: {previous, reason}`, a withdrawn one
 `superseded: {reason}`; a rewritten claim without a marker is dropped
 (`round_claims_dropped`), and the round adds at least one new claim
 (`round_claim_missing`). Both are round-gate obligations, so the manuscript loop
 can still measure an intermediate draft.
+The manuscript export gives blind reviewers a separate current-claims file.
+The original ledger remains available to the round assessor.
 
 The loop ends only through a recorded exit. An approved `stop` leads to deposit
 when the publication gate passes and otherwise parks the study with the plateau

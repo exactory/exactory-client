@@ -89,7 +89,6 @@ _WRITTEN_BY_EXACTORY_KEYWORD = "Written by exactory.ai"
 # 'supplementary' sorts after 'paper', keeping the paper on top.
 _PAPER_UPLOAD_NAME = "paper.pdf"
 _SOURCES_UPLOAD_STEM = "supplementary-sources"
-_RDM_JSON_MEDIA_TYPE = "application/vnd.inveniordm.v1+json"
 
 def _exit_with_error(message: str, code: int = 1) -> None:
     print(message, file=sys.stderr)
@@ -248,19 +247,6 @@ def _name_sources_upload(sources_path: Path) -> str:
     return _SOURCES_UPLOAD_STEM + sources_path.suffix
 
 
-def _mark_paper_as_preview(base_url: str, record_id: int, token: str) -> None:
-    """Make the paper the record's previewed file. The RDM draft document is
-    the working surface for this: the file-sort endpoint that
-    https://developers.zenodo.org still documents answers HTTP 405 on
-    zenodo.org (verified 2026-08-30). The PUT replaces the whole draft
-    document, so the fetched document goes back with only default_preview
-    added."""
-    draft_url = f"{base_url}/records/{record_id}/draft"
-    document = _call_zenodo("GET", draft_url, token, accept=_RDM_JSON_MEDIA_TYPE)
-    document.setdefault("files", {})["default_preview"] = _PAPER_UPLOAD_NAME
-    _call_zenodo("PUT", draft_url, token, json_body=document)
-
-
 def _run_deposit(args: argparse.Namespace) -> None:
     try:
         workspace = find_workspace()
@@ -311,8 +297,7 @@ def _run_deposit(args: argparse.Namespace) -> None:
     # CAS validates the snapshot that supplied the exact upload bytes.
     if args.expected_revision is None:
         identity["expected_revision"] = report["revision"]
-    receipt = deposit_bundle(store, binding, lambda method, url, **kwargs: _call_zenodo(method, url, token, **kwargs),
-                            lambda base, record_id: _mark_paper_as_preview(base, record_id, token), **identity)
+    receipt = deposit_bundle(store, binding, lambda method, url, **kwargs: _call_zenodo(method, url, token, **kwargs), **identity)
     print(json.dumps(receipt, indent=2))
 
 
@@ -324,8 +309,7 @@ def _run_reconcile(args: argparse.Namespace) -> None:
         raise ResearchError("remote_intent_mismatch", "Use a deposit intent for Zenodo reconciliation")
     token = _read_zenodo_token(intent["binding"]["environment"] == "production")
     receipt = continue_deposit(store, args.intent_id,
-        lambda method, url, **kwargs: _call_zenodo(method, url, token, **kwargs),
-        lambda base, record_id: _mark_paper_as_preview(base, record_id, token), reconcile=True)
+        lambda method, url, **kwargs: _call_zenodo(method, url, token, **kwargs), reconcile=True)
     print(json.dumps(receipt, indent=2))
 
 

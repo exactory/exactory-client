@@ -35,8 +35,9 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
-Version 0.39.1 corrects the documentation of the development rounds of 0.39.0
-and adds tests; it changes no harness code. Version
+Version 0.39.2 enforces the final round decision at deposit, separates internal
+claim history from blind review, and measures the three paired reviewers.
+Version
 [0.39.0](docs/releases/0.39.0.md) develops a paper across research rounds. At the
 end of a round, the study decides on the exact manuscript bundle to continue with
 a new goal or to stop. An independent assessor must approve this decision. Each
@@ -50,7 +51,7 @@ literature preparation of [0.38.0](docs/releases/0.38.0.md), the shared research
 foundation of [0.36.0](docs/releases/0.36.0.md) and
 [0.37.0](docs/releases/0.37.0.md) and the mathematical strategy reassessment of
 [0.35.0](docs/releases/0.35.0.md). Read the
-[release notes](docs/releases/0.39.1.md) and the
+[release notes](docs/releases/0.39.2.md) and the
 [upgrade notes of 0.39.0](docs/releases/0.39.0.md) before updating a waiting agent
 or adopting an existing attack. An update does not resume paused research or reset
 its budget.

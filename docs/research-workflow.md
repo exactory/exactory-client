@@ -336,6 +336,12 @@ and the reviewer's `assessor`. Scores and predictions are results of the round,
 not criteria. Then read `gate round`: it names what the closing round still owes
 and, once nothing is owed, asks for the decision.
 
+Use the same assessor identity for each review and its prediction on the bundle.
+`round.measurement.complete` reports whether exactly three distinct prediction
+assessors each have a review. Duplicate or extra predictions make the group
+ambiguous. Incomplete or ambiguous groups report counts and null medians.
+Publication-only reviewers remain outside the measurement.
+
 Decide on the exact bundle with `round`: `continue` with one pursued candidate
 and a goal the current paper does not meet, or `stop`. Either decision disposes
 of every carried development of the closing round in `carried`. Deliver the

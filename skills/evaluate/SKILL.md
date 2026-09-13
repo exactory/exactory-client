@@ -113,12 +113,12 @@ harness accepts one review per assessor per exact bundle, so a rejection stands
 until the manuscript changes. The reviewer is never told a round or revision
 number and never sees `reviews/`, `learnings/`, a prior score, or an expected
 score. The paper itself must carry no revision markers: no "v2", no changelog, no
-response-to-reviewers text. The packet does carry the pinned `evidence/claims.json`
-unchanged. A claim marked `revised` shows its earlier text and the reason, and a
-claim marked `superseded` shows its reason, so the reviewer can see that those
-claims changed. Keep the markers: the round gate refuses a rewritten claim without
-`revised` and a claim removed from the ledger (`round_claims_dropped`). A score
-anchored on "it has improved" is not a measurement.
+response-to-reviewers text. The manuscript export derives a separate claims file
+for the reviewer. It contains current claims and omits their `revised` metadata
+and all `superseded` entries. Its evidence map contains only those current claims.
+Keep the complete ledger and its markers in the study for the round gate.
+The round assessor receives that original ledger. A score anchored on
+"it has improved" is not a measurement.
 
 **Spot-check claim support on the load-bearing citations.** Step 1 proved each
 reference exists and carries the metadata the registry states. It did not prove the
@@ -154,6 +154,19 @@ cohort with `prediction_cohort_mismatch`. Record both unchanged with
 `manuscript-prediction`, adding `id`, the exact current `bundle_digest`,
 `blind: true` and the reviewer's `assessor` (provenance saved with `artifact`). The
 core stays exactly the eight fields; the prediction never enters it.
+
+Use the same assessor identity for each review and its prediction on the same
+bundle. The harness matches identities after case and whitespace normalization.
+The measurement is complete when exactly three distinct prediction assessors
+each have a review. Duplicate or extra predictions make the group ambiguous.
+`round.measurement.complete` reports this condition. An incomplete or ambiguous
+group reports counts and null medians. Publication reviewers without predictions
+remain outside this measurement. If one reviewer is missing, relaunch that
+reviewer alone. Preserve the original review and prediction files.
+If extra or duplicate predictions make the group ambiguous, retain it as an
+invalid measurement. Record the group's identity and the reason in the
+measurement history. After the next substantive manuscript revision, obtain
+three fresh review/prediction pairs for that revised bundle.
 
 **Before deposit, run the dual-reviewer gate.** If the `santa-method` skill is
 installed, use it; the essential protocol is stated here in full either way. Launch

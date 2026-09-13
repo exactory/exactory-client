@@ -8,13 +8,13 @@ evidence without labels."""
 import json
 from pathlib import Path
 
-from .artifacts import ArtifactStore
+from .artifacts import ArtifactStore, describe_artifact
 from .execution_evidence import author_readiness_state
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .publication import _bundle, publication_state
 from .review_packets import manuscript_packet, readiness_packet, round_packet
-from .workspace import write_projection
+from .workspace import strict_json, write_projection
 
 
 def references(value):
@@ -32,12 +32,14 @@ def references(value):
     return [found[key] for key in sorted(found)]
 
 
-def _deliver(store, destination, manifest):
+def _deliver(store, destination, manifest, *, derived=None):
     destination = Path(destination).absolute()
     if destination.exists() or destination.is_symlink():
         raise ResearchError("review_destination_exists", "Deliver into a new independent directory")
     artifacts = ArtifactStore(store.root)
-    values = [(ref, artifacts.read(ref)) for ref in references(manifest)]
+    derived = derived or {}
+    values = [(ref, derived[ref["path"]] if ref["path"] in derived else artifacts.read(ref))
+              for ref in references(manifest)]
     destination.mkdir(parents=True, mode=0o700)
     for ref, data in values:
         write_projection(destination, ref["path"], data)
@@ -55,12 +57,28 @@ def deliver_readiness(store, destination):
     return _deliver(store, destination, readiness_packet(report))
 
 
+def _project_current_claims(bundle, artifacts):
+    """Separate current claims from the study's internal continuity ledger."""
+    claims = strict_json(artifacts.read(bundle["files"]["claims"]["artifact"]))
+    if not any("revised" in claim or "superseded" in claim for claim in claims):
+        return bundle, {}
+    current = [{key: value for key, value in claim.items() if key != "revised"}
+               for claim in claims if "superseded" not in claim]
+    data = (json.dumps(current, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    reference = describe_artifact(data, "application/json")
+    files = dict(bundle["files"], claims=dict(bundle["files"]["claims"], artifact=reference))
+    identifiers = {claim["id"] for claim in current}
+    evidence = [item for item in bundle["claim_evidence"] if item["claim_id"] in identifiers]
+    return dict(bundle, files=files, claim_evidence=evidence), {reference["path"]: data}
+
+
 def deliver_manuscript(store, destination):
     snapshot = store.snapshot()
     report = publication_state(snapshot["records"], Evaluation(snapshot["records"], ArtifactStore(store.root)), "manuscript")
     if not report["ready"]:
         raise ResearchError("readiness_required", "Prepare a current manuscript bundle before independent delivery", {"obligations": report["obligations"]})
-    return _deliver(store, destination, manuscript_packet(snapshot["records"], report["bundle"]))
+    bundle, derived = _project_current_claims(report["bundle"], ArtifactStore(store.root))
+    return _deliver(store, destination, manuscript_packet(snapshot["records"], bundle), derived=derived)
 
 
 def deliver_round(store, destination):

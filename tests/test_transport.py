@@ -291,7 +291,7 @@ class TestSubmitCitationGate(_TransportTestCase):
         _write_passing_citation_report(self.scratch_dir)
         (self.scratch_dir / "draft/paper.pdf").write_bytes(b"%PDF-1.4\n% Authored finite-result fixture.\n%%EOF")
         (self.scratch_dir / "draft/abstract.txt").write_text("The exact finite bound is 9.")
-        bundle = prepare_manuscript(case)
+        bundle = prepare_manuscript(case, stop=True)
         binding = {"bundle_digest": bundle["digest"], "prepared_revision": bundle["prepared_revision"],
             "base_url": "https://zenodo.org/api", "environment": "production", "new_version": False,
             "publish": True, "metadata": {"title": "Authored finite result", "description": "The finite bound is 9."},
@@ -305,7 +305,7 @@ class TestSubmitCitationGate(_TransportTestCase):
                         "links": {"record_html": "https://zenodo.org/records/1"}}
             return {}
 
-        deposit(case.store, binding, publisher, lambda *args: {},
+        deposit(case.store, binding, publisher,
                 expected_revision=case.store.revision, request_id="transport-publication")
         self.responses[("POST", "/api/v1/verifications")] = ({"verificationId": _VERIFICATION_ID}, 201)
         task_path = "/api/v1/tasks/" + _VERIFICATION_ID

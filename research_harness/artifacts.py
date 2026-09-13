@@ -96,6 +96,16 @@ def _media_type(value):
         raise ResearchError("invalid_input", "Expected a media type without control characters")
 
 
+def describe_artifact(data: bytes, media_type: str) -> dict:
+    """Describe immutable content without writing it to a workspace."""
+    if not isinstance(data, bytes):
+        raise ResearchError("invalid_input", "Artifact data must be bytes")
+    _media_type(media_type)
+    digest = hashlib.sha256(data).hexdigest()
+    return {"sha256": digest, "path": _OBJECT_DIRECTORY + "/" + digest,
+            "size": len(data), "media_type": media_type}
+
+
 def _verify_object(directory: int, reference: dict) -> bytes:
     descriptor = _regular_file(directory, reference["sha256"])
     with os.fdopen(descriptor, "rb") as source:
@@ -114,12 +124,8 @@ class ArtifactStore:
         self.root = self._workspace.root
 
     def put(self, data: bytes, media_type: str) -> dict:
-        if not isinstance(data, bytes):
-            raise ResearchError("invalid_input", "Artifact data must be bytes")
-        _media_type(media_type)
-        digest = hashlib.sha256(data).hexdigest()
-        reference = {"sha256": digest, "path": _OBJECT_DIRECTORY + "/" + digest,
-                     "size": len(data), "media_type": media_type}
+        reference = describe_artifact(data, media_type)
+        digest = reference["sha256"]
         with self._workspace.directory(_OBJECT_DIRECTORY, create=True) as directory:
             try:
                 _verify_object(directory, reference)
