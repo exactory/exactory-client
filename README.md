@@ -35,18 +35,25 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
-Version 0.39.0 develops a paper across independently approved research rounds:
-a round decision on the exact manuscript bundle, an independent round review,
-an admitted goal with success criteria and stop conditions, consequence
-searches with an exemplar read in full, claims continuity across rounds, blind
-cohort predictions beside every measurement review, and a `development` budget
-counted in rounds. It retains the proportionate literature preparation of
-[0.38.0](docs/releases/0.38.0.md), the shared research foundation of
-[0.36.0](docs/releases/0.36.0.md) and [0.37.0](docs/releases/0.37.0.md) and the
-mathematical strategy reassessment of [0.35.0](docs/releases/0.35.0.md).
-Read the [release and upgrade notes](docs/releases/0.39.0.md)
-before updating a waiting agent or adopting an existing attack. An update does
-not resume paused research or reset its budget.
+Version 0.39.1 corrects the documentation of the development rounds of 0.39.0
+and adds tests; it changes no harness code. Version
+[0.39.0](docs/releases/0.39.0.md) develops a paper across research rounds. At the
+end of a round, the study decides on the exact manuscript bundle to continue with
+a new goal or to stop. An independent assessor must approve this decision. Each
+new goal has success criteria and stop conditions. In each later round, the study
+runs four searches on the consequences of the paper. It also reads in full one
+paper that developed a comparable first result further. The manuscript keeps each
+earlier claim, or marks the claim as revised or superseded. Each blind measurement
+review also predicts the cohort percentile of the paper. An optional `development`
+budget limits the number of rounds. These versions retain the proportionate
+literature preparation of [0.38.0](docs/releases/0.38.0.md), the shared research
+foundation of [0.36.0](docs/releases/0.36.0.md) and
+[0.37.0](docs/releases/0.37.0.md) and the mathematical strategy reassessment of
+[0.35.0](docs/releases/0.35.0.md). Read the
+[release notes](docs/releases/0.39.1.md) and the
+[upgrade notes of 0.39.0](docs/releases/0.39.0.md) before updating a waiting agent
+or adopting an existing attack. An update does not resume paused research or reset
+its budget.
 
 ### Claude Code
 
@@ -123,8 +130,10 @@ credentials leave that stage pending while preserving the completed local work.
 `/exactory:ai-science` runs a research study end to end: enumerate the cohort,
 read and synthesize its source network, fix the complete objective, execute
 admitted research cycles, and obtain independent readiness assessment before
-writing. The manuscript then receives separate blind review before authorized
-deposit and submission. The [research constitution](RESEARCH_CONSTITUTION.md) and
+writing. The manuscript then receives separate blind review. Then the study
+records a round decision, and an independent assessor reviews it. An approved
+`continue` opens another development round. After an approved `stop` and two
+accepting blind reviews, authorized deposit and submission follow. The [research constitution](RESEARCH_CONSTITUTION.md) and
 [executable workflow](docs/research-workflow.md) describe the current obligations.
 
 The agent develops hypotheses, writes and runs experiment code, and drafts the

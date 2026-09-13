@@ -60,7 +60,9 @@ A branch result does not complete the full objective by itself.
 A useful development that exceeds the round's admitted scope or resources takes
 the `next_round` disposition in the assessment, with its reason and evidence. It
 is carried, not paused: it leaves no development obligation at readiness, and the
-next `round` decision disposes of it as a candidate.
+next `round` decision disposes of it in `carried` as `pursue`, `rejected` or
+`deferred`, with a reason. It may also be written as a candidate, but a candidate
+alone does not dispose of it.
 
 For scalar parameter optimization, use a noise-aware baseline and prospective
 comparisons. Select the best supported source variant while retaining every

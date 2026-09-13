@@ -327,16 +327,25 @@ new write; an API credential does not itself authorize publication.
 ## Develop the paper across rounds
 
 The paper develops across rounds. Every blind measurement reviewer returns the
-rubric core and, in a separate file, a cohort prediction; record each prediction
-with `manuscript-prediction`. Scores and predictions are results of the round,
+rubric core and, in a separate file, a cohort prediction with its reasons. Give
+each reviewer the study's cohort with the packet: the `corpus`, the
+`primaryCategory` as `category`, the `windowStart` and the `windowEnd` of the
+research scope's first collection. Record each prediction with
+`manuscript-prediction`, adding `id`, the exact `bundle_digest`, `blind: true`
+and the reviewer's `assessor`. Scores and predictions are results of the round,
 not criteria. Then read `gate round`: it names what the closing round still owes
 and, once nothing is owed, asks for the decision.
 
 Decide on the exact bundle with `round`: `continue` with one pursued candidate
-and a goal the current paper does not meet, or `stop`. Deliver the decision with
-`export --kind round` to an independent assessor who is not a cycle author, and
-record its judgment with `round-review`. An approved `continue` is opened with
-`round-admit`; log the decision and return to `literature`.
+and a goal the current paper does not meet, or `stop`. Either decision disposes
+of every carried development of the closing round in `carried`. Deliver the
+decision with `export --kind round` to an independent assessor who is not a
+cycle author; the evaluate skill's section "The round review" gives the assessor
+its questions and the fields it returns. Record its judgment with
+`round-review`. An approved `continue` is opened with `round-admit`. Keep the
+`round-admit` output: it is the only report of the admitted goal and of its
+success criterion and stop condition ids. Log the decision and return to
+`literature`.
 
 ```sh
 exactory-research example manuscript-prediction > prediction.json
@@ -354,10 +363,13 @@ exactory-lab state set --stage literature --status pending
 Inside the round, the literature stage records the four consequence purposes
 (`downstream`, `next_step`, `exemplars`, `changes`) and one `exemplar` full-text
 requirement read in full. The earlier cycles are assessed again under the current
-preparation before the round's candidate is selected. The manuscript keeps every
-claim id of the round's opening bundle: a claim is revised or superseded, never
-dropped. When the round's manuscript is pinned and measured, assess the round
-against its goal, then decide again.
+preparation, and the round's candidate assessment lists every retained cycle of
+every round in `development.branches` before the readiness review. The manuscript
+keeps every claim id of the round's opening bundle: a claim is revised or
+superseded, never dropped. When the round's manuscript is pinned and measured,
+assess the round against its goal: `round-assessment.json` judges each success
+criterion and stop condition id of the saved goal exactly once (`invalid_round`
+otherwise). Then decide again.
 
 ```sh
 exactory-research round-assess --file round-assessment.json --expected-revision REVISION --request-id round-assess-002
@@ -365,13 +377,19 @@ exactory-research gate round
 exactory-research round --file round-decision-2.json --expected-revision REVISION --request-id round-decide-002
 ```
 
-The loop ends only through the recorded exits: an approved `stop`, a goal
-withdrawn in literature, an observed stop condition, two unsuccessful rounds in
-one direction, or an exhausted `development` budget. After an approved `stop`,
-deposit follows the publication gate.
+The loop ends only with an approved `stop`. Deposit follows when the publication
+gate passes; otherwise the study parks with the plateau recorded. A goal withdrawn
+in literature (`scooped` in `next_step`, `contradicted` in `changes`) or an
+observed stop condition ends work on that goal, and the next `round` decision
+proposes a distinct goal or stops. After two consecutive unsuccessful rounds,
+`continue` is refused in their directions unless it reopens one of them
+(`round_direction_exhausted`). A recorded `development` budget at its limit
+refuses `continue` (`resource_budget_exhausted`) until the user raises it with a
+reason. An unavailable round assessor leaves `round_review_missing` pending, and
+the study parks.
 
 ```sh
-exactory-lab decide --stage evaluate --decision "Stop after round 2" --why "No candidate with evidenced demand remains."
+exactory-lab decide --stage evaluate --decision "Stop after round 2" --why "Every recorded candidate was rejected or deferred on its evidence."
 exactory-lab state set --stage deposit --status pending
 ```
 

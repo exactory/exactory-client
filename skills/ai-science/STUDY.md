@@ -28,6 +28,7 @@ research preparation pending. Every path is relative to the workspace root.
 │   ├── sources/objects/   immutable captured and pinned bytes
 │   └── literature.md      cumulative human survey narrative
 ├── reviews/               exact deliveries, original reviews and score history
+│   └── round-00N/admission.json   saved round-admit output: the admitted goal
 └── learnings/iter_NNN.md   predictions, observations and next questions
 ```
 
@@ -36,10 +37,13 @@ cycles, admissions, execution observations, assessments, checkpoints, reviews,
 round decisions, round reviews, round admissions, round assessments, cohort
 predictions, and remote intents. Read `exactory-research status --summary` and
 `next --summary` for current obligations; `status` reports `round` with the
-current round number, whether it is active or assessed, its decision, its
-obligations, its derived progress and the bundle's measurement. Hand-editing a projection cannot authorize work. Explicit
-`export --kind workspace` rebuilds workspace views from current history; run
-reconciliation repairs execution views. Legacy work is adopted explicitly and
+current round number, whether it is active or assessed, its decision, the number
+of its open round obligations, counts of its derived progress, the bundle's
+measurement, the admitted round's limits, the `development` budget and the usage
+since admission. It does not report the admitted goal; the saved `round-admit`
+output under `reviews/` carries it. Hand-editing a projection cannot authorize
+work. Explicit `export --kind workspace` rebuilds workspace views from current
+history; run reconciliation repairs execution views. Legacy work is adopted explicitly and
 does not inherit finished reading or execution credit from old labels.
 
 The initializer creates a Git repository when needed and preserves an existing
@@ -119,5 +123,6 @@ whole gate decides mechanical eligibility; a historical review does not.
 [LOOP.md](LOOP.md) governs development and manuscript iteration. The write skill's
 [WORKSPACE.md](../write/WORKSPACE.md) describes the human review and learning files.
 On resume, read current status, the search tree, checkpoint lineage, pending work,
-and user context before continuing. Preserve unfinished source changes and all
+the saved `round-admit` output of an active round, and user context before
+continuing. Preserve unfinished source changes and all
 managed history; a crash never authorizes erasing unmeasured work.
