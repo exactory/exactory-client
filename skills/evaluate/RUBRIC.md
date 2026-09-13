@@ -97,6 +97,18 @@ shared context beyond the artifact and this rubric. The gate passes only when bo
 return `decision: "accept"`. One reviewer catching a problem means the problem is
 real.
 
+## The prediction file
+
+In a managed study, each blind reviewer also returns a second file beside the
+core JSON: the cohort prediction in the market's shape, the percentile the
+paper is expected to reach in the study's frozen cohort, with a band and reasons.
+It is recorded with `manuscript-prediction`; the core stays exactly the eight
+fields above.
+
+```json
+{"corpus": "arxiv", "category": "cs.LG", "windowStart": "2026-01-01", "windowEnd": "2026-01-31", "percentile": 25, "band": {"best": 15, "worst": 40}}
+```
+
 ## Record files
 
 - `reviews/review_NNN.json`: the core JSON. `NNN` is the next free three-digit
@@ -107,6 +119,9 @@ real.
 ```json
 {"review": 7, "overall": 6, "soundness": 3, "presentation": 3, "contribution": 2, "decision": "accept", "ts": "2026-08-07T09:30:00Z"}
 ```
+
+A loop iteration's line also carries the three `predictions` (percentiles) and
+their `prediction_median`.
 
 Both files are the meta layer for the author and the next iteration. A blind
 reviewer never reads them.

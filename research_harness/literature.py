@@ -50,6 +50,7 @@ from .source_links import captured_source, complete_original, contains, covers_t
 
 
 SEARCH_PURPOSES = ("direct", "originals", "theory", "adjacent", "recent")
+DEVELOPMENT_PURPOSES = ("downstream", "next_step", "exemplars", "changes")
 NOVELTY_VERDICTS = ("nothing-new", "scooped", "replicate-extend", "contradicted", "novel-confirmed")
 DISPOSITIONS = ("relevant", "contradictory", "potentially_relevant", "out_of_scope", "duplicate", "unresolved")
 CARRIED_DISPOSITIONS = ("contradictory", "unresolved")
@@ -337,8 +338,8 @@ def record_search(store, payload, *, expected_revision, request_id):
         fields(value, ("id", "profile", "purpose", "queries", "responses", "captured_at", "scope", "found_work_ids", "verdict",
                        "cited_work_ids", "impact", "gaps", "dispositions"), ("resolved",), code="invalid_search")
         profile_name(value["profile"])
-        if value["purpose"] not in SEARCH_PURPOSES or value["verdict"] not in NOVELTY_VERDICTS:
-            raise ResearchError("invalid_search", "Use the five search purposes and the existing novelty verdict vocabulary")
+        if value["purpose"] not in SEARCH_PURPOSES + DEVELOPMENT_PURPOSES or value["verdict"] not in NOVELTY_VERDICTS:
+            raise ResearchError("invalid_search", "Use the five search purposes, the four development purposes, and the existing novelty verdict vocabulary")
         strings(value["queries"], "Queries", nonempty=True, code="invalid_search")
         strings(value["found_work_ids"], "Found works", code="invalid_search")
         strings(value["cited_work_ids"], "Cited works", code="invalid_search")
@@ -476,9 +477,19 @@ def _foundation_state(evaluation, profile):
         requirements.setdefault(item["version_id"], "abstract")
         reasons.setdefault(item["version_id"], []).append("cohort")
         historical.add(item["version_id"])
+    from .rounds import active_round, fresh_searches, has_round_exemplar, latest_admission, literature_obligations
+    latest = latest_admission(records) if profile == "research" else None
+    active = active_round(records) if latest is not None else None
     searches = {k: s for k, s in records.get("literature_search", {}).items() if s["profile"] == profile}
-    selected_searches = {purpose: records.get("search_selection", {}).get(profile + ":" + purpose, {}).get("search_id") for purpose in SEARCH_PURPOSES}
-    for purpose in SEARCH_PURPOSES:
+    selections = records.get("search_selection", {})
+    selected_searches = {purpose: selections.get(profile + ":" + purpose, {}).get("search_id") for purpose in SEARCH_PURPOSES}
+    # The current round's consequence searches are judgments beside the five purposes. A selection the
+    # round opened with is what the round refreshes, and before any round there are no consequence judgments.
+    if latest is not None:
+        selected_searches.update(fresh_searches(records, latest))
+    if active is not None:
+        obligations.extend(literature_obligations(fresh_searches(records, active), has_round_exemplar(records, active)))
+    for purpose in selected_searches:
         matches = [s for s in searches.values() if s["id"] == selected_searches[purpose] and s["purpose"] == purpose]
         current = [s for s in matches if s["scope_digest"] == digest(scope)]
         if not current:
@@ -582,7 +593,8 @@ def _foundation_state(evaluation, profile):
                                           "extraction_status": c["extraction_status"], "url": c["url"],
                                           "next_eligible_at": records.get("source", {}).get(c["source_id"], {}).get("next_eligible_at")}
                                          for c in work["fulltexts"]]})
-    obligations.extend(resources.obligations(records, profile))
+    # An exhausted development budget is the round gate's obligation, never a foundation or readiness one.
+    obligations.extend(o for o in resources.obligations(records, profile) if o["purpose"] != "development")
     # Deduplicate repeated unit obligations while retaining each occurrence and
     # each independent cohort/version obligation.
     obligations = sorted({digest(o): o for o in obligations}.values(), key=lambda o: (o["code"], o.get("version_id", ""), digest(o)))

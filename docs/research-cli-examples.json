@@ -2058,6 +2058,623 @@
     },
     "blind": true
   },
+  "round": {
+    "id": "round-decision-1",
+    "closes": 1,
+    "decision": "continue",
+    "bundle_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "candidates": [
+      {
+        "id": "multivariate-bound",
+        "direction": "vertical",
+        "statement": "Extend the finite bound to the multivariate case under the same evidence standard.",
+        "disposition": "pursue",
+        "reason": "The current paper covers the univariate case and its readers need the multivariate bound next.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "applied-transfer",
+        "direction": "horizontal",
+        "statement": "Apply the bound to an adjacent applied setting.",
+        "disposition": "rejected",
+        "reason": "The cohort shows no evidenced demand for the applied setting.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "carried": [],
+    "next": {
+      "number": 2,
+      "objective": {
+        "kind": "objective",
+        "id": "complete-objective",
+        "statement": "Establish the stated bound over the complete declared domain."
+      },
+      "objective_lineage": null,
+      "goal": {
+        "direction": "vertical",
+        "field_change": null,
+        "statement": "Extend the finite bound to the multivariate case under the same evidence standard.",
+        "contribution_delta": "After this round the field has a multivariate bound with evidence; the current paper gives only the univariate one.",
+        "beneficiaries": [
+          {
+            "who": "Authors who apply the bound to multivariate data.",
+            "bottleneck": "They must currently reduce their problem to one variable and lose the joint structure.",
+            "evidence": [
+              {
+                "kind": "source",
+                "link": {
+                  "version_id": "arxiv:2601.00001v1",
+                  "source_id": "SOURCE_ID",
+                  "artifact": {
+                    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                    "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                    "size": 15,
+                    "media_type": "text/plain"
+                  },
+                  "locator": {
+                    "kind": "span",
+                    "start": 0,
+                    "end": 15,
+                    "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                    "excerpt": "Source passage."
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "success_criteria": [
+          {
+            "id": "sc-1",
+            "kind": "claim",
+            "statement": "The manuscript establishes the multivariate bound with result evidence."
+          },
+          {
+            "id": "sc-2",
+            "kind": "scope",
+            "statement": "The assessed scope covers two and three variables under the stated assumptions."
+          }
+        ],
+        "stop_conditions": [
+          {
+            "id": "st-1",
+            "statement": "The multivariate case has no finite bound under the stated assumptions."
+          }
+        ],
+        "continuity": "The round keeps every claim, reading and result of the univariate paper and builds the multivariate case on them.",
+        "route": "Plan a cycle that computes the two-variable bound, then one that extends it to three variables.",
+        "risks": [
+          "The multivariate computation exceeds the experiment wall-time allowance."
+        ],
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          }
+        ]
+      },
+      "resource_limits": {
+        "literature": {
+          "network_requests": 60,
+          "readings": 40
+        },
+        "experiment": {
+          "wall_seconds": 7200
+        }
+      },
+      "reopening": null
+    },
+    "reason": "The pursued candidate has evidenced demand and a feasible route; the rejected one has neither."
+  },
+  "round-review": {
+    "id": "round-review-1",
+    "round_id": "round-decision-1",
+    "round_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "assessor": {
+      "id": "independent-reviewer-1",
+      "kind": "agent",
+      "provenance": {
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+        "size": 15,
+        "media_type": "text/plain"
+      },
+      "relationship": "Describe the assessor relationship to the author.",
+      "independence_basis": "Describe the separate blind review context and its exact input delivery."
+    },
+    "verdict": "approved",
+    "checks": [
+      {
+        "kind": "impact",
+        "status": "passed",
+        "reason": "The multivariate bound changes what readers of the current paper can do.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          }
+        ]
+      },
+      {
+        "kind": "demand",
+        "status": "passed",
+        "reason": "The cited readers state the multivariate case as their bottleneck.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          }
+        ]
+      },
+      {
+        "kind": "novelty_risk",
+        "status": "passed",
+        "reason": "The consequence searches found no multivariate bound of this kind.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          }
+        ]
+      },
+      {
+        "kind": "feasibility",
+        "status": "passed",
+        "reason": "The route names two cycles within the round's experiment allowance.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          }
+        ]
+      },
+      {
+        "kind": "distinctness",
+        "status": "passed",
+        "reason": "The goal differs from the closed round's goal and from every rejected candidate.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          }
+        ]
+      },
+      {
+        "kind": "continuity",
+        "status": "passed",
+        "reason": "The goal keeps the univariate claims, evidence and readings in full use.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "limitations": [
+      "The reviewer read the decision, the packet and the cited evidence; it did not rerun the computations."
+    ]
+  },
+  "round-admit": {
+    "id": "round-2",
+    "round_id": "round-decision-1",
+    "review_id": "round-review-1",
+    "reason": "The approved goal opens the round."
+  },
+  "round-assess": {
+    "id": "round-assessment-2",
+    "round_id": "round-2",
+    "bundle_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "criteria": [
+      {
+        "id": "sc-1",
+        "status": "observed",
+        "explanation": "The manuscript carries the multivariate bound as a new claim with result evidence.",
+        "evidence": [
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "sc-2",
+        "status": "not_observed",
+        "explanation": "The assessed scope covers two variables; the three-variable case stays open.",
+        "evidence": [
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "stop_conditions": [
+      {
+        "id": "st-1",
+        "status": "not_observed",
+        "explanation": "A finite bound was observed for two variables.",
+        "evidence": [
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "summary": "The round established the two-variable bound, left the three-variable case open, and spent one of its two experiment cycles."
+  },
+  "manuscript-prediction": {
+    "id": "prediction-1",
+    "bundle_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "blind": true,
+    "assessor": {
+      "id": "independent-reviewer-1",
+      "kind": "agent",
+      "provenance": {
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+        "size": 15,
+        "media_type": "text/plain"
+      },
+      "relationship": "Describe the assessor relationship to the author.",
+      "independence_basis": "Describe the separate blind review context and its exact input delivery."
+    },
+    "prediction": {
+      "corpus": "arxiv",
+      "category": "cs.LG",
+      "windowStart": "2026-01-01",
+      "windowEnd": "2026-01-31",
+      "percentile": 25,
+      "band": {
+        "best": 15,
+        "worst": 40
+      }
+    },
+    "reasons": [
+      "The claim is sound and narrow; papers of this cohort with one established bound sit in the upper quarter."
+    ]
+  },
   "bind-verdict": {
     "id": "verdict-assessment-1",
     "task_digest": "0000000000000000000000000000000000000000000000000000000000000000",
@@ -2213,7 +2830,8 @@
       "screenings": null,
       "model_input_tokens": null,
       "model_output_tokens": null,
-      "wall_seconds": null
+      "wall_seconds": null,
+      "rounds": null
     },
     "reason": "The user approved this preparation budget before the cohort readings."
   },

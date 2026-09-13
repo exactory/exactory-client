@@ -31,6 +31,9 @@ from .synthesis import synthesis_state
 
 STRATEGIES = ("generalization", "weaker_assumptions", "mechanism", "tightness_limits", "unification",
               "representation_change", "transfer", "practical_usefulness", "other")
+DISPOSITIONS = ("pursue", "not_useful", "resolved", "budget_paused", "next_round")
+# The status of a predicted observable judged against evidence; round criteria reuse it.
+OBSERVATION_STATUSES = ("observed", "not_observed", "unresolved")
 _REVIEW_CHECKS = ("validity", "scope", "novelty", "contribution", "development", "branches")
 _LIMITS = ("This is mechanical evidence anchoring and documented research assessment, not scientific truth or native "
            "mathematical proof acceptance. The launcher must execute the admitted artifact and preserve the actual run "
@@ -269,14 +272,24 @@ def _unresolved_plan_sources(context, checkpoint, value):
     return True
 
 
+def _objective_lineage(context):
+    """The current objective and every recorded predecessor, newest first."""
+    lineage, current = [], context.objective
+    while current is not None:
+        lineage.append(current)
+        link = context.records.get("objective_lineage", {}).get(current["id"])
+        current = context.records.get("research_objective", {}).get(link["predecessor"]) if link else None
+    return lineage
+
+
 def _inheritance(context, evidence, value):
     dependencies = []
     predecessor = value["predecessor"]
     if predecessor is not None:
         parent = _get(context.records, "checkpoint", predecessor, "unknown_checkpoint")
         context.artifacts.read(parent["artifact"])
-        if parent["objective"] != context.objective:
-            raise ResearchError("objective_mismatch", "A successor checkpoint must retain the same complete objective")
+        if parent["objective"] not in _objective_lineage(context):
+            raise ResearchError("objective_mismatch", "A successor checkpoint must retain the complete objective or a recorded ancestor of it")
         if _normalized(value["question"]) == _normalized(context.records["cycle_plan"][parent["cycle_id"]]["payload"]["question"]):
             raise ResearchError("development_question_repeated", "A successor must pose a distinct development question")
     inherited = set()
@@ -284,7 +297,7 @@ def _inheritance(context, evidence, value):
         _fields(item, ("checkpoint_id", "assessment_id", "use", "evidence", "assumptions", "deduction"))
         checkpoint = _get(context.records, "checkpoint", item["checkpoint_id"], "unknown_checkpoint")
         context.artifacts.read(checkpoint["artifact"])
-        if checkpoint["objective"] != context.objective or checkpoint["assessment_id"] != item["assessment_id"]:
+        if checkpoint["objective"] not in _objective_lineage(context) or checkpoint["assessment_id"] != item["assessment_id"]:
             raise ResearchError("inheritance_mismatch", "Inherit the assessment actually preserved by the named checkpoint")
         _choice(item["use"], ("validated_result", "failure", "unresolved"), "Inherited evidence use")
         _strings(item["assumptions"], "Inherited assumptions")
@@ -629,7 +642,7 @@ def _assessed_checks(evidence, values, expected, identity, target_claim=None):
         if value[identity] in seen or value[identity] not in expected:
             raise ResearchError("invalid_development", "Assess each exact planned outcome/failure identity once")
         seen.add(value[identity])
-        _choice(value["status"], ("observed", "not_observed", "unresolved"), "Observed outcome/failure")
+        _choice(value["status"], OBSERVATION_STATUSES, "Observed outcome/failure")
         _text(value["explanation"], "Outcome/failure interpretation")
         evidence.many(value["evidence"], "Outcome/failure evidence")
         if target_claim is not None and value["target_claim"] != target_claim:
@@ -673,7 +686,7 @@ def _development(context, evidence, value, scope, cycle_id):
     for option in _items(value["alternatives"], "Useful alternative developments", True):
         _fields(option, ("strategy", "question", "disposition", "reason", "evidence"))
         _choice(option["strategy"], STRATEGIES, "Alternative strategy")
-        _choice(option["disposition"], ("pursue", "not_useful", "resolved", "budget_paused"), "Alternative disposition")
+        _choice(option["disposition"], DISPOSITIONS, "Alternative disposition")
         _text(option["question"], "Alternative question")
         _text(option["reason"], "Alternative scientific value or limitation")
         evidence.many(option["evidence"], "Alternative decision evidence")
@@ -686,7 +699,7 @@ def _development(context, evidence, value, scope, cycle_id):
         if branch["cycle_id"] in seen:
             raise ResearchError("invalid_development", "Assess each actual branch once")
         seen.add(branch["cycle_id"])
-        _choice(branch["disposition"], ("pursue", "not_useful", "resolved", "budget_paused"), "Branch disposition")
+        _choice(branch["disposition"], DISPOSITIONS, "Branch disposition")
         _text(branch["reason"], "Branch disposition reason")
         evidence.many(branch["evidence"], "Branch disposition evidence")
         if branch["disposition"] in ("pursue", "budget_paused"):
@@ -698,6 +711,32 @@ def _development(context, evidence, value, scope, cycle_id):
     return obligations
 
 
+def cycle_authors(records):
+    """Every author of a cycle plan or cycle assessment; none of them reviews independently."""
+    return sorted({p["payload"]["author"] for p in records.get("cycle_plan", {}).values()}
+                  | {a["payload"]["author"] for a in records.get("cycle_assessment", {}).values()})
+
+
+def carried_developments(records):
+    """The `next_round` alternatives and branches of each cycle's current assessment."""
+    carried = []
+    for cycle in records.get("cycle", {}).values():
+        if cycle["assessment_id"] is None:
+            continue
+        development = records["cycle_assessment"][cycle["assessment_id"]]["payload"]["development"]
+        if development is None:
+            continue
+        for option in development["alternatives"]:
+            if option["disposition"] == "next_round":
+                carried.append({"assessment_id": cycle["assessment_id"], "kind": "alternative", "question": option["question"],
+                                "strategy": option["strategy"], "reason": option["reason"]})
+        for branch in development["branches"]:
+            if branch["disposition"] == "next_round":
+                carried.append({"assessment_id": cycle["assessment_id"], "kind": "branch", "cycle_id": branch["cycle_id"],
+                                "reason": branch["reason"]})
+    return sorted(carried, key=lambda item: (item["assessment_id"], item["kind"], item.get("question") or item.get("cycle_id")))
+
+
 def _assess(context, value):
     _fields(value, ("id", "cycle_id", "author", "scope", "execution_ids", "result", "validity_checks", "outcomes", "failures",
                     "findings", "assumptions", "remaining_obligations", "objective_status", "disposition", "development"))
@@ -705,7 +744,7 @@ def _assess(context, value):
         _text(value[key], "Assessment " + key)
     plan = _get(context.records, "cycle_plan", value["cycle_id"], "unknown_cycle")
     cycle = context.records["cycle"][value["cycle_id"]]
-    _scope(value["scope"], context.objective)
+    _scope(value["scope"], plan["payload"]["objective"])
     _strings(value["assumptions"], "Result assumptions")
     if not set(value["scope"]["assumptions"]) <= set(value["assumptions"]):
         raise ResearchError("scope_assumptions_missing", "Retain the declared scope assumptions in the assessed result")
@@ -821,7 +860,8 @@ def _assess(context, value):
                 obligations.append(obligation("resource_limit_exceeded", "Retain the result and the actual overrun without satisfying the admitted resource contract.",
                                               admission_id=admission["id"], reserved_units=admission["reserved_units"], used_units=units))
                 remaining.append("Resolve the exceeded resource contract for run " + admission["id"] + ".")
-    if value["scope"]["kind"] != "full" or plan["payload"]["scope"]["kind"] != "full":
+    # A full scope of an ancestor objective is a special case of the widened current one.
+    if value["scope"]["kind"] != "full" or plan["payload"]["scope"]["kind"] != "full" or plan["payload"]["objective"] != context.objective:
         obligations.append(obligation("objective_scope_incomplete", "A special case contributes to the fixed complete objective but cannot close it."))
         remaining = list(dict.fromkeys(remaining + plan["payload"]["scope"]["remaining_obligations"]))
         if not remaining:
@@ -866,7 +906,7 @@ def assess_cycle(store, payload, *, expected_revision, request_id):
         failures = account["failures"] + [{"assessment_id": value["id"], "signal_id": f["signal_id"]}
                                              for f in value["failures"] if f["status"] == "observed"]
         changes = [immutable_record(records, "cycle_assessment", value["id"], record),
-                   immutable_record(records, "development_scope", value["scope"]["id"], {"objective": context.objective, "scope": value["scope"]}),
+                   immutable_record(records, "development_scope", value["scope"]["id"], {"objective": plan["payload"]["objective"], "scope": value["scope"]}),
                    ("cycle", cycle["id"], cycle), ("strategy_account", plan["strategy_key"], dict(account, failures=failures))]
         if paused:
             checkpoint = _checkpoint_record(records, artifacts, context.dependencies(), "paused:" + value["id"], cycle, report,
@@ -997,8 +1037,7 @@ def _candidate(context):
                  "evidence": [e["reference"] for e in evidence], "branches_digest": digest(context.branches),
                  "strategy_accounts_digest": digest(context.records.get("strategy_account", {})),
                  "source_records_digest": digest(context.sources),
-                 "authors": sorted({p["payload"]["author"] for p in context.records.get("cycle_plan", {}).values()}
-                                   | {a["payload"]["author"] for a in context.records.get("cycle_assessment", {}).values()})}
+                 "authors": cycle_authors(context.records)}
     candidate["digest"] = digest(candidate)
     return candidate, _unique(obligations)
 

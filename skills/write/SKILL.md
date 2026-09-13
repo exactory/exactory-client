@@ -77,6 +77,12 @@ A claim without a source does not enter the draft: drop it, and name every
 dropped claim in the stage report so the user can supply a source later. Never
 invent a number.
 
+Claims keep their ids across rounds. In a development round, every claim id of
+the round's opening bundle stays in the ledger: a changed claim carries
+`revised: {previous, reason}` with the earlier text, a withdrawn one
+`superseded: {reason}`. A rewritten claim without a marker counts as dropped at
+the round gate, and a superseded claim does not count as the round's new claim.
+
 Stage report: state the claim ledger and any claim dropped for want of a
 source, then continue to stage 2.
 

@@ -6,10 +6,12 @@ from pathlib import Path
 import sys
 import time
 
-from . import acquisition, cohort_evidence, development, graph, literature, principles, reading, resources, screening, synthesis, visual_assets
+from . import (acquisition, cohort_evidence, development, graph, literature, predictions, principles, reading, resources, rounds,
+                screening, synthesis, visual_assets)
 from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evaluation import Evaluation
+from .evidence import digest
 from .gates import gate_report, gate_state, require_ready
 from .integration import adopt_workspace, current_store, export_workspace, pin_artifact
 from .operations import fields
@@ -46,6 +48,11 @@ OPERATIONS = {
     "budget": resources.set_budget,
     "screen-batch": screening.record_screening_batch,
     "screening-checkpoint": screening.record_screening_checkpoint,
+    "round": rounds.record_round,
+    "round-review": rounds.record_round_review,
+    "round-admit": rounds.admit_round,
+    "round-assess": rounds.assess_round,
+    "manuscript-prediction": predictions.record_prediction,
 }
 
 from .execution import bind_execution, reconcile_execution, record_imported_execution
@@ -55,7 +62,7 @@ from .verification import bind_verdict
 OPERATIONS.update({"manuscript": prepare_publication, "manuscript-review": record_manuscript_review, "bind-verdict": bind_verdict})
 
 ACQUISITION = ("collect", "resume", "acquire", "expand", "fulltext", "import-response", "visual")
-GATES = ("cohort", "foundation", "preparation", "readiness", "execution", "verification", "manuscript", "publication", "deposited", "submitted")
+GATES = ("cohort", "foundation", "preparation", "readiness", "execution", "verification", "manuscript", "publication", "deposited", "submitted", "round")
 
 
 def add_identity(parser, *, required=True):
@@ -105,8 +112,8 @@ def build_parser():
         if command == "gate":
             item.add_argument("action", choices=GATES)
         if command == "export":
-            item.add_argument("--kind", choices=("workspace", "foundation", "readiness", "manuscript", "native"), default="workspace")
-            item.add_argument("--destination", help="New independent reviewer directory for readiness inputs and actual source bytes.")
+            item.add_argument("--kind", choices=("workspace", "foundation", "readiness", "manuscript", "round", "native"), default="workspace")
+            item.add_argument("--destination", help="New independent reviewer directory for the readiness, manuscript or round packet and its actual source bytes.")
             item.add_argument("--attack-root", help="Native attack root for an immutable foundation delivery.")
             item.add_argument("--claim-binding", help="JSON source correspondence for an external native verification claim.")
         if command == "recover":
@@ -151,6 +158,16 @@ def status_report(store, *, counters=False):
     study = records.get("workspace", {}).get("study")
     action = "verification" if profile == "verification" else "readiness"
     report = gate_state(records, evaluation, action, profile=profile)
+    round_report = None
+    if config is not None and profile == "research":
+        from .rounds import round_state, round_summary
+        round_report = round_state(records, evaluation)
+        if study and study["stage"] == "evaluate":
+            # At evaluate the study is led first through the manuscript measurement, then to the round decision.
+            from .publication import publication_state
+            merged = report["obligations"] + publication_state(records, evaluation, "publication")["obligations"] + round_report["obligations"]
+            obligations = order_obligations({digest(o): o for o in merged}.values())
+            report = dict(report, ready=not obligations, obligations=obligations, counts=dict(report["counts"], obligations=len(obligations)))
     # Before later gates are applicable, expose the actual next unread cohort
     # abstract instead of asking for a root or completed development too early.
     preparation = gate_state(records, evaluation, "cohort" if study and study["stage"] == "cohort" else "preparation", profile=profile)
@@ -161,6 +178,7 @@ def status_report(store, *, counters=False):
     obligations = current_obligations({"obligations": report["obligations"], "preparation": preparation})
     return dict(report, revision=snapshot["revision"], profile=profile, runtime=runtime_provenance(),
                 study=study, preparation=preparation, resources=resources.account_report(records, profile), **diagnostics,
+                round=round_summary(round_report) if round_report else None,
                 next=upcoming or (order_obligations(obligations)[0] if obligations else None),
                 pending_executions=[key for key in records.get("execution_admission", {}) if key not in records.get("execution_outcome", {})],
                 remote_intents=list(records.get("remote_intent", {}).values()),
@@ -225,10 +243,11 @@ def run(args):
             raise ResearchError("invalid_input", "Native export requires --attack-root and a new --destination")
         binding = strict_json(Path(args.claim_binding).read_bytes()) if args.claim_binding else None
         return export_native(store, Path(args.attack_root), Path(args.destination), claim_binding=binding)
-    from .review_delivery import deliver_readiness, deliver_manuscript
+    from .review_delivery import deliver_manuscript, deliver_readiness, deliver_round
     if not args.destination:
-        raise ResearchError("invalid_input", "Readiness delivery requires --destination for the separate reviewer")
-    return (deliver_manuscript if args.kind == "manuscript" else deliver_readiness)(store, Path(args.destination))
+        raise ResearchError("invalid_input", "Reviewer delivery requires --destination for the separate reviewer")
+    deliver = {"readiness": deliver_readiness, "manuscript": deliver_manuscript, "round": deliver_round}[args.kind]
+    return deliver(store, Path(args.destination))
 
 
 def main(argv=None):

@@ -1,6 +1,6 @@
 # Research constitution
 
-Version: 2
+Version: 3
 
 This is the common research-policy document for this plugin. System, host, and
 user constraints continue to govern. A managed study records this document's
@@ -108,3 +108,17 @@ The managed checks establish mechanical prerequisites and documented inspection.
 They do not guarantee comprehension, entailment, truth outside a checker's scope,
 novelty, social benefit, or a breakthrough. Independent scientific assessment and
 the native mathematical acceptance rules remain necessary.
+
+## Development across rounds
+
+A study produces one paper and develops it across rounds. Each round begins from
+the paper as it stands and ends with a paper that contains what the earlier rounds
+established; intermediate states are not published. A round is authorized by a
+goal that states what the field will be able to do afterwards, for whom, in which
+direction, with the criteria that recognize success and the conditions that end
+the round early. An independent assessor judges the goal before the round and
+judges the decision to stop before publication. Every round performs new
+investigation of the paper's consequences and adds evidence and claims; a round
+spent on presentation alone does not count as development. Stopping on evidence
+is a correct outcome and is recorded as one. A measurement target is a stopping
+condition for the author, never an instruction to a reviewer.

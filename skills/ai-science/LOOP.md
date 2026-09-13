@@ -74,10 +74,83 @@ or evidence shows saturation and there is no substantive justified next revision
 Record the reason. Saturation does not authorize publication when current
 research or manuscript gates remain pending.
 
+## Develop the paper across rounds
+
+The study produces one paper and develops it across rounds. Each round starts
+from the paper as it stands and ends with a decision on the exact bundle. Scores
+and predictions are recorded results of a round and never criteria: no gate rule
+and no goal reads them.
+
+At every measurement, each of the three blind reviewers returns the rubric core
+and, in a separate file, a cohort prediction in the market's shape. Record each
+prediction with `manuscript-prediction` for the exact bundle. `status --summary`
+reports the review and prediction medians and spreads under `round`.
+
+The round gate, at the end of `evaluate`:
+
+1. Read `gate round`. It names what the closing round still owes: for a round of
+   number 2 or more, its assessment on this bundle (`round-assess`), the four
+   consequence searches, the exemplar, a cycle, and claims continuity.
+2. Write the candidates from the carried developments (`next_round` dispositions
+   of the closing round's cycle assessments), the review findings, the `context`
+   and `innovation` sections, and the open Grand Challenges. Each candidate has a
+   direction (`vertical` or `horizontal`), a disposition and evidence.
+3. Choose one goal with `round`: `continue` pursues exactly one candidate and
+   states the direction, the contribution delta, the beneficiaries, the
+   success criteria, the stop conditions, the continuity with the current
+   paper, the route and the risks; or `stop` with every candidate disposed of
+   and no pursued one. A goal repeats neither an earlier round's goal nor a
+   rejected candidate (`round_goal_repeated`) unless a `reopening` names an
+   earlier unsuccessful round and the evidence that changed.
+4. Deliver `export --kind round` to a fresh subagent that is not a cycle author.
+   It returns the review JSON with one judgment per check; record it with
+   `round-review`.
+5. Admit an approved `continue` with `round-admit`, log the decision with
+   `exactory-lab decide`, and enter `literature` with `--status pending`. An
+   approved `stop` enters `deposit` when the publication gate passes.
+
+Inside the round, the literature stage records a selected search for each
+consequence purpose (`downstream`: who is blocked by what the paper does not yet
+do; `next_step`: whether the next step was already taken; `exemplars`: how a
+comparable first result was developed further; `changes`: what changed since
+the previous round), one `require-fulltext` with purpose `exemplar` whose work
+is read in full and analyzed as an innovation case, and the re-recorded
+`rationale`, `context` and `innovation` sections with the carried findings. The
+five foundation purposes keep their own freshness rules.
+
+Before the round's candidate is selected, the earlier rounds' cycles are assessed
+again under the current preparation, so the readiness review disposes of every
+retained cycle. Every hypothesis of the round names the success criterion it
+serves; successors inherit checkpoints of earlier rounds through objective
+lineage.
+
+Claims continuity: the manuscript keeps every claim id of the round's opening
+bundle. A changed claim carries `revised: {previous, reason}`, a withdrawn one
+`superseded: {reason}`; a rewritten claim without a marker is dropped
+(`round_claims_dropped`), and the round adds at least one new claim
+(`round_claim_missing`). Both are round-gate obligations, so the manuscript loop
+can still measure an intermediate draft.
+
+The loop ends only through a recorded exit. An approved `stop` leads to deposit
+when the publication gate passes and otherwise parks the study with the plateau
+recorded. A `scooped` verdict in `next_step` or a `contradicted` one in `changes`
+withdraws the goal: the round is assessed unsuccessful with the withdrawal as
+evidence, and the next decision proposes a distinct goal or stops. An observed
+stop condition in `round-assess` has the same consequence. Two unsuccessful
+rounds in a row in one direction exhaust it (`round_direction_exhausted`): only a
+goal in the other direction or a reopening with changed evidence continues. A
+recorded `development` budget at its limit is `resource_budget_exhausted`:
+checkpoint and stop, or the user raises the budget with a reason. Both
+directions exhausted refuse `continue`. Purpose, experiment and autopilot budgets
+inside a round keep their existing behavior, and an unavailable round assessor
+leaves `round_review_missing` pending. A round spent on presentation alone is
+recorded unproductive and counts toward the exhausted direction.
+
 ## Publication and resume
 
 Pin the final exact bundle, deliver it to two independent blind assessors, record
 the original reviews and provenance, and run `exactory-research gate publication`.
+Deposit follows an approved `stop` decision on that bundle (`gate round`).
 Resolve a rejection with appropriate changes and fresh applicable reviews. Proceed
 through authorized deposit and submission only with current gates and required
 credentials; reconcile an unknown remote intent before any new write.

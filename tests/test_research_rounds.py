@@ -1,0 +1,938 @@
+"""Development rounds: decisions, reviews, admissions, assessments and the round gate."""
+
+import copy
+
+from research_harness import predictions, publication, resources, rounds
+from research_harness.errors import ResearchError
+from research_harness.evaluation import Evaluation
+from rounds_fixtures import RoundsCase
+
+
+class RoundDecisionTests(RoundsCase):
+    def test_a_decision_binds_the_exact_current_bundle_and_the_current_round(self):
+        bundle = self.pin()
+        stale = self.decision_payload(bundle)
+        stale["bundle_digest"] = "0" * 64
+        self.assert_error("round_bundle_mismatch", lambda: self.mutate(rounds.record_round, stale))
+        wrong = self.decision_payload(bundle, closes=2)
+        self.assert_error("round_number_mismatch", lambda: self.mutate(rounds.record_round, wrong))
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        self.assertEqual((decision["closes"], decision["decision"], decision["bundle_digest"]), (1, "continue", bundle["digest"]))
+        self.assertEqual(rounds.current_number(self.store.snapshot()["records"]), 1)
+
+    def test_a_decision_needs_a_pinned_bundle(self):
+        unpinned = self.decision_payload({"digest": "0" * 64})
+        self.assert_error("publication_bundle_missing", lambda: self.mutate(rounds.record_round, unpinned))
+
+    def test_the_next_round_is_well_formed(self):
+        bundle = self.pin()
+        for edit in (lambda p: p["next"].update(number=3),
+                     lambda p: p["next"]["goal"].update(statement="Another statement than the pursued candidate's."),
+                     lambda p: p["next"].update(objective_lineage={"previous_id": self.objective["id"], "containment": "Unchanged."}),
+                     lambda p: p["next"]["goal"].update(field_change={"corpus": "arxiv", "primaryCategory": "math.CO"})):
+            payload = self.decision_payload(bundle)
+            edit(payload)
+            self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round, payload))
+        wider = dict(self.objective, id="objective-wide", statement=self.objective["statement"] + " The bound also holds at n = 4.")
+        locked = self.decision_payload(bundle, objective=wider, lineage={"previous_id": "absent", "containment": "The wider range contains [0, 3]."})
+        self.assert_error("objective_locked", lambda: self.mutate(rounds.record_round, locked))
+
+    def test_continue_pursues_exactly_one_candidate_and_stop_pursues_none(self):
+        bundle = self.pin()
+        none = self.decision_payload(bundle)
+        none["candidates"][0]["disposition"] = "rejected"
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round, none))
+        two = self.decision_payload(bundle)
+        two["candidates"][1]["disposition"] = "pursue"
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round, two))
+        stop = self.decision_payload(bundle, decision="stop")
+        stop["candidates"][0]["disposition"] = "pursue"
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round, stop))
+        recorded = self.mutate(rounds.record_round, self.decision_payload(bundle, decision="stop"))["result"]
+        self.assertEqual(recorded["decision"], "stop")
+        self.assertIsNone(recorded["payload"]["next"])
+
+    def test_a_goal_needs_claim_or_scope_criteria_stop_conditions_and_continuity(self):
+        bundle = self.pin()
+        for change in ({"success_criteria": []}, {"stop_conditions": []},
+                       {"success_criteria": [{"id": "m", "kind": "measurement", "statement": "Percentile median improves by 10."}]}):
+            payload = self.decision_payload(bundle)
+            payload["next"]["goal"].update(change)
+            self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round, payload))
+        payload = self.decision_payload(bundle)
+        del payload["next"]["goal"]["continuity"]
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round, payload))
+
+    def test_a_carried_development_must_be_disposed(self):
+        self.recandidate("carry")
+        bundle = self.pin()
+        omitted = self.decision_payload(bundle)
+        self.assert_error("carried_development_missing", lambda: self.mutate(rounds.record_round, omitted))
+        carried = [{"assessment_id": "assessment-carry", "kind": "alternative", "question": "Does the bound extend beyond n = 3?",
+                    "disposition": "pursue", "reason": "It is the round's goal."}]
+        stop = self.decision_payload(bundle, decision="stop", carried=carried)
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round, stop))
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle, carried=carried))["result"]
+        self.assertEqual(decision["payload"]["carried"], carried)
+
+    def test_a_late_reassessment_of_an_earlier_cycle_is_carried_by_the_closing_round(self):
+        first = self.pin()
+        decision = self.mutate(rounds.record_round, self.decision_payload(first))["result"]
+        self.write_round(decision, "round-2")
+        self.round_literature("late")
+        self.recandidate("late")
+        second = self.pin()
+        self.write_round_assessment("round-2", True, second["digest"])
+        statement = "Extend the finite bound to every integer in [0, 7]."
+        omitted = self.decision_payload(second, closes=2, statement=statement)
+        self.assert_error("carried_development_missing", lambda: self.mutate(rounds.record_round, omitted))
+        carried = [{"assessment_id": "assessment-late", "kind": "alternative", "question": "Does the bound extend beyond n = 3?",
+                    "disposition": "deferred", "reason": "The wider range comes first."}]
+        for listed in ([dict(carried[0], assessment_id=["assessment-late"])], [dict(carried[0], kind=["alternative"])],
+                       [dict(carried[0], question=["Does the bound extend beyond n = 3?"])], [dict(carried[0], cycle_id=["cycle-1"])]):
+            self.assert_error("invalid_round", lambda: self.mutate(
+                rounds.record_round, self.decision_payload(second, closes=2, statement=statement, carried=listed)))
+        recorded = self.mutate(rounds.record_round, self.decision_payload(second, closes=2, statement=statement, carried=carried))["result"]
+        self.assertEqual(recorded["payload"]["carried"], carried)
+
+    def test_an_admitted_round_is_assessed_before_the_next_decision(self):
+        bundle = self.pin()
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        self.write_round(decision, "round-2")
+        self.round_literature("round-2")
+        self.recandidate("round-2")
+        second = self.decision_payload(self.pin(), closes=2, statement="Extend the finite bound to every integer in [0, 7].")
+        self.assert_error("round_assessment_missing", lambda: self.mutate(rounds.record_round, second))
+
+    def test_an_admitted_round_is_assessed_on_this_bundle_before_the_next_decision(self):
+        bundle = self.pin()
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        self.write_round(decision, "round-2", successful=True, bundle_digest="0" * 64)
+        second = self.decision_payload(bundle, closes=2, statement="Extend the finite bound to every integer in [0, 7].")
+        self.assert_error("round_assessment_missing", lambda: self.mutate(rounds.record_round, second))
+
+    def test_a_rejected_candidate_cannot_become_a_goal(self):
+        bundle = self.pin()
+        first = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        self.mutate(rounds.record_round_review, self.review_payload(first, verdict="not_approved", assessor="first-assessor"))
+        repeated = self.decision_payload(bundle, statement="Transfer the bound to real inputs.")
+        repeated["candidates"][0]["direction"] = repeated["next"]["goal"]["direction"] = "horizontal"
+        self.assert_error("round_goal_repeated", lambda: self.mutate(rounds.record_round, repeated))
+
+    def test_a_deferred_candidate_may_become_a_later_goal(self):
+        bundle = self.pin()
+        first = self.decision_payload(bundle)
+        first["candidates"][1]["disposition"] = "deferred"
+        first["candidates"][1]["reason"] = "Demand is not evidenced yet."
+        decision = self.mutate(rounds.record_round, first)["result"]
+        self.write_round(decision, "round-2", successful=True, bundle_digest=bundle["digest"])
+        pursued = {"id": "cand-transfer", "direction": "horizontal", "statement": "Transfer the bound to real inputs.",
+                   "disposition": "pursue", "reason": "Deferred earlier; demand is now evidenced.", "evidence": self.round_evidence()}
+        later = self.decision_payload(bundle, closes=2, direction="horizontal", statement="Transfer the bound to real inputs.",
+                                      candidates=[pursued])
+        recorded = self.mutate(rounds.record_round, later)["result"]
+        self.assertEqual(recorded["payload"]["next"]["goal"]["statement"], "Transfer the bound to real inputs.")
+
+    def test_a_repeated_round_goal_reopens_that_round_with_changed_evidence(self):
+        bundle = self.pin()
+        first = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        self.write_round(first, "round-2", successful=False, bundle_digest=bundle["digest"])
+        second = self.mutate(rounds.record_round, self.decision_payload(
+            bundle, closes=2, statement="Extend the finite bound to every integer in [0, 7]."))["result"]
+        self.write_round(second, "round-3", successful=False, bundle_digest=bundle["digest"])
+        changed = [{"kind": "review", "review_id": bundle["id"] + "-gate-1"}]
+        repeated = self.decision_payload(bundle, closes=3)
+        self.assert_error("round_goal_repeated", lambda: self.mutate(rounds.record_round, repeated))
+        other = self.decision_payload(bundle, closes=3, reopening={"round_id": "round-3", "reason": "The picture changed.", "evidence": changed})
+        self.assert_error("round_goal_repeated", lambda: self.mutate(rounds.record_round, other))
+        unchanged = self.decision_payload(bundle, closes=3, reopening={"round_id": "round-2", "reason": "The picture changed.",
+                                                                       "evidence": self.round_evidence()})
+        self.assert_error("round_reopening_unchanged", lambda: self.mutate(rounds.record_round, unchanged))
+        listed = self.decision_payload(bundle, closes=3, reopening={"round_id": ["round-2"], "reason": "The picture changed.", "evidence": changed})
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round, listed))
+        reopened = self.decision_payload(bundle, closes=3, reopening={"round_id": "round-2", "reason": "The picture changed.", "evidence": changed})
+        recorded = self.mutate(rounds.record_round, reopened)["result"]
+        self.assertEqual(recorded["payload"]["next"]["reopening"]["round_id"], "round-2")
+
+    def test_a_successful_round_is_not_reopened(self):
+        bundle = self.pin()
+        first = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        self.write_round(first, "round-2", successful=True, bundle_digest=bundle["digest"])
+        changed = [{"kind": "review", "review_id": bundle["id"] + "-gate-1"}]
+        repeated = self.decision_payload(bundle, closes=2, reopening={"round_id": "round-2", "reason": "The picture changed.", "evidence": changed})
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round, repeated))
+
+    def test_an_exhausted_direction_reopens_one_of_its_two_unsuccessful_rounds(self):
+        bundle = self.pin()
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        self.write_round(decision, "round-2", successful=False, bundle_digest=bundle["digest"])
+        for closes, direction, statement in ((2, "vertical", "Extend the finite bound to every integer in [0, 7]."),
+                                             (3, "horizontal", "Apply the bound to a neighbouring category.")):
+            decision = self.mutate(rounds.record_round, self.decision_payload(bundle, closes=closes, direction=direction, statement=statement))["result"]
+            self.write_round(decision, "round-" + str(closes + 1), successful=False, bundle_digest=bundle["digest"])
+        statement = "Extend the finite bound to every integer in [0, 11]."
+        changed = [{"kind": "review", "review_id": bundle["id"] + "-gate-1"}]
+        same = self.decision_payload(bundle, closes=4, statement=statement)
+        self.assert_error("round_direction_exhausted", lambda: self.mutate(rounds.record_round, same))
+        earlier = self.decision_payload(bundle, closes=4, statement=statement,
+                                        reopening={"round_id": "round-2", "reason": "The picture changed.", "evidence": changed})
+        self.assert_error("round_direction_exhausted", lambda: self.mutate(rounds.record_round, earlier))
+        reopened = self.decision_payload(bundle, closes=4, statement=statement,
+                                         reopening={"round_id": "round-3", "reason": "The picture changed.", "evidence": changed})
+        self.assertEqual(self.mutate(rounds.record_round, reopened)["result"]["payload"]["next"]["reopening"]["round_id"], "round-3")
+
+    def test_review_evidence_names_a_manuscript_review_of_this_bundle(self):
+        first = self.pin()
+        review_id = first["id"] + "-gate-1"
+        payload = self.decision_payload(first)
+        payload["candidates"][0]["evidence"].append({"kind": "review", "review_id": review_id})
+        decision = self.mutate(rounds.record_round, payload)["result"]
+        self.assertIn(review_id, [e["reference"].get("review_id") for e in decision["evidence"]])
+        wrong = self.decision_payload(first)
+        wrong["candidates"][0]["evidence"].append({"kind": "review", "review_id": "absent"})
+        self.assert_error("round_evidence_mismatch", lambda: self.mutate(rounds.record_round, wrong))
+        listed = self.decision_payload(first)
+        listed["candidates"][0]["evidence"].append({"kind": "review", "review_id": [review_id]})
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round, listed))
+        (self.root / "draft/abstract.txt").write_text("The exact finite bound was enumerated, revised.")
+        second = self.pin()
+        other = self.decision_payload(second)
+        other["candidates"][0]["evidence"].append({"kind": "review", "review_id": review_id})
+        self.assert_error("round_evidence_mismatch", lambda: self.mutate(rounds.record_round, other))
+
+
+class RoundReviewTests(RoundsCase):
+    def test_the_review_is_independent_complete_and_bound_to_the_decision(self):
+        bundle = self.pin()
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        author = self.review_payload(decision, assessor="cycle-author")
+        self.assert_error("review_not_independent", lambda: self.mutate(rounds.record_round_review, author))
+        unknown = self.review_payload(decision)
+        unknown["round_id"] = "absent"
+        self.assert_error("unknown_round_decision", lambda: self.mutate(rounds.record_round_review, unknown))
+        listed = self.review_payload(decision)
+        listed["round_id"] = [decision["id"]]
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round_review, listed))
+        short = self.review_payload(decision)
+        short["checks"] = short["checks"][:-1]
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round_review, short))
+        doubled = self.review_payload(decision)
+        doubled["checks"].append(dict(doubled["checks"][0]))
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round_review, doubled))
+        stale = self.review_payload(decision)
+        stale["round_digest"] = "0" * 64
+        self.assert_error("round_review_stale", lambda: self.mutate(rounds.record_round_review, stale))
+        review = self.mutate(rounds.record_round_review, self.review_payload(decision, verdict="not_approved"))["result"]
+        self.assertEqual(review["verdict"], "not_approved")
+        again = self.review_payload(decision, verdict="approved")
+        self.assert_error("round_review_duplicate", lambda: self.mutate(rounds.record_round_review, again))
+
+    def test_a_review_binds_the_current_bundle(self):
+        first = self.pin()
+        decision = self.mutate(rounds.record_round, self.decision_payload(first))["result"]
+        (self.root / "draft/abstract.txt").write_text("The exact finite bound was enumerated, revised.")
+        self.pin()
+        self.assert_error("round_review_stale", lambda: self.mutate(rounds.record_round_review, self.review_payload(decision)))
+
+    def test_an_author_of_a_cycle_assessment_cannot_review_the_round(self):
+        self.recandidate("second", alternative="not_useful", author="assessment-only-author")
+        bundle = self.pin()
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        author = self.review_payload(decision, assessor="assessment-only-author")
+        self.assert_error("review_not_independent", lambda: self.mutate(rounds.record_round_review, author))
+
+    def test_a_stop_review_has_its_own_checks(self):
+        bundle = self.pin()
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle, decision="stop"))["result"]
+        wrong = self.review_payload(decision)
+        wrong["checks"] = [dict(wrong["checks"][0], kind="impact"), dict(wrong["checks"][1], kind="demand")]
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round_review, wrong))
+        review = self.mutate(rounds.record_round_review, self.review_payload(decision))["result"]
+        self.assertEqual({c["kind"] for c in review["payload"]["checks"]}, set(rounds.CHECKS_STOP))
+
+    def test_one_approved_decision_per_closing_round(self):
+        bundle = self.pin()
+        first = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        self.mutate(rounds.record_round_review, self.review_payload(first))
+        agreed = self.mutate(rounds.record_round_review, self.review_payload(first, assessor="second-assessor"))["result"]
+        self.assertEqual((agreed["round_id"], agreed["verdict"]), (first["id"], "approved"))
+        second = self.mutate(rounds.record_round, self.decision_payload(bundle, decision="stop"))["result"]
+        self.assert_error("round_decision_duplicate",
+                          lambda: self.mutate(rounds.record_round_review, self.review_payload(second, assessor="other-assessor")))
+
+    def test_an_approved_decision_on_a_superseded_bundle_does_not_block_the_round(self):
+        first = self.pin()
+        stopped = self.mutate(rounds.record_round, self.decision_payload(first, decision="stop"))["result"]
+        self.mutate(rounds.record_round_review, self.review_payload(stopped))
+        (self.root / "draft/abstract.txt").write_text("The exact finite bound was enumerated, revised after the plateau.")
+        revised = self.pin()
+        again = self.mutate(rounds.record_round, self.decision_payload(revised, decision="stop"))["result"]
+        approved = self.mutate(rounds.record_round_review, self.review_payload(again, assessor="second-assessor"))["result"]
+        self.assertEqual((approved["round_id"], approved["verdict"]), (again["id"], "approved"))
+
+
+class RoundAdmissionTests(RoundsCase):
+    def test_admission_needs_an_approved_continue_decision_and_records_the_opening_state(self):
+        bundle = self.pin()
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        early = {"id": "round-2", "round_id": decision["id"], "review_id": "absent", "reason": "Too early."}
+        self.assert_error("unknown_round_review", lambda: self.mutate(rounds.admit_round, early))
+        review = self.mutate(rounds.record_round_review, self.review_payload(decision, verdict="not_approved"))["result"]
+        pending = dict(early, review_id=review["id"])
+        self.assert_error("round_review_required", lambda: self.mutate(rounds.admit_round, pending))
+        approved = self.mutate(rounds.record_round_review, self.review_payload(decision, assessor="second-assessor"))["result"]
+        before = self.store.snapshot()["records"]
+        admission = self.mutate(rounds.admit_round, dict(early, review_id=approved["id"]))["result"]
+        self.assertEqual((admission["number"], admission["objective"]), (2, self.objective))
+        opening = admission["opening"]
+        self.assertEqual((opening["bundle_id"], opening["claim_ids"], opening["cycle_ids"]), (bundle["id"], ["bound"], ["cycle-1"]))
+        self.assertEqual(set(opening["search_selection"]), set(rounds.OPENING_PURPOSES))
+        self.assertEqual(opening["search_selection"]["downstream"], None)
+        self.assertEqual(opening["search_selection"]["direct"], "direct")
+        self.assertEqual(opening["requirement_ids"], sorted(before.get("fulltext_requirement", {})))
+        self.assertEqual(opening["fulltext_reading_count"], sum(1 for r in before["reading"].values() if r["depth"] == "fulltext"))
+        self.assertEqual(opening["accounts"], resources.account_report(before, "research"))
+        self.assertEqual(opening["accounts"]["literature"]["network_requests"]["charged"], 7)
+        records = self.store.snapshot()["records"]
+        self.assertEqual(rounds.current_number(records), 2)
+        self.assertEqual(rounds.active_round(records)["id"], "round-2")
+        again = {"id": "round-2b", "round_id": decision["id"], "review_id": approved["id"], "reason": "Twice."}
+        self.assert_error("round_active", lambda: self.mutate(rounds.admit_round, again))
+
+    def test_admission_needs_a_review_of_this_decision(self):
+        bundle = self.pin()
+        first, approving = self.approve(self.decision_payload(bundle))
+        other = self.mutate(rounds.record_round, self.decision_payload(bundle, statement="Extend the finite bound to every integer in [0, 7]."))["result"]
+        absent = {"id": "round-2", "round_id": "absent", "review_id": approving["id"], "reason": "No such decision."}
+        self.assert_error("unknown_round_decision", lambda: self.mutate(rounds.admit_round, absent))
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.admit_round, dict(absent, round_id=[first["id"]])))
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.admit_round, dict(absent, round_id=first["id"], review_id=[approving["id"]])))
+        borrowed = dict(absent, round_id=other["id"], reason="Borrowed approval.")
+        self.assert_error("round_review_required", lambda: self.mutate(rounds.admit_round, borrowed))
+        admitted = self.mutate(rounds.admit_round, dict(absent, round_id=first["id"], reason="The approved decision."))["result"]
+        self.assertEqual(admitted["decision_id"], first["id"])
+
+    def test_admission_widens_the_objective_and_charges_the_development_budget(self):
+        from research_harness.resources import set_budget
+        limits = {unit: None for unit in ("network_requests", "source_bytes", "readings", "screenings",
+                                          "model_input_tokens", "model_output_tokens", "wall_seconds", "rounds")}
+        self.mutate(set_budget, {"profile": "research", "purpose": "development", "limits": dict(limits, rounds=1),
+                                 "reason": "One development round at most."})
+        wider = {"kind": "objective", "id": "wider-square-bound",
+                 "statement": "For every integer n in [0, 5], n squared is at most 25, with equality at n = 5."}
+        lineage = {"previous_id": self.objective["id"], "containment": "The range [0, 3] is contained in [0, 5]."}
+        decision, review, admission = self.open_round(objective=wider, lineage=lineage)
+        records = self.store.snapshot()["records"]
+        self.assertEqual(records["configuration"]["research"]["target"], wider)
+        self.assertEqual(records["objective_lineage"][wider["id"]]["round_id"], admission["id"])
+        self.assertEqual(records["resource_account"]["research:development"]["charged"]["rounds"], 1)
+        self.assertEqual(records["research_objective"][self.objective["id"]], self.objective)
+
+    def test_an_exhausted_development_budget_refuses_the_decision(self):
+        from research_harness.resources import set_budget
+        limits = {unit: None for unit in ("network_requests", "source_bytes", "readings", "screenings",
+                                          "model_input_tokens", "model_output_tokens", "wall_seconds", "rounds")}
+        self.mutate(set_budget, {"profile": "research", "purpose": "development", "limits": dict(limits, rounds=0),
+                                 "reason": "No development round."})
+        bundle = self.pin()
+        self.assert_error("resource_budget_exhausted", lambda: self.mutate(rounds.record_round, self.decision_payload(bundle)))
+
+    def test_a_field_change_stays_in_the_corpus_and_needs_literature_room(self):
+        bundle = self.pin()
+        decision, review = self.approve(self.field_change_payload(bundle, "pubmed", "q-bio.QM"))
+        payload = {"id": "round-2", "round_id": decision["id"], "review_id": review["id"], "reason": "Move fields."}
+        self.assert_error("round_field_change_refused", lambda: self.mutate(rounds.admit_round, payload))
+        bare = self.field_change_payload(bundle, "arxiv", "math.CO")
+        bare["next"]["resource_limits"] = {"experiment": {"wall_seconds": 10}}
+        self.assert_error("round_field_change_refused", lambda: self.mutate(rounds.record_round, bare))
+
+    def test_a_field_change_adds_a_category_the_cohort_lacks(self):
+        bundle = self.pin()
+        collections = self.store.snapshot()["records"]["collection"].values()
+        cohort_category = next(iter(collections))["definition"]["primaryCategory"]
+        decision, review = self.approve(self.field_change_payload(bundle, "arxiv", cohort_category))
+        payload = {"id": "round-2", "round_id": decision["id"], "review_id": review["id"], "reason": "Same category."}
+        self.assert_error("round_field_change_refused", lambda: self.mutate(rounds.admit_round, payload))
+
+    def test_a_field_change_to_a_new_category_is_admitted(self):
+        decision, review = self.approve(self.field_change_payload(self.pin(), "arxiv", "math.CO"))
+        payload = {"id": "round-2", "round_id": decision["id"], "review_id": review["id"], "reason": "Add the category."}
+        admission = self.mutate(rounds.admit_round, payload)["result"]
+        self.assertEqual(admission["goal"]["field_change"], {"corpus": "arxiv", "primaryCategory": "math.CO"})
+
+    def test_a_stop_decision_opens_no_round(self):
+        stop, review = self.approve(self.decision_payload(self.pin(), decision="stop"))
+        payload = {"id": "round-2", "round_id": stop["id"], "review_id": review["id"], "reason": "A stop opens nothing."}
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.admit_round, payload))
+
+    def test_admission_needs_the_decision_bundle_to_be_current(self):
+        decision, review = self.approve(self.decision_payload(self.pin()))
+        (self.root / "draft/abstract.txt").write_text("Rewritten after the approval.")
+        self.pin()
+        payload = {"id": "round-2", "round_id": decision["id"], "review_id": review["id"], "reason": "Stale."}
+        self.assert_error("round_review_stale", lambda: self.mutate(rounds.admit_round, payload))
+
+    def test_admission_needs_development_budget_room(self):
+        from research_harness.resources import set_budget
+        limits = {unit: None for unit in ("network_requests", "source_bytes", "readings", "screenings",
+                                          "model_input_tokens", "model_output_tokens", "wall_seconds", "rounds")}
+        self.mutate(set_budget, {"profile": "research", "purpose": "development", "limits": dict(limits, rounds=1),
+                                 "reason": "One round."})
+        decision, review = self.approve(self.decision_payload(self.pin()))
+        self.mutate(set_budget, {"profile": "research", "purpose": "development", "limits": dict(limits, rounds=0),
+                                 "reason": "No round after all."})
+        payload = {"id": "round-2", "round_id": decision["id"], "review_id": review["id"], "reason": "Open."}
+        self.assert_error("resource_budget_exhausted", lambda: self.mutate(rounds.admit_round, payload))
+
+    def test_admission_records_the_revision_and_limits_and_closes_only_the_current_round(self):
+        decision, review, admission = self.open_round()
+        self.assertEqual(admission["admitted_revision"], self.store.revision)
+        self.assertEqual(admission["resource_limits"], decision["payload"]["next"]["resource_limits"])
+        self.write_round_assessment(admission["id"], True, decision["bundle_digest"])
+        payload = {"id": "round-2b", "round_id": decision["id"], "review_id": review["id"], "reason": "Round 1 is closed."}
+        self.assert_error("round_number_mismatch", lambda: self.mutate(rounds.admit_round, payload))
+
+
+class RoundLiteratureTests(RoundsCase):
+    def test_a_development_purpose_is_a_search_purpose(self):
+        from research_harness.synthesis import synthesis_report
+        before = synthesis_report(self.store, "research")["literature_digest"]
+        self.record_purpose("downstream", "downstream-early")
+        self.assertEqual(self.store.snapshot()["records"]["search_selection"]["research:downstream"], {"search_id": "downstream-early"})
+        # Before any round, a consequence search is history, not a judgment the sections rest on.
+        self.assertEqual(synthesis_report(self.store, "research")["literature_digest"], before)
+
+    def test_an_active_round_requires_fresh_consequence_searches_and_an_exemplar(self):
+        self.record_purpose("downstream", "downstream-early")
+        self.assertNotIn("round_search_missing", self.codes())
+        self.assertNotIn("round_exemplar_missing", self.codes())
+        # The readiness review binds the search sources, so the early search is reviewed again before the pin.
+        self.mutate(self.development().record_readiness_review, self.review(self.execution_payload, identifier="review-early"))
+        self.open_round()
+        missing = [o for o in self.store_obligations("research") if o["code"] == "round_search_missing"]
+        self.assertEqual(sorted(o["purpose"] for o in missing), ["changes", "downstream", "exemplars", "next_step"])
+        self.assertIn("round_exemplar_missing", self.codes())
+        # The round's obligations belong to the research profile; the verification profile has no rounds.
+        self.assertFalse({"round_search_missing", "round_exemplar_missing"} & self.codes("verification"))
+        for purpose in ("downstream", "next_step", "exemplars"):
+            self.record_purpose(purpose, purpose + "-round-2")
+        missing = [o for o in self.store_obligations("research") if o["code"] == "round_search_missing"]
+        self.assertEqual([o["purpose"] for o in missing], ["changes"])
+        self.record_purpose("changes", "changes-round-2")
+        self.assertNotIn("round_search_missing", self.codes())
+        self.exemplar_requirement("round-2")
+        self.assertNotIn("round_exemplar_missing", self.codes())
+
+    def test_development_searches_enter_the_judgments_that_synthesis_depends_on(self):
+        from research_harness.synthesis import synthesis_report
+        decision, _, admission = self.open_round()
+        before = synthesis_report(self.store, "research")["literature_digest"]
+        self.record_purpose("downstream", "downstream-round-2")
+        inside = synthesis_report(self.store, "research")["literature_digest"]
+        self.assertNotEqual(inside, before)
+        # The round's judgments stay when the round is assessed, so what bound them inside the round stays current.
+        self.write_round_assessment(admission["id"], True, decision["bundle_digest"])
+        self.assertEqual(synthesis_report(self.store, "research")["literature_digest"], inside)
+        # A judgment that stays is still checked after the assessment: a new full-text requirement stales it too.
+        self.exemplar_requirement("late")
+        self.assertIn("downstream", [o["purpose"] for o in self.store_obligations() if o["code"] == "search_evidence_stale"])
+
+    def test_a_fresh_consequence_search_is_judged_like_the_five_purposes(self):
+        self.open_round()
+        self.record_purpose("downstream", "downstream-round-2")
+        self.exemplar_requirement("round-2")
+        stale = sorted(o["purpose"] for o in self.store_obligations() if o["code"] == "search_evidence_stale")
+        self.assertEqual(stale, ["adjacent", "direct", "downstream", "originals", "recent", "theory"])
+        self.record_purpose("downstream", "downstream-round-2b")
+        self.assertNotIn("downstream", [o["purpose"] for o in self.store_obligations() if o["code"] == "search_evidence_stale"])
+
+    def test_an_exemplar_the_round_opened_with_does_not_count(self):
+        self.exemplar_requirement("early")
+        self.foundation_searches(identifier_suffix="-early")
+        self.refresh_synthesis("early")
+        self.recandidate("early")
+        bundle = self.pin()
+        carried = [{"assessment_id": "assessment-early", "kind": "alternative", "question": "Does the bound extend beyond n = 3?",
+                    "disposition": "deferred", "reason": "The wider range comes first."}]
+        _, _, admission = self.open_round(bundle, carried=carried)
+        self.assertEqual(admission["opening"]["requirement_ids"], ["exemplar-early"])
+        self.assertIn("round_exemplar_missing", self.codes())
+        self.exemplar_requirement("round-2")
+        self.assertNotIn("round_exemplar_missing", self.codes())
+
+
+class PredictionTests(RoundsCase):
+    def test_a_prediction_binds_the_bundle_the_cohort_and_a_blind_assessor(self):
+        self.assert_error("publication_bundle_missing", lambda: self.mutate(predictions.record_prediction,
+                                                                            self.prediction_payload({"digest": "0" * 64}, "predictor-0")))
+        bundle = self.pin()
+        recorded = self.mutate(predictions.record_prediction, self.prediction_payload(bundle, "predictor-a"))["result"]
+        self.assertEqual(recorded["prediction"]["percentile"], 30)
+        self.assertEqual(recorded["bundle_digest"], bundle["digest"])
+        wrong_cohort = self.prediction_payload(bundle, "predictor-b")
+        wrong_cohort["prediction"]["category"] = "cs.CL"
+        self.assert_error("prediction_cohort_mismatch", lambda: self.mutate(predictions.record_prediction, wrong_cohort))
+        wrong_band = self.prediction_payload(bundle, "predictor-c", percentile=10, band=(20, 40))
+        self.assert_error("invalid_prediction", lambda: self.mutate(predictions.record_prediction, wrong_band))
+        out_of_range = self.prediction_payload(bundle, "predictor-c", percentile=100, band=(90, 101))
+        self.assert_error("invalid_prediction", lambda: self.mutate(predictions.record_prediction, out_of_range))
+        again = self.prediction_payload(bundle, "Predictor-A")
+        self.assert_error("manuscript_prediction_duplicate", lambda: self.mutate(predictions.record_prediction, again))
+        author = self.prediction_payload(bundle, "cycle-author")
+        self.assert_error("review_not_independent", lambda: self.mutate(predictions.record_prediction, author))
+        sighted = self.prediction_payload(bundle, "predictor-d")
+        sighted["blind"] = False
+        self.assert_error("review_not_independent", lambda: self.mutate(predictions.record_prediction, sighted))
+        stale = self.prediction_payload(bundle, "predictor-e")
+        stale["bundle_digest"] = "0" * 64
+        self.assert_error("publication_review_stale", lambda: self.mutate(predictions.record_prediction, stale))
+
+    def test_measurement_summary_reports_medians_and_spreads(self):
+        bundle = self.pin()
+        self.measure(bundle, "one", percentiles=(30, 25, 40))
+        summary = predictions.measurement_summary(self.store.snapshot()["records"], bundle)
+        self.assertEqual(summary["predictions"], {"count": 3, "percentile": {"median": 30, "spread": [25, 40]}})
+        self.assertEqual(summary["reviews"]["count"], 5)
+        self.assertEqual(sorted(summary["reviews"]), ["contribution", "count", "overall", "presentation", "soundness"])
+        self.assertEqual(summary["reviews"]["overall"], {"median": 6, "spread": [6, 6]})
+        self.assertEqual(summary["reviews"]["contribution"], {"median": 3, "spread": [3, 3]})
+        # Two more reviews by one assessor on this bundle, as records written before the duplicate
+        # rule existed: the assessor's latest stands, as the publication gate selects it.
+        saved = self.store.snapshot()["records"]["manuscript_review"]["measure-one-1"]
+        self.write_record("manuscript_review", dict(saved, id="measure-one-1-later", reviewed_revision=self.store.revision + 1,
+                                                    assessor=dict(saved["assessor"], id="Measure-One-1"), core=dict(saved["core"], overall=10)))
+        summary = predictions.measurement_summary(self.store.snapshot()["records"], bundle)
+        self.assertEqual(summary["reviews"]["count"], 5)
+        self.assertEqual(summary["reviews"]["overall"], {"median": 6, "spread": [6, 10]})
+        self.write_record("manuscript_review", dict(saved, id="measure-one-1-superseded", reviewed_revision=0, core=dict(saved["core"], overall=1)))
+        summary = predictions.measurement_summary(self.store.snapshot()["records"], bundle)
+        self.assertEqual(summary["reviews"]["count"], 5)
+        self.assertEqual(summary["reviews"]["overall"], {"median": 6, "spread": [6, 10]})
+        self.assertEqual({r["id"] for r in publication.publication_report(self.store)["reviews"] if r["id"].startswith("measure-one-1")},
+                         {"measure-one-1-later"})
+        empty = predictions.measurement_summary(self.store.snapshot()["records"], {"digest": "0" * 64})
+        self.assertEqual(empty["predictions"], {"count": 0, "percentile": {"median": None, "spread": None}})
+        self.assertEqual(empty["reviews"]["count"], 0)
+        self.assertEqual(empty["reviews"]["overall"], {"median": None, "spread": None})
+
+
+class RoundAssessmentTests(RoundsCase):
+    def test_a_productive_round_is_assessed_with_derived_progress(self):
+        from research_harness.operations import prepared_mutation
+        from research_harness.reading import record_reading
+        decision, review, admission = self.open_round()
+        # An abstract reading inside the round is not one of the round's full readings.
+        self.mutate(record_reading, self.abstract_note(self.links[1]["version_id"], "abstract-r2"))
+        self.run_round_work("r2")
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2")
+        self.measure(bundle, "r2")
+        # A charge inside the round, through the real account: the round's usage is the difference since its opening.
+        self.mutate(lambda store, payload, **identity: prepared_mutation(store, "test.charge", payload,
+                    lambda records, value: ([resources.charge(records, "literature", {"network_requests": 3})], {}), **identity), {})
+        assessed = self.mutate(rounds.assess_round, self.assess_payload(admission, bundle))["result"]
+        derived = assessed["derived"]
+        self.assertEqual(sorted(derived["fresh_purposes"]), ["changes", "downstream", "exemplars", "next_step"])
+        self.assertTrue(derived["exemplar"])
+        self.assertEqual(derived["cycles"], ["cycle-r2"])
+        self.assertEqual((derived["new_claim_ids"], derived["dropped_claim_ids"]), (["wider"], []))
+        self.assertEqual((derived["revised_claim_ids"], derived["superseded_claim_ids"]), ([], []))
+        self.assertEqual(derived["measurement"]["predictions"]["count"], 3)
+        self.assertEqual(derived["measurement"], predictions.measurement_summary(self.store.snapshot()["records"], bundle))
+        # The round read its exemplar in full once; its admission charged the round, and the charge above its requests.
+        self.assertEqual(derived["readings"], 1)
+        self.assertEqual(derived["usage"]["literature"]["network_requests"], 3)
+        self.assertEqual(derived["usage"]["development"]["rounds"], 1)
+        self.assertEqual((assessed["successful"], assessed["unproductive"]), (True, False))
+        self.assertEqual((assessed["round_id"], assessed["bundle_digest"]), (admission["id"], bundle["digest"]))
+        self.assertEqual(assessed["assessed_revision"], self.store.revision)
+        self.assert_error("round_already_assessed", lambda: self.mutate(rounds.assess_round, self.assess_payload(admission, bundle)))
+
+    def test_a_round_assessed_on_a_superseded_bundle_is_assessed_again_on_the_current_one(self):
+        decision, review, admission = self.open_round()
+        self.run_round_work("r2")
+        superseded = self.pin(self.claims("wider"), identifier="paper-r2")
+        first = self.mutate(rounds.assess_round, self.assess_payload(admission, superseded))["result"]
+        (self.root / "draft/abstract.txt").write_text("The exact finite bound was enumerated over the wider range.")
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2-revised")
+        # The assessment binds the superseded bundle: the closing decision needs one on the current bundle.
+        stop = self.decision_payload(bundle, closes=2, decision="stop")
+        self.assert_error("round_assessment_missing", lambda: self.mutate(rounds.record_round, stop))
+        again = dict(self.assess_payload(admission, bundle), id="round-2-assessment-revised")
+        second = self.mutate(rounds.assess_round, again)["result"]
+        self.assertEqual((second["round_id"], second["bundle_digest"]), (admission["id"], bundle["digest"]))
+        self.assertEqual(rounds.assessment_for(self.store.snapshot()["records"], admission["id"])["id"], second["id"])
+        self.assertNotEqual(first["id"], second["id"])
+        self.assertEqual(self.mutate(rounds.record_round, stop)["result"]["decision"], "stop")
+        third = dict(again, id="round-2-assessment-third")
+        self.assert_error("round_already_assessed", lambda: self.mutate(rounds.assess_round, third))
+
+    def test_an_earlier_round_is_not_assessed_on_a_later_round_bundle(self):
+        decision, review, admission = self.open_round()
+        self.run_round_work("r2")
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2")
+        first = self.mutate(rounds.assess_round, self.assess_payload(admission, bundle))["result"]
+        self.open_round(bundle, closes=2, statement="Extend the finite bound to every integer in [0, 7].")
+        self.run_round_work("r3")
+        later = self.pin(self.claims("wider"), identifier="paper-r3")
+        # Round 2 is closed; its assessment stands as the one its decision was made on.
+        stale = dict(self.assess_payload(admission, later), id="round-2-assessment-late")
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.assess_round, stale))
+        self.assertEqual(rounds.assessment_for(self.store.snapshot()["records"], admission["id"])["id"], first["id"])
+
+    def test_an_unproductive_round_is_unsuccessful_even_when_a_criterion_is_observed(self):
+        decision, review, admission = self.open_round()
+        self.run_round_work("r2", new_cycle=False)
+        bundle = self.pin(identifier="paper-r2")
+        assessed = self.mutate(rounds.assess_round, self.assess_payload(admission, bundle, observed=True))["result"]
+        self.assertEqual((assessed["successful"], assessed["unproductive"]), (False, True))
+        self.assertEqual(assessed["derived"]["cycles"], [])
+        self.assertEqual(assessed["derived"]["new_claim_ids"], [])
+
+    def test_a_productive_round_without_an_observed_criterion_is_unsuccessful(self):
+        decision, review, admission = self.open_round()
+        self.run_round_work("r2")
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2")
+        assessed = self.mutate(rounds.assess_round, self.assess_payload(admission, bundle, observed=False))["result"]
+        self.assertEqual((assessed["successful"], assessed["unproductive"]), (False, False))
+
+    def test_every_criterion_and_stop_condition_is_judged_once_on_the_current_bundle(self):
+        decision, review, admission = self.open_round()
+        self.run_round_work("r2")
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2")
+        stale = self.assess_payload(admission, bundle)
+        stale["bundle_digest"] = "0" * 64
+        self.assert_error("round_bundle_mismatch", lambda: self.mutate(rounds.assess_round, stale))
+        absent = self.assess_payload(admission, bundle)
+        absent["round_id"] = "absent"
+        self.assert_error("unknown_round", lambda: self.mutate(rounds.assess_round, absent))
+        for edit in (lambda p: p.update(criteria=[]),
+                     lambda p: p["criteria"].append(dict(p["criteria"][0])),
+                     lambda p: p["criteria"][0].update(id=["sc-wider"]),
+                     lambda p: p.update(round_id=["round-2"]),
+                     lambda p: p["criteria"][0]["evidence"].append({"kind": "review", "review_id": ["x"]}),
+                     lambda p: p["criteria"][0].update(status="passed"),
+                     lambda p: p["stop_conditions"][0].update(id="other")):
+            payload = self.assess_payload(admission, bundle)
+            edit(payload)
+            self.assert_error("invalid_round", lambda: self.mutate(rounds.assess_round, payload))
+
+    def test_every_criterion_of_a_two_criterion_goal_is_judged_with_evidence(self):
+        payload = self.decision_payload(self.pin())
+        payload["next"]["goal"]["success_criteria"].append(
+            {"id": "sc-scope", "kind": "scope", "statement": "The assessed scope covers [0, 5] under the stated assumptions."})
+        decision, review, admission = self.open_round(payload=payload)
+        self.run_round_work("r2")
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2")
+        # Only sc-wider judged; sc-wider judged without evidence.
+        for edit in (lambda p: p["criteria"].pop(), lambda p: p["criteria"][0].update(evidence=[])):
+            payload = self.assess_payload(admission, bundle)
+            edit(payload)
+            self.assert_error("invalid_round", lambda: self.mutate(rounds.assess_round, payload))
+        judged = self.assess_payload(admission, bundle)
+        judged["criteria"][1]["status"] = "unresolved"
+        assessed = self.mutate(rounds.assess_round, judged)["result"]
+        self.assertEqual([c["id"] for c in assessed["payload"]["criteria"]], ["sc-wider", "sc-scope"])
+        self.assertTrue(assessed["successful"])
+
+    def test_an_unproductive_round_lacks_a_fresh_search_the_round_exemplar_or_a_new_cycle(self):
+        from research_harness.reading import require_fulltext
+        decision, review, admission = self.open_round()
+        # A verification-profile exemplar requirement inside the round is not the round's exemplar.
+        self.mutate(require_fulltext, {"id": "exemplar-verification-r2", "profile": "verification", "version_id": self.links[1]["version_id"],
+                                       "purpose": "exemplar", "reason": "A verification-profile requirement is not the round's exemplar."})
+        self.run_round_work("r2")
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2")
+        records = self.store.snapshot()["records"]
+        evaluation = Evaluation(records, self.artifacts)
+        self.assertFalse(rounds.derive_progress(records, evaluation, admission, bundle)["unproductive"])
+        # As if the round had opened with the `changes` search it recorded: three purposes fresh, not four.
+        stale_search = copy.deepcopy(admission)
+        stale_search["opening"]["search_selection"]["changes"] = records["search_selection"]["research:changes"]["search_id"]
+        progress = rounds.derive_progress(records, evaluation, stale_search, bundle)
+        self.assertEqual((progress["fresh_purposes"], progress["unproductive"]), (["downstream", "exemplars", "next_step"], True))
+        # As if the round had opened with the exemplar requirement it recorded.
+        stale_exemplar = copy.deepcopy(admission)
+        stale_exemplar["opening"]["requirement_ids"].append("exemplar-r2")
+        progress = rounds.derive_progress(records, evaluation, stale_exemplar, bundle)
+        self.assertEqual((progress["exemplar"], progress["unproductive"]), (False, True))
+        # As if the round had opened with the cycle it planned and assessed.
+        stale_cycle = copy.deepcopy(admission)
+        stale_cycle["opening"]["cycle_ids"].append("cycle-r2")
+        progress = rounds.derive_progress(records, evaluation, stale_cycle, bundle)
+        self.assertEqual((progress["cycles"], progress["unproductive"]), ([], True))
+
+    def test_claims_continuity_marks_revised_superseded_and_dropped_claims(self):
+        decision, review, admission = self.open_round()
+        self.run_round_work("r2")
+        records = self.store.snapshot()["records"]
+        evaluation = Evaluation(records, self.artifacts)
+        rewritten = [{"id": "bound", "claim": "The maximum is 10."}, {"id": "wider", "claim": "Claim wider holds."}]
+        bundle = self.pin(rewritten, identifier="paper-rewritten")
+        progress = rounds.derive_progress(self.store.snapshot()["records"], evaluation, admission, bundle)
+        self.assertEqual((progress["changed_claim_ids"], progress["revised_claim_ids"], progress["dropped_claim_ids"]), (["bound"], [], []))
+        bundle = self.pin(self.claims("wider", revised=["bound"]), identifier="paper-revised")
+        progress = rounds.derive_progress(self.store.snapshot()["records"], evaluation, admission, bundle)
+        self.assertEqual((progress["new_claim_ids"], progress["revised_claim_ids"], progress["dropped_claim_ids"]), (["wider"], ["bound"], []))
+        self.assertEqual(progress["changed_claim_ids"], [])
+        bundle = self.pin(self.claims("wider", superseded=["bound"]), identifier="paper-superseded")
+        progress = rounds.derive_progress(self.store.snapshot()["records"], evaluation, admission, bundle)
+        self.assertEqual((progress["superseded_claim_ids"], progress["dropped_claim_ids"]), (["bound"], []))
+        (self.root / "evidence/claims.json").write_text('[{"id": "wider", "claim": "Claim wider holds."}]')
+        bundle = self.mutate(publication.prepare_publication, {"id": "paper-dropped", "files": {"pdf": "draft/paper.pdf",
+            "abstract": "draft/abstract.txt", "bibliography": "draft/references.bib", "claims": "evidence/claims.json", "sources": None},
+            "claim_evidence": [{"claim_id": "wider", "evidence": [self.result_evidence(self.execution_payload)]}]})["result"]
+        progress = rounds.derive_progress(self.store.snapshot()["records"], evaluation, admission, bundle)
+        self.assertEqual(progress["dropped_claim_ids"], ["bound"])
+        without = rounds.derive_progress(self.store.snapshot()["records"], evaluation, admission, None)
+        self.assertEqual((without["new_claim_ids"], without["changed_claim_ids"], without["dropped_claim_ids"], without["measurement"]),
+                         ([], [], [], None))
+        self.assertEqual((without["cycles"], without["unproductive"]), (["cycle-r2"], True))
+
+
+class RoundGateTests(RoundsCase):
+    def gate(self):
+        from research_harness.gates import gate_report
+        return gate_report(self.store, "round")
+
+    @staticmethod
+    def gate_codes(report):
+        return [o["code"] for o in report["obligations"]]
+
+    def test_the_gate_walks_from_bundle_to_decision_to_review_to_admission(self):
+        self.assertIn("publication_bundle_missing", self.gate_codes(self.gate()))
+        bundle = self.pin()
+        self.assertEqual(self.gate_codes(self.gate()), ["round_decision_missing"])
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        self.assertEqual(self.gate_codes(self.gate()), ["round_review_missing"])
+        self.mutate(rounds.record_round_review, self.review_payload(decision, verdict="not_approved"))
+        self.assertEqual(self.gate_codes(self.gate()), ["round_review_pending"])
+        review = self.mutate(rounds.record_round_review, self.review_payload(decision, assessor="second"))["result"]
+        report = self.gate()
+        self.assertEqual((self.gate_codes(report), report["decision"]), (["round_admission_missing"], "continue"))
+        self.assertEqual((report["decision_id"], report["next"]), (decision["id"], decision["payload"]["next"]))
+        self.assertFalse(report["ready"])
+        self.mutate(rounds.admit_round, {"id": "round-2", "round_id": decision["id"], "review_id": review["id"], "reason": "Open."})
+        report = self.gate()
+        self.assertTrue(report["active"])
+        self.assertEqual(report["round"], 2)
+        # The admitted decision opened the round the gate now closes: it is not the decision the gate reports.
+        self.assertEqual((report["decision"], report["decision_id"], report["next"], report["assessed"]), (None, None, None, False))
+        self.assertIn("round_assessment_missing", self.gate_codes(report))
+        self.assertIn("round_cycle_missing", self.gate_codes(report))
+        self.assertIn("round_exemplar_missing", self.gate_codes(report))
+        self.assertEqual(sorted(o["purpose"] for o in report["obligations"] if o["code"] == "round_search_missing"),
+                         ["changes", "downstream", "exemplars", "next_step"])
+        self.assertEqual(report["progress"]["cycles"], [])
+
+    def test_a_stop_decision_makes_the_gate_ready(self):
+        bundle = self.pin()
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle, decision="stop"))["result"]
+        self.mutate(rounds.record_round_review, self.review_payload(decision))
+        report = self.gate()
+        self.assertEqual((report["ready"], report["decision"], report["next"]), (True, "stop", None))
+        self.assertEqual(report["measurement"]["reviews"]["count"], 2)
+
+    def test_the_gate_reports_the_round_claims_and_the_stale_assessment(self):
+        from research_harness.gates import validate_transition
+        decision, review, admission = self.open_round()
+        self.run_round_work("r2")
+        bundle = self.pin(identifier="paper-r2")
+        report = self.gate()
+        self.assertEqual(self.gate_codes(report), ["round_claim_missing", "round_assessment_missing"])
+        self.assertEqual((report["decision"], report["assessed"]), (None, False))
+        (self.root / "evidence/claims.json").write_text('[{"id": "wider", "claim": "Claim wider holds."}]')
+        bundle = self.mutate(publication.prepare_publication, {"id": "paper-dropped", "files": {"pdf": "draft/paper.pdf",
+            "abstract": "draft/abstract.txt", "bibliography": "draft/references.bib", "claims": "evidence/claims.json", "sources": None},
+            "claim_evidence": [{"claim_id": "wider", "evidence": [self.result_evidence(self.execution_payload)]}]})["result"]
+        report = self.gate()
+        self.assertEqual(self.gate_codes(report), ["round_claims_dropped", "round_assessment_missing"])
+        self.assertEqual(report["obligations"][0]["claim_ids"], ["bound"])
+        bundle = self.pin([{"id": "bound", "claim": "The maximum is 10."}, {"id": "wider", "claim": "Claim wider holds."}], identifier="paper-changed")
+        self.assertEqual(self.gate_codes(self.gate()), ["round_claims_dropped", "round_assessment_missing"])
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2-final")
+        self.assertEqual(self.gate_codes(self.gate()), ["round_assessment_missing"])
+        # The publication gate passes on this bundle; the round rule refuses deposit with the active round's obligations.
+        records = self.store.snapshot()["records"]
+        with self.assertRaises(ResearchError) as raised:
+            validate_transition(records, Evaluation(records, self.artifacts), {"stage": "evaluate", "status": "pending"},
+                                {"stage": "deposit", "status": "pending"})
+        self.assertEqual((raised.exception.code, raised.exception.details["action"]), ("readiness_required", "entering deposit"))
+        self.assertEqual([o["code"] for o in raised.exception.details["obligations"]], ["round_assessment_missing"])
+        self.mutate(rounds.assess_round, self.assess_payload(admission, bundle))
+        report = self.gate()
+        self.assertEqual((self.gate_codes(report), report["assessed"]), (["round_decision_missing"], True))
+        # Claims continuity holds after the assessment too: an assessed round whose bundle drops an opening claim cannot close.
+        dropped = self.pin([{"id": "wider", "claim": "Claim wider holds."}], identifier="paper-r2-dropped")
+        self.mutate(rounds.assess_round, dict(self.assess_payload(admission, dropped), id="round-2-assessment-dropped"))
+        report = self.gate()
+        self.assertEqual((self.gate_codes(report), report["assessed"]), (["round_claims_dropped"], True))
+        self.assertEqual(report["obligations"][0]["claim_ids"], ["bound"])
+        with self.assertRaises(ResearchError) as raised:
+            self.mutate(rounds.record_round, self.decision_payload(dropped, closes=2, decision="stop"))
+        self.assertEqual((raised.exception.code, raised.exception.details["claim_ids"]), ("round_claims_dropped", ["bound"]))
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2-kept")
+        self.mutate(rounds.assess_round, dict(self.assess_payload(admission, bundle), id="round-2-assessment-kept"))
+        self.assertEqual(self.gate_codes(self.gate()), ["round_decision_missing"])
+        (self.root / "draft/abstract.txt").write_text("The exact finite bound was enumerated and extended.")
+        self.pin(self.claims("wider"), identifier="paper-r2-revised")
+        report = self.gate()
+        self.assertEqual((self.gate_codes(report), report["active"], report["round"]), (["round_assessment_missing"], False, 2))
+
+    def test_transitions_follow_the_round_gate(self):
+        from research_harness.gates import validate_transition
+        evaluate, literature = {"stage": "evaluate", "status": "pending"}, {"stage": "literature", "status": "pending"}
+        deposit = {"stage": "deposit", "status": "pending"}
+
+        def transition(target):
+            records = self.store.snapshot()["records"]
+            return validate_transition(records, Evaluation(records, self.artifacts), evaluate, target)
+        self.assert_error("readiness_required", lambda: transition(literature))
+        bundle = self.pin()
+        # The publication gate passes on the pinned bundle; the round rule refuses deposit without a decision.
+        with self.assertRaises(ResearchError) as raised:
+            transition(deposit)
+        self.assertEqual(raised.exception.details["action"], "entering deposit")
+        self.assertEqual([o["code"] for o in raised.exception.details["obligations"]], ["round_decision_missing"])
+        decision, review, admission = self.open_round(bundle)
+        transition(literature)
+        # Inside the round the readiness behind the publication gate is stale, so the publication gate refuses deposit first.
+        with self.assertRaises(ResearchError) as raised:
+            transition(deposit)
+        self.assertEqual(raised.exception.details["action"], "evaluate completion")
+
+    def test_a_stop_does_not_enter_a_development_round(self):
+        from research_harness.gates import validate_transition
+        bundle = self.pin()
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle, decision="stop"))["result"]
+        self.mutate(rounds.record_round_review, self.review_payload(decision))
+        records = self.store.snapshot()["records"]
+        with self.assertRaises(ResearchError) as raised:
+            validate_transition(records, Evaluation(records, self.artifacts), {"stage": "evaluate", "status": "pending"},
+                                {"stage": "literature", "status": "pending"})
+        self.assertEqual((raised.exception.code, raised.exception.details["decision"]), ("readiness_required", "stop"))
+
+    def test_a_stop_after_an_assessed_round_permits_deposit(self):
+        from research_harness.gates import validate_transition
+        decision, review, admission = self.open_round()
+        self.run_round_work("r2")
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2")
+        self.mutate(rounds.assess_round, self.assess_payload(admission, bundle))
+        stop = self.mutate(rounds.record_round, self.decision_payload(bundle, closes=2, decision="stop"))["result"]
+        self.mutate(rounds.record_round_review, self.review_payload(stop))
+        records = self.store.snapshot()["records"]
+        validate_transition(records, Evaluation(records, self.artifacts), {"stage": "evaluate", "status": "pending"},
+                            {"stage": "deposit", "status": "pending"})
+
+    def test_an_exhausted_development_budget_is_a_round_gate_obligation(self):
+        from research_harness.resources import set_budget
+        limits = {unit: None for unit in ("network_requests", "source_bytes", "readings", "screenings",
+                                          "model_input_tokens", "model_output_tokens", "wall_seconds", "rounds")}
+        self.mutate(set_budget, {"profile": "research", "purpose": "development", "limits": dict(limits, rounds=1),
+                                 "reason": "One development round at most."})
+        decision, review, admission = self.open_round()
+        self.run_round_work("r2")
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2")
+        self.mutate(rounds.assess_round, self.assess_payload(admission, bundle))
+        report = self.gate()
+        self.assertEqual(self.gate_codes(report), ["resource_budget_exhausted", "round_decision_missing"])
+        self.assertEqual((report["obligations"][0]["purpose"], report["obligations"][0]["unit"]), ("development", "rounds"))
+        self.assertEqual(report["budget"]["rounds"], {"limit": 1, "charged": 1, "reserved": 0, "unknown": 0})
+        another = self.decision_payload(bundle, closes=2, statement="Extend the finite bound to every integer in [0, 7].")
+        self.assert_error("resource_budget_exhausted", lambda: self.mutate(rounds.record_round, another))
+        stop =self.mutate(rounds.record_round, self.decision_payload(bundle, closes=2, decision="stop"))["result"]
+        self.assertEqual(self.gate_codes(self.gate()), ["resource_budget_exhausted", "round_review_missing"])
+        self.mutate(rounds.record_round_review, self.review_payload(stop))
+        report = self.gate()
+        self.assertEqual((report["ready"], report["decision"]), (True, "stop"))
+
+    def test_two_unsuccessful_rounds_exhaust_a_direction(self):
+        decision, review, admission = self.open_round()
+        self.run_round_work("r2", new_cycle=False)
+        bundle = self.pin(identifier="paper-r2")
+        self.mutate(rounds.assess_round, self.assess_payload(admission, bundle, observed=False))
+        decision, review, admission = self.open_round(bundle, closes=2, statement="Extend the finite bound to every integer in [0, 7].")
+        self.run_round_work("r3", new_cycle=False)
+        bundle = self.pin(identifier="paper-r3")
+        self.mutate(rounds.assess_round, self.assess_payload(admission, bundle, observed=False))
+        same = self.decision_payload(bundle, closes=3, statement="Extend the finite bound to every integer in [0, 9].")
+        self.assert_error("round_direction_exhausted", lambda: self.mutate(rounds.record_round, same))
+        other = self.decision_payload(bundle, closes=3, direction="horizontal", statement="Apply the bound to a neighbouring category.")
+        other["candidates"][0]["direction"] = "horizontal"
+        self.mutate(rounds.record_round, other)
+        reopened = self.decision_payload(bundle, closes=3, statement="Extend the finite bound to every integer in [0, 9].",
+                                         reopening={"round_id": "round-2", "reason": "A new measurement changed the picture.",
+                                                    "evidence": [{"kind": "review", "review_id": "paper-r3-gate-1"}]})
+        recorded = self.mutate(rounds.record_round, reopened)["result"]
+        self.assertEqual(recorded["payload"]["next"]["reopening"]["round_id"], "round-2")
+
+
+class RoundStatusTests(RoundsCase):
+    def gate_report(self):
+        from research_harness.gates import gate_report
+        return gate_report(self.store, "round")
+
+    def test_status_at_evaluate_carries_publication_and_round_obligations_in_priority_order(self):
+        from research_harness.cli import status_report
+        from research_harness.report_views import status_summary
+        self.set_stage("literature")
+        self.pin()
+        report = status_report(self.store)
+        self.assertNotIn("round_decision_missing", [o["code"] for o in report["obligations"]])
+        self.assertEqual(report["round"]["number"], 1)
+        self.set_stage("evaluate")
+        report = status_report(self.store)
+        self.assertEqual([o["code"] for o in report["obligations"]], ["round_decision_missing"])
+        self.assertFalse(report["ready"])
+        self.assertEqual(report["next"]["code"], "round_decision_missing")
+        (self.root / "draft/paper.pdf").write_bytes(b"%PDF-1.4\n% changed\n%%EOF")
+        report = status_report(self.store)
+        self.assertEqual([o["code"] for o in report["obligations"]], ["publication_artifact_changed"])
+        self.assertEqual(report["counts"]["obligations"], len(report["obligations"]))
+        summary = status_summary(status_report(self.store))
+        self.assertEqual(summary["round"], rounds.round_summary(self.gate_report()))
+
+    def test_a_manuscript_awaiting_reviews_is_led_to_the_reviews_before_the_round(self):
+        from research_harness.cli import status_report
+        self.set_stage("evaluate")
+        self.pin(reviews=0)
+        codes = [o["code"] for o in status_report(self.store)["obligations"]]
+        self.assertEqual(codes, ["manuscript_reviews_required", "round_decision_missing"])
+
+    def test_the_round_summary_is_bounded_and_carries_the_active_round(self):
+        from research_harness.cli import status_report
+        from research_harness.operations import prepared_mutation
+        self.set_stage("evaluate")
+        # Before any admission: no limits, no development account, no progress and no usage.
+        summary = status_report(self.store)["round"]
+        self.assertEqual((summary["number"], summary["active"], summary["limits"], summary["budget"], summary["progress"],
+                          summary["usage"]), (1, False, None, None, None, None))
+        decision, review, admission = self.open_round()
+        self.record_purpose("downstream", "downstream-r2")
+        summary = status_report(self.store)["round"]
+        self.assertEqual((summary["number"], summary["active"], summary["decision"], summary["assessed"]), (2, True, None, False))
+        self.assertEqual(summary["progress"], {"fresh_purposes": ["downstream"], "exemplar": False, "cycles": 0,
+                                               "new_claims": 0, "dropped_claims": 0, "readings": 0})
+        self.assertIsNone(summary["measurement"])
+        # The admitted round's limits, the development budget line and the usage since the admission (spec sections 12 and 14).
+        self.assertEqual(summary["limits"], admission["resource_limits"])
+        self.assertEqual(summary["budget"]["rounds"], {"limit": None, "charged": 1, "reserved": 0, "unknown": 0})
+        self.assertEqual(summary["usage"]["literature"]["network_requests"], 0)
+        self.assertTrue(set(summary["usage"]) <= {"literature", "experiment"})
+        self.assertEqual(sorted(summary), ["active", "assessed", "budget", "decision", "limits", "measurement", "number",
+                                           "obligations", "progress", "usage"])
+        self.run_round_work("r2-work")
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2")
+        # A charge inside the round, through the real account: the usage is the difference since the admission.
+        self.mutate(lambda store, payload, **identity: prepared_mutation(store, "test.charge", payload,
+                    lambda records, value: ([resources.charge(records, "literature", {"network_requests": 3})], {}), **identity), {})
+        summary = status_report(self.store)["round"]
+        self.assertEqual((summary["active"], summary["decision"], summary["assessed"]), (True, None, False))
+        self.assertEqual(summary["usage"]["literature"]["network_requests"], 3)
+        self.mutate(rounds.assess_round, self.assess_payload(admission, bundle))
+        summary = status_report(self.store)["round"]
+        self.assertEqual((summary["active"], summary["decision"], summary["assessed"]), (False, None, True))
+        self.assertEqual((summary["progress"]["cycles"], summary["progress"]["new_claims"]), (1, 1))
+        # The manuscript changed after the assessment: no bundle is current, and the round's counts are still reported.
+        (self.root / "draft/paper.pdf").write_bytes(b"%PDF-1.4\n% changed\n%%EOF")
+        summary = status_report(self.store)["round"]
+        self.assertEqual((summary["active"], summary["assessed"], summary["progress"]["cycles"]), (False, False, 1))

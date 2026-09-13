@@ -8,7 +8,9 @@ allowance of every acquisition operation that is still admitted, so an
 interrupted or superseded operation holds nothing once it is no longer
 admitted. Admission refuses work that has no room for one request; batches
 charge their counts and any reported model usage. Usage already spent is
-always recorded; exhaustion is an obligation, never readiness.
+always recorded; exhaustion is an obligation, never readiness. The
+`development` purpose counts admitted development rounds in the `rounds`
+unit; `round-admit` charges one round.
 """
 
 from .errors import ResearchError
@@ -16,8 +18,8 @@ from .graph import obligation
 from .operations import fields, prepared_mutation, profile_name, text
 
 
-UNITS = ("network_requests", "source_bytes", "readings", "screenings", "model_input_tokens", "model_output_tokens", "wall_seconds")
-PURPOSES = ("literature", "screening", "experiment")
+UNITS = ("network_requests", "source_bytes", "readings", "screenings", "model_input_tokens", "model_output_tokens", "wall_seconds", "rounds")
+PURPOSES = ("literature", "screening", "experiment", "development")
 _ACCOUNT = "resource_account"
 _BUDGET = "resource_budget"
 
@@ -50,7 +52,7 @@ def set_budget(store, payload, *, expected_revision, request_id):
         text(value["reason"], "Budget reason")
         fields(value["limits"], UNITS)
         _amounts(value["limits"], "Budget limits")
-        account = records.get(_ACCOUNT, {}).get(key, _empty(key))
+        account = _account(records, key)
         for unit, limit in value["limits"].items():
             if limit is not None and account["charged"][unit] > limit:
                 raise ResearchError("resource_budget_below_charged", "A budget cannot drop below the amount already charged",
@@ -64,6 +66,14 @@ def _lookup(source, kind, key):
     if hasattr(source, "get") and not isinstance(source, dict):
         return source.get(kind, key)
     return source.get(kind, {}).get(key)
+
+
+def _account(source, key):
+    """The stored account with every current unit present; accounts stored before a unit was added lack it."""
+    stored = _lookup(source, _ACCOUNT, key) or {}
+    empty = _empty(key)
+    return {"key": key, "charged": {**empty["charged"], **stored.get("charged", {})},
+            "unknown": {**empty["unknown"], **stored.get("unknown", {})}}
 
 
 def _records(source, kind):
@@ -101,7 +111,7 @@ def admit(source, purpose, max_requests):
     if profile is None:
         return
     key = _key(profile, purpose)
-    account = _lookup(source, _ACCOUNT, key) or _empty(key)
+    account = _account(source, key)
     _check(_lookup(source, _BUDGET, key), account, held(source, purpose), "network_requests", max(max_requests or 0, 1))
 
 
@@ -111,7 +121,7 @@ def charge(source, purpose, amounts, *, unknown=(), refuse=True):
     if profile is None:
         return None
     key = _key(profile, purpose)
-    account = dict(_lookup(source, _ACCOUNT, key) or _empty(key))
+    account = _account(source, key)
     budget = _lookup(source, _BUDGET, key)
     charged, unknowns = dict(account["charged"]), dict(account["unknown"])
     reserved = held(source, purpose) if refuse else None
@@ -132,11 +142,10 @@ def account_report(records, profile):
     report = {}
     for purpose in PURPOSES:
         key = profile + ":" + purpose
-        budget = records.get(_BUDGET, {}).get(key)
-        account = records.get(_ACCOUNT, {}).get(key)
-        if budget is None and account is None:
+        budget = _lookup(records, _BUDGET, key)
+        if budget is None and _lookup(records, _ACCOUNT, key) is None:
             continue
-        account = account or _empty(key)
+        account = _account(records, key)
         reserved = held(records, purpose)
         report[purpose] = {unit: {"limit": (budget or {}).get("limits", {}).get(unit), "charged": account["charged"][unit],
                                   "reserved": reserved[unit], "unknown": account["unknown"][unit]} for unit in UNITS}

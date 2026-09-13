@@ -12,8 +12,8 @@ from .artifacts import ArtifactStore
 from .execution_evidence import author_readiness_state
 from .errors import ResearchError
 from .evaluation import Evaluation
-from .publication import publication_state
-from .review_packets import manuscript_packet, readiness_packet
+from .publication import _bundle, publication_state
+from .review_packets import manuscript_packet, readiness_packet, round_packet
 from .workspace import write_projection
 
 
@@ -61,3 +61,13 @@ def deliver_manuscript(store, destination):
     if not report["ready"]:
         raise ResearchError("readiness_required", "Prepare a current manuscript bundle before independent delivery", {"obligations": report["obligations"]})
     return _deliver(store, destination, manuscript_packet(snapshot["records"], report["bundle"]))
+
+
+def deliver_round(store, destination):
+    """The latest round decision on the exact current bundle, delivered to the independent round assessor."""
+    records = store.snapshot()["records"]
+    bundle = _bundle(records, Evaluation(records, ArtifactStore(store.root)))
+    decisions = [d for d in records.get("round_decision", {}).values() if d["bundle_digest"] == bundle["digest"]]
+    if not decisions:
+        raise ResearchError("round_decision_missing", "Record the round decision before delivering it for review")
+    return _deliver(store, destination, round_packet(records, bundle, max(decisions, key=lambda d: d["decided_revision"])))

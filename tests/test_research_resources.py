@@ -14,7 +14,7 @@ def item(version_id):
 
 def limits(**values):
     base = {"network_requests": None, "source_bytes": None, "readings": None, "screenings": None,
-            "model_input_tokens": None, "model_output_tokens": None, "wall_seconds": None}
+            "model_input_tokens": None, "model_output_tokens": None, "wall_seconds": None, "rounds": None}
     base.update(values)
     return base
 
@@ -128,3 +128,42 @@ class ResourceTests(LiteratureCase):
         report = status_report(self.store)
         self.assertEqual(report["resources"]["literature"]["readings"], {"limit": 1, "charged": 1, "reserved": 0, "unknown": 0})
         self.assertIn("resource_budget_exhausted", {o["code"] for o in report["obligations"]})
+
+    def test_development_rounds_are_a_budgeted_unit(self):
+        from research_harness.resources import PURPOSES, UNITS, charge, obligations, set_budget
+        self.assertIn("rounds", UNITS)
+        self.assertIn("development", PURPOSES)
+        self.mutate(set_budget, {"profile": "research", "purpose": "development", "limits": limits(rounds=1),
+                                 "reason": "The user wants at most one development round."})
+        records = self.store.snapshot()["records"]
+        kind, key, account = charge(records, "development", {"rounds": 1})
+        self.assertEqual((kind, key, account["charged"]["rounds"]), ("resource_account", "research:development", 1))
+        charged = dict(records, resource_account={key: account})
+        self.assert_error("resource_budget_exhausted", lambda: charge(charged, "development", {"rounds": 1}))
+        self.assertEqual([o["code"] for o in obligations(charged, "research")], ["resource_budget_exhausted"])
+
+    def test_a_budget_payload_names_the_rounds_unit(self):
+        from research_harness.resources import set_budget
+        incomplete = limits()
+        del incomplete["rounds"]
+        self.assert_error("invalid_input", lambda: self.mutate(set_budget, {"profile": "research", "purpose": "literature",
+                                                                             "limits": incomplete, "reason": "Incomplete."}))
+
+    def test_an_account_stored_before_the_rounds_unit_keeps_its_credit(self):
+        from research_harness.cli import status_report
+        from research_harness.operations import prepared_mutation
+        from research_harness.resources import account_report, charge, obligations, set_budget
+        legacy = {"key": "research:literature", "charged": {u: 0 for u in limits() if u != "rounds"},
+                  "unknown": {u: 0 for u in limits() if u != "rounds"}}
+        legacy["charged"]["readings"] = 1
+        records = dict(self.store.snapshot()["records"], resource_account={"research:literature": legacy})
+        self.assertEqual(account_report(records, "research")["literature"]["rounds"],
+                         {"limit": None, "charged": 0, "reserved": 0, "unknown": 0})
+        self.assertEqual(account_report(records, "research")["literature"]["readings"]["charged"], 1)
+        self.assertEqual(obligations(records, "research"), [])
+        self.assertEqual(charge(records, "literature", {"readings": 1})[2]["charged"], dict(legacy["charged"], readings=2, rounds=0))
+        prepared_mutation(self.store, "test.legacy-account", {}, lambda stored, value: ([("resource_account", "research:literature", legacy)], None),
+                          expected_revision=self.store.revision, request_id="legacy-account")
+        self.assertEqual(status_report(self.store)["resources"]["literature"]["readings"]["charged"], 1)
+        self.budget(rounds=2)
+        self.assertEqual(self.account(), legacy)

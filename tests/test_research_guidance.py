@@ -83,8 +83,8 @@ class ResearchGuidanceTests(unittest.TestCase):
 
     def test_release_manifests_and_notes_describe_the_same_final_version(self):
         for relative in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
-            self.assertEqual(json.loads((PLUGIN / relative).read_text())["version"], "0.38.0")
-        self.assertTrue((PLUGIN / "docs/releases/0.38.0.md").is_file())
+            self.assertEqual(json.loads((PLUGIN / relative).read_text())["version"], "0.39.0")
+        self.assertTrue((PLUGIN / "docs/releases/0.39.0.md").is_file())
 
     def test_staged_plugin_runs_common_and_native_entrypoints_without_repository_cwd(self):
         from research_harness.cli import ACQUISITION, OPERATIONS

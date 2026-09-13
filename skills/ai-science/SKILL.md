@@ -25,7 +25,7 @@ prerequisites and provenance; scientific validity still needs actual assessment.
 | `ideate` | [Ideate](../ideate/SKILL.md) | Prospective scoped cycle, pinned inputs, current admission and binding |
 | `experiment` | [Experiment](../experiment/SKILL.md) | Actual outcomes, validity assessment, checkpoints, independent current research readiness |
 | `write` | [Write](../write/SKILL.md) | Evidence-grounded draft with verified citations and exact claim mappings |
-| `evaluate` | [Evaluate](../evaluate/SKILL.md), [LOOP.md](LOOP.md) | Current manuscript bundle and separate independent blind assessments |
+| `evaluate` | [Evaluate](../evaluate/SKILL.md), [LOOP.md](LOOP.md) | Current manuscript bundle, separate independent blind assessments with cohort predictions, and the round decision |
 | `deposit` | [Deposit](../deposit/SKILL.md) | Authorized exact production bundle and confirmed publication receipt |
 | `submit` | [Submit](../submit/SKILL.md) | Confirmed association with the concrete published record |
 | `complete` | Current status | Retained study and confirmed final state |
@@ -71,6 +71,11 @@ assess the exact manuscript independently and revise the highest-impact supporte
 weakness. New scientific evidence needs a current admitted cycle and renewed
 research assessment. Changes in source, scope, or synthesis return to literature
 preparation. Keep the full history of results, costs, reviews, and source changes.
+
+A study develops its paper across rounds. At the end of `evaluate`, decide on the
+exact bundle with `round`, obtain the independent round review, and either admit
+the next round (`round-admit`, then `--stage literature --status pending`) or stop
+and enter `deposit`. LOOP.md's third section governs the round.
 
 ## Authorization, pending work, and resume
 

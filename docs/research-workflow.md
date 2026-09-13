@@ -324,6 +324,57 @@ decisions and require reassessment. Follow the deposit and submission skills
 within the user's authorization. Reconcile an unknown remote intent before any
 new write; an API credential does not itself authorize publication.
 
+## Develop the paper across rounds
+
+The paper develops across rounds. Every blind measurement reviewer returns the
+rubric core and, in a separate file, a cohort prediction; record each prediction
+with `manuscript-prediction`. Scores and predictions are results of the round,
+not criteria. Then read `gate round`: it names what the closing round still owes
+and, once nothing is owed, asks for the decision.
+
+Decide on the exact bundle with `round`: `continue` with one pursued candidate
+and a goal the current paper does not meet, or `stop`. Deliver the decision with
+`export --kind round` to an independent assessor who is not a cycle author, and
+record its judgment with `round-review`. An approved `continue` is opened with
+`round-admit`; log the decision and return to `literature`.
+
+```sh
+exactory-research example manuscript-prediction > prediction.json
+exactory-research manuscript-prediction --file prediction.json --expected-revision REVISION --request-id predict-001
+exactory-research gate round
+exactory-research example round > round-decision.json
+exactory-research round --file round-decision.json --expected-revision REVISION --request-id round-decide-001
+exactory-research export --kind round --destination reviews/round-001
+exactory-research round-review --file round-review.json --expected-revision REVISION --request-id round-review-001
+exactory-research round-admit --file round-admit.json --expected-revision REVISION --request-id round-admit-001
+exactory-lab decide --stage evaluate --decision "Open round 2" --why "The approved goal names the contribution the paper lacks."
+exactory-lab state set --stage literature --status pending
+```
+
+Inside the round, the literature stage records the four consequence purposes
+(`downstream`, `next_step`, `exemplars`, `changes`) and one `exemplar` full-text
+requirement read in full. The earlier cycles are assessed again under the current
+preparation before the round's candidate is selected. The manuscript keeps every
+claim id of the round's opening bundle: a claim is revised or superseded, never
+dropped. When the round's manuscript is pinned and measured, assess the round
+against its goal, then decide again.
+
+```sh
+exactory-research round-assess --file round-assessment.json --expected-revision REVISION --request-id round-assess-002
+exactory-research gate round
+exactory-research round --file round-decision-2.json --expected-revision REVISION --request-id round-decide-002
+```
+
+The loop ends only through the recorded exits: an approved `stop`, a goal
+withdrawn in literature, an observed stop condition, two unsuccessful rounds in
+one direction, or an exhausted `development` budget. After an approved `stop`,
+deposit follows the publication gate.
+
+```sh
+exactory-lab decide --stage evaluate --decision "Stop after round 2" --why "No candidate with evidenced demand remains."
+exactory-lab state set --stage deposit --status pending
+```
+
 ## Verification and native mathematics
 
 An external-paper verification uses a separate `verification` profile. Acquire

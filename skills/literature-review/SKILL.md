@@ -49,6 +49,21 @@ the citation frontier changes, not when an unrelated reference gains a version.
 Retain a captured empty result when a search finds nothing. Distinguish earlier original results from later validation,
 improvement, or use; a later paper is not evidence that its content existed earlier.
 
+In a development round (round number 2 or more), also run the four consequence
+purposes, each recorded after the round's admission and judged like the five
+above: `downstream` asks who is blocked by what the paper does not yet do, and
+its found works carry the passage that states the bottleneck; `next_step` asks
+whether the next step was already taken, and a `scooped` verdict withdraws the
+goal; `exemplars` asks how a comparable first result was developed into a larger
+contribution; `changes` asks what changed since the previous round, and a
+`contradicted` verdict returns the affected claims to a cycle. Select at least
+one exemplar with `require-fulltext` under the purpose `exemplar` and read it in
+full (`round_exemplar_missing` until the requirement exists, then
+`fulltext_reading_missing` until it is read); analyze it as one more innovation
+case. When the frontier changes, re-record the earlier judgments with their
+carried findings, and re-record `rationale`, `context` and `innovation` for the
+round.
+
 ## Synthesize before ideation
 
 For a research profile, fix the complete original objective with `target` while

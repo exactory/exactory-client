@@ -36,7 +36,7 @@ from .visual_assets import asset_dependencies
 
 
 NOTE_FIELDS = ("problem", "claims", "assumptions", "methods", "evidence", "limitations", "relevance")
-FULLTEXT_PURPOSES = ("major_claim", "novelty", "innovation", "validity")
+FULLTEXT_PURPOSES = ("major_claim", "novelty", "innovation", "validity", "exemplar")
 BATCH_LIMIT = 100
 RELEVANCE = ("none", "weak", "strong")
 

@@ -133,7 +133,11 @@ to `reviews/review_NNN.json` and append its line to
 Exactory AI Science improvement loop is active, measurement follows that loop
 instead: three independent blind reviews whose median is the measurement,
 recorded as the ai-science skill's LOOP.md and the write skill's WORKSPACE.md
-state.
+state. Each blind reviewer returns the rubric core and, as a second file, the
+cohort prediction in the market's shape (`corpus`, `category`, `windowStart`,
+`windowEnd`, `percentile`, `band: {best, worst}`) with its reasons; record it
+with `manuscript-prediction` for the exact bundle digest. The core stays exactly
+the eight fields; the prediction never enters it.
 
 **Before deposit, run the dual-reviewer gate.** If the `santa-method` skill is
 installed, use it; the essential protocol is stated here in full either way. Launch

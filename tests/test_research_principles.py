@@ -144,6 +144,6 @@ class PreparationPolicyTests(LiteratureCase):
         self.assertEqual(report["preparation_policy"], "screened-v1")
         self.assertNotEqual(report["digest"], before)
 
-    def test_distributed_constitution_is_version_two(self):
-        self.assertEqual(self.api().constitution_contract()["version"], "2")
+    def test_distributed_constitution_is_version_three(self):
+        self.assertEqual(self.api().constitution_contract()["version"], "3")
 

@@ -57,6 +57,11 @@ using prospective successor cycles and explicit inheritance. Preserve failed
 branches and reopen them only when new evidence addresses the recorded obstruction.
 A branch result does not complete the full objective by itself.
 
+A useful development that exceeds the round's admitted scope or resources takes
+the `next_round` disposition in the assessment, with its reason and evidence. It
+is carried, not paused: it leaves no development obligation at readiness, and the
+next `round` decision disposes of it as a candidate.
+
 For scalar parameter optimization, use a noise-aware baseline and prospective
 comparisons. Select the best supported source variant while retaining every
 attempt, observation, failure, review, and resource charge. Restoring source code

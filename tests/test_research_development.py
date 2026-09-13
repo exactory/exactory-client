@@ -1011,3 +1011,119 @@ class DevelopmentTests(DevelopmentCase):
         self.assertTrue(report["ready"])
         self.assertEqual(records, snapshot["records"])
         self.assertEqual(self.store.snapshot(), snapshot)
+
+    def test_a_next_round_alternative_is_carried_and_does_not_block_readiness(self):
+        api = self.development()
+        self.prepared_study()
+        plan, execution = self.run_cycle()
+        payload = self.assessment(plan, execution)
+        payload["development"]["alternatives"][0].update(disposition="next_round",
+            reason="The wider range exceeds this round's admitted scope.")
+        assessed = self.mutate(api.assess_cycle, payload)["result"]
+        self.assertNotIn("useful_development_remaining", {o["code"] for o in assessed["obligations"]})
+        self.save_checkpoint()
+        self.mutate(api.record_readiness_review, self.review(execution))
+        self.assertTrue(api.readiness_report(self.store)["ready"])
+        carried = api.carried_developments(self.store.snapshot()["records"])
+        self.assertEqual(carried, [{"assessment_id": "assessment-1", "kind": "alternative",
+                                    "question": "Does the bound extend beyond n = 3?", "strategy": "generalization",
+                                    "reason": "The wider range exceeds this round's admitted scope."}])
+
+    def test_a_next_round_branch_is_carried(self):
+        api = self.development()
+        self.prepared_study()
+        plan, execution = self.run_cycle()
+        payload = self.assessment(plan, execution)
+        payload["development"]["branches"][0].update(disposition="next_round", reason="Carried to the round gate.")
+        self.mutate(api.assess_cycle, payload)
+        carried = api.carried_developments(self.store.snapshot()["records"])
+        self.assertEqual(carried, [{"assessment_id": "assessment-1", "kind": "branch", "cycle_id": "cycle-1",
+                                    "reason": "Carried to the round gate."}])
+
+    def widen(self, statement="For every integer n in [0, 5], n squared is at most 25, with equality at n = 5."):
+        from research_harness.operations import prepared_mutation
+        principles = self.api("principles")
+        target = {"kind": "objective", "id": "wider-square-bound", "statement": statement}
+
+        def prepare(records, value):
+            changes = principles.widen_objective(records, target,
+                                                 {"previous_id": self.objective["id"], "containment": "The range [0, 3] is contained in [0, 5]."},
+                                                 "round-2")
+            return changes, target
+        self.mutate(lambda store, payload, **identity: prepared_mutation(store, "test.widen", payload, prepare, **identity), {})
+        return target
+
+    def test_a_widened_objective_keeps_the_old_one_as_an_ancestor(self):
+        api = self.development()
+        self.prepared_study()
+        plan, execution = self.run_cycle()
+        self.mutate(api.assess_cycle, self.assessment(plan, execution))
+        checkpoint = self.save_checkpoint()
+        target = self.widen()
+        records = self.store.snapshot()["records"]
+        self.assertEqual(records["configuration"]["research"]["target"], target)
+        self.assertEqual(records["research_objective"][self.objective["id"]], self.objective)
+        self.assertEqual(records["objective_lineage"][target["id"]]["predecessor"], self.objective["id"])
+        # The widened objective changes the configuration digest every synthesis section and every
+        # earlier assessment bound, so the synthesis is recorded again and the earlier cycle is
+        # assessed again under the current objective before it is inherited.
+        stale = {o["section"] for o in self.api().synthesis_report(self.store, "research")["obligations"]
+                 if o["code"] == "synthesis_dependencies_stale"}
+        self.assertEqual(stale, {"standards", "rationale", "context", "innovation"})
+        self.refresh_synthesis("wider")
+        again = self.assessment(plan, execution, identifier="assessment-1b")
+        reassessed = self.mutate(api.assess_cycle, again)["result"]
+        self.assertTrue(reassessed["validated_result"])
+        # A full scope of the old objective is a partial result for the wider one.
+        self.assertFalse(reassessed["complete"])
+        self.assertIn("objective_scope_incomplete", {o["code"] for o in reassessed["obligations"]})
+        checkpoint = self.save_checkpoint(assessment_id="assessment-1b", identifier="checkpoint-1b")
+        successor = self.plan("cycle-2")
+        successor.update(objective=target, predecessor=checkpoint["id"], question="Does the bound hold up to n = 5?",
+                         distinguishing_test="Enumerate all integers up to 5.",
+                         scope={"id": "up-to-three", "kind": "partial", "statement": "At n in [0, 3] the square is at most 9.",
+                                "assumptions": ["n is an integer in the stated finite range."],
+                                "remaining_obligations": ["Establish the bound for n = 4, 5."]},
+                         inheritance=[{"checkpoint_id": checkpoint["id"], "assessment_id": "assessment-1b", "use": "validated_result",
+                                       "evidence": [self.result_evidence(execution)], "assumptions": ["n is an integer in the stated finite range."],
+                                       "deduction": "The enumeration up to 3 contributes the first part of the wider range."}])
+        successor["literature"]["scope"] = successor["scope"]
+        self.mutate(api.plan_cycle, successor)
+        self.assertEqual(self.store.snapshot()["records"]["cycle"]["cycle-2"]["status"], "planned")
+        stale = self.plan("cycle-3")
+        stale.update(question="A plan that still carries the old objective.", distinguishing_test="Old objective test.")
+        self.assert_error("objective_mismatch", lambda: self.mutate(api.plan_cycle, stale))
+
+    def test_an_unlinked_unchanged_or_malformed_objective_is_refused(self):
+        # Containment is the author's recorded assertion, judged by the round reviewer; the harness
+        # refuses an unlinked predecessor, an unchanged statement, a reused objective id, and a
+        # malformed target or lineage.
+        self.prepared_study()
+        principles = self.api("principles")
+        records = self.store.snapshot()["records"]
+        linked = {"previous_id": self.objective["id"], "containment": "x"}
+        unlinked = {"kind": "objective", "id": "narrow", "statement": "At n = 0 the square is at most 9."}
+        self.assert_error("objective_locked", lambda: principles.widen_objective(records, unlinked,
+            {"previous_id": "someone-else", "containment": "x"}, "round-2"))
+        self.assert_error("objective_locked", lambda: principles.widen_objective(records, dict(self.objective, id="same"), linked, "round-2"))
+        reused = {"kind": "objective", "id": self.objective["id"], "statement": "For every integer n in [0, 5], n squared is at most 25."}
+        self.assert_error("objective_locked", lambda: principles.widen_objective(records, reused, linked, "round-2"))
+        wider = {"kind": "objective", "id": "wider", "statement": "For every integer n in [0, 5], n squared is at most 25."}
+        self.assert_error("invalid_target", lambda: principles.widen_objective(records, None, linked, "round-2"))
+        self.assert_error("invalid_target", lambda: principles.widen_objective(records, dict(wider, kind="scope"), linked, "round-2"))
+        self.assert_error("invalid_target", lambda: principles.widen_objective(records, wider, {"previous_id": self.objective["id"]}, "round-2"))
+        self.assert_error("invalid_target", lambda: principles.widen_objective(records, wider, dict(linked, containment=""), "round-2"))
+
+    def test_an_ancestor_objective_id_cannot_be_reused_after_a_widening(self):
+        # After a widening the root id is no longer the current objective, so only the retained
+        # research_objective record refuses its reuse; a reused ancestor id would otherwise close
+        # the lineage into a loop.
+        self.prepared_study()
+        principles = self.api("principles")
+        target = self.widen()
+        records = self.store.snapshot()["records"]
+        lineage = {"previous_id": target["id"], "containment": "[0, 5] is contained in [0, 9]."}
+        reused = {"kind": "objective", "id": self.objective["id"], "statement": "For every integer n in [0, 9], n squared is at most 81."}
+        self.assert_error("objective_locked", lambda: principles.widen_objective(records, reused, lineage, "round-3"))
+        # The unchanged root record is identical content, so only this guard stands between it and the loop.
+        self.assert_error("objective_locked", lambda: principles.widen_objective(records, dict(self.objective), lineage, "round-3"))

@@ -7,7 +7,8 @@ description: Deposit a paper's preprint to Zenodo and get its DOI, from a draft 
 Read the [research constitution](../../RESEARCH_CONSTITUTION.md). Follow the
 [managed research workflow](../../docs/research-workflow.md) for current whole
 research readiness, the exact manuscript bundle, two independent blind reviews,
-and `exactory-research gate publication` before deposit. Begin or resume with
+an approved `stop` decision on that bundle (`exactory-research gate round`), and
+`exactory-research gate publication` before deposit. Begin or resume with
 `status --summary` and `next --summary`; reconcile any unknown remote intent with
 `exactory-draft reconcile INTENT_ID` before another write. A local accept label,
 credential, or historical receipt does not establish current publication readiness.

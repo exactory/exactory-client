@@ -35,15 +35,16 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
-Version 0.38.0 makes literature preparation proportionate to its scientific
-value: one evaluation per command, bounded status and next views, span locators
-that reference saved text by hash, typed reading batches, dependency-specific
-freshness for searches and synthesis, neutral reviewer packets, resource
-budgets, and an opt-in screened preparation policy with audited exclusions.
-It retains the shared research foundation of
+Version 0.39.0 develops a paper across independently approved research rounds:
+a round decision on the exact manuscript bundle, an independent round review,
+an admitted goal with success criteria and stop conditions, consequence
+searches with an exemplar read in full, claims continuity across rounds, blind
+cohort predictions beside every measurement review, and a `development` budget
+counted in rounds. It retains the proportionate literature preparation of
+[0.38.0](docs/releases/0.38.0.md), the shared research foundation of
 [0.36.0](docs/releases/0.36.0.md) and [0.37.0](docs/releases/0.37.0.md) and the
 mathematical strategy reassessment of [0.35.0](docs/releases/0.35.0.md).
-Read the [release and upgrade notes](docs/releases/0.38.0.md)
+Read the [release and upgrade notes](docs/releases/0.39.0.md)
 before updating a waiting agent or adopting an existing attack. An update does
 not resume paused research or reset its budget.
 

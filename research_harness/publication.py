@@ -15,6 +15,8 @@ from .workspace import read_file, strict_json
 
 FILE_TYPES = {"pdf": "application/pdf", "abstract": "text/plain", "bibliography": "text/plain",
               "claims": "application/json", "sources": "application/octet-stream"}
+# The rubric's numeric scores and their unchanged maximum (every scale starts at 1).
+SCORE_SCALES = (("soundness", 4), ("presentation", 4), ("contribution", 4), ("overall", 10))
 
 
 def _ready(records, artifacts):
@@ -23,6 +25,19 @@ def _ready(records, artifacts):
         raise ResearchError("readiness_required", "Current whole-candidate readiness is required for the manuscript",
                             {"obligations": report["obligations"]})
     return report
+
+
+def _claim_markers(claim):
+    """A claim carries at most one continuity marker: `revised: {previous, reason}` or `superseded: {reason}`."""
+    if "revised" in claim and "superseded" in claim:
+        raise ResearchError("publication_claims_missing", "A claim is revised or superseded, not both")
+    if "revised" in claim:
+        fields(claim["revised"], ("previous", "reason"), code="publication_claims_missing")
+        text(claim["revised"]["previous"], "Revised claim previous text", code="publication_claims_missing")
+        text(claim["revised"]["reason"], "Revision reason", code="publication_claims_missing")
+    if "superseded" in claim:
+        fields(claim["superseded"], ("reason",), code="publication_claims_missing")
+        text(claim["superseded"]["reason"], "Supersession reason", code="publication_claims_missing")
 
 
 def prepare_publication(store, payload, *, expected_revision, request_id):
@@ -58,6 +73,7 @@ def prepare_publication(store, payload, *, expected_revision, request_id):
                 raise ResearchError("publication_claims_missing", "Claim records must have stable IDs and claim text")
             claim_ids.append(text(claim.get("id"), "Claim ID"))
             text(claim.get("claim"), "Claim text")
+            _claim_markers(claim)
         if len(set(claim_ids)) != len(claim_ids):
             raise ResearchError("publication_claims_missing", "Claim IDs must be unique")
         if not isinstance(value["claim_evidence"], list):
@@ -100,36 +116,58 @@ def _bundle(records, artifacts):
     return bundle
 
 
+def _assessor_key(assessor_id):
+    return " ".join(assessor_id.casefold().split())
+
+
+def latest_reviews(records, bundle_digest):
+    """The latest manuscript review per assessor on the bundle, keyed by assessor.
+
+    Recording refuses a second review per assessor per exact bundle; for reviews recorded
+    before that rule the assessor's latest stands. The gate and the measurement summary
+    both read this selection.
+    """
+    latest = {}
+    for saved in records.get("manuscript_review", {}).values():
+        if saved["bundle_digest"] == bundle_digest:
+            key = _assessor_key(saved["assessor"]["id"])
+            if key not in latest or saved["reviewed_revision"] > latest[key]["reviewed_revision"]:
+                latest[key] = saved
+    return latest
+
+
+def validate_assessor(artifacts, assessor, authors):
+    """An identified human or agent assessor with pinned provenance who is not an author."""
+    fields(assessor, ("id", "kind", "provenance", "relationship", "independence_basis"))
+    for key in ("id", "relationship", "independence_basis"):
+        text(assessor[key], "Independent assessor " + key)
+    if assessor["kind"] not in ("human", "agent"):
+        raise ResearchError("review_not_independent", "Supply an identified independent reviewer")
+    artifacts.read(assessor["provenance"])
+    if _assessor_key(assessor["id"]) in {_assessor_key(a) for a in authors}:
+        raise ResearchError("review_not_independent", "An author cannot provide an independent assessment")
+    return assessor
+
+
 def _review(records, artifacts, value, bundle):
     fields(value, ("id", "bundle_digest", "assessor", "review", "blind"))
     text(value["id"], "Manuscript review ID")
     if value["bundle_digest"] != bundle["digest"]:
         raise ResearchError("publication_review_stale", "Review the exact current manuscript bundle")
-    assessor = value["assessor"]
-    fields(assessor, ("id", "kind", "provenance", "relationship", "independence_basis"))
-    for key in ("id", "relationship", "independence_basis"):
-        text(assessor[key], "Independent assessor " + key)
-    if assessor["kind"] not in ("human", "agent") or value["blind"] is not True:
+    if value["blind"] is not True:
         raise ResearchError("review_not_independent", "Supply an identified independent blind reviewer")
-    artifacts.read(assessor["provenance"])
-    normalize = lambda s: " ".join(s.casefold().split())
-    if normalize(assessor["id"]) in {normalize(a) for a in bundle["candidate"]["authors"]}:
-        raise ResearchError("review_not_independent", "An author cannot provide the independent manuscript gate")
+    validate_assessor(artifacts, value["assessor"], bundle["candidate"]["authors"])
     core = strict_json(artifacts.read(value["review"]))
     fields(core, ("summary", "strengths", "weaknesses", "soundness", "presentation", "contribution", "overall", "decision"))
     text(core["summary"], "Review summary")
     for key in ("strengths", "weaknesses"):
         strings(core[key], key, nonempty=True)
-    for key, maximum in (("soundness", 4), ("presentation", 4), ("contribution", 4), ("overall", 10)):
+    for key, maximum in SCORE_SCALES:
         if type(core[key]) not in (int, float) or not 1 <= core[key] <= maximum:
             raise ResearchError("invalid_review", "Review scores must use the unchanged rubric scales")
     if core["decision"] not in ("accept", "reject"):
         raise ResearchError("invalid_review", "The rubric decision must be accept or reject")
     return core
-
-
-def _assessor_key(assessor_id):
-    return " ".join(assessor_id.casefold().split())
 
 
 def record_manuscript_review(store, payload, *, expected_revision, request_id):
@@ -153,17 +191,12 @@ def publication_state(records, artifacts, action="publication"):
     bundle, reviews, obligations = None, [], []
     try:
         bundle = _bundle(records, artifacts)
-        latest = {}
+        cores = {}
         for saved in records.get("manuscript_review", {}).values():
             if saved["bundle_digest"] == bundle["digest"]:
-                core = _review(records, artifacts, {k: saved[k] for k in ("id", "bundle_digest", "assessor", "review", "blind")}, bundle)
-                key = _assessor_key(saved["assessor"]["id"])
-                # Recording refuses a second review per assessor per exact bundle; for reviews
-                # recorded before that rule the assessor's latest stands.
-                if key not in latest or saved["reviewed_revision"] > latest[key][0]["reviewed_revision"]:
-                    latest[key] = (saved, core)
-        reviews = [item[0] for item in latest.values()]
-        if action != "manuscript" and (len(latest) < 2 or any(core["decision"] != "accept" for _, core in latest.values())):
+                cores[saved["id"]] = _review(records, artifacts, {k: saved[k] for k in ("id", "bundle_digest", "assessor", "review", "blind")}, bundle)
+        reviews = list(latest_reviews(records, bundle["digest"]).values())
+        if action != "manuscript" and (len(reviews) < 2 or any(cores[saved["id"]]["decision"] != "accept" for saved in reviews)):
             obligations.append(obligation("manuscript_reviews_required", "Obtain two independent accepting reviews of this exact manuscript and resolve current rejections."))
         if action == "deposited":
             if not any(r.get("bundle_digest") == bundle["digest"] and r.get("doi") and r.get("environment") == "production"
