@@ -87,6 +87,10 @@ class RoundDecisionTests(RoundsCase):
         self.assert_error("carried_development_missing", lambda: self.mutate(rounds.record_round, omitted))
         carried = [{"assessment_id": "assessment-late", "kind": "alternative", "question": "Does the bound extend beyond n = 3?",
                     "disposition": "deferred", "reason": "The wider range comes first."}]
+        for listed in ([dict(carried[0], assessment_id=["assessment-late"])], [dict(carried[0], kind=["alternative"])],
+                       [dict(carried[0], question=["Does the bound extend beyond n = 3?"])], [dict(carried[0], cycle_id=["cycle-1"])]):
+            self.assert_error("invalid_round", lambda: self.mutate(
+                rounds.record_round, self.decision_payload(second, closes=2, statement=statement, carried=listed)))
         recorded = self.mutate(rounds.record_round, self.decision_payload(second, closes=2, statement=statement, carried=carried))["result"]
         self.assertEqual(recorded["payload"]["carried"], carried)
 
@@ -186,6 +190,9 @@ class RoundDecisionTests(RoundsCase):
         wrong = self.decision_payload(first)
         wrong["candidates"][0]["evidence"].append({"kind": "review", "review_id": "absent"})
         self.assert_error("round_evidence_mismatch", lambda: self.mutate(rounds.record_round, wrong))
+        listed = self.decision_payload(first)
+        listed["candidates"][0]["evidence"].append({"kind": "review", "review_id": [review_id]})
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round, listed))
         (self.root / "draft/abstract.txt").write_text("The exact finite bound was enumerated, revised.")
         second = self.pin()
         other = self.decision_payload(second)
@@ -558,6 +565,19 @@ class RoundAssessmentTests(RoundsCase):
         third = dict(again, id="round-2-assessment-third")
         self.assert_error("round_already_assessed", lambda: self.mutate(rounds.assess_round, third))
 
+    def test_an_earlier_round_is_not_assessed_on_a_later_round_bundle(self):
+        decision, review, admission = self.open_round()
+        self.run_round_work("r2")
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2")
+        first = self.mutate(rounds.assess_round, self.assess_payload(admission, bundle))["result"]
+        self.open_round(bundle, closes=2, statement="Extend the finite bound to every integer in [0, 7].")
+        self.run_round_work("r3")
+        later = self.pin(self.claims("wider"), identifier="paper-r3")
+        # Round 2 is closed; its assessment stands as the one its decision was made on.
+        stale = dict(self.assess_payload(admission, later), id="round-2-assessment-late")
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.assess_round, stale))
+        self.assertEqual(rounds.assessment_for(self.store.snapshot()["records"], admission["id"])["id"], first["id"])
+
     def test_an_unproductive_round_is_unsuccessful_even_when_a_criterion_is_observed(self):
         decision, review, admission = self.open_round()
         self.run_round_work("r2", new_cycle=False)
@@ -588,6 +608,7 @@ class RoundAssessmentTests(RoundsCase):
                      lambda p: p["criteria"].append(dict(p["criteria"][0])),
                      lambda p: p["criteria"][0].update(id=["sc-wider"]),
                      lambda p: p.update(round_id=["round-2"]),
+                     lambda p: p["criteria"][0]["evidence"].append({"kind": "review", "review_id": ["x"]}),
                      lambda p: p["criteria"][0].update(status="passed"),
                      lambda p: p["stop_conditions"][0].update(id="other")):
             payload = self.assess_payload(admission, bundle)

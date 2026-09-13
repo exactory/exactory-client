@@ -118,6 +118,7 @@ class _RoundEvidence:
         for value in _items(values, name):
             if isinstance(value, dict) and value.get("kind") == "review":
                 _fields(value, ("kind", "review_id"))
+                _text(value["review_id"], "Review evidence ID")
                 review = self.records.get("manuscript_review", {}).get(value["review_id"])
                 if review is None or review["bundle_digest"] != self.bundle["digest"]:
                     raise ResearchError("round_evidence_mismatch", "Review evidence names a manuscript review of the current bundle")
@@ -168,6 +169,11 @@ def _carried(records, latest, values):
     seen = {}
     for item in _items(values, "Carried developments", nonempty=False):
         _fields(item, ("assessment_id", "kind", "disposition", "reason"), ("question", "cycle_id"))
+        _text(item["assessment_id"], "Carried development assessment ID")
+        _text(item["kind"], "Carried development kind")
+        for key in ("question", "cycle_id"):
+            if key in item:
+                _text(item[key], "Carried development " + key)
         _text(item["reason"], "Carried development reason")
         _choice(item["disposition"], CANDIDATE_DISPOSITIONS, "Carried development disposition")
         key = _carried_key(item)
@@ -520,6 +526,8 @@ def assess_round(store, payload, *, expected_revision, request_id):
             raise ResearchError("unknown_round", "Assess an admitted round", {"id": value["round_id"]})
         if value["bundle_digest"] != bundle["digest"]:
             raise ResearchError("round_bundle_mismatch", "Assess the round on the exact current manuscript bundle")
+        if latest_admission(records)["id"] != admission["id"]:
+            raise ResearchError(_ERROR, "Assess the current round", {"round_id": admission["id"]})
         existing = assessment_for(records, admission["id"])
         if existing is not None and existing["bundle_digest"] == bundle["digest"]:
             raise ResearchError("round_already_assessed", "This round already has its assessment on this bundle", {"round_id": admission["id"]})
