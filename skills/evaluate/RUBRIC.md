@@ -99,15 +99,26 @@ real.
 
 ## The prediction file
 
-In a managed study, each blind reviewer also returns a second file beside the
-core JSON: the cohort prediction in the market's shape, the percentile the
-paper is expected to reach in the study's frozen cohort, with a band and reasons.
-It is recorded with `manuscript-prediction`; the core stays exactly the eight
-fields above.
+In a managed study, each blind measurement reviewer (not a dual-reviewer gate
+reviewer) also returns a second file beside the core JSON: the cohort prediction
+in the market's shape and the reasons for it, as a nonempty list of strings. The
+core stays exactly the eight fields above.
+
+The author gives the reviewer the study's cohort with the packet: `corpus`,
+`category`, `windowStart` and `windowEnd`. Copy these four values unchanged; the
+example below shows the shape, not a cohort to reuse. `percentile` is where the
+paper is expected to rank in that cohort, written as "top X%": 1 is the strongest
+position and 100 the weakest. `band` is the one-sigma range on the same scale, so
+`best` is the smaller number and `best <= percentile <= worst`. All three are
+integers from 1 to 100.
 
 ```json
-{"corpus": "arxiv", "category": "cs.LG", "windowStart": "2026-01-01", "windowEnd": "2026-01-31", "percentile": 25, "band": {"best": 15, "worst": 40}}
+{"prediction": {"corpus": "arxiv", "category": "cs.LG", "windowStart": "2026-01-01", "windowEnd": "2026-01-31", "percentile": 25, "band": {"best": 15, "worst": 40}}, "reasons": ["..."]}
 ```
+
+The author records it with `manuscript-prediction`. The author keeps `prediction`
+and `reasons` unchanged and adds `id`, `bundle_digest` (the exact current bundle),
+`blind: true` and the reviewer's `assessor`.
 
 ## Record files
 

@@ -105,14 +105,20 @@ it, the rubric's soundness scale governs.
 
 **The review is blind.** The reviewer receives the artifact only: the paper, plus
 the evidence files its numbers point at (the `evidence/claims.json` targets, in a
-workspace). In a managed study that is the neutral packet written by
-`exactory-research export --kind manuscript`; it carries no plan, author list,
-revision label, prior score or assessment history, and the harness accepts one
-review per assessor per exact bundle, so a rejection stands until the manuscript
-changes. The reviewer is never told which revision this is and never sees
-`reviews/`, `learnings/`, a prior score, or an expected score. The paper itself must
-carry no revision markers: no "v2", no changelog, no response-to-reviewers text. A
-score anchored on "it has improved" is not a measurement.
+workspace). A measurement reviewer in a managed study also receives the study's
+cohort for its prediction, as stated below. In a managed study the artifact is the
+neutral packet written by `exactory-research export --kind manuscript`; it carries
+no plan, author list, revision label, prior score or assessment history, and the
+harness accepts one review per assessor per exact bundle, so a rejection stands
+until the manuscript changes. The reviewer is never told a round or revision
+number and never sees `reviews/`, `learnings/`, a prior score, or an expected
+score. The paper itself must carry no revision markers: no "v2", no changelog, no
+response-to-reviewers text. The packet does carry the pinned `evidence/claims.json`
+unchanged. A claim marked `revised` shows its earlier text and the reason, and a
+claim marked `superseded` shows its reason, so the reviewer can see that those
+claims changed. Keep the markers: the round gate refuses a rewritten claim without
+`revised` and a claim removed from the ledger (`round_claims_dropped`). A score
+anchored on "it has improved" is not a measurement.
 
 **Spot-check claim support on the load-bearing citations.** Step 1 proved each
 reference exists and carries the metadata the registry states. It did not prove the
@@ -133,11 +139,21 @@ to `reviews/review_NNN.json` and append its line to
 Exactory AI Science improvement loop is active, measurement follows that loop
 instead: three independent blind reviews whose median is the measurement,
 recorded as the ai-science skill's LOOP.md and the write skill's WORKSPACE.md
-state. Each blind reviewer returns the rubric core and, as a second file, the
-cohort prediction in the market's shape (`corpus`, `category`, `windowStart`,
-`windowEnd`, `percentile`, `band: {best, worst}`) with its reasons; record it
-with `manuscript-prediction` for the exact bundle digest. The core stays exactly
-the eight fields; the prediction never enters it.
+state. Each blind reviewer returns the rubric core and, as a second file,
+`prediction` (the cohort prediction in the market's shape: `corpus`, `category`,
+`windowStart`, `windowEnd`, `percentile` as "top X%" of the cohort with 1 the
+strongest, and `band: {best, worst}`, the one-sigma range with
+`best <= percentile <= worst`, all integers from 1 to 100; RUBRIC.md states the
+shape) and `reasons` (a nonempty list of strings). Give each measurement reviewer
+the study's cohort with the packet. Use the `definition` of the first collection in
+the research scope (the first entry of `collection_ids` in the research `roots`
+payload): its `corpus`, its `primaryCategory` as `category`, its `windowStart` and
+its `windowEnd`. Give nothing else about the study. The reviewer copies these four
+values into the prediction unchanged; `manuscript-prediction` refuses any other
+cohort with `prediction_cohort_mismatch`. Record both unchanged with
+`manuscript-prediction`, adding `id`, the exact current `bundle_digest`,
+`blind: true` and the reviewer's `assessor` (provenance saved with `artifact`). The
+core stays exactly the eight fields; the prediction never enters it.
 
 **Before deposit, run the dual-reviewer gate.** If the `santa-method` skill is
 installed, use it; the essential protocol is stated here in full either way. Launch
@@ -184,6 +200,57 @@ verifier agent reading the pinned version will conclude, not what the author hop
 
 Its value arrives later. When the verdicts land on the deposited paper, the distance
 between them and this file tells you how well you judge your own work.
+
+### 4. The round review
+
+In a managed study, `exactory-research export --kind round --destination PATH`
+writes the packet for the round assessor. The assessor is a fresh subagent that is
+not a cycle author, or a human. Deliver the whole directory and this section. The
+round review is not blind: the packet carries the manuscript, its reviews and
+predictions with their medians, the decision under review, and every earlier
+round's goal, assessment and decision.
+
+The assessor answers each check of the decision's kind once. A `continue` decision
+has six checks and a `stop` decision has two:
+
+- `impact` (continue): Does the goal name something concrete the field could do
+  after the round that it cannot do with the current paper, and is that named with
+  evidence rather than asserted?
+- `demand` (continue and stop): Are the beneficiaries real, as shown by sources
+  whose stated bottleneck this addresses, by Grand Challenges, or by review
+  findings, and not invented to satisfy the form?
+- `novelty_risk` (continue): As far as the current sources show, is the next step
+  still open, and does the goal state how it will be tested for prior art before
+  experiments?
+- `feasibility` (continue): Can the route reach the success criteria within the
+  stated resources, from where the study stands?
+- `distinctness` (continue): Is the goal different from earlier rounds' goals and
+  from rejected candidates, or is a reopening justified by changed evidence?
+- `continuity` (continue): Does the round build on the previous rounds' products in
+  full, keeping their claims, evidence and readings in use, rather than replacing
+  them or migrating the study elsewhere?
+- `stop` (stop): Were the candidates and carried items judged fairly against the
+  paper's evidence and reviews?
+
+The assessor returns three things:
+
+- `verdict`: `approved`, `not_approved` or `unresolved`.
+- `checks`: one entry per check, each `{kind, status, reason, evidence}`. `status`
+  is `passed`, `failed` or `unresolved`. `evidence` has at least one item.
+- `limitations`: a nonempty array of strings.
+
+Each evidence item is one of three kinds:
+
+- `{"kind": "source", "link": Link}` for a source read in full;
+- `{"kind": "result", "execution_id", "output_id", "artifact", "locator"}` for an
+  actual execution output;
+- `{"kind": "review", "review_id"}` naming a review in the packet's `reviews`.
+
+The author then saves the assessor's unchanged output and provenance with
+`artifact`. The author adds `id`, `round_id` (the packet's `decision.payload.id`),
+`round_digest` (the packet's `decision.digest`) and the `assessor` block, and
+records the result with `round-review`. `exactory-research example round-review`
+shows the complete payload.
 
 ## What not to do
 

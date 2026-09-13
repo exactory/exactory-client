@@ -11,11 +11,16 @@ Full suite on `main` at `19ef5d2` (0.38.0) before any change: 901 tests,
 
 ## Per-task evidence
 
-Every task followed the plan's loop: the failing tests were committed first
-(`test:` commits), the implementation second (`feat(research):` commits), then
-two independent reviews (specification conformance; code quality and test
+Tasks 1 to 10 followed the plan's loop: failing tests, then the implementation,
+then two independent reviews (specification conformance; code quality and test
 rigor) whose blocker and major findings were fixed with regression tests
-(`fix(research):` commits). The observed RED reasons and GREEN tallies were
+(`fix(research):` and `test(research):` commits). Tasks 3 to 10 committed the
+failing tests first (`test:` commits) and the implementation second
+(`feat(research):` commits). Tasks 1 and 2 committed the tests and the
+implementation together in one `feat(research):` commit. Tasks 11 and 12
+committed failing tests first (`65a170f`, `b5b4418`) and then the implementation
+(`acb0cc7`, `bca298b`), with no review before the release (see "Review
+process"). The observed RED reasons and GREEN tallies were
 recorded task by task in the progress record
 (`docs/superpowers/plans/2026-09-12-development-rounds-progress.md`), which is
 the primary source; this table restates them.
@@ -64,7 +69,7 @@ map to these tests. Unless a module is named, the test is in
 | R09 | `test_one_approved_decision_per_closing_round`, `test_an_approved_decision_on_a_superseded_bundle_does_not_block_the_round`, `test_a_review_binds_the_current_bundle` |
 | R10 | `test_transitions_follow_the_round_gate`, `test_a_stop_does_not_enter_a_development_round`, `test_a_stop_after_an_assessed_round_permits_deposit`, `test_a_stop_decision_makes_the_gate_ready` |
 | R11 | `test_admission_widens_the_objective_and_charges_the_development_budget`; `test_research_development`: `test_a_widened_objective_keeps_the_old_one_as_an_ancestor`, `test_an_unlinked_unchanged_or_malformed_objective_is_refused`, `test_an_ancestor_objective_id_cannot_be_reused_after_a_widening` |
-| R12 | `test_research_development.test_a_widened_objective_keeps_the_old_one_as_an_ancestor` (a successor cycle planned under the widened objective inherits the earlier checkpoint; the stale-objective refusal is `test_an_unlinked_unchanged_or_malformed_objective_is_refused`) |
+| R12 | `test_research_development.test_a_widened_objective_keeps_the_old_one_as_an_ancestor` (a successor cycle planned under the widened objective inherits the earlier checkpoint; the stale-objective refusal is `test_research_development.test_an_unlinked_unchanged_or_malformed_objective_is_refused`) |
 | R13 | `test_an_active_round_requires_fresh_consequence_searches_and_an_exemplar`, `test_a_fresh_consequence_search_is_judged_like_the_five_purposes`, `test_development_searches_enter_the_judgments_that_synthesis_depends_on`, `test_a_development_purpose_is_a_search_purpose`; `test_research_literature.test_a_development_purpose_is_a_search_purpose_and_an_unknown_purpose_is_not` |
 | R14 | `test_an_active_round_requires_fresh_consequence_searches_and_an_exemplar`, `test_an_exemplar_the_round_opened_with_does_not_count` |
 | R15 | `test_an_unproductive_round_lacks_a_fresh_search_the_round_exemplar_or_a_new_cycle`, `test_an_unproductive_round_is_unsuccessful_even_when_a_criterion_is_observed` |
@@ -76,29 +81,53 @@ map to these tests. Unless a module is named, the test is in
 | R21 | `test_research_review_packets.test_the_round_packet_carries_history_and_reviews_but_no_labels_or_authors` |
 | R22 | `test_research_review_packets.test_the_manuscript_packet_stays_blind_to_rounds_and_predictions` |
 | R23 | `test_status_at_evaluate_carries_publication_and_round_obligations_in_priority_order`, `test_a_manuscript_awaiting_reviews_is_led_to_the_reviews_before_the_round`, `test_the_round_summary_is_bounded_and_carries_the_active_round`; `test_research_report_views.test_the_round_object_is_copied_into_the_status_summary` |
-| R24 | `test_research_principles.test_distributed_constitution_is_version_three` (the constitution obligation); the `round_decision_missing` leg on a bundle without a decision is `test_the_gate_walks_from_bundle_to_decision_to_review_to_admission`. No test opens a store written by 0.38.0; the case rests on the unchanged `schema_version` 1 and on the existing 0.38.0 tests, which stay enabled. |
-| R25 | `test_a_field_change_stays_in_the_corpus_and_needs_literature_room`, `test_a_field_change_adds_a_category_the_cohort_lacks`, `test_a_field_change_to_a_new_category_is_admitted`. The difference-collection linking is the existing per-version reading rule of the cohort stage; no round test collects a second category. |
+| R24 | `test_research_principles.test_distributed_constitution_is_version_three`; `ConstitutionUpgradeTests.test_a_study_before_evaluate_reports_the_staleness_of_its_recorded_decisions` and `ConstitutionUpgradeTests.test_a_study_at_evaluate_decides_after_fresh_readiness_and_a_new_pinned_bundle` (added in 0.39.1). The upgrade tests build the study under the 0.38.0 constitution text and open it under Version 3. The case as written in the validation document expected only `constitution_revalidation_required` and `round_decision_missing`; the shipped behavior also stales every decision that binds the constitution digest, as the corrected release note states. No test opens a store file written by the 0.38.0 code; `schema_version` stays 1. |
+| R25 | `test_a_field_change_stays_in_the_corpus_and_needs_literature_room`, `test_a_field_change_adds_a_category_the_cohort_lacks`, `test_a_field_change_to_a_new_category_is_admitted`, `test_a_field_change_collects_only_the_category_difference` (added in 0.39.1: a member already read keeps its reading, and only the new member owes one). |
 
-The CLI registration of the five operations, the `round` gate and the export
-kind is `test_research_cli.test_round_commands_are_registered_with_examples_and_the_round_gate`;
-the example catalog and the workflow's `sh` blocks are parsed by
-`test_research_guidance`.
+The CLI registration of the five operations (each command's function) and the
+`round` gate is `test_research_cli.test_round_commands_are_registered_with_examples_and_the_round_gate`;
+the `round` export kind through the CLI is
+`test_research_review_packets.test_export_round_through_the_cli_delivers_the_latest_decision`
+(added in 0.39.1); the example catalog and the workflow's `sh` blocks are parsed
+by `test_research_guidance`.
 
 ## Review process
 
-Each task ended with two independent reviews (specification conformance; code
-quality and test rigor). Every blocker and major finding was fixed in code with
-a regression test; the findings and the fixes are recorded per task in the
-progress record. The whole-branch two-reviewer pass and the final full-suite
-result are recorded below once run.
-
-## Final full suite
-
-Pending: to be recorded by the release step
-(`python3 -m unittest discover -s tests`).
+Tasks 1 to 10 each ended with two independent reviews (specification
+conformance; code quality and test rigor). Every blocker and major finding was
+fixed in code with a regression test; the findings and the fixes are recorded per
+task in the progress record. Tasks 11 and 12 had no review before the release, and
+no whole-branch review was run then. Two independent reviewers read them on
+2026-09-13. Their findings, the fixes, the refuted finding and the findings left
+for the user are in the progress record, section "Review of Tasks 11 and 12".
 
 ## Full suite on the release commit
 
 Full suite on `bca298b` (2026-09-12/13): 979 tests in 1,741 s, one failure: `test_research_provenance.ProvenanceTests.test_runtime_provenance_names_the_build` still expected constitution Version 2; the literal was updated to 3 (a test-only change) and the module re-ran 5 tests OK. The full suite was not re-run after that test-only change.
 
-Tasks 11 and 12 (CLI wiring, examples, documentation, constitution version, skills, release note, this record) were implemented with failing tests first but without a separate review pass, and no whole-branch review pass was run: the user asked on 2026-09-12 to release with the remaining budget. The per-task reviews of Tasks 1 to 10 (two independent reviewers each; findings and fixes in the progress record) are the review of this release.
+Tasks 11 and 12 (CLI wiring, examples, documentation, constitution version, skills, release note, this record) were implemented with failing tests first but without a separate review pass before the release: the user asked on 2026-09-12 to release with the remaining budget.
+
+## Review fixes of Tasks 11 and 12 (0.39.1)
+
+Full suite on `1a9adc2` (2026-09-13; macOS, Python 3.9.6), the last commit of the
+review fixes before this record: 983 tests in 1,727 s, OK. The count is the 979
+tests of `bca298b` plus four new tests:
+`test_research_review_packets.test_export_round_through_the_cli_delivers_the_latest_decision`,
+`test_a_field_change_collects_only_the_category_difference`, and the two
+`ConstitutionUpgradeTests`. `test_research_cli.test_round_commands_are_registered_with_examples_and_the_round_gate`
+now checks each command's function.
+
+RED and GREEN, as run:
+
+- The version tests (`test_manifest`, `test_codex`, `test_research_guidance`)
+  failed with `'0.39.0' != '0.39.1'` before the manifests changed, then passed.
+- The two CLI wiring tests passed on the unchanged tree and failed on four
+  copies of `research_harness/cli.py` with one deliberate wiring error each:
+  `round` export to `deliver_manuscript`, `round-review` to `admit_round`,
+  `round-assess` to `record_round`, `manuscript-prediction` to `record_round`.
+- The R24 and R25 tests describe shipped behavior and passed on their first run.
+- Touched modules after the document fixes: `test_manifest` 7, `test_codex` 29,
+  `test_research_guidance` 5, `test_research_principles` 11, `test_hooks` 64,
+  `test_research_report_views` 12, `test_research_cli` 19,
+  `test_research_review_packets` 25, `test_research_rounds` 62, all OK.
+  `python3 codex/generate.py --check` and `git diff --check`: clean.

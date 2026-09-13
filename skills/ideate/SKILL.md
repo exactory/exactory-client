@@ -21,12 +21,20 @@ test, failure signal, and feasible resource demand. Include ambitious hypotheses
 when their assumptions and tests can be made precise. A valid negative result can
 resolve an important uncertainty; contribution is assessed from evidence.
 
-In a development round, read the admitted goal, the carried developments it
-pursues, and the `downstream` and `next_step` records before forming hypotheses.
+In a development round, read the admitted goal in the saved `round-admit` output
+(`reviews/round-00N/admission.json`), the carried developments it pursues, and the
+`downstream` and `next_step` records before forming hypotheses.
 Every hypothesis of the round names the success criterion it serves. A successor
-cycle inherits a checkpoint of an earlier round through objective lineage: a
-widened objective keeps the earlier one as its ancestor, so the inherited result
-and its assumptions stay valid under the round's objective.
+cycle may inherit a checkpoint of an earlier round. When the round widened the
+objective, objective lineage keeps the earlier objective as an ancestor, so that
+checkpoint can still be inherited. Its assessment is stale once the round changes
+the objective or the preparation, and the round's literature stage changes the
+preparation. To inherit the result as `validated_result`, assess that cycle again
+under the current objective and preparation, checkpoint the new assessment, and
+inherit that checkpoint (`inherited_result_stale` otherwise). The inheritance entry
+retains the assumptions under which the result was assessed
+(`inheritance_assumptions_missing` otherwise), and its deduction explains how the
+result contributes to the round's objective.
 
 Use fresh captured searches to test each consequential novelty claim. The
 literature-review skill is part of this plugin and governs the refresh. Record

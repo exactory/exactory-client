@@ -82,7 +82,8 @@ A JSON array, one object per quantitative claim:
 
 A claim keeps its `id` across rounds. A changed claim carries
 `revised: {previous, reason}`, a withdrawn one `superseded: {reason}`; an
-opening claim id that disappears is `round_claims_dropped` at the round gate.
+opening claim id that disappears, or whose text changes without a marker, is
+`round_claims_dropped` at the round gate.
 
 This compact example is a human note, not the complete managed evidence mapping.
 Pin the actual original source or execution output and its exact locator. Record
@@ -130,22 +131,25 @@ At the end of each iteration, save the reviews under `reviews/` and append
 one line to `reviews/score_history.jsonl`, so the score trajectory stays
 readable after the fact.
 
-Blind-review hygiene: the draft carries no revision markers (no "v2",
-"revised", no changelog, no response-to-reviewers text), and the reviewer is
+Blind-review hygiene: the paper text carries no revision markers (no "v2", no
+changelog, no response-to-reviewers text), and the reviewer is
 never shown `reviews/`, `learnings/`, or a prior score. Those directories
 exist for the user and for the next iteration, not for the reviewer. In a
 managed study, `exactory-research export --kind manuscript` delivers a neutral
 packet: the exact files, the claim-to-evidence map, the cited evidence, the
 observed executions and the field standards, with no plan, author list,
-revision label or assessment history. Give the reviewer that directory.
+revision label or assessment history. Give the reviewer that directory. The
+packet includes the claims ledger as pinned. Its `revised` and `superseded`
+markers, with each revised claim's earlier text and every reason, therefore reach
+the reviewer. The round gate requires those markers, so they stay in the ledger.
 
 ## The measurement (the improvement loop)
 
 One measurement is three independent blind reviews, run as sub-agents
 spawned fresh for that iteration. The reviewers share no context: each
-sees the artifact and the evaluate skill's RUBRIC.md only, and none knows
-the others exist. The measurement value is the median of the three overall
-scores. A measurement is valid only with all three reviews; when a
+sees the artifact, the evaluate skill's RUBRIC.md and the study's cohort (for
+the prediction) only, and none knows the others exist. The measurement value
+is the median of the three overall scores. A measurement is valid only with all three reviews; when a
 reviewer fails, relaunch that reviewer alone.
 
 Save each loop review as `reviews/review_NNN_rM.json` (M is 1 to 3). A
@@ -153,8 +157,11 @@ manual single-pass review outside the loop keeps `reviews/review_NNN.json`.
 A loop iteration's `score_history.jsonl` line carries the iteration
 number, the three raw scores, the median, the three cohort `predictions`
 (percentiles) and their `prediction_median`, whether the revision was
-adopted, and the revision commit hash. Each reviewer's prediction is a
-second file beside its rubric core, recorded with `manuscript-prediction`.
+adopted, and the revision commit hash. Each reviewer also returns a second
+file beside its rubric core, with the reviewer's `prediction` and `reasons`.
+Record it with `manuscript-prediction`: keep `prediction` and `reasons`
+unchanged and add `id`, the exact `bundle_digest`, `blind: true` and the
+reviewer's `assessor`.
 
 ## Commits and reverts (the improvement loop)
 

@@ -60,9 +60,11 @@ contribution; `changes` asks what changed since the previous round, and a
 one exemplar with `require-fulltext` under the purpose `exemplar` and read it in
 full (`round_exemplar_missing` until the requirement exists, then
 `fulltext_reading_missing` until it is read); analyze it as one more innovation
-case. When the frontier changes, re-record the earlier judgments with their
-carried findings, and re-record `rationale`, `context` and `innovation` for the
-round.
+case (`within_field` when it comes from the study's field; an `external` exemplar
+counts toward the five to ten external cases, so replace an older external case
+rather than exceed ten). When the frontier changes, re-record the earlier
+judgments with their carried findings, and re-record `rationale`, `context` and
+`innovation` for the round.
 
 ## Synthesize before ideation
 
