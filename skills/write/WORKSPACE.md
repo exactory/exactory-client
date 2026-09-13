@@ -131,8 +131,8 @@ At the end of each iteration, save the reviews under `reviews/` and append
 one line to `reviews/score_history.jsonl`, so the score trajectory stays
 readable after the fact.
 
-Blind-review hygiene: the draft carries no revision markers (no "v2",
-"revised", no changelog, no response-to-reviewers text), and the reviewer is
+Blind-review hygiene: the paper text carries no revision markers (no "v2", no
+changelog, no response-to-reviewers text), and the reviewer is
 never shown `reviews/`, `learnings/`, or a prior score. Those directories
 exist for the user and for the next iteration, not for the reviewer. In a
 managed study, `exactory-research export --kind manuscript` delivers a neutral
@@ -148,8 +148,8 @@ the reviewer. The round gate requires those markers, so they stay in the ledger.
 One measurement is three independent blind reviews, run as sub-agents
 spawned fresh for that iteration. The reviewers share no context: each
 sees the artifact, the evaluate skill's RUBRIC.md and the study's cohort (for
-the prediction) only, and none knows the others exist. The measurement value is the median of the three overall
-scores. A measurement is valid only with all three reviews; when a
+the prediction) only, and none knows the others exist. The measurement value
+is the median of the three overall scores. A measurement is valid only with all three reviews; when a
 reviewer fails, relaunch that reviewer alone.
 
 Save each loop review as `reviews/review_NNN_rM.json` (M is 1 to 3). A
@@ -157,10 +157,11 @@ manual single-pass review outside the loop keeps `reviews/review_NNN.json`.
 A loop iteration's `score_history.jsonl` line carries the iteration
 number, the three raw scores, the median, the three cohort `predictions`
 (percentiles) and their `prediction_median`, whether the revision was
-adopted, and the revision commit hash. Each reviewer's prediction is a
-second file beside its rubric core, recorded with `manuscript-prediction` (the
-returned prediction under `prediction`, with `id`, the exact `bundle_digest`,
-`blind: true`, the reviewer's `assessor` and `reasons` added).
+adopted, and the revision commit hash. Each reviewer also returns a second
+file beside its rubric core, with the reviewer's `prediction` and `reasons`.
+Record it with `manuscript-prediction`: keep `prediction` and `reasons`
+unchanged and add `id`, the exact `bundle_digest`, `blind: true` and the
+reviewer's `assessor`.
 
 ## Commits and reverts (the improvement loop)
 

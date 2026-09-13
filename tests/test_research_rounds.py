@@ -378,7 +378,9 @@ class RoundAdmissionTests(RoundsCase):
         records = self.store.snapshot()["records"]
         report = cohort_report(records, self.artifacts, sorted(records["collection"]))
         difference = {item["version_id"]: item["reading_id"] for item in report["inventory"] if item["collection_id"] == added}
-        earlier = next(item for item in report["inventory"] if item["collection_id"] != added)
+        earlier = next(item for item in report["inventory"]
+                       if item["collection_id"] != added and item["version_id"] == "arxiv:2601.00001v1")
+        self.assertIsNotNone(earlier["reading_id"])
         self.assertEqual(sorted(difference), ["arxiv:2601.00001v1", "arxiv:2601.00009v1"])
         self.assertEqual(difference["arxiv:2601.00001v1"], earlier["reading_id"])
         self.assertIsNone(difference["arxiv:2601.00009v1"])

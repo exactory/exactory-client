@@ -125,7 +125,7 @@ The example for each operation contains all its required keys and shows the comp
 | `manuscript-prediction` | `id`, `bundle_digest`, `blind: true`, `assessor`, `prediction`, `reasons` | `prediction` is `{corpus, category, windowStart, windowEnd, percentile, band: {best, worst}}`; the four cohort fields equal the study's frozen collection definition (`prediction_cohort_mismatch` otherwise). `percentile` and both band ends are "top X%" of the cohort, where 1 is the strongest position, with `best <= percentile <= worst` as integers from 1 to 100. One prediction per assessor per exact bundle (`manuscript_prediction_duplicate`); the assessor is not a cycle author. Recorded and summarized as a result; no gate rule reads it. |
 | `round` | `id`, `closes`, `decision`, `bundle_digest`, `candidates`, `carried`, `next`, `reason` | `decision` is `continue` (exactly one `pursue` candidate and `next` present) or `stop` (at least one candidate, no `pursue` candidate or carried development, and `next: null`). Candidates are `{id, direction: vertical|horizontal, statement, disposition: pursue|rejected|deferred, reason, evidence}`; evidence takes the `source` and `result` shapes or `{kind: "review", review_id}` naming a manuscript review of this bundle; a `source` item needs a full reading that inspects that link (`reading_missing`). `carried` disposes of every `next_round` development the closing round's cycle assessments recorded: `{assessment_id, kind: alternative|branch, question or cycle_id, disposition, reason}`. `next` is `{number, objective, objective_lineage, goal, resource_limits, reopening}`; the goal has `direction`, `field_change`, `statement`, `contribution_delta`, `beneficiaries`, `success_criteria` (`kind` `claim` or `scope`), `stop_conditions`, `continuity`, `route`, `risks`, `evidence`. See "Development rounds". |
 | `round-review` | `id`, `round_id`, `round_digest`, `assessor`, `verdict`, `checks`, `limitations` | `verdict` is `approved`, `not_approved`, or `unresolved`. For a `continue` decision the checks are `impact`, `demand`, `novelty_risk`, `feasibility`, `distinctness`, `continuity`; for `stop` they are `stop` and `demand`; each is addressed once with `status` (`passed`, `failed`, `unresolved`), a reason and evidence. One review per assessor per decision (`round_review_duplicate`); the assessor is not a cycle author. |
-| `round-admit` | `id`, `round_id`, `review_id`, `reason` | Opens the round of an approved `continue` decision on the current bundle. Records the round's number, goal, objective, limits and opening state; applies a widened objective through its lineage. Its receipt is the only output that carries the admitted goal. |
+| `round-admit` | `id`, `round_id`, `review_id`, `reason` | Opens the round of an approved `continue` decision on the current bundle. Records the round's number, goal, objective, limits and opening state; applies a widened objective through its lineage. While the round runs, its receipt is the only output that reports the admitted goal (see "Development rounds"). |
 | `round-assess` | `id`, `round_id`, `bundle_digest`, `criteria`, `stop_conditions`, `summary` | Judges every success criterion and stop condition of the admitted goal once with `status` (`observed`, `not_observed`, `unresolved`), an explanation and evidence, on the exact current bundle. The harness derives and stores the round's progress with the record. |
 
 A fulltext note uses `depth: "fulltext"`, its current `bundle_id`, and inspections for the actual required units. Abstract inspections use `unit_id: null` and cover the complete saved abstract. Notes report `present`, `absent`, or `not_applicable` as supported by the source. Saving text about a paper without matching its captured location cannot satisfy a reading.
@@ -371,8 +371,8 @@ category; `round-admit` does, so confirm both against the study's collections
 before the review. Any unit of a recorded `development` budget at its limit refuses
 `continue` (`resource_budget_exhausted`). A malformed decision fails with
 `invalid_round`, except that a `resource_limits` amount or unit fails with
-`invalid_input`, and a `source` or `result` evidence item that is malformed or of an
-unknown kind fails with `invalid_development`. A `source` evidence item needs a full
+`invalid_input`, and an evidence item of an unknown kind, or a malformed `source` or
+`result` item, fails with `invalid_development`. A `source` evidence item needs a full
 reading that inspects that link (`reading_missing`).
 
 `round-review` is the independent judgment of one decision. It binds the decision's
@@ -394,7 +394,7 @@ still current (`round_review_stale`), the decision closing the current round
 (`round_active`). A `field_change` goal names the corpus of one of the study's
 collections and a `primaryCategory` that none of them has
 (`round_field_change_refused`). It charges one round to the `development` account
-(`resource_budget_exhausted` when a recorded limit has no room, for example after the
+(`resource_budget_exhausted` when the recorded `rounds` limit has no room, for example after the
 budget was lowered since the decision), applies a widened objective (the
 configuration target, `research_objective` and `objective_lineage` records), and
 stores the opening state the round is judged against: the bundle and its claim ids,
@@ -445,7 +445,7 @@ bundle (`publication_review_stale` otherwise): the percentile the paper is expec
 to reach in the study's frozen cohort, in the shape the market's verdict carries.
 Each blind measurement reviewer returns the rubric core and, separately, the
 prediction and its reasons; the author gives the reviewer the study's cohort and adds
-`id`, `bundle_digest`, `blind` and `assessor` when recording it. `status --summary`,
+`id`, `bundle_digest`, `blind: true` and `assessor` when recording it. `status --summary`,
 `round-assess` and the round packet report the review and prediction medians.
 
 `gate round` evaluates, in order: the current bundle (`publication_bundle_missing`,
@@ -476,7 +476,8 @@ manuscript packet, the bundle's reviews and predictions with their measurement, 
 decision, every earlier round's goal, assessment and decision, the `development`
 blocks of the closing round's cycle assessments, the `context` and `innovation`
 synthesis sections, the selected `downstream` and `next_step` searches, and the
-research resource accounts with their budgets, `development` included, with the
+research resource accounts with their budgets (`development` once it has a budget or a charged
+round), with the
 actual source bytes and an `inputs.json` manifest.
 
 ## Native math preparation

@@ -86,10 +86,9 @@ and, in a separate file, a cohort prediction in the market's shape with its
 reasons. Give each reviewer the study's cohort with the packet: `corpus`,
 `primaryCategory` as `category`, `windowStart` and `windowEnd` from the definition
 of the research scope's first collection. The reviewer copies them into the
-prediction. Record each prediction with `manuscript-prediction` for the exact
-bundle, with the returned prediction under `prediction`, its reasons in
-`reasons`, and `id`, `bundle_digest`, `blind: true` and the reviewer's `assessor`
-added. `status --summary` reports the review and prediction medians and spreads
+prediction. Record each prediction file with `manuscript-prediction` for the
+exact bundle: keep its `prediction` and `reasons` unchanged and add `id`,
+`bundle_digest`, `blind: true` and the reviewer's `assessor`. `status --summary` reports the review and prediction medians and spreads
 under `round`.
 
 The round gate, at the end of `evaluate`:
@@ -106,7 +105,7 @@ The round gate, at the end of `evaluate`:
 3. Choose with `round`. `continue` pursues exactly one candidate and states the
    goal: the direction, the contribution delta, the beneficiaries, the success
    criteria, the stop conditions, the continuity with the current paper, the
-   route and the risks. `stop` keeps at least one candidate, disposes of every
+   route and the risks. `stop` lists at least one candidate, disposes of every
    candidate and carried development, and pursues none of them. Either decision
    disposes of every carried development of the closing round in `carried`, once
    each: `{assessment_id, kind, question or cycle_id, disposition, reason}`, where
@@ -124,9 +123,10 @@ The round gate, at the end of `evaluate`:
    `round-review`. The questions and the returned fields are in the evaluate
    skill's SKILL.md, section "The round review".
 5. Admit an approved `continue` with `round-admit`. Save its output unchanged,
-   for example as `reviews/round-00N/admission.json`: it is the stored admission
-   record and the only output that carries the admitted `goal` with its success
-   criterion and stop condition ids. Log the decision with `exactory-lab decide`,
+   for example as `reviews/round-00N/admission.json`. It carries the stored
+   admission record under `result`, and while the round runs it is the only output
+   that carries the admitted `goal` with its success criterion and stop condition
+   ids (`status`, `gate round` and `export --kind round` do not report it). Log the decision with `exactory-lab decide`,
    and enter `literature` with `--status pending`. An approved `stop` enters
    `deposit` when the publication gate passes. When the study keeps a Git
    repository, tag the bundle of each round decision as `round-N`, where N is the
@@ -142,7 +142,7 @@ is read in full and analyzed as one more innovation case, and the re-recorded
 exemplar case is `within_field` when it comes from the study's field; an
 `external` exemplar counts toward the five to ten external cases, so replace an
 older external case rather than exceed ten. The re-recorded `rationale` names in
-`But` the bottleneck the goal addresses, and `context` names the round's
+`but` the bottleneck the goal addresses, and `context` names the round's
 beneficiaries. The five foundation purposes keep their own freshness rules.
 
 Before the round's candidate is selected, assess the earlier rounds' cycles again

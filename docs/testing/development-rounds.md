@@ -19,8 +19,8 @@ failing tests first (`test:` commits) and the implementation second
 (`feat(research):` commits). Tasks 1 and 2 committed the tests and the
 implementation together in one `feat(research):` commit. Tasks 11 and 12
 committed failing tests first (`65a170f`, `b5b4418`) and then the implementation
-(`acb0cc7`, `bca298b`). They had no review before the release; their review of
-2026-09-13 is recorded in "Review of Tasks 11 and 12". The observed RED reasons and GREEN tallies were
+(`acb0cc7`, `bca298b`), with no review before the release (see "Review
+process"). The observed RED reasons and GREEN tallies were
 recorded task by task in the progress record
 (`docs/superpowers/plans/2026-09-12-development-rounds-progress.md`), which is
 the primary source; this table restates them.
@@ -97,11 +97,12 @@ Tasks 1 to 10 each ended with two independent reviews (specification
 conformance; code quality and test rigor). Every blocker and major finding was
 fixed in code with a regression test; the findings and the fixes are recorded per
 task in the progress record. Tasks 11 and 12 had no review before the release, and
-no whole-branch review was run then; their review followed on 2026-09-13 (see
-"Review of Tasks 11 and 12").
+no whole-branch review was run then. Two independent reviewers read them on
+2026-09-13. Their findings, the fixes, the refuted finding and the findings left
+for the user are in the progress record, section "Review of Tasks 11 and 12".
 
 ## Full suite on the release commit
 
 Full suite on `bca298b` (2026-09-12/13): 979 tests in 1,741 s, one failure: `test_research_provenance.ProvenanceTests.test_runtime_provenance_names_the_build` still expected constitution Version 2; the literal was updated to 3 (a test-only change) and the module re-ran 5 tests OK. The full suite was not re-run after that test-only change.
 
-Tasks 11 and 12 (CLI wiring, examples, documentation, constitution version, skills, release note, this record) were implemented with failing tests first but without a separate review pass before the release: the user asked on 2026-09-12 to release with the remaining budget. Their review of 2026-09-13 is the next section.
+Tasks 11 and 12 (CLI wiring, examples, documentation, constitution version, skills, release note, this record) were implemented with failing tests first but without a separate review pass before the release: the user asked on 2026-09-12 to release with the remaining budget.

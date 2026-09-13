@@ -343,9 +343,9 @@ decision with `export --kind round` to an independent assessor who is not a
 cycle author; the evaluate skill's section "The round review" gives the assessor
 its questions and the fields it returns. Record its judgment with
 `round-review`. An approved `continue` is opened with `round-admit`. Keep the
-`round-admit` output: it is the only report of the admitted goal and of its
-success criterion and stop condition ids. Log the decision and return to
-`literature`.
+`round-admit` output: while the round runs, no other report shows the admitted
+goal and its success criterion and stop condition ids. Log the decision and
+return to `literature`.
 
 ```sh
 exactory-research example manuscript-prediction > prediction.json
@@ -381,9 +381,9 @@ The loop ends only with an approved `stop`. Deposit follows when the publication
 gate passes; otherwise the study parks with the plateau recorded. A goal withdrawn
 in literature (`scooped` in `next_step`, `contradicted` in `changes`) or an
 observed stop condition ends work on that goal, and the next `round` decision
-proposes a distinct goal or stops. After two consecutive unsuccessful rounds,
-`continue` is refused in their directions unless it reopens one of them
-(`round_direction_exhausted`). A recorded `development` budget at its limit
+proposes a distinct goal or stops. When the two most recent rounds were both
+unsuccessful, `continue` is refused in their directions unless it reopens one of
+them (`round_direction_exhausted`). A recorded `development` budget at its limit
 refuses `continue` (`resource_budget_exhausted`) until the user raises it with a
 reason. An unavailable round assessor leaves `round_review_missing` pending, and
 the study parks.

@@ -43,8 +43,9 @@ measurement, the admitted round's limits, the `development` budget and the usage
 since admission. It does not report the admitted goal; the saved `round-admit`
 output under `reviews/` carries it. Hand-editing a projection cannot authorize
 work. Explicit `export --kind workspace` rebuilds workspace views from current
-history; run reconciliation repairs execution views. Legacy work is adopted explicitly and
-does not inherit finished reading or execution credit from old labels.
+history; run reconciliation repairs execution views. Legacy work is adopted
+explicitly and does not inherit finished reading or execution credit from old
+labels.
 
 The initializer creates a Git repository when needed and preserves an existing
 one. Respect the user's storage and commit policy. A durable checkpoint may use

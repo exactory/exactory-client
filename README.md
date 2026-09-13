@@ -131,9 +131,10 @@ credentials leave that stage pending while preserving the completed local work.
 read and synthesize its source network, fix the complete objective, execute
 admitted research cycles, and obtain independent readiness assessment before
 writing. The manuscript then receives separate blind review. Then the study
-records a round decision, and an independent assessor reviews it. An approved
-`continue` opens another development round. After an approved `stop` and two
-accepting blind reviews, authorized deposit and submission follow. The [research constitution](RESEARCH_CONSTITUTION.md) and
+records a round decision, and an independent assessor reviews it. `round-admit`
+opens another development round for an approved `continue`. After an approved
+`stop` and two accepting blind reviews, authorized deposit and submission follow.
+The [research constitution](RESEARCH_CONSTITUTION.md) and
 [executable workflow](docs/research-workflow.md) describe the current obligations.
 
 The agent develops hypotheses, writes and runs experiment code, and drafts the
