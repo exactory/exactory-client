@@ -119,7 +119,8 @@ class RoundsCase(DevelopmentCase):
     def write_round_assessment(self, round_id, successful, bundle_digest):
         """Write the assessment of an admitted round directly, bound to `bundle_digest`; a stand-in until `assess_round` exists."""
         return self.write_record("round_assessment", {"id": round_id + "-assessment", "round_id": round_id,
-                                                      "bundle_digest": bundle_digest, "successful": successful})
+                                                      "bundle_digest": bundle_digest, "successful": successful,
+                                                      "assessed_revision": self.store.revision + 1})
 
     def goal(self, direction="vertical", statement="Extend the finite bound to every integer in [0, 5]."):
         return {"direction": direction, "field_change": None, "statement": statement,

@@ -67,7 +67,9 @@ def latest_admission(records):
 
 
 def assessment_for(records, admission_id):
-    return next((a for a in records.get("round_assessment", {}).values() if a["round_id"] == admission_id), None)
+    """The round's latest assessment, or None; a round assessed on a superseded bundle is assessed again on the current one."""
+    return max((a for a in records.get("round_assessment", {}).values() if a["round_id"] == admission_id),
+               key=lambda a: a["assessed_revision"], default=None)
 
 
 def current_number(records):
@@ -516,10 +518,11 @@ def assess_round(store, payload, *, expected_revision, request_id):
         admission = records.get("round_admission", {}).get(value["round_id"])
         if admission is None:
             raise ResearchError("unknown_round", "Assess an admitted round", {"id": value["round_id"]})
-        if assessment_for(records, admission["id"]) is not None:
-            raise ResearchError("round_already_assessed", "This round already has its assessment", {"round_id": admission["id"]})
         if value["bundle_digest"] != bundle["digest"]:
             raise ResearchError("round_bundle_mismatch", "Assess the round on the exact current manuscript bundle")
+        existing = assessment_for(records, admission["id"])
+        if existing is not None and existing["bundle_digest"] == bundle["digest"]:
+            raise ResearchError("round_already_assessed", "This round already has its assessment on this bundle", {"round_id": admission["id"]})
         evidence = _RoundEvidence(context, bundle)
         goal = admission["goal"]
         criteria = _validate_judgments(value["criteria"], {c["id"] for c in goal["success_criteria"]}, "Success criteria", evidence)

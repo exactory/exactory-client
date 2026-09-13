@@ -539,6 +539,25 @@ class RoundAssessmentTests(RoundsCase):
         self.assertEqual(assessed["assessed_revision"], self.store.revision)
         self.assert_error("round_already_assessed", lambda: self.mutate(rounds.assess_round, self.assess_payload(admission, bundle)))
 
+    def test_a_round_assessed_on_a_superseded_bundle_is_assessed_again_on_the_current_one(self):
+        decision, review, admission = self.open_round()
+        self.run_round_work("r2")
+        superseded = self.pin(self.claims("wider"), identifier="paper-r2")
+        first = self.mutate(rounds.assess_round, self.assess_payload(admission, superseded))["result"]
+        (self.root / "draft/abstract.txt").write_text("The exact finite bound was enumerated over the wider range.")
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2-revised")
+        # The assessment binds the superseded bundle: the closing decision needs one on the current bundle.
+        stop = self.decision_payload(bundle, closes=2, decision="stop")
+        self.assert_error("round_assessment_missing", lambda: self.mutate(rounds.record_round, stop))
+        again = dict(self.assess_payload(admission, bundle), id="round-2-assessment-revised")
+        second = self.mutate(rounds.assess_round, again)["result"]
+        self.assertEqual((second["round_id"], second["bundle_digest"]), (admission["id"], bundle["digest"]))
+        self.assertEqual(rounds.assessment_for(self.store.snapshot()["records"], admission["id"])["id"], second["id"])
+        self.assertNotEqual(first["id"], second["id"])
+        self.assertEqual(self.mutate(rounds.record_round, stop)["result"]["decision"], "stop")
+        third = dict(again, id="round-2-assessment-third")
+        self.assert_error("round_already_assessed", lambda: self.mutate(rounds.assess_round, third))
+
     def test_an_unproductive_round_is_unsuccessful_even_when_a_criterion_is_observed(self):
         decision, review, admission = self.open_round()
         self.run_round_work("r2", new_cycle=False)
@@ -594,7 +613,11 @@ class RoundAssessmentTests(RoundsCase):
         self.assertTrue(assessed["successful"])
 
     def test_an_unproductive_round_lacks_a_fresh_search_the_round_exemplar_or_a_new_cycle(self):
+        from research_harness.reading import require_fulltext
         decision, review, admission = self.open_round()
+        # A verification-profile exemplar requirement inside the round is not the round's exemplar.
+        self.mutate(require_fulltext, {"id": "exemplar-verification-r2", "profile": "verification", "version_id": self.links[1]["version_id"],
+                                       "purpose": "exemplar", "reason": "A verification-profile requirement is not the round's exemplar."})
         self.run_round_work("r2")
         bundle = self.pin(self.claims("wider"), identifier="paper-r2")
         records = self.store.snapshot()["records"]
