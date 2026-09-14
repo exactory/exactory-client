@@ -136,6 +136,10 @@ def _cohort_report(evaluation, collection_ids, target):
         if collection is None:
             obligations.append(obligation("cohort_missing", "Restore the selected frozen cohort collection.", collection_id=collection_id))
             continue
+        from .oai_cohort import enumeration_evidence
+        enumeration = enumeration_evidence(records, artifacts, collection)
+        if enumeration:
+            dependencies["enumeration:" + collection_id] = enumeration
         summary = _collection_summary(records, collection)
         summaries.append(summary)
         for pending in summary["pending"]:

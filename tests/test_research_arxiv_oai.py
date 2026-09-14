@@ -60,6 +60,11 @@ class ArxivOaiTests(unittest.TestCase):
                 with self.assertRaises(ResearchError):
                     Arxiv().parse(raw)
 
+    def test_getrecord_requires_its_requested_identifier(self):
+        raw = record().replace(b' identifier="oai:arXiv.org:2608.28914"', b'')
+        with self.assertRaises(ResearchError):
+            Arxiv().parse(raw)
+
     def test_conflicting_identifiers_and_duplicate_records_are_rejected(self):
         cases = [record().replace(b'identifier="oai:arXiv.org:2608.28914"', b'identifier="oai:arXiv.org:2608.00001"'),
                  record().replace(b'<id>2608.28914</id>', b'<id>2608.00001</id>'),
@@ -86,12 +91,24 @@ class ArxivOaiTests(unittest.TestCase):
                  record().replace(b'version="v2"', b'version="v1"'),
                  record().replace(b'version="v1"', b'version="v0"'),
                  record().replace(b'Sun, 30 Aug 2026 10:00:00 GMT', b'unknown'),
-                 record().replace(b'Sun, 30 Aug 2026 10:00:00 GMT', b'Thu, 27 Aug 2026 10:00:00 GMT'),
                  record().replace(b'<title>A test title</title>', b'<title/>')]
         for raw in cases:
             with self.subTest(raw=raw):
                 with self.assertRaises(ResearchError):
                     Arxiv().parse(raw)
+
+    def test_version_numbers_determine_current_even_when_original_dates_run_backwards(self):
+        raw = record().replace(b'Sun, 30 Aug 2026 10:00:00 GMT', b'Thu, 27 Aug 2026 10:00:00 GMT')
+        work = Arxiv().parse(raw).works[0]
+        self.assertEqual(work["id"], "arxiv:2608.28914v2")
+        self.assertEqual(work["publication_date"], "2026-08-28T22:22:10Z")
+        self.assertEqual(work["date_assertions"]["updated"], "2026-08-27T10:00:00Z")
+        self.assertEqual(work["date_assertions"]["diagnostics"][0]["code"], "nonmonotone_version_dates")
+
+    def test_future_earlier_version_is_rejected_even_if_latest_version_date_is_past(self):
+        raw = record().replace(b'Fri, 28 Aug 2026 22:22:10 GMT', b'Tue, 15 Sep 2026 22:22:10 GMT')
+        with self.assertRaises(ResearchError):
+            Arxiv().parse(raw)
 
     def test_missing_abstract_and_bad_alias_remain_explicit(self):
         raw = record().replace(b'<abstract>First line.\nSecond line with $x &lt; y$.</abstract>', b'')

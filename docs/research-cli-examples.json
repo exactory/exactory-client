@@ -2887,5 +2887,15 @@
       "batch-008"
     ],
     "reason": "Two consecutive batches of pending members added no prior art, contradiction, method or standard."
+  },
+  "import-oai-cohort": {
+    "collection_id": "COLLECTION_ID",
+    "pages": [
+      {
+        "response_file": "cohort/original-oai-page-1.xml",
+        "source_url": "https://oaipmh.arxiv.org/oai?verb=ListRecords&metadataPrefix=arXivRaw&set=physics%3Amath-ph",
+        "captured_at": "2026-09-14T02:00:00Z"
+      }
+    ]
   }
 }

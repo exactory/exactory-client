@@ -61,7 +61,7 @@ from .publication import prepare_publication, record_manuscript_review
 from .verification import bind_verdict
 OPERATIONS.update({"manuscript": prepare_publication, "manuscript-review": record_manuscript_review, "bind-verdict": bind_verdict})
 
-ACQUISITION = ("collect", "resume", "acquire", "expand", "fulltext", "import-response", "visual")
+ACQUISITION = ("collect", "resume", "acquire", "expand", "fulltext", "import-response", "import-oai-cohort", "visual")
 GATES = ("cohort", "foundation", "preparation", "readiness", "execution", "verification", "manuscript", "publication", "deposited", "submitted", "round")
 
 
@@ -167,6 +167,9 @@ def acquisition_command(store, command, payload, identity):
     if command == "collect":
         fields(payload, ("definition",), ("max_requests", "page_size"))
         return acquisition.collect_cohort(store, **payload, **identity)
+    if command == "import-oai-cohort":
+        fields(payload, ("collection_id", "pages"))
+        return acquisition.import_oai_cohort(store, **payload, **identity)
     if command == "resume":
         fields(payload, ("collection_id",), ("max_requests",))
         return acquisition.resume_cohort(store, **payload, **identity)
@@ -242,6 +245,9 @@ def run(args):
         if args.expected_revision is not None and args.expected_revision != revision:
             raise ResearchError("stale_revision", "Recovered revision differs from the expected committed revision", {"revision": revision})
         return {"revision": revision, "recovered": True, "scientific_validation": False, "schema_migrated": False}
+    elif args.command == "import-oai-cohort":
+        root = find_workspace(root)
+        store = Store(root)
     elif args.command in ACQUISITION:
         existing = find_workspace(root, required=False)
         store = Store(existing) if existing is not None else Store(root, create=True)

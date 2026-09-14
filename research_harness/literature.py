@@ -395,7 +395,10 @@ def _historical_status(work, cutoff):
     # arXiv explicitly distinguishes original submission from this capture's
     # update date. A first submission inside the cohort does not date later text.
     if work["id"].startswith("arxiv:"):
-        updates = [a.get("updated") for a in assertions if a.get("updated")]
+        # Official OAI version histories can contain reversed original dates.
+        # Their current-version date alone cannot establish temporal priority.
+        updates = [a.get("updated") for a in assertions if a.get("updated")
+                   and not any(d.get("code") == "nonmonotone_version_dates" for d in a.get("diagnostics", []))]
         if not updates:
             return "unknown"
         return "known_before" if all(timestamp(d).date() <= cutoff for d in updates) else "later_capture"

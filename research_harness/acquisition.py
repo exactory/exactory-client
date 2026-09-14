@@ -229,7 +229,11 @@ def collection_status(store, collection_id=None):
         raise ResearchError("unknown_collection", "No collection has this identifier")
     selected = list(collections.values()) if collection_id is None else [collections[collection_id]]
     summaries = [_collection_summary(snapshot["records"], c) for c in selected]
-    artifacts = ArtifactStore(store.root)
+    from .evaluation import Evaluation
+    from .oai_cohort import enumeration_evidence
+    artifacts = Evaluation(snapshot["records"], ArtifactStore(store.root))
+    for collection in selected:
+        enumeration_evidence(snapshot["records"], artifacts, collection)
     for summary in summaries:
         for obligation in summary["reading_obligations"]:
             if obligation["artifact"]:
@@ -675,3 +679,9 @@ def import_response(store, provider, response, *, source_url, captured_at, reque
 def digest_bytes(data):
     import hashlib
     return hashlib.sha256(data).hexdigest()
+
+
+def import_oai_cohort(store, collection_id, pages, *, request_id, expected_revision):
+    """Import an original complete OAI chain into an existing frozen collection."""
+    from .oai_cohort import import_cohort
+    return import_cohort(store, collection_id, pages, request_id=request_id, expected_revision=expected_revision)
