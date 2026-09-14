@@ -28,7 +28,8 @@ import os
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timezone
+from email.utils import parsedate_to_datetime
 from urllib.parse import quote, urlencode
 
 from .errors import ResearchError
@@ -36,6 +37,11 @@ from .identities import family_id, normalize_identifier, version_of
 
 
 _MAX_JSON_DEPTH = 128
+
+
+class _MetadataTreeBuilder(ET.TreeBuilder):
+    def doctype(self, name, pubid, system):
+        raise ResearchError("invalid_response", "Metadata XML must not contain a document type declaration")
 
 
 @dataclass
@@ -225,7 +231,9 @@ class Arxiv:
         try:
             if b"<!DOCTYPE" in data.upper() or b"<!ENTITY" in data.upper():
                 raise ValueError()
-            root = ET.fromstring(data)
+            root = ET.fromstring(data, parser=ET.XMLParser(target=_MetadataTreeBuilder()))
+            if root.tag == "{http://www.openarchives.org/OAI/2.0/}OAI-PMH":
+                return self._parse_oai_record(root)
             if root.tag != "{" + self.ns["a"] + "}feed":
                 raise ValueError()
             def integer(name):
@@ -296,6 +304,122 @@ class Arxiv:
                 page.works.append(work)
             except ResearchError as error:
                 page.failures.append({"index": index, "code": error.code})
+        return page
+
+    def _parse_oai_record(self, root):
+        """Import arXivRaw GetRecord metadata without claiming query coverage."""
+        oai = "{http://www.openarchives.org/OAI/2.0/}"
+        raw = "{http://arxiv.org/OAI/arXivRaw/}"
+
+        def child(parent, tag, *, optional=False):
+            nodes = parent.findall(tag)
+            if optional and not nodes:
+                return None
+            if len(nodes) != 1:
+                _invalid("oai." + tag.rsplit("}", 1)[-1])
+            return nodes[0]
+
+        def value(parent, tag, *, optional=False, empty=False):
+            node = child(parent, tag, optional=optional)
+            if node is None:
+                return None
+            if len(node):
+                _invalid("oai.simple_text")
+            return _string(node.text or "" if empty else node.text,
+                           "oai." + tag.rsplit("}", 1)[-1], empty=empty)
+
+        def version_date(text):
+            if not re.fullmatch(r"[A-Z][a-z]{2}, [0-9]{1,2} [A-Z][a-z]{2} [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2} GMT", text):
+                _invalid("oai.version.date")
+            try:
+                parsed = parsedate_to_datetime(text)
+                if parsed.utcoffset() != timezone.utc.utcoffset(None) or parsed.strftime("%a") != text[:3]:
+                    _invalid("oai.version.date")
+                return parsed.astimezone(timezone.utc)
+            except (ValueError, TypeError, OverflowError) as error:
+                raise ResearchError("invalid_response", "Invalid arXiv OAI version date") from error
+
+        if root.findall(oai + "error"):
+            raise ResearchError("provider_error", "arXiv OAI returned a protocol error")
+        if any(node.tag not in {oai + "request", oai + "responseDate", oai + "GetRecord"} for node in root):
+            _invalid("oai.envelope")
+        request = child(root, oai + "request")
+        if request.get("verb") != "GetRecord" or request.get("metadataPrefix") != "arXivRaw":
+            _invalid("oai.request")
+        response_date = value(root, oai + "responseDate")
+        try:
+            parsed_response = datetime.fromisoformat(response_date.replace("Z", "+00:00"))
+            if parsed_response.utcoffset() is None:
+                _invalid("oai.responseDate")
+        except ValueError as error:
+            raise ResearchError("invalid_response", "Invalid arXiv OAI response date") from error
+        node = child(child(root, oai + "GetRecord"), oai + "record")
+        header = child(node, oai + "header")
+        if header.get("status") is not None:
+            raise ResearchError("provider_error", "arXiv OAI record is deleted or has an unknown status")
+        header_id = value(header, oai + "identifier")
+        metadata = child(node, oai + "metadata")
+        if len(metadata) != 1:
+            _invalid("oai.metadata")
+        article = child(metadata, raw + "arXivRaw")
+        article_fields = {raw + name for name in ("id", "submitter", "version", "title", "authors", "categories",
+                           "comments", "proxy", "report-no", "acm-class", "msc-class", "journal-ref", "doi", "license", "abstract")}
+        if any(node.tag not in article_fields for node in article):
+            _invalid("oai.article_structure")
+        identifier = value(article, raw + "id")
+        canonical = normalize_identifier("arxiv:" + identifier)
+        if not canonical.startswith("arxiv:"):
+            _invalid("oai.identifier")
+        expected_header = "oai:arXiv.org:" + canonical[6:]
+        if (version_of(canonical) is not None or header_id != expected_header
+                or request.get("identifier") != expected_header):
+            _invalid("oai.identifier")
+        datestamp = _iso_date(value(header, oai + "datestamp"), "oai.datestamp")
+        history = []
+        for version in article.findall(raw + "version"):
+            if any(node.tag not in {raw + "date", raw + "size", raw + "source_type"} for node in version):
+                _invalid("oai.version_structure")
+            label = version.get("version", "")
+            if not re.fullmatch(r"v[1-9][0-9]*", label):
+                _invalid("oai.version")
+            date_text = value(version, raw + "date")
+            history.append((int(label[1:]), version_date(date_text), {"version": label, "date": date_text}))
+        history.sort(key=lambda item: item[0])
+        if not history or [item[0] for item in history] != list(range(1, len(history) + 1)):
+            _invalid("oai.version_history")
+        if any(left[1] > right[1] for left, right in zip(history, history[1:])):
+            _invalid("oai.version_history_dates")
+        if history[-1][1] > parsed_response:
+            _invalid("oai.future_version")
+        exact = canonical + "v" + str(history[-1][0])
+        work = _work(exact, value(article, raw + "title"), [],
+                     locator={"type": "oai_record", "identifier": header_id, "metadata_prefix": "arXivRaw"})
+        work["authors_raw"] = value(article, raw + "authors", optional=True)
+        work["date_assertions"] = {"published": history[0][1].strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                   "updated": history[-1][1].strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                   "oai_datestamp": datestamp, "oai_response_date": response_date,
+                                   "version_history": [item[2] for item in history]}
+        work["publication_date"] = work["date_assertions"]["published"]
+        categories = value(article, raw + "categories", optional=True)
+        work["categories"] = categories.split() if categories else []
+        if any(not re.fullmatch(r"[A-Za-z][A-Za-z0-9.-]*", term) for term in work["categories"]):
+            _invalid("oai.categories")
+        abstract = value(article, raw + "abstract", optional=True, empty=True)
+        if abstract is not None and abstract.strip():
+            work["abstract_text"], work["abstract_status"] = abstract, "available"
+        work["fulltext_urls"] = ["https://arxiv.org/pdf/" + exact[6:], "https://arxiv.org/html/" + exact[6:]]
+        page = Page(works=[work], returned_count=1)
+        page.warnings.extend([{"code": "unstructured_authors", "id": exact},
+                              {"code": "primary_category_unasserted", "id": exact}])
+        doi = value(article, raw + "doi", optional=True, empty=True)
+        if doi and doi.strip():
+            try:
+                alias = normalize_identifier(doi.strip())
+                if not alias.startswith("doi:"):
+                    _invalid("doi")
+                work["aliases"] = [alias]
+            except ResearchError:
+                page.warnings.append({"index": 0, "code": "invalid_alias", "id": exact, "raw": doi.strip()})
         return page
 
 
