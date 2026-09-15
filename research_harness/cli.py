@@ -72,6 +72,39 @@ def add_identity(parser, *, required=True):
                         help="Stable unique request identity; identical retries return the original receipt.")
 
 
+def note_managed_record_skipped(error):
+    """One stderr line: the command ran, and the study's receipt was not written.
+
+    A readiness refusal carries its obligations; their codes name what the study still owes."""
+    pending = [item["code"] for item in (error.details or {}).get("obligations", [])]
+    suffix = " Pending: " + ", ".join(pending) + "." if pending else ""
+    print("Managed record skipped (" + error.code + "): " + error.message + suffix, file=sys.stderr)
+
+
+def select_managed_path(check, start=None):
+    """Return (store, check(store)) when the workspace around `start` can record this command.
+
+    `check` runs every check the managed path performs before its first remote
+    write and returns what the managed path needs. No workspace, or a workspace
+    whose store is missing or unconfigured, returns None silently. Any other
+    refusal is noted on stderr and returns None, so the command sends the
+    user's request directly."""
+    workspace = find_workspace(start, required=False)
+    if workspace is None:
+        return None
+    try:
+        store = current_store(workspace)
+    except ResearchError as error:
+        if error.code != "migration_required":
+            note_managed_record_skipped(error)
+        return None
+    try:
+        return store, check(store)
+    except ResearchError as error:
+        note_managed_record_skipped(error)
+        return None
+
+
 def build_parser():
     parser = argparse.ArgumentParser(prog="exactory-research", allow_abbrev=False,
         description="Acquire, read, prepare and develop research with current evidence gates.",
