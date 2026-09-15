@@ -5,8 +5,8 @@ Python standard library only. Authentication comes from EXACTORY_API_KEY, or
 from the credentials file that `exactory login` writes
 ($XDG_CONFIG_HOME/exactory/credentials.json, default ~/.config/exactory/).
 The API base URL comes from EXACTORY_API_URL (default: https://www.exactory.ai).
-Inside a draft workspace, submit first runs the offline citation gate
-(exactory-check gate) and stops when the gate fails.
+Inside a draft workspace, submit first prints the offline citation report
+(exactory-check gate) and continues.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ import json
 import os
 import re
 import socket
-import subprocess
 import sys
 import urllib.error
 import urllib.parse
@@ -25,6 +24,7 @@ import webbrowser
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from research_harness.citation_report import report_citation_gate
 from research_harness.cli import add_identity, select_managed_path
 from research_harness.errors import ResearchError
 from research_harness.integration import command_identity, current_store
@@ -38,6 +38,7 @@ _BARE_ARXIV_ID_RE = re.compile(r"(\d{4}\.\d{4,5})(?:v\d+)?")
 # The server rejects more than this; the local check turns that into a message the
 # user reads before a request goes out. The server stays the authority.
 _MAX_DECLARED_CHALLENGES = 3
+_CHECK_COMMAND_PATH = Path(__file__).with_name("exactory-check")
 
 # The release version has one definition: the plugin manifest. Deriving the
 # User-Agent from it at boot keeps the two from drifting apart.
@@ -161,21 +162,6 @@ def _print_json(payload: dict) -> None:
 
 
 def _run_submit(args: argparse.Namespace) -> None:
-    # Inside a draft workspace, the offline citation gate must pass first. The
-    # gate command owns the checks; this command only forwards its refusal.
-    workspace = find_workspace(required=False)
-    managed = workspace is not None and any((workspace / ".exactory" / name).exists() for name in ("draft.json", "study.json"))
-    if managed:
-        gate_process = subprocess.run(
-            [sys.executable, str(Path(__file__).with_name("exactory-check")),
-             "gate", "--workspace", str(workspace)],
-            capture_output=True,
-            text=True,
-        )
-        if gate_process.returncode != 0:
-            sys.stderr.write(gate_process.stderr)
-            sys.exit(1)
-
     if args.arxiv_id:
         body = {"arxivId": args.arxiv_id}
     elif args.doi:
@@ -187,8 +173,18 @@ def _run_submit(args: argparse.Namespace) -> None:
             _exit_with_error(f"The command names {len(args.challenge)} challenges."
                              f" The limit is {_MAX_DECLARED_CHALLENGES}. Remove some.")
         body["grandChallengeIds"] = args.challenge
-    if managed:
-        store = current_store(workspace)
+
+    # Inside a draft workspace the offline citation report is printed first; the
+    # submit continues either way, because the user asked for it.
+    workspace = find_workspace(required=False)
+    if workspace is not None and (workspace / ".exactory" / "draft.json").is_file():
+        report_citation_gate(workspace, _CHECK_COMMAND_PATH)
+
+    # A study whose publication gate is ready records the submission receipt;
+    # otherwise the request goes out directly, and the user reads why on stderr.
+    managed = select_managed_path(lambda store: validate_submission(store, body))
+    if managed is not None:
+        store, _ = managed
         payload = submit_managed(store, body, _send_request, **command_identity(store, args))
         status = 201
     else:

@@ -1,4 +1,4 @@
-"""Tests for bin/exactory: identifier mapping, path encoding, the citation gate,
+"""Tests for bin/exactory: identifier mapping, path encoding, the citation report,
 and the grand-challenge subcommands."""
 
 from __future__ import annotations
@@ -272,18 +272,44 @@ class TestSubmitRepeatNotice(_TransportTestCase):
         json.loads(stdout_text)
 
 
-class TestSubmitCitationGate(_TransportTestCase):
+class TestSubmitDecision(_TransportTestCase):
     def setUp(self) -> None:
         super().setUp()
         _build_draft_workspace(self.scratch_dir)
 
-    def test_submit_inside_a_workspace_is_refused_when_the_gate_fails(self) -> None:
-        _, stderr_text = self._run(["submit", "--doi", "10.5281/zenodo.1"],
-                                   expected_exit_code=1)
+    def test_submit_in_a_legacy_workspace_prints_the_report_and_posts(self) -> None:
+        _, stderr_text = self._run(["submit", "--doi", "10.5281/zenodo.1"])
+        self.assertTrue(stderr_text.startswith("Citation report: "))
         self.assertIn("references.bib", stderr_text)
-        self.assertEqual(self.requested_paths, [])
+        self.assertEqual(self.requested_paths, ["/api/v1/verifications"])
+        self.assertEqual(self.request_bodies, [{"doi": "10.5281/zenodo.1"}])
 
-    def test_submit_inside_a_workspace_proceeds_when_the_gate_passes(self) -> None:
+    def test_submit_from_a_workspace_subdirectory_still_prints_the_report(self) -> None:
+        os.chdir(self.scratch_dir / "draft")
+        _, stderr_text = self._run(["submit", "--doi", "10.5281/zenodo.1"])
+        self.assertTrue(stderr_text.startswith("Citation report: "))
+        self.assertEqual(self.requested_paths, ["/api/v1/verifications"])
+
+    def test_submit_outside_a_workspace_prints_nothing_and_posts(self) -> None:
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        os.chdir(outside.name)
+        _, stderr_text = self._run(["submit", "--doi", "10.5281/zenodo.1"])
+        self.assertEqual(stderr_text, "")
+        self.assertEqual(self.requested_paths, ["/api/v1/verifications"])
+
+    def test_submit_in_an_unready_study_notes_the_skip_and_posts(self) -> None:
+        from integration_fixtures import prepare_research
+
+        prepare_research(self.scratch_dir, candidate=True)
+        _write_passing_citation_report(self.scratch_dir)
+        _, stderr_text = self._run(["submit", "--doi", "10.5281/zenodo.1"])
+        self.assertTrue(stderr_text.startswith("Managed record skipped (readiness_required): "))
+        self.assertEqual(self.requested_paths, ["/api/v1/verifications"])
+        from research_harness.storage import Store
+        self.assertNotIn("submission_receipt", Store(self.scratch_dir).snapshot()["records"])
+
+    def test_submit_in_a_ready_study_writes_the_receipt(self) -> None:
         from integration_fixtures import prepare_manuscript, prepare_research
         from research_harness.zenodo import deposit
 
@@ -312,21 +338,14 @@ class TestSubmitCitationGate(_TransportTestCase):
         self.responses[("GET", task_path)] = ({"verificationId": _VERIFICATION_ID,
             "doi": "10.5281/zenodo.0", "source": "zenodo", "sourceId": "1", "sourceVersion": None,
             "url": "https://zenodo.org/records/1"}, 200)
-        self._run(["submit", "--doi", "10.5281/zenodo.1"])
+        _, stderr_text = self._run(["submit", "--doi", "10.5281/zenodo.1"])
+        self.assertEqual(stderr_text, "")
         self.assertEqual(self.requested_paths, ["/api/v1/verifications", task_path])
         self.assertEqual(self.request_bodies, [{"doi": "10.5281/zenodo.1"}, None])
-
-    def test_submit_from_a_workspace_subdirectory_still_runs_the_gate(self) -> None:
-        os.chdir(self.scratch_dir / "draft")
-        self._run(["submit", "--doi", "10.5281/zenodo.1"], expected_exit_code=1)
-        self.assertEqual(self.requested_paths, [])
-
-    def test_submit_outside_a_workspace_skips_the_gate(self) -> None:
-        outside = tempfile.TemporaryDirectory()
-        self.addCleanup(outside.cleanup)
-        os.chdir(outside.name)
-        self._run(["submit", "--doi", "10.5281/zenodo.1"])
-        self.assertEqual(self.requested_paths, ["/api/v1/verifications"])
+        from research_harness.storage import Store
+        receipts = Store(self.scratch_dir).snapshot()["records"]["submission_receipt"]
+        self.assertEqual(len(receipts), 1)
+        self.assertTrue(next(iter(receipts.values()))["matched"])
 
 
 _VERIFICATION_ID = "0e5c2b1a-9d4f-4c3b-8a7e-6f5d4c3b2a19"
