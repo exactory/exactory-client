@@ -17,16 +17,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${PLUGIN_ROOT}/codex/hook.py\" enforce_citation_check.py",
-            "timeout": 20
-          },
-          {
-            "type": "command",
-            "command": "python3 \"${PLUGIN_ROOT}/codex/hook.py\" enforce_prediction.py",
-            "timeout": 15
-          },
-          {
-            "type": "command",
             "command": "python3 \"${PLUGIN_ROOT}/codex/hook.py\" guard_experiment_exec.py",
             "timeout": 15
           },

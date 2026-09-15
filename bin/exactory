@@ -272,8 +272,7 @@ def _run_verify(args: argparse.Namespace) -> None:
         _exit_with_error(f"{args.file} is not valid JSON: {error}.")
 
     # Every verdict states its cohort impact prediction; the server accepts a
-    # verdict without one, so this client refuses to send one (the hook gate
-    # enforce_prediction.py is the second layer of the same rule).
+    # verdict without one, so this client refuses to send one.
     prediction = body.get("prediction") if isinstance(body, dict) else None
     if not isinstance(prediction, dict):
         _exit_with_error(

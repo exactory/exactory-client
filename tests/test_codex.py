@@ -193,11 +193,11 @@ class TestCodexHooks(unittest.TestCase):
                            "*** Add File: examples/draft.md\n+draft")
         self.assertIsNone(self.run_hook("enforce_unit_flow.py", patch))
 
-    def test_bash_still_reaches_shared_submission_gate(self):
+    def test_bash_still_reaches_the_shared_experiment_guard(self):
         (self.root / ".exactory").mkdir()
-        (self.root / ".exactory/draft.json").write_text("{}")
-        self.assert_denied(self.run_hook("enforce_citation_check.py",
-                          "exactory submit --doi 10.1234/example", tool="Bash"), "references")
+        (self.root / ".exactory/study.json").write_text("{}")
+        self.assert_denied(self.run_hook("guard_experiment_exec.py",
+                          "sudo rm -rf /", tool="Bash"), "privilege")
 
     def test_post_patch_records_paper_authorship_and_checks_references(self):
         (self.root / ".exactory").mkdir()
