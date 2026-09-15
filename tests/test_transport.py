@@ -397,14 +397,14 @@ class TestVerify(_TransportTestCase):
         self.assertEqual(json.loads(stdout_text)["id"], "22222222-2222-4222-8222-222222222222")
         self.assertEqual(stderr_text, "")
 
-    def test_verify_in_a_bound_verification_workspace_writes_the_receipt(self) -> None:
+    def _bind_the_verdict_in_a_verification_workspace(self) -> None:
+        """Pin the task and bind an evidence-linked assessment of verdict.json, as the managed path requires."""
         from integration_fixtures import prepare_verification
         from research_harness.verification import bind_verdict, record_task
 
         case = prepare_verification(self.scratch_dir)
         _write_verdict_file(self.scratch_dir / "verdict.json")
-        task = self._task()
-        pinned = case.mutate(record_task, {"task": task})["result"]
+        pinned = case.mutate(record_task, {"task": self._task()})["result"]
         case.mutate(bind_verdict, {"id": "transport-verdict", "task_digest": pinned["digest"],
             "body": case.artifacts.put((self.scratch_dir / "verdict.json").read_bytes(), "application/json"),
             "assessment": {"assessor": "transport-independent-verifier",
@@ -412,13 +412,17 @@ class TestVerify(_TransportTestCase):
                 "independence_basis": "Separate context read the exact source and no other verdicts.", "blind": True,
                 "checks": [{"dimension": dimension, "reason": "The exact scoped source supports this separate judgment.",
                             "evidence": [case.linked]} for dimension in ("soundness", "novelty", "impact")]}})
-        self.responses[("GET", f"/api/v1/tasks/{_VERIFICATION_ID}")] = (task, 200)
+        self.responses[("GET", f"/api/v1/tasks/{_VERIFICATION_ID}")] = (self._task(), 200)
         self.responses[("POST", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts")] = (
             {"id": "22222222-2222-4222-8222-222222222222"}, 201)
+
+    def test_verify_in_a_bound_verification_workspace_writes_the_receipt(self) -> None:
+        self._bind_the_verdict_in_a_verification_workspace()
         _, stderr_text = self._run_verify()
         self.assertEqual(stderr_text, "")
         self.assertEqual(self.requested_paths,
                          [f"/api/v1/tasks/{_VERIFICATION_ID}", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts"])
+        self.assertEqual(self.request_bodies[1], json.loads((self.scratch_dir / "verdict.json").read_text()))
         from research_harness.storage import Store
         receipts = Store(self.scratch_dir).snapshot()["records"]["verdict_receipt"]
         self.assertEqual(len(receipts), 1)
@@ -433,11 +437,56 @@ class TestVerify(_TransportTestCase):
         self.responses[("POST", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts")] = (
             {"id": "22222222-2222-4222-8222-222222222222"}, 201)
         _, stderr_text = self._run_verify()
-        self.assertTrue(stderr_text.startswith("Managed record skipped (verdict_assessment_required): "))
+        self.assertEqual(stderr_text, "Managed record skipped (verdict_assessment_required):"
+                                      " Bind an evidence-linked assessment of this exact verdict body\n")
         self.assertEqual(self.requested_paths,
                          [f"/api/v1/tasks/{_VERIFICATION_ID}", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts"])
+        self.assertEqual(self.request_bodies[1], json.loads((self.scratch_dir / "verdict.json").read_text()))
         from research_harness.storage import Store
         self.assertNotIn("verdict_receipt", Store(self.scratch_dir).snapshot()["records"])
+
+    def test_verify_with_a_body_that_differs_from_the_bound_assessment_notes_the_skip_and_posts(self) -> None:
+        self._bind_the_verdict_in_a_verification_workspace()
+        _write_verdict_file(self.scratch_dir / "verdict.json", summary="A different summary.")
+        _, stderr_text = self._run_verify()
+        self.assertEqual(stderr_text, "Managed record skipped (verdict_body_mismatch):"
+                                      " The transmitted verdict body must equal the bound assessment, including revisions\n")
+        self.assertEqual(self.requested_paths,
+                         [f"/api/v1/tasks/{_VERIFICATION_ID}", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts"])
+        self.assertEqual(self.request_bodies[1], json.loads((self.scratch_dir / "verdict.json").read_text()))
+        from research_harness.storage import Store
+        self.assertNotIn("verdict_receipt", Store(self.scratch_dir).snapshot()["records"])
+
+    def test_verify_after_an_unknown_verdict_outcome_notes_the_skip_and_posts(self) -> None:
+        self._bind_the_verdict_in_a_verification_workspace()
+        record_request = _transport._send_request
+
+        def lose_the_verdict_response(method: str, path: str, body: dict | None = None,
+                                      *, allow_missing: bool = False) -> tuple[dict, int]:
+            response = record_request(method, path, body, allow_missing=allow_missing)
+            if method == "POST":
+                _transport._exit_with_error("The client cannot reach the server.")
+            return response
+
+        _transport._send_request = lose_the_verdict_response
+        self._run_verify(expected_exit_code=1)
+        _transport._send_request = record_request
+        self.requested_paths.clear()
+        self.request_bodies.clear()
+
+        _, stderr_text = self._run_verify()
+        self.assertEqual(stderr_text, "Managed record skipped (verdict_reconciliation_pending):"
+                                      " The previous POST has an unknown outcome. The task exposes only your verdict ID,"
+                                      " so the existing API cannot confirm the exact body without exposing other verdicts\n")
+        self.assertEqual(self.requested_paths,
+                         [f"/api/v1/tasks/{_VERIFICATION_ID}", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts"])
+        self.assertEqual(self.request_bodies[1], json.loads((self.scratch_dir / "verdict.json").read_text()))
+        from research_harness.storage import Store
+        records = Store(self.scratch_dir).snapshot()["records"]
+        self.assertEqual([intent["status"] for intent in records["remote_intent"].values()], ["in_flight"])
+        self.assertEqual([observation["status"] for observation in records["remote_observation"].values()],
+                         ["verdict_response_unknown"])
+        self.assertNotIn("verdict_receipt", records)
 
 
 class TestTasksSearchFlags(_TransportTestCase):

@@ -100,7 +100,9 @@ def check_verdict_preconditions(store, task, body):
 
     Returns the validation report and the intent binding. Raises ResearchError
     when the workspace cannot record this verdict as it stands; the CLI then
-    sends the verdict directly."""
+    sends the verdict directly. Before it raises for a pending unknown outcome,
+    it records the task's own verdict ID as a remote observation, so the store
+    keeps what the task showed before any later POST."""
     report = validate_verdict(store, task, body)
     binding = {"assessment": report["assessment"], "body": report["body"], "task_identity": task_identity(task),
                "verification_id": task["verificationId"],
@@ -111,7 +113,7 @@ def check_verdict_preconditions(store, task, body):
     uncertain = next((r for r in prior if r["pending"] is not None), None)
     if uncertain is not None:
         _observation(store, uncertain["id"], "verdict_response_unknown", {"verificationId": task["verificationId"], "viewerVerdictId": task.get("viewerVerdictId")})
-        raise ResearchError("verdict_reconciliation_pending", "The previous POST has an unknown outcome. The task exposes only your verdict ID, so the existing API cannot confirm the exact body without exposing other verdicts; no duplicate POST was sent",
+        raise ResearchError("verdict_reconciliation_pending", "The previous POST has an unknown outcome. The task exposes only your verdict ID, so the existing API cannot confirm the exact body without exposing other verdicts",
                             {"intent_id": uncertain["id"], "viewerVerdictId": task.get("viewerVerdictId")})
     if not any(r["binding"] == binding for r in prior):
         current_id = task.get("viewerVerdictId")

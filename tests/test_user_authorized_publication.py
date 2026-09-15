@@ -60,7 +60,8 @@ class TestSelectManagedPath(unittest.TestCase):
         (self.root / ".exactory" / "research.sqlite3").write_bytes(b"not a database")
         selected, stderr_text = self._select(_pass_check)
         self.assertIsNone(selected)
-        self.assertTrue(stderr_text.startswith("Managed record skipped (corrupt_state): "))
+        self.assertEqual(stderr_text,
+                         "Managed record skipped (corrupt_state): Research database has an invalid SQLite header\n")
 
     def test_a_failing_check_is_noted_and_selects_the_direct_path(self) -> None:
         from integration_fixtures import prepare_research

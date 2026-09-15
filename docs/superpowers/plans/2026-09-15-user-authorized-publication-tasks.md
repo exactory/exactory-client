@@ -27,7 +27,7 @@
 
 ## Test commands
 
-The suite runs with `python3 -m unittest`. One module: `python3 -m unittest tests.test_transport -v`. One test by name: `python3 -m unittest tests.test_transport -k posts_the_verdict -v`. The whole suite takes about 30 minutes on Python 3.9.6; run it once at the end (Task 8). The math-solver harness suite (`skills/math-solver/harness/tests`) is unaffected by this plan and is not run here.
+The suite runs with `python3 -m unittest`. `PYTHONPATH=tests` puts the fixture modules in `tests/` on the import path, which the module form needs and `discover -s tests` sets by itself. One module: `PYTHONPATH=tests python3 -m unittest tests.test_transport -v`. One test by name: `PYTHONPATH=tests python3 -m unittest tests.test_transport -k posts_the_verdict -v`. The whole suite takes about 30 minutes on Python 3.9.6; run it once at the end (Task 8). The math-solver harness suite (`skills/math-solver/harness/tests`) is unaffected by this plan and is not run here.
 
 ## File map
 
@@ -69,7 +69,7 @@ The suite runs with `python3 -m unittest`. One module: `python3 -m unittest test
 
 ```bash
 git rm hooks/enforce_citation_check.py hooks/enforce_prediction.py
-python3 -m unittest tests.test_hooks -k TestHooksManifest -v
+PYTHONPATH=tests python3 -m unittest tests.test_hooks -k TestHooksManifest -v
 ```
 
 Expected: `test_every_command_points_at_an_existing_script_under_the_plugin_root` FAILS on `hooks/enforce_citation_check.py`, and `test_each_hook_is_wired_to_its_designed_event_and_matcher` FAILS with `StopIteration`.
@@ -133,10 +133,10 @@ In `tests/test_codex.py`, replace `test_bash_still_reaches_shared_submission_gat
 - [ ] **Step 4: Run the two modules**
 
 ```bash
-python3 -m unittest tests.test_hooks tests.test_codex -v
+PYTHONPATH=tests python3 -m unittest tests.test_hooks tests.test_codex -v
 ```
 
-Expected: PASS. If `test_codex` reports Codex adapter coverage below 80 percent, run `python3 -m coverage run --rcfile=codex/coverage.ini -m unittest tests.test_codex` and read the missing lines; the replacement test above exercises the same `Bash` translation path the deleted test did.
+Expected: PASS. If `test_codex` reports Codex adapter coverage below 80 percent, run `PYTHONPATH=tests python3 -m coverage run --rcfile=codex/coverage.ini -m unittest tests.test_codex` and read the missing lines; the replacement test above exercises the same `Bash` translation path the deleted test did.
 
 - [ ] **Step 5: Commit**
 
@@ -309,7 +309,7 @@ if __name__ == "__main__":
 - [ ] **Step 2: Run the module to see it fail**
 
 ```bash
-python3 -m unittest tests.test_user_authorized_publication -v
+PYTHONPATH=tests python3 -m unittest tests.test_user_authorized_publication -v
 ```
 
 Expected: FAIL at import with `ImportError: cannot import name 'note_managed_record_skipped'`.
@@ -377,7 +377,7 @@ def report_citation_gate(workspace, check_command):
 - [ ] **Step 4: Run the module**
 
 ```bash
-python3 -m unittest tests.test_user_authorized_publication -v
+PYTHONPATH=tests python3 -m unittest tests.test_user_authorized_publication -v
 ```
 
 Expected: 10 tests PASS.
@@ -417,7 +417,7 @@ git commit -F <scratchpad>/commit-2.txt
 
 - [ ] **Step 1: Write the failing tests**
 
-In `tests/test_transport.py`, replace the class `TestVerifyPredictionGate` (keep its three refusal tests unchanged) with `TestVerify`, and add these three tests after `test_verify_refuses_a_prediction_without_a_percentile`:
+In `tests/test_transport.py`, replace the class `TestVerifyPredictionGate` (keep its three refusal tests unchanged) with `TestVerify`, and add these tests after `test_verify_refuses_a_prediction_without_a_percentile`:
 
 ```python
     def _task(self) -> dict:
@@ -437,14 +437,14 @@ In `tests/test_transport.py`, replace the class `TestVerifyPredictionGate` (keep
         self.assertEqual(json.loads(stdout_text)["id"], "22222222-2222-4222-8222-222222222222")
         self.assertEqual(stderr_text, "")
 
-    def test_verify_in_a_bound_verification_workspace_writes_the_receipt(self) -> None:
+    def _bind_the_verdict_in_a_verification_workspace(self) -> None:
+        """Pin the task and bind an evidence-linked assessment of verdict.json, as the managed path requires."""
         from integration_fixtures import prepare_verification
         from research_harness.verification import bind_verdict, record_task
 
         case = prepare_verification(self.scratch_dir)
         _write_verdict_file(self.scratch_dir / "verdict.json")
-        task = self._task()
-        pinned = case.mutate(record_task, {"task": task})["result"]
+        pinned = case.mutate(record_task, {"task": self._task()})["result"]
         case.mutate(bind_verdict, {"id": "transport-verdict", "task_digest": pinned["digest"],
             "body": case.artifacts.put((self.scratch_dir / "verdict.json").read_bytes(), "application/json"),
             "assessment": {"assessor": "transport-independent-verifier",
@@ -452,13 +452,17 @@ In `tests/test_transport.py`, replace the class `TestVerifyPredictionGate` (keep
                 "independence_basis": "Separate context read the exact source and no other verdicts.", "blind": True,
                 "checks": [{"dimension": dimension, "reason": "The exact scoped source supports this separate judgment.",
                             "evidence": [case.linked]} for dimension in ("soundness", "novelty", "impact")]}})
-        self.responses[("GET", f"/api/v1/tasks/{_VERIFICATION_ID}")] = (task, 200)
+        self.responses[("GET", f"/api/v1/tasks/{_VERIFICATION_ID}")] = (self._task(), 200)
         self.responses[("POST", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts")] = (
             {"id": "22222222-2222-4222-8222-222222222222"}, 201)
+
+    def test_verify_in_a_bound_verification_workspace_writes_the_receipt(self) -> None:
+        self._bind_the_verdict_in_a_verification_workspace()
         _, stderr_text = self._run_verify()
         self.assertEqual(stderr_text, "")
         self.assertEqual(self.requested_paths,
                          [f"/api/v1/tasks/{_VERIFICATION_ID}", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts"])
+        self.assertEqual(self.request_bodies[1], json.loads((self.scratch_dir / "verdict.json").read_text()))
         from research_harness.storage import Store
         receipts = Store(self.scratch_dir).snapshot()["records"]["verdict_receipt"]
         self.assertEqual(len(receipts), 1)
@@ -467,28 +471,73 @@ In `tests/test_transport.py`, replace the class `TestVerifyPredictionGate` (keep
     def test_verify_in_an_unbound_workspace_notes_the_skip_and_posts(self) -> None:
         from integration_fixtures import prepare_verification
 
-        case = prepare_verification(self.scratch_dir)
+        prepare_verification(self.scratch_dir)
         _write_verdict_file(self.scratch_dir / "verdict.json")
         self.responses[("GET", f"/api/v1/tasks/{_VERIFICATION_ID}")] = (self._task(), 200)
         self.responses[("POST", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts")] = (
             {"id": "22222222-2222-4222-8222-222222222222"}, 201)
         _, stderr_text = self._run_verify()
-        self.assertTrue(stderr_text.startswith("Managed record skipped (verdict_assessment_required): "))
+        self.assertEqual(stderr_text, "Managed record skipped (verdict_assessment_required):"
+                                      " Bind an evidence-linked assessment of this exact verdict body\n")
         self.assertEqual(self.requested_paths,
                          [f"/api/v1/tasks/{_VERIFICATION_ID}", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts"])
+        self.assertEqual(self.request_bodies[1], json.loads((self.scratch_dir / "verdict.json").read_text()))
         from research_harness.storage import Store
         self.assertNotIn("verdict_receipt", Store(self.scratch_dir).snapshot()["records"])
+
+    def test_verify_with_a_body_that_differs_from_the_bound_assessment_notes_the_skip_and_posts(self) -> None:
+        self._bind_the_verdict_in_a_verification_workspace()
+        _write_verdict_file(self.scratch_dir / "verdict.json", summary="A different summary.")
+        _, stderr_text = self._run_verify()
+        self.assertEqual(stderr_text, "Managed record skipped (verdict_body_mismatch):"
+                                      " The transmitted verdict body must equal the bound assessment, including revisions\n")
+        self.assertEqual(self.requested_paths,
+                         [f"/api/v1/tasks/{_VERIFICATION_ID}", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts"])
+        self.assertEqual(self.request_bodies[1], json.loads((self.scratch_dir / "verdict.json").read_text()))
+        from research_harness.storage import Store
+        self.assertNotIn("verdict_receipt", Store(self.scratch_dir).snapshot()["records"])
+
+    def test_verify_after_an_unknown_verdict_outcome_notes_the_skip_and_posts(self) -> None:
+        self._bind_the_verdict_in_a_verification_workspace()
+        record_request = _transport._send_request
+
+        def lose_the_verdict_response(method: str, path: str, body: dict | None = None,
+                                      *, allow_missing: bool = False) -> tuple[dict, int]:
+            response = record_request(method, path, body, allow_missing=allow_missing)
+            if method == "POST":
+                _transport._exit_with_error("The client cannot reach the server.")
+            return response
+
+        _transport._send_request = lose_the_verdict_response
+        self._run_verify(expected_exit_code=1)
+        _transport._send_request = record_request
+        self.requested_paths.clear()
+        self.request_bodies.clear()
+
+        _, stderr_text = self._run_verify()
+        self.assertEqual(stderr_text, "Managed record skipped (verdict_reconciliation_pending):"
+                                      " The previous POST has an unknown outcome. The task exposes only your verdict ID,"
+                                      " so the existing API cannot confirm the exact body without exposing other verdicts\n")
+        self.assertEqual(self.requested_paths,
+                         [f"/api/v1/tasks/{_VERIFICATION_ID}", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts"])
+        self.assertEqual(self.request_bodies[1], json.loads((self.scratch_dir / "verdict.json").read_text()))
+        from research_harness.storage import Store
+        records = Store(self.scratch_dir).snapshot()["records"]
+        self.assertEqual([intent["status"] for intent in records["remote_intent"].values()], ["in_flight"])
+        self.assertEqual([observation["status"] for observation in records["remote_observation"].values()],
+                         ["verdict_response_unknown"])
+        self.assertNotIn("verdict_receipt", records)
 ```
 
-Delete the old `test_verify_sends_a_verdict_that_carries_the_prediction`; the second test above replaces it.
+Delete the old `test_verify_sends_a_verdict_that_carries_the_prediction`; `test_verify_in_a_bound_verification_workspace_writes_the_receipt` above replaces it.
 
 - [ ] **Step 2: Run to see the new tests fail**
 
 ```bash
-python3 -m unittest tests.test_transport -k TestVerify -v
+PYTHONPATH=tests python3 -m unittest tests.test_transport -k TestVerify -v
 ```
 
-Expected: the three refusal tests PASS; `test_verify_without_a_workspace_posts_the_verdict` and `test_verify_in_an_unbound_workspace_notes_the_skip_and_posts` FAIL with `ResearchError: migration_required` or `verdict_assessment_required`; the bound test PASSES already.
+Expected: the three refusal tests and the bound test PASS; the four other tests ERROR, each with the `ResearchError` the managed path raises today: `migration_required` without a workspace, `verdict_assessment_required` in the unbound workspace, `verdict_body_mismatch` for the changed body, and `verdict_reconciliation_pending` after the unknown outcome.
 
 - [ ] **Step 3: Extract the preconditions in `research_harness/submission.py`**
 
@@ -511,7 +560,7 @@ def check_verdict_preconditions(store, task, body):
     uncertain = next((r for r in prior if r["pending"] is not None), None)
     if uncertain is not None:
         _observation(store, uncertain["id"], "verdict_response_unknown", {"verificationId": task["verificationId"], "viewerVerdictId": task.get("viewerVerdictId")})
-        raise ResearchError("verdict_reconciliation_pending", "The previous POST has an unknown outcome. The task exposes only your verdict ID, so the existing API cannot confirm the exact body without exposing other verdicts; no duplicate POST was sent",
+        raise ResearchError("verdict_reconciliation_pending", "The previous POST has an unknown outcome. The task exposes only your verdict ID, so the existing API cannot confirm the exact body without exposing other verdicts",
                             {"intent_id": uncertain["id"], "viewerVerdictId": task.get("viewerVerdictId")})
     if not any(r["binding"] == binding for r in prior):
         current_id = task.get("viewerVerdictId")
@@ -540,7 +589,7 @@ def _send_verdict(store, task, body, client, *, expected_revision, request_id):
             "assessment_digest": report["assessment"]["digest"], "task": task, "response": response})
 ```
 
-The body of `check_verdict_preconditions` is the former first half of `_send_verdict`, moved verbatim; `send_verdict` is unchanged.
+The body of `check_verdict_preconditions` is the former first half of `_send_verdict`. Its `verdict_reconciliation_pending` message drops the closing `; no duplicate POST was sent`, because the CLI prints this message as the skip line and then posts the verdict. `send_verdict` is unchanged.
 
 - [ ] **Step 4: Rewrite `_run_verify` in `bin/exactory`**
 
@@ -581,8 +630,8 @@ Replace the tail of `_run_verify`, from the comment `# The command takes the ver
 - [ ] **Step 5: Run the verify tests and the verification module**
 
 ```bash
-python3 -m unittest tests.test_transport -k TestVerify -v
-python3 -m unittest tests.test_research_verification -v
+PYTHONPATH=tests python3 -m unittest tests.test_transport -k TestVerify -v
+PYTHONPATH=tests python3 -m unittest tests.test_research_verification -v
 ```
 
 Expected: PASS.
@@ -699,7 +748,7 @@ Also update the module docstring's "the citation gate" to "the citation report".
 - [ ] **Step 2: Run to see them fail**
 
 ```bash
-python3 -m unittest tests.test_transport -k TestSubmitDecision -v
+PYTHONPATH=tests python3 -m unittest tests.test_transport -k TestSubmitDecision -v
 ```
 
 Expected: the legacy, subdirectory, and unready-study tests FAIL (exit code 1 or `ResearchError`); the outside and ready-study tests PASS.
@@ -754,7 +803,7 @@ Remove the `import subprocess` from `bin/exactory` if nothing else uses it, and 
 - [ ] **Step 4: Run the transport module**
 
 ```bash
-python3 -m unittest tests.test_transport -v
+PYTHONPATH=tests python3 -m unittest tests.test_transport -v
 ```
 
 Expected: PASS.
@@ -1093,9 +1142,9 @@ Read the fixture's `setUp` first: when `self.root` already holds a configured st
 - [ ] **Step 2: Run to see them fail**
 
 ```bash
-python3 -m unittest tests.test_draft -k TestDirectDeposit -k TestLegacyWorkspaceDeposit -k TestProductionDepositCitationReport -v
-python3 -m unittest tests.test_research_round_integrity -k DepositRoundGateTests -v
-python3 -m unittest tests.test_research_gates -k bare_draft -v
+PYTHONPATH=tests python3 -m unittest tests.test_draft -k TestDirectDeposit -k TestLegacyWorkspaceDeposit -k TestProductionDepositCitationReport -v
+PYTHONPATH=tests python3 -m unittest tests.test_research_round_integrity -k DepositRoundGateTests -v
+PYTHONPATH=tests python3 -m unittest tests.test_research_gates -k bare_draft -v
 ```
 
 Expected: every `TestDirectDeposit` and `TestLegacyWorkspaceDeposit` test FAILS with `readiness_required` or `migration_required` in the output; `test_a_changed_bibliography_moves_the_deposit_to_the_direct_path` FAILS; the two replaced round-integrity tests and the bare-draft test FAIL.
@@ -1322,8 +1371,8 @@ Check that `_run_reconcile` still imports what it needs (`current_store` from `r
 - [ ] **Step 5: Run the draft module and the publication and round modules**
 
 ```bash
-python3 -m unittest tests.test_draft -v
-python3 -m unittest tests.test_research_publication tests.test_research_round_integrity tests.test_research_gates -v
+PYTHONPATH=tests python3 -m unittest tests.test_draft -v
+PYTHONPATH=tests python3 -m unittest tests.test_research_publication tests.test_research_round_integrity tests.test_research_gates -v
 ```
 
 Expected: PASS. The preview tests in the round-integrity module still stop the managed deposit, because the bundle changes after `validate_deposit` passed and the managed remote steps started.
@@ -1502,8 +1551,8 @@ Read each rewritten file top to bottom and confirm: no sentence names `status --
 ```bash
 grep -n "status --summary\|next --summary\|gate publication\|gate round\|gate deposited\|gate preparation\|expected-revision\|request-id\|reconcile" skills/submit/SKILL.md skills/verify/SKILL.md skills/deposit/SKILL.md
 python3 codex/generate.py --check
-python3 -m unittest tests.test_research_guidance -k links -v
-python3 -m unittest tests.test_research_guidance -k recipe -v
+PYTHONPATH=tests python3 -m unittest tests.test_research_guidance -k links -v
+PYTHONPATH=tests python3 -m unittest tests.test_research_guidance -k recipe -v
 ```
 
 Expected: the grep prints nothing; the check passes; both guidance tests pass.
@@ -1727,8 +1776,8 @@ validation, and `git diff --check` pass.
 Set `"version": "0.40.0"` in `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`. In `tests/test_research_guidance.py`, `test_release_manifests_and_notes_describe_the_same_final_version` names `"0.40.0"` and `docs/releases/0.40.0.md`.
 
 ```bash
-python3 -m unittest tests.test_manifest -v
-python3 -m unittest tests.test_research_guidance -v
+PYTHONPATH=tests python3 -m unittest tests.test_manifest -v
+PYTHONPATH=tests python3 -m unittest tests.test_research_guidance -v
 python3 codex/generate.py --check
 ```
 
