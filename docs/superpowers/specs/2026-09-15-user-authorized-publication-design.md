@@ -35,9 +35,9 @@ Each command has a managed path (the current 0.39.2 behavior, which validates th
 
 The command decides between the two paths before its first network write:
 
-1. Locate a workspace from the current directory (`find_workspace(required=False)`) and open its store. A directory with no workspace, or a workspace with no store (a draft workspace initialized before 0.38.0), selects the direct path with no message: that is the ordinary case for a verifier or an author working outside the loop.
+1. Locate a workspace from the current directory (`find_workspace(required=False)`) and open its store. A directory with no workspace, or a workspace whose store is missing or unconfigured (`migration_required`, for example a draft workspace initialized before 0.38.0), selects the direct path with no message: that is the ordinary case for a verifier or an author working outside the loop.
 2. Run every check the managed path performs before its first remote write. When all of them pass, take the managed path.
-3. When any of them raises `ResearchError`, write one line to stderr and take the direct path:
+3. When opening the store raises any other `ResearchError` (for example `corrupt_state`), or any check raises `ResearchError`, write one line to stderr and take the direct path:
 
    ```
    Managed record skipped (<code>): <message>
@@ -69,11 +69,13 @@ Citation report: inside a draft or study workspace the command still runs `exact
 
 ## 4. `exactory-draft deposit`
 
-Preconditions of the managed path: a workspace with a store exists; the `readiness` gate is ready; `validate_upload` accepts the PDF, abstract, and optional sources against the current publication bundle; the round gate is ready (an approved `stop` on that bundle).
+Preconditions of the managed path: a workspace with a store exists; the `readiness` gate is ready; `validate_upload` accepts the PDF, abstract, and optional sources against the current publication bundle; the round gate is ready (an approved `stop` on that bundle); with `--new-version`, the store's workspace deposit record exists on the same environment.
 
 Managed path: unchanged (`research_harness.zenodo.deposit`).
 
-Direct path: the 0.36.0 flow. Create the deposition (or open a new version of the deposition recorded in `.exactory/deposit.json` when `--new-version` is set), upload `paper.pdf` and the optional sources archive, set the metadata, mark `paper.pdf` as the default preview, publish when `--publish` is set, and write `.exactory/deposit.json` with the same fields the managed projection writes: `environment`, `deposition_id`, `draft_url`, and, once published, `doi`, `concept_doi`, `record_url`. The PDF may live anywhere on disk; the abstract file is read as UTF-8 text and must contain nonblank text.
+Direct path: the 0.36.0 flow. Create the deposition (or open a new version of the deposition recorded in `.exactory/deposit.json` when `--new-version` is set), upload `paper.pdf` and the optional sources archive, set the metadata, mark `paper.pdf` as the default preview, and publish when `--publish` is set. The PDF may live anywhere on disk; the abstract file is read as UTF-8 text and must contain nonblank text.
+
+The direct path then records the deposit with the same fields the managed projection writes: `environment`, `deposition_id`, `draft_url`, and, once published, `doi`, `concept_doi`, `record_url`. In a workspace with a usable store, `record_direct_deposit` sets the store's workspace deposit record to these fields and exports the projection, so `.exactory/deposit.json` survives the next projection export (for example the one `exactory-lab decide` runs). The record grants no publication credit: the gates read publication receipts bound to a reviewed bundle. In a workspace without a usable store, the command writes `.exactory/deposit.json` itself; a store that exists but refuses the record also prints the one-line note.
 
 Both paths keep: the token rule (`ZENODO_SANDBOX_TOKEN` for the sandbox, `ZENODO_TOKEN` for production, the missing variable named in the error), the `--confirm-publish` requirement for a production publish, the disclosure that `_build_deposit_metadata` writes, the fixed upload names, and `--new-version` requiring a prior record on the same environment.
 
@@ -89,7 +91,7 @@ The description field of `hooks/hooks.json` names no script, so it is unchanged.
 
 ## 6. Skills
 
-Three skills are rewritten from their 0.36.0 text plus the server rules that arrived since (verdict revision through `supersedesVerdictId`, `requestedByViewer`, `--challenge`, the writer disclosure). Each skill states the one-rule contract of section 1 in one paragraph, so an agent knows that a study's receipt is written automatically when the study is ready and that the command runs either way.
+Three skills are rewritten from their 0.36.0 text plus the server rules that arrived since (verdict revision through `supersedesVerdictId`, `requestedByViewer`, `--challenge`, the writer disclosure). Each skill states the one-rule contract of section 1 in one paragraph, so an agent knows that a study's receipt is written automatically when the study is ready and that the command runs either way. Each skill keeps one link to `RESEARCH_CONSTITUTION.md`, and the verify skill keeps one link to `docs/research-workflow.md`, because every shared skill links the constitution and the primary research stages link the workflow; the link sentence names the managed study as its scope.
 
 `skills/submit/SKILL.md` keeps: the API-key handling, the identifier forms, `--challenge`, the response fields to report, the existing-request notice, the two source failures. Inside a study workspace with no identifier named, the paper is the record in `.exactory/deposit.json` (`doi` of the production record). It drops: the constitution and workflow preamble, `status --summary`, `next --summary`, `gate deposited`, `reconcile` before a write, and the closing paragraph on intents.
 
@@ -112,7 +114,7 @@ Three skills are rewritten from their 0.36.0 text plus the server rules that arr
 
 Deleted: `TestCitationGate` and `TestPredictionGate` in `tests/test_hooks.py`; `test_bash_still_reaches_shared_submission_gate` in `tests/test_codex.py`; the `enforce_citation_check.py` assertions in `test_each_hook_is_wired_to_its_designed_event_and_matcher`.
 
-Changed: `TestSubmitCitationGate` in `tests/test_transport.py` becomes `TestSubmitCitationReport` (a failing gate writes the report and the submit proceeds); `TestProductionDepositGate` in `tests/test_draft.py` becomes `TestProductionDepositCitationReport`; `test_deposit_outside_a_workspace_points_at_init` stays (a deposit needs `.exactory/draft.json` for its title).
+Changed: `TestSubmitCitationGate` in `tests/test_transport.py` becomes `TestSubmitDecision` (a failing gate writes the report and the submit proceeds); `TestProductionDepositGate` in `tests/test_draft.py` becomes `TestProductionDepositCitationReport`; `test_deposit_outside_a_workspace_points_at_init` stays (a deposit needs `.exactory/draft.json` for its title). Three tests assert the refusals this release removes and change to assert the note and the direct deposit: `test_first_deposit_requires_an_approved_stop_before_remote_writes` and `test_a_new_version_requires_its_own_stop_and_keeps_the_prior_record` in `tests/test_research_round_integrity.py`, and `test_bare_draft_marker_is_not_publication_readiness` in `tests/test_research_gates.py`. The preview tests in `tests/test_research_round_integrity.py` stay: a bundle that changes after the managed remote steps started still stops the managed deposit. `test_release_manifests_and_notes_describe_the_same_final_version` in `tests/test_research_guidance.py` names 0.40.0.
 
 Added, one per behavior of section 1:
 
@@ -124,6 +126,8 @@ Added, one per behavior of section 1:
 - `exactory submit` in a study whose publication gate is not ready writes the skipped line and posts the request.
 - `exactory-draft deposit` in a draft workspace with no store, and in a study whose gates are not ready, runs the direct flow, uploads the PDF, and writes `.exactory/deposit.json`.
 - `exactory-draft deposit` in a ready study writes the publication receipt.
+- A direct deposit in a workspace with a store records the workspace deposit record, and a later projection export keeps `.exactory/deposit.json` unchanged, including after a managed first version.
+- The decision point notes a corrupt store and takes the direct path.
 - `exactory-draft deposit --new-version` on the direct path reuses the deposition in `.exactory/deposit.json` and refuses an environment mismatch.
 - `hooks/hooks.json` and `codex/hooks.json` wire exactly the remaining scripts.
 

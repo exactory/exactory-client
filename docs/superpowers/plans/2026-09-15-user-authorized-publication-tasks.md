@@ -20,7 +20,8 @@
 - `exactory-draft deposit --production --publish` keeps requiring `--confirm-publish`.
 - Both host manifests carry version `0.40.0`. `codex/generate.py --check` passes.
 - All artifacts, code, and documentation are English.
-- Commit messages are written to a file in the session scratchpad directory (written `<scratchpad>` below) and passed with `git commit -F <file>`; every message ends with `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`.
+- Commit messages are written to a file in the session scratchpad directory (written `<scratchpad>` below) and passed with `git commit -F <file>`; every message ends with `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`.
+- Baseline on `fc081fd`: `python3 -m unittest discover -s tests` ran 994 tests in 1,889.338 s on Python 3.9.6, all passing.
 - Tests that read the store after a CLI run open a fresh `Store(<workspace>)` from `research_harness.storage` for the assertion, so no cached snapshot from an earlier instance is read.
 - Work happens in the worktree `/Users/ryshiro/exactory/plugins/exactory-client-worktrees/user-authorized-publication` on branch `feat/user-authorized-publication`. Run every test command from that directory. Nothing is pushed until the user confirms.
 
@@ -34,8 +35,8 @@ The suite runs with `python3 -m unittest`. One module: `python3 -m unittest test
 | --- | --- |
 | `hooks/enforce_citation_check.py`, `hooks/enforce_prediction.py` | Deleted |
 | `hooks/hooks.json`, `codex/hooks.json` | The two entries removed; Codex file regenerated |
-| `research_harness/integration.py` | `managed_store(start=None)` |
-| `research_harness/cli.py` | `note_managed_record_skipped(error)` |
+| `research_harness/integration.py` | `record_direct_deposit(store, state, *, expected_revision, request_id)` |
+| `research_harness/cli.py` | `note_managed_record_skipped(error)`, `select_managed_path(check, start=None)` |
 | `research_harness/citation_report.py` | New: `report_citation_gate(workspace, check_command)` |
 | `research_harness/submission.py` | `check_verdict_preconditions(store, task, body)` extracted from `_send_verdict` |
 | `research_harness/zenodo.py` | `validate_deposit(store, pdf, abstract, sources)` |
@@ -46,6 +47,8 @@ The suite runs with `python3 -m unittest`. One module: `python3 -m unittest test
 | `docs/releases/0.40.0.md`, `docs/testing/user-authorized-publication.md` | New |
 | `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json` | Version `0.40.0` |
 | `tests/test_hooks.py`, `tests/test_codex.py`, `tests/test_transport.py`, `tests/test_draft.py` | Changed |
+| `tests/test_research_round_integrity.py`, `tests/test_research_gates.py` | The three tests that assert the removed refusals |
+| `tests/test_research_guidance.py` | The release version assertion |
 | `tests/test_user_authorized_publication.py` | New: the three shared helpers |
 
 ---
@@ -146,7 +149,7 @@ The CLIs own the prediction rule and the citation report. The two
 PreToolUse hooks repeated a CLI refusal at the shell boundary and
 stopped commands the user had asked for.
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 ```
 
 ```bash
@@ -159,15 +162,14 @@ git commit -F <scratchpad>/commit-1.txt
 ### Task 2: Shared helpers for the decision point
 
 **Files:**
-- Modify: `research_harness/integration.py:24-33` (after `current_store`)
 - Modify: `research_harness/cli.py:68-72` (after `add_identity`)
 - Create: `research_harness/citation_report.py`
 - Test: `tests/test_user_authorized_publication.py`
 
 **Interfaces:**
 - Produces:
-  - `integration.managed_store(start=None) -> Store | None`: the store of the workspace around `start` (default: the current directory); `None` when there is no workspace or the workspace has no configured store (`migration_required`); any other `ResearchError` propagates.
   - `cli.note_managed_record_skipped(error: ResearchError) -> None`: prints `Managed record skipped (<code>): <message>` to stderr.
+  - `cli.select_managed_path(check, start=None) -> tuple[Store, object] | None`: finds the workspace around `start` (default: the current directory) and opens its store with `current_store`. No workspace, or `migration_required` from `current_store`, returns `None` silently. Any other `ResearchError` from `current_store`, or any `ResearchError` from `check(store)`, prints the note and returns `None`. Otherwise returns `(store, check(store))`.
   - `citation_report.report_citation_gate(workspace: Path, check_command: Path) -> bool`: runs `python3 <check_command> gate --workspace <workspace>`; on a nonzero exit prints `Citation report: <stderr, stripped>` to stderr; returns whether the gate passed.
 
 - [ ] **Step 1: Write the failing tests**
@@ -188,40 +190,69 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from research_harness.cli import note_managed_record_skipped
+from research_harness.cli import note_managed_record_skipped, select_managed_path
 from research_harness.citation_report import report_citation_gate
 from research_harness.errors import ResearchError
-from research_harness.integration import managed_store
 from research_harness.storage import Store
 
 _PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 _CHECK_COMMAND_PATH = _PLUGIN_ROOT / "bin" / "exactory-check"
 
 
-class TestManagedStore(unittest.TestCase):
+def _pass_check(store):
+    return "checked at revision " + str(store.revision)
+
+
+def _fail_check(store):
+    raise ResearchError("readiness_required", "Publish the reviewed bundle first")
+
+
+class TestSelectManagedPath(unittest.TestCase):
     def setUp(self) -> None:
         scratch = tempfile.TemporaryDirectory()
         self.addCleanup(scratch.cleanup)
         self.root = Path(scratch.name)
 
-    def test_no_workspace_gives_none(self) -> None:
-        self.assertIsNone(managed_store(self.root))
+    def _select(self, check, start=None) -> tuple[object, str]:
+        sink = io.StringIO()
+        with contextlib.redirect_stderr(sink):
+            selected = select_managed_path(check, start or self.root)
+        return selected, sink.getvalue()
 
-    def test_a_legacy_draft_workspace_without_a_store_gives_none(self) -> None:
+    def test_no_workspace_selects_the_direct_path_silently(self) -> None:
+        self.assertEqual(self._select(_pass_check), (None, ""))
+
+    def test_a_legacy_draft_workspace_without_a_store_selects_the_direct_path_silently(self) -> None:
         (self.root / ".exactory").mkdir()
         (self.root / ".exactory" / "draft.json").write_text(json.dumps({"title": "Legacy"}))
-        self.assertIsNone(managed_store(self.root))
+        self.assertEqual(self._select(_pass_check), (None, ""))
 
-    def test_a_store_without_a_research_configuration_gives_none(self) -> None:
+    def test_a_store_without_a_research_configuration_selects_the_direct_path_silently(self) -> None:
         Store(self.root, create=True)
-        self.assertIsNone(managed_store(self.root))
+        self.assertEqual(self._select(_pass_check), (None, ""))
 
-    def test_a_configured_store_is_returned_from_a_subdirectory(self) -> None:
+    def test_a_corrupt_store_is_noted_and_selects_the_direct_path(self) -> None:
+        (self.root / ".exactory").mkdir()
+        (self.root / ".exactory" / "research.sqlite3").write_bytes(b"not a database")
+        selected, stderr_text = self._select(_pass_check)
+        self.assertIsNone(selected)
+        self.assertTrue(stderr_text.startswith("Managed record skipped (corrupt_state): "))
+
+    def test_a_failing_check_is_noted_and_selects_the_direct_path(self) -> None:
+        from integration_fixtures import prepare_research
+        prepare_research(self.root)
+        self.assertEqual(self._select(_fail_check),
+                         (None, "Managed record skipped (readiness_required): Publish the reviewed bundle first\n"))
+
+    def test_a_passing_check_selects_the_managed_path_from_a_subdirectory(self) -> None:
         from integration_fixtures import prepare_research
         case = prepare_research(self.root)
         nested = self.root / "draft" / "figures"
         nested.mkdir(parents=True)
-        self.assertEqual(managed_store(nested).revision, case.store.revision)
+        (store, checked), stderr_text = self._select(_pass_check, nested)
+        self.assertEqual(store.revision, case.store.revision)
+        self.assertEqual(checked, "checked at revision " + str(case.store.revision))
+        self.assertEqual(stderr_text, "")
 
 
 class TestNote(unittest.TestCase):
@@ -231,6 +262,17 @@ class TestNote(unittest.TestCase):
             note_managed_record_skipped(ResearchError("readiness_required", "Publish the reviewed bundle first"))
         self.assertEqual(sink.getvalue(),
                          "Managed record skipped (readiness_required): Publish the reviewed bundle first\n")
+
+    def test_the_note_names_the_pending_obligation_codes(self) -> None:
+        sink = io.StringIO()
+        error = ResearchError("readiness_required", "Current research readiness is required for deposit",
+                              {"obligations": [{"code": "round_decision_missing", "explanation": "Decide."},
+                                               {"code": "manuscript_reviews_required", "explanation": "Review."}]})
+        with contextlib.redirect_stderr(sink):
+            note_managed_record_skipped(error)
+        self.assertEqual(sink.getvalue(),
+                         "Managed record skipped (readiness_required): Current research readiness is required for deposit"
+                         " Pending: round_decision_missing, manuscript_reviews_required.\n")
 
 
 class TestCitationReport(unittest.TestCase):
@@ -274,37 +316,41 @@ Expected: FAIL at import with `ImportError: cannot import name 'note_managed_rec
 
 - [ ] **Step 3: Implement the three helpers**
 
-In `research_harness/integration.py`, after `current_store`:
+In `research_harness/cli.py`, after `add_identity` (the module already imports `sys`, `ResearchError`, `current_store`, and `find_workspace`):
 
 ```python
-def managed_store(start=None):
-    """The store of the workspace around `start`, or None outside a managed workspace.
+def note_managed_record_skipped(error):
+    """One stderr line: the command ran, and the study's receipt was not written.
 
-    A directory with no workspace, or a workspace with no configured store,
-    selects the direct path of submit, verify, and deposit. Any other error is
-    the store's own and propagates."""
+    A readiness refusal carries its obligations; their codes name what the study still owes."""
+    pending = [item["code"] for item in (error.details or {}).get("obligations", [])]
+    suffix = " Pending: " + ", ".join(pending) + "." if pending else ""
+    print("Managed record skipped (" + error.code + "): " + error.message + suffix, file=sys.stderr)
+
+
+def select_managed_path(check, start=None):
+    """Return (store, check(store)) when the workspace around `start` can record this command.
+
+    `check` runs every check the managed path performs before its first remote
+    write and returns what the managed path needs. No workspace, or a workspace
+    whose store is missing or unconfigured, returns None silently. Any other
+    refusal is noted on stderr and returns None, so the command sends the
+    user's request directly."""
     workspace = find_workspace(start, required=False)
     if workspace is None:
         return None
     try:
-        return current_store(workspace)
+        store = current_store(workspace)
     except ResearchError as error:
-        if error.code == "migration_required":
-            return None
-        raise
+        if error.code != "migration_required":
+            note_managed_record_skipped(error)
+        return None
+    try:
+        return store, check(store)
+    except ResearchError as error:
+        note_managed_record_skipped(error)
+        return None
 ```
-
-`find_workspace` is already imported in `integration.py` from `.workspace`; add it to that import line if it is not.
-
-In `research_harness/cli.py`, after `add_identity`:
-
-```python
-def note_managed_record_skipped(error):
-    """One stderr line: the command ran, and the study's receipt was not written."""
-    print("Managed record skipped (" + error.code + "): " + error.message, file=sys.stderr)
-```
-
-Add `import sys` to the module imports if it is absent.
 
 Create `research_harness/citation_report.py`:
 
@@ -334,7 +380,7 @@ def report_citation_gate(workspace, check_command):
 python3 -m unittest tests.test_user_authorized_publication -v
 ```
 
-Expected: 7 tests PASS.
+Expected: 10 tests PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -343,16 +389,16 @@ Message file `commit-2.txt`:
 ```
 feat: add the shared decision helpers for user-authorized commands
 
-managed_store opens the surrounding workspace's store or returns None,
-note_managed_record_skipped prints the one-line note, and
-report_citation_gate prints the offline citation report without
-stopping the command.
+select_managed_path opens the surrounding workspace's store and runs the
+managed path's checks, noting any refusal and returning None for the
+direct path. report_citation_gate prints the offline citation report
+without stopping the command.
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 ```
 
 ```bash
-git add research_harness/integration.py research_harness/cli.py research_harness/citation_report.py tests/test_user_authorized_publication.py
+git add research_harness/cli.py research_harness/citation_report.py tests/test_user_authorized_publication.py
 git commit -F <scratchpad>/commit-2.txt
 ```
 
@@ -366,7 +412,7 @@ git commit -F <scratchpad>/commit-2.txt
 - Test: `tests/test_transport.py:354-409` (`TestVerifyPredictionGate`)
 
 **Interfaces:**
-- Consumes: `managed_store`, `note_managed_record_skipped` from Task 2.
+- Consumes: `select_managed_path` from Task 2.
 - Produces: `submission.check_verdict_preconditions(store, task, body) -> (report, binding)`: every check `_send_verdict` runs before `begin_intent`; raises `ResearchError` (`readiness_required`, `verification_target_mismatch`, `verdict_assessment_required`, `verdict_assessment_stale`, `verdict_body_mismatch`, `verdict_reconciliation_pending`, `verdict_revision_required`) when the workspace cannot record the verdict as it stands.
 
 - [ ] **Step 1: Write the failing tests**
@@ -501,9 +547,9 @@ The body of `check_verdict_preconditions` is the former first half of `_send_ver
 Change the imports:
 
 ```python
-from research_harness.cli import add_identity, note_managed_record_skipped
+from research_harness.cli import add_identity, select_managed_path
 from research_harness.errors import ResearchError
-from research_harness.integration import command_identity, current_store, managed_store
+from research_harness.integration import command_identity, current_store
 from research_harness.submission import check_verdict_preconditions, continue_submission, send_verdict, submit_managed, validate_submission
 from research_harness.verification import record_task
 from research_harness.workspace import find_workspace, strict_json
@@ -519,14 +565,9 @@ Replace the tail of `_run_verify`, from the comment `# The command takes the ver
 
     # The workspace records a receipt when it bound this exact verdict; otherwise
     # the verdict goes out directly, and the user reads why on stderr.
-    store = managed_store()
-    if store is not None:
-        try:
-            check_verdict_preconditions(store, task, body)
-        except ResearchError as error:
-            note_managed_record_skipped(error)
-            store = None
-    if store is not None:
+    managed = select_managed_path(lambda store: check_verdict_preconditions(store, task, body))
+    if managed is not None:
+        store, _ = managed
         payload = send_verdict(store, task, body, _send_request, **command_identity(store, args))
     else:
         payload, _ = _send_request(
@@ -557,7 +598,7 @@ exactory verify records the managed receipt when the workspace bound
 this exact verdict, and otherwise posts the verdict directly after one
 stderr line naming why no receipt was written.
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 ```
 
 ```bash
@@ -574,7 +615,7 @@ git commit -F <scratchpad>/commit-3.txt
 - Test: `tests/test_transport.py:275-330` (`TestSubmitCitationGate`)
 
 **Interfaces:**
-- Consumes: `managed_store`, `note_managed_record_skipped`, `report_citation_gate` (Task 2); `validate_submission`, `submit_managed` (existing).
+- Consumes: `select_managed_path`, `report_citation_gate` (Task 2); `validate_submission`, `submit_managed` (existing).
 - Produces: nothing new.
 
 - [ ] **Step 1: Write the failing tests**
@@ -695,14 +736,9 @@ def _run_submit(args: argparse.Namespace) -> None:
 
     # A study whose publication gate is ready records the submission receipt;
     # otherwise the request goes out directly, and the user reads why on stderr.
-    store = managed_store()
-    if store is not None:
-        try:
-            validate_submission(store, body)
-        except ResearchError as error:
-            note_managed_record_skipped(error)
-            store = None
-    if store is not None:
+    managed = select_managed_path(lambda store: validate_submission(store, body))
+    if managed is not None:
+        store, _ = managed
         payload = submit_managed(store, body, _send_request, **command_identity(store, args))
         status = 201
     else:
@@ -735,7 +771,7 @@ publication gate is ready and otherwise posts the request directly.
 The offline citation report is printed inside a draft workspace and
 never stops the submit.
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 ```
 
 ```bash
@@ -749,12 +785,15 @@ git commit -F <scratchpad>/commit-4.txt
 
 **Files:**
 - Modify: `research_harness/zenodo.py` (add `validate_deposit` before `deposit`)
+- Modify: `research_harness/integration.py` (add `record_direct_deposit` after `export_workspace`)
 - Modify: `bin/exactory-draft:28-40` (imports), `bin/exactory-draft:41-57` (constants), `bin/exactory-draft:250-302` (`_run_deposit`), plus the restored helpers
-- Test: `tests/test_draft.py`
+- Test: `tests/test_draft.py`, `tests/test_research_round_integrity.py:15-79`, `tests/test_research_gates.py:31-42`
 
 **Interfaces:**
-- Consumes: `managed_store`, `note_managed_record_skipped`, `report_citation_gate` (Task 2).
-- Produces: `zenodo.validate_deposit(store, pdf, abstract, sources) -> report`: `validate_upload` plus the round gate; raises `ResearchError` when the workspace cannot record this deposit.
+- Consumes: `select_managed_path`, `note_managed_record_skipped`, `report_citation_gate` (Task 2).
+- Produces:
+  - `zenodo.validate_deposit(store, pdf, abstract, sources, *, new_version, environment) -> report`: `validate_upload`, the round gate, and (with `new_version`) a prior workspace deposit record on the same environment; raises `ResearchError` when the workspace cannot record this deposit.
+  - `integration.record_direct_deposit(store, state, *, expected_revision, request_id) -> dict`: sets the store's workspace deposit record to `state` (fields `environment`, `deposition_id`, `draft_url`, and optionally `doi`, `concept_doi`, `record_url`), keeps an immutable `direct_deposit` record keyed by the request ID, and exports the projections.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -896,6 +935,16 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
         self.assertIn("abstract", stderr_text)
         self.assertEqual(self.fake_api.requests, [])
 
+    def test_the_store_records_the_direct_deposit_so_an_export_keeps_it(self) -> None:
+        from research_harness.integration import export_workspace
+        self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"])
+        written = self.read_deposit_state()
+        store = Store(self.workspace_dir)
+        self.assertEqual(store.snapshot()["records"]["workspace"]["deposit"], written)
+        self.assertNotIn("publication_receipt", store.snapshot()["records"])
+        export_workspace(store)
+        self.assertEqual(self.read_deposit_state(), written)
+
 
 class TestLegacyWorkspaceDeposit(_LegacyWorkspaceDepositTestCase):
     def test_a_legacy_workspace_uploads_without_a_note(self) -> None:
@@ -971,20 +1020,92 @@ class TestProductionDepositCitationReport(_DepositTestCase):
         self.assertEqual(next(iter(receipts.values()))["doi"], "10.5281/zenodo.4242")
 ```
 
+4. In `tests/test_research_round_integrity.py`, `DepositRoundGateTests` asserts two of the refusals this release removes. Replace `test_first_deposit_requires_an_approved_stop_before_remote_writes` with:
+
+```python
+    def test_a_first_deposit_without_an_approved_stop_is_noted_and_deposited_directly(self):
+        output = self._deposit(["--production", "--publish", "--confirm-publish",
+                                "--creator", "Example, Researcher"])
+        self.assertIn("Managed record skipped (readiness_required): ", output)
+        self.assertIn("round_decision_missing", output)
+        self.assertEqual(self.fake_api.requests[0].full_url, "https://zenodo.org/api/deposit/depositions")
+        records = Store(self.workspace_dir).snapshot()["records"]
+        self.assertNotIn("publication_receipt", records)
+        self.assertEqual(records["workspace"]["deposit"]["doi"], "10.5281/zenodo.4242")
+```
+
+Replace `test_a_new_version_requires_its_own_stop_and_keeps_the_prior_record` with:
+
+```python
+    def test_a_new_version_without_its_own_stop_is_deposited_directly_and_survives_export(self):
+        from research_harness.integration import export_workspace
+        store = self.research.store
+        approve_publication_stop(self.research, publication.publication_report(store)["bundle"])
+        self._deposit(["--publish", "--creator", "Example, Researcher"])
+        prepare_manuscript(self.research)
+        self.assertFalse(gate_report(store, "round")["ready"])
+        self.fake_api.requests.clear()
+        output = self._deposit(["--new-version", "--creator", "Example, Researcher"])
+        self.assertIn("Managed record skipped (readiness_required): ", output)
+        self.assertIn("round_decision_missing", output)
+        self.assertEqual(self.fake_api.requests[0].full_url,
+                         "https://sandbox.zenodo.org/api/deposit/depositions/4242/actions/newversion")
+        self.assertEqual(json.loads((self.workspace_dir / ".exactory/deposit.json").read_text())["deposition_id"], 4343)
+        current = Store(self.workspace_dir)
+        self.assertEqual(len(current.snapshot()["records"]["publication_receipt"]), 1)
+        export_workspace(current)
+        self.assertEqual(json.loads((self.workspace_dir / ".exactory/deposit.json").read_text())["deposition_id"], 4343)
+
+    def test_a_new_version_with_its_own_stop_keeps_the_prior_record(self):
+        store = self.research.store
+        approve_publication_stop(self.research, publication.publication_report(store)["bundle"])
+        self._deposit(["--publish", "--creator", "Example, Researcher"])
+        bundle = prepare_manuscript(self.research)
+        approve_publication_stop(self.research, bundle)
+        self.fake_api.requests.clear()
+        output = self._deposit(["--new-version", "--creator", "Example, Researcher"])
+        self.assertNotIn("Managed record skipped", output)
+        receipt = json.loads((self.workspace_dir / ".exactory/deposit.json").read_text())
+        self.assertEqual(receipt["deposition_id"], 4343)
+        self.assertEqual(len(Store(self.workspace_dir).snapshot()["records"]["publication_receipt"]), 2)
+```
+
+Add `from research_harness.storage import Store` to that module's imports. The two preview tests (`test_a_changed_bundle_stops_before_the_remote_preview`, `test_a_change_during_the_preview_read_stops_before_a_pending_write`) and `test_a_legacy_pending_deposit_requires_the_stop_before_resuming` stay unchanged: they change the bundle after the managed path started its remote steps, or resume a managed intent, which keeps its 0.39.2 behavior.
+
+5. In `tests/test_research_gates.py`, replace `test_bare_draft_marker_is_not_publication_readiness` with:
+
+```python
+    def test_bare_draft_marker_deposits_directly(self):
+        metadata = self.root / ".exactory"
+        (metadata / "draft.json").write_text(json.dumps({"version": 1, "title": "Fixture"}))
+        (self.root / "paper.pdf").write_bytes(b"%PDF-1.4\n%%EOF")
+        (self.root / "abstract.txt").write_text("An authored bounded fixture.")
+        result = subprocess.run([sys.executable, str(PLUGIN / "bin/exactory-draft"), "deposit",
+            "--pdf", "paper.pdf", "--abstract-file", "abstract.txt", "--creator", "Example, Author"],
+            cwd=self.root, capture_output=True, text=True, env=dict(os.environ, ZENODO_SANDBOX_TOKEN=""))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("ZENODO_SANDBOX_TOKEN is not set", result.stderr)
+        self.assertNotIn("readiness", result.stderr)
+```
+
+Read the fixture's `setUp` first: when `self.root` already holds a configured store, the command takes the store path instead of the legacy path, and the assertion on the token message still holds because the token check runs before the decision point. When the fake root holds `.exactory/research.sqlite3`, the `Managed record skipped` note never appears, because the command exits at the token check first.
+
 - [ ] **Step 2: Run to see them fail**
 
 ```bash
 python3 -m unittest tests.test_draft -k TestDirectDeposit -k TestLegacyWorkspaceDeposit -k TestProductionDepositCitationReport -v
+python3 -m unittest tests.test_research_round_integrity -k DepositRoundGateTests -v
+python3 -m unittest tests.test_research_gates -k bare_draft -v
 ```
 
-Expected: every `TestDirectDeposit` and `TestLegacyWorkspaceDeposit` test FAILS with `readiness_required` or `migration_required` in the output; `test_a_changed_bibliography_moves_the_deposit_to_the_direct_path` FAILS.
+Expected: every `TestDirectDeposit` and `TestLegacyWorkspaceDeposit` test FAILS with `readiness_required` or `migration_required` in the output; `test_a_changed_bibliography_moves_the_deposit_to_the_direct_path` FAILS; the two replaced round-integrity tests and the bare-draft test FAIL.
 
-- [ ] **Step 3: Add `validate_deposit` to `research_harness/zenodo.py`**
+- [ ] **Step 3: Add `validate_deposit` to `research_harness/zenodo.py` and `record_direct_deposit` to `research_harness/integration.py`**
 
-Before `def deposit(`:
+In `research_harness/zenodo.py`, before `def deposit(`:
 
 ```python
-def validate_deposit(store, pdf, abstract, sources):
+def validate_deposit(store, pdf, abstract, sources, *, new_version, environment):
     """Every check the managed deposit runs before its first remote write.
 
     Raises ResearchError when the workspace cannot record this deposit; the
@@ -993,10 +1114,33 @@ def validate_deposit(store, pdf, abstract, sources):
     records = store.snapshot()["records"]
     require_ready(round_state(records, Evaluation(records, ArtifactStore(store.root))),
                   "depositing the final development round")
+    prior = records.get("workspace", {}).get("deposit")
+    if new_version and (prior is None or prior["environment"] != environment):
+        raise ResearchError("publication_prior_required", "A revised deposit must use the prior concrete record in the same environment")
     return report
 ```
 
-Add `from .publication import publication_state, validate_upload` to the imports (replacing the existing `publication_state` import line).
+Replace the existing `from .publication import publication_state` line with `from .publication import publication_state, validate_upload`.
+
+In `research_harness/integration.py`, after `export_workspace`:
+
+```python
+def record_direct_deposit(store, state, *, expected_revision, request_id):
+    """Record a deposit made outside the managed publication path as the workspace's deposit.
+
+    The projection export then keeps .exactory/deposit.json on this record. It
+    grants no publication credit: the gates read receipts bound to a reviewed bundle."""
+    def prepare(records, value):
+        fields(value, ("environment", "deposition_id", "draft_url"), ("doi", "concept_doi", "record_url"))
+        return [immutable_record(records, "direct_deposit", request_id, value),
+                ("workspace", "deposit", value)], value
+    result = prepared_mutation(store, "workspace.direct_deposit", state, prepare,
+                               expected_revision=expected_revision, request_id=request_id)
+    export_workspace(store)
+    return result
+```
+
+`fields`, `immutable_record`, and `prepared_mutation` are already imported in `integration.py`. Read `fields` in `research_harness/operations.py` before relying on the optional-field argument; if its signature differs, pass the arguments the way `initialize_workspace` does.
 
 - [ ] **Step 4: Rewrite the deposit command in `bin/exactory-draft`**
 
@@ -1004,15 +1148,17 @@ Change the imports to:
 
 ```python
 from research_harness.errors import ResearchError
-from research_harness.integration import command_identity, current_store, initialization_payload, initialize_workspace, managed_store
+from research_harness.integration import command_identity, current_store, initialization_payload, initialize_workspace, record_direct_deposit
 from research_harness.storage import Store
 from research_harness.workspace import find_workspace
 from research_harness.citation_report import report_citation_gate
-from research_harness.cli import add_identity, note_managed_record_skipped
+from research_harness.cli import add_identity, note_managed_record_skipped, select_managed_path
 from research_harness.zenodo import deposit as deposit_bundle, continue_deposit, validate_deposit
 ```
 
-(`gate_report`, `require_ready`, `validate_upload`, and `ArtifactStore` are no longer used here; drop them. `current_store` and `find_workspace` stay for `_run_reconcile`; `Store` stays for `_run_init`.)
+Add `import uuid` to the standard-library imports.
+
+(`gate_report`, `require_ready`, `validate_upload`, and `ArtifactStore` are no longer used here; drop them. `current_store` stays for `_save_deposit_state` and `_run_reconcile`, `find_workspace` for `_run_reconcile`, `Store` for `_run_init`. Confirm each with a search before removing an import.)
 
 Add the constants after `_SOURCES_UPLOAD_STEM`:
 
@@ -1051,15 +1197,10 @@ def _run_deposit(args: argparse.Namespace) -> None:
 
     # A study whose publication and round gates are ready records the receipt;
     # otherwise the record is created directly, and the user reads why on stderr.
-    store = managed_store()
-    report = None
-    if store is not None:
-        try:
-            report = validate_deposit(store, pdf_path, abstract_path, sources_path)
-        except ResearchError as error:
-            note_managed_record_skipped(error)
-            store = None
-    if store is not None:
+    managed = select_managed_path(lambda store: validate_deposit(
+        store, pdf_path, abstract_path, sources_path, new_version=args.new_version, environment=environment))
+    if managed is not None:
+        store, report = managed
         _deposit_managed(store, report, args, base_url, environment, metadata, sources_path, token)
     else:
         _deposit_directly(args, base_url, environment, metadata, pdf_path, sources_path, token)
@@ -1147,7 +1288,11 @@ def _open_new_version_draft(base_url: str, environment: str, token: str) -> dict
 
 
 def _save_deposit_state(environment: str, deposition: dict, published: dict | None) -> dict:
-    """Write .exactory/deposit.json with the fields the managed projection writes, and return them."""
+    """Record a direct deposit with the fields the managed projection writes, and return them.
+
+    A workspace with a research store records it there, so a later projection
+    export keeps .exactory/deposit.json. Without a usable store the file is
+    written directly."""
     state = {
         "environment": environment,
         "deposition_id": deposition["id"],
@@ -1157,9 +1302,18 @@ def _save_deposit_state(environment: str, deposition: dict, published: dict | No
         state["doi"] = published.get("doi", "")
         state["concept_doi"] = published.get("conceptdoi", "")
         state["record_url"] = published.get("links", {}).get("record_html", "")
-    _DEPOSIT_STATE_PATH.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    try:
+        store = current_store(Path.cwd())
+        record_direct_deposit(store, state, expected_revision=store.revision,
+                              request_id="direct-deposit-" + uuid.uuid4().hex)
+    except ResearchError as error:
+        if error.code != "migration_required":
+            note_managed_record_skipped(error)
+        _DEPOSIT_STATE_PATH.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
     return state
 ```
+
+The command runs from the workspace root (it reads `.exactory/draft.json` by relative path), so `Path.cwd()` is the workspace root.
 
 Update the module docstring (lines 2-15): replace "A production deposit first runs the offline citation gate (exactory-check gate)." with "A production deposit first prints the offline citation report (exactory-check gate) and continues." and add one sentence: "A workspace whose publication and round gates are ready records the deposit as a managed receipt; any other workspace deposits directly and prints one Managed record skipped line."
 
@@ -1169,10 +1323,10 @@ Check that `_run_reconcile` still imports what it needs (`current_store` from `r
 
 ```bash
 python3 -m unittest tests.test_draft -v
-python3 -m unittest tests.test_research_publication tests.test_research_round_integrity -v
+python3 -m unittest tests.test_research_publication tests.test_research_round_integrity tests.test_research_gates -v
 ```
 
-Expected: PASS. The round-integrity module still passes because `validate_deposit` runs the same round check the managed path runs.
+Expected: PASS. The preview tests in the round-integrity module still stop the managed deposit, because the bundle changes after `validate_deposit` passed and the managed remote steps started.
 
 - [ ] **Step 6: Commit**
 
@@ -1186,11 +1340,11 @@ publication and round gates are ready, and otherwise creates the Zenodo
 record directly and writes .exactory/deposit.json. The production
 citation report is printed and never stops the deposit.
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 ```
 
 ```bash
-git add bin/exactory-draft research_harness/zenodo.py tests/test_draft.py
+git add bin/exactory-draft research_harness/zenodo.py research_harness/integration.py tests/test_draft.py tests/test_research_round_integrity.py tests/test_research_gates.py
 git commit -F <scratchpad>/commit-5.txt
 ```
 
@@ -1220,9 +1374,10 @@ After the paragraph that starts "The `exactory` command is on PATH", insert:
 
 ```markdown
 The command runs from any directory, and the user's request is its authorization.
-Inside a study whose publication gate is ready, the CLI also records the submission
-receipt the study needs to close its `submit` stage. In any other workspace it prints
-one line, `Managed record skipped (<code>): <message>`, and sends the request anyway.
+A managed study works under the [research constitution](../../RESEARCH_CONSTITUTION.md);
+inside a study whose publication gate is ready, the CLI also records the submission
+receipt that closes the study's `submit` stage. In any other workspace it prints one
+line, `Managed record skipped (<code>): <message>`, and sends the request anyway.
 Inside a draft workspace it first prints the offline citation report; a failing
 report is information for the user, and the submit continues.
 ```
@@ -1243,10 +1398,11 @@ Replace the second bullet of step 1 ("The user named none and you are in a study
 
 ```markdown
 The command runs from any directory, and the user's request is its authorization.
-When you work inside a verification workspace that bound this exact verdict with
-`exactory-research bind-verdict`, the CLI also records the verdict receipt there. In
-any other directory it sends the verdict directly; inside a workspace that did not
-bind it, it first prints one line, `Managed record skipped (<code>): <message>`.
+A verification workspace that follows the [research constitution](../../RESEARCH_CONSTITUTION.md)
+and the [managed research workflow](../../docs/research-workflow.md), and that bound
+this exact verdict with `exactory-research bind-verdict`, also records the verdict
+receipt. In any other directory the CLI sends the verdict directly; inside a workspace
+that did not bind it, it first prints one line, `Managed record skipped (<code>): <message>`.
 Neither case stops the send.
 ```
 
@@ -1285,9 +1441,10 @@ unsoundness: name what you could not read, and judge on what you did read.
   `--confirm-publish` flag records that the user asked for it. Park before
   production (`exactory-lab state set --waiting production-deposit`) only when
   the user named that stop ("prepare the deposit but let me publish it").
-- The command runs in any draft workspace. In a study whose publication and
-  round gates are ready, the CLI records the publication receipt the study needs
-  to close its `deposit` stage. In any other workspace it prints one line,
+- The command runs in any draft workspace. In a study that works under the
+  [research constitution](../../RESEARCH_CONSTITUTION.md) and whose publication
+  and round gates are ready, the CLI records the publication receipt that closes
+  the study's `deposit` stage. In any other workspace it prints one line,
   `Managed record skipped (<code>): <message>`, and creates the record anyway.
 ```
 
@@ -1340,14 +1497,16 @@ unsoundness: name what you could not read, and judge on what you did read.
 
 - [ ] **Step 5: Read the three files once in full**
 
-Read each rewritten file top to bottom and confirm: no sentence names `status --summary`, `next --summary`, `gate`, `bind-verdict`, `--expected-revision`, `--request-id`, `reconcile`, or the research constitution; the four fenced commands still parse; the Codex check passes.
+Read each rewritten file top to bottom and confirm: no sentence names `status --summary`, `next --summary`, `gate publication`, `gate round`, `gate deposited`, `gate preparation`, `--expected-revision`, `--request-id`, or `reconcile`; each skill links the constitution once; the verify skill links the workflow once; the Codex check and the guidance tests pass.
 
 ```bash
-grep -n "status --summary\|next --summary\|gate \|bind-verdict\|expected-revision\|request-id\|reconcile\|constitution" skills/submit/SKILL.md skills/verify/SKILL.md skills/deposit/SKILL.md
+grep -n "status --summary\|next --summary\|gate publication\|gate round\|gate deposited\|gate preparation\|expected-revision\|request-id\|reconcile" skills/submit/SKILL.md skills/verify/SKILL.md skills/deposit/SKILL.md
 python3 codex/generate.py --check
+python3 -m unittest tests.test_research_guidance -k links -v
+python3 -m unittest tests.test_research_guidance -k recipe -v
 ```
 
-Expected: the grep prints one line, the verify skill's sentence that names `exactory-research bind-verdict` as the optional managed binding, and nothing else; the check passes.
+Expected: the grep prints nothing; the check passes; both guidance tests pass.
 
 - [ ] **Step 6: Commit**
 
@@ -1361,7 +1520,7 @@ CLI records a study receipt when the study is ready and runs the command
 either way. The deposit skill makes the sandbox a test the user asks for
 and goes straight to production.
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 ```
 
 ```bash
@@ -1565,10 +1724,11 @@ validation, and `git diff --check` pass.
 
 - [ ] **Step 7: Version**
 
-Set `"version": "0.40.0"` in `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`.
+Set `"version": "0.40.0"` in `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`. In `tests/test_research_guidance.py`, `test_release_manifests_and_notes_describe_the_same_final_version` names `"0.40.0"` and `docs/releases/0.40.0.md`.
 
 ```bash
 python3 -m unittest tests.test_manifest -v
+python3 -m unittest tests.test_research_guidance -v
 python3 codex/generate.py --check
 ```
 
@@ -1581,11 +1741,11 @@ Message file `commit-7.txt`:
 ```
 docs: release 0.40.0, user-authorized publication
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 ```
 
 ```bash
-git add README.md docs/research-workflow.md docs/research-cli.md codex/README.md docs/releases/0.40.0.md docs/testing/user-authorized-publication.md .claude-plugin/plugin.json .codex-plugin/plugin.json
+git add README.md docs/research-workflow.md docs/research-cli.md codex/README.md docs/releases/0.40.0.md docs/testing/user-authorized-publication.md .claude-plugin/plugin.json .codex-plugin/plugin.json tests/test_research_guidance.py
 git commit -F <scratchpad>/commit-7.txt
 ```
 
