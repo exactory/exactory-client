@@ -8,7 +8,7 @@ from .execution import _owner
 from .evaluation import Evaluation
 from .gates import require_ready
 from .integration import export_workspace
-from .publication import publication_state
+from .publication import publication_state, validate_upload
 from .remote import begin_intent, finish_intent, get_intent, remote_step, resolve_step
 from .rounds import round_state
 
@@ -152,6 +152,21 @@ def continue_deposit(store, identifier, client, *, reconcile=False):
         result = finish_intent(store, identifier, "publication_receipt", receipt, workspace=state)
         export_workspace(store)
         return result
+
+
+def validate_deposit(store, pdf, abstract, sources, *, new_version, environment):
+    """Every check the managed deposit runs before its first remote write.
+
+    Raises ResearchError when the workspace cannot record this deposit; the
+    CLI then deposits directly."""
+    report = validate_upload(store, pdf, abstract, sources)
+    records = store.snapshot()["records"]
+    require_ready(round_state(records, Evaluation(records, ArtifactStore(store.root))),
+                  "depositing the final development round")
+    prior = records.get("workspace", {}).get("deposit")
+    if new_version and (prior is None or prior["environment"] != environment):
+        raise ResearchError("publication_prior_required", "A revised deposit must use the prior concrete record in the same environment")
+    return report
 
 
 def deposit(store, binding, client, *, expected_revision, request_id):

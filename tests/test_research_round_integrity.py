@@ -7,6 +7,7 @@ import unittest
 from research_harness import predictions, publication, rounds
 from research_harness.gates import gate_report
 from research_harness.review_delivery import deliver_manuscript, deliver_round
+from research_harness.storage import Store
 from rounds_fixtures import RoundsCase
 from integration_fixtures import approve_publication_stop, prepare_manuscript
 from test_draft import _DepositTestCase, _draft
@@ -15,13 +16,15 @@ from test_draft import _DepositTestCase, _draft
 class DepositRoundGateTests(_DepositTestCase):
     prepare_stop = False
 
-    def test_first_deposit_requires_an_approved_stop_before_remote_writes(self):
-        before = self.research.store.snapshot()
+    def test_a_first_deposit_without_an_approved_stop_is_noted_and_deposited_directly(self):
         output = self._deposit(["--production", "--publish", "--confirm-publish",
-                                "--creator", "Example, Researcher"], expected_exit_code=1)
+                                "--creator", "Example, Researcher"])
+        self.assertIn("Managed record skipped (readiness_required): ", output)
         self.assertIn("round_decision_missing", output)
-        self.assertEqual(self.fake_api.requests, [])
-        self.assertEqual(self.research.store.snapshot(), before)
+        self.assertEqual(self.fake_api.requests[0].full_url, "https://zenodo.org/api/deposit/depositions")
+        records = Store(self.workspace_dir).snapshot()["records"]
+        self.assertNotIn("publication_receipt", records)
+        self.assertEqual(records["workspace"]["deposit"]["doi"], "10.5281/zenodo.4242")
 
     def test_a_legacy_pending_deposit_requires_the_stop_before_resuming(self):
         from research_harness.remote import begin_intent
@@ -61,20 +64,37 @@ class DepositRoundGateTests(_DepositTestCase):
         self.assertFalse(store.snapshot()["records"].get("publication_receipt"))
         self.assertIsNone(next(iter(store.snapshot()["records"]["remote_intent"].values()))["pending"])
 
-    def test_a_new_version_requires_its_own_stop_and_keeps_the_prior_record(self):
+    def test_a_new_version_without_its_own_stop_is_deposited_directly_and_survives_export(self):
+        from research_harness.integration import export_workspace
         store = self.research.store
         approve_publication_stop(self.research, publication.publication_report(store)["bundle"])
-        self._deposit(["--creator", "Example, Researcher"])
-        bundle = prepare_manuscript(self.research)
+        self._deposit(["--publish", "--creator", "Example, Researcher"])
+        prepare_manuscript(self.research)
         self.assertFalse(gate_report(store, "round")["ready"])
         self.fake_api.requests.clear()
-        output = self._deposit(["--new-version", "--creator", "Example, Researcher"], expected_exit_code=1)
+        output = self._deposit(["--new-version", "--creator", "Example, Researcher"])
+        self.assertIn("Managed record skipped (readiness_required): ", output)
         self.assertIn("round_decision_missing", output)
-        self.assertEqual(self.fake_api.requests, [])
+        self.assertEqual(self.fake_api.requests[0].full_url,
+                         "https://sandbox.zenodo.org/api/deposit/depositions/4242/actions/newversion")
+        self.assertEqual(json.loads((self.workspace_dir / ".exactory/deposit.json").read_text())["deposition_id"], 4343)
+        current = Store(self.workspace_dir)
+        self.assertEqual(len(current.snapshot()["records"]["publication_receipt"]), 1)
+        export_workspace(current)
+        self.assertEqual(json.loads((self.workspace_dir / ".exactory/deposit.json").read_text())["deposition_id"], 4343)
+
+    def test_a_new_version_with_its_own_stop_keeps_the_prior_record(self):
+        store = self.research.store
+        approve_publication_stop(self.research, publication.publication_report(store)["bundle"])
+        self._deposit(["--publish", "--creator", "Example, Researcher"])
+        bundle = prepare_manuscript(self.research)
         approve_publication_stop(self.research, bundle)
-        self._deposit(["--new-version", "--creator", "Example, Researcher"])
+        self.fake_api.requests.clear()
+        output = self._deposit(["--new-version", "--creator", "Example, Researcher"])
+        self.assertNotIn("Managed record skipped", output)
         receipt = json.loads((self.workspace_dir / ".exactory/deposit.json").read_text())
         self.assertEqual(receipt["deposition_id"], 4343)
+        self.assertEqual(len(Store(self.workspace_dir).snapshot()["records"]["publication_receipt"]), 2)
 
 
 class ManuscriptHistoryTests(RoundsCase):

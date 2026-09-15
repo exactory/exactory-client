@@ -19,6 +19,7 @@ from pathlib import Path
 
 from integration_fixtures import prepare_research, prepare_manuscript
 from research_harness.errors import ResearchError
+from research_harness.storage import Store
 
 _PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 
@@ -260,6 +261,60 @@ class _DepositTestCase(unittest.TestCase):
         )
 
 
+class _PlainWorkspaceDepositTestCase(unittest.TestCase):
+    """A draft workspace as `exactory-draft init` leaves it: a store, no research."""
+
+    def setUp(self) -> None:
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        self.workspace_dir = Path(scratch.name)
+        _run_draft_command(
+            ["init", "--dir", str(self.workspace_dir),
+             "--title", "Cohort Percentiles", "--category", "cs.MA"],
+            None,
+            self,
+        )
+        (self.workspace_dir / "draft" / "paper.pdf").write_bytes(b"%PDF-1.4 fake paper")
+        (self.workspace_dir / "draft" / "abstract.txt").write_text(
+            "We predict cohort percentiles & bound their error.\n"
+        )
+        _write_passing_citation_report(self.workspace_dir)
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(self.workspace_dir)
+        self.fake_api = _FakeZenodoApi()
+        self.addCleanup(setattr, _draft, "_open_url", _draft._open_url)
+        _draft._open_url = self.fake_api
+        env_patcher = unittest.mock.patch.dict(
+            os.environ,
+            {"ZENODO_SANDBOX_TOKEN": "sandbox-token", "ZENODO_TOKEN": "production-token"},
+            clear=True,
+        )
+        env_patcher.start()
+        self.addCleanup(env_patcher.stop)
+
+    def _deposit(self, argv_tail: list[str], expected_exit_code: int | None = None) -> str:
+        return _run_draft_command(
+            ["deposit", "--abstract-file", "draft/abstract.txt", *argv_tail],
+            expected_exit_code, self,
+        )
+
+    def read_deposit_state(self) -> dict:
+        return json.loads((self.workspace_dir / ".exactory" / "deposit.json").read_text())
+
+    def requested(self) -> list[tuple[str, str]]:
+        return [(request.get_method(), request.full_url) for request in self.fake_api.requests]
+
+
+class _LegacyWorkspaceDepositTestCase(_PlainWorkspaceDepositTestCase):
+    """A draft workspace from before 0.38.0: draft.json and no store."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        # The store and its journal files, which Store() looks for together.
+        for path in (self.workspace_dir / ".exactory").glob("research.sqlite3*"):
+            path.unlink()
+
+
 class TestDeposit(_DepositTestCase):
     def _read_sent_metadata(self) -> dict:
         metadata_request = next(
@@ -408,28 +463,30 @@ class TestDeposit(_DepositTestCase):
         outside_pdf_path.write_bytes(b"%PDF-1.4 fake paper from elsewhere")
         return outside_pdf_path
 
-    def test_a_pdf_from_outside_the_draft_tree_is_refused_before_deposit(self) -> None:
+    def test_a_pdf_from_outside_the_draft_tree_moves_the_deposit_to_the_direct_path(self) -> None:
         _write_authorship_record(self.workspace_dir, _AGENT_WROTE_THE_PAPER_RECORD_TEXT)
         outside = self._write_pdf_outside_the_workspace()
         self.assertFalse(_draft._has_exactory_authorship_evidence(outside))
-        output = self._deposit(["--creator", "Shiroshita, Ryosuke", "--pdf", str(outside)], 1)
-        self.assertIn("publication_artifact_mismatch", output)
-        self.assertEqual(self.fake_api.requests, [])
+        output = self._deposit(["--creator", "Shiroshita, Ryosuke", "--pdf", str(outside)])
+        self.assertIn("Managed record skipped (publication_artifact_mismatch): ", output)
+        self.assertEqual(self.fake_api.requests[0].get_method(), "POST")
+        self.assertNotIn("publication_receipt", Store(self.workspace_dir).snapshot()["records"])
 
-    def test_a_pdf_symlinked_out_of_the_draft_tree_is_refused_before_deposit(self) -> None:
+    def test_a_pdf_symlinked_out_of_the_draft_tree_moves_the_deposit_to_the_direct_path(self) -> None:
         _write_authorship_record(self.workspace_dir, _AGENT_WROTE_THE_PAPER_RECORD_TEXT)
         paper_path = self.workspace_dir / "draft" / "paper.pdf"
         paper_path.unlink()
         paper_path.symlink_to(self._write_pdf_outside_the_workspace())
         self.assertFalse(_draft._has_exactory_authorship_evidence(paper_path))
-        output = self._deposit(["--creator", "Shiroshita, Ryosuke"], 1)
-        self.assertIn("readiness_required", output)
-        self.assertEqual(self.fake_api.requests, [])
+        output = self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        self.assertIn("Managed record skipped (", output)
+        self.assertEqual(self.fake_api.requests[0].get_method(), "POST")
+        self.assertNotIn("publication_receipt", Store(self.workspace_dir).snapshot()["records"])
 
     def test_a_blank_abstract_file_is_refused_before_any_request(self) -> None:
         (self.workspace_dir / "draft" / "abstract.txt").write_text(" \n\n")
         stderr_text = self._deposit(
-            ["--creator", "Shiroshita, Ryosuke"], expected_exit_code=1
+            ["--creator", "Shiroshita, Ryosuke"], expected_exit_code=2
         )
         self.assertIn("abstract", stderr_text)
         self.assertEqual(self.fake_api.requests, [])
@@ -438,7 +495,7 @@ class TestDeposit(_DepositTestCase):
         stderr_text = _run_draft_command(
             ["deposit", "--abstract-file", "draft/nothing-here.txt",
              "--creator", "Shiroshita, Ryosuke"],
-            1, self,
+            2, self,
         )
         self.assertIn("nothing-here.txt", stderr_text)
         self.assertEqual(self.fake_api.requests, [])
@@ -528,6 +585,13 @@ class TestDeposit(_DepositTestCase):
         self.assertIn("publish", stdout_text)
         self.assertNotIn("10.5281/zenodo.4242", stdout_text)
 
+    def test_a_ready_study_writes_the_publication_receipt(self) -> None:
+        output = self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"])
+        self.assertNotIn("Managed record skipped", output)
+        receipts = Store(self.workspace_dir).snapshot()["records"]["publication_receipt"]
+        self.assertEqual(len(receipts), 1)
+        self.assertEqual(next(iter(receipts.values()))["doi"], "10.5281/zenodo.4242")
+
 
 class TestProductionPublishConfirmation(_DepositTestCase):
     def test_refuses_without_the_confirm_publish_flag(self) -> None:
@@ -561,21 +625,22 @@ class TestProductionPublishConfirmation(_DepositTestCase):
         self.assertEqual(len(publish_urls), 1)
 
 
-class TestProductionDepositGate(_DepositTestCase):
-    def test_production_deposit_is_refused_when_the_gate_fails(self) -> None:
+class TestProductionDepositCitationReport(_DepositTestCase):
+    def test_a_failing_report_is_printed_and_the_managed_deposit_continues(self) -> None:
         (self.workspace_dir / ".exactory" / "citation-check.json").unlink()
-        stderr_text = self._deposit(
-            ["--production", "--creator", "Shiroshita, Ryosuke"], expected_exit_code=1
-        )
-        self.assertIn("exactory-check lookup", stderr_text)
-        self.assertEqual(self.fake_api.requests, [])
+        output = self._deposit(["--production", "--creator", "Shiroshita, Ryosuke"])
+        self.assertIn("Citation report: ", output)
+        self.assertIn("exactory-check lookup", output)
+        self.assertTrue(self.fake_api.requests[0].full_url.startswith("https://zenodo.org/api/"))
+        self.assertIn("publication_receipt", Store(self.workspace_dir).snapshot()["records"])
 
-    def test_sandbox_also_requires_the_current_reviewed_bibliography(self) -> None:
+    def test_a_changed_bibliography_moves_the_deposit_to_the_direct_path(self) -> None:
         (self.workspace_dir / ".exactory" / "citation-check.json").unlink()
         (self.workspace_dir / "draft" / "references.bib").unlink()
-        output = self._deposit(["--creator", "Shiroshita, Ryosuke"], 1)
-        self.assertIn("readiness_required", output)
-        self.assertEqual(self.fake_api.requests, [])
+        output = self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        self.assertIn("Managed record skipped (", output)
+        self.assertEqual(self.fake_api.requests[0].get_method(), "POST")
+        self.assertNotIn("publication_receipt", Store(self.workspace_dir).snapshot()["records"])
 
 
 class TestParserStrictness(unittest.TestCase):
@@ -593,7 +658,7 @@ class TestDepositPreconditions(_DepositTestCase):
         outside_dir = tempfile.TemporaryDirectory()
         self.addCleanup(outside_dir.cleanup)
         os.chdir(outside_dir.name)
-        stderr_text = self._deposit(["--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
+        stderr_text = self._deposit(["--creator", "Shiroshita, Ryosuke"], expected_exit_code=2)
         self.assertIn("init", stderr_text)
 
     def test_deposit_without_a_pdf_is_an_error(self) -> None:
@@ -706,6 +771,101 @@ class TestNewVersion(_DepositTestCase):
             expected_exit_code=1,
         )
         self.assertIn("prior concrete record", stderr_text)
+
+
+class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
+    def test_an_unready_workspace_notes_the_skip_and_uploads(self) -> None:
+        output = self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        self.assertIn("Managed record skipped (readiness_required): ", output)
+        self.assertEqual(self.requested()[0], ("POST", "https://sandbox.zenodo.org/api/deposit/depositions"))
+        self.assertIn(("PUT", "https://sandbox.zenodo.org/api/files/bucket-1/paper.pdf"), self.requested())
+        self.assertIn(("PUT", "https://sandbox.zenodo.org/api/deposit/depositions/4242"), self.requested())
+        self.assertIn(("PUT", "https://sandbox.zenodo.org/api/records/4242/draft"), self.requested())
+        state = self.read_deposit_state()
+        self.assertEqual(state["environment"], "sandbox")
+        self.assertEqual(state["deposition_id"], 4242)
+        self.assertIn("deposit/4242", state["draft_url"])
+        self.assertNotIn("doi", state)
+
+    def test_a_published_direct_deposit_writes_the_dois(self) -> None:
+        output = self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"])
+        state = self.read_deposit_state()
+        self.assertEqual(state["doi"], "10.5281/zenodo.4242")
+        self.assertEqual(state["concept_doi"], "10.5281/zenodo.4241")
+        self.assertIn("records/4242", state["record_url"])
+        # The combined stream holds the skip note, the publish line, then the state JSON.
+        self.assertIn("The record is published: ", output)
+        self.assertIn('"doi": "10.5281/zenodo.4242"', output)
+
+    def test_the_direct_metadata_carries_the_disclosure(self) -> None:
+        self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        metadata_request = next(request for request in self.fake_api.requests
+                                if request.get_method() == "PUT"
+                                and request.full_url.endswith("/deposit/depositions/4242"))
+        metadata = json.loads(metadata_request.data.decode())["metadata"]
+        self.assertEqual(metadata["title"], "Cohort Percentiles")
+        self.assertEqual(metadata["creators"], [{"name": "Shiroshita, Ryosuke"}])
+        self.assertIn(_DEPOSITED_THROUGH_EXACTORY_SENTENCE, metadata["description"])
+        self.assertNotIn("keywords", metadata)
+
+    def test_a_production_deposit_prints_a_failing_citation_report_and_continues(self) -> None:
+        (self.workspace_dir / ".exactory" / "citation-check.json").unlink()
+        output = self._deposit(["--production", "--creator", "Shiroshita, Ryosuke"])
+        self.assertIn("Citation report: ", output)
+        self.assertIn("exactory-check lookup", output)
+        self.assertEqual(self.requested()[0], ("POST", "https://zenodo.org/api/deposit/depositions"))
+
+    def test_a_production_publish_still_needs_confirmation(self) -> None:
+        stderr_text = self._deposit(["--production", "--publish", "--creator", "Shiroshita, Ryosuke"],
+                                    expected_exit_code=1)
+        self.assertIn("--confirm-publish", stderr_text)
+        self.assertEqual(self.fake_api.requests, [])
+
+    def test_a_new_version_reuses_the_stored_deposition(self) -> None:
+        self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"])
+        self.fake_api.requests.clear()
+        self._deposit(["--new-version", "--creator", "Shiroshita, Ryosuke"])
+        self.assertEqual(self.requested()[0],
+                         ("POST", "https://sandbox.zenodo.org/api/deposit/depositions/4242/actions/newversion"))
+        self.assertEqual(self.requested()[1], ("GET", "https://sandbox.zenodo.org/api/deposit/depositions/4343"))
+        self.assertIn(("PUT", "https://sandbox.zenodo.org/api/files/bucket-2/paper.pdf"), self.requested())
+        self.assertEqual(self.read_deposit_state()["deposition_id"], 4343)
+
+    def test_a_new_version_refuses_an_environment_mismatch(self) -> None:
+        self._deposit(["--production", "--publish", "--confirm-publish", "--creator", "Shiroshita, Ryosuke"])
+        self.fake_api.requests.clear()
+        stderr_text = self._deposit(["--new-version", "--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
+        self.assertIn("same environment", stderr_text)
+        self.assertEqual(self.fake_api.requests, [])
+
+    def test_a_new_version_without_a_prior_record_is_an_error(self) -> None:
+        stderr_text = self._deposit(["--new-version", "--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
+        self.assertIn("Run a plain deposit first", stderr_text)
+        self.assertEqual(self.fake_api.requests, [])
+
+    def test_a_blank_abstract_file_is_refused_before_any_request(self) -> None:
+        (self.workspace_dir / "draft" / "abstract.txt").write_text(" \n\n")
+        stderr_text = self._deposit(["--creator", "Shiroshita, Ryosuke"], expected_exit_code=2)
+        self.assertIn("abstract", stderr_text)
+        self.assertEqual(self.fake_api.requests, [])
+
+    def test_the_store_records_the_direct_deposit_so_an_export_keeps_it(self) -> None:
+        from research_harness.integration import export_workspace
+        self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"])
+        written = self.read_deposit_state()
+        store = Store(self.workspace_dir)
+        self.assertEqual(store.snapshot()["records"]["workspace"]["deposit"], written)
+        self.assertNotIn("publication_receipt", store.snapshot()["records"])
+        export_workspace(store)
+        self.assertEqual(self.read_deposit_state(), written)
+
+
+class TestLegacyWorkspaceDeposit(_LegacyWorkspaceDepositTestCase):
+    def test_a_legacy_workspace_uploads_without_a_note(self) -> None:
+        output = self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        self.assertNotIn("Managed record skipped", output)
+        self.assertEqual(self.requested()[0], ("POST", "https://sandbox.zenodo.org/api/deposit/depositions"))
+        self.assertEqual(self.read_deposit_state()["deposition_id"], 4242)
 
 
 if __name__ == "__main__":

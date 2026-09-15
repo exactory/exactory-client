@@ -105,6 +105,21 @@ def export_workspace(store):
     return {"revision": snapshot["revision"], "projection_only": True}
 
 
+def record_direct_deposit(store, state, *, expected_revision, request_id):
+    """Record a deposit made outside the managed publication path as the workspace's deposit.
+
+    The projection export then keeps .exactory/deposit.json on this record. It
+    grants no publication credit: the gates read receipts bound to a reviewed bundle."""
+    def prepare(records, value):
+        fields(value, ("environment", "deposition_id", "draft_url"), ("doi", "concept_doi", "record_url"))
+        return [immutable_record(records, "direct_deposit", request_id, value),
+                ("workspace", "deposit", value)], value
+    result = prepared_mutation(store, "workspace.direct_deposit", state, prepare,
+                               expected_revision=expected_revision, request_id=request_id)
+    export_workspace(store)
+    return result
+
+
 def _decisions(records, artifacts):
     from .storage import _canonical
     legacy = records.get("workspace_decision_history", {}).get("legacy")

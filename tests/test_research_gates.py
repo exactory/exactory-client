@@ -28,7 +28,7 @@ class ResearchGateTests(DevelopmentCase):
         self.assertFalse(report["ready"])
         self.assertIn("plan_dependencies_stale", [item["code"] for item in report["obligations"]])
 
-    def test_bare_draft_marker_is_not_publication_readiness(self):
+    def test_bare_draft_marker_deposits_directly(self):
         metadata = self.root / ".exactory"
         (metadata / "draft.json").write_text(json.dumps({"version": 1, "title": "Fixture"}))
         (self.root / "paper.pdf").write_bytes(b"%PDF-1.4\n%%EOF")
@@ -36,9 +36,9 @@ class ResearchGateTests(DevelopmentCase):
         result = subprocess.run([sys.executable, str(PLUGIN / "bin/exactory-draft"), "deposit",
             "--pdf", "paper.pdf", "--abstract-file", "abstract.txt", "--creator", "Example, Author"],
             cwd=self.root, capture_output=True, text=True, env=dict(os.environ, ZENODO_SANDBOX_TOKEN=""))
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("readiness", result.stderr)
-        self.assertNotIn("ZENODO_SANDBOX_TOKEN is not set", result.stderr)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("ZENODO_SANDBOX_TOKEN is not set", result.stderr)
+        self.assertNotIn("readiness", result.stderr)
 
     def test_gate_recomputes_whole_candidate_after_source_change(self):
         from integration_fixtures import observed_candidate

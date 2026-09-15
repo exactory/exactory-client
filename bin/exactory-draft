@@ -7,11 +7,13 @@ Two commands:
 
 Deposits go to the Zenodo sandbox and stay in the draft state by default.
 --production targets zenodo.org, and --publish makes the record public. A
-production deposit first runs the offline citation gate (exactory-check gate).
-A production publish also needs the --confirm-publish flag, because a
-published DOI is permanent. Tokens come from ZENODO_SANDBOX_TOKEN /
-ZENODO_TOKEN. The API shape follows https://developers.zenodo.org. Python
-standard library only.
+production deposit first prints the offline citation report (exactory-check
+gate) and continues. A workspace whose publication and round gates are ready
+records the deposit as a managed receipt; any other workspace deposits
+directly and prints one Managed record skipped line. A production publish also
+needs the --confirm-publish flag, because a published DOI is permanent. Tokens
+come from ZENODO_SANDBOX_TOKEN / ZENODO_TOKEN. The API shape follows
+https://developers.zenodo.org. Python standard library only.
 """
 
 from __future__ import annotations
@@ -20,23 +22,21 @@ import argparse
 import html
 import json
 import os
-import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
+import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from research_harness.errors import ResearchError
-from research_harness.gates import gate_report, require_ready
-from research_harness.integration import command_identity, current_store, initialization_payload, initialize_workspace
+from research_harness.integration import command_identity, current_store, initialization_payload, initialize_workspace, record_direct_deposit
 from research_harness.storage import Store
 from research_harness.workspace import find_workspace
-from research_harness.artifacts import ArtifactStore
-from research_harness.publication import validate_upload
-from research_harness.zenodo import deposit as deposit_bundle, continue_deposit
-from research_harness.cli import add_identity
+from research_harness.citation_report import report_citation_gate
+from research_harness.zenodo import deposit as deposit_bundle, continue_deposit, validate_deposit
+from research_harness.cli import add_identity, note_managed_record_skipped, select_managed_path
 
 _PRODUCTION_API_URL = "https://zenodo.org/api"
 _SANDBOX_API_URL = "https://sandbox.zenodo.org/api"
@@ -89,6 +89,9 @@ _WRITTEN_BY_EXACTORY_KEYWORD = "Written by exactory.ai"
 # 'supplementary' sorts after 'paper', keeping the paper on top.
 _PAPER_UPLOAD_NAME = "paper.pdf"
 _SOURCES_UPLOAD_STEM = "supplementary-sources"
+
+_CHECK_COMMAND_PATH = Path(__file__).with_name("exactory-check")
+_RDM_JSON_MEDIA_TYPE = "application/vnd.inveniordm.v1+json"
 
 def _exit_with_error(message: str, code: int = 1) -> None:
     print(message, file=sys.stderr)
@@ -248,12 +251,6 @@ def _name_sources_upload(sources_path: Path) -> str:
 
 
 def _run_deposit(args: argparse.Namespace) -> None:
-    try:
-        workspace = find_workspace()
-        store = current_store(workspace)
-        require_ready(gate_report(store, "readiness"), "publication")
-    except ResearchError as error:
-        _exit_with_error(json.dumps({"error": error.as_dict()}))
     state = _load_draft_state()
     pdf_path = Path(args.pdf) if args.pdf else _find_newest_pdf()
     if not pdf_path.exists():
@@ -261,31 +258,37 @@ def _run_deposit(args: argparse.Namespace) -> None:
     sources_path = Path(args.sources) if args.sources else None
     if sources_path is not None and not sources_path.exists():
         _exit_with_error(f"The file {sources_path} does not exist.", 2)
-    report = validate_upload(store, pdf_path, Path(args.abstract_file), sources_path)
-    bundle = report["bundle"]
-    abstract_text = ArtifactStore(store.root).read(bundle["files"]["abstract"]["artifact"]).decode("utf-8").strip()
+    abstract_path = Path(args.abstract_file)
+    abstract_text = _read_abstract_text(abstract_path)
     has_exactory_authorship_evidence = _has_exactory_authorship_evidence(pdf_path)
     token = _read_zenodo_token(args.production)
     if args.publish and args.production and not args.confirm_publish:
         _exit_with_error("A production publish is permanent. Get the user's approval"
                          " first. Then run the command again with --confirm-publish.")
     if args.production:
-        # A production deposit must pass the offline citation gate. The gate
-        # command owns the checks; this command only forwards its refusal.
-        gate_process = subprocess.run(
-            [sys.executable, str(Path(__file__).with_name("exactory-check")),
-             "gate", "--workspace", str(Path.cwd())],
-            capture_output=True,
-            text=True,
-        )
-        if gate_process.returncode != 0:
-            sys.stderr.write(gate_process.stderr)
-            sys.exit(1)
+        # The offline citation report is printed before the first remote write;
+        # the deposit continues either way, because the user asked for it.
+        report_citation_gate(Path.cwd(), _CHECK_COMMAND_PATH)
 
     base_url = _PRODUCTION_API_URL if args.production else _SANDBOX_API_URL
     environment = "production" if args.production else "sandbox"
     metadata = _build_deposit_metadata(state["title"], args.creator, abstract_text,
                                        has_exactory_authorship_evidence)
+
+    # A study whose publication and round gates are ready records the receipt;
+    # otherwise the record is created directly, and the user reads why on stderr.
+    managed = select_managed_path(lambda store: validate_deposit(
+        store, pdf_path, abstract_path, sources_path, new_version=args.new_version, environment=environment))
+    if managed is not None:
+        store, report = managed
+        _deposit_managed(store, report, args, base_url, environment, metadata, sources_path, token)
+    else:
+        _deposit_directly(args, base_url, environment, metadata, pdf_path, sources_path, token)
+
+
+def _deposit_managed(store, report: dict, args: argparse.Namespace, base_url: str, environment: str,
+                     metadata: dict, sources_path: Path | None, token: str) -> None:
+    bundle = report["bundle"]
     uploads = [{"name": _PAPER_UPLOAD_NAME, "artifact": bundle["files"]["pdf"]["artifact"]}]
     if sources_path is not None:
         uploads.append({"name": _name_sources_upload(sources_path), "artifact": bundle["files"]["sources"]["artifact"]})
@@ -299,6 +302,95 @@ def _run_deposit(args: argparse.Namespace) -> None:
         identity["expected_revision"] = report["revision"]
     receipt = deposit_bundle(store, binding, lambda method, url, **kwargs: _call_zenodo(method, url, token, **kwargs), **identity)
     print(json.dumps(receipt, indent=2))
+
+
+def _deposit_directly(args: argparse.Namespace, base_url: str, environment: str, metadata: dict,
+                      pdf_path: Path, sources_path: Path | None, token: str) -> None:
+    if args.new_version:
+        deposition = _open_new_version_draft(base_url, environment, token)
+    else:
+        deposition = _call_zenodo("POST", f"{base_url}/deposit/depositions", token, json_body={})
+    bucket_url = deposition["links"]["bucket"]
+    _call_zenodo("PUT", f"{bucket_url}/{_PAPER_UPLOAD_NAME}", token, file_bytes=pdf_path.read_bytes())
+    if sources_path is not None:
+        _call_zenodo("PUT", f"{bucket_url}/{_name_sources_upload(sources_path)}", token,
+                     file_bytes=sources_path.read_bytes())
+    _call_zenodo("PUT", f"{base_url}/deposit/depositions/{deposition['id']}", token,
+                 json_body={"metadata": metadata})
+    _mark_paper_as_preview(base_url, deposition["id"], token)
+    published = None
+    if args.publish:
+        # Per https://developers.zenodo.org, doi is present only on published
+        # depositions; conceptdoi names the paper across all its versions.
+        published = _call_zenodo("POST", f"{base_url}/deposit/depositions/{deposition['id']}/actions/publish", token)
+    state = _save_deposit_state(environment, deposition, published)
+    if published is not None:
+        print(f"The record is published: {state['record_url']}")
+    else:
+        print(f"The draft deposit is created. Review it at: {state['draft_url']}")
+    print(json.dumps(state, indent=2))
+
+
+def _mark_paper_as_preview(base_url: str, record_id: int, token: str) -> None:
+    """Make the paper the record's previewed file. The RDM draft document is
+    the working surface for this: the file-sort endpoint that
+    https://developers.zenodo.org still documents answers HTTP 405 on
+    zenodo.org (verified 2026-08-30). The PUT replaces the whole draft
+    document, so the fetched document goes back with only default_preview
+    added."""
+    draft_url = f"{base_url}/records/{record_id}/draft"
+    document = _call_zenodo("GET", draft_url, token, accept=_RDM_JSON_MEDIA_TYPE)
+    document.setdefault("files", {})["default_preview"] = _PAPER_UPLOAD_NAME
+    _call_zenodo("PUT", draft_url, token, json_body=document)
+
+
+def _open_new_version_draft(base_url: str, environment: str, token: str) -> dict:
+    try:
+        prior = json.loads(_DEPOSIT_STATE_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        _exit_with_error(f"{_DEPOSIT_STATE_PATH} does not exist here."
+                         " Run a plain deposit first; --new-version revises it.")
+    except json.JSONDecodeError as error:
+        _exit_with_error(f"{_DEPOSIT_STATE_PATH} is not valid JSON. Cause: {error}")
+    if prior.get("environment") != environment:
+        _exit_with_error(
+            f"The stored deposit is on {prior.get('environment')}, not"
+            f" {environment}. Run --new-version against the same environment.")
+    created = _call_zenodo(
+        "POST",
+        f"{base_url}/deposit/depositions/{prior['deposition_id']}/actions/newversion",
+        token,
+    )
+    draft_url = created.get("links", {}).get("latest_draft", "")
+    if draft_url == "":
+        _exit_with_error("Zenodo returned no new-version draft link.")
+    return _call_zenodo("GET", draft_url, token)
+
+
+def _save_deposit_state(environment: str, deposition: dict, published: dict | None) -> dict:
+    """Record a direct deposit with the fields the managed projection writes, and return them.
+
+    A workspace with a research store records it there, so a later projection
+    export keeps .exactory/deposit.json. Without a usable store the file is
+    written directly."""
+    state = {
+        "environment": environment,
+        "deposition_id": deposition["id"],
+        "draft_url": deposition.get("links", {}).get("html", ""),
+    }
+    if published is not None:
+        state["doi"] = published.get("doi", "")
+        state["concept_doi"] = published.get("conceptdoi", "")
+        state["record_url"] = published.get("links", {}).get("record_html", "")
+    try:
+        store = current_store(Path.cwd())
+        record_direct_deposit(store, state, expected_revision=store.revision,
+                              request_id="direct-deposit-" + uuid.uuid4().hex)
+    except ResearchError as error:
+        if error.code != "migration_required":
+            note_managed_record_skipped(error)
+        _DEPOSIT_STATE_PATH.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    return state
 
 
 def _run_reconcile(args: argparse.Namespace) -> None:
