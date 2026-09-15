@@ -95,7 +95,12 @@ def send_verdict(store, task, body, client, *, expected_revision, request_id):
                             {"verification_id": task["verificationId"]}) from error
 
 
-def _send_verdict(store, task, body, client, *, expected_revision, request_id):
+def check_verdict_preconditions(store, task, body):
+    """Every check the managed path runs before its remote write.
+
+    Returns the validation report and the intent binding. Raises ResearchError
+    when the workspace cannot record this verdict as it stands; the CLI then
+    sends the verdict directly."""
     report = validate_verdict(store, task, body)
     binding = {"assessment": report["assessment"], "body": report["body"], "task_identity": task_identity(task),
                "verification_id": task["verificationId"],
@@ -118,6 +123,11 @@ def _send_verdict(store, task, body, client, *, expected_revision, request_id):
                 raise ResearchError("verdict_reconciliation_pending", "The known prior success needs an exact own verdict ID before an explicit revision")
         if current_id != body.get("supersedesVerdictId"):
             raise ResearchError("verdict_revision_required", "A new verdict revision must explicitly name the latest known own verdict ID")
+    return report, binding
+
+
+def _send_verdict(store, task, body, client, *, expected_revision, request_id):
+    report, binding = check_verdict_preconditions(store, task, body)
     intent = begin_intent(store, "verdict", binding, expected_revision=expected_revision, request_id=request_id)
     with _owner(store.root, "remote:" + intent["id"]):
         current = get_intent(store, intent["id"])

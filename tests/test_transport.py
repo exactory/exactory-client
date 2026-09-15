@@ -351,7 +351,7 @@ def _write_verdict_file(path: Path, **overrides: object) -> None:
     path.write_text(json.dumps(verdict))
 
 
-class TestVerifyPredictionGate(_TransportTestCase):
+class TestVerify(_TransportTestCase):
     def _run_verify(self, expected_exit_code: int | None = None) -> tuple[str, str]:
         return self._run(["verify", _VERIFICATION_ID, "--file", "verdict.json"],
                          expected_exit_code=expected_exit_code)
@@ -380,15 +380,30 @@ class TestVerifyPredictionGate(_TransportTestCase):
         self.assertIn("percentile", stderr_text)
         self.assertEqual(self.requested_paths, [])
 
-    def test_verify_sends_a_verdict_that_carries_the_prediction(self) -> None:
+    def _task(self) -> dict:
+        return {"verificationId": _VERIFICATION_ID, "doi": "10.48550/arxiv.2601.00001",
+                "source": "arxiv", "sourceId": "2601.00001", "sourceVersion": 1,
+                "url": "https://arxiv.org/abs/2601.00001v1", "viewerVerdictId": None}
+
+    def test_verify_without_a_workspace_posts_the_verdict(self) -> None:
+        _write_verdict_file(self.scratch_dir / "verdict.json")
+        self.responses[("GET", f"/api/v1/tasks/{_VERIFICATION_ID}")] = (self._task(), 200)
+        self.responses[("POST", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts")] = (
+            {"id": "22222222-2222-4222-8222-222222222222"}, 201)
+        stdout_text, stderr_text = self._run_verify()
+        self.assertEqual(self.requested_paths,
+                         [f"/api/v1/tasks/{_VERIFICATION_ID}", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts"])
+        self.assertEqual(self.request_bodies[1], json.loads((self.scratch_dir / "verdict.json").read_text()))
+        self.assertEqual(json.loads(stdout_text)["id"], "22222222-2222-4222-8222-222222222222")
+        self.assertEqual(stderr_text, "")
+
+    def test_verify_in_a_bound_verification_workspace_writes_the_receipt(self) -> None:
         from integration_fixtures import prepare_verification
         from research_harness.verification import bind_verdict, record_task
 
         case = prepare_verification(self.scratch_dir)
         _write_verdict_file(self.scratch_dir / "verdict.json")
-        task = {"verificationId": _VERIFICATION_ID, "doi": "10.48550/arxiv.2601.00001",
-                "source": "arxiv", "sourceId": "2601.00001", "sourceVersion": 1,
-                "url": "https://arxiv.org/abs/2601.00001v1", "viewerVerdictId": None}
+        task = self._task()
         pinned = case.mutate(record_task, {"task": task})["result"]
         case.mutate(bind_verdict, {"id": "transport-verdict", "task_digest": pinned["digest"],
             "body": case.artifacts.put((self.scratch_dir / "verdict.json").read_bytes(), "application/json"),
@@ -400,13 +415,29 @@ class TestVerifyPredictionGate(_TransportTestCase):
         self.responses[("GET", f"/api/v1/tasks/{_VERIFICATION_ID}")] = (task, 200)
         self.responses[("POST", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts")] = (
             {"id": "22222222-2222-4222-8222-222222222222"}, 201)
-        self._run_verify()
-        self.assertEqual(
-            self.requested_paths,
-            [f"/api/v1/tasks/{_VERIFICATION_ID}", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts"],
-        )
-        self.assertEqual(self.request_bodies[1]["prediction"]["percentile"], 15)
-        self.assertEqual(self.request_bodies[1], json.loads((self.scratch_dir / "verdict.json").read_text()))
+        _, stderr_text = self._run_verify()
+        self.assertEqual(stderr_text, "")
+        self.assertEqual(self.requested_paths,
+                         [f"/api/v1/tasks/{_VERIFICATION_ID}", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts"])
+        from research_harness.storage import Store
+        receipts = Store(self.scratch_dir).snapshot()["records"]["verdict_receipt"]
+        self.assertEqual(len(receipts), 1)
+        self.assertEqual(next(iter(receipts.values()))["response"]["id"], "22222222-2222-4222-8222-222222222222")
+
+    def test_verify_in_an_unbound_workspace_notes_the_skip_and_posts(self) -> None:
+        from integration_fixtures import prepare_verification
+
+        prepare_verification(self.scratch_dir)
+        _write_verdict_file(self.scratch_dir / "verdict.json")
+        self.responses[("GET", f"/api/v1/tasks/{_VERIFICATION_ID}")] = (self._task(), 200)
+        self.responses[("POST", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts")] = (
+            {"id": "22222222-2222-4222-8222-222222222222"}, 201)
+        _, stderr_text = self._run_verify()
+        self.assertTrue(stderr_text.startswith("Managed record skipped (verdict_assessment_required): "))
+        self.assertEqual(self.requested_paths,
+                         [f"/api/v1/tasks/{_VERIFICATION_ID}", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts"])
+        from research_harness.storage import Store
+        self.assertNotIn("verdict_receipt", Store(self.scratch_dir).snapshot()["records"])
 
 
 class TestTasksSearchFlags(_TransportTestCase):
