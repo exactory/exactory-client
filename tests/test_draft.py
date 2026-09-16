@@ -136,6 +136,43 @@ class _StdoutRecordingZenodoApi(_FakeZenodoApi):
         return super().__call__(request)
 
 
+class _LostResponseZenodoApi(_FakeZenodoApi):
+    """Answer like the fake above until one named request, whose response is
+    lost on the way back. Zenodo may have acted on it already and the client
+    cannot tell, which is the state the message on the screen has to answer."""
+
+    def __init__(self, lost_url_suffix: str) -> None:
+        super().__init__()
+        self.lost_url_suffix = lost_url_suffix
+
+    def __call__(self, request):
+        if request.full_url.endswith(self.lost_url_suffix):
+            self.requests.append(request)
+            raise OSError("connection reset by peer")
+        return super().__call__(request)
+
+
+class _PublishedRecordZenodoApi(_FakeZenodoApi):
+    """Answer the reconciliation read of a deposition that is published: the
+    record carries its DOI and the file the interrupted run uploaded."""
+
+    def __init__(self, uploaded_bytes: bytes) -> None:
+        super().__init__()
+        self.uploaded_bytes = uploaded_bytes
+
+    def __call__(self, request):
+        if request.get_method() == "GET" and request.full_url.endswith("/deposit/depositions/4242"):
+            self.requests.append(request)
+            return {
+                "id": 4242, "submitted": True, "doi": "10.5281/zenodo.4242",
+                "conceptdoi": "10.5281/zenodo.4241",
+                "links": {"record_html": "https://sandbox.zenodo.org/api/records/4242"},
+                "files": [{"filename": "paper.pdf", "checksum": "md5:" + hashlib.md5(
+                    self.uploaded_bytes, usedforsecurity=False).hexdigest()}],
+            }
+        return super().__call__(request)
+
+
 def _read_pinned_abstract_bytes(workspace_dir: Path) -> bytes:
     """The abstract bytes the publication bundle pinned. The managed deposit of
     0.39.x built the record's description from these bytes, so they are the
@@ -690,6 +727,37 @@ class TestProductionPublishConfirmation(_DepositTestCase):
         self.assertEqual(len(publish_urls), 1)
 
 
+class TestManagedDepositAfterALostPublishResponse(_DepositTestCase):
+    """The managed path holds the whole deposit as one saved intent, so the
+    same command finishes it through remote reads. This is what the deposit
+    skill sends an agent to do, and the record it protects is permanent."""
+
+    def test_the_same_command_reads_the_record_and_sends_no_second_publish(self) -> None:
+        self.fake_api = _LostResponseZenodoApi("/actions/publish")
+        _draft._open_url = self.fake_api
+        interrupted_output = self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"],
+                                           expected_exit_code=1)
+        # The managed publish is resumable, so it keeps the plain advice, and
+        # the deposition line belongs to the direct path alone.
+        self.assertIn("Then run the command again.", interrupted_output)
+        self.assertNotIn("is open on Zenodo", interrupted_output)
+        uploaded_bytes = next(request.data for request in self.fake_api.requests
+                              if request.full_url.endswith("/files/bucket-1/paper.pdf"))
+
+        self.fake_api = _PublishedRecordZenodoApi(uploaded_bytes)
+        _draft._open_url = self.fake_api
+        output = self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"])
+        self.assertEqual([(request.get_method(), request.full_url) for request in self.fake_api.requests],
+                         [("GET", "https://sandbox.zenodo.org/api/deposit/depositions/4242")])
+        self.assertIn('"doi": "10.5281/zenodo.4242"', output)
+        intents = Store(self.workspace_dir).snapshot()["records"]["remote_intent"]
+        self.assertEqual(len(intents), 1)
+        self.assertEqual(next(iter(intents.values()))["status"], "complete")
+        receipts = Store(self.workspace_dir).snapshot()["records"]["publication_receipt"]
+        self.assertEqual(len(receipts), 1)
+        self.assertEqual(next(iter(receipts.values()))["doi"], "10.5281/zenodo.4242")
+
+
 class TestProductionDepositCitationReport(_DepositTestCase):
     def test_a_failing_report_is_printed_and_the_managed_deposit_continues(self) -> None:
         (self.workspace_dir / ".exactory" / "citation-check.json").unlink()
@@ -976,6 +1044,30 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
         self.assertIn("Deposition 4242 is open on Zenodo:"
                       " https://sandbox.zenodo.org/api/deposit/4242",
                       self.fake_api.printed_before_publish)
+
+    def test_a_lost_publish_response_names_the_record_instead_of_a_second_run(self) -> None:
+        # A direct deposit saves no intent, so there is nothing to resume: the
+        # last line the user reads names the record to open, and the advice to
+        # send the request again stays off this one request.
+        self.fake_api = _LostResponseZenodoApi("/actions/publish")
+        _draft._open_url = self.fake_api
+        output = self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"],
+                               expected_exit_code=1)
+        self.assertIn("Deposition 4242 is open on Zenodo:", output)
+        self.assertIn("The client cannot reach the Zenodo API.", output)
+        self.assertIn("The deposition named above may be published already.", output)
+        self.assertIn("a second run publishes a second permanent record", output)
+        self.assertNotIn("Then run the command again", output)
+
+    def test_a_lost_upload_response_keeps_the_advice_to_run_the_command_again(self) -> None:
+        # Every other request of a direct deposit can be sent again, and the
+        # upload is the one before the publish.
+        self.fake_api = _LostResponseZenodoApi("/files/bucket-1/paper.pdf")
+        _draft._open_url = self.fake_api
+        output = self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"],
+                               expected_exit_code=1)
+        self.assertIn("Then run the command again.", output)
+        self.assertNotIn("second permanent record", output)
 
     def test_a_new_version_without_a_stored_deposition_id_is_an_error(self) -> None:
         (self.workspace_dir / ".exactory" / "deposit.json").write_text(

@@ -27,7 +27,11 @@ PATH while this plugin is enabled.
   the study's `deposit` stage. A workspace that refuses the receipt prints one
   line, `Managed record skipped (<code>): <message>`, and creates the record
   anyway. A draft workspace with no store, such as one initialized before
-  0.38.0, creates it with no line.
+  0.38.0, creates it with no line. When the store also kept no record of the
+  deposit, the command writes `.exactory/deposit.json`, says that this file is
+  the only local copy, and exits nonzero after the DOI. A nonzero exit that
+  follows a printed DOI means the record exists on Zenodo: report that DOI and
+  do not deposit again.
 - The Zenodo tokens are exported by the user, never pasted into chat. Sandbox
   uses `ZENODO_SANDBOX_TOKEN`, production uses `ZENODO_TOKEN`. Run
   `exactory-lab keys` to read which one is set.
@@ -99,10 +103,17 @@ the user ended the run at deposit, set the state:
   asks for.
 - Do not treat a missing Zenodo token as a study failure. Park the run and
   report the finished local paper.
-- Do not run a deposit again when its publish response was lost. The command
-  prints the deposition id and its draft URL before it publishes. Open that
-  record and read its state first; a second run publishes a second permanent
-  record.
+- Do not run a direct deposit again when its publish response was lost. A direct
+  deposit prints `Deposition <id> is open on Zenodo: <url>` before it publishes,
+  and it saves no intent, so a second run publishes a second permanent record.
+  Open that record, read its state, and report the DOI from it. A managed
+  deposit prints no such line. It holds the whole deposit as one saved intent,
+  so run the same command again, in the workspace as the interrupted run left
+  it: the command reads the record on Zenodo and finishes that deposit. A run
+  that ends in `remote_reconciliation_required` sent nothing twice; it names the
+  request id and the step it could not settle, and
+  `exactory-draft reconcile <request id>` continues that deposit once the record
+  is readable.
 - Do not paste a Zenodo token into the chat; the user exports it.
 - Do not edit the citation report to pass the gate; fix the references.
 - Do not hand-write the deposit metadata; `exactory-draft` builds it.
