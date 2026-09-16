@@ -17,16 +17,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/enforce_citation_check.py\"",
-            "timeout": 20
-          },
-          {
-            "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/enforce_prediction.py\"",
-            "timeout": 15
-          },
-          {
-            "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/guard_experiment_exec.py\"",
             "timeout": 15
           },

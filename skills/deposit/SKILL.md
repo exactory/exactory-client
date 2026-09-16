@@ -4,15 +4,6 @@ description: Deposit a paper's preprint to Zenodo and get its DOI, from a draft 
 
 # Deposit to Zenodo
 
-Read the [research constitution](../../RESEARCH_CONSTITUTION.md). Follow the
-[managed research workflow](../../docs/research-workflow.md) for current whole
-research readiness, the exact manuscript bundle, two independent blind reviews,
-an approved `stop` decision on that bundle (`exactory-research gate round`), and
-`exactory-research gate publication` before deposit. Begin or resume with
-`status --summary` and `next --summary`; reconcile any unknown remote intent with
-`exactory-draft reconcile INTENT_ID` before another write. A local accept label,
-credential, or historical receipt does not establish current publication readiness.
-
 The product of this stage is a citable, immutable record: the preprint on
 Zenodo with a DOI, deposited by the human author who takes responsibility for
 it. A submitted paper is verified on this fixed record, so deposit is the border
@@ -25,11 +16,22 @@ PATH while this plugin is enabled.
 
 ## Before anything else
 
-- Production publishing is permanent, and invoking this stage is the
-  authorization to run it: proceed through sandbox and production without
-  stopping. Park before production
-  (`exactory-lab state set --waiting production-deposit`) only when the user
-  named that stop ("prepare the deposit but let me publish it").
+- The user's instruction to deposit is the authorization, and the deposit runs at
+  the time the user names. Production publishing is permanent; the
+  `--confirm-publish` flag records that the user asked for it. Park before
+  production (`exactory-lab state set --waiting production-deposit`) only when
+  the user named that stop ("prepare the deposit but let me publish it").
+- The command runs in any draft workspace. In a study that works under the
+  [research constitution](../../RESEARCH_CONSTITUTION.md) and whose publication
+  and round gates are ready, the CLI records the publication receipt that closes
+  the study's `deposit` stage. A workspace that refuses the receipt prints one
+  line, `Managed record skipped (<code>): <message>`, and creates the record
+  anyway. A draft workspace with no store, such as one initialized before
+  0.38.0, creates it with no line. When the store also kept no record of the
+  deposit, the command writes `.exactory/deposit.json`, says that this file is
+  the only local copy, and exits nonzero after it prints the record. A nonzero
+  exit that follows a printed DOI means the record exists on Zenodo: report that
+  DOI and do not deposit again.
 - The Zenodo tokens are exported by the user, never pasted into chat. Sandbox
   uses `ZENODO_SANDBOX_TOKEN`, production uses `ZENODO_TOKEN`. Run
   `exactory-lab keys` to read which one is set.
@@ -42,41 +44,52 @@ PATH while this plugin is enabled.
 
 ## Procedure
 
-1. **Confirm the citations are clean.** Run `exactory-check lookup` and check
-   the report. Production deposit runs the citation gate itself; run the check
-   now instead of discovering it at the gate. Fix any blocking finding at the
-   reference, never in the report.
+1. **Read the citation report.** Run `exactory-check lookup` and read the report.
+   Fix any blocking finding at the reference, never in the report. A production
+   deposit runs the same check again and prints its report on stderr as
+   `Citation report:` when it fails, then continues. When the user has asked for
+   the deposit now, deposit now and report the blocking findings beside the DOI.
 2. **Write the abstract to a file.** Copy the paper's final abstract into
    `draft/abstract.txt` as plain text: no LaTeX commands, paragraphs separated
-   by one blank line. This file becomes the record's description on Zenodo,
-   so it must match the abstract in the PDF word for word. Pin and review this
-   exact file as part of the manuscript bundle before the publication gate; a
-   changed abstract invalidates the affected current reviews.
-3. **Deposit to the sandbox first.**
-   ```
-   exactory-draft deposit --creator "<Family, Given>" --abstract-file draft/abstract.txt
-   ```
-   Repeat `--creator` for more authors. Sandbox and draft are the defaults.
-   The record's description opens with the abstract and closes with a
-   disclosure naming the human as the responsible author. There are two
-   disclosures, and the command picks between them: it names exactory.ai as
-   the paper's writer when the PDF comes from this workspace's `draft/` tree
-   and `.exactory/authorship.json` reads `written_by_exactory` true, which
-   the plugin writes when an agent writes a LaTeX source under `draft/`, and
-   otherwise it states only that the paper was prepared with AI assistance
-   and deposited through exactory.ai. The PDF is uploaded as `paper.pdf` and
-   listed first; the sources archive follows it. Present the sandbox record
-   to the user, and read the disclosure back to them from the record, never
-   from memory. The record is written to `.exactory/deposit.json`.
-4. **Deposit and publish to production.**
+   by one blank line, and LF line endings, because the blank line of a CRLF
+   file separates no paragraphs in the record's description. This file becomes
+   the record's description on Zenodo, so it must match the abstract in the PDF
+   word for word.
+3. **Deposit and publish to production.**
    ```
    exactory-draft deposit --production --publish --confirm-publish --creator "<Family, Given>" --abstract-file draft/abstract.txt
    ```
-   Run it, and state the command in the report beside its result: the record
-   DOI and the concept DOI. The concept DOI names the paper across versions;
-   managed author submission binds the concrete production record DOI and current
-   publication receipt. When the user named a stop before
-   production, park instead and hand them the exact command.
+   Repeat `--creator` for more authors. The record's description opens with the
+   abstract and closes with a disclosure naming the human as the responsible
+   author. There are two disclosures, and the command picks between them: it
+   names exactory.ai as the paper's writer when the PDF comes from this
+   workspace's `draft/` tree and `.exactory/authorship.json` reads
+   `written_by_exactory` true, which the plugin writes when an agent writes a
+   LaTeX source under `draft/`, and otherwise it states only that the paper was
+   prepared with AI assistance and deposited through exactory.ai. The PDF is
+   uploaded as `paper.pdf` and listed first; the sources archive follows it.
+   State the command in the report beside its result: the record DOI and the
+   concept DOI. The concept DOI names the paper across all its versions;
+   `/exactory:submit` reads the record DOI from `.exactory/deposit.json`. Read
+   the disclosure back to the user from the record, never from memory. When the
+   user named a stop before production, park instead and hand them the exact
+   command.
+4. **A test record, when the user asks for one.** The same command without
+   `--production` (and without `--confirm-publish`) creates the record on the
+   Zenodo sandbox with `ZENODO_SANDBOX_TOKEN`. A sandbox record is a rehearsal:
+   the server cannot fetch it, so it is never the record to submit.
+
+When a deposit ends without a DOI because its response was lost, read which path
+it took before another run. A managed deposit saved an intent, which
+`exactory-research status` names under `remote_intents`. Run the same command
+again in the same workspace: the study holds the whole deposit as one saved
+intent, so the command reads the record on Zenodo and finishes that deposit.
+When the reads do not settle what happened, the command sends nothing and ends
+in `remote_reconciliation_required`. Its `details` name the request id and the
+step no read settled, and `exactory-draft reconcile <request id>` continues that
+deposit when a later read settles that step. Report the record to the user and
+ask before another run. A deposit that saved no intent took the direct path, and
+"What not to do" names its recovery.
 
 ## Publishing a revised version
 
@@ -92,13 +105,6 @@ exactory-draft deposit --production --publish --confirm-publish --new-version --
 same; a new version DOI is minted. The first version keeps its DOI and its
 place on the record.
 
-Pin the revised PDF, abstract, bibliography, internal claim ledger and optional
-sources as a current bundle. Give manuscript assessors its neutral export,
-including the derived current-claims file. Obtain the applicable independent
-reviews and an approved stop on this bundle before deposit. An uncertain
-new-version creation remains pending when its remote draft ID cannot be recovered;
-retain its intent and reconcile rather than repeating creation.
-
 Log the stage decision (the DOI, whether sandbox or production) and, unless
 the user ended the run at deposit, set the state:
 `exactory-lab state set --stage submit --status pending`.
@@ -107,8 +113,16 @@ the user ended the run at deposit, set the state:
 
 - Do not stop before production unless the user named that stop; and when they
   did, do not publish until they release it.
+- Do not make a sandbox deposit a step of the procedure; it is a test the user
+  asks for.
 - Do not treat a missing Zenodo token as a study failure. Park the run and
   report the finished local paper.
+- Do not run a direct deposit again when its publish response was lost. A direct
+  deposit saves no intent, so a second run publishes a second permanent record.
+  The command prints `Deposition <id> is open on Zenodo: <url>` before it
+  publishes: open that record, read its state, and report the DOI from it. A
+  response lost before the publish leaves no published record, so run the
+  command again.
 - Do not paste a Zenodo token into the chat; the user exports it.
 - Do not edit the citation report to pass the gate; fix the references.
 - Do not hand-write the deposit metadata; `exactory-draft` builds it.

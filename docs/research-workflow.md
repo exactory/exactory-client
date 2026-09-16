@@ -320,9 +320,13 @@ exactory-research gate publication
 
 Publication uses the current exact bundle, two applicable accepting reviews, and
 the existing citation/remote receipt checks. Changes invalidate affected current
-decisions and require reassessment. Follow the deposit and submission skills
-within the user's authorization. Reconcile an unknown remote intent before any
-new write; an API credential does not itself authorize publication.
+decisions and require reassessment. `exactory-draft deposit` and `exactory submit`
+run on the user's instruction. The deposit records the study's publication
+receipt when the publication and round gates pass; the submit records the
+submission receipt when that publication receipt names this exact bundle and the
+submit names its record. Otherwise they create the record or request directly,
+with one `Managed record skipped` line when a store refuses the receipt.
+Reconcile an unknown remote intent before any new managed write.
 
 ## Develop the paper across rounds
 
@@ -383,16 +387,16 @@ exactory-research gate round
 exactory-research round --file round-decision-2.json --expected-revision REVISION --request-id round-decide-002
 ```
 
-The loop ends only with an approved `stop`. Deposit follows when the publication
-gate passes; otherwise the study parks with the plateau recorded. A goal withdrawn
-in literature (`scooped` in `next_step`, `contradicted` in `changes`) or an
-observed stop condition ends work on that goal, and the next `round` decision
-proposes a distinct goal or stops. When the two most recent rounds were both
-unsuccessful, `continue` is refused in their directions unless it reopens one of
-them (`round_direction_exhausted`). A recorded `development` budget at its limit
-refuses `continue` (`resource_budget_exhausted`) until the user raises it with a
-reason. An unavailable round assessor leaves `round_review_missing` pending, and
-the study parks.
+The loop ends only with an approved `stop`, which opens `deposit` when the
+publication gate passes. A goal withdrawn in literature (`scooped` in
+`next_step`, `contradicted` in `changes`) or an observed stop condition ends work
+on that goal, and the next `round` decision proposes a distinct goal or stops.
+When the two most recent rounds were both unsuccessful, `continue` is refused in
+their directions unless it reopens one of them (`round_direction_exhausted`). A
+recorded `development` budget at its limit refuses `continue`
+(`resource_budget_exhausted`) until the user raises it with a reason. An
+unavailable round assessor leaves `round_review_missing` pending, and the study
+parks.
 
 ```sh
 exactory-lab decide --stage evaluate --decision "Stop after round 2" --why "Every recorded candidate was rejected or deferred on its evidence."
@@ -409,8 +413,9 @@ Complete the same network, reading, five search purposes, and applicable standar
 Keep historical prior art tied to the version that existed at the target's date.
 Current work can explain a result without becoming earlier prior art. Author
 innovation goals and contribution targets are not verification prerequisites.
-Use the [verification skill](../skills/verify/SKILL.md) and CLI's task/bind-verdict
-flow for the independent exact-target assessment and original outgoing verdict.
+`exactory verify` sends a verdict from any directory; a verification workspace that
+bound the verdict with `task --bind` and `bind-verdict` also records its receipt.
+The [verification skill](../skills/verify/SKILL.md) states the direct procedure.
 `requestedByViewer` identifies the request opener and proves no authorship.
 
 For a native mathematical attack, complete current common preparation first,

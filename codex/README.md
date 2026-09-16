@@ -39,8 +39,9 @@ writing; two blind reviews of the exact manuscript are a separate publication
 requirement. At `evaluate`, decide on the exact manuscript bundle with `round`
 (`continue` or `stop`) and record an independent assessor's `round-review`. An
 approved `continue` is opened with `round-admit` before the study returns to
-`literature`; deposit needs an approved `stop` (`gate round`) and the publication
-gate. Use the actual payloads from `exactory-research example OPERATION`
+`literature`; the study's `deposit` stage closes on the receipt that
+`exactory-draft deposit` records when `gate round` and the publication gate pass.
+Use the actual payloads from `exactory-research example OPERATION`
 and the [CLI reference](../docs/research-cli.md). Preserve failed branches,
 checkpoints, source changes, uncommitted user work, and all resource costs.
 

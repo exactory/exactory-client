@@ -8,9 +8,32 @@ from .execution import _owner
 from .evaluation import Evaluation
 from .gates import require_ready
 from .integration import export_workspace
-from .publication import publication_state
-from .remote import begin_intent, finish_intent, get_intent, remote_step, resolve_step
+from .publication import publication_state, validate_upload
+from .remote import begin_intent, discard_step, finish_intent, get_intent, remote_step, resolve_step
 from .rounds import round_state
+
+
+# The paper always lands on a record under this name, whatever the local build
+# called it, so every record presents the same face and every step that names
+# the paper to Zenodo names the same file.
+PAPER_UPLOAD_NAME = "paper.pdf"
+# The record's previewed file is set on its RDM draft document: the file-sort
+# endpoint that https://developers.zenodo.org still documents answers HTTP 405
+# on zenodo.org (verified 2026-08-30).
+RDM_JSON_MEDIA_TYPE = "application/vnd.inveniordm.v1+json"
+
+
+def build_draft_document_url(base_url, record_id):
+    """The URL of one record's RDM draft document."""
+    return base_url + "/records/" + str(record_id) + "/draft"
+
+
+def build_previewed_document(document):
+    """Return the fetched RDM draft document with the paper as its previewed file.
+
+    The RDM PUT replaces the whole draft document, so every other field the
+    fetched document carries goes back unchanged."""
+    return dict(document, files=dict(document.get("files", {}), default_preview=PAPER_UPLOAD_NAME))
 
 
 def _current(store, binding):
@@ -48,24 +71,38 @@ def reconcile_pending(store, identifier, client):
     observed = None
     if name == "create":
         if binding["new_version"]:
-            raise ResearchError("remote_reconciliation_required", "The new-version response was lost before its record ID was captured; no repeat creation was sent",
-                                {"request_id": identifier, "prior_deposition_id": binding["prior"]["deposition_id"]})
+            # The lost response carried the new version's record ID, so no read
+            # names that record. https://developers.zenodo.org states that the
+            # new-version action has no effect while the draft of the first call
+            # is unpublished, so the claim is cleared and the caller sends that
+            # same action again: it answers with the draft the first call left,
+            # and the published record it revises stays as it is.
+            discard_step(store, identifier, name, {"kind": "repeat_without_effect", "action": "newversion",
+                                                   "prior_deposition_id": binding["prior"]["deposition_id"]})
+            return get_intent(store, identifier)
         token = "Exactory publication intent " + identifier
-        candidates = []
+        candidates, is_listing_complete = [], False
         for page in range(1, 4):
             rows = client("GET", base + "/deposit/depositions?page=" + str(page) + "&size=100")
             if not isinstance(rows, list):
                 raise ResearchError("remote_reconciliation_required", "The deposition listing did not supply a complete checked page")
             candidates.extend(r for r in rows if r.get("metadata", {}).get("notes") == token)
             if len(rows) < 100:
+                is_listing_complete = True
                 break
         if len(candidates) == 1:
             observed = candidates[0]
+        elif not candidates and is_listing_complete:
+            # Every deposition of this account was read and none carries the
+            # intent's token, so the creation never landed. The claim is cleared
+            # and the caller creates the record.
+            discard_step(store, identifier, name, {"kind": "remote_read", "listing": "complete", "notes": token})
+            return get_intent(store, identifier)
     elif deposition is not None:
         record_id = deposition["id"]
         if name == "preview":
-            candidate = client("GET", base + "/records/" + str(record_id) + "/draft")
-            if candidate.get("files", {}).get("default_preview") == "paper.pdf":
+            candidate = client("GET", build_draft_document_url(base, record_id))
+            if candidate.get("files", {}).get("default_preview") == PAPER_UPLOAD_NAME:
                 observed = candidate
         else:
             candidate = client("GET", base + "/deposit/depositions/" + str(record_id))
@@ -77,6 +114,15 @@ def reconcile_pending(store, identifier, client):
                 observed = candidate
             elif name == "publish" and candidate.get("submitted") is True and candidate.get("doi") and _files_match(candidate, binding, ArtifactStore(store.root)):
                 observed = candidate
+        # Each step above writes to the record this read returned, so a read
+        # with no trace of the step establishes that it never landed: the claim
+        # is cleared and the caller sends that one step to that same record.
+        # The publish reads its own evidence of absence, the `submitted` status
+        # of https://developers.zenodo.org, because a submitted record carrying
+        # another DOI or other files is an anomaly that no repeat settles.
+        if observed is None and (name != "publish" or candidate.get("submitted") is False):
+            discard_step(store, identifier, name, {"kind": "remote_read", "deposition_id": record_id})
+            return get_intent(store, identifier)
     if observed is None:
         raise ResearchError("remote_reconciliation_required", "Remote reads have not established the pending mutation's exact outcome; no duplicate write was sent",
                             {"request_id": identifier, "pending": pending})
@@ -89,12 +135,10 @@ def _set_preview(store, identifier, binding, client, record_id):
     intent = get_intent(store, identifier)
     if "preview" in intent["responses"]:
         return intent["responses"]["preview"]["response"]
-    url = binding["base_url"] + "/records/" + str(record_id) + "/draft"
-    document = client("GET", url, accept="application/vnd.inveniordm.v1+json")
-    # The RDM PUT replaces the draft document, so retain its other fields.
-    updated = dict(document, files=dict(document.get("files", {}), default_preview="paper.pdf"))
+    url = build_draft_document_url(binding["base_url"], record_id)
+    updated = build_previewed_document(client("GET", url, accept=RDM_JSON_MEDIA_TYPE))
     _current(store, binding)
-    return remote_step(store, identifier, "preview", {"deposition_id": record_id, "filename": "paper.pdf"},
+    return remote_step(store, identifier, "preview", {"deposition_id": record_id, "filename": PAPER_UPLOAD_NAME},
                        lambda: client("PUT", url, json_body=updated))
 
 
@@ -154,9 +198,26 @@ def continue_deposit(store, identifier, client, *, reconcile=False):
         return result
 
 
+def validate_deposit(store, pdf, abstract, sources, *, new_version, environment):
+    """Every check the managed deposit runs before its first remote write.
+
+    Raises ResearchError when the workspace cannot record this deposit; the
+    CLI then deposits directly."""
+    report = validate_upload(store, pdf, abstract, sources)
+    records = store.snapshot()["records"]
+    require_ready(round_state(records, Evaluation(records, ArtifactStore(store.root))),
+                  "depositing the final development round")
+    prior = records.get("workspace", {}).get("deposit")
+    if new_version and (prior is None or prior["environment"] != environment):
+        raise ResearchError("publication_prior_required", "A revised deposit must use the prior concrete record in the same environment")
+    return report
+
+
 def deposit(store, binding, client, *, expected_revision, request_id):
     _current(store, binding)
     if binding["new_version"] and (binding["prior"] is None or binding["prior"]["environment"] != binding["environment"]):
         raise ResearchError("publication_prior_required", "A revised deposit must use the prior concrete record in the same environment")
     intent = begin_intent(store, "deposit", binding, expected_revision=expected_revision, request_id=request_id)
-    return continue_deposit(store, intent["id"], client)
+    # An interrupted deposit continues from its saved intent: a fresh intent has
+    # no claimed step, so reconciliation returns at once and nothing changes.
+    return continue_deposit(store, intent["id"], client, reconcile=True)

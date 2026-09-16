@@ -1,4 +1,4 @@
-"""Tests for bin/exactory: identifier mapping, path encoding, the citation gate,
+"""Tests for bin/exactory: identifier mapping, path encoding, the citation report,
 and the grand-challenge subcommands."""
 
 from __future__ import annotations
@@ -272,18 +272,46 @@ class TestSubmitRepeatNotice(_TransportTestCase):
         json.loads(stdout_text)
 
 
-class TestSubmitCitationGate(_TransportTestCase):
+class TestSubmitDecision(_TransportTestCase):
     def setUp(self) -> None:
         super().setUp()
         _build_draft_workspace(self.scratch_dir)
 
-    def test_submit_inside_a_workspace_is_refused_when_the_gate_fails(self) -> None:
-        _, stderr_text = self._run(["submit", "--doi", "10.5281/zenodo.1"],
-                                   expected_exit_code=1)
+    def test_submit_in_a_legacy_workspace_prints_the_report_and_posts(self) -> None:
+        _, stderr_text = self._run(["submit", "--doi", "10.5281/zenodo.1"])
+        self.assertTrue(stderr_text.startswith("Citation report: "))
         self.assertIn("references.bib", stderr_text)
-        self.assertEqual(self.requested_paths, [])
+        self.assertEqual(self.requested_paths, ["/api/v1/verifications"])
+        self.assertEqual(self.request_bodies, [{"doi": "10.5281/zenodo.1"}])
 
-    def test_submit_inside_a_workspace_proceeds_when_the_gate_passes(self) -> None:
+    def test_submit_from_a_workspace_subdirectory_still_prints_the_report(self) -> None:
+        os.chdir(self.scratch_dir / "draft")
+        _, stderr_text = self._run(["submit", "--doi", "10.5281/zenodo.1"])
+        self.assertTrue(stderr_text.startswith("Citation report: "))
+        self.assertEqual(self.requested_paths, ["/api/v1/verifications"])
+
+    def test_submit_outside_a_workspace_prints_nothing_and_posts(self) -> None:
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        os.chdir(outside.name)
+        _, stderr_text = self._run(["submit", "--doi", "10.5281/zenodo.1"])
+        self.assertEqual(stderr_text, "")
+        self.assertEqual(self.requested_paths, ["/api/v1/verifications"])
+
+    def test_submit_in_an_unready_study_notes_the_skip_and_posts(self) -> None:
+        from integration_fixtures import prepare_research
+
+        prepare_research(self.scratch_dir, candidate=True)
+        _write_passing_citation_report(self.scratch_dir)
+        _, stderr_text = self._run(["submit", "--doi", "10.5281/zenodo.1"])
+        self.assertTrue(stderr_text.startswith("Managed record skipped (readiness_required): "))
+        self.assertEqual(self.requested_paths, ["/api/v1/verifications"])
+        from research_harness.storage import Store
+        self.assertNotIn("submission_receipt", Store(self.scratch_dir).snapshot()["records"])
+
+    def _publish_the_reviewed_bundle(self) -> None:
+        """Publish the reviewed manuscript on Zenodo, as the managed submit requires,
+        and answer the submit POST and the task GET that the managed path then reads."""
         from integration_fixtures import prepare_manuscript, prepare_research
         from research_harness.zenodo import deposit
 
@@ -308,25 +336,72 @@ class TestSubmitCitationGate(_TransportTestCase):
         deposit(case.store, binding, publisher,
                 expected_revision=case.store.revision, request_id="transport-publication")
         self.responses[("POST", "/api/v1/verifications")] = ({"verificationId": _VERIFICATION_ID}, 201)
-        task_path = "/api/v1/tasks/" + _VERIFICATION_ID
-        self.responses[("GET", task_path)] = ({"verificationId": _VERIFICATION_ID,
+        self.responses[("GET", "/api/v1/tasks/" + _VERIFICATION_ID)] = ({"verificationId": _VERIFICATION_ID,
             "doi": "10.5281/zenodo.0", "source": "zenodo", "sourceId": "1", "sourceVersion": None,
             "url": "https://zenodo.org/records/1"}, 200)
-        self._run(["submit", "--doi", "10.5281/zenodo.1"])
-        self.assertEqual(self.requested_paths, ["/api/v1/verifications", task_path])
+
+    def test_submit_in_a_ready_study_writes_the_receipt(self) -> None:
+        self._publish_the_reviewed_bundle()
+        _, stderr_text = self._run(["submit", "--doi", "10.5281/zenodo.1"])
+        self.assertEqual(stderr_text, "")
+        self.assertEqual(self.requested_paths, ["/api/v1/verifications", "/api/v1/tasks/" + _VERIFICATION_ID])
         self.assertEqual(self.request_bodies, [{"doi": "10.5281/zenodo.1"}, None])
+        from research_harness.storage import Store
+        receipts = Store(self.scratch_dir).snapshot()["records"]["submission_receipt"]
+        self.assertEqual(len(receipts), 1)
+        self.assertTrue(next(iter(receipts.values()))["matched"])
 
-    def test_submit_from_a_workspace_subdirectory_still_runs_the_gate(self) -> None:
-        os.chdir(self.scratch_dir / "draft")
+    def test_submit_after_an_unknown_submission_outcome_notes_the_skip_and_posts(self) -> None:
+        self._publish_the_reviewed_bundle()
+        record_request = _transport._send_request
+
+        def lose_the_submission_response(method: str, path: str, body: dict | None = None,
+                                         *, allow_missing: bool = False) -> tuple[dict, int]:
+            response = record_request(method, path, body, allow_missing=allow_missing)
+            if method == "POST":
+                _transport._exit_with_error("The client cannot reach the server.")
+            return response
+
+        _transport._send_request = lose_the_submission_response
         self._run(["submit", "--doi", "10.5281/zenodo.1"], expected_exit_code=1)
-        self.assertEqual(self.requested_paths, [])
+        _transport._send_request = record_request
+        self.requested_paths.clear()
+        self.request_bodies.clear()
+        # The concept DOI is the locator a stranded intent reads instead of the
+        # lost verification id, and the server has no task under it.
+        self.responses[("GET", "/api/v1/tasks/10.5281/zenodo.0")] = ({}, 404)
 
-    def test_submit_outside_a_workspace_skips_the_gate(self) -> None:
-        outside = tempfile.TemporaryDirectory()
-        self.addCleanup(outside.cleanup)
-        os.chdir(outside.name)
-        self._run(["submit", "--doi", "10.5281/zenodo.1"])
+        _, stderr_text = self._run(["submit", "--doi", "10.5281/zenodo.1"])
+        self.assertEqual(stderr_text, "Managed record skipped (remote_reconciliation_required):"
+                                      " A prior submission POST has an unknown outcome. Reconcile that intent"
+                                      " before this study records another submission\n")
         self.assertEqual(self.requested_paths, ["/api/v1/verifications"])
+        self.assertEqual(self.request_bodies, [{"doi": "10.5281/zenodo.1"}])
+        from research_harness.storage import Store
+        records = Store(self.scratch_dir).snapshot()["records"]
+        self.assertEqual([intent["status"] for intent in records["remote_intent"].values()
+                          if intent["kind"] == "submit"], ["in_flight"])
+        self.assertNotIn("submission_receipt", records)
+
+
+class TestSubmitInAStudyWorkspaceWithNoDraftMarker(_TransportTestCase):
+    """A study workspace that never ran `exactory-draft init`: `.exactory/study.json`
+    and no draft marker. The citation check reads the draft workspace's references
+    file, so this workspace runs no check and the submit says nothing."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        (self.scratch_dir / ".exactory").mkdir()
+        (self.scratch_dir / ".exactory" / "study.json").write_text(json.dumps({
+            "version": 1, "slug": "cohort-percentiles", "stage": "submit",
+            "status": "running",
+        }))
+
+    def test_submit_prints_nothing_and_posts(self) -> None:
+        _, stderr_text = self._run(["submit", "--doi", "10.5281/zenodo.1"])
+        self.assertEqual(stderr_text, "")
+        self.assertEqual(self.requested_paths, ["/api/v1/verifications"])
+        self.assertEqual(self.request_bodies, [{"doi": "10.5281/zenodo.1"}])
 
 
 _VERIFICATION_ID = "0e5c2b1a-9d4f-4c3b-8a7e-6f5d4c3b2a19"
@@ -351,7 +426,7 @@ def _write_verdict_file(path: Path, **overrides: object) -> None:
     path.write_text(json.dumps(verdict))
 
 
-class TestVerifyPredictionGate(_TransportTestCase):
+class TestVerify(_TransportTestCase):
     def _run_verify(self, expected_exit_code: int | None = None) -> tuple[str, str]:
         return self._run(["verify", _VERIFICATION_ID, "--file", "verdict.json"],
                          expected_exit_code=expected_exit_code)
@@ -380,16 +455,31 @@ class TestVerifyPredictionGate(_TransportTestCase):
         self.assertIn("percentile", stderr_text)
         self.assertEqual(self.requested_paths, [])
 
-    def test_verify_sends_a_verdict_that_carries_the_prediction(self) -> None:
+    def _task(self) -> dict:
+        return {"verificationId": _VERIFICATION_ID, "doi": "10.48550/arxiv.2601.00001",
+                "source": "arxiv", "sourceId": "2601.00001", "sourceVersion": 1,
+                "url": "https://arxiv.org/abs/2601.00001v1", "viewerVerdictId": None}
+
+    def test_verify_without_a_workspace_posts_the_verdict(self) -> None:
+        _write_verdict_file(self.scratch_dir / "verdict.json")
+        self.responses[("GET", f"/api/v1/tasks/{_VERIFICATION_ID}")] = (self._task(), 200)
+        self.responses[("POST", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts")] = (
+            {"id": "22222222-2222-4222-8222-222222222222"}, 201)
+        stdout_text, stderr_text = self._run_verify()
+        self.assertEqual(self.requested_paths,
+                         [f"/api/v1/tasks/{_VERIFICATION_ID}", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts"])
+        self.assertEqual(self.request_bodies[1], json.loads((self.scratch_dir / "verdict.json").read_text()))
+        self.assertEqual(json.loads(stdout_text)["id"], "22222222-2222-4222-8222-222222222222")
+        self.assertEqual(stderr_text, "")
+
+    def _bind_the_verdict_in_a_verification_workspace(self) -> None:
+        """Pin the task and bind an evidence-linked assessment of verdict.json, as the managed path requires."""
         from integration_fixtures import prepare_verification
         from research_harness.verification import bind_verdict, record_task
 
         case = prepare_verification(self.scratch_dir)
         _write_verdict_file(self.scratch_dir / "verdict.json")
-        task = {"verificationId": _VERIFICATION_ID, "doi": "10.48550/arxiv.2601.00001",
-                "source": "arxiv", "sourceId": "2601.00001", "sourceVersion": 1,
-                "url": "https://arxiv.org/abs/2601.00001v1", "viewerVerdictId": None}
-        pinned = case.mutate(record_task, {"task": task})["result"]
+        pinned = case.mutate(record_task, {"task": self._task()})["result"]
         case.mutate(bind_verdict, {"id": "transport-verdict", "task_digest": pinned["digest"],
             "body": case.artifacts.put((self.scratch_dir / "verdict.json").read_bytes(), "application/json"),
             "assessment": {"assessor": "transport-independent-verifier",
@@ -397,16 +487,81 @@ class TestVerifyPredictionGate(_TransportTestCase):
                 "independence_basis": "Separate context read the exact source and no other verdicts.", "blind": True,
                 "checks": [{"dimension": dimension, "reason": "The exact scoped source supports this separate judgment.",
                             "evidence": [case.linked]} for dimension in ("soundness", "novelty", "impact")]}})
-        self.responses[("GET", f"/api/v1/tasks/{_VERIFICATION_ID}")] = (task, 200)
+        self.responses[("GET", f"/api/v1/tasks/{_VERIFICATION_ID}")] = (self._task(), 200)
         self.responses[("POST", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts")] = (
             {"id": "22222222-2222-4222-8222-222222222222"}, 201)
-        self._run_verify()
-        self.assertEqual(
-            self.requested_paths,
-            [f"/api/v1/tasks/{_VERIFICATION_ID}", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts"],
-        )
-        self.assertEqual(self.request_bodies[1]["prediction"]["percentile"], 15)
+
+    def test_verify_in_a_bound_verification_workspace_writes_the_receipt(self) -> None:
+        self._bind_the_verdict_in_a_verification_workspace()
+        _, stderr_text = self._run_verify()
+        self.assertEqual(stderr_text, "")
+        self.assertEqual(self.requested_paths,
+                         [f"/api/v1/tasks/{_VERIFICATION_ID}", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts"])
         self.assertEqual(self.request_bodies[1], json.loads((self.scratch_dir / "verdict.json").read_text()))
+        from research_harness.storage import Store
+        receipts = Store(self.scratch_dir).snapshot()["records"]["verdict_receipt"]
+        self.assertEqual(len(receipts), 1)
+        self.assertEqual(next(iter(receipts.values()))["response"]["id"], "22222222-2222-4222-8222-222222222222")
+
+    def test_verify_in_an_unbound_workspace_notes_the_skip_and_posts(self) -> None:
+        from integration_fixtures import prepare_verification
+
+        prepare_verification(self.scratch_dir)
+        _write_verdict_file(self.scratch_dir / "verdict.json")
+        self.responses[("GET", f"/api/v1/tasks/{_VERIFICATION_ID}")] = (self._task(), 200)
+        self.responses[("POST", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts")] = (
+            {"id": "22222222-2222-4222-8222-222222222222"}, 201)
+        _, stderr_text = self._run_verify()
+        self.assertEqual(stderr_text, "Managed record skipped (verdict_assessment_required):"
+                                      " Bind an evidence-linked assessment of this exact verdict body\n")
+        self.assertEqual(self.requested_paths,
+                         [f"/api/v1/tasks/{_VERIFICATION_ID}", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts"])
+        self.assertEqual(self.request_bodies[1], json.loads((self.scratch_dir / "verdict.json").read_text()))
+        from research_harness.storage import Store
+        self.assertNotIn("verdict_receipt", Store(self.scratch_dir).snapshot()["records"])
+
+    def test_verify_with_a_body_that_differs_from_the_bound_assessment_notes_the_skip_and_posts(self) -> None:
+        self._bind_the_verdict_in_a_verification_workspace()
+        _write_verdict_file(self.scratch_dir / "verdict.json", summary="A different summary.")
+        _, stderr_text = self._run_verify()
+        self.assertEqual(stderr_text, "Managed record skipped (verdict_body_mismatch):"
+                                      " The transmitted verdict body must equal the bound assessment, including revisions\n")
+        self.assertEqual(self.requested_paths,
+                         [f"/api/v1/tasks/{_VERIFICATION_ID}", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts"])
+        self.assertEqual(self.request_bodies[1], json.loads((self.scratch_dir / "verdict.json").read_text()))
+        from research_harness.storage import Store
+        self.assertNotIn("verdict_receipt", Store(self.scratch_dir).snapshot()["records"])
+
+    def test_verify_after_an_unknown_verdict_outcome_notes_the_skip_and_posts(self) -> None:
+        self._bind_the_verdict_in_a_verification_workspace()
+        record_request = _transport._send_request
+
+        def lose_the_verdict_response(method: str, path: str, body: dict | None = None,
+                                      *, allow_missing: bool = False) -> tuple[dict, int]:
+            response = record_request(method, path, body, allow_missing=allow_missing)
+            if method == "POST":
+                _transport._exit_with_error("The client cannot reach the server.")
+            return response
+
+        _transport._send_request = lose_the_verdict_response
+        self._run_verify(expected_exit_code=1)
+        _transport._send_request = record_request
+        self.requested_paths.clear()
+        self.request_bodies.clear()
+
+        _, stderr_text = self._run_verify()
+        self.assertEqual(stderr_text, "Managed record skipped (verdict_reconciliation_pending):"
+                                      " The previous POST has an unknown outcome. The task exposes only your verdict ID,"
+                                      " so the existing API cannot confirm the exact body without exposing other verdicts\n")
+        self.assertEqual(self.requested_paths,
+                         [f"/api/v1/tasks/{_VERIFICATION_ID}", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts"])
+        self.assertEqual(self.request_bodies[1], json.loads((self.scratch_dir / "verdict.json").read_text()))
+        from research_harness.storage import Store
+        records = Store(self.scratch_dir).snapshot()["records"]
+        self.assertEqual([intent["status"] for intent in records["remote_intent"].values()], ["in_flight"])
+        self.assertEqual([observation["status"] for observation in records["remote_observation"].values()],
+                         ["verdict_response_unknown"])
+        self.assertNotIn("verdict_receipt", records)
 
 
 class TestTasksSearchFlags(_TransportTestCase):

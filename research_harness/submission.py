@@ -7,7 +7,7 @@ from .evidence import digest
 from .execution import _owner
 from .operations import immutable_record, prepared_mutation
 from .publication import publication_report
-from .remote import begin_intent, finish_intent, get_intent, remote_step, resolve_step
+from .remote import begin_intent, find_intent, finish_intent, get_intent, remote_step, resolve_step
 from .verification import task_identity, validate_verdict
 
 
@@ -25,8 +25,10 @@ def validate_submission(store, body):
         raise ResearchError("readiness_required", "Submit the concrete published DOI of the current reviewed manuscript", {"obligations": report["obligations"]})
     records = store.snapshot()["records"]
     current = records.get("workspace", {}).get("deposit", {})
+    # An unpublished deposit has no DOI to name, so its receipt is no candidate.
     candidates = [r for r in records.get("publication_receipt", {}).values()
-                  if r.get("bundle_digest") == report["bundle"]["digest"] and r.get("doi") == current.get("doi") and r.get("environment") == "production"]
+                  if r.get("bundle_digest") == report["bundle"]["digest"] and r.get("environment") == "production"
+                  and r.get("doi") and r.get("doi") == current.get("doi")]
     if len(candidates) != 1:
         raise ResearchError("publication_receipt_required", "Select the exact current production publication receipt")
     receipt = candidates[0]
@@ -38,13 +40,28 @@ def validate_submission(store, body):
     return report, receipt
 
 
-def submit_managed(store, body, client, *, expected_revision, request_id):
+def check_submission_preconditions(store, body):
+    """Every check the managed path runs before its remote write.
+
+    Returns the intent binding and the deduplication key of the submission this
+    workspace records. Raises ResearchError when the workspace cannot record
+    this submission as it stands; the CLI then sends the request directly."""
     report, publication = validate_submission(store, body)
     binding = {"bundle_digest": report["bundle"]["digest"], "publication": publication, "body": body}
     # Equivalent record DOI/URL inputs retain their exact request payloads, but
     # refer to one durable submission for this concrete publication receipt.
+    deduplication_key = {"publication_receipt": publication["intent_id"], "record_doi": publication["doi"]}
+    existing = find_intent(store.snapshot()["records"], "submit", binding, deduplication_key)
+    if existing is not None and existing["pending"] is not None:
+        raise ResearchError("remote_reconciliation_required", "A prior submission POST has an unknown outcome. Reconcile that intent before this study records another submission",
+                            {"intent_id": existing["id"]})
+    return binding, deduplication_key
+
+
+def submit_managed(store, body, client, *, expected_revision, request_id):
+    binding, deduplication_key = check_submission_preconditions(store, body)
     intent = begin_intent(store, "submit", binding, expected_revision=expected_revision, request_id=request_id,
-        deduplication_key={"publication_receipt": publication["intent_id"], "record_doi": publication["doi"]})
+                          deduplication_key=deduplication_key)
     return continue_submission(store, intent["id"], client)
 
 
@@ -95,7 +112,14 @@ def send_verdict(store, task, body, client, *, expected_revision, request_id):
                             {"verification_id": task["verificationId"]}) from error
 
 
-def _send_verdict(store, task, body, client, *, expected_revision, request_id):
+def check_verdict_preconditions(store, task, body):
+    """Every check the managed path runs before its remote write.
+
+    Returns the validation report and the intent binding. Raises ResearchError
+    when the workspace cannot record this verdict as it stands; the CLI then
+    sends the verdict directly. Before it raises for a pending unknown outcome,
+    it records the task's own verdict ID as a remote observation, so the store
+    keeps what the task showed before any later POST."""
     report = validate_verdict(store, task, body)
     binding = {"assessment": report["assessment"], "body": report["body"], "task_identity": task_identity(task),
                "verification_id": task["verificationId"],
@@ -106,7 +130,7 @@ def _send_verdict(store, task, body, client, *, expected_revision, request_id):
     uncertain = next((r for r in prior if r["pending"] is not None), None)
     if uncertain is not None:
         _observation(store, uncertain["id"], "verdict_response_unknown", {"verificationId": task["verificationId"], "viewerVerdictId": task.get("viewerVerdictId")})
-        raise ResearchError("verdict_reconciliation_pending", "The previous POST has an unknown outcome. The task exposes only your verdict ID, so the existing API cannot confirm the exact body without exposing other verdicts; no duplicate POST was sent",
+        raise ResearchError("verdict_reconciliation_pending", "The previous POST has an unknown outcome. The task exposes only your verdict ID, so the existing API cannot confirm the exact body without exposing other verdicts",
                             {"intent_id": uncertain["id"], "viewerVerdictId": task.get("viewerVerdictId")})
     if not any(r["binding"] == binding for r in prior):
         current_id = task.get("viewerVerdictId")
@@ -118,6 +142,11 @@ def _send_verdict(store, task, body, client, *, expected_revision, request_id):
                 raise ResearchError("verdict_reconciliation_pending", "The known prior success needs an exact own verdict ID before an explicit revision")
         if current_id != body.get("supersedesVerdictId"):
             raise ResearchError("verdict_revision_required", "A new verdict revision must explicitly name the latest known own verdict ID")
+    return report, binding
+
+
+def _send_verdict(store, task, body, client, *, expected_revision, request_id):
+    report, binding = check_verdict_preconditions(store, task, body)
     intent = begin_intent(store, "verdict", binding, expected_revision=expected_revision, request_id=request_id)
     with _owner(store.root, "remote:" + intent["id"]):
         current = get_intent(store, intent["id"])

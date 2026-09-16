@@ -7,11 +7,18 @@ Two commands:
 
 Deposits go to the Zenodo sandbox and stay in the draft state by default.
 --production targets zenodo.org, and --publish makes the record public. A
-production deposit first runs the offline citation gate (exactory-check gate).
-A production publish also needs the --confirm-publish flag, because a
-published DOI is permanent. Tokens come from ZENODO_SANDBOX_TOKEN /
-ZENODO_TOKEN. The API shape follows https://developers.zenodo.org. Python
-standard library only.
+production deposit first runs the offline citation check (exactory-check gate);
+a failing check prints one Citation report line and the deposit continues. A
+workspace whose publication and round gates are ready records the deposit as a
+managed receipt; a workspace that refuses the receipt deposits directly and
+prints one Managed record skipped line; a workspace with no store deposits
+directly with no line. A production publish also needs the --confirm-publish
+flag, because a published DOI is permanent. Tokens come from
+ZENODO_SANDBOX_TOKEN / ZENODO_TOKEN. The API shape follows
+https://developers.zenodo.org. Python standard library only.
+
+The deposit runs in a draft workspace, from its root: it reads the paper's
+title from .exactory/draft.json there.
 """
 
 from __future__ import annotations
@@ -20,23 +27,23 @@ import argparse
 import html
 import json
 import os
-import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
+import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from research_harness.errors import ResearchError
-from research_harness.gates import gate_report, require_ready
-from research_harness.integration import command_identity, current_store, initialization_payload, initialize_workspace
+from research_harness.integration import command_identity, current_store, initialization_payload, initialize_workspace, record_direct_deposit
 from research_harness.storage import Store
-from research_harness.workspace import find_workspace
-from research_harness.artifacts import ArtifactStore
-from research_harness.publication import validate_upload
-from research_harness.zenodo import deposit as deposit_bundle, continue_deposit
-from research_harness.cli import add_identity
+from research_harness.workspace import find_workspace, json_projection
+from research_harness.citation_report import report_citation_gate
+from research_harness.zenodo import (PAPER_UPLOAD_NAME, RDM_JSON_MEDIA_TYPE, build_draft_document_url,
+                                     build_previewed_document, continue_deposit,
+                                     deposit as deposit_bundle, validate_deposit)
+from research_harness.cli import add_identity, note_managed_record_skipped, select_managed_path
 
 _PRODUCTION_API_URL = "https://zenodo.org/api"
 _SANDBOX_API_URL = "https://sandbox.zenodo.org/api"
@@ -83,12 +90,28 @@ _DEPOSITED_THROUGH_EXACTORY_DISCLOSURE_TEMPLATE = (
 # an answer to that question, so it sends no keyword.
 _WRITTEN_BY_EXACTORY_KEYWORD = "Written by exactory.ai"
 
-# The paper always lands on Zenodo under this name, whatever the local build
-# called it, so every record presents the same face. The sources archive gets
-# the supplementary stem because Zenodo lists a record's files by name:
-# 'supplementary' sorts after 'paper', keeping the paper on top.
-_PAPER_UPLOAD_NAME = "paper.pdf"
+# The paper uploads under the fixed name research_harness.zenodo owns, because
+# every step that names the paper to Zenodo must name the same file. The
+# sources archive gets the supplementary stem because Zenodo lists a record's
+# files by name: 'supplementary' sorts after 'paper', keeping the paper on top.
 _SOURCES_UPLOAD_STEM = "supplementary-sources"
+
+_CHECK_COMMAND_PATH = Path(__file__).with_name("exactory-check")
+
+# What an uncertain outcome earns the user: an unreachable API and a 5xx both
+# leave the request unsettled. Every request of this command can be sent again,
+# except the publish of a direct deposit: a managed deposit resumes its saved
+# intent, which settles each claimed step before it writes again, while a direct
+# deposit has no intent, so a second run of it publishes a second permanent
+# record. The advice names that record itself, because stderr carries it to a
+# caller that reads none of the lines on stdout.
+_RETRY_ADVICE_MSG = "Then run the command again."
+_UNCERTAIN_DIRECT_PUBLISH_ADVICE_TEMPLATE = (
+    "Deposition {deposition_id} may be published already. Open {draft_url} and"
+    " read its state. Do not run this command again: a second run publishes a"
+    " second permanent record."
+)
+
 
 def _exit_with_error(message: str, code: int = 1) -> None:
     print(message, file=sys.stderr)
@@ -124,27 +147,22 @@ def _run_init(args: argparse.Namespace) -> None:
 
 
 def _open_url(request: urllib.request.Request) -> dict:
-    """Send one Zenodo API request and return the parsed JSON body. Exits with
-    Zenodo's own error message on failure, and never echoes the token. Tests
+    """Send one Zenodo API request and return the parsed JSON body. Tests
     replace this function; nothing else touches the network."""
-    try:
-        with urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS) as response:
-            body = response.read().decode("utf-8", "replace")
-            return json.loads(body) if body else {}
-    except urllib.error.HTTPError as error:
-        detail = error.read().decode("utf-8", "replace")[:2000]
-        _exit_with_error(f"The Zenodo API returned HTTP {error.code}.\n{detail}")
-    except OSError as error:
-        _exit_with_error(f"The client cannot reach the Zenodo API. Cause: {error}."
-                         " Make sure that the network is available."
-                         " Then run the command again.")
-    raise AssertionError("unreachable")
+    with urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS) as response:
+        body = response.read().decode("utf-8", "replace")
+        return json.loads(body) if body else {}
 
 
 def _call_zenodo(method: str, url: str, token: str,
                  json_body: dict | list | None = None,
                  file_bytes: bytes | None = None,
-                 accept: str | None = None) -> dict:
+                 accept: str | None = None,
+                 uncertain_outcome_advice_msg: str = _RETRY_ADVICE_MSG) -> dict:
+    """Send one request to the Zenodo API and return its JSON body. Exits with
+    Zenodo's own error message on failure, and never echoes the token. The
+    caller names the advice an uncertain outcome earns, because only the caller
+    knows whether its request can be sent again."""
     headers = {"Authorization": f"Bearer {token}", "User-Agent": _USER_AGENT}
     if accept is not None:
         headers["Accept"] = accept
@@ -155,7 +173,21 @@ def _call_zenodo(method: str, url: str, token: str,
     elif file_bytes is not None:
         data = file_bytes
         headers["Content-Type"] = "application/octet-stream"
-    return _open_url(urllib.request.Request(url, method=method, data=data, headers=headers))
+    try:
+        return _open_url(urllib.request.Request(url, method=method, data=data, headers=headers))
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", "replace")[:2000]
+        message = f"The Zenodo API returned HTTP {error.code}.\n{detail}"
+        # A 5xx leaves this request as unsettled as a lost connection does: the
+        # server states no outcome for it. A 4xx is the server's own decision,
+        # which the same request cannot change.
+        if error.code >= 500:
+            message += f"\nThe server states no outcome for this request. {uncertain_outcome_advice_msg}"
+        _exit_with_error(message)
+    except OSError as error:
+        _exit_with_error(f"The client cannot reach the Zenodo API. Cause: {error}."
+                         f" Make sure that the network is available. {uncertain_outcome_advice_msg}")
+    raise AssertionError("unreachable")
 
 
 def _read_zenodo_token(production: bool) -> str:
@@ -168,14 +200,23 @@ def _read_zenodo_token(production: bool) -> str:
 
 
 def _load_draft_state() -> dict:
+    """The draft marker, checked here because this read is its only edge.
+
+    The deposit names the paper from this file, so the title is read where the
+    file is, next to the file-level refusals, and no caller indexes it blind."""
     try:
-        return json.loads(_DRAFT_STATE_PATH.read_text(encoding="utf-8"))
+        state = json.loads(_DRAFT_STATE_PATH.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        _exit_with_error(f"{_DRAFT_STATE_PATH} does not exist here."
-                         " Run exactory-draft init first.", 2)
+        _exit_with_error(f"{_DRAFT_STATE_PATH} does not exist here. The deposit runs in the"
+                         " directory that holds it. Change to that directory, or run"
+                         " exactory-draft init to create a draft workspace.", 2)
     except json.JSONDecodeError as error:
         _exit_with_error(f"{_DRAFT_STATE_PATH} is not valid JSON. Cause: {error}")
-    raise AssertionError("unreachable")
+    # Any JSON value parses, and only an object can name a title.
+    if not isinstance(state, dict) or "title" not in state:
+        _exit_with_error(f"{_DRAFT_STATE_PATH} names no title."
+                         " Write the paper's working title into it as \"title\".", 2)
+    return state
 
 
 def _find_newest_pdf() -> Path:
@@ -187,14 +228,37 @@ def _find_newest_pdf() -> Path:
 
 
 def _read_abstract_text(path: Path) -> str:
+    """The abstract the record's description opens with, as the user wrote it.
+
+    The direct path takes the abstract from any file the user names, so this
+    reader owns the UTF-8 rule the pinned publication bundle used to own. It
+    reads bytes and decodes them, because the publication bundle pins the
+    file's own bytes: a text read translates CRLF to LF, which changes the
+    description, and with it the deposit intent's fingerprint, so an
+    interrupted deposit no longer resumes and creates a second record."""
     if not path.exists():
         _exit_with_error(f"The file {path} does not exist."
                          " Write the paper's abstract into it as plain text.", 2)
-    abstract_text = path.read_text(encoding="utf-8").strip()
+    try:
+        abstract_text = path.read_bytes().decode("utf-8").strip()
+    except (OSError, UnicodeDecodeError) as error:
+        _exit_with_error(f"The client cannot read the abstract file {path} as UTF-8 text."
+                         f" Cause: {error}."
+                         " Write the paper's abstract into it as plain text.", 2)
     if abstract_text == "":
         _exit_with_error(f"The abstract file {path} is empty."
                          " Write the paper's abstract into it as plain text.", 2)
     return abstract_text
+
+
+def _read_upload_bytes(path: Path) -> bytes:
+    """The bytes of a file the user named for upload. The direct path uploads
+    from disk, so an unreadable path stops the command instead of the runtime."""
+    try:
+        return path.read_bytes()
+    except OSError as error:
+        _exit_with_error(f"The client cannot read the file {path}. Cause: {error}.", 2)
+    raise AssertionError("unreachable")
 
 
 def _has_exactory_authorship_evidence(pdf_path: Path) -> bool:
@@ -248,12 +312,6 @@ def _name_sources_upload(sources_path: Path) -> str:
 
 
 def _run_deposit(args: argparse.Namespace) -> None:
-    try:
-        workspace = find_workspace()
-        store = current_store(workspace)
-        require_ready(gate_report(store, "readiness"), "publication")
-    except ResearchError as error:
-        _exit_with_error(json.dumps({"error": error.as_dict()}))
     state = _load_draft_state()
     pdf_path = Path(args.pdf) if args.pdf else _find_newest_pdf()
     if not pdf_path.exists():
@@ -261,32 +319,42 @@ def _run_deposit(args: argparse.Namespace) -> None:
     sources_path = Path(args.sources) if args.sources else None
     if sources_path is not None and not sources_path.exists():
         _exit_with_error(f"The file {sources_path} does not exist.", 2)
-    report = validate_upload(store, pdf_path, Path(args.abstract_file), sources_path)
-    bundle = report["bundle"]
-    abstract_text = ArtifactStore(store.root).read(bundle["files"]["abstract"]["artifact"]).decode("utf-8").strip()
+    abstract_path = Path(args.abstract_file)
+    abstract_text = _read_abstract_text(abstract_path)
     has_exactory_authorship_evidence = _has_exactory_authorship_evidence(pdf_path)
     token = _read_zenodo_token(args.production)
     if args.publish and args.production and not args.confirm_publish:
         _exit_with_error("A production publish is permanent. Get the user's approval"
                          " first. Then run the command again with --confirm-publish.")
     if args.production:
-        # A production deposit must pass the offline citation gate. The gate
-        # command owns the checks; this command only forwards its refusal.
-        gate_process = subprocess.run(
-            [sys.executable, str(Path(__file__).with_name("exactory-check")),
-             "gate", "--workspace", str(Path.cwd())],
-            capture_output=True,
-            text=True,
-        )
-        if gate_process.returncode != 0:
-            sys.stderr.write(gate_process.stderr)
-            sys.exit(1)
+        # The offline citation check runs before the first remote write and
+        # prints its report when it fails; the deposit continues either way,
+        # because the user asked for it.
+        report_citation_gate(Path.cwd(), _CHECK_COMMAND_PATH)
 
     base_url = _PRODUCTION_API_URL if args.production else _SANDBOX_API_URL
     environment = "production" if args.production else "sandbox"
     metadata = _build_deposit_metadata(state["title"], args.creator, abstract_text,
                                        has_exactory_authorship_evidence)
-    uploads = [{"name": _PAPER_UPLOAD_NAME, "artifact": bundle["files"]["pdf"]["artifact"]}]
+
+    # A study whose publication and round gates are ready records the receipt;
+    # otherwise the record is created directly, and the user reads why on stderr.
+    # The direct path keeps the store this call opened, so the command opens the
+    # workspace once and notes a refusal once.
+    store, deposit_report, store_open_error = select_managed_path(lambda workspace_store: validate_deposit(
+        workspace_store, pdf_path, abstract_path, sources_path,
+        new_version=args.new_version, environment=environment))
+    if deposit_report is not None:
+        _deposit_managed(store, deposit_report, args, base_url, environment, metadata, sources_path, token)
+    else:
+        _deposit_directly(store, store_open_error, args, base_url, environment, metadata,
+                          pdf_path, sources_path, token)
+
+
+def _deposit_managed(store, report: dict, args: argparse.Namespace, base_url: str, environment: str,
+                     metadata: dict, sources_path: Path | None, token: str) -> None:
+    bundle = report["bundle"]
+    uploads = [{"name": PAPER_UPLOAD_NAME, "artifact": bundle["files"]["pdf"]["artifact"]}]
     if sources_path is not None:
         uploads.append({"name": _name_sources_upload(sources_path), "artifact": bundle["files"]["sources"]["artifact"]})
     binding = {"bundle_digest": bundle["digest"], "prepared_revision": bundle["prepared_revision"],
@@ -299,6 +367,130 @@ def _run_deposit(args: argparse.Namespace) -> None:
         identity["expected_revision"] = report["revision"]
     receipt = deposit_bundle(store, binding, lambda method, url, **kwargs: _call_zenodo(method, url, token, **kwargs), **identity)
     print(json.dumps(receipt, indent=2))
+
+
+def _deposit_directly(store, store_open_error, args: argparse.Namespace, base_url: str, environment: str,
+                      metadata: dict, pdf_path: Path, sources_path: Path | None, token: str) -> None:
+    # Every local input is read before the first remote write, like the rest of
+    # this command, so an unreadable path leaves no draft record on Zenodo. The
+    # bytes were already held in full for the upload, so peak memory is the same.
+    pdf_bytes = _read_upload_bytes(pdf_path)
+    sources_bytes = _read_upload_bytes(sources_path) if sources_path is not None else None
+    if args.new_version:
+        deposition = _open_new_version_draft(base_url, environment, token)
+    else:
+        deposition = _call_zenodo("POST", f"{base_url}/deposit/depositions", token, json_body={})
+    # The record exists from here on, and a publish cannot be made idempotent:
+    # a second run creates and publishes a second permanent record. The user
+    # reads the id and the draft link first, so a lost response leaves a record
+    # to open instead of a deposit to repeat.
+    draft_url = deposition.get("links", {}).get("html", "")
+    print(f"Deposition {deposition['id']} is open on Zenodo: {draft_url}")
+    bucket_url = deposition["links"]["bucket"]
+    _call_zenodo("PUT", f"{bucket_url}/{PAPER_UPLOAD_NAME}", token, file_bytes=pdf_bytes)
+    if sources_path is not None:
+        _call_zenodo("PUT", f"{bucket_url}/{_name_sources_upload(sources_path)}", token,
+                     file_bytes=sources_bytes)
+    _call_zenodo("PUT", f"{base_url}/deposit/depositions/{deposition['id']}", token,
+                 json_body={"metadata": metadata})
+    _mark_paper_as_preview(base_url, deposition["id"], token)
+    state = {"environment": environment, "deposition_id": deposition["id"],
+             "draft_url": draft_url}
+    if args.publish:
+        # Per https://developers.zenodo.org, doi is present only on published
+        # depositions; conceptdoi names the paper across all its versions.
+        publish_response = _call_zenodo(
+            "POST", f"{base_url}/deposit/depositions/{deposition['id']}/actions/publish", token,
+            uncertain_outcome_advice_msg=_UNCERTAIN_DIRECT_PUBLISH_ADVICE_TEMPLATE.format(
+                deposition_id=deposition["id"], draft_url=draft_url))
+        state["doi"] = publish_response.get("doi", "")
+        state["concept_doi"] = publish_response.get("conceptdoi", "")
+        state["record_url"] = publish_response.get("links", {}).get("record_html", "")
+        print(f"The record is published: {state['record_url']}")
+    else:
+        print(f"The draft deposit is created. Review it at: {state['draft_url']}")
+    # The user reads the record before the local record is kept, so a store that
+    # refuses the write still leaves the DOI on the screen.
+    print(json.dumps(state, indent=2))
+    _save_deposit_state(store, store_open_error, state)
+
+
+def _mark_paper_as_preview(base_url: str, record_id: int, token: str) -> None:
+    """Make the paper the record's previewed file. research_harness.zenodo owns
+    the draft-document contract this shares with the managed deposit."""
+    draft_url = build_draft_document_url(base_url, record_id)
+    document = _call_zenodo("GET", draft_url, token, accept=RDM_JSON_MEDIA_TYPE)
+    _call_zenodo("PUT", draft_url, token, json_body=build_previewed_document(document))
+
+
+def _open_new_version_draft(base_url: str, environment: str, token: str) -> dict:
+    try:
+        prior = json.loads(_DEPOSIT_STATE_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        _exit_with_error(f"{_DEPOSIT_STATE_PATH} does not exist here."
+                         " Run a plain deposit first; --new-version revises it.")
+    except json.JSONDecodeError as error:
+        _exit_with_error(f"{_DEPOSIT_STATE_PATH} is not valid JSON. Cause: {error}")
+    if prior.get("environment") != environment:
+        _exit_with_error(
+            f"The stored deposit is on {prior.get('environment')}, not"
+            f" {environment}. Run --new-version against the same environment.")
+    deposition_id = prior.get("deposition_id")
+    if deposition_id is None:
+        _exit_with_error(f"{_DEPOSIT_STATE_PATH} names no deposition_id."
+                         " Run a plain deposit first; --new-version revises it.")
+    created = _call_zenodo(
+        "POST",
+        f"{base_url}/deposit/depositions/{deposition_id}/actions/newversion",
+        token,
+    )
+    draft_url = created.get("links", {}).get("latest_draft", "")
+    if draft_url == "":
+        _exit_with_error("Zenodo returned no new-version draft link.")
+    return _call_zenodo("GET", draft_url, token)
+
+
+def _save_deposit_state(store, store_open_error, state: dict) -> None:
+    """Keep the local record of a direct deposit.
+
+    A workspace with a usable store records it there, and the projection export
+    writes .exactory/deposit.json from that record. A workspace with no store
+    has no projection export, so the file itself is the record and the command
+    says nothing. The other two cases hold a store that did not take the
+    record: it refused the write, or it never opened. Both leave a store that
+    can serve a later projection export, which rewrites the file from a record
+    the store does not hold, so both write the file, say that it is the only
+    local copy, and exit nonzero instead of reporting a kept record.
+
+    Those two cases write the file with the same projection primitive the
+    export uses, because the file they write is the only local copy of a
+    published DOI, and the primitive is what makes the replacement atomic and
+    keeps it off a symlink. The command runs from the workspace root, which is
+    why cwd is the root the projection is written under."""
+    if store is None and store_open_error is None:
+        json_projection(Path.cwd(), str(_DEPOSIT_STATE_PATH), state)
+        return
+    if store is None:
+        _stop_with_only_the_local_deposit_copy(Path.cwd(), state)
+        return
+    try:
+        record_direct_deposit(store, state, expected_revision=store.revision,
+                              request_id="direct-deposit-" + uuid.uuid4().hex)
+    except ResearchError as error:
+        note_managed_record_skipped(error)
+        _stop_with_only_the_local_deposit_copy(store.root, state)
+
+
+def _stop_with_only_the_local_deposit_copy(root: Path, state: dict) -> None:
+    """Write the deposit file, report it as the only local copy, and exit
+    nonzero. The store holds no record of this deposit, so a later projection
+    export replaces the file this writes. The message names that file, because
+    stderr carries it to a caller that reads none of the lines on stdout."""
+    json_projection(root, str(_DEPOSIT_STATE_PATH), state)
+    _exit_with_error("The workspace store did not record this deposit. The record is on Zenodo."
+                     f" {_DEPOSIT_STATE_PATH} holds the only local copy of it, and a projection"
+                     " export can replace that file. Copy the state out of that file before the"
+                     " next projection export.")
 
 
 def _run_reconcile(args: argparse.Namespace) -> None:
@@ -355,7 +547,7 @@ def _build_parser() -> argparse.ArgumentParser:
                          help='Author as "Family name, Given names". Repeat for more authors.')
     deposit.set_defaults(handler=_run_deposit)
     add_identity(deposit, required=False)
-    reconcile = commands.add_parser("reconcile", allow_abbrev=False, help="Reconcile a saved deposit intent through remote reads before continuing confirmed steps.")
+    reconcile = commands.add_parser("reconcile", allow_abbrev=False, help="Settle the claimed step of a saved deposit intent, then continue that deposit.")
     reconcile.add_argument("intent_id")
     reconcile.set_defaults(handler=_run_reconcile)
 

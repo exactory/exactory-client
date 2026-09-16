@@ -71,8 +71,9 @@ For each iteration:
 A small gain inside review variation is not established improvement. End the
 manuscript optimization phase when the stated target or resource condition holds,
 or evidence shows saturation and there is no substantive justified next revision.
-Record the reason. Saturation does not authorize publication when current
-research or manuscript gates remain pending.
+Record the reason. Saturation does not authorize publication; the user's
+instruction does, and pending research or manuscript gates still name what the
+study owes.
 
 ## Develop the paper across rounds
 
@@ -168,9 +169,13 @@ can still measure an intermediate draft.
 The manuscript export gives blind reviewers a separate current-claims file.
 The original ledger remains available to the round assessor.
 
-The loop ends only through a recorded exit. An approved `stop` leads to deposit
-when the publication gate passes and otherwise parks the study with the plateau
-recorded. A `scooped` verdict in `next_step` or a `contradicted` one in `changes`
+The loop ends only through a recorded exit. An approved `stop` leads to the
+deposit, and the deposit runs on the user's instruction: `exactory-draft deposit`
+records the study's publication receipt when the publication and round gates
+pass, and otherwise creates the record anyway, with one `Managed record skipped`
+line when a store refuses the receipt. The `deposit` stage stays open until a
+receipt exists.
+A `scooped` verdict in `next_step` or a `contradicted` one in `changes`
 withdraws the goal: the round is assessed unsuccessful with the withdrawal as
 evidence, and the next decision proposes a distinct goal or stops. After an
 observed stop condition in `round-assess`, the next decision also proposes a
@@ -191,10 +196,16 @@ round.
 
 Pin the final exact bundle, deliver it to two independent blind assessors, record
 the original reviews and provenance, and run `exactory-research gate publication`.
-Deposit follows an approved `stop` decision on that bundle (`gate round`).
-Resolve a rejection with appropriate changes and fresh applicable reviews. Proceed
-through authorized deposit and submission only with current gates and required
-credentials; reconcile an unknown remote intent before any new write.
+The `deposit` stage opens when the publication gate passes and `gate round`
+reports an approved `stop` decision for that bundle. Resolve a rejection with appropriate
+changes and fresh applicable reviews. The deposit and the submission run on the user's instruction:
+`exactory-draft deposit` records the publication receipt when these gates pass,
+and `exactory submit` records the submission receipt when that publication
+receipt names this exact bundle and the submit names its record. A command that
+records no receipt creates the record or the request anyway, with one
+`Managed record skipped` line when a store refuses the receipt. Each command
+needs its own credential. The managed deposit settles an unknown earlier outcome
+against the Zenodo record before it sends that step again.
 
 On resume, read authoritative `status --summary` and `next --summary`, the search tree and checkpoint
 records, pending admissions or intents, review history, source state, and context.

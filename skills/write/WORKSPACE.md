@@ -193,4 +193,5 @@ For publication, pin the exact current manuscript bundle and export its actual
 bytes for two independent blind assessors. Preserve unchanged original rubric
 JSON and actual provenance, record `manuscript-review` for the bundle digest,
 and run the current whole `gate publication`. Historical review files and score
-measurements alone do not authorize publication.
+measurements do not authorize publication; the user's instruction does, and the
+gate decides the study's publication receipt.

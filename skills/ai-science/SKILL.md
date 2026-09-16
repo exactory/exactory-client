@@ -75,14 +75,17 @@ preparation. Keep the full history of results, costs, reviews, and source change
 A study develops its paper across rounds. At the end of `evaluate`, decide on the
 exact bundle with `round`, obtain the independent round review, and either admit
 the next round (`round-admit`, then `--stage literature --status pending`) or stop
-and enter `deposit`. LOOP.md's third section governs the round.
+and enter `deposit` when the publication gate passes. LOOP.md's third section
+governs the round.
 
 ## Authorization, pending work, and resume
 
 An end-to-end invocation authorizes the requested stages, subject to the user's
 limits and host instructions. Continue without unnecessary stage-boundary waits.
-Record explicit user pacing in study state and honor it. Publication still uses
-the concrete reviewed bundle, current gates, and the requested scope.
+Record explicit user pacing in study state and honor it. The deposit and the
+submission run on the user's instruction; the study's publication and submission
+receipts still use the concrete reviewed bundle, current gates, and the requested
+scope.
 
 Distinguish unread or unavailable sources, eligible retries, unknown executions,
 unresolved scientific findings, unavailable independent reviewers, exhausted

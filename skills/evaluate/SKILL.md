@@ -72,7 +72,8 @@ The report lands in `.exactory/citation-check.json`. Act on the statuses:
 - **Warnings** (`year_mismatch`, `no_query`, `network_error`): judgment calls. A
   network failure is never evidence of fabrication; re-run when the network returns.
 - `nothing_verified: true` means the report proves nothing. It is not a passing
-  check, and the deposit gate treats it as a failure.
+  check: a production deposit prints the failing report as a `Citation report:`
+  line and continues, so fix the references before that deposit.
 
 ### 1b. Derivation integrity
 
