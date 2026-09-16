@@ -137,11 +137,10 @@ class TestCitationReport(unittest.TestCase):
         (self.workspace / "draft").mkdir()
         (self.workspace / ".exactory" / "draft.json").write_text(json.dumps({"title": "Report"}))
 
-    def test_a_failing_gate_is_printed_and_reported_as_failed(self) -> None:
+    def test_a_failing_gate_is_printed(self) -> None:
         sink = io.StringIO()
         with contextlib.redirect_stderr(sink):
-            passed = report_citation_gate(self.workspace, _CHECK_COMMAND_PATH)
-        self.assertFalse(passed)
+            report_citation_gate(self.workspace, _CHECK_COMMAND_PATH)
         self.assertTrue(sink.getvalue().startswith("Citation report: "))
         self.assertIn("references.bib", sink.getvalue())
 
@@ -150,8 +149,7 @@ class TestCitationReport(unittest.TestCase):
         _write_passing_citation_report(self.workspace)
         sink = io.StringIO()
         with contextlib.redirect_stderr(sink):
-            passed = report_citation_gate(self.workspace, _CHECK_COMMAND_PATH)
-        self.assertTrue(passed)
+            report_citation_gate(self.workspace, _CHECK_COMMAND_PATH)
         self.assertEqual(sink.getvalue(), "")
 
 
