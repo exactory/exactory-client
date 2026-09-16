@@ -40,6 +40,7 @@ deposit` on the user's instruction. `submit` and `verify` run from any directory
 `deposit` runs in a draft workspace, from its root. A ready study records its
 receipt. A workspace that refuses the receipt gets one stderr line. A refused
 receipt stops no request.
+
 Version 0.39.2 enforces the final round decision at deposit, separates internal
 claim history from blind review, and measures the three paired reviewers.
 Version

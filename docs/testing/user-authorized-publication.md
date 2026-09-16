@@ -84,7 +84,16 @@ the project's code principles. A task was approved only when both reviewers
 reported no blocker and no major finding. Five fix passes ran, and the review
 loop then ran again with fresh reviewers. Thirty-six agents ran in total.
 
-The findings that changed the code:
+The whole branch then went through a second review of six lenses: the decision
+point and its error paths, the user's requirement case by case, safety and side
+effects, test strength, the shipped documents, and the upgrade of an existing
+study. The six lenses raised 43 findings. Two independent skeptics tried to
+refute each one, and 30 survived, which reduce to eleven distinct defects after
+duplicates across lenses are merged. Three fix rounds repaired them, each round
+reviewed again by two reviewers. Ninety-two agents ran the review and thirty-two
+the repairs.
+
+The findings that changed the code in the first review:
 
 - The message of `verdict_reconciliation_pending` ended with "no duplicate POST
   was sent". The decision point now prints that message and then sends the
@@ -105,32 +114,60 @@ the task's own verdict identifier as a remote observation before it raises for
 an unknown earlier outcome. The record is true on both paths, and it keeps what
 the task showed before the direct POST.
 
+The findings that changed the code in the second review:
+
+- A submit whose POST was claimed and whose response was lost blocked that study
+  from ever submitting again: every later run took the managed path, skipped the
+  POST, read the task, and exited on the 404. The managed checks now include the
+  saved intent, so a stranded intent prints the skipped line and the request goes
+  out. A repeated submit is harmless: a paper carries one verification and the
+  server returns the standing request.
+- A deposit whose remote step was claimed and whose response was lost blocked
+  that manuscript from ever depositing again. The managed deposit now settles
+  the claimed step against the Zenodo record before it writes: a step the record
+  shows landed is resolved from that read, and a step the record shows never
+  landed is discarded and sent again to the same record. The publish reads the
+  record's `submitted` status, so one deposition is published once. A step that
+  no read settles keeps the claim and its refusal.
+- `validate_submission` raised `KeyError` on a publication receipt without a
+  DOI, which is not a `ResearchError`, so the submit crashed instead of posting.
+  A receipt without a DOI is no longer a candidate.
+- A store that exists and does not open was indistinguishable from no store, so
+  a direct deposit reported a local record that a later projection export can
+  replace. The decision point now names the failure that kept the store shut,
+  and the deposit warns and exits nonzero after it prints the record.
+- The abstract was read as text, which translates CRLF to LF. That changed the
+  record's description, and with it the deposit intent's fingerprint, so an
+  interrupted 0.39.x deposit would not have resumed. The reader takes the file's
+  own bytes.
+- A draft marker holding a non-object JSON value ended the command with a
+  traceback.
+- A direct deposit printed nothing before it published, so a lost response left
+  no record to open. It now prints the deposition and its draft link first.
+- README, the release note and the design note said all three commands run from
+  any directory. The deposit reads the draft marker by a relative path, so it
+  runs in a draft workspace, from its root.
+- The CLI reference said a wrong body or stale preparation stops the verdict
+  before the write. It stops `task --bind` and `bind-verdict`; `exactory verify`
+  prints the skipped line and posts.
+- The AI Science loop still told the agent to deposit and submit only with
+  current gates. The stage transition keeps its gates; the two commands run on
+  the user's instruction.
+- Four behaviors had no test: the bytes of the direct paper upload, the direct
+  sources upload and its archive suffix, the silence of a study workspace with
+  no draft marker, and the citation report reaching the user before the first
+  remote write.
+
 ## Final validation
 
-`166d9b0` recorded the branch's full-suite run: on Python 3.9.6,
-`python3 -m unittest discover -s tests` ran 1,009 tests in 1,882.286 s and
-passed, where the baseline ran 994 tests in 1,889.338 s and passed. The
-math-solver harness suite, which this release does not touch, ran alone and
-passed 689 tests in 1,667.159 s.
-
-Later commits changed `bin/exactory-draft`, the README, the release note, the
-CLI reference, the workflow, the design note, the deposit and ai-science skills,
-and the tests of the deposit and the transport. At the head of the branch, the
-three modules that cover those files passed: `tests.test_draft` ran 81 tests in
-393.163 s, `tests.test_transport` ran 97 tests in 30.085 s, and
-`tests.test_research_guidance` ran 5 tests in 7.181 s, each run with
-`PYTHONPATH=tests python3 -m unittest`.
-
-The last commit of the branch changed the workflow, the two ai-science skill
-files and this record, to state the publication gate that the
-`evaluate -> deposit` transition requires. The modules that read those files
-passed at that commit:
-`tests.test_research_guidance` ran 5 tests in 7.120 s, and `tests.test_codex`
-with `tests.test_manifest` ran 36 tests in 7.333 s.
+On Python 3.9.6, `python3 -m unittest discover -s tests` ran 1,047 tests in
+2,204.925 s at the head of the branch and passed. The baseline ran 994 tests in
+1,889.338 s and passed. The math-solver harness suite, which this release does
+not touch, ran alone and passed 689 tests in 1,667.159 s.
 
 `python3 -m compileall -q bin hooks research_harness codex tests`,
 `python3 codex/generate.py --check`, `python3 -m json.tool` over every tracked
-JSON file, and `git diff --check` all exit 0.
+JSON file, and `git diff --check` all exit 0 at that head.
 
 These repairs establish that the three commands run on the user's instruction
 and that a ready study still records its receipt. They do not measure how often
