@@ -5,9 +5,6 @@ Two commands:
   init     - create the draft workspace layout and .exactory/draft.json
   deposit  - upload the built PDF (and optional sources) to Zenodo
 
-The deposit runs in a draft workspace, from its root: it reads the paper's
-title from .exactory/draft.json there.
-
 Deposits go to the Zenodo sandbox and stay in the draft state by default.
 --production targets zenodo.org, and --publish makes the record public. A
 production deposit first runs the offline citation check (exactory-check gate);
@@ -19,6 +16,9 @@ directly with no line. A production publish also needs the --confirm-publish
 flag, because a published DOI is permanent. Tokens come from
 ZENODO_SANDBOX_TOKEN / ZENODO_TOKEN. The API shape follows
 https://developers.zenodo.org. Python standard library only.
+
+The deposit runs in a draft workspace, from its root: it reads the paper's
+title from .exactory/draft.json there.
 """
 
 from __future__ import annotations
