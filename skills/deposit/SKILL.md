@@ -79,6 +79,13 @@ PATH while this plugin is enabled.
    Zenodo sandbox with `ZENODO_SANDBOX_TOKEN`. A sandbox record is a rehearsal:
    the server cannot fetch it, so it is never the record to submit.
 
+When a deposit in a study ends without a DOI because its response was lost, run
+the same command again in the same workspace. The study holds the whole deposit
+as one saved intent, so the command reads the record on Zenodo and finishes that
+deposit. When the reads do not settle what happened, the command sends nothing
+and ends in `remote_reconciliation_required`. Report the record to the user and
+ask before another run.
+
 ## Publishing a revised version
 
 When the paper has already been deposited and the improvement loop produced a
@@ -105,24 +112,10 @@ the user ended the run at deposit, set the state:
   asks for.
 - Do not treat a missing Zenodo token as a study failure. Park the run and
   report the finished local paper.
-- Do not run a direct deposit again when its publish response was lost. A direct
-  deposit prints `Deposition <id> is open on Zenodo: <url>` before it publishes,
-  and it saves no intent, so a second run publishes a second permanent record.
-  Open that record, read its state, and report the DOI from it. A managed
-  deposit prints no such line. It holds the whole deposit as one saved intent,
-  so run the same command again, in the workspace as the interrupted run left
-  it: the command reads the record on Zenodo and finishes that deposit from
-  either state the record is in. A record that reads back published keeps the
-  DOI it has; a record that reads back as a draft never received the publish,
-  and the command publishes that same deposition, which Zenodo publishes once.
-  A run that ends in `remote_reconciliation_required` sent nothing twice. Its
-  `details` name the request id and the step the remote read did not settle,
-  and `exactory-draft reconcile <request id>` continues that deposit when a
-  later read settles that step. A record that no read settles keeps the refusal.
-  One example is a record that reads back published with another DOI or other
-  files. Report that record to the user and do not run the command again. When
-  the error carries no `details`, the `remote_intents` of
-  `exactory-research status` name the saved intent.
+- Do not run a direct deposit again when its response was lost. A direct deposit
+  saves no intent, so a second run creates and publishes a second permanent
+  record. The command prints `Deposition <id> is open on Zenodo: <url>` before
+  it publishes: open that record, read its state, and report the DOI from it.
 - Do not paste a Zenodo token into the chat; the user exports it.
 - Do not edit the citation report to pass the gate; fix the references.
 - Do not hand-write the deposit metadata; `exactory-draft` builds it.
