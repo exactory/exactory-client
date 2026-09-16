@@ -81,8 +81,10 @@ and enter `deposit`. LOOP.md's third section governs the round.
 
 An end-to-end invocation authorizes the requested stages, subject to the user's
 limits and host instructions. Continue without unnecessary stage-boundary waits.
-Record explicit user pacing in study state and honor it. Publication still uses
-the concrete reviewed bundle, current gates, and the requested scope.
+Record explicit user pacing in study state and honor it. The deposit and the
+submission run on the user's instruction; the study's publication and submission
+receipts still use the concrete reviewed bundle, current gates, and the requested
+scope.
 
 Distinguish unread or unavailable sources, eligible retries, unknown executions,
 unresolved scientific findings, unavailable independent reviewers, exhausted
