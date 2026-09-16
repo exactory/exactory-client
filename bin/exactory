@@ -5,8 +5,9 @@ Python standard library only. Authentication comes from EXACTORY_API_KEY, or
 from the credentials file that `exactory login` writes
 ($XDG_CONFIG_HOME/exactory/credentials.json, default ~/.config/exactory/).
 The API base URL comes from EXACTORY_API_URL (default: https://www.exactory.ai).
-Inside a draft workspace, submit first prints the offline citation report
-(exactory-check gate) and continues.
+Inside a draft workspace, submit first runs the offline citation check
+(exactory-check gate); a failing check prints one Citation report line and the
+submit continues.
 """
 
 from __future__ import annotations
@@ -174,8 +175,9 @@ def _run_submit(args: argparse.Namespace) -> None:
                              f" The limit is {_MAX_DECLARED_CHALLENGES}. Remove some.")
         body["grandChallengeIds"] = args.challenge
 
-    # Inside a draft workspace the offline citation report is printed first; the
-    # submit continues either way, because the user asked for it.
+    # Inside a draft workspace the offline citation check runs first and prints
+    # its report when it fails; the submit continues either way, because the
+    # user asked for it.
     workspace = find_workspace(required=False)
     if workspace is not None and (workspace / ".exactory" / "draft.json").is_file():
         report_citation_gate(workspace, _CHECK_COMMAND_PATH)

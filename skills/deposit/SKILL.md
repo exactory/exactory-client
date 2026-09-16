@@ -42,9 +42,9 @@ PATH while this plugin is enabled.
 
 1. **Read the citation report.** Run `exactory-check lookup` and read the report.
    Fix any blocking finding at the reference, never in the report. A production
-   deposit prints the same report again on stderr as `Citation report:` and
-   continues. When the user has asked for the deposit now, deposit now and
-   report the blocking findings beside the DOI.
+   deposit runs the same check again and prints its report on stderr as
+   `Citation report:` when it fails, then continues. When the user has asked for
+   the deposit now, deposit now and report the blocking findings beside the DOI.
 2. **Write the abstract to a file.** Copy the paper's final abstract into
    `draft/abstract.txt` as plain text: no LaTeX commands, paragraphs separated
    by one blank line. This file becomes the record's description on Zenodo,

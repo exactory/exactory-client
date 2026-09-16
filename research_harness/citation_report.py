@@ -1,4 +1,4 @@
-"""The offline citation report that submit and a production deposit print before a remote write."""
+"""The offline citation check that submit and a production deposit run before a remote write."""
 
 import subprocess
 import sys

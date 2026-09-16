@@ -7,12 +7,14 @@ Two commands:
 
 Deposits go to the Zenodo sandbox and stay in the draft state by default.
 --production targets zenodo.org, and --publish makes the record public. A
-production deposit first prints the offline citation report (exactory-check
-gate) and continues. A workspace whose publication and round gates are ready
-records the deposit as a managed receipt; any other workspace deposits
-directly and prints one Managed record skipped line. A production publish also
-needs the --confirm-publish flag, because a published DOI is permanent. Tokens
-come from ZENODO_SANDBOX_TOKEN / ZENODO_TOKEN. The API shape follows
+production deposit first runs the offline citation check (exactory-check gate);
+a failing check prints one Citation report line and the deposit continues. A
+workspace whose publication and round gates are ready records the deposit as a
+managed receipt; a workspace that refuses the receipt deposits directly and
+prints one Managed record skipped line; a workspace with no store deposits
+directly with no line. A production publish also needs the --confirm-publish
+flag, because a published DOI is permanent. Tokens come from
+ZENODO_SANDBOX_TOKEN / ZENODO_TOKEN. The API shape follows
 https://developers.zenodo.org. Python standard library only.
 """
 
@@ -292,8 +294,9 @@ def _run_deposit(args: argparse.Namespace) -> None:
         _exit_with_error("A production publish is permanent. Get the user's approval"
                          " first. Then run the command again with --confirm-publish.")
     if args.production:
-        # The offline citation report is printed before the first remote write;
-        # the deposit continues either way, because the user asked for it.
+        # The offline citation check runs before the first remote write and
+        # prints its report when it fails; the deposit continues either way,
+        # because the user asked for it.
         report_citation_gate(Path.cwd(), _CHECK_COMMAND_PATH)
 
     base_url = _PRODUCTION_API_URL if args.production else _SANDBOX_API_URL

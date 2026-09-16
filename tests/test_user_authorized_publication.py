@@ -6,6 +6,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -145,6 +146,30 @@ class TestCitationReport(unittest.TestCase):
             passed = report_citation_gate(self.workspace, _CHECK_COMMAND_PATH)
         self.assertTrue(passed)
         self.assertEqual(sink.getvalue(), "")
+
+
+class TestCommandHelp(unittest.TestCase):
+    """`--help` prints the module docstring, so it states the paths the tests
+    above measure: a refused receipt prints one line, a workspace with no store
+    prints none, and the citation check prints only when it fails."""
+
+    def _read_help(self, command: str) -> str:
+        completed = subprocess.run([sys.executable, str(_PLUGIN_ROOT / "bin" / command), "--help"],
+                                   capture_output=True, text=True, check=True)
+        return " ".join(completed.stdout.split())
+
+    def test_the_deposit_help_separates_the_noted_refusal_from_the_silent_deposit(self) -> None:
+        help_text = self._read_help("exactory-draft")
+        self.assertIn("a workspace that refuses the receipt deposits directly and prints one"
+                      " Managed record skipped line", help_text)
+        self.assertIn("a workspace with no store deposits directly with no line", help_text)
+
+    def test_the_help_of_both_commands_states_that_only_a_failing_check_prints(self) -> None:
+        for command in ("exactory", "exactory-draft"):
+            with self.subTest(command=command):
+                help_text = self._read_help(command)
+                self.assertIn("runs the offline citation check (exactory-check gate)", help_text)
+                self.assertIn("a failing check prints one Citation report line", help_text)
 
 
 if __name__ == "__main__":

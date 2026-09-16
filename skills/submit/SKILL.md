@@ -14,8 +14,9 @@ receipt that closes the study's `submit` stage. A workspace that refuses the rec
 prints one line, `Managed record skipped (<code>): <message>`, and sends the request
 anyway. A directory with no workspace, or a workspace with no store, sends it with
 no line.
-Inside a draft workspace it first prints the offline citation report; a failing
-report is information for the user, and the submit continues.
+Inside a draft workspace it first runs the offline citation check; a failing check
+prints one `Citation report:` line, which is information for the user, and the
+submit continues.
 
 If the command reports that no API key is found, the next step depends on where you are.
 
