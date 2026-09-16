@@ -320,9 +320,11 @@ exactory-research gate publication
 
 Publication uses the current exact bundle, two applicable accepting reviews, and
 the existing citation/remote receipt checks. Changes invalidate affected current
-decisions and require reassessment. Follow the deposit and submission skills
-within the user's authorization. Reconcile an unknown remote intent before any
-new write; an API credential does not itself authorize publication.
+decisions and require reassessment. `exactory-draft deposit` and `exactory submit`
+run on the user's instruction: when these gates pass they record the study's
+publication and submission receipts, and otherwise they print one
+`Managed record skipped` line and create the record or request directly.
+Reconcile an unknown remote intent before any new managed write.
 
 ## Develop the paper across rounds
 
@@ -409,8 +411,9 @@ Complete the same network, reading, five search purposes, and applicable standar
 Keep historical prior art tied to the version that existed at the target's date.
 Current work can explain a result without becoming earlier prior art. Author
 innovation goals and contribution targets are not verification prerequisites.
-Use the [verification skill](../skills/verify/SKILL.md) and CLI's task/bind-verdict
-flow for the independent exact-target assessment and original outgoing verdict.
+`exactory verify` sends a verdict from any directory; a verification workspace that
+bound the verdict with `task --bind` and `bind-verdict` also records its receipt.
+The [verification skill](../skills/verify/SKILL.md) states the direct procedure.
 `requestedByViewer` identifies the request opener and proves no authorship.
 
 For a native mathematical attack, complete current common preparation first,

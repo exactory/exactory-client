@@ -35,6 +35,9 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version 0.40.0 runs `exactory submit`, `exactory verify`, and `exactory-draft
+deposit` on the user's instruction, from any directory. A ready study records its
+receipt. Any other workspace gets one stderr line, and the request goes out.
 Version 0.39.2 enforces the final round decision at deposit, separates internal
 claim history from blind review, and measures the three paired reviewers.
 Version
@@ -51,7 +54,7 @@ literature preparation of [0.38.0](docs/releases/0.38.0.md), the shared research
 foundation of [0.36.0](docs/releases/0.36.0.md) and
 [0.37.0](docs/releases/0.37.0.md) and the mathematical strategy reassessment of
 [0.35.0](docs/releases/0.35.0.md). Read the
-[release notes](docs/releases/0.39.2.md) and the
+[release notes](docs/releases/0.40.0.md) and the
 [upgrade notes of 0.39.0](docs/releases/0.39.0.md) before updating a waiting agent
 or adopting an existing attack. An update does not resume paused research or reset
 its budget.
@@ -323,23 +326,23 @@ workspace they do nothing.
   retains its `EXACTORY_ATTACK_MAX` advance cap. A native completion marker
   cannot close a broader managed objective with remaining obligations.
 
-## Citation gate and hooks
+## Citation report and hooks
 
-A gate holds production deposit and paper submission until the citation
-report is fresh and clean. The report must match the current references
-file, with zero blocking findings and at least one verified entry.
-`exactory submit` and `exactory-draft deposit --production` run this gate
-themselves before any network call. On failure, the gate names the failed
-condition and the exact command to run next.
+`exactory submit` inside a draft workspace and `exactory-draft deposit
+--production` run the offline citation check (`exactory-check gate`) before
+their first network call. The check passes when the report matches the current
+references file, has zero blocking findings, and has at least one verified
+entry. A failing check prints one line on stderr with the prefix
+`Citation report:` and the exact command to run next. The command continues,
+because the user asked for the submit or the deposit. The report informs that
+decision.
 
-Two hooks add a second layer in a draft workspace. Outside a workspace they
-do nothing.
+One hook watches the references file in a draft workspace. Outside a workspace
+it does nothing.
 
 - **Advisory.** After each edit of a `.bib` file, the plugin validates the
   file offline. It reports duplicate keys and entries that have no DOI and
   no arXiv id.
-- **Blocking.** A PreToolUse hook applies the same gate conditions to the
-  gated commands. Its message names the exact command to run next.
 
 ## Environment
 
