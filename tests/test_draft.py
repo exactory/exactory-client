@@ -330,6 +330,17 @@ def _link_deposit_state_elsewhere(workspace_dir: Path) -> Path:
     return elsewhere_path
 
 
+def _read_request(requests, method: str, url_suffix: str):
+    """Read the first recorded request a test names.
+
+    The match is checked here, so a test that names a request the run never sent
+    fails with that name instead of ending in StopIteration."""
+    for request in requests:
+        if request.get_method() == method and request.full_url.endswith(url_suffix):
+            return request
+    raise AssertionError(f"The run sent no {method} to a URL ending {url_suffix}.")
+
+
 def _refuse_the_direct_deposit_record(store, state, *, expected_revision, request_id):
     """Stand in for record_direct_deposit when the store cannot take the write."""
     raise ResearchError("store_busy", "Research store is busy; retry the same"
@@ -479,11 +490,8 @@ class _LegacyWorkspaceDepositTestCase(_PlainWorkspaceDepositTestCase):
 
 class TestDeposit(_DepositTestCase):
     def _read_sent_metadata(self) -> dict:
-        metadata_request = next(
-            request for request in self.fake_api.requests
-            if request.get_method() == "PUT"
-            and request.full_url.endswith("/deposit/depositions/4242")
-        )
+        metadata_request = _read_request(self.fake_api.requests, "PUT",
+                                         "/deposit/depositions/4242")
         return json.loads(metadata_request.data.decode())["metadata"]
 
     def test_deposit_targets_the_sandbox_by_default(self) -> None:
@@ -698,18 +706,10 @@ class TestDeposit(_DepositTestCase):
 
     def test_every_deposit_marks_the_paper_as_the_default_preview(self) -> None:
         self._deposit(["--creator", "Shiroshita, Ryosuke"])
-        read_request = next(
-            request for request in self.fake_api.requests
-            if request.get_method() == "GET"
-            and request.full_url.endswith("/records/4242/draft")
-        )
+        read_request = _read_request(self.fake_api.requests, "GET", "/records/4242/draft")
         self.assertEqual(read_request.get_header("Accept"),
                          "application/vnd.inveniordm.v1+json")
-        write_request = next(
-            request for request in self.fake_api.requests
-            if request.get_method() == "PUT"
-            and request.full_url.endswith("/records/4242/draft")
-        )
+        write_request = _read_request(self.fake_api.requests, "PUT", "/records/4242/draft")
         document = json.loads(write_request.data.decode())
         self.assertEqual(document["files"]["default_preview"], "paper.pdf")
         # The whole draft document goes back, so the PUT replaces nothing else.
@@ -823,8 +823,8 @@ class TestManagedDepositAfterALostPublishResponse(_DepositTestCase):
         # the deposition line belongs to the direct path alone.
         self.assertIn("Then run the command again.", interrupted_output)
         self.assertNotIn("is open on Zenodo", interrupted_output)
-        uploaded_bytes = next(request.data for request in self.fake_api.requests
-                              if request.full_url.endswith("/files/bucket-1/paper.pdf"))
+        uploaded_bytes = _read_request(self.fake_api.requests, "PUT",
+                                       "/files/bucket-1/paper.pdf").data
 
         self.fake_api = _PublishedRecordZenodoApi(uploaded_bytes)
         _draft._open_url = self.fake_api
@@ -843,8 +843,8 @@ class TestManagedDepositAfterALostPublishResponse(_DepositTestCase):
         self.fake_api = _LostResponseZenodoApi("/actions/publish")
         _draft._open_url = self.fake_api
         self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
-        uploaded_bytes = next(request.data for request in self.fake_api.requests
-                              if request.full_url.endswith("/files/bucket-1/paper.pdf"))
+        uploaded_bytes = _read_request(self.fake_api.requests, "PUT",
+                                       "/files/bucket-1/paper.pdf").data
 
         self.fake_api = _UnpublishedRecordZenodoApi(uploaded_bytes)
         _draft._open_url = self.fake_api
@@ -862,6 +862,7 @@ class TestManagedDepositAfterALostPublishResponse(_DepositTestCase):
         self.assertEqual(intent["status"], "complete")
         self.assertEqual([entry["name"] for entry in intent["discarded"]], ["publish"])
         receipts = Store(self.workspace_dir).snapshot()["records"]["publication_receipt"]
+        self.assertEqual(len(receipts), 1)
         self.assertEqual(next(iter(receipts.values()))["doi"], "10.5281/zenodo.4242")
 
 
@@ -1016,9 +1017,11 @@ class TestNewVersion(_DepositTestCase):
         self.assertEqual([url for _, url in requested
                           if url.endswith("/deposit/depositions")], [])
         self.assertEqual(self.read_deposit_state()["deposition_id"], 4343)
-        intent = next(record for record
-                      in Store(self.workspace_dir).snapshot()["records"]["remote_intent"].values()
-                      if record["binding"]["new_version"])
+        intents = [record for record
+                   in Store(self.workspace_dir).snapshot()["records"]["remote_intent"].values()
+                   if record["binding"]["new_version"]]
+        self.assertEqual(len(intents), 1)
+        intent = intents[0]
         self.assertEqual(intent["status"], "complete")
         self.assertEqual([entry["name"] for entry in intent["discarded"]], ["create"])
 
@@ -1026,11 +1029,8 @@ class TestNewVersion(_DepositTestCase):
         self.record_prior_deposit()
         _write_authorship_record(self.workspace_dir, _AGENT_WROTE_THE_PAPER_RECORD_TEXT)
         self._deposit(["--new-version", "--creator", "Shiroshita, Ryosuke"])
-        metadata_request = next(
-            request for request in self.fake_api.requests
-            if request.get_method() == "PUT"
-            and request.full_url.endswith("/deposit/depositions/4343")
-        )
+        metadata_request = _read_request(self.fake_api.requests, "PUT",
+                                         "/deposit/depositions/4343")
         metadata = json.loads(metadata_request.data.decode())["metadata"]
         self.assertIn(_WRITTEN_BY_EXACTORY_SENTENCE, metadata["description"])
         self.assertEqual(metadata["keywords"], [_WRITTEN_BY_EXACTORY_KEYWORD])
@@ -1078,9 +1078,8 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
 
     def test_the_direct_metadata_carries_the_disclosure(self) -> None:
         self._deposit(["--creator", "Shiroshita, Ryosuke"])
-        metadata_request = next(request for request in self.fake_api.requests
-                                if request.get_method() == "PUT"
-                                and request.full_url.endswith("/deposit/depositions/4242"))
+        metadata_request = _read_request(self.fake_api.requests, "PUT",
+                                         "/deposit/depositions/4242")
         metadata = json.loads(metadata_request.data.decode())["metadata"]
         self.assertEqual(metadata["title"], "Cohort Percentiles")
         self.assertEqual(metadata["creators"], [{"name": "Shiroshita, Ryosuke"}])
@@ -1088,9 +1087,8 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
         self.assertNotIn("keywords", metadata)
 
     def _read_upload_body(self, upload_name: str) -> bytes:
-        request = next(request for request in self.fake_api.requests
-                       if request.full_url.endswith("/files/bucket-1/" + upload_name))
-        return request.data
+        return _read_request(self.fake_api.requests, "PUT",
+                             "/files/bucket-1/" + upload_name).data
 
     def test_the_paper_upload_carries_the_bytes_of_the_pdf(self) -> None:
         """The upload body is the file on disk. A PUT that names paper.pdf and

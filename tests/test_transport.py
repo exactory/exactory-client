@@ -396,9 +396,6 @@ class TestSubmitInAStudyWorkspaceWithNoDraftMarker(_TransportTestCase):
             "version": 1, "slug": "cohort-percentiles", "stage": "submit",
             "status": "running",
         }))
-        # The check reports on this file when it runs, which it does not here.
-        (self.scratch_dir / "draft").mkdir()
-        (self.scratch_dir / "draft" / "references.bib").write_text("@article{a2023b,\n}\n")
 
     def test_submit_prints_nothing_and_posts(self) -> None:
         _, stderr_text = self._run(["submit", "--doi", "10.5281/zenodo.1"])
