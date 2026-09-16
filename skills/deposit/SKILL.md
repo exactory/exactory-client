@@ -29,9 +29,9 @@ PATH while this plugin is enabled.
   anyway. A draft workspace with no store, such as one initialized before
   0.38.0, creates it with no line. When the store also kept no record of the
   deposit, the command writes `.exactory/deposit.json`, says that this file is
-  the only local copy, and exits nonzero after the DOI. A nonzero exit that
-  follows a printed DOI means the record exists on Zenodo: report that DOI and
-  do not deposit again.
+  the only local copy, and exits nonzero after it prints the record. A nonzero
+  exit that follows a printed DOI means the record exists on Zenodo: report that
+  DOI and do not deposit again.
 - The Zenodo tokens are exported by the user, never pasted into chat. Sandbox
   uses `ZENODO_SANDBOX_TOKEN`, production uses `ZENODO_TOKEN`. Run
   `exactory-lab keys` to read which one is set.
@@ -117,9 +117,12 @@ the user ended the run at deposit, set the state:
   and the command publishes that same deposition, which Zenodo publishes once.
   A run that ends in `remote_reconciliation_required` sent nothing twice. Its
   `details` name the request id and the step the remote read did not settle,
-  and `exactory-draft reconcile <request id>` continues that deposit once the
-  record is readable. When the error carries no `details`, the `remote_intents`
-  of `exactory-research status` name the saved intent.
+  and `exactory-draft reconcile <request id>` continues that deposit when a
+  later read settles that step. A record that no read settles keeps the refusal.
+  One example is a record that reads back published with another DOI or other
+  files. Report that record to the user and do not run the command again. When
+  the error carries no `details`, the `remote_intents` of
+  `exactory-research status` name the saved intent.
 - Do not paste a Zenodo token into the chat; the user exports it.
 - Do not edit the citation report to pass the gate; fix the references.
 - Do not hand-write the deposit metadata; `exactory-draft` builds it.

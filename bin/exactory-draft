@@ -98,11 +98,13 @@ _CHECK_COMMAND_PATH = Path(__file__).with_name("exactory-check")
 # What an uncertain outcome earns the user: an unreachable API and a 5xx both
 # leave the request unsettled. Every request of this command can be sent again,
 # except the publish of a direct deposit: a managed deposit resumes its saved
-# intent through remote reads, while a direct deposit has no intent, so a
-# second run of it publishes a second permanent record.
+# intent, which settles each claimed step before it writes again, while a direct
+# deposit has no intent, so a second run of it publishes a second permanent
+# record. The advice names that record itself, because stderr carries it to a
+# caller that reads none of the lines on stdout.
 _RETRY_ADVICE_MSG = "Then run the command again."
-_UNCERTAIN_DIRECT_PUBLISH_ADVICE_MSG = (
-    "The deposition named above may be published already. Open that record and"
+_UNCERTAIN_DIRECT_PUBLISH_ADVICE_TEMPLATE = (
+    "Deposition {deposition_id} may be published already. Open {draft_url} and"
     " read its state. Do not run this command again: a second run publishes a"
     " second permanent record."
 )
@@ -395,7 +397,8 @@ def _deposit_directly(store, store_open_error, args: argparse.Namespace, base_ur
         # depositions; conceptdoi names the paper across all its versions.
         publish_response = _call_zenodo(
             "POST", f"{base_url}/deposit/depositions/{deposition['id']}/actions/publish", token,
-            uncertain_outcome_advice_msg=_UNCERTAIN_DIRECT_PUBLISH_ADVICE_MSG)
+            uncertain_outcome_advice_msg=_UNCERTAIN_DIRECT_PUBLISH_ADVICE_TEMPLATE.format(
+                deposition_id=deposition["id"], draft_url=draft_url))
         state["doi"] = publish_response.get("doi", "")
         state["concept_doi"] = publish_response.get("conceptdoi", "")
         state["record_url"] = publish_response.get("links", {}).get("record_html", "")
@@ -477,11 +480,13 @@ def _save_deposit_state(store, store_open_error, state: dict) -> None:
 def _stop_with_only_the_local_deposit_copy(root: Path, state: dict) -> None:
     """Write the deposit file, report it as the only local copy, and exit
     nonzero. The store holds no record of this deposit, so a later projection
-    export replaces the file this writes."""
+    export replaces the file this writes. The message names that file, because
+    stderr carries it to a caller that reads none of the lines on stdout."""
     json_projection(root, str(_DEPOSIT_STATE_PATH), state)
     _exit_with_error("The workspace store did not record this deposit. The record is on Zenodo."
                      f" {_DEPOSIT_STATE_PATH} holds the only local copy of it, and a projection"
-                     " export can replace that file. Save the deposit state printed above.")
+                     " export can replace that file. Copy the state out of that file before the"
+                     " next projection export.")
 
 
 def _run_reconcile(args: argparse.Namespace) -> None:
@@ -538,7 +543,7 @@ def _build_parser() -> argparse.ArgumentParser:
                          help='Author as "Family name, Given names". Repeat for more authors.')
     deposit.set_defaults(handler=_run_deposit)
     add_identity(deposit, required=False)
-    reconcile = commands.add_parser("reconcile", allow_abbrev=False, help="Reconcile a saved deposit intent through remote reads before continuing confirmed steps.")
+    reconcile = commands.add_parser("reconcile", allow_abbrev=False, help="Settle the claimed step of a saved deposit intent, then continue that deposit.")
     reconcile.add_argument("intent_id")
     reconcile.set_defaults(handler=_run_reconcile)
 

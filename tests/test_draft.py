@@ -41,23 +41,40 @@ _draft = _load_bin_module("exactory-draft", "exactory_draft")
 _WORKSPACE_DIR_NAMES = (".exactory", "draft", "evidence", "research", "reviews", "learnings")
 
 
-def _run_draft_command(argv: list[str], expected_exit_code: int | None,
-                       test_case: unittest.TestCase) -> str:
+def _invoke_draft_command(argv: list[str], expected_exit_code: int | None,
+                          test_case: unittest.TestCase,
+                          out_sink: io.StringIO, err_sink: io.StringIO) -> None:
     args = _draft._build_parser().parse_args(argv)
     def invoke():
         try:
             args.handler(args)
         except ResearchError as error:
             _draft._exit_with_error(json.dumps({"error": error.as_dict()}))
-    sink = io.StringIO()
-    with contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):
+    with contextlib.redirect_stdout(out_sink), contextlib.redirect_stderr(err_sink):
         if expected_exit_code is None:
             invoke()
         else:
             with test_case.assertRaises(SystemExit) as caught:
                 invoke()
             test_case.assertEqual(caught.exception.code, expected_exit_code)
+
+
+def _run_draft_command(argv: list[str], expected_exit_code: int | None,
+                       test_case: unittest.TestCase) -> str:
+    sink = io.StringIO()
+    _invoke_draft_command(argv, expected_exit_code, test_case, sink, sink)
     return sink.getvalue()
+
+
+def _run_draft_command_on_split_streams(argv: list[str], expected_exit_code: int | None,
+                                        test_case: unittest.TestCase) -> tuple[str, str]:
+    """Run the command with stdout and stderr apart, and return the two texts.
+
+    An agent captures the two streams separately, so every instruction on stderr
+    carries what it names instead of pointing at a line on the other stream."""
+    out_sink, err_sink = io.StringIO(), io.StringIO()
+    _invoke_draft_command(argv, expected_exit_code, test_case, out_sink, err_sink)
+    return out_sink.getvalue(), err_sink.getvalue()
 
 
 class _FakeZenodoApi:
@@ -415,6 +432,13 @@ class _PlainWorkspaceDepositTestCase(unittest.TestCase):
 
     def _deposit(self, argv_tail: list[str], expected_exit_code: int | None = None) -> str:
         return _run_draft_command(
+            ["deposit", "--abstract-file", "draft/abstract.txt", *argv_tail],
+            expected_exit_code, self,
+        )
+
+    def _deposit_on_split_streams(self, argv_tail: list[str],
+                                  expected_exit_code: int | None = None) -> tuple[str, str]:
+        return _run_draft_command_on_split_streams(
             ["deposit", "--abstract-file", "draft/abstract.txt", *argv_tail],
             expected_exit_code, self,
         )
@@ -942,6 +966,38 @@ class TestNewVersion(_DepositTestCase):
             (self.workspace_dir / ".exactory" / "deposit.json").read_text()
         )
 
+    def test_a_lost_new_version_response_finishes_on_the_next_run(self) -> None:
+        # https://developers.zenodo.org states that the new-version action has
+        # no effect while the draft of the first call is unpublished. The next
+        # run sends that same action again, so the deposit finishes on the draft
+        # the lost call left, and it creates no second record.
+        self.record_prior_deposit()
+        self.fake_api = _LostResponseZenodoApi("/actions/newversion")
+        _draft._open_url = self.fake_api
+        interrupted_output = self._deposit(
+            ["--new-version", "--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
+        self.assertIn("Then run the command again.", interrupted_output)
+
+        self.fake_api = _FakeZenodoApi()
+        _draft._open_url = self.fake_api
+        self._deposit(["--new-version", "--creator", "Shiroshita, Ryosuke"])
+        requested = [(request.get_method(), request.full_url)
+                     for request in self.fake_api.requests]
+        self.assertEqual(
+            requested[:2],
+            [("POST", "https://sandbox.zenodo.org/api/deposit/depositions"
+                      "/4242/actions/newversion"),
+             ("GET", "https://sandbox.zenodo.org/api/deposit/depositions/4343")],
+        )
+        self.assertEqual([url for _, url in requested
+                          if url.endswith("/deposit/depositions")], [])
+        self.assertEqual(self.read_deposit_state()["deposition_id"], 4343)
+        intent = next(record for record
+                      in Store(self.workspace_dir).snapshot()["records"]["remote_intent"].values()
+                      if record["binding"]["new_version"])
+        self.assertEqual(intent["status"], "complete")
+        self.assertEqual([entry["name"] for entry in intent["discarded"]], ["create"])
+
     def test_new_version_states_the_same_authorship_as_a_first_deposit(self) -> None:
         self.record_prior_deposit()
         _write_authorship_record(self.workspace_dir, _AGENT_WROTE_THE_PAPER_RECORD_TEXT)
@@ -1113,17 +1169,20 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
 
     def test_a_lost_publish_response_names_the_record_instead_of_a_second_run(self) -> None:
         # A direct deposit saves no intent, so there is nothing to resume: the
-        # last line the user reads names the record to open, and the advice to
-        # send the request again stays off this one request.
+        # advice names the record to open, and the advice to send the request
+        # again stays off this one request. The advice stands on stderr alone,
+        # because the caller that reads it there holds no stdout line.
         self.fake_api = _LostResponseZenodoApi("/actions/publish")
         _draft._open_url = self.fake_api
-        output = self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"],
-                               expected_exit_code=1)
-        self.assertIn("Deposition 4242 is open on Zenodo:", output)
-        self.assertIn("The client cannot reach the Zenodo API.", output)
-        self.assertIn("The deposition named above may be published already.", output)
-        self.assertIn("a second run publishes a second permanent record", output)
-        self.assertNotIn("Then run the command again", output)
+        stdout_text, stderr_text = self._deposit_on_split_streams(
+            ["--publish", "--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
+        self.assertIn("Deposition 4242 is open on Zenodo:", stdout_text)
+        self.assertIn("The client cannot reach the Zenodo API.", stderr_text)
+        self.assertIn("Deposition 4242 may be published already. Open"
+                      " https://sandbox.zenodo.org/api/deposit/4242 and read its state.",
+                      stderr_text)
+        self.assertIn("a second run publishes a second permanent record", stderr_text)
+        self.assertNotIn("Then run the command again", stderr_text)
 
     def test_a_lost_upload_response_keeps_the_advice_to_run_the_command_again(self) -> None:
         # Every other request of a direct deposit can be sent again, and the
@@ -1145,7 +1204,7 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
         self.assertIn("Deposition 4242 is open on Zenodo:", output)
         self.assertIn("The Zenodo API returned HTTP 502.", output)
         self.assertIn("The server states no outcome for this request.", output)
-        self.assertIn("The deposition named above may be published already.", output)
+        self.assertIn("Deposition 4242 may be published already.", output)
         self.assertNotIn("Then run the command again", output)
 
     def test_a_refused_publish_states_the_status_without_advice_to_send_it_again(self) -> None:
@@ -1223,15 +1282,21 @@ class TestCorruptStoreDeposit(_PlainWorkspaceDepositTestCase):
     def test_the_corrupt_store_is_noted_once_and_the_deposit_is_direct(self) -> None:
         # A store that exists and does not open can open again later, and the
         # projection export then rewrites the file from a store that never saw
-        # this deposit. The command says so and exits nonzero.
-        output = self._deposit(["--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
-        self.assertIn("Managed record skipped (corrupt_state): ", output)
+        # this deposit. The command says so on stderr, where it names the file
+        # that holds the state instead of a line on the other stream, and exits
+        # nonzero.
+        stdout_text, stderr_text = self._deposit_on_split_streams(
+            ["--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
+        self.assertIn("Managed record skipped (corrupt_state): ", stderr_text)
         # One decision point, so one note: nothing re-opens the store to say it again.
-        self.assertEqual(output.count("Managed record skipped"), 1)
+        self.assertEqual(stderr_text.count("Managed record skipped"), 1)
         self.assertEqual(self.requested()[0], ("POST", "https://sandbox.zenodo.org/api/deposit/depositions"))
         self.assertEqual(self.read_deposit_state()["deposition_id"], 4242)
-        self.assertIn(".exactory/deposit.json holds the only local copy of it", output)
-        self.assertIn("a projection export can replace that file", output)
+        self.assertIn('"deposition_id": 4242', stdout_text)
+        self.assertIn(".exactory/deposit.json holds the only local copy of it", stderr_text)
+        self.assertIn("a projection export can replace that file", stderr_text)
+        self.assertIn("Copy the state out of that file", stderr_text)
+        self.assertNotIn("printed above", stderr_text)
 
     def test_a_published_deposit_prints_the_doi_before_the_corrupt_store_stops_it(self) -> None:
         output = self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"],

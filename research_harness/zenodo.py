@@ -71,8 +71,15 @@ def reconcile_pending(store, identifier, client):
     observed = None
     if name == "create":
         if binding["new_version"]:
-            raise ResearchError("remote_reconciliation_required", "The new-version response was lost before its record ID was captured; no repeat creation was sent",
-                                {"request_id": identifier, "prior_deposition_id": binding["prior"]["deposition_id"]})
+            # The lost response carried the new version's record ID, so no read
+            # names that record. https://developers.zenodo.org states that the
+            # new-version action has no effect while the draft of the first call
+            # is unpublished, so the claim is cleared and the caller sends that
+            # same action again: it answers with the draft the first call left,
+            # and the published record it revises stays as it is.
+            discard_step(store, identifier, name, {"kind": "repeat_without_effect", "action": "newversion",
+                                                   "prior_deposition_id": binding["prior"]["deposition_id"]})
+            return get_intent(store, identifier)
         token = "Exactory publication intent " + identifier
         candidates, is_listing_complete = [], False
         for page in range(1, 4):
@@ -211,6 +218,6 @@ def deposit(store, binding, client, *, expected_revision, request_id):
     if binding["new_version"] and (binding["prior"] is None or binding["prior"]["environment"] != binding["environment"]):
         raise ResearchError("publication_prior_required", "A revised deposit must use the prior concrete record in the same environment")
     intent = begin_intent(store, "deposit", binding, expected_revision=expected_revision, request_id=request_id)
-    # An interrupted deposit continues through remote reads: a fresh intent has
+    # An interrupted deposit continues from its saved intent: a fresh intent has
     # no claimed step, so reconciliation returns at once and nothing changes.
     return continue_deposit(store, intent["id"], client, reconcile=True)

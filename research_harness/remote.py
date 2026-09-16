@@ -94,11 +94,12 @@ def resolve_step(store, identifier, name, response, observation):
 
 
 def discard_step(store, identifier, name, observation):
-    """Clear a claimed step that checked remote reads show never landed.
+    """Clear a claimed step so that the caller sends it itself.
 
-    A discard invents no response: the remote state holds no trace of the
-    request, so the caller sends the step itself. The intent keeps the
-    observation that established the absence."""
+    A discard invents no response. The caller establishes that the step reaches
+    the same remote state when it is sent again: checked remote reads hold no
+    trace of the request, or the service documents the request as an action that
+    has no effect when it is repeated. The intent keeps that observation."""
     def transform(record):
         _read_pending_step(record, name)
         return dict(record, pending=None, status="confirmed" if record["responses"] else "prepared",
