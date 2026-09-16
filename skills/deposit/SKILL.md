@@ -99,6 +99,10 @@ the user ended the run at deposit, set the state:
   asks for.
 - Do not treat a missing Zenodo token as a study failure. Park the run and
   report the finished local paper.
+- Do not run a deposit again when its publish response was lost. The command
+  prints the deposition id and its draft URL before it publishes. Open that
+  record and read its state first; a second run publishes a second permanent
+  record.
 - Do not paste a Zenodo token into the chat; the user exports it.
 - Do not edit the citation report to pass the gate; fix the references.
 - Do not hand-write the deposit metadata; `exactory-draft` builds it.

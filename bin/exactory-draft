@@ -184,7 +184,8 @@ def _load_draft_state() -> dict:
                          " Run exactory-draft init first.", 2)
     except json.JSONDecodeError as error:
         _exit_with_error(f"{_DRAFT_STATE_PATH} is not valid JSON. Cause: {error}")
-    if "title" not in state:
+    # Any JSON value parses, and only an object can name a title.
+    if not isinstance(state, dict) or "title" not in state:
         _exit_with_error(f"{_DRAFT_STATE_PATH} names no title."
                          " Write the paper's working title into it as \"title\".", 2)
     return state
@@ -202,12 +203,16 @@ def _read_abstract_text(path: Path) -> str:
     """The abstract the record's description opens with, as the user wrote it.
 
     The direct path takes the abstract from any file the user names, so this
-    reader owns the UTF-8 rule the pinned publication bundle used to own."""
+    reader owns the UTF-8 rule the pinned publication bundle used to own. It
+    reads bytes and decodes them, because the publication bundle pins the
+    file's own bytes: a text read translates CRLF to LF, which changes the
+    description, and with it the deposit intent's fingerprint, so an
+    interrupted deposit no longer resumes and creates a second record."""
     if not path.exists():
         _exit_with_error(f"The file {path} does not exist."
                          " Write the paper's abstract into it as plain text.", 2)
     try:
-        abstract_text = path.read_text(encoding="utf-8").strip()
+        abstract_text = path.read_bytes().decode("utf-8").strip()
     except (OSError, UnicodeDecodeError) as error:
         _exit_with_error(f"The client cannot read the abstract file {path} as UTF-8 text."
                          f" Cause: {error}."
@@ -308,13 +313,14 @@ def _run_deposit(args: argparse.Namespace) -> None:
     # otherwise the record is created directly, and the user reads why on stderr.
     # The direct path keeps the store this call opened, so the command opens the
     # workspace once and notes a refusal once.
-    store, deposit_report, _ = select_managed_path(lambda workspace_store: validate_deposit(
+    store, deposit_report, store_open_error = select_managed_path(lambda workspace_store: validate_deposit(
         workspace_store, pdf_path, abstract_path, sources_path,
         new_version=args.new_version, environment=environment))
     if deposit_report is not None:
         _deposit_managed(store, deposit_report, args, base_url, environment, metadata, sources_path, token)
     else:
-        _deposit_directly(store, args, base_url, environment, metadata, pdf_path, sources_path, token)
+        _deposit_directly(store, store_open_error, args, base_url, environment, metadata,
+                          pdf_path, sources_path, token)
 
 
 def _deposit_managed(store, report: dict, args: argparse.Namespace, base_url: str, environment: str,
@@ -335,8 +341,8 @@ def _deposit_managed(store, report: dict, args: argparse.Namespace, base_url: st
     print(json.dumps(receipt, indent=2))
 
 
-def _deposit_directly(store, args: argparse.Namespace, base_url: str, environment: str, metadata: dict,
-                      pdf_path: Path, sources_path: Path | None, token: str) -> None:
+def _deposit_directly(store, store_open_error, args: argparse.Namespace, base_url: str, environment: str,
+                      metadata: dict, pdf_path: Path, sources_path: Path | None, token: str) -> None:
     # Every local input is read before the first remote write, like the rest of
     # this command, so an unreadable path leaves no draft record on Zenodo. The
     # bytes were already held in full for the upload, so peak memory is the same.
@@ -346,6 +352,12 @@ def _deposit_directly(store, args: argparse.Namespace, base_url: str, environmen
         deposition = _open_new_version_draft(base_url, environment, token)
     else:
         deposition = _call_zenodo("POST", f"{base_url}/deposit/depositions", token, json_body={})
+    # The record exists from here on, and a publish cannot be made idempotent:
+    # a second run creates and publishes a second permanent record. The user
+    # reads the id and the draft link first, so a lost response leaves a record
+    # to open instead of a deposit to repeat.
+    draft_url = deposition.get("links", {}).get("html", "")
+    print(f"Deposition {deposition['id']} is open on Zenodo: {draft_url}")
     bucket_url = deposition["links"]["bucket"]
     _call_zenodo("PUT", f"{bucket_url}/{PAPER_UPLOAD_NAME}", token, file_bytes=pdf_bytes)
     if sources_path is not None:
@@ -355,7 +367,7 @@ def _deposit_directly(store, args: argparse.Namespace, base_url: str, environmen
                  json_body={"metadata": metadata})
     _mark_paper_as_preview(base_url, deposition["id"], token)
     state = {"environment": environment, "deposition_id": deposition["id"],
-             "draft_url": deposition.get("links", {}).get("html", "")}
+             "draft_url": draft_url}
     if args.publish:
         # Per https://developers.zenodo.org, doi is present only on published
         # depositions; conceptdoi names the paper across all its versions.
@@ -370,7 +382,7 @@ def _deposit_directly(store, args: argparse.Namespace, base_url: str, environmen
     # The user reads the record before the local record is kept, so a store that
     # refuses the write still leaves the DOI on the screen.
     print(json.dumps(state, indent=2))
-    _save_deposit_state(store, state)
+    _save_deposit_state(store, store_open_error, state)
 
 
 def _mark_paper_as_preview(base_url: str, record_id: int, token: str) -> None:
@@ -408,33 +420,44 @@ def _open_new_version_draft(base_url: str, environment: str, token: str) -> dict
     return _call_zenodo("GET", draft_url, token)
 
 
-def _save_deposit_state(store, state: dict) -> None:
+def _save_deposit_state(store, store_open_error, state: dict) -> None:
     """Keep the local record of a direct deposit.
 
     A workspace with a usable store records it there, and the projection export
-    writes .exactory/deposit.json from that record. Without a store there is no
-    projection export, so the file itself is the record. A store that refuses
-    the write is the third case: the file holds a deposit the store does not
-    know, a later projection export rewrites the file from the store, and the
-    command says so and exits nonzero instead of reporting a kept record.
+    writes .exactory/deposit.json from that record. A workspace with no store
+    has no projection export, so the file itself is the record and the command
+    says nothing. The other two cases hold a store that did not take the
+    record: it refused the write, or it never opened. Both leave a store that
+    can serve a later projection export, which rewrites the file from a record
+    the store does not hold, so both write the file, say that it is the only
+    local copy, and exit nonzero instead of reporting a kept record.
 
-    Both of those cases write the file with the same projection primitive the
+    Those two cases write the file with the same projection primitive the
     export uses, because the file they write is the only local copy of a
     published DOI, and the primitive is what makes the replacement atomic and
     keeps it off a symlink. The command runs from the workspace root, which is
     why cwd is the root the projection is written under."""
-    if store is None:
+    if store is None and store_open_error is None:
         json_projection(Path.cwd(), str(_DEPOSIT_STATE_PATH), state)
         return
+    if store is None:
+        _stop_with_only_the_local_deposit_copy(Path.cwd(), state)
     try:
         record_direct_deposit(store, state, expected_revision=store.revision,
                               request_id="direct-deposit-" + uuid.uuid4().hex)
     except ResearchError as error:
         note_managed_record_skipped(error)
-        json_projection(store.root, str(_DEPOSIT_STATE_PATH), state)
-        _exit_with_error("The workspace store did not record this deposit. The record is on Zenodo."
-                         f" {_DEPOSIT_STATE_PATH} holds the only local copy of it, and a projection"
-                         " export can replace that file. Save the deposit state printed above.")
+        _stop_with_only_the_local_deposit_copy(store.root, state)
+
+
+def _stop_with_only_the_local_deposit_copy(root: Path, state: dict) -> None:
+    """Write the deposit file, report it as the only local copy, and exit
+    nonzero. The store holds no record of this deposit, so a later projection
+    export replaces the file this writes."""
+    json_projection(root, str(_DEPOSIT_STATE_PATH), state)
+    _exit_with_error("The workspace store did not record this deposit. The record is on Zenodo."
+                     f" {_DEPOSIT_STATE_PATH} holds the only local copy of it, and a projection"
+                     " export can replace that file. Save the deposit state printed above.")
 
 
 def _run_reconcile(args: argparse.Namespace) -> None:

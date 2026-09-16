@@ -18,6 +18,7 @@ import unittest.mock
 from pathlib import Path
 
 from integration_fixtures import prepare_research, prepare_manuscript
+from research_harness.artifacts import ArtifactStore
 from research_harness.errors import ResearchError
 from research_harness.storage import Store
 
@@ -118,6 +119,31 @@ class _FakeZenodoApi:
                 "links": {"record_html": f"{base_url}/records/4343"},
             }
         raise AssertionError(f"unexpected Zenodo request in test: {method} {url}")
+
+
+class _StdoutRecordingZenodoApi(_FakeZenodoApi):
+    """Answer like the fake above, and keep what the command had printed when
+    the publish request went out. A published record is permanent, so the test
+    measures what the user holds before the response that can be lost."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.printed_before_publish = ""
+
+    def __call__(self, request):
+        if request.full_url.endswith("/actions/publish"):
+            self.printed_before_publish = sys.stdout.getvalue()
+        return super().__call__(request)
+
+
+def _read_pinned_abstract_bytes(workspace_dir: Path) -> bytes:
+    """The abstract bytes the publication bundle pinned. The managed deposit of
+    0.39.x built the record's description from these bytes, so they are the
+    reference the description keeps matching."""
+    store = Store(workspace_dir)
+    records = store.snapshot()["records"]
+    bundle = records["publication_bundle"][records["publication_selection"]["bundle"]["id"]]
+    return ArtifactStore(store.root).read(bundle["files"]["abstract"]["artifact"])
 
 
 def _write_passing_citation_report(workspace_dir: Path) -> None:
@@ -384,6 +410,28 @@ class TestDeposit(_DepositTestCase):
             description.find(_DEPOSITED_THROUGH_EXACTORY_SENTENCE),
         )
         self.assertTrue(description.endswith("responsible for it.</p>"))
+
+    def test_an_abstract_with_crlf_line_endings_describes_the_record_as_the_pinned_bytes_do(self) -> None:
+        """A Windows abstract reaches Zenodo with the description the pinned
+        bytes produce, the one 0.39.x sent. The description is part of the
+        deposit intent's fingerprint, so a description that differs by the line
+        endings alone stops an interrupted 0.39.x deposit from resuming and
+        creates a second record."""
+        abstract_path = self.workspace_dir / "draft" / "abstract.txt"
+        abstract_path.write_bytes(b"We predict cohort percentiles & bound their error.\r\n\r\n"
+                                  b"A second paragraph states the limits.\r\n")
+        prepare_manuscript(self.research, stop=True)
+        self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        description = self._read_sent_metadata()["description"]
+        pinned_text = _read_pinned_abstract_bytes(self.workspace_dir).decode("utf-8").strip()
+        self.assertEqual(description,
+                         _draft._build_deposit_metadata("Cohort Percentiles", ["Shiroshita, Ryosuke"],
+                                                        pinned_text, False)["description"])
+        # Both paragraphs reach the record. A CRLF file holds no "\n\n", which
+        # is the paragraph separator, so they arrive as one paragraph, exactly
+        # as they did when the bundle's bytes fed the description.
+        self.assertIn("<p>We predict cohort percentiles &amp; bound their error."
+                      " A second paragraph states the limits.</p>", description)
 
     def _assert_claims_only_the_deposit(self, metadata: dict) -> None:
         """Assert the record says nothing about who wrote the paper. The gate
@@ -906,6 +954,29 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
         self.assertIn("names no title", stderr_text)
         self.assertEqual(self.fake_api.requests, [])
 
+    def test_a_draft_state_that_is_not_an_object_is_refused_before_any_request(self) -> None:
+        # A JSON scalar is valid JSON and names no title, so it lands on the
+        # same refusal a state without a title lands on.
+        for state_text in ("null", "7"):
+            with self.subTest(state=state_text):
+                (self.workspace_dir / ".exactory" / "draft.json").write_text(
+                    state_text + "\n", encoding="utf-8"
+                )
+                stderr_text = self._deposit(["--creator", "Shiroshita, Ryosuke"], expected_exit_code=2)
+                self.assertIn("names no title", stderr_text)
+                self.assertEqual(self.fake_api.requests, [])
+
+    def test_the_deposition_id_and_its_draft_url_reach_the_user_before_the_publish(self) -> None:
+        # The publish response can be lost, and a second run publishes a second
+        # permanent record. The user reads the record's id first, so the
+        # created record stays findable.
+        self.fake_api = _StdoutRecordingZenodoApi()
+        _draft._open_url = self.fake_api
+        self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"])
+        self.assertIn("Deposition 4242 is open on Zenodo:"
+                      " https://sandbox.zenodo.org/api/deposit/4242",
+                      self.fake_api.printed_before_publish)
+
     def test_a_new_version_without_a_stored_deposition_id_is_an_error(self) -> None:
         (self.workspace_dir / ".exactory" / "deposit.json").write_text(
             json.dumps({"environment": "sandbox"}) + "\n", encoding="utf-8"
@@ -958,18 +1029,34 @@ class TestCorruptStoreDeposit(_PlainWorkspaceDepositTestCase):
         (self.workspace_dir / ".exactory" / "research.sqlite3").write_bytes(b"not a database")
 
     def test_the_corrupt_store_is_noted_once_and_the_deposit_is_direct(self) -> None:
-        output = self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        # A store that exists and does not open can open again later, and the
+        # projection export then rewrites the file from a store that never saw
+        # this deposit. The command says so and exits nonzero.
+        output = self._deposit(["--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
         self.assertIn("Managed record skipped (corrupt_state): ", output)
         # One decision point, so one note: nothing re-opens the store to say it again.
         self.assertEqual(output.count("Managed record skipped"), 1)
         self.assertEqual(self.requested()[0], ("POST", "https://sandbox.zenodo.org/api/deposit/depositions"))
         self.assertEqual(self.read_deposit_state()["deposition_id"], 4242)
+        self.assertIn(".exactory/deposit.json holds the only local copy of it", output)
+        self.assertIn("a projection export can replace that file", output)
+
+    def test_a_published_deposit_prints_the_doi_before_the_corrupt_store_stops_it(self) -> None:
+        output = self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"],
+                               expected_exit_code=1)
+        self.assertIn("The record is published: ", output)
+        self.assertIn('"doi": "10.5281/zenodo.4242"', output)
+        self.assertIn(".exactory/deposit.json holds the only local copy of it", output)
+        self.assertEqual(self.read_deposit_state()["doi"], "10.5281/zenodo.4242")
 
 
 class TestLegacyWorkspaceDeposit(_LegacyWorkspaceDepositTestCase):
     def test_a_legacy_workspace_uploads_without_a_note(self) -> None:
+        # No store means no projection export, so the file this command writes
+        # is the record. The command says nothing and succeeds.
         output = self._deposit(["--creator", "Shiroshita, Ryosuke"])
         self.assertNotIn("Managed record skipped", output)
+        self.assertNotIn("only local copy", output)
         self.assertEqual(self.requested()[0], ("POST", "https://sandbox.zenodo.org/api/deposit/depositions"))
         self.assertEqual(self.read_deposit_state()["deposition_id"], 4242)
 
