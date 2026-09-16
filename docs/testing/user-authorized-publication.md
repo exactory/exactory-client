@@ -7,7 +7,7 @@ Release under validation: 0.40.0.
 ## Reproductions
 
 Every task ran its tests against the unchanged code first. The measured results,
-on Python 3.9.6:
+on Python 3.9.6, each at the time of its own task:
 
 - Removing the two Bash gate hooks failed all three tests of the hook manifest
   (`Ran 3 tests in 0.008s FAILED (failures=3)`). After `hooks/hooks.json` and the
@@ -67,7 +67,9 @@ workspace whose store does not open. It covers the local record: the store
 record that a projection export keeps, the file written without a store, the
 symlink that the projection primitive replaces instead of following, and the
 store that refuses the record. It covers every local input the direct path
-reads before its first remote write.
+reads before its first remote write, the refusal a deposit run from a
+subdirectory of its workspace prints, and the advice a lost create response
+earns.
 
 `tests/test_research_round_integrity.py` and `tests/test_research_gates.py` keep
 the managed boundaries: a bundle that changes after the managed remote steps
@@ -105,11 +107,19 @@ the task showed before the direct POST.
 
 ## Final validation
 
-On Python 3.9.6, `python3 -m unittest discover -s tests` ran 1,009 tests in
-1,882.286 s and passed. The baseline ran 994 tests in 1,889.338 s and passed.
-
-The math-solver harness suite, which this release does not touch, ran alone and
+`166d9b0` recorded the branch's full-suite run: on Python 3.9.6,
+`python3 -m unittest discover -s tests` ran 1,009 tests in 1,882.286 s and
+passed, where the baseline ran 994 tests in 1,889.338 s and passed. The
+math-solver harness suite, which this release does not touch, ran alone and
 passed 689 tests in 1,667.159 s.
+
+Later commits changed `bin/exactory-draft`, the README, the release note, the
+CLI reference, the workflow, the design note, the deposit and ai-science skills,
+and the tests of the deposit and the transport. At the head of the branch, the
+three modules that cover those files passed: `tests.test_draft` ran 81 tests in
+393.163 s, `tests.test_transport` ran 97 tests in 30.085 s, and
+`tests.test_research_guidance` ran 5 tests in 7.181 s, each run with
+`PYTHONPATH=tests python3 -m unittest`.
 
 `python3 -m compileall -q bin hooks research_harness codex tests`,
 `python3 codex/generate.py --check`, `python3 -m json.tool` over every tracked

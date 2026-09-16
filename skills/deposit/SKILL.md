@@ -79,12 +79,17 @@ PATH while this plugin is enabled.
    Zenodo sandbox with `ZENODO_SANDBOX_TOKEN`. A sandbox record is a rehearsal:
    the server cannot fetch it, so it is never the record to submit.
 
-When a deposit in a study ends without a DOI because its response was lost, run
-the same command again in the same workspace. The study holds the whole deposit
-as one saved intent, so the command reads the record on Zenodo and finishes that
-deposit. When the reads do not settle what happened, the command sends nothing
-and ends in `remote_reconciliation_required`. Report the record to the user and
-ask before another run.
+When a deposit ends without a DOI because its response was lost, read which path
+it took before another run. A managed deposit saved an intent, which
+`exactory-research status` names under `remote_intents`. Run the same command
+again in the same workspace: the study holds the whole deposit as one saved
+intent, so the command reads the record on Zenodo and finishes that deposit.
+When the reads do not settle what happened, the command sends nothing and ends
+in `remote_reconciliation_required`. Its `details` name the request id and the
+step no read settled, and `exactory-draft reconcile <request id>` continues that
+deposit when a later read settles that step. Report the record to the user and
+ask before another run. A deposit that saved no intent took the direct path, and
+"What not to do" names its recovery.
 
 ## Publishing a revised version
 
@@ -112,10 +117,12 @@ the user ended the run at deposit, set the state:
   asks for.
 - Do not treat a missing Zenodo token as a study failure. Park the run and
   report the finished local paper.
-- Do not run a direct deposit again when its response was lost. A direct deposit
-  saves no intent, so a second run creates and publishes a second permanent
-  record. The command prints `Deposition <id> is open on Zenodo: <url>` before
-  it publishes: open that record, read its state, and report the DOI from it.
+- Do not run a direct deposit again when its publish response was lost. A direct
+  deposit saves no intent, so a second run publishes a second permanent record.
+  The command prints `Deposition <id> is open on Zenodo: <url>` before it
+  publishes: open that record, read its state, and report the DOI from it. A
+  response lost before the publish leaves no published record, so run the
+  command again.
 - Do not paste a Zenodo token into the chat; the user exports it.
 - Do not edit the citation report to pass the gate; fix the references.
 - Do not hand-write the deposit metadata; `exactory-draft` builds it.

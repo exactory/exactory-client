@@ -134,9 +134,9 @@ The round gate, at the end of `evaluate`:
    that carries the admitted `goal` with its success criterion and stop condition
    ids (`status`, `gate round` and `export --kind round` do not report it). Log the decision with `exactory-lab decide`,
    and enter `literature` with `--status pending`. An approved `stop` enters
-   `deposit` when the publication gate passes. When the study keeps a Git
-   repository, tag the bundle of each round decision as `round-N`, where N is the
-   number of the round that the decision closes.
+   `deposit`. When the study keeps a Git repository, tag the bundle of each round
+   decision as `round-N`, where N is the number of the round that the decision
+   closes.
 
 Inside the round, the literature stage records a selected search for each
 consequence purpose (`downstream`: who is blocked by what the paper does not yet
@@ -172,8 +172,9 @@ The original ledger remains available to the round assessor.
 The loop ends only through a recorded exit. An approved `stop` leads to the
 deposit, and the deposit runs on the user's instruction: `exactory-draft deposit`
 records the study's publication receipt when the publication and round gates
-pass, and otherwise prints one `Managed record skipped` line and creates the
-record anyway. The `deposit` stage stays open until a receipt exists.
+pass, and otherwise creates the record anyway, with one `Managed record skipped`
+line when a store refuses the receipt. The `deposit` stage stays open until a
+receipt exists.
 A `scooped` verdict in `next_step` or a `contradicted` one in `changes`
 withdraws the goal: the round is assessed unsuccessful with the withdrawal as
 evidence, and the next decision proposes a distinct goal or stops. After an
@@ -201,10 +202,10 @@ reviews. The deposit and the submission run on the user's instruction:
 `exactory-draft deposit` records the publication receipt when these gates pass,
 and `exactory submit` records the submission receipt when that publication
 receipt names this exact bundle and the submit names its record. A command that
-records no receipt prints one `Managed record skipped` line and creates the
-record or the request anyway. Each command needs its own credential. The managed
-deposit settles an unknown earlier outcome against the Zenodo record before it
-sends that step again.
+records no receipt creates the record or the request anyway, with one
+`Managed record skipped` line when a store refuses the receipt. Each command
+needs its own credential. The managed deposit settles an unknown earlier outcome
+against the Zenodo record before it sends that step again.
 
 On resume, read authoritative `status --summary` and `next --summary`, the search tree and checkpoint
 records, pending admissions or intents, review history, source state, and context.

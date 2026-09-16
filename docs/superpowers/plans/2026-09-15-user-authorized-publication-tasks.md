@@ -4,6 +4,8 @@
 
 **Goal:** `exactory submit`, `exactory verify`, and `exactory-draft deposit` run whenever the user asks, from any directory; the managed harness records a receipt when the workspace supports one and otherwise prints one stderr line and proceeds.
 
+**Correction from the shipped release:** `exactory submit` and `exactory verify` run from any directory, and `exactory-draft deposit` runs from the root of a draft workspace, the directory that holds the `.exactory/draft.json` it reads the title from. The shipped README, release note and CLI reference carry that narrower wording, which supersedes the goal above and the text blocks prescribed below.
+
 **Architecture:** Each of the three commands gains one decision point before its first network write: open the surrounding workspace's store if there is one, run every check the managed path performs before its remote write, and take the managed path when they all pass. Any `ResearchError` from those checks selects the direct path (the 0.36.0 request) after one `Managed record skipped (<code>): <message>` line. The two Bash-boundary hooks that duplicated CLI refusals are deleted; the citation gate becomes a printed report.
 
 **Tech Stack:** Python 3.9+ standard library, `unittest`, the plugin's `research_harness` package, the `bin/` CLI scripts.

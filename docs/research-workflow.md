@@ -387,13 +387,12 @@ exactory-research gate round
 exactory-research round --file round-decision-2.json --expected-revision REVISION --request-id round-decide-002
 ```
 
-The loop ends only with an approved `stop`. Deposit follows when the publication
-gate passes; otherwise the study parks with the plateau recorded. A goal withdrawn
-in literature (`scooped` in `next_step`, `contradicted` in `changes`) or an
-observed stop condition ends work on that goal, and the next `round` decision
-proposes a distinct goal or stops. When the two most recent rounds were both
-unsuccessful, `continue` is refused in their directions unless it reopens one of
-them (`round_direction_exhausted`). A recorded `development` budget at its limit
+The loop ends only with an approved `stop`, which opens `deposit`. A goal
+withdrawn in literature (`scooped` in `next_step`, `contradicted` in `changes`)
+or an observed stop condition ends work on that goal, and the next `round`
+decision proposes a distinct goal or stops. When the two most recent rounds were
+both unsuccessful, `continue` is refused in their directions unless it reopens
+one of them (`round_direction_exhausted`). A recorded `development` budget at its limit
 refuses `continue` (`resource_budget_exhausted`) until the user raises it with a
 reason. An unavailable round assessor leaves `round_review_missing` pending, and
 the study parks.

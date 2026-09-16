@@ -909,6 +909,17 @@ class TestDepositPreconditions(_DepositTestCase):
         stderr_text = self._deposit(["--creator", "Shiroshita, Ryosuke"], expected_exit_code=2)
         self.assertIn("init", stderr_text)
 
+    def test_deposit_from_a_subdirectory_names_the_directory_that_holds_the_marker(self) -> None:
+        # The command reads the title from .exactory/draft.json under the
+        # current directory, so a run from a subdirectory finds no marker. The
+        # message sends the user to the workspace root instead of to init,
+        # which would make a second workspace inside this one.
+        os.chdir(self.workspace_dir / "draft")
+        stderr_text = self._deposit(["--creator", "Shiroshita, Ryosuke"], expected_exit_code=2)
+        self.assertIn(".exactory/draft.json does not exist here.", stderr_text)
+        self.assertIn("The deposit runs in the directory that holds it.", stderr_text)
+        self.assertEqual(self.fake_api.requests, [])
+
     def test_deposit_without_a_pdf_is_an_error(self) -> None:
         (self.workspace_dir / "draft" / "paper.pdf").unlink()
         stderr_text = self._deposit(["--creator", "Shiroshita, Ryosuke"], expected_exit_code=2)
@@ -1232,6 +1243,20 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
                       stderr_text)
         self.assertIn("a second run publishes a second permanent record", stderr_text)
         self.assertNotIn("Then run the command again", stderr_text)
+
+    def test_a_lost_create_response_keeps_the_advice_to_run_the_command_again(self) -> None:
+        # The publish is the last request of the deposit, so a run that ends at
+        # the create published nothing: the next run publishes the record for
+        # the first time, and the plain advice holds.
+        self.fake_api = _LostResponseZenodoApi("/deposit/depositions")
+        _draft._open_url = self.fake_api
+        output = self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"],
+                               expected_exit_code=1)
+        self.assertIn("The client cannot reach the Zenodo API.", output)
+        self.assertIn("Then run the command again.", output)
+        self.assertNotIn("second permanent record", output)
+        self.assertEqual(self.requested(),
+                         [("POST", "https://sandbox.zenodo.org/api/deposit/depositions")])
 
     def test_a_lost_upload_response_keeps_the_advice_to_run_the_command_again(self) -> None:
         # Every other request of a direct deposit can be sent again, and the
