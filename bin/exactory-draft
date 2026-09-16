@@ -95,17 +95,18 @@ _SOURCES_UPLOAD_STEM = "supplementary-sources"
 
 _CHECK_COMMAND_PATH = Path(__file__).with_name("exactory-check")
 
-# What an unreachable API earns the user. Every request of this command can be
-# sent again, except the publish of a direct deposit: a managed deposit resumes
-# its saved intent through remote reads, while a direct deposit has no intent,
-# so a second run of it publishes a second permanent record.
-_NETWORK_RETRY_ADVICE_MSG = ("Make sure that the network is available."
-                             " Then run the command again.")
-_LOST_DIRECT_PUBLISH_ADVICE_MSG = (
+# What an uncertain outcome earns the user: an unreachable API and a 5xx both
+# leave the request unsettled. Every request of this command can be sent again,
+# except the publish of a direct deposit: a managed deposit resumes its saved
+# intent through remote reads, while a direct deposit has no intent, so a
+# second run of it publishes a second permanent record.
+_RETRY_ADVICE_MSG = "Then run the command again."
+_UNCERTAIN_DIRECT_PUBLISH_ADVICE_MSG = (
     "The deposition named above may be published already. Open that record and"
     " read its state. Do not run this command again: a second run publishes a"
     " second permanent record."
 )
+
 
 def _exit_with_error(message: str, code: int = 1) -> None:
     print(message, file=sys.stderr)
@@ -152,10 +153,10 @@ def _call_zenodo(method: str, url: str, token: str,
                  json_body: dict | list | None = None,
                  file_bytes: bytes | None = None,
                  accept: str | None = None,
-                 unreachable_advice_msg: str = _NETWORK_RETRY_ADVICE_MSG) -> dict:
+                 uncertain_outcome_advice_msg: str = _RETRY_ADVICE_MSG) -> dict:
     """Send one request to the Zenodo API and return its JSON body. Exits with
     Zenodo's own error message on failure, and never echoes the token. The
-    caller names the advice an unreachable API earns, because only the caller
+    caller names the advice an uncertain outcome earns, because only the caller
     knows whether its request can be sent again."""
     headers = {"Authorization": f"Bearer {token}", "User-Agent": _USER_AGENT}
     if accept is not None:
@@ -171,10 +172,16 @@ def _call_zenodo(method: str, url: str, token: str,
         return _open_url(urllib.request.Request(url, method=method, data=data, headers=headers))
     except urllib.error.HTTPError as error:
         detail = error.read().decode("utf-8", "replace")[:2000]
-        _exit_with_error(f"The Zenodo API returned HTTP {error.code}.\n{detail}")
+        message = f"The Zenodo API returned HTTP {error.code}.\n{detail}"
+        # A 5xx leaves this request as unsettled as a lost connection does: the
+        # server states no outcome for it. A 4xx is the server's own decision,
+        # which the same request cannot change.
+        if error.code >= 500:
+            message += f"\nThe server states no outcome for this request. {uncertain_outcome_advice_msg}"
+        _exit_with_error(message)
     except OSError as error:
         _exit_with_error(f"The client cannot reach the Zenodo API. Cause: {error}."
-                         f" {unreachable_advice_msg}")
+                         f" Make sure that the network is available. {uncertain_outcome_advice_msg}")
     raise AssertionError("unreachable")
 
 
@@ -388,7 +395,7 @@ def _deposit_directly(store, store_open_error, args: argparse.Namespace, base_ur
         # depositions; conceptdoi names the paper across all its versions.
         publish_response = _call_zenodo(
             "POST", f"{base_url}/deposit/depositions/{deposition['id']}/actions/publish", token,
-            unreachable_advice_msg=_LOST_DIRECT_PUBLISH_ADVICE_MSG)
+            uncertain_outcome_advice_msg=_UNCERTAIN_DIRECT_PUBLISH_ADVICE_MSG)
         state["doi"] = publish_response.get("doi", "")
         state["concept_doi"] = publish_response.get("conceptdoi", "")
         state["record_url"] = publish_response.get("links", {}).get("record_html", "")

@@ -107,6 +107,15 @@ def reconcile_pending(store, identifier, client):
                 observed = candidate
             elif name == "publish" and candidate.get("submitted") is True and candidate.get("doi") and _files_match(candidate, binding, ArtifactStore(store.root)):
                 observed = candidate
+        # Each step above writes to the record this read returned, so a read
+        # with no trace of the step establishes that it never landed: the claim
+        # is cleared and the caller sends that one step to that same record.
+        # The publish reads its own evidence of absence, the `submitted` status
+        # of https://developers.zenodo.org, because a submitted record carrying
+        # another DOI or other files is an anomaly that no repeat settles.
+        if observed is None and (name != "publish" or candidate.get("submitted") is False):
+            discard_step(store, identifier, name, {"kind": "remote_read", "deposition_id": record_id})
+            return get_intent(store, identifier)
     if observed is None:
         raise ResearchError("remote_reconciliation_required", "Remote reads have not established the pending mutation's exact outcome; no duplicate write was sent",
                             {"request_id": identifier, "pending": pending})

@@ -51,8 +51,10 @@ PATH while this plugin is enabled.
    the deposit now, deposit now and report the blocking findings beside the DOI.
 2. **Write the abstract to a file.** Copy the paper's final abstract into
    `draft/abstract.txt` as plain text: no LaTeX commands, paragraphs separated
-   by one blank line. This file becomes the record's description on Zenodo,
-   so it must match the abstract in the PDF word for word.
+   by one blank line, and LF line endings, because the blank line of a CRLF
+   file separates no paragraphs in the record's description. This file becomes
+   the record's description on Zenodo, so it must match the abstract in the PDF
+   word for word.
 3. **Deposit and publish to production.**
    ```
    exactory-draft deposit --production --publish --confirm-publish --creator "<Family, Given>" --abstract-file draft/abstract.txt
@@ -109,11 +111,15 @@ the user ended the run at deposit, set the state:
   Open that record, read its state, and report the DOI from it. A managed
   deposit prints no such line. It holds the whole deposit as one saved intent,
   so run the same command again, in the workspace as the interrupted run left
-  it: the command reads the record on Zenodo and finishes that deposit. A run
-  that ends in `remote_reconciliation_required` sent nothing twice; it names the
-  request id and the step it could not settle, and
-  `exactory-draft reconcile <request id>` continues that deposit once the record
-  is readable.
+  it: the command reads the record on Zenodo and finishes that deposit from
+  either state the record is in. A record that reads back published keeps the
+  DOI it has; a record that reads back as a draft never received the publish,
+  and the command publishes that same deposition, which Zenodo publishes once.
+  A run that ends in `remote_reconciliation_required` sent nothing twice. Its
+  `details` name the request id and the step the remote read did not settle,
+  and `exactory-draft reconcile <request id>` continues that deposit once the
+  record is readable. When the error carries no `details`, the `remote_intents`
+  of `exactory-research status` name the saved intent.
 - Do not paste a Zenodo token into the chat; the user exports it.
 - Do not edit the citation report to pass the gate; fix the references.
 - Do not hand-write the deposit metadata; `exactory-draft` builds it.

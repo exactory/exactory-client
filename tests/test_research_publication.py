@@ -1,5 +1,6 @@
 """Exact manuscript, dual review and remote-intent publication boundaries."""
 
+import hashlib
 import importlib
 import json
 from pathlib import Path
@@ -195,6 +196,105 @@ class ResearchPublicationTests(DevelopmentCase):
         self.assertEqual(intent["responses"]["create"]["response"]["id"], 93)
         self.assertEqual(intent["discarded"], [{"name": "create", "observation": {
             "kind": "remote_read", "listing": "complete", "notes": "Exactory publication intent deposit-1"}}])
+
+    def deposit_after_a_lost_write(self, binding, lost_url_ending):
+        """Deposit twice, losing the response of one write that never landed.
+
+        The fake record holds only what landed, so the second run reads a record
+        with no trace of the lost write. Returns the receipt and every call."""
+        from research_harness.zenodo import deposit
+        calls = []
+        record = {"id": 91, "submitted": False, "metadata": {}, "files": [],
+                  "links": {"bucket": "https://zenodo.org/api/files/bucket", "html": "https://zenodo.org/deposit/91"}}
+        draft_document = {"metadata": {"title": "Authored finite result"}, "files": {"enabled": True}}
+        is_response_lost = [True]
+
+        def client(method, url, **kwargs):
+            calls.append((method, url))
+            if method != "GET" and url.endswith(lost_url_ending) and is_response_lost[0]:
+                is_response_lost[0] = False
+                raise OSError("The write never reached the server.")
+            if method == "POST" and url.endswith("/deposit/depositions"):
+                record["metadata"] = kwargs["json_body"]["metadata"]
+                return dict(record)
+            if method == "PUT" and "/files/" in url:
+                record["files"] = [{"filename": "paper.pdf",
+                                    "checksum": "md5:" + hashlib.md5(kwargs["file_bytes"]).hexdigest()}]
+                return {"filename": "paper.pdf"}
+            if method == "PUT" and url.endswith("/deposit/depositions/91"):
+                record["metadata"] = kwargs["json_body"]["metadata"]
+                return dict(record)
+            if method == "PUT" and url.endswith("/records/91/draft"):
+                draft_document.update(kwargs["json_body"])
+                return dict(draft_document)
+            if url.endswith("/actions/publish"):
+                record.update(submitted=True, doi="10.5281/zenodo.91", conceptdoi="10.5281/zenodo.90",
+                              links=dict(record["links"], record_html="https://zenodo.org/records/91"))
+                return dict(record)
+            if method == "GET" and url.endswith("/records/91/draft"):
+                return dict(draft_document)
+            if method == "GET" and url.endswith("/deposit/depositions/91"):
+                return dict(record)
+            return {}
+
+        revision = self.store.revision
+        with self.assertRaises(OSError):
+            deposit(self.store, binding, client, expected_revision=revision, request_id="deposit-1")
+        receipt = deposit(self.store, binding, client, expected_revision=revision, request_id="deposit-1")
+        return receipt, calls
+
+    def assert_the_discarded_step_finished_the_deposit(self, receipt, calls, step_name, sent):
+        self.assertEqual(receipt["doi"], "10.5281/zenodo.91")
+        intent = self.store.snapshot()["records"]["remote_intent"]["deposit-1"]
+        self.assertEqual(intent["status"], "complete")
+        self.assertEqual([entry["name"] for entry in intent["discarded"]], [step_name])
+        self.assertEqual(intent["discarded"][0]["observation"], {"kind": "remote_read", "deposition_id": 91})
+        # Once lost, once after the record showed it never landed.
+        self.assertEqual(calls.count(sent), 2)
+
+    def test_an_upload_the_record_shows_never_landed_is_sent_again_and_the_deposit_finishes(self):
+        receipt, calls = self.deposit_after_a_lost_write(self.remote_binding(), "/files/bucket/paper.pdf")
+        self.assert_the_discarded_step_finished_the_deposit(
+            receipt, calls, "upload:paper.pdf", ("PUT", "https://zenodo.org/api/files/bucket/paper.pdf"))
+
+    def test_a_preview_the_draft_shows_never_landed_is_sent_again_and_the_deposit_finishes(self):
+        receipt, calls = self.deposit_after_a_lost_write(self.remote_binding(), "/records/91/draft")
+        self.assert_the_discarded_step_finished_the_deposit(
+            receipt, calls, "preview", ("PUT", "https://zenodo.org/api/records/91/draft"))
+
+    def test_a_publish_the_record_shows_never_landed_is_sent_to_that_same_record(self):
+        receipt, calls = self.deposit_after_a_lost_write(self.remote_binding(), "/actions/publish")
+        self.assert_the_discarded_step_finished_the_deposit(
+            receipt, calls, "publish", ("POST", "https://zenodo.org/api/deposit/depositions/91/actions/publish"))
+        # One record, published once: the deposit finished on the deposition the
+        # interrupted run created.
+        self.assertEqual(sum(method == "POST" and url.endswith("/deposit/depositions") for method, url in calls), 1)
+        self.assertEqual(receipt["deposition_id"], 91)
+
+    def test_a_published_record_that_does_not_match_the_intent_keeps_the_refusal(self):
+        from research_harness.zenodo import deposit
+        binding = self.remote_binding()
+
+        def client(method, url, **kwargs):
+            if method == "POST" and url.endswith("/deposit/depositions"):
+                return {"id": 91, "metadata": kwargs["json_body"]["metadata"],
+                        "links": {"bucket": "https://zenodo.org/api/files/bucket", "html": "https://zenodo.org/deposit/91"}}
+            if url.endswith("/actions/publish"):
+                raise OSError("The server published the record, then the response was lost.")
+            if method == "GET" and url.endswith("/deposit/depositions/91"):
+                # Submitted, and holding neither this intent's DOI nor its file.
+                return {"id": 91, "submitted": True, "files": []}
+            return {}
+
+        revision = self.store.revision
+        with self.assertRaises(OSError):
+            deposit(self.store, binding, client, expected_revision=revision, request_id="deposit-1")
+        # A published record no repeat can change keeps the claim and the refusal.
+        self.assert_error("remote_reconciliation_required", lambda: deposit(
+            self.store, binding, client, expected_revision=revision, request_id="deposit-1"))
+        intent = self.store.snapshot()["records"]["remote_intent"]["deposit-1"]
+        self.assertEqual(intent["pending"]["name"], "publish")
+        self.assertNotIn("discarded", intent)
 
     def deposit_an_unpublished_draft(self, binding):
         """Deposit the same reviewed bundle again without publishing it. Its receipt

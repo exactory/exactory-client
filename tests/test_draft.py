@@ -15,6 +15,7 @@ import tempfile
 import time
 import unittest
 import unittest.mock
+import urllib.error
 from pathlib import Path
 
 from integration_fixtures import prepare_research, prepare_manuscript
@@ -152,6 +153,24 @@ class _LostResponseZenodoApi(_FakeZenodoApi):
         return super().__call__(request)
 
 
+class _StatusErrorZenodoApi(_FakeZenodoApi):
+    """Answer like the fake above until one named request, which the API answers
+    with a status instead of a body. A 5xx states no outcome for the request,
+    exactly as a lost response states none; a 4xx is the server's decision."""
+
+    def __init__(self, failing_url_suffix: str, status_code: int) -> None:
+        super().__init__()
+        self.failing_url_suffix = failing_url_suffix
+        self.status_code = status_code
+
+    def __call__(self, request):
+        if request.full_url.endswith(self.failing_url_suffix):
+            self.requests.append(request)
+            raise urllib.error.HTTPError(request.full_url, self.status_code, "Zenodo error",
+                                         {}, io.BytesIO(b"the gateway answered"))
+        return super().__call__(request)
+
+
 class _PublishedRecordZenodoApi(_FakeZenodoApi):
     """Answer the reconciliation read of a deposition that is published: the
     record carries its DOI and the file the interrupted run uploaded."""
@@ -167,6 +186,28 @@ class _PublishedRecordZenodoApi(_FakeZenodoApi):
                 "id": 4242, "submitted": True, "doi": "10.5281/zenodo.4242",
                 "conceptdoi": "10.5281/zenodo.4241",
                 "links": {"record_html": "https://sandbox.zenodo.org/api/records/4242"},
+                "files": [{"filename": "paper.pdf", "checksum": "md5:" + hashlib.md5(
+                    self.uploaded_bytes, usedforsecurity=False).hexdigest()}],
+            }
+        return super().__call__(request)
+
+
+class _UnpublishedRecordZenodoApi(_FakeZenodoApi):
+    """Answer the reconciliation read of a deposition that is still a draft:
+    the publish request never reached Zenodo, so the record holds the file the
+    interrupted run uploaded and reads back unpublished."""
+
+    def __init__(self, uploaded_bytes: bytes) -> None:
+        super().__init__()
+        self.uploaded_bytes = uploaded_bytes
+
+    def __call__(self, request):
+        if request.get_method() == "GET" and request.full_url.endswith("/deposit/depositions/4242"):
+            self.requests.append(request)
+            return {
+                "id": 4242, "submitted": False,
+                "links": {"bucket": "https://sandbox.zenodo.org/api/files/bucket-1",
+                          "html": "https://sandbox.zenodo.org/api/deposit/4242"},
                 "files": [{"filename": "paper.pdf", "checksum": "md5:" + hashlib.md5(
                     self.uploaded_bytes, usedforsecurity=False).hexdigest()}],
             }
@@ -757,6 +798,31 @@ class TestManagedDepositAfterALostPublishResponse(_DepositTestCase):
         self.assertEqual(len(receipts), 1)
         self.assertEqual(next(iter(receipts.values()))["doi"], "10.5281/zenodo.4242")
 
+    def test_a_publish_that_never_landed_is_sent_to_the_same_record_and_finishes(self) -> None:
+        self.fake_api = _LostResponseZenodoApi("/actions/publish")
+        _draft._open_url = self.fake_api
+        self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
+        uploaded_bytes = next(request.data for request in self.fake_api.requests
+                              if request.full_url.endswith("/files/bucket-1/paper.pdf"))
+
+        self.fake_api = _UnpublishedRecordZenodoApi(uploaded_bytes)
+        _draft._open_url = self.fake_api
+        output = self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"])
+        # The record reads back as a draft, so the publish never landed. The
+        # same deposition is published, which Zenodo publishes once, so the
+        # deposit finishes on the record the interrupted run created.
+        self.assertEqual([(request.get_method(), request.full_url) for request in self.fake_api.requests],
+                         [("GET", "https://sandbox.zenodo.org/api/deposit/depositions/4242"),
+                          ("POST", "https://sandbox.zenodo.org/api/deposit/depositions/4242/actions/publish")])
+        self.assertIn('"doi": "10.5281/zenodo.4242"', output)
+        intents = Store(self.workspace_dir).snapshot()["records"]["remote_intent"]
+        self.assertEqual(len(intents), 1)
+        intent = next(iter(intents.values()))
+        self.assertEqual(intent["status"], "complete")
+        self.assertEqual([entry["name"] for entry in intent["discarded"]], ["publish"])
+        receipts = Store(self.workspace_dir).snapshot()["records"]["publication_receipt"]
+        self.assertEqual(next(iter(receipts.values()))["doi"], "10.5281/zenodo.4242")
+
 
 class TestProductionDepositCitationReport(_DepositTestCase):
     def test_a_failing_report_is_printed_and_the_managed_deposit_continues(self) -> None:
@@ -1067,6 +1133,40 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
         output = self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"],
                                expected_exit_code=1)
         self.assertIn("Then run the command again.", output)
+        self.assertNotIn("second permanent record", output)
+
+    def test_a_server_error_on_the_publish_names_the_record_instead_of_a_second_run(self) -> None:
+        # A 5xx settles the publish no more than a lost response does: Zenodo
+        # can have published the record behind the gateway that answered.
+        self.fake_api = _StatusErrorZenodoApi("/actions/publish", 502)
+        _draft._open_url = self.fake_api
+        output = self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"],
+                               expected_exit_code=1)
+        self.assertIn("Deposition 4242 is open on Zenodo:", output)
+        self.assertIn("The Zenodo API returned HTTP 502.", output)
+        self.assertIn("The server states no outcome for this request.", output)
+        self.assertIn("The deposition named above may be published already.", output)
+        self.assertNotIn("Then run the command again", output)
+
+    def test_a_refused_publish_states_the_status_without_advice_to_send_it_again(self) -> None:
+        # A 4xx is the server's decision on the request it read, so the same
+        # request earns no advice at all.
+        self.fake_api = _StatusErrorZenodoApi("/actions/publish", 400)
+        _draft._open_url = self.fake_api
+        output = self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"],
+                               expected_exit_code=1)
+        self.assertIn("The Zenodo API returned HTTP 400.", output)
+        self.assertNotIn("The server states no outcome for this request.", output)
+        self.assertNotIn("may be published already", output)
+        self.assertNotIn("Then run the command again", output)
+
+    def test_a_server_error_on_the_upload_keeps_the_advice_to_run_the_command_again(self) -> None:
+        self.fake_api = _StatusErrorZenodoApi("/files/bucket-1/paper.pdf", 503)
+        _draft._open_url = self.fake_api
+        output = self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"],
+                               expected_exit_code=1)
+        self.assertIn("The server states no outcome for this request."
+                      " Then run the command again.", output)
         self.assertNotIn("second permanent record", output)
 
     def test_a_new_version_without_a_stored_deposition_id_is_an_error(self) -> None:
