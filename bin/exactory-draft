@@ -207,8 +207,9 @@ def _load_draft_state() -> dict:
     try:
         state = json.loads(_DRAFT_STATE_PATH.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        _exit_with_error(f"{_DRAFT_STATE_PATH} does not exist here."
-                         " Run exactory-draft init first.", 2)
+        _exit_with_error(f"{_DRAFT_STATE_PATH} does not exist here. The deposit runs in the"
+                         " directory that holds it. Change to that directory, or run"
+                         " exactory-draft init to create a draft workspace.", 2)
     except json.JSONDecodeError as error:
         _exit_with_error(f"{_DRAFT_STATE_PATH} is not valid JSON. Cause: {error}")
     # Any JSON value parses, and only an object can name a title.
