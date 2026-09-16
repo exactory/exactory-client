@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from research_harness.errors import ResearchError
 from research_harness.integration import command_identity, current_store, initialization_payload, initialize_workspace, record_direct_deposit
 from research_harness.storage import Store
-from research_harness.workspace import find_workspace
+from research_harness.workspace import find_workspace, json_projection
 from research_harness.citation_report import report_citation_gate
 from research_harness.zenodo import (PAPER_UPLOAD_NAME, RDM_JSON_MEDIA_TYPE, build_draft_document_url,
                                      build_previewed_document, continue_deposit,
@@ -171,14 +171,21 @@ def _read_zenodo_token(production: bool) -> str:
 
 
 def _load_draft_state() -> dict:
+    """The draft marker, checked here because this read is its only edge.
+
+    The deposit names the paper from this file, so the title is read where the
+    file is, next to the file-level refusals, and no caller indexes it blind."""
     try:
-        return json.loads(_DRAFT_STATE_PATH.read_text(encoding="utf-8"))
+        state = json.loads(_DRAFT_STATE_PATH.read_text(encoding="utf-8"))
     except FileNotFoundError:
         _exit_with_error(f"{_DRAFT_STATE_PATH} does not exist here."
                          " Run exactory-draft init first.", 2)
     except json.JSONDecodeError as error:
         _exit_with_error(f"{_DRAFT_STATE_PATH} is not valid JSON. Cause: {error}")
-    raise AssertionError("unreachable")
+    if "title" not in state:
+        _exit_with_error(f"{_DRAFT_STATE_PATH} names no title."
+                         " Write the paper's working title into it as \"title\".", 2)
+    return state
 
 
 def _find_newest_pdf() -> Path:
@@ -327,15 +334,20 @@ def _deposit_managed(store, report: dict, args: argparse.Namespace, base_url: st
 
 def _deposit_directly(store, args: argparse.Namespace, base_url: str, environment: str, metadata: dict,
                       pdf_path: Path, sources_path: Path | None, token: str) -> None:
+    # Every local input is read before the first remote write, like the rest of
+    # this command, so an unreadable path leaves no draft record on Zenodo. The
+    # bytes were already held in full for the upload, so peak memory is the same.
+    pdf_bytes = _read_upload_bytes(pdf_path)
+    sources_bytes = _read_upload_bytes(sources_path) if sources_path is not None else None
     if args.new_version:
         deposition = _open_new_version_draft(base_url, environment, token)
     else:
         deposition = _call_zenodo("POST", f"{base_url}/deposit/depositions", token, json_body={})
     bucket_url = deposition["links"]["bucket"]
-    _call_zenodo("PUT", f"{bucket_url}/{PAPER_UPLOAD_NAME}", token, file_bytes=_read_upload_bytes(pdf_path))
+    _call_zenodo("PUT", f"{bucket_url}/{PAPER_UPLOAD_NAME}", token, file_bytes=pdf_bytes)
     if sources_path is not None:
         _call_zenodo("PUT", f"{bucket_url}/{_name_sources_upload(sources_path)}", token,
-                     file_bytes=_read_upload_bytes(sources_path))
+                     file_bytes=sources_bytes)
     _call_zenodo("PUT", f"{base_url}/deposit/depositions/{deposition['id']}", token,
                  json_body={"metadata": metadata})
     _mark_paper_as_preview(base_url, deposition["id"], token)
@@ -378,9 +390,13 @@ def _open_new_version_draft(base_url: str, environment: str, token: str) -> dict
         _exit_with_error(
             f"The stored deposit is on {prior.get('environment')}, not"
             f" {environment}. Run --new-version against the same environment.")
+    deposition_id = prior.get("deposition_id")
+    if deposition_id is None:
+        _exit_with_error(f"{_DEPOSIT_STATE_PATH} names no deposition_id."
+                         " Run a plain deposit first; --new-version revises it.")
     created = _call_zenodo(
         "POST",
-        f"{base_url}/deposit/depositions/{prior['deposition_id']}/actions/newversion",
+        f"{base_url}/deposit/depositions/{deposition_id}/actions/newversion",
         token,
     )
     draft_url = created.get("links", {}).get("latest_draft", "")
@@ -397,16 +413,22 @@ def _save_deposit_state(store, state: dict) -> None:
     projection export, so the file itself is the record. A store that refuses
     the write is the third case: the file holds a deposit the store does not
     know, a later projection export rewrites the file from the store, and the
-    command says so and exits nonzero instead of reporting a kept record."""
+    command says so and exits nonzero instead of reporting a kept record.
+
+    Both of those cases write the file with the same projection primitive the
+    export uses, because the file they write is the only local copy of a
+    published DOI, and the primitive is what makes the replacement atomic and
+    keeps it off a symlink. The command runs from the workspace root, which is
+    why cwd is the root the projection is written under."""
     if store is None:
-        _DEPOSIT_STATE_PATH.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+        json_projection(Path.cwd(), str(_DEPOSIT_STATE_PATH), state)
         return
     try:
         record_direct_deposit(store, state, expected_revision=store.revision,
                               request_id="direct-deposit-" + uuid.uuid4().hex)
     except ResearchError as error:
         note_managed_record_skipped(error)
-        _DEPOSIT_STATE_PATH.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+        json_projection(store.root, str(_DEPOSIT_STATE_PATH), state)
         _exit_with_error("The workspace store did not record this deposit. The record is on Zenodo."
                          f" {_DEPOSIT_STATE_PATH} holds the only local copy of it, and a projection"
                          " export can replace that file. Save the deposit state printed above.")

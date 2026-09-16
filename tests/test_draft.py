@@ -181,6 +181,23 @@ def _write_authorship_record(workspace_dir: Path, record_text: str) -> None:
     )
 
 
+def _link_deposit_state_elsewhere(workspace_dir: Path) -> Path:
+    """Make .exactory/deposit.json a symlink and return the file it names.
+
+    A writer that follows the symlink overwrites the named file and leaves the
+    link in place; the projection primitive replaces the link itself."""
+    elsewhere_path = workspace_dir / "draft" / "elsewhere.json"
+    elsewhere_path.write_text("untouched\n", encoding="utf-8")
+    (workspace_dir / ".exactory" / "deposit.json").symlink_to(elsewhere_path)
+    return elsewhere_path
+
+
+def _refuse_the_direct_deposit_record(store, state, *, expected_revision, request_id):
+    """Stand in for record_direct_deposit when the store cannot take the write."""
+    raise ResearchError("store_busy", "Research store is busy; retry the same"
+                                      " request after the writer finishes")
+
+
 class TestInit(unittest.TestCase):
     def setUp(self) -> None:
         scratch = tempfile.TemporaryDirectory()
@@ -865,21 +882,41 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
         self.assertIn("as UTF-8 text", stderr_text)
         self.assertEqual(self.fake_api.requests, [])
 
-    def test_a_pdf_path_that_is_a_directory_is_refused_before_the_upload(self) -> None:
+    def test_a_pdf_path_that_is_a_directory_is_refused_before_any_request(self) -> None:
         directory_path = self.workspace_dir / "draft" / "paper-directory"
         directory_path.mkdir()
         stderr_text = self._deposit(["--pdf", str(directory_path), "--creator", "Shiroshita, Ryosuke"],
                                     expected_exit_code=2)
         self.assertIn("cannot read the file", stderr_text)
-        self.assertNotIn(("PUT", "https://sandbox.zenodo.org/api/files/bucket-1/paper.pdf"),
-                         self.requested())
+        self.assertEqual(self.fake_api.requests, [])
+
+    def test_a_sources_path_that_is_a_directory_is_refused_before_any_request(self) -> None:
+        directory_path = self.workspace_dir / "draft" / "sources-directory"
+        directory_path.mkdir()
+        stderr_text = self._deposit(["--sources", str(directory_path), "--creator", "Shiroshita, Ryosuke"],
+                                    expected_exit_code=2)
+        self.assertIn("cannot read the file", stderr_text)
+        self.assertEqual(self.fake_api.requests, [])
+
+    def test_a_draft_state_without_a_title_is_refused_before_any_request(self) -> None:
+        (self.workspace_dir / ".exactory" / "draft.json").write_text(
+            json.dumps({"version": 1, "category": "cs.MA"}) + "\n", encoding="utf-8"
+        )
+        stderr_text = self._deposit(["--creator", "Shiroshita, Ryosuke"], expected_exit_code=2)
+        self.assertIn("names no title", stderr_text)
+        self.assertEqual(self.fake_api.requests, [])
+
+    def test_a_new_version_without_a_stored_deposition_id_is_an_error(self) -> None:
+        (self.workspace_dir / ".exactory" / "deposit.json").write_text(
+            json.dumps({"environment": "sandbox"}) + "\n", encoding="utf-8"
+        )
+        stderr_text = self._deposit(["--new-version", "--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
+        self.assertIn("names no deposition_id", stderr_text)
+        self.assertEqual(self.fake_api.requests, [])
 
     def test_a_store_that_refuses_the_record_names_the_only_local_copy_and_stops(self) -> None:
-        def refuse_the_record(store, state, *, expected_revision, request_id):
-            raise ResearchError("store_busy", "Research store is busy; retry the same"
-                                              " request after the writer finishes")
-
-        with unittest.mock.patch.object(_draft, "record_direct_deposit", refuse_the_record):
+        with unittest.mock.patch.object(_draft, "record_direct_deposit",
+                                        _refuse_the_direct_deposit_record):
             output = self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"],
                                    expected_exit_code=1)
         # The DOI reaches the user before the command reports the refused record.
@@ -890,6 +927,15 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
         self.assertEqual(self.read_deposit_state()["doi"], "10.5281/zenodo.4242")
         # The store kept no deposit, which is why the file is not durable.
         self.assertNotIn("deposit", Store(self.workspace_dir).snapshot()["records"].get("workspace", {}))
+
+    def test_a_refused_record_replaces_a_deposit_state_symlink_instead_of_following_it(self) -> None:
+        elsewhere_path = _link_deposit_state_elsewhere(self.workspace_dir)
+        with unittest.mock.patch.object(_draft, "record_direct_deposit",
+                                        _refuse_the_direct_deposit_record):
+            self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
+        self.assertFalse((self.workspace_dir / ".exactory" / "deposit.json").is_symlink())
+        self.assertEqual(elsewhere_path.read_text(encoding="utf-8"), "untouched\n")
+        self.assertEqual(self.read_deposit_state()["doi"], "10.5281/zenodo.4242")
 
     def test_the_store_records_the_direct_deposit_so_an_export_keeps_it(self) -> None:
         from research_harness.integration import export_workspace
@@ -925,6 +971,13 @@ class TestLegacyWorkspaceDeposit(_LegacyWorkspaceDepositTestCase):
         output = self._deposit(["--creator", "Shiroshita, Ryosuke"])
         self.assertNotIn("Managed record skipped", output)
         self.assertEqual(self.requested()[0], ("POST", "https://sandbox.zenodo.org/api/deposit/depositions"))
+        self.assertEqual(self.read_deposit_state()["deposition_id"], 4242)
+
+    def test_a_legacy_workspace_replaces_a_deposit_state_symlink_instead_of_following_it(self) -> None:
+        elsewhere_path = _link_deposit_state_elsewhere(self.workspace_dir)
+        self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        self.assertFalse((self.workspace_dir / ".exactory" / "deposit.json").is_symlink())
+        self.assertEqual(elsewhere_path.read_text(encoding="utf-8"), "untouched\n")
         self.assertEqual(self.read_deposit_state()["deposition_id"], 4242)
 
 
