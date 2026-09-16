@@ -322,10 +322,10 @@ Publication uses the current exact bundle, two applicable accepting reviews, and
 the existing citation/remote receipt checks. Changes invalidate affected current
 decisions and require reassessment. `exactory-draft deposit` and `exactory submit`
 run on the user's instruction. The deposit records the study's publication
-receipt when these gates pass; the submit records the submission receipt when
-that publication receipt names this exact bundle and the submit names its
-record. Otherwise they create the record or request directly, with one
-`Managed record skipped` line when a store refuses the receipt.
+receipt when the publication and round gates pass; the submit records the
+submission receipt when that publication receipt names this exact bundle and the
+submit names its record. Otherwise they create the record or request directly,
+with one `Managed record skipped` line when a store refuses the receipt.
 Reconcile an unknown remote intent before any new managed write.
 
 ## Develop the paper across rounds
@@ -387,15 +387,16 @@ exactory-research gate round
 exactory-research round --file round-decision-2.json --expected-revision REVISION --request-id round-decide-002
 ```
 
-The loop ends only with an approved `stop`, which opens `deposit`. A goal
-withdrawn in literature (`scooped` in `next_step`, `contradicted` in `changes`)
-or an observed stop condition ends work on that goal, and the next `round`
-decision proposes a distinct goal or stops. When the two most recent rounds were
-both unsuccessful, `continue` is refused in their directions unless it reopens
-one of them (`round_direction_exhausted`). A recorded `development` budget at its limit
-refuses `continue` (`resource_budget_exhausted`) until the user raises it with a
-reason. An unavailable round assessor leaves `round_review_missing` pending, and
-the study parks.
+The loop ends only with an approved `stop`, which opens `deposit` when the
+publication gate passes. A goal withdrawn in literature (`scooped` in
+`next_step`, `contradicted` in `changes`) or an observed stop condition ends work
+on that goal, and the next `round` decision proposes a distinct goal or stops.
+When the two most recent rounds were both unsuccessful, `continue` is refused in
+their directions unless it reopens one of them (`round_direction_exhausted`). A
+recorded `development` budget at its limit refuses `continue`
+(`resource_budget_exhausted`) until the user raises it with a reason. An
+unavailable round assessor leaves `round_review_missing` pending, and the study
+parks.
 
 ```sh
 exactory-lab decide --stage evaluate --decision "Stop after round 2" --why "Every recorded candidate was rejected or deferred on its evidence."

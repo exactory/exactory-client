@@ -134,9 +134,9 @@ The round gate, at the end of `evaluate`:
    that carries the admitted `goal` with its success criterion and stop condition
    ids (`status`, `gate round` and `export --kind round` do not report it). Log the decision with `exactory-lab decide`,
    and enter `literature` with `--status pending`. An approved `stop` enters
-   `deposit`. When the study keeps a Git repository, tag the bundle of each round
-   decision as `round-N`, where N is the number of the round that the decision
-   closes.
+   `deposit` when the publication gate passes. When the study keeps a Git
+   repository, tag the bundle of each round decision as `round-N`, where N is the
+   number of the round that the decision closes.
 
 Inside the round, the literature stage records a selected search for each
 consequence purpose (`downstream`: who is blocked by what the paper does not yet
@@ -196,9 +196,9 @@ round.
 
 Pin the final exact bundle, deliver it to two independent blind assessors, record
 the original reviews and provenance, and run `exactory-research gate publication`.
-The `deposit` stage opens on an approved `stop` decision for that bundle
-(`gate round`). Resolve a rejection with appropriate changes and fresh applicable
-reviews. The deposit and the submission run on the user's instruction:
+The `deposit` stage opens when the publication gate passes and `gate round`
+reports an approved `stop` decision for that bundle. Resolve a rejection with appropriate
+changes and fresh applicable reviews. The deposit and the submission run on the user's instruction:
 `exactory-draft deposit` records the publication receipt when these gates pass,
 and `exactory submit` records the submission receipt when that publication
 receipt names this exact bundle and the submit names its record. A command that

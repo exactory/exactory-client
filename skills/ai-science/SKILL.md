@@ -75,7 +75,8 @@ preparation. Keep the full history of results, costs, reviews, and source change
 A study develops its paper across rounds. At the end of `evaluate`, decide on the
 exact bundle with `round`, obtain the independent round review, and either admit
 the next round (`round-admit`, then `--stage literature --status pending`) or stop
-and enter `deposit`. LOOP.md's third section governs the round.
+and enter `deposit` when the publication gate passes. LOOP.md's third section
+governs the round.
 
 ## Authorization, pending work, and resume
 

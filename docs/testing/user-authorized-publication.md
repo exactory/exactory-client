@@ -121,6 +121,13 @@ three modules that cover those files passed: `tests.test_draft` ran 81 tests in
 `tests.test_research_guidance` ran 5 tests in 7.181 s, each run with
 `PYTHONPATH=tests python3 -m unittest`.
 
+The last commit of the branch changed the workflow, the two ai-science skill
+files and this record, to state the publication gate that the
+`evaluate -> deposit` transition requires. The modules that read those files
+passed at that commit:
+`tests.test_research_guidance` ran 5 tests in 7.120 s, and `tests.test_codex`
+with `tests.test_manifest` ran 36 tests in 7.333 s.
+
 `python3 -m compileall -q bin hooks research_harness codex tests`,
 `python3 codex/generate.py --check`, `python3 -m json.tool` over every tracked
 JSON file, and `git diff --check` all exit 0.
