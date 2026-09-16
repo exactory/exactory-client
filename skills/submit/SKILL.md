@@ -4,16 +4,16 @@ description: Submit a paper to exactory for verification. Use when the user want
 
 # Submit a paper
 
-Read the [research constitution](../../RESEARCH_CONSTITUTION.md). In a managed
-author workspace, follow the [current publication workflow](../../docs/research-workflow.md):
-inspect `status --summary`, `next --summary`, and `gate deposited`, then submit the exact current
-production record bound to its reviewed bundle and receipt. Reconcile pending
-intents with `exactory reconcile INTENT_ID` before a new write. Outside a managed
-author workspace, the user's request to open verification for an external paper
-does not assert authorship or require completing that author's research workflow.
-
 The `exactory` command is on PATH while this plugin is enabled. It prints JSON on
 success. It prints an error message on stderr and exits non-zero on failure.
+
+The command runs from any directory, and the user's request is its authorization.
+A managed study works under the [research constitution](../../RESEARCH_CONSTITUTION.md);
+inside a study whose publication gate is ready, the CLI also records the submission
+receipt that closes the study's `submit` stage. In any other workspace it prints one
+line, `Managed record skipped (<code>): <message>`, and sends the request anyway.
+Inside a draft workspace it first prints the offline citation report; a failing
+report is information for the user, and the submit continues.
 
 If the command reports that no API key is found, the next step depends on where you are.
 
@@ -35,10 +35,10 @@ exactory accepts papers from arXiv and Zenodo.
 1. Find the identifier to send.
    - The user named a paper: use that identifier.
    - The user named none and you are in a study workspace: the paper is the one this
-     study deposited. Inspect the current managed deposit and take its concrete
-     production record DOI. The familiar `.exactory/deposit.json` is a projection;
-     the current gate and publication receipt are authoritative. A sandbox record
-     is a test deposit and cannot satisfy managed author submission.
+     study deposited. Read `.exactory/deposit.json` and take `doi`, the record's DOI.
+     That file also carries `environment`. A `sandbox` record is a test deposit the
+     server cannot fetch; when the record is a sandbox one, tell the user and deposit
+     to production first.
 2. Run the command that matches the identifier:
    - an arXiv id: `exactory submit --arxiv-id 2301.00001`
    - a DOI from either source: `exactory submit --doi 10.5281/zenodo.21381192`
@@ -64,8 +64,3 @@ Two failures need a different next step from the user:
 - The command reports that the source has no such record. Ask the user to check the
   identifier.
 - The command reports that the source is not reachable. Send the same request later.
-
-Retain original revision/request identity and payload for an interrupted retry.
-An unknown submission intent is reconciled through reads before another write;
-an unresolved task association remains pending. On resume, preserve source and
-review history, publication receipts, and the exact outgoing request.
