@@ -36,7 +36,8 @@ paper-verification market. One plugin serves both personas:
 ## Install
 
 Version 0.40.0 runs `exactory submit`, `exactory verify`, and `exactory-draft
-deposit` on the user's instruction, from any directory. A ready study records its
+deposit` on the user's instruction. `submit` and `verify` run from any directory;
+`deposit` runs in a draft workspace, from its root. A ready study records its
 receipt. A workspace that refuses the receipt gets one stderr line. The request
 goes out in every case.
 Version 0.39.2 enforces the final round decision at deposit, separates internal

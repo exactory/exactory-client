@@ -5,6 +5,9 @@ Two commands:
   init     - create the draft workspace layout and .exactory/draft.json
   deposit  - upload the built PDF (and optional sources) to Zenodo
 
+The deposit runs in a draft workspace, from its root: it reads the paper's
+title from .exactory/draft.json there.
+
 Deposits go to the Zenodo sandbox and stay in the draft state by default.
 --production targets zenodo.org, and --publish makes the record public. A
 production deposit first runs the offline citation check (exactory-check gate);
