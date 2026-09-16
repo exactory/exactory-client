@@ -37,7 +37,8 @@ paper-verification market. One plugin serves both personas:
 
 Version 0.40.0 runs `exactory submit`, `exactory verify`, and `exactory-draft
 deposit` on the user's instruction, from any directory. A ready study records its
-receipt. Any other workspace gets one stderr line, and the request goes out.
+receipt. A workspace that refuses the receipt gets one stderr line. The request
+goes out in every case.
 Version 0.39.2 enforces the final round decision at deposit, separates internal
 claim history from blind review, and measures the three paired reviewers.
 Version
@@ -337,12 +338,10 @@ entry. A failing check prints one line on stderr with the prefix
 because the user asked for the submit or the deposit. The report informs that
 decision.
 
-One hook watches the references file in a draft workspace. Outside a workspace
-it does nothing.
-
-- **Advisory.** After each edit of a `.bib` file, the plugin validates the
-  file offline. It reports duplicate keys and entries that have no DOI and
-  no arXiv id.
+One advisory hook watches the references file in a draft workspace. After each
+edit of a `.bib` file it validates the file offline and reports duplicate keys
+and entries that have no DOI and no arXiv id. Outside a workspace it does
+nothing.
 
 ## Environment
 

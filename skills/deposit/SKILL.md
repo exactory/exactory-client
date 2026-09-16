@@ -24,8 +24,10 @@ PATH while this plugin is enabled.
 - The command runs in any draft workspace. In a study that works under the
   [research constitution](../../RESEARCH_CONSTITUTION.md) and whose publication
   and round gates are ready, the CLI records the publication receipt that closes
-  the study's `deposit` stage. In any other workspace it prints one line,
-  `Managed record skipped (<code>): <message>`, and creates the record anyway.
+  the study's `deposit` stage. A workspace that refuses the receipt prints one
+  line, `Managed record skipped (<code>): <message>`, and creates the record
+  anyway. A draft workspace with no store, such as one initialized before
+  0.38.0, creates it with no line.
 - The Zenodo tokens are exported by the user, never pasted into chat. Sandbox
   uses `ZENODO_SANDBOX_TOKEN`, production uses `ZENODO_TOKEN`. Run
   `exactory-lab keys` to read which one is set.

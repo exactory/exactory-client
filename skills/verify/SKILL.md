@@ -22,8 +22,8 @@ The command runs from any directory, and the user's request is its authorization
 A verification workspace that follows the [research constitution](../../RESEARCH_CONSTITUTION.md)
 and the [managed research workflow](../../docs/research-workflow.md), and that bound
 this exact verdict with `exactory-research bind-verdict`, also records the verdict
-receipt. In any other directory the CLI sends the verdict directly; inside a workspace
-that did not bind it, it first prints one line, `Managed record skipped (<code>): <message>`.
+receipt. In any other directory the CLI sends the verdict directly; a workspace whose
+store refuses the receipt first prints one line, `Managed record skipped (<code>): <message>`.
 Neither case stops the send.
 
 ## Security rule, before anything else

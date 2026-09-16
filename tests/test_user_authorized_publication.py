@@ -104,6 +104,21 @@ class TestNote(unittest.TestCase):
                          "Managed record skipped (readiness_required): Current research readiness is required for deposit"
                          " Pending: round_decision_missing, manuscript_reviews_required.\n")
 
+    def test_the_cli_reference_documents_both_parts_of_the_line(self) -> None:
+        line_template = "Managed record skipped (<code>): <message>"
+        pending_template = " Pending: <codes>."
+        reference = (_PLUGIN_ROOT / "docs" / "research-cli.md").read_text(encoding="utf-8")
+        self.assertIn("`" + line_template + "`", reference)
+        self.assertIn("`" + pending_template + "`", reference)
+        sink = io.StringIO()
+        with contextlib.redirect_stderr(sink):
+            note_managed_record_skipped(ResearchError("readiness_required", "Publish the reviewed bundle first",
+                                                      {"obligations": [{"code": "round_decision_missing"}]}))
+        self.assertEqual(sink.getvalue(),
+                         line_template.replace("<code>", "readiness_required")
+                         .replace("<message>", "Publish the reviewed bundle first")
+                         + pending_template.replace("<codes>", "round_decision_missing") + "\n")
+
 
 class TestCitationReport(unittest.TestCase):
     def setUp(self) -> None:

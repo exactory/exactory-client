@@ -10,8 +10,10 @@ success. It prints an error message on stderr and exits non-zero on failure.
 The command runs from any directory, and the user's request is its authorization.
 A managed study works under the [research constitution](../../RESEARCH_CONSTITUTION.md);
 inside a study whose publication gate is ready, the CLI also records the submission
-receipt that closes the study's `submit` stage. In any other workspace it prints one
-line, `Managed record skipped (<code>): <message>`, and sends the request anyway.
+receipt that closes the study's `submit` stage. A workspace that refuses the receipt
+prints one line, `Managed record skipped (<code>): <message>`, and sends the request
+anyway. A directory with no workspace, or a workspace with no store, sends it with
+no line.
 Inside a draft workspace it first prints the offline citation report; a failing
 report is information for the user, and the submit continues.
 
