@@ -17,17 +17,31 @@ def get_intent(store, identifier):
     return record
 
 
+def _compute_request_fingerprint(kind, binding, deduplication_key):
+    """What makes two remote requests one durable intent: the whole request, or
+    the caller's deduplication key when equivalent requests name one operation."""
+    if deduplication_key is not None:
+        return digest({"kind": kind, "key": deduplication_key})
+    return digest({"kind": kind, "binding": binding})
+
+
+def find_intent(records, kind, binding, deduplication_key=None):
+    """The saved intent that begin_intent reuses for this exact request, or None."""
+    fingerprint = _compute_request_fingerprint(kind, binding, deduplication_key)
+    return next((r for r in records.get("remote_intent", {}).values() if r["fingerprint"] == fingerprint), None)
+
+
 def begin_intent(store, kind, binding, *, expected_revision, request_id, deduplication_key=None):
     payload = {"kind": kind, "binding": binding}
     if deduplication_key is not None:
         payload["deduplication_key"] = deduplication_key
     def prepare(records, value):
         text(kind, "Remote operation")
-        fingerprint = digest(value if deduplication_key is None else {"kind": kind, "key": deduplication_key})
-        existing = next((r for r in records.get("remote_intent", {}).values() if r["fingerprint"] == fingerprint), None)
+        existing = find_intent(records, kind, value["binding"], deduplication_key)
         if existing is not None:
             return [], {"id": existing["id"]}
-        record = {"id": request_id, "kind": kind, "binding": binding, "fingerprint": fingerprint,
+        record = {"id": request_id, "kind": kind, "binding": binding,
+                  "fingerprint": _compute_request_fingerprint(kind, value["binding"], deduplication_key),
                   "responses": {}, "pending": None, "status": "prepared", "created_revision": expected_revision}
         if deduplication_key is not None:
             record["deduplication_key"] = deduplication_key
@@ -61,17 +75,35 @@ def remote_step(store, identifier, name, request, perform):
     return resolve_step(store, identifier, name, response, {"kind": "direct_response"})
 
 
+def _read_pending_step(record, name):
+    pending = record["pending"]
+    if pending is None or pending["name"] != name:
+        raise ResearchError("remote_reconciliation_conflict", "Remote observation does not match the pending step")
+    return pending
+
+
 def resolve_step(store, identifier, name, response, observation):
     """Only a concrete transport response or checked remote observation resolves it."""
     def transform(record):
-        pending = record["pending"]
-        if pending is None or pending["name"] != name:
-            raise ResearchError("remote_reconciliation_conflict", "Remote observation does not match the pending step")
+        pending = _read_pending_step(record, name)
         replies = dict(record["responses"])
         replies[name] = {"request": pending["request"], "response": response, "observation": observation}
         return dict(record, pending=None, responses=replies, status="confirmed")
     _change(store, identifier, "resolve", {"name": name, "response": response, "observation": observation}, transform)
     return response
+
+
+def discard_step(store, identifier, name, observation):
+    """Clear a claimed step that checked remote reads show never landed.
+
+    A discard invents no response: the remote state holds no trace of the
+    request, so the caller sends the step itself. The intent keeps the
+    observation that established the absence."""
+    def transform(record):
+        _read_pending_step(record, name)
+        return dict(record, pending=None, status="confirmed" if record["responses"] else "prepared",
+                    discarded=record.get("discarded", []) + [{"name": name, "observation": observation}])
+    _change(store, identifier, "discard", {"name": name, "observation": observation}, transform)
 
 
 def finish_intent(store, identifier, kind, receipt, *, workspace=None):

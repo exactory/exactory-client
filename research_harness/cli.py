@@ -82,29 +82,33 @@ def note_managed_record_skipped(error):
 
 
 def select_managed_path(check, start=None):
-    """Return (store, check(store)) when the workspace around `start` can record this command.
+    """Return (store, check(store), store_open_error) for the workspace around `start`.
 
     `check` runs every check the managed path performs before its first remote
     write and returns what the managed path needs. A refused check returns
-    (store, None), so a command that writes its own record on the direct path
-    reuses the store this call already opened instead of deciding again. No
-    workspace, or a store that does not open, returns (None, None). A missing
-    or unconfigured store is silent; every other refusal is noted on stderr
-    once, and the command sends the user's request directly."""
+    (store, None, None), so a command that writes its own record on the direct
+    path reuses the store this call already opened instead of deciding again. No
+    workspace, no store file, or a workspace outside the research contract
+    returns (None, None, None) silently. A store file that exists and does not
+    open returns its ResearchError as the third value, because a record the
+    command keeps elsewhere is then the only copy of it. Every refusal except
+    the silent ones is noted on stderr once, and the command sends the user's
+    request directly."""
     workspace = find_workspace(start, required=False)
     if workspace is None:
-        return None, None
+        return None, None, None
     try:
         store = current_store(workspace)
     except ResearchError as error:
-        if error.code != "migration_required":
-            note_managed_record_skipped(error)
-        return None, None
+        if error.code == "migration_required":
+            return None, None, None
+        note_managed_record_skipped(error)
+        return None, None, error
     try:
-        return store, check(store)
+        return store, check(store), None
     except ResearchError as error:
         note_managed_record_skipped(error)
-        return store, None
+        return store, None, None
 
 
 def build_parser():

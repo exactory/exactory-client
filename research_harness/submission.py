@@ -7,7 +7,7 @@ from .evidence import digest
 from .execution import _owner
 from .operations import immutable_record, prepared_mutation
 from .publication import publication_report
-from .remote import begin_intent, finish_intent, get_intent, remote_step, resolve_step
+from .remote import begin_intent, find_intent, finish_intent, get_intent, remote_step, resolve_step
 from .verification import task_identity, validate_verdict
 
 
@@ -25,8 +25,10 @@ def validate_submission(store, body):
         raise ResearchError("readiness_required", "Submit the concrete published DOI of the current reviewed manuscript", {"obligations": report["obligations"]})
     records = store.snapshot()["records"]
     current = records.get("workspace", {}).get("deposit", {})
+    # An unpublished deposit has no DOI to name, so its receipt is no candidate.
     candidates = [r for r in records.get("publication_receipt", {}).values()
-                  if r.get("bundle_digest") == report["bundle"]["digest"] and r.get("doi") == current.get("doi") and r.get("environment") == "production"]
+                  if r.get("bundle_digest") == report["bundle"]["digest"] and r.get("environment") == "production"
+                  and r.get("doi") and r.get("doi") == current.get("doi")]
     if len(candidates) != 1:
         raise ResearchError("publication_receipt_required", "Select the exact current production publication receipt")
     receipt = candidates[0]
@@ -38,13 +40,28 @@ def validate_submission(store, body):
     return report, receipt
 
 
-def submit_managed(store, body, client, *, expected_revision, request_id):
+def check_submission_preconditions(store, body):
+    """Every check the managed path runs before its remote write.
+
+    Returns the intent binding and the deduplication key of the submission this
+    workspace records. Raises ResearchError when the workspace cannot record
+    this submission as it stands; the CLI then sends the request directly."""
     report, publication = validate_submission(store, body)
     binding = {"bundle_digest": report["bundle"]["digest"], "publication": publication, "body": body}
     # Equivalent record DOI/URL inputs retain their exact request payloads, but
     # refer to one durable submission for this concrete publication receipt.
+    deduplication_key = {"publication_receipt": publication["intent_id"], "record_doi": publication["doi"]}
+    existing = find_intent(store.snapshot()["records"], "submit", binding, deduplication_key)
+    if existing is not None and existing["pending"] is not None:
+        raise ResearchError("remote_reconciliation_required", "A prior submission POST has an unknown outcome. Reconcile that intent before this study records another submission",
+                            {"intent_id": existing["id"]})
+    return binding, deduplication_key
+
+
+def submit_managed(store, body, client, *, expected_revision, request_id):
+    binding, deduplication_key = check_submission_preconditions(store, body)
     intent = begin_intent(store, "submit", binding, expected_revision=expected_revision, request_id=request_id,
-        deduplication_key={"publication_receipt": publication["intent_id"], "record_doi": publication["doi"]})
+                          deduplication_key=deduplication_key)
     return continue_submission(store, intent["id"], client)
 
 

@@ -29,7 +29,8 @@ from research_harness.citation_report import report_citation_gate
 from research_harness.cli import add_identity, select_managed_path
 from research_harness.errors import ResearchError
 from research_harness.integration import command_identity, current_store
-from research_harness.submission import check_verdict_preconditions, continue_submission, send_verdict, submit_managed, validate_submission
+from research_harness.submission import (check_submission_preconditions, check_verdict_preconditions,
+                                         continue_submission, send_verdict, submit_managed)
 from research_harness.verification import record_task
 from research_harness.workspace import find_workspace, strict_json
 
@@ -184,9 +185,11 @@ def _run_submit(args: argparse.Namespace) -> None:
 
     # A study whose publication gate is ready records the submission receipt;
     # otherwise the request goes out directly, and the user reads why on stderr.
-    store, submission_report = select_managed_path(
-        lambda workspace_store: validate_submission(workspace_store, body))
-    if submission_report is not None:
+    # The submission keeps no local copy of the request, so a store that does not
+    # open changes nothing here.
+    store, submission_checks, _ = select_managed_path(
+        lambda workspace_store: check_submission_preconditions(workspace_store, body))
+    if submission_checks is not None:
         payload = submit_managed(store, body, _send_request, **command_identity(store, args))
         status = 201
     else:
@@ -294,7 +297,9 @@ def _run_verify(args: argparse.Namespace) -> None:
 
     # The workspace records a receipt when it bound this exact verdict; otherwise
     # the verdict goes out directly, and the user reads why on stderr.
-    store, verdict_report = select_managed_path(
+    # The verdict keeps no local copy of itself, so a store that does not open
+    # changes nothing here.
+    store, verdict_report, _ = select_managed_path(
         lambda workspace_store: check_verdict_preconditions(workspace_store, task, body))
     if verdict_report is not None:
         payload = send_verdict(store, task, body, _send_request, **command_identity(store, args))

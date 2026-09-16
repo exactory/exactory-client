@@ -9,7 +9,7 @@ from .evaluation import Evaluation
 from .gates import require_ready
 from .integration import export_workspace
 from .publication import publication_state, validate_upload
-from .remote import begin_intent, finish_intent, get_intent, remote_step, resolve_step
+from .remote import begin_intent, discard_step, finish_intent, get_intent, remote_step, resolve_step
 from .rounds import round_state
 
 
@@ -74,16 +74,23 @@ def reconcile_pending(store, identifier, client):
             raise ResearchError("remote_reconciliation_required", "The new-version response was lost before its record ID was captured; no repeat creation was sent",
                                 {"request_id": identifier, "prior_deposition_id": binding["prior"]["deposition_id"]})
         token = "Exactory publication intent " + identifier
-        candidates = []
+        candidates, is_listing_complete = [], False
         for page in range(1, 4):
             rows = client("GET", base + "/deposit/depositions?page=" + str(page) + "&size=100")
             if not isinstance(rows, list):
                 raise ResearchError("remote_reconciliation_required", "The deposition listing did not supply a complete checked page")
             candidates.extend(r for r in rows if r.get("metadata", {}).get("notes") == token)
             if len(rows) < 100:
+                is_listing_complete = True
                 break
         if len(candidates) == 1:
             observed = candidates[0]
+        elif not candidates and is_listing_complete:
+            # Every deposition of this account was read and none carries the
+            # intent's token, so the creation never landed. The claim is cleared
+            # and the caller creates the record.
+            discard_step(store, identifier, name, {"kind": "remote_read", "listing": "complete", "notes": token})
+            return get_intent(store, identifier)
     elif deposition is not None:
         record_id = deposition["id"]
         if name == "preview":
@@ -195,4 +202,6 @@ def deposit(store, binding, client, *, expected_revision, request_id):
     if binding["new_version"] and (binding["prior"] is None or binding["prior"]["environment"] != binding["environment"]):
         raise ResearchError("publication_prior_required", "A revised deposit must use the prior concrete record in the same environment")
     intent = begin_intent(store, "deposit", binding, expected_revision=expected_revision, request_id=request_id)
-    return continue_deposit(store, intent["id"], client)
+    # An interrupted deposit continues through remote reads: a fresh intent has
+    # no claimed step, so reconciliation returns at once and nothing changes.
+    return continue_deposit(store, intent["id"], client, reconcile=True)

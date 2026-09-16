@@ -120,7 +120,7 @@ class ResearchPublicationTests(DevelopmentCase):
                 "uploads": [{"name": "paper.pdf", "artifact": bundle["files"]["pdf"]["artifact"]}], "prior": None}
 
     def publish_remote(self, binding, lost=False):
-        from research_harness.zenodo import deposit, continue_deposit
+        from research_harness.zenodo import deposit
         calls, created, uploaded = [], [], []
         def client(method, url, **kwargs):
             calls.append((method, url, kwargs))
@@ -143,20 +143,85 @@ class ResearchPublicationTests(DevelopmentCase):
         if lost:
             with self.assertRaises(OSError):
                 deposit(self.store, binding, client, expected_revision=revision, request_id="deposit-1")
-            self.assert_error("remote_reconciliation_required", lambda: deposit(self.store, binding, client,
-                expected_revision=revision, request_id="deposit-1"))
-            receipt = continue_deposit(self.store, "deposit-1", client, reconcile=True)
-        else:
-            receipt = deposit(self.store, binding, client, expected_revision=revision, request_id="deposit-1")
+        receipt = deposit(self.store, binding, client, expected_revision=revision, request_id="deposit-1")
         return receipt, calls, created, uploaded
 
     def test_lost_deposit_creation_is_reconciled_before_any_repeat_write(self):
         binding = self.remote_binding()
         receipt, calls, created, uploaded = self.publish_remote(binding, lost=True)
+        # The deposit itself reads the listing, finds the record its intent token
+        # names, and finishes on it. No second creation is sent.
         self.assertEqual(len(created), 1)
+        self.assertEqual(sum(method == "POST" and url.endswith("/deposit/depositions") for method, url, _ in calls), 1)
+        self.assertIn(("GET", "https://zenodo.org/api/deposit/depositions?page=1&size=100", {}), calls)
         self.assertEqual(uploaded, [(self.root / "draft/paper.pdf").read_bytes()])
         self.assertEqual(receipt["bundle_digest"], binding["bundle_digest"])
         self.assertEqual(self.store.snapshot()["records"]["remote_intent"]["deposit-1"]["status"], "complete")
+
+    def test_a_creation_the_listing_shows_never_landed_is_discarded_and_the_deposit_creates_its_record(self):
+        from research_harness.zenodo import deposit
+        binding = self.remote_binding()
+        attempts, created, calls = [], [], []
+
+        def client(method, url, **kwargs):
+            calls.append((method, url))
+            if method == "POST" and url.endswith("/deposit/depositions"):
+                attempts.append(url)
+                if len(attempts) == 1:
+                    raise OSError("The creation never reached the server.")
+                record = {"id": 93, "metadata": kwargs["json_body"]["metadata"],
+                          "links": {"bucket": "https://zenodo.org/api/files/bucket", "html": "https://zenodo.org/deposit/93"}}
+                created.append(record)
+                return record
+            if method == "GET" and "/deposit/depositions?page=" in url:
+                return created
+            if url.endswith("/actions/publish"):
+                return {"id": 93, "doi": "10.5281/zenodo.93", "conceptdoi": "10.5281/zenodo.92",
+                        "links": {"record_html": "https://zenodo.org/records/93"}}
+            return {}
+
+        revision = self.store.revision
+        with self.assertRaises(OSError):
+            deposit(self.store, binding, client, expected_revision=revision, request_id="deposit-1")
+        receipt = deposit(self.store, binding, client, expected_revision=revision, request_id="deposit-1")
+        # The account's whole deposition listing carries no record of this intent,
+        # so the claimed creation is discarded and the deposit creates its record.
+        self.assertIn(("GET", "https://zenodo.org/api/deposit/depositions?page=1&size=100"), calls)
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual(len(created), 1)
+        self.assertEqual(receipt["doi"], "10.5281/zenodo.93")
+        intent = self.store.snapshot()["records"]["remote_intent"]["deposit-1"]
+        self.assertEqual(intent["status"], "complete")
+        self.assertEqual(intent["responses"]["create"]["response"]["id"], 93)
+        self.assertEqual(intent["discarded"], [{"name": "create", "observation": {
+            "kind": "remote_read", "listing": "complete", "notes": "Exactory publication intent deposit-1"}}])
+
+    def deposit_an_unpublished_draft(self, binding):
+        """Deposit the same reviewed bundle again without publishing it. Its receipt
+        carries no DOI, and neither does the workspace deposit record it leaves."""
+        from research_harness.zenodo import deposit
+
+        def client(method, url, **kwargs):
+            if method == "POST" and url.endswith("/deposit/depositions"):
+                return {"id": 94, "metadata": kwargs["json_body"]["metadata"],
+                        "links": {"bucket": "https://zenodo.org/api/files/draft", "html": "https://zenodo.org/deposit/94"}}
+            return {}
+
+        return deposit(self.store, dict(binding, publish=False), client,
+                       expected_revision=self.store.revision, request_id="deposit-draft")
+
+    def test_a_publication_receipt_without_a_doi_is_not_a_submission_candidate(self):
+        from research_harness.submission import validate_submission
+        binding = self.remote_binding()
+        publication, _, _, _ = self.publish_remote(binding)
+        draft = self.deposit_an_unpublished_draft(binding)
+        self.assertNotIn("doi", draft)
+        self.assertNotIn("doi", self.store.snapshot()["records"]["workspace"]["deposit"])
+        self.assertTrue(self.publication().publication_report(self.store, "deposited")["ready"])
+        # The published record stays the only candidate; the draft receipt carries
+        # no DOI to compare, so the submit is refused instead of failing on it.
+        self.assert_error("publication_receipt_required",
+                          lambda: validate_submission(self.store, {"doi": publication["doi"]}))
 
     def test_managed_submit_keeps_concept_doi_distinct_from_concrete_record(self):
         from research_harness.submission import submit_managed, continue_submission
@@ -203,11 +268,17 @@ class ResearchPublicationTests(DevelopmentCase):
                     raise OSError("The server accepted the request, then its response was lost")
                 return {"verificationId": task["verificationId"], "doi": task["doi"]}, 201
             return (task, 200) if ingested[0] else ({}, 404)
+        from research_harness.errors import ResearchError
         with self.assertRaises(OSError):
             submit_managed(self.store, {"doi": publication["doi"]}, client,
                 expected_revision=self.store.revision, request_id="lost-submission")
-        self.assert_error("verification_ingest_pending", lambda: submit_managed(self.store,
-            {"url": publication["record_url"]}, client, expected_revision=self.store.revision, request_id="same-record-url"))
+        # The record URL names the same publication, so the managed path reaches
+        # the one intent the lost POST left and refuses before any second write.
+        with self.assertRaises(ResearchError) as raised:
+            submit_managed(self.store, {"url": publication["record_url"]}, client,
+                expected_revision=self.store.revision, request_id="same-record-url")
+        self.assertEqual(raised.exception.code, "remote_reconciliation_required")
+        self.assertEqual(raised.exception.details["intent_id"], "lost-submission")
         self.assertEqual(sum(call[0] == "POST" for call in calls), 1, calls)
         self.assertEqual({record["id"] for record in self.store.snapshot()["records"]["remote_intent"].values()
                           if record["kind"] == "submit"}, {"lost-submission"})

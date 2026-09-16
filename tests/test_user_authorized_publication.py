@@ -38,40 +38,46 @@ class TestSelectManagedPath(unittest.TestCase):
         self.addCleanup(scratch.cleanup)
         self.root = Path(scratch.name)
 
-    def _select(self, check, start=None) -> tuple[tuple[object, object], str]:
+    def _select(self, check, start=None) -> tuple[tuple[object, object, object], str]:
         sink = io.StringIO()
         with contextlib.redirect_stderr(sink):
             selected = select_managed_path(check, start or self.root)
         return selected, sink.getvalue()
 
     def test_no_workspace_selects_the_direct_path_silently(self) -> None:
-        self.assertEqual(self._select(_pass_check), ((None, None), ""))
+        self.assertEqual(self._select(_pass_check), ((None, None, None), ""))
 
     def test_a_legacy_draft_workspace_without_a_store_selects_the_direct_path_silently(self) -> None:
         (self.root / ".exactory").mkdir()
         (self.root / ".exactory" / "draft.json").write_text(json.dumps({"title": "Legacy"}))
-        self.assertEqual(self._select(_pass_check), ((None, None), ""))
+        self.assertEqual(self._select(_pass_check), ((None, None, None), ""))
 
     def test_a_store_without_a_research_configuration_selects_the_direct_path_silently(self) -> None:
         Store(self.root, create=True)
-        self.assertEqual(self._select(_pass_check), ((None, None), ""))
+        self.assertEqual(self._select(_pass_check), ((None, None, None), ""))
 
-    def test_a_corrupt_store_is_noted_once_and_hands_back_no_store(self) -> None:
+    def test_a_corrupt_store_is_noted_once_and_names_the_failure_that_kept_it_shut(self) -> None:
         (self.root / ".exactory").mkdir()
         (self.root / ".exactory" / "research.sqlite3").write_bytes(b"not a database")
-        selected, stderr_text = self._select(_pass_check)
-        self.assertEqual(selected, (None, None))
+        (store, report, store_open_error), stderr_text = self._select(_pass_check)
+        self.assertIsNone(store)
+        self.assertIsNone(report)
+        # A store file that exists and does not open is not the same as no store:
+        # a record the command keeps in its own file is the only copy of it.
+        self.assertEqual(store_open_error.code, "corrupt_state")
+        self.assertEqual(store_open_error.message, "Research database has an invalid SQLite header")
         self.assertEqual(stderr_text,
                          "Managed record skipped (corrupt_state): Research database has an invalid SQLite header\n")
 
     def test_a_failing_check_is_noted_and_hands_back_the_open_store(self) -> None:
         from integration_fixtures import prepare_research
         case = prepare_research(self.root)
-        (store, report), stderr_text = self._select(_fail_check)
+        (store, report, store_open_error), stderr_text = self._select(_fail_check)
         # The direct path writes its own record through this store, so the
         # command never opens the workspace a second time to decide again.
         self.assertEqual(store.revision, case.store.revision)
         self.assertIsNone(report)
+        self.assertIsNone(store_open_error)
         self.assertEqual(stderr_text,
                          "Managed record skipped (readiness_required): Publish the reviewed bundle first\n")
 
@@ -80,9 +86,10 @@ class TestSelectManagedPath(unittest.TestCase):
         case = prepare_research(self.root)
         nested = self.root / "draft" / "figures"
         nested.mkdir(parents=True)
-        (store, checked), stderr_text = self._select(_pass_check, nested)
+        (store, checked, store_open_error), stderr_text = self._select(_pass_check, nested)
         self.assertEqual(store.revision, case.store.revision)
         self.assertEqual(checked, "checked at revision " + str(case.store.revision))
+        self.assertIsNone(store_open_error)
         self.assertEqual(stderr_text, "")
 
 

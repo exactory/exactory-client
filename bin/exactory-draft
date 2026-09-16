@@ -308,7 +308,7 @@ def _run_deposit(args: argparse.Namespace) -> None:
     # otherwise the record is created directly, and the user reads why on stderr.
     # The direct path keeps the store this call opened, so the command opens the
     # workspace once and notes a refusal once.
-    store, deposit_report = select_managed_path(lambda workspace_store: validate_deposit(
+    store, deposit_report, _ = select_managed_path(lambda workspace_store: validate_deposit(
         workspace_store, pdf_path, abstract_path, sources_path,
         new_version=args.new_version, environment=environment))
     if deposit_report is not None:
