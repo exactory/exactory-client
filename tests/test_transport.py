@@ -384,6 +384,29 @@ class TestSubmitDecision(_TransportTestCase):
         self.assertNotIn("submission_receipt", records)
 
 
+class TestSubmitInAStudyWorkspaceWithNoDraftMarker(_TransportTestCase):
+    """A study workspace that never ran `exactory-draft init`: `.exactory/study.json`
+    and no draft marker. The citation check reads the draft workspace's references
+    file, so this workspace runs no check and the submit says nothing."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        (self.scratch_dir / ".exactory").mkdir()
+        (self.scratch_dir / ".exactory" / "study.json").write_text(json.dumps({
+            "version": 1, "slug": "cohort-percentiles", "stage": "submit",
+            "status": "running",
+        }))
+        # The check reports on this file when it runs, which it does not here.
+        (self.scratch_dir / "draft").mkdir()
+        (self.scratch_dir / "draft" / "references.bib").write_text("@article{a2023b,\n}\n")
+
+    def test_submit_prints_nothing_and_posts(self) -> None:
+        _, stderr_text = self._run(["submit", "--doi", "10.5281/zenodo.1"])
+        self.assertEqual(stderr_text, "")
+        self.assertEqual(self.requested_paths, ["/api/v1/verifications"])
+        self.assertEqual(self.request_bodies, [{"doi": "10.5281/zenodo.1"}])
+
+
 _VERIFICATION_ID = "0e5c2b1a-9d4f-4c3b-8a7e-6f5d4c3b2a19"
 
 

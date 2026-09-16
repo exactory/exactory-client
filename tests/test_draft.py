@@ -16,6 +16,7 @@ import time
 import unittest
 import unittest.mock
 import urllib.error
+import zipfile
 from pathlib import Path
 
 from integration_fixtures import prepare_research, prepare_manuscript
@@ -228,6 +229,22 @@ class _UnpublishedRecordZenodoApi(_FakeZenodoApi):
                 "files": [{"filename": "paper.pdf", "checksum": "md5:" + hashlib.md5(
                     self.uploaded_bytes, usedforsecurity=False).hexdigest()}],
             }
+        return super().__call__(request)
+
+
+class _FirstRequestRecordingZenodoApi(_FakeZenodoApi):
+    """Answer like the fake above, and keep what the command had printed when
+    the first request went out. The citation report informs the user about the
+    record that is about to exist, so it reaches the screen before that record
+    does."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.printed_before_the_first_request = ""
+
+    def __call__(self, request):
+        if not self.requests:
+            self.printed_before_the_first_request = sys.stderr.getvalue()
         return super().__call__(request)
 
 
@@ -857,6 +874,13 @@ class TestProductionDepositCitationReport(_DepositTestCase):
         self.assertTrue(self.fake_api.requests[0].full_url.startswith("https://zenodo.org/api/"))
         self.assertIn("publication_receipt", Store(self.workspace_dir).snapshot()["records"])
 
+    def test_the_report_reaches_the_user_before_the_first_remote_write(self) -> None:
+        (self.workspace_dir / ".exactory" / "citation-check.json").unlink()
+        self.fake_api = _FirstRequestRecordingZenodoApi()
+        _draft._open_url = self.fake_api
+        self._deposit(["--production", "--creator", "Shiroshita, Ryosuke"])
+        self.assertIn("Citation report: ", self.fake_api.printed_before_the_first_request)
+
     def test_a_changed_bibliography_moves_the_deposit_to_the_direct_path(self) -> None:
         (self.workspace_dir / ".exactory" / "citation-check.json").unlink()
         (self.workspace_dir / "draft" / "references.bib").unlink()
@@ -1062,6 +1086,33 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
         self.assertEqual(metadata["creators"], [{"name": "Shiroshita, Ryosuke"}])
         self.assertIn(_DEPOSITED_THROUGH_EXACTORY_SENTENCE, metadata["description"])
         self.assertNotIn("keywords", metadata)
+
+    def _read_upload_body(self, upload_name: str) -> bytes:
+        request = next(request for request in self.fake_api.requests
+                       if request.full_url.endswith("/files/bucket-1/" + upload_name))
+        return request.data
+
+    def test_the_paper_upload_carries_the_bytes_of_the_pdf(self) -> None:
+        """The upload body is the file on disk. A PUT that names paper.pdf and
+        sends nothing leaves an empty paper on a permanent record."""
+        self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        self.assertEqual(self._read_upload_body("paper.pdf"),
+                         (self.workspace_dir / "draft" / "paper.pdf").read_bytes())
+
+    def test_the_sources_upload_carries_the_bytes_of_the_archive(self) -> None:
+        sources_path = self.workspace_dir / "sources.zip"
+        with zipfile.ZipFile(sources_path, "w") as archive:
+            archive.writestr("main.tex", "\\documentclass{article}\n")
+        self._deposit(["--creator", "Shiroshita, Ryosuke", "--sources", str(sources_path)])
+        self.assertEqual(self._read_upload_body("supplementary-sources.zip"),
+                         sources_path.read_bytes())
+
+    def test_a_tarball_keeps_its_archive_suffix_in_the_supplementary_name(self) -> None:
+        sources_path = self.workspace_dir / "code.tar.gz"
+        sources_path.write_bytes(b"\x1f\x8b\x08\x00fake tarball")
+        self._deposit(["--creator", "Shiroshita, Ryosuke", "--sources", str(sources_path)])
+        self.assertEqual(self._read_upload_body("supplementary-sources.tar.gz"),
+                         sources_path.read_bytes())
 
     def test_a_production_deposit_prints_a_failing_citation_report_and_continues(self) -> None:
         (self.workspace_dir / ".exactory" / "citation-check.json").unlink()
