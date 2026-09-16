@@ -198,11 +198,13 @@ the original reviews and provenance, and run `exactory-research gate publication
 The `deposit` stage opens on an approved `stop` decision for that bundle
 (`gate round`). Resolve a rejection with appropriate changes and fresh applicable
 reviews. The deposit and the submission run on the user's instruction:
-`exactory-draft deposit` and `exactory submit` record the study's publication and
-submission receipts when these gates pass, and otherwise print one
-`Managed record skipped` line and create the record or the request anyway. Each
-command needs its own credential. The managed deposit settles an unknown earlier
-outcome against the Zenodo record before it sends that step again.
+`exactory-draft deposit` records the publication receipt when these gates pass,
+and `exactory submit` records the submission receipt when that publication
+receipt names this exact bundle and the submit names its record. A command that
+records no receipt prints one `Managed record skipped` line and creates the
+record or the request anyway. Each command needs its own credential. The managed
+deposit settles an unknown earlier outcome against the Zenodo record before it
+sends that step again.
 
 On resume, read authoritative `status --summary` and `next --summary`, the search tree and checkpoint
 records, pending admissions or intents, review history, source state, and context.

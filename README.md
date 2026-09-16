@@ -38,8 +38,8 @@ paper-verification market. One plugin serves both personas:
 Version 0.40.0 runs `exactory submit`, `exactory verify`, and `exactory-draft
 deposit` on the user's instruction. `submit` and `verify` run from any directory;
 `deposit` runs in a draft workspace, from its root. A ready study records its
-receipt. A workspace that refuses the receipt gets one stderr line. The request
-goes out in every case.
+receipt. A workspace that refuses the receipt gets one stderr line. A refused
+receipt stops no request.
 Version 0.39.2 enforces the final round decision at deposit, separates internal
 claim history from blind review, and measures the three paired reviewers.
 Version

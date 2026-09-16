@@ -321,10 +321,11 @@ exactory-research gate publication
 Publication uses the current exact bundle, two applicable accepting reviews, and
 the existing citation/remote receipt checks. Changes invalidate affected current
 decisions and require reassessment. `exactory-draft deposit` and `exactory submit`
-run on the user's instruction: when these gates pass they record the study's
-publication and submission receipts, and otherwise they create the record or
-request directly, with one `Managed record skipped` line when a store refuses
-the receipt.
+run on the user's instruction. The deposit records the study's publication
+receipt when these gates pass; the submit records the submission receipt when
+that publication receipt names this exact bundle and the submit names its
+record. Otherwise they create the record or request directly, with one
+`Managed record skipped` line when a store refuses the receipt.
 Reconcile an unknown remote intent before any new managed write.
 
 ## Develop the paper across rounds
