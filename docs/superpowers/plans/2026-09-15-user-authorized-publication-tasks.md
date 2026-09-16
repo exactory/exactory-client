@@ -169,7 +169,7 @@ git commit -F <scratchpad>/commit-1.txt
 **Interfaces:**
 - Produces:
   - `cli.note_managed_record_skipped(error: ResearchError) -> None`: prints `Managed record skipped (<code>): <message>` to stderr.
-  - `cli.select_managed_path(check, start=None) -> tuple[Store, object] | None`: finds the workspace around `start` (default: the current directory) and opens its store with `current_store`. No workspace, or `migration_required` from `current_store`, returns `None` silently. Any other `ResearchError` from `current_store`, or any `ResearchError` from `check(store)`, prints the note and returns `None`. Otherwise returns `(store, check(store))`.
+  - `cli.select_managed_path(check, start=None) -> tuple[Store | None, object | None]`: finds the workspace around `start` (default: the current directory) and opens its store with `current_store`. No workspace, or `migration_required` from `current_store`, returns `(None, None)` silently. Any other `ResearchError` from `current_store` prints the note and returns `(None, None)`. A `ResearchError` from `check(store)` prints the note and returns `(store, None)`, so a command that writes its own record on the direct path reuses the open store. Otherwise returns `(store, check(store))`.
   - `citation_report.report_citation_gate(workspace: Path, check_command: Path) -> bool`: runs `python3 <check_command> gate --workspace <workspace>`; on a nonzero exit prints `Citation report: <stderr, stripped>` to stderr; returns whether the gate passed.
 
 - [ ] **Step 1: Write the failing tests**

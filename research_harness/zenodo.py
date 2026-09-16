@@ -13,6 +13,29 @@ from .remote import begin_intent, finish_intent, get_intent, remote_step, resolv
 from .rounds import round_state
 
 
+# The paper always lands on a record under this name, whatever the local build
+# called it, so every record presents the same face and every step that names
+# the paper to Zenodo names the same file.
+PAPER_UPLOAD_NAME = "paper.pdf"
+# The record's previewed file is set on its RDM draft document: the file-sort
+# endpoint that https://developers.zenodo.org still documents answers HTTP 405
+# on zenodo.org (verified 2026-08-30).
+RDM_JSON_MEDIA_TYPE = "application/vnd.inveniordm.v1+json"
+
+
+def build_draft_document_url(base_url, record_id):
+    """The URL of one record's RDM draft document."""
+    return base_url + "/records/" + str(record_id) + "/draft"
+
+
+def build_previewed_document(document):
+    """Return the fetched RDM draft document with the paper as its previewed file.
+
+    The RDM PUT replaces the whole draft document, so every other field the
+    fetched document carries goes back unchanged."""
+    return dict(document, files=dict(document.get("files", {}), default_preview=PAPER_UPLOAD_NAME))
+
+
 def _current(store, binding):
     records = store.snapshot()["records"]
     evaluation = Evaluation(records, ArtifactStore(store.root))
@@ -64,8 +87,8 @@ def reconcile_pending(store, identifier, client):
     elif deposition is not None:
         record_id = deposition["id"]
         if name == "preview":
-            candidate = client("GET", base + "/records/" + str(record_id) + "/draft")
-            if candidate.get("files", {}).get("default_preview") == "paper.pdf":
+            candidate = client("GET", build_draft_document_url(base, record_id))
+            if candidate.get("files", {}).get("default_preview") == PAPER_UPLOAD_NAME:
                 observed = candidate
         else:
             candidate = client("GET", base + "/deposit/depositions/" + str(record_id))
@@ -89,12 +112,10 @@ def _set_preview(store, identifier, binding, client, record_id):
     intent = get_intent(store, identifier)
     if "preview" in intent["responses"]:
         return intent["responses"]["preview"]["response"]
-    url = binding["base_url"] + "/records/" + str(record_id) + "/draft"
-    document = client("GET", url, accept="application/vnd.inveniordm.v1+json")
-    # The RDM PUT replaces the draft document, so retain its other fields.
-    updated = dict(document, files=dict(document.get("files", {}), default_preview="paper.pdf"))
+    url = build_draft_document_url(binding["base_url"], record_id)
+    updated = build_previewed_document(client("GET", url, accept=RDM_JSON_MEDIA_TYPE))
     _current(store, binding)
-    return remote_step(store, identifier, "preview", {"deposition_id": record_id, "filename": "paper.pdf"},
+    return remote_step(store, identifier, "preview", {"deposition_id": record_id, "filename": PAPER_UPLOAD_NAME},
                        lambda: client("PUT", url, json_body=updated))
 
 

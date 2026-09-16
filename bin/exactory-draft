@@ -35,7 +35,9 @@ from research_harness.integration import command_identity, current_store, initia
 from research_harness.storage import Store
 from research_harness.workspace import find_workspace
 from research_harness.citation_report import report_citation_gate
-from research_harness.zenodo import deposit as deposit_bundle, continue_deposit, validate_deposit
+from research_harness.zenodo import (PAPER_UPLOAD_NAME, RDM_JSON_MEDIA_TYPE, build_draft_document_url,
+                                     build_previewed_document, continue_deposit,
+                                     deposit as deposit_bundle, validate_deposit)
 from research_harness.cli import add_identity, note_managed_record_skipped, select_managed_path
 
 _PRODUCTION_API_URL = "https://zenodo.org/api"
@@ -83,15 +85,13 @@ _DEPOSITED_THROUGH_EXACTORY_DISCLOSURE_TEMPLATE = (
 # an answer to that question, so it sends no keyword.
 _WRITTEN_BY_EXACTORY_KEYWORD = "Written by exactory.ai"
 
-# The paper always lands on Zenodo under this name, whatever the local build
-# called it, so every record presents the same face. The sources archive gets
-# the supplementary stem because Zenodo lists a record's files by name:
-# 'supplementary' sorts after 'paper', keeping the paper on top.
-_PAPER_UPLOAD_NAME = "paper.pdf"
+# The paper uploads under the fixed name research_harness.zenodo owns, because
+# every step that names the paper to Zenodo must name the same file. The
+# sources archive gets the supplementary stem because Zenodo lists a record's
+# files by name: 'supplementary' sorts after 'paper', keeping the paper on top.
 _SOURCES_UPLOAD_STEM = "supplementary-sources"
 
 _CHECK_COMMAND_PATH = Path(__file__).with_name("exactory-check")
-_RDM_JSON_MEDIA_TYPE = "application/vnd.inveniordm.v1+json"
 
 def _exit_with_error(message: str, code: int = 1) -> None:
     print(message, file=sys.stderr)
@@ -190,14 +190,33 @@ def _find_newest_pdf() -> Path:
 
 
 def _read_abstract_text(path: Path) -> str:
+    """The abstract the record's description opens with, as the user wrote it.
+
+    The direct path takes the abstract from any file the user names, so this
+    reader owns the UTF-8 rule the pinned publication bundle used to own."""
     if not path.exists():
         _exit_with_error(f"The file {path} does not exist."
                          " Write the paper's abstract into it as plain text.", 2)
-    abstract_text = path.read_text(encoding="utf-8").strip()
+    try:
+        abstract_text = path.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeDecodeError) as error:
+        _exit_with_error(f"The client cannot read the abstract file {path} as UTF-8 text."
+                         f" Cause: {error}."
+                         " Write the paper's abstract into it as plain text.", 2)
     if abstract_text == "":
         _exit_with_error(f"The abstract file {path} is empty."
                          " Write the paper's abstract into it as plain text.", 2)
     return abstract_text
+
+
+def _read_upload_bytes(path: Path) -> bytes:
+    """The bytes of a file the user named for upload. The direct path uploads
+    from disk, so an unreadable path stops the command instead of the runtime."""
+    try:
+        return path.read_bytes()
+    except OSError as error:
+        _exit_with_error(f"The client cannot read the file {path}. Cause: {error}.", 2)
+    raise AssertionError("unreachable")
 
 
 def _has_exactory_authorship_evidence(pdf_path: Path) -> bool:
@@ -277,19 +296,21 @@ def _run_deposit(args: argparse.Namespace) -> None:
 
     # A study whose publication and round gates are ready records the receipt;
     # otherwise the record is created directly, and the user reads why on stderr.
-    managed = select_managed_path(lambda store: validate_deposit(
-        store, pdf_path, abstract_path, sources_path, new_version=args.new_version, environment=environment))
-    if managed is not None:
-        store, report = managed
-        _deposit_managed(store, report, args, base_url, environment, metadata, sources_path, token)
+    # The direct path keeps the store this call opened, so the command opens the
+    # workspace once and notes a refusal once.
+    store, deposit_report = select_managed_path(lambda workspace_store: validate_deposit(
+        workspace_store, pdf_path, abstract_path, sources_path,
+        new_version=args.new_version, environment=environment))
+    if deposit_report is not None:
+        _deposit_managed(store, deposit_report, args, base_url, environment, metadata, sources_path, token)
     else:
-        _deposit_directly(args, base_url, environment, metadata, pdf_path, sources_path, token)
+        _deposit_directly(store, args, base_url, environment, metadata, pdf_path, sources_path, token)
 
 
 def _deposit_managed(store, report: dict, args: argparse.Namespace, base_url: str, environment: str,
                      metadata: dict, sources_path: Path | None, token: str) -> None:
     bundle = report["bundle"]
-    uploads = [{"name": _PAPER_UPLOAD_NAME, "artifact": bundle["files"]["pdf"]["artifact"]}]
+    uploads = [{"name": PAPER_UPLOAD_NAME, "artifact": bundle["files"]["pdf"]["artifact"]}]
     if sources_path is not None:
         uploads.append({"name": _name_sources_upload(sources_path), "artifact": bundle["files"]["sources"]["artifact"]})
     binding = {"bundle_digest": bundle["digest"], "prepared_revision": bundle["prepared_revision"],
@@ -304,44 +325,45 @@ def _deposit_managed(store, report: dict, args: argparse.Namespace, base_url: st
     print(json.dumps(receipt, indent=2))
 
 
-def _deposit_directly(args: argparse.Namespace, base_url: str, environment: str, metadata: dict,
+def _deposit_directly(store, args: argparse.Namespace, base_url: str, environment: str, metadata: dict,
                       pdf_path: Path, sources_path: Path | None, token: str) -> None:
     if args.new_version:
         deposition = _open_new_version_draft(base_url, environment, token)
     else:
         deposition = _call_zenodo("POST", f"{base_url}/deposit/depositions", token, json_body={})
     bucket_url = deposition["links"]["bucket"]
-    _call_zenodo("PUT", f"{bucket_url}/{_PAPER_UPLOAD_NAME}", token, file_bytes=pdf_path.read_bytes())
+    _call_zenodo("PUT", f"{bucket_url}/{PAPER_UPLOAD_NAME}", token, file_bytes=_read_upload_bytes(pdf_path))
     if sources_path is not None:
         _call_zenodo("PUT", f"{bucket_url}/{_name_sources_upload(sources_path)}", token,
-                     file_bytes=sources_path.read_bytes())
+                     file_bytes=_read_upload_bytes(sources_path))
     _call_zenodo("PUT", f"{base_url}/deposit/depositions/{deposition['id']}", token,
                  json_body={"metadata": metadata})
     _mark_paper_as_preview(base_url, deposition["id"], token)
-    published = None
+    state = {"environment": environment, "deposition_id": deposition["id"],
+             "draft_url": deposition.get("links", {}).get("html", "")}
     if args.publish:
         # Per https://developers.zenodo.org, doi is present only on published
         # depositions; conceptdoi names the paper across all its versions.
-        published = _call_zenodo("POST", f"{base_url}/deposit/depositions/{deposition['id']}/actions/publish", token)
-    state = _save_deposit_state(environment, deposition, published)
-    if published is not None:
+        publish_response = _call_zenodo(
+            "POST", f"{base_url}/deposit/depositions/{deposition['id']}/actions/publish", token)
+        state["doi"] = publish_response.get("doi", "")
+        state["concept_doi"] = publish_response.get("conceptdoi", "")
+        state["record_url"] = publish_response.get("links", {}).get("record_html", "")
         print(f"The record is published: {state['record_url']}")
     else:
         print(f"The draft deposit is created. Review it at: {state['draft_url']}")
+    # The user reads the record before the local record is kept, so a store that
+    # refuses the write still leaves the DOI on the screen.
     print(json.dumps(state, indent=2))
+    _save_deposit_state(store, state)
 
 
 def _mark_paper_as_preview(base_url: str, record_id: int, token: str) -> None:
-    """Make the paper the record's previewed file. The RDM draft document is
-    the working surface for this: the file-sort endpoint that
-    https://developers.zenodo.org still documents answers HTTP 405 on
-    zenodo.org (verified 2026-08-30). The PUT replaces the whole draft
-    document, so the fetched document goes back with only default_preview
-    added."""
-    draft_url = f"{base_url}/records/{record_id}/draft"
-    document = _call_zenodo("GET", draft_url, token, accept=_RDM_JSON_MEDIA_TYPE)
-    document.setdefault("files", {})["default_preview"] = _PAPER_UPLOAD_NAME
-    _call_zenodo("PUT", draft_url, token, json_body=document)
+    """Make the paper the record's previewed file. research_harness.zenodo owns
+    the draft-document contract this shares with the managed deposit."""
+    draft_url = build_draft_document_url(base_url, record_id)
+    document = _call_zenodo("GET", draft_url, token, accept=RDM_JSON_MEDIA_TYPE)
+    _call_zenodo("PUT", draft_url, token, json_body=build_previewed_document(document))
 
 
 def _open_new_version_draft(base_url: str, environment: str, token: str) -> dict:
@@ -367,30 +389,27 @@ def _open_new_version_draft(base_url: str, environment: str, token: str) -> dict
     return _call_zenodo("GET", draft_url, token)
 
 
-def _save_deposit_state(environment: str, deposition: dict, published: dict | None) -> dict:
-    """Record a direct deposit with the fields the managed projection writes, and return them.
+def _save_deposit_state(store, state: dict) -> None:
+    """Keep the local record of a direct deposit.
 
-    A workspace with a research store records it there, so a later projection
-    export keeps .exactory/deposit.json. Without a usable store the file is
-    written directly."""
-    state = {
-        "environment": environment,
-        "deposition_id": deposition["id"],
-        "draft_url": deposition.get("links", {}).get("html", ""),
-    }
-    if published is not None:
-        state["doi"] = published.get("doi", "")
-        state["concept_doi"] = published.get("conceptdoi", "")
-        state["record_url"] = published.get("links", {}).get("record_html", "")
+    A workspace with a usable store records it there, and the projection export
+    writes .exactory/deposit.json from that record. Without a store there is no
+    projection export, so the file itself is the record. A store that refuses
+    the write is the third case: the file holds a deposit the store does not
+    know, a later projection export rewrites the file from the store, and the
+    command says so and exits nonzero instead of reporting a kept record."""
+    if store is None:
+        _DEPOSIT_STATE_PATH.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+        return
     try:
-        store = current_store(Path.cwd())
         record_direct_deposit(store, state, expected_revision=store.revision,
                               request_id="direct-deposit-" + uuid.uuid4().hex)
     except ResearchError as error:
-        if error.code != "migration_required":
-            note_managed_record_skipped(error)
+        note_managed_record_skipped(error)
         _DEPOSIT_STATE_PATH.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
-    return state
+        _exit_with_error("The workspace store did not record this deposit. The record is on Zenodo."
+                         f" {_DEPOSIT_STATE_PATH} holds the only local copy of it, and a projection"
+                         " export can replace that file. Save the deposit state printed above.")
 
 
 def _run_reconcile(args: argparse.Namespace) -> None:

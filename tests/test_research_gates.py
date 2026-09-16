@@ -28,7 +28,7 @@ class ResearchGateTests(DevelopmentCase):
         self.assertFalse(report["ready"])
         self.assertIn("plan_dependencies_stale", [item["code"] for item in report["obligations"]])
 
-    def test_bare_draft_marker_deposits_directly(self):
+    def test_bare_draft_marker_is_no_longer_refused_before_the_token_check(self):
         metadata = self.root / ".exactory"
         (metadata / "draft.json").write_text(json.dumps({"version": 1, "title": "Fixture"}))
         (self.root / "paper.pdf").write_bytes(b"%PDF-1.4\n%%EOF")

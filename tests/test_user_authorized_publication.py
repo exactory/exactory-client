@@ -37,37 +37,42 @@ class TestSelectManagedPath(unittest.TestCase):
         self.addCleanup(scratch.cleanup)
         self.root = Path(scratch.name)
 
-    def _select(self, check, start=None) -> tuple[object, str]:
+    def _select(self, check, start=None) -> tuple[tuple[object, object], str]:
         sink = io.StringIO()
         with contextlib.redirect_stderr(sink):
             selected = select_managed_path(check, start or self.root)
         return selected, sink.getvalue()
 
     def test_no_workspace_selects_the_direct_path_silently(self) -> None:
-        self.assertEqual(self._select(_pass_check), (None, ""))
+        self.assertEqual(self._select(_pass_check), ((None, None), ""))
 
     def test_a_legacy_draft_workspace_without_a_store_selects_the_direct_path_silently(self) -> None:
         (self.root / ".exactory").mkdir()
         (self.root / ".exactory" / "draft.json").write_text(json.dumps({"title": "Legacy"}))
-        self.assertEqual(self._select(_pass_check), (None, ""))
+        self.assertEqual(self._select(_pass_check), ((None, None), ""))
 
     def test_a_store_without_a_research_configuration_selects_the_direct_path_silently(self) -> None:
         Store(self.root, create=True)
-        self.assertEqual(self._select(_pass_check), (None, ""))
+        self.assertEqual(self._select(_pass_check), ((None, None), ""))
 
-    def test_a_corrupt_store_is_noted_and_selects_the_direct_path(self) -> None:
+    def test_a_corrupt_store_is_noted_once_and_hands_back_no_store(self) -> None:
         (self.root / ".exactory").mkdir()
         (self.root / ".exactory" / "research.sqlite3").write_bytes(b"not a database")
         selected, stderr_text = self._select(_pass_check)
-        self.assertIsNone(selected)
+        self.assertEqual(selected, (None, None))
         self.assertEqual(stderr_text,
                          "Managed record skipped (corrupt_state): Research database has an invalid SQLite header\n")
 
-    def test_a_failing_check_is_noted_and_selects_the_direct_path(self) -> None:
+    def test_a_failing_check_is_noted_and_hands_back_the_open_store(self) -> None:
         from integration_fixtures import prepare_research
-        prepare_research(self.root)
-        self.assertEqual(self._select(_fail_check),
-                         (None, "Managed record skipped (readiness_required): Publish the reviewed bundle first\n"))
+        case = prepare_research(self.root)
+        (store, report), stderr_text = self._select(_fail_check)
+        # The direct path writes its own record through this store, so the
+        # command never opens the workspace a second time to decide again.
+        self.assertEqual(store.revision, case.store.revision)
+        self.assertIsNone(report)
+        self.assertEqual(stderr_text,
+                         "Managed record skipped (readiness_required): Publish the reviewed bundle first\n")
 
     def test_a_passing_check_selects_the_managed_path_from_a_subdirectory(self) -> None:
         from integration_fixtures import prepare_research

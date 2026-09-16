@@ -849,6 +849,48 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
         self.assertIn("abstract", stderr_text)
         self.assertEqual(self.fake_api.requests, [])
 
+    def test_an_abstract_file_that_is_not_utf8_is_refused_before_any_request(self) -> None:
+        (self.workspace_dir / "draft" / "abstract.txt").write_bytes(b"R\xe9sum\xe9 of the paper\n")
+        stderr_text = self._deposit(["--creator", "Shiroshita, Ryosuke"], expected_exit_code=2)
+        self.assertIn("as UTF-8 text", stderr_text)
+        self.assertEqual(self.fake_api.requests, [])
+
+    def test_an_abstract_path_that_is_a_directory_is_refused_before_any_request(self) -> None:
+        (self.workspace_dir / "draft" / "abstract-directory").mkdir()
+        stderr_text = _run_draft_command(
+            ["deposit", "--abstract-file", "draft/abstract-directory",
+             "--creator", "Shiroshita, Ryosuke"],
+            2, self,
+        )
+        self.assertIn("as UTF-8 text", stderr_text)
+        self.assertEqual(self.fake_api.requests, [])
+
+    def test_a_pdf_path_that_is_a_directory_is_refused_before_the_upload(self) -> None:
+        directory_path = self.workspace_dir / "draft" / "paper-directory"
+        directory_path.mkdir()
+        stderr_text = self._deposit(["--pdf", str(directory_path), "--creator", "Shiroshita, Ryosuke"],
+                                    expected_exit_code=2)
+        self.assertIn("cannot read the file", stderr_text)
+        self.assertNotIn(("PUT", "https://sandbox.zenodo.org/api/files/bucket-1/paper.pdf"),
+                         self.requested())
+
+    def test_a_store_that_refuses_the_record_names_the_only_local_copy_and_stops(self) -> None:
+        def refuse_the_record(store, state, *, expected_revision, request_id):
+            raise ResearchError("store_busy", "Research store is busy; retry the same"
+                                              " request after the writer finishes")
+
+        with unittest.mock.patch.object(_draft, "record_direct_deposit", refuse_the_record):
+            output = self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"],
+                                   expected_exit_code=1)
+        # The DOI reaches the user before the command reports the refused record.
+        self.assertIn("The record is published: ", output)
+        self.assertIn('"doi": "10.5281/zenodo.4242"', output)
+        self.assertIn("Managed record skipped (store_busy): ", output)
+        self.assertIn(".exactory/deposit.json holds the only local copy of it", output)
+        self.assertEqual(self.read_deposit_state()["doi"], "10.5281/zenodo.4242")
+        # The store kept no deposit, which is why the file is not durable.
+        self.assertNotIn("deposit", Store(self.workspace_dir).snapshot()["records"].get("workspace", {}))
+
     def test_the_store_records_the_direct_deposit_so_an_export_keeps_it(self) -> None:
         from research_harness.integration import export_workspace
         self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"])
@@ -858,6 +900,24 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
         self.assertNotIn("publication_receipt", store.snapshot()["records"])
         export_workspace(store)
         self.assertEqual(self.read_deposit_state(), written)
+
+
+class TestCorruptStoreDeposit(_PlainWorkspaceDepositTestCase):
+    """A draft workspace whose store exists and does not open."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        for path in (self.workspace_dir / ".exactory").glob("research.sqlite3-*"):
+            path.unlink()
+        (self.workspace_dir / ".exactory" / "research.sqlite3").write_bytes(b"not a database")
+
+    def test_the_corrupt_store_is_noted_once_and_the_deposit_is_direct(self) -> None:
+        output = self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        self.assertIn("Managed record skipped (corrupt_state): ", output)
+        # One decision point, so one note: nothing re-opens the store to say it again.
+        self.assertEqual(output.count("Managed record skipped"), 1)
+        self.assertEqual(self.requested()[0], ("POST", "https://sandbox.zenodo.org/api/deposit/depositions"))
+        self.assertEqual(self.read_deposit_state()["deposition_id"], 4242)
 
 
 class TestLegacyWorkspaceDeposit(_LegacyWorkspaceDepositTestCase):

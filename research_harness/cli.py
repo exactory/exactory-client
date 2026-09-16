@@ -85,24 +85,26 @@ def select_managed_path(check, start=None):
     """Return (store, check(store)) when the workspace around `start` can record this command.
 
     `check` runs every check the managed path performs before its first remote
-    write and returns what the managed path needs. No workspace, or a workspace
-    whose store is missing or unconfigured, returns None silently. Any other
-    refusal is noted on stderr and returns None, so the command sends the
-    user's request directly."""
+    write and returns what the managed path needs. A refused check returns
+    (store, None), so a command that writes its own record on the direct path
+    reuses the store this call already opened instead of deciding again. No
+    workspace, or a store that does not open, returns (None, None). A missing
+    or unconfigured store is silent; every other refusal is noted on stderr
+    once, and the command sends the user's request directly."""
     workspace = find_workspace(start, required=False)
     if workspace is None:
-        return None
+        return None, None
     try:
         store = current_store(workspace)
     except ResearchError as error:
         if error.code != "migration_required":
             note_managed_record_skipped(error)
-        return None
+        return None, None
     try:
         return store, check(store)
     except ResearchError as error:
         note_managed_record_skipped(error)
-        return None
+        return store, None
 
 
 def build_parser():
