@@ -353,8 +353,20 @@ class BatchExtrasTests(LiteratureCase):
         outside = self.metadata(50)
         self.assert_error("invalid_batch", lambda: self.batch([self.note(outside, placement={"position": "above", "reason": "r"})]))
         self.mutate(sampling.record_sample, {"id": "s", "collection_id": collection, "size": 2, "seed": "x"})
+        self.assert_error("invalid_batch", lambda: self.batch([self.note(outside, placement={"position": "above", "reason": "r"})]))
         sampled = sampling.current_sample(self.store.snapshot()["records"])["members"][0]["version_id"]
         self.batch([self.note(sampled, placement={"position": "below", "reason": "r"})])
         hits = [self.metadata(n) for n in range(60, 60 + sampling.SEARCH_READING_LIMIT + 1)]
         self.batch([self.note(v, search_hit=True) for v in hits[:-1]])
         self.assert_error("search_reading_limit_reached", lambda: self.batch([self.note(hits[-1], search_hit=True)]))
+
+    def test_innovation_candidates_are_counted_and_only_true_is_accepted(self):
+        from research_harness import lineage
+        from research_harness.principles import initialize_research
+        self.mutate(initialize_research, {"profile": "research", "target": None, "preparation_policy": "lineage-v1"})
+        version, other = self.metadata(1), self.metadata(2)
+        self.batch([self.note(version, innovation_candidate=True)])
+        records = self.store.snapshot()["records"]
+        self.assertEqual([r["version_id"] for r in lineage.candidate_readings(records)], [version])
+        self.assertEqual(lineage.candidate_families(records), {records["work"][version]["work_id"]})
+        self.assert_error("invalid_batch", lambda: self.batch([self.note(other, innovation_candidate=False)]))

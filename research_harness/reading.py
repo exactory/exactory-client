@@ -260,13 +260,14 @@ def _batch_item(records, evaluation, batch_id, item):
     for name, note in item["notes"].items():
         fields(note, ("text", "status"), code="invalid_batch")
     extras = _batch_extras(item)
+    from .lineage import LINEAGE
+    from .sampling import SAMPLED, current_sample
     policy = preparation_policy(records)
-    if ("loop" in extras or "innovation_candidate" in extras) and policy != "lineage-v1":
+    if ("loop" in extras or "innovation_candidate" in extras) and policy != LINEAGE:
         raise ResearchError("invalid_batch", "Loop and candidate readings belong to the lineage-v1 policy", {"policy": policy})
-    if ("placement" in extras or "search_hit" in extras) and policy != "sampled-v1":
+    if ("placement" in extras or "search_hit" in extras) and policy != SAMPLED:
         raise ResearchError("invalid_batch", "Placement and search-hit readings belong to the sampled-v1 policy", {"policy": policy})
     if "placement" in extras:
-        from .sampling import current_sample
         sample = current_sample(records)
         if sample is None or work["id"] not in {m["version_id"] for m in sample["members"]}:
             raise ResearchError("invalid_batch", "A placement judges a member of the current sample", {"version_id": work["id"]})
