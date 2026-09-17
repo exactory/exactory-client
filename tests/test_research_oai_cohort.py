@@ -383,7 +383,8 @@ class ImportTests(unittest.TestCase):
     def test_exact_byte_budget_allows_import_with_no_network_budget_and_replay_no_charge(self):
         from research_harness.principles import initialize_research
         from research_harness.resources import set_budget, UNITS
-        initialize_research(self.store, {"profile": "research", "target": None}, expected_revision=self.store.revision, request_id="init")
+        initialize_research(self.store, {"profile": "research", "target": None, "preparation_policy": "exhaustive-v1"},
+                            expected_revision=self.store.revision, request_id="init")
         raw = page([article()]); inputs = self.inputs([raw])
         amounts = {unit: None for unit in UNITS}; amounts.update(network_requests=0, source_bytes=len(raw["response"]) - 1)
         set_budget(self.store, {"profile": "research", "purpose": "literature", "limits": amounts, "reason": "Fixture exact bound."},

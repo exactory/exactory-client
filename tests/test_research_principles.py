@@ -16,7 +16,7 @@ class PrinciplesTests(LiteratureCase):
         report = api.configuration_report(self.store, "research")
         self.assertFalse(report["ready"])
         self.assertEqual(self.store.snapshot(), before)
-        result = self.mutate(api.initialize_research, {"profile": "research", "target": None})
+        result = self.mutate(api.initialize_research, {"profile": "research", "target": None, "preparation_policy": "exhaustive-v1"})
         config = self.store.snapshot()["records"]["configuration"]["research"]
         self.assertIsNone(config["target"])
         self.assertEqual(config["constitution"]["sha256"], result["result"]["constitution"]["sha256"])
@@ -24,7 +24,7 @@ class PrinciplesTests(LiteratureCase):
 
     def test_full_objective_is_fixed_separately_from_branch_scope_and_replay(self):
         api = self.api()
-        self.mutate(api.initialize_research, {"profile": "research", "target": None})
+        self.mutate(api.initialize_research, {"profile": "research", "target": None, "preparation_policy": "exhaustive-v1"})
         target = {"kind": "objective", "id": "objective-1", "statement": "Prove the bound for every integer from 5 through 15."}
         payload = {"target": target, "reason": "Fix the complete authorized problem."}
         revision = self.store.revision
@@ -42,7 +42,7 @@ class PrinciplesTests(LiteratureCase):
         api = self.api()
         work = self.metadata()
         target = {"kind": "work", "id": work, "source_id": None, "sha256": None}
-        self.mutate(api.initialize_research, {"profile": "verification", "target": target})
+        self.mutate(api.initialize_research, {"profile": "verification", "target": target, "preparation_policy": "exhaustive-v1"})
         self.scope([work], profile="verification", target=target)
         self.assertIn("target_source_pin_missing", {x["code"] for x in api.configuration_report(self.store, "verification")["obligations"]})
         capture = self.capture(work)
@@ -58,7 +58,7 @@ class PrinciplesTests(LiteratureCase):
     def test_changed_constitution_requires_explicit_adoption_and_preserves_previous_bytes(self):
         api = self.api()
         target = {"kind": "objective", "id": "root", "statement": "Establish the complete finite bound."}
-        first = self.mutate(api.initialize_research, {"profile": "research", "target": target})
+        first = self.mutate(api.initialize_research, {"profile": "research", "target": target, "preparation_policy": "exhaustive-v1"})
         old = first["result"]["constitution"]
         changed = self.root / "new-policy.md"
         changed.write_text("# Research constitution\n\nVersion: 2\n\nRequire explicit current assessment.\n", encoding="utf-8")
@@ -77,14 +77,15 @@ class PrinciplesTests(LiteratureCase):
 
     def test_configuration_cannot_switch_profile_or_reinitialize_over_a_fixed_objective(self):
         api = self.api()
-        self.mutate(api.initialize_research, {"profile": "research", "target": None})
+        self.mutate(api.initialize_research, {"profile": "research", "target": None, "preparation_policy": "exhaustive-v1"})
         before = digest(self.store.snapshot())
-        self.assert_error("configuration_exists", lambda: self.mutate(api.initialize_research, {"profile": "verification", "target": None}))
+        self.assert_error("configuration_exists", lambda: self.mutate(api.initialize_research,
+            {"profile": "verification", "target": None, "preparation_policy": "exhaustive-v1"}))
         self.assertEqual(digest(self.store.snapshot()), before)
 
     def test_revalidation_checks_previous_contract_and_old_request_replays_after_release(self):
         api = self.api()
-        payload = {"profile": "research", "target": None}
+        payload = {"profile": "research", "target": None, "preparation_policy": "exhaustive-v1"}
         first = api.initialize_research(self.store, payload, expected_revision=0, request_id="initialize")
         self.assert_error("constitution_conflict", lambda: self.mutate(api.revalidate_constitution,
             {"previous_sha256": "0" * 64, "reason": "An unrelated policy must not be adopted as the predecessor."}))
@@ -106,7 +107,8 @@ class PrinciplesTests(LiteratureCase):
 
         with patch.object(api, "_constitution", side_effect=policy_after_concurrent_write):
             self.assert_error("stale_revision", lambda: api.initialize_research(self.store,
-                {"profile": "research", "target": {"kind": "objective", "id": "root", "statement": "The complete original objective."}},
+                {"profile": "research", "target": {"kind": "objective", "id": "root", "statement": "The complete original objective."},
+                 "preparation_policy": "exhaustive-v1"},
                 expected_revision=0, request_id="racing-init"))
         self.assertEqual(self.store.snapshot()["records"], {"note": {"one": {"text": "Concurrent work."}}})
 
@@ -115,9 +117,9 @@ class PreparationPolicyTests(LiteratureCase):
     def api(self):
         return importlib.import_module("research_harness.principles")
 
-    def test_default_policy_is_exhaustive_and_screened_is_recorded_explicitly(self):
+    def test_recorded_policy_is_reported_and_configurations_without_the_field_are_exhaustive(self):
         api = self.api()
-        self.mutate(api.initialize_research, {"profile": "research", "target": None})
+        self.mutate(api.initialize_research, {"profile": "research", "target": None, "preparation_policy": "exhaustive-v1"})
         records = self.store.snapshot()["records"]
         self.assertEqual(records["configuration"]["research"]["preparation_policy"], {"id": "exhaustive-v1"})
         self.assertEqual(api.preparation_policy(records), "exhaustive-v1")
@@ -135,7 +137,7 @@ class PreparationPolicyTests(LiteratureCase):
 
     def test_policy_change_names_the_current_policy_and_changes_the_configuration_digest(self):
         api = self.api()
-        self.mutate(api.initialize_research, {"profile": "research", "target": None})
+        self.mutate(api.initialize_research, {"profile": "research", "target": None, "preparation_policy": "exhaustive-v1"})
         before = api.configuration_report(self.store, "research")["digest"]
         self.assert_error("policy_conflict", lambda: self.mutate(api.change_policy,
                                                                   {"previous": "screened-v1", "policy": "exhaustive-v1", "reason": "x"}))
@@ -147,3 +149,19 @@ class PreparationPolicyTests(LiteratureCase):
     def test_distributed_constitution_is_version_three(self):
         self.assertEqual(self.api().constitution_contract()["version"], "3")
 
+    def test_new_workspaces_default_by_profile_and_legacy_configs_stay_exhaustive(self):
+        from research_harness.principles import default_policy, initialize_research, preparation_policy
+        self.assertEqual(default_policy("research"), "lineage-v1")
+        self.assertEqual(default_policy("verification"), "sampled-v1")
+        self.mutate(initialize_research, {"profile": "research", "target": None})
+        self.assertEqual(preparation_policy(self.store.snapshot()["records"]), "lineage-v1")
+        self.assertEqual(preparation_policy({"configuration": {"research": {"profile": "research"}}}), "exhaustive-v1")
+
+    def test_a_policy_belongs_to_one_profile(self):
+        from research_harness.principles import change_policy, initialize_research
+        self.assert_error("policy_inapplicable", lambda: self.mutate(initialize_research,
+            {"profile": "research", "target": None, "preparation_policy": "sampled-v1"}))
+        self.mutate(initialize_research, {"profile": "research", "target": None, "preparation_policy": "exhaustive-v1"})
+        self.assert_error("policy_inapplicable", lambda: self.mutate(change_policy,
+            {"previous": "exhaustive-v1", "policy": "sampled-v1", "reason": "Wrong profile."}))
+        self.mutate(change_policy, {"previous": "exhaustive-v1", "policy": "lineage-v1", "reason": "Adopt the lineage policy."})

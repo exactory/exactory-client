@@ -28,7 +28,7 @@ class DevelopmentCase(SynthesisCase):
         work = self.metadata()
         self.objective = {"kind": "objective", "id": "finite-square-bound",
                           "statement": "For every integer n in [0, 3], n squared is at most 9, with equality at n = 3."}
-        self.mutate(self.api("principles").initialize_research, {"profile": "research", "target": self.objective})
+        self.mutate(self.api("principles").initialize_research, {"profile": "research", "target": self.objective, "preparation_policy": "exhaustive-v1"})
         self.scope([work])
         self.links = [self.read_source(n) for n in range(1, 7)]
         self.complete_foundation(work)

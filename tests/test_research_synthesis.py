@@ -20,7 +20,7 @@ class SynthesisCase(LiteratureCase):
         if profile == "verification":
             capture = self.capture(work)
             target = {"kind": "work", "id": work, "source_id": capture["source_id"], "sha256": capture["original"]["sha256"]}
-        self.mutate(api.initialize_research, {"profile": profile, "target": target})
+        self.mutate(api.initialize_research, {"profile": profile, "target": target, "preparation_policy": "exhaustive-v1"})
         self.scope([work], profile=profile, **({"target": target} if profile == "verification" else {}))
         return work
 

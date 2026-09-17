@@ -23,7 +23,7 @@ class ResourceTests(LiteratureCase):
     def setUp(self):
         super().setUp()
         from research_harness.principles import initialize_research
-        self.mutate(initialize_research, {"profile": "research", "target": None})
+        self.mutate(initialize_research, {"profile": "research", "target": None, "preparation_policy": "exhaustive-v1"})
 
     def budget(self, **values):
         from research_harness.resources import set_budget

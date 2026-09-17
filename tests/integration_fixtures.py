@@ -47,7 +47,7 @@ def prepare_research(root, objective=None, *, candidate=False):
         "statement": "For every integer n in [0, 3], n squared is at most 9, with equality at n = 3."}
     config = case.store.snapshot()["records"].get("configuration", {}).get("research")
     if config is None:
-        case.mutate(case.api("principles").initialize_research, {"profile": "research", "target": case.objective})
+        case.mutate(case.api("principles").initialize_research, {"profile": "research", "target": case.objective, "preparation_policy": "exhaustive-v1"})
     elif config["target"] is None:
         case.mutate(case.api("principles").set_target, {"target": case.objective, "reason": "Fix the complete fixture objective before planning."})
     else:
