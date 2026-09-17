@@ -62,12 +62,14 @@ def _members(records, collection):
     if summary["pending"]:
         raise ResearchError("collection_pending", "Complete the population enumeration before drawing the sample",
                             {"pending": summary["pending"]})
-    members = []
+    # One entry per work: a work with several reading obligations keeps the last of them,
+    # which is the version the rest of the harness reads as version_ids[-1].
+    members = {}
     for item in summary["reading_obligations"]:
         work = records.get("work", {}).get(item["version_id"]) or {}
-        members.append({"work_id": item["work_id"], "version_id": item["version_id"],
-                        "month": (work.get("publication_date") or "")[:7]})
-    return members
+        members[item["work_id"]] = {"work_id": item["work_id"], "version_id": item["version_id"],
+                                    "month": (work.get("publication_date") or "")[:7]}
+    return list(members.values())
 
 
 def record_sample(store, payload, *, expected_revision, request_id):
@@ -83,6 +85,12 @@ def record_sample(store, payload, *, expected_revision, request_id):
         if collection is None:
             raise ResearchError("cohort_missing", "Select the frozen population collection", {"collection_id": value["collection_id"]})
         members = _members(records, collection)
+        population_digest = digest(sorted(m["work_id"] for m in members))
+        existing = current_sample(records)
+        if (existing is not None and existing["collection_id"] == value["collection_id"]
+                and existing["population_digest"] == population_digest):
+            raise ResearchError("sample_exists", "This verification already drew its sample; draw again only after the population changed",
+                                {"sample_id": existing["id"]})
         drawn = draw(members, value["size"], value["seed"])
         months = {}
         for item in members:
@@ -90,7 +98,7 @@ def record_sample(store, payload, *, expected_revision, request_id):
         for item in drawn:
             months[item["month"]]["sampled"] += 1
         record = {"id": value["id"], "collection_id": value["collection_id"], "seed": value["seed"], "size": value["size"],
-                  "population": len(members), "population_digest": digest(sorted(m["work_id"] for m in members)),
+                  "population": len(members), "population_digest": population_digest,
                   "months": months, "members": drawn, "revision": expected_revision + 1}
         return [immutable_record(records, "cohort_sample", value["id"], record),
                 ("cohort_sample_selection", "current", {"id": value["id"]})], record
@@ -104,14 +112,15 @@ def current_sample(records):
 
 
 def placements(records, sample):
-    """The placement judgment recorded on each sampled member's abstract reading, by version."""
-    found = {}
+    """The placement judgment recorded on each sampled member's abstract reading, by version.
+    Readings are taken in batch order, so the latest batch's placement is the one that stands."""
+    batches = records.get("reading_batch", {})
     wanted = {m["version_id"] for m in sample["members"]}
-    for reading in sorted(records.get("reading", {}).values(), key=lambda r: r["id"]):
-        placement = (reading.get("batch") or {}).get("placement")
-        if placement and reading["version_id"] in wanted and reading["assessment"]["status"] == "complete":
-            found[reading["version_id"]] = placement
-    return found
+    judged = [r for r in records.get("reading", {}).values()
+              if (r.get("batch") or {}).get("placement") and r["version_id"] in wanted
+              and r["assessment"]["status"] == "complete"]
+    judged.sort(key=lambda r: (batches.get(r["batch"]["batch_id"], {}).get("revision", 0), r["id"]))
+    return {r["version_id"]: r["batch"]["placement"] for r in judged}
 
 
 def prediction(records):
@@ -125,11 +134,14 @@ def prediction(records):
     unplaced = sum(p["position"] == "unplaced" for p in judged.values())
     placed = above + below
     if placed == 0:
-        return {"sample_id": sample["id"], "n": len(judged), "placed": 0, "above": above, "below": below, "unplaced": unplaced,
+        return {"sample_id": sample["id"], "size": len(sample["members"]), "n": len(judged), "placed": 0,
+                "above": above, "below": below, "unplaced": unplaced,
                 "percentile": None, "standard_error": None, "band": None, "widen_required": unplaced > UNPLACED_WIDEN}
     share = above / placed
     error = math.sqrt(share * (1 - share) / placed) * 100
-    percentile = round((1 - share) * 100)
-    band = {"best": max(1, round(percentile - error)), "worst": min(99, round(percentile + error))}
-    return {"sample_id": sample["id"], "n": len(judged), "placed": placed, "above": above, "below": below, "unplaced": unplaced,
+    # The platform states a percentile and a band as integers from 1 to 100, with best <= percentile <= worst.
+    percentile = min(100, max(1, round((1 - share) * 100)))
+    band = {"best": max(1, round(percentile - error)), "worst": min(100, round(percentile + error))}
+    return {"sample_id": sample["id"], "size": len(sample["members"]), "n": len(judged), "placed": placed,
+            "above": above, "below": below, "unplaced": unplaced,
             "percentile": percentile, "standard_error": round(error, 2), "band": band, "widen_required": unplaced > UNPLACED_WIDEN}

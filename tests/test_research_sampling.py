@@ -1,7 +1,8 @@
 """Sampled verification preparation: the draw, the record, and the prediction."""
 
+import unittest
+
 from literature_fixtures import FIELDS, LiteratureCase
-from research_harness.errors import ResearchError
 from research_harness import sampling
 
 
@@ -50,6 +51,8 @@ class SampleRecordTests(LiteratureCase):
         self.assertEqual(saved["seed"], "abc")
         self.assert_error("invalid_input", lambda: self.mutate(sampling.record_sample,
             {"id": "sample-2", "collection_id": self.collection, "size": 101, "seed": "abc"}))
+        self.assert_error("sample_exists", lambda: self.mutate(sampling.record_sample,
+            {"id": "sample-3", "collection_id": self.collection, "size": 5, "seed": "xyz"}))
 
     def test_prediction_from_placements(self):
         from research_harness.reading import record_reading_batch
@@ -67,3 +70,50 @@ class SampleRecordTests(LiteratureCase):
         self.assertEqual(report["percentile"], 50)
         self.assertEqual(report["band"], {"best": 15, "worst": 85})
         self.assertFalse(report["widen_required"])
+
+
+class PredictionTests(unittest.TestCase):
+    """The prediction reads recorded placements; these author the records a batch reading leaves."""
+
+    def make_sample_records(self, count):
+        members = [{"version_id": "v%d" % index} for index in range(count)]
+        return {"cohort_sample": {"sample-1": {"id": "sample-1", "members": members}},
+                "cohort_sample_selection": {"current": {"id": "sample-1"}},
+                "reading_batch": {}, "reading": {}}
+
+    def place(self, records, version_id, position, *, reading_id, batch_id, revision):
+        records["reading_batch"][batch_id] = {"id": batch_id, "revision": revision}
+        records["reading"][reading_id] = {"id": reading_id, "version_id": version_id,
+            "assessment": {"status": "complete"},
+            "batch": {"batch_id": batch_id, "placement": {"position": position, "reason": "Authored placement."}}}
+
+    def test_every_placed_member_below_predicts_the_top_of_the_range(self):
+        records = self.make_sample_records(3)
+        for index in range(3):
+            self.place(records, "v%d" % index, "below", reading_id="reading-%d" % index, batch_id="batch-1", revision=1)
+        report = sampling.prediction(records)
+        self.assertEqual((report["size"], report["n"], report["placed"]), (3, 3, 3))
+        self.assertEqual(report["percentile"], 100)
+        self.assertEqual(report["band"], {"best": 100, "worst": 100})
+
+    def test_every_placed_member_above_predicts_the_bottom_of_the_range(self):
+        records = self.make_sample_records(2)
+        for index in range(2):
+            self.place(records, "v%d" % index, "above", reading_id="reading-%d" % index, batch_id="batch-1", revision=1)
+        report = sampling.prediction(records)
+        self.assertEqual(report["percentile"], 1)
+        self.assertEqual(report["band"], {"best": 1, "worst": 1})
+
+    def test_the_later_batch_overrides_an_earlier_placement_of_the_same_version(self):
+        records = self.make_sample_records(1)
+        self.place(records, "v0", "above", reading_id="reading-b", batch_id="batch-1", revision=1)
+        self.place(records, "v0", "below", reading_id="reading-a", batch_id="batch-2", revision=2)
+        report = sampling.prediction(records)
+        self.assertEqual((report["above"], report["below"], report["percentile"]), (0, 1, 100))
+
+    def test_a_sample_read_in_part_reports_its_size_beside_the_count_read(self):
+        records = self.make_sample_records(5)
+        self.place(records, "v0", "above", reading_id="reading-0", batch_id="batch-1", revision=1)
+        self.place(records, "v1", "unplaced", reading_id="reading-1", batch_id="batch-1", revision=1)
+        report = sampling.prediction(records)
+        self.assertEqual((report["size"], report["n"], report["placed"], report["unplaced"]), (5, 2, 1, 1))
