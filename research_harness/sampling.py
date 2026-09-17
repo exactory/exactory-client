@@ -150,3 +150,32 @@ def prediction(records):
 def search_readings(records):
     """Abstract readings a verification registered from targeted search hits."""
     return sorted((r for r in records.get("reading", {}).values() if (r.get("batch") or {}).get("search_hit")), key=lambda r: r["id"])
+
+
+def sample_obligations(records, collection, inventory):
+    """The sampled policy's obligations for one collection: a current sample, and a placed abstract reading per sampled member."""
+    sample = current_sample(records)
+    counts = {"sampled": 0, "read": 0, "placed": 0}
+    if sample is None or sample["collection_id"] != collection["id"]:
+        return [obligation("sample_missing", "Draw the stratified random sample of this population before reading.", collection_id=collection["id"])], counts
+    population = digest(sorted({item["work_id"] for item in inventory}))
+    if population != sample["population_digest"]:
+        return [obligation("sample_stale", "The population changed after the sample was drawn; draw a new sample.", sample_id=sample["id"])], counts
+    by_version = {item["version_id"]: item for item in inventory}
+    judged = placements(records, sample)
+    found = []
+    for member in sample["members"]:
+        counts["sampled"] += 1
+        item = by_version.get(member["version_id"])
+        if item is None or item["reading_id"] is None:
+            found.append(obligation("sample_reading_missing", "Read the complete abstract of this sampled member.",
+                                    version_id=member["version_id"], work_id=member["work_id"], collection_id=collection["id"],
+                                    paths=(item or {}).get("paths", [])))
+            continue
+        counts["read"] += 1
+        if member["version_id"] not in judged:
+            found.append(obligation("placement_missing", "Record the placement judgment on this sampled member's reading.",
+                                    version_id=member["version_id"], work_id=member["work_id"], collection_id=collection["id"]))
+        else:
+            counts["placed"] += 1
+    return found, counts

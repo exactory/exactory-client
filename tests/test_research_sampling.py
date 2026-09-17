@@ -117,3 +117,69 @@ class PredictionTests(unittest.TestCase):
         self.place(records, "v1", "unplaced", reading_id="reading-1", batch_id="batch-1", revision=1)
         report = sampling.prediction(records)
         self.assertEqual((report["size"], report["n"], report["placed"], report["unplaced"]), (5, 2, 1, 1))
+
+
+class CohortGateTests(LiteratureCase):
+    def codes(self, collection):
+        from research_harness.cohort_evidence import cohort_reading_report
+        report = cohort_reading_report(self.store, [collection])
+        return [o["code"] for o in report["obligations"]], [n["code"] for n in report.get("notices", [])]
+
+    def test_lineage_reads_no_member_and_reports_pending_enumeration_as_a_notice(self):
+        from research_harness.principles import initialize_research
+        self.mutate(initialize_research, {"profile": "research", "target": None, "preparation_policy": "lineage-v1"})
+        collection = self.cohort((1, 2, 3))
+        obligations, notices = self.codes(collection)
+        self.assertEqual(obligations, [])
+        self.assertNotIn("cohort_abstract_reading_missing", obligations)
+
+    def test_a_paused_enumeration_under_lineage_is_a_notice_not_an_obligation(self):
+        from research_fixtures import client
+        from research_harness.acquisition import collect_cohort
+        from research_harness.principles import initialize_research
+        self.mutate(initialize_research, {"profile": "research", "target": None, "preparation_policy": "lineage-v1"})
+        http, _, _ = client([(429, {"Retry-After": "120"}, b"Limited")], max_retries=0)
+        collection = self.mutate(collect_cohort, {"corpus": "arxiv", "primaryCategory": "cs.LG",
+            "windowStart": "2026-01-01", "windowEnd": "2026-01-31"}, http=http, max_requests=1)["collection_id"]
+        obligations, notices = self.codes(collection)
+        self.assertEqual(obligations, [])
+        self.assertIn("collection_pending", notices)
+
+    def test_the_sample_reads_stale_once_the_population_grows_and_stays_current_when_a_work_repeats(self):
+        from research_harness.cohort_evidence import cohort_reading_report
+        from research_harness.principles import initialize_research
+        self.mutate(initialize_research, {"profile": "verification", "target": self.verification_target(),
+                                          "preparation_policy": "sampled-v1"})
+        collection_id = self.cohort((1, 2, 3))
+        self.mutate(sampling.record_sample, {"id": "s", "collection_id": collection_id, "size": 2, "seed": "x"})
+        records = self.store.snapshot()["records"]
+        collection = records["collection"][collection_id]
+        report = cohort_reading_report(self.store, [collection_id])
+        self.assertEqual(report["counts"]["sample"][collection_id], {"sampled": 2, "read": 0, "placed": 0})
+        inventory = report["inventory"]
+        repeated = inventory + [dict(inventory[0], version_id=inventory[0]["version_id"][:-1] + "2")]
+        self.assertNotIn("sample_stale", [o["code"] for o in sampling.sample_obligations(records, collection, repeated)[0]])
+        grown = inventory + [{"work_id": "arxiv:2601.00099", "version_id": "arxiv:2601.00099v1", "paths": [], "reading_id": None}]
+        found, counts = sampling.sample_obligations(records, collection, grown)
+        self.assertEqual([o["code"] for o in found], ["sample_stale"])
+        self.assertEqual(counts, {"sampled": 0, "read": 0, "placed": 0})
+
+    def test_sampled_needs_a_sample_and_every_sampled_abstract_with_a_placement(self):
+        from research_harness.principles import initialize_research
+        from research_harness.reading import record_reading_batch
+        self.mutate(initialize_research, {"profile": "verification", "target": self.verification_target(),
+                                          "preparation_policy": "sampled-v1"})
+        collection = self.cohort((1, 2, 3))
+        self.assertIn("sample_missing", self.codes(collection)[0])
+        self.mutate(sampling.record_sample, {"id": "s", "collection_id": collection, "size": 2, "seed": "x"})
+        obligations, _ = self.codes(collection)
+        self.assertEqual(obligations.count("sample_reading_missing"), 2)
+        members = sampling.current_sample(self.store.snapshot()["records"])["members"]
+        plain = {"version_id": members[0]["version_id"], "note": "Read the complete abstract.",
+                 "notes": {f: {"text": "The abstract discusses " + f + ".", "status": "present"} for f in FIELDS}}
+        self.mutate(record_reading_batch, {"id": "b1", "depth": "abstract", "items": [plain]})
+        obligations, _ = self.codes(collection)
+        self.assertIn("placement_missing", obligations)
+        placed = dict(plain, placement={"position": "above", "reason": "r"})
+        self.mutate(record_reading_batch, {"id": "b2", "depth": "abstract", "items": [placed]})
+        self.assertNotIn("placement_missing", self.codes(collection)[0])
