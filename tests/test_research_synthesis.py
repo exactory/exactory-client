@@ -751,15 +751,20 @@ class LineageInnovationTests(SynthesisCase):
         api = self.api()
         self.mutate(api.record_standards, self.standards(links[0]))
         cases = [self.case(link, n) for n, link in enumerate(links[:5], 1)]
-        codes = lambda: {o["code"] for o in self.mutate(api.record_innovation, self.innovation(cases, "inn-" + str(self.sequence)))["result"]["obligations"]}
-        self.assertIn("innovation_candidates_missing", codes())
+
+        def collect_codes(chosen, identifier):
+            result = self.mutate(api.record_innovation, self.innovation(chosen, identifier))
+            return {o["code"] for o in result["result"]["obligations"]}
+
+        self.assertIn("innovation_candidates_missing", collect_codes(cases, "inn-unread"))
         for link in links[:10]:
             self.candidate(link)
-        found = codes()
+        found = collect_codes(cases, "inn-five")
         self.assertNotIn("innovation_candidates_missing", found)
         self.assertNotIn("within_field_case_missing", found)
         self.assertNotIn("external_cases_insufficient", found)
-        six = cases + [self.case(links[10], 6)]
-        found = {o["code"] for o in self.mutate(api.record_innovation, self.innovation(six, "inn-six"))["result"]["obligations"]}
+        self.assertNotIn("innovation_case_not_candidate", found)
+        self.assertIn("external_cases_insufficient", collect_codes(cases[:4], "inn-four"))
+        found = collect_codes(cases + [self.case(links[10], 6)], "inn-six")
         self.assertIn("external_cases_excess", found)
         self.assertIn("innovation_case_not_candidate", found)
