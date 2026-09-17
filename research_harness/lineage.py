@@ -33,9 +33,10 @@ def candidate_families(records):
 
 
 def loop_state(records, profile="research"):
-    """Per purpose: loop readings, covering readings, distinct queries, and whether the purpose is covered."""
+    """Per purpose: loop readings, covering readings, the distinct queries tried, and whether the purpose is covered."""
     readings = loop_readings(records)
-    searches = [s for s in records.get("literature_search", {}).values() if s["profile"] == profile]
+    searches = [s for s in records.get("literature_search", {}).values()
+                if s["profile"] == profile and s["purpose"] in SEARCH_PURPOSES]
     purposes = {}
     for purpose in SEARCH_PURPOSES:
         hits = [r for r in readings if purpose in r["batch"]["loop"]["purposes"]]
@@ -43,13 +44,16 @@ def loop_state(records, profile="research"):
         own = [s for s in searches if s["purpose"] == purpose]
         queries = {q for s in own for q in s["queries"]}
         empty = len(queries) >= 2 and not any(d["disposition"] in COVERING for s in own for d in s.get("dispositions", []))
-        purposes[purpose] = {"readings": len(hits), "relevant": len(relevant), "queries": len(queries), "covered": bool(relevant) or empty}
+        purposes[purpose] = {"readings": len(hits), "relevant": len(relevant), "queries": len(queries),
+                             "queries_tried": sorted(queries), "covered": bool(relevant) or empty}
     return {"readings": len(readings), "limit": LOOP_LIMIT, "purposes": purposes,
             "digest": digest([sorted(r["id"] for r in readings), sorted(s["id"] for s in searches)])}
 
 
 def record_loop_closure(store, payload, *, expected_revision, request_id):
-    """Close the loop with {id, purposes: {purpose: {status: covered|gap, note}}} against the current loop state."""
+    """Close the loop with {id, purposes: {purpose: {status: covered|gap, note}}} against the current loop state.
+
+    Each closed purpose keeps the queries tried, so a recorded gap names the searches it rests on."""
     def prepare(records, value):
         fields(value, ("id", "purposes"))
         text(value["id"], "Closure ID")
@@ -58,6 +62,7 @@ def record_loop_closure(store, payload, *, expected_revision, request_id):
         state = loop_state(records)
         if not isinstance(value["purposes"], dict) or set(value["purposes"]) != set(SEARCH_PURPOSES):
             raise ResearchError("invalid_input", "Close every one of the five purposes exactly once")
+        closed = {}
         for purpose, item in value["purposes"].items():
             fields(item, ("status", "note"))
             text(item["note"], "Closure note for " + purpose)
@@ -70,7 +75,8 @@ def record_loop_closure(store, payload, *, expected_revision, request_id):
                 raise ResearchError("invalid_input", "A covered purpose is not a gap", {"purpose": purpose})
             if item["status"] == "gap" and current["queries"] < 2 and state["readings"] < LOOP_LIMIT:
                 raise ResearchError("invalid_input", "A gap needs two distinct queries tried or the loop at its limit", {"purpose": purpose})
-        record = {"id": value["id"], "purposes": value["purposes"], "loop_digest": state["digest"], "readings": state["readings"],
+            closed[purpose] = dict(item, queries_tried=current["queries_tried"])
+        record = {"id": value["id"], "purposes": closed, "loop_digest": state["digest"], "readings": state["readings"],
                   "revision": expected_revision + 1}
         return [immutable_record(records, "loop_closure", value["id"], record), ("loop_closure_selection", "current", {"id": value["id"]})], record
 

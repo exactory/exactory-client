@@ -23,8 +23,9 @@ unrelated reference does not invalidate it. Native registry captures
 use their parser; web/MCP JSON requires results_pointer into the actual array
 and the original import mappings for every result. Query provenance is a saved
 response locator or the exact query in its captured URL. Under the bounded
-preparation policies each captured response carries at most ten results. Search
-records describe bounded searches and do not establish universal novelty.
+preparation policies each captured query carries at most ten results across all
+its responses. Search records describe bounded searches and do not establish
+universal novelty.
 """
 
 import copy
@@ -351,26 +352,29 @@ def record_search(store, payload, *, expected_revision, request_id):
         date = timestamp(value["captured_at"])
         if not isinstance(value["responses"], list) or not value["responses"]:
             raise ResearchError("invalid_search", "An empty user list without original captured responses is not a search")
-        found, pending, queries, pages = set(), [], set(), []
+        found, pending, pages, by_query = set(), [], [], {}
         evaluation = Evaluation(records, ArtifactStore(store.root))
         from .lineage import HITS_PER_QUERY, LINEAGE
         from .sampling import SAMPLED
         bounded = preparation_policy(records) in (LINEAGE, SAMPLED)
         for response in value["responses"]:
             source, identifiers, gaps, page = _search_response(records, evaluation, response, value["scope"])
-            if bounded and len(identifiers) > HITS_PER_QUERY:
-                raise ResearchError("invalid_search", "Capture at most 10 hits per query under this policy; rank and keep the top 10",
-                                    {"found": len(identifiers), "limit": HITS_PER_QUERY})
             if timestamp(source["captured_at"]) > date:
                 raise ResearchError("invalid_search", "A search cannot precede its captured responses")
             found.update(identifiers)
+            by_query.setdefault(response["query"], set()).update(identifiers)
             pending.extend(gaps)
-            queries.add(response["query"])
             if page is not None:
                 pages.append(page)
+        if bounded:
+            for query, hits in sorted(by_query.items()):
+                if len(hits) > HITS_PER_QUERY:
+                    raise ResearchError("invalid_search", "Capture at most " + str(HITS_PER_QUERY)
+                                        + " hits per query under this policy; rank and keep the top " + str(HITS_PER_QUERY),
+                                        {"query": query, "found": len(hits), "limit": HITS_PER_QUERY})
         page_groups, enumeration_pending = enumerate_pages(pages)
         pending.extend(enumeration_pending)
-        if found != set(value["found_work_ids"]) or queries != set(value["queries"]):
+        if found != set(value["found_work_ids"]) or set(by_query) != set(value["queries"]):
             raise ResearchError("invalid_search", "Search results and queries must account for every saved response")
         if not set(value["cited_work_ids"]) <= found or value["verdict"] == "replicate-extend" and not value["cited_work_ids"]:
             raise ResearchError("invalid_search", "A replicate-extend verdict must cite acquired work from the search")
