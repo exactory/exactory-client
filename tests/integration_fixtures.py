@@ -46,6 +46,10 @@ def prepare_research(root, objective=None, *, candidate=False):
     case.objective = objective or {"kind": "objective", "id": "finite-square-bound",
         "statement": "For every integer n in [0, 3], n squared is at most 9, with equality at n = 3."}
     config = case.store.snapshot()["records"].get("configuration", {}).get("research")
+    # A study the product CLI initialized records the research default, lineage-v1; these integration tests prepare under the legacy policy.
+    if config is not None and config["preparation_policy"]["id"] != "exhaustive-v1":
+        case.mutate(case.api("principles").change_policy, {"previous": config["preparation_policy"]["id"], "policy": "exhaustive-v1",
+                                                           "reason": "The integration fixture prepares the study under the legacy policy."})
     if config is None:
         case.mutate(case.api("principles").initialize_research, {"profile": "research", "target": case.objective, "preparation_policy": "exhaustive-v1"})
     elif config["target"] is None:
