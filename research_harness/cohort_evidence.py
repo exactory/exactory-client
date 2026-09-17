@@ -129,8 +129,8 @@ def _cohort_report(evaluation, collection_ids, target):
     evaluation.counters["cohort_reports"] += 1
     records, artifacts = evaluation.records, evaluation
     summaries, obligations, inventory, dependencies, readings = [], [], [], {}, {}
-    screened = preparation_policy(records) == "screened-v1"
     policy = preparation_policy(records)
+    screened = policy == "screened-v1"
     lineage, sampled = policy == LINEAGE, policy == SAMPLED
     notices, sample_counts = [], {}
     screening_counts = {}

@@ -345,7 +345,7 @@ class ResearchPreparationTests(DevelopmentCase):
         return json.loads(result.stdout)
 
     def test_null_objective_preparation_order_reaches_ideate_after_actual_reading(self):
-        initialized = self.cli("exactory-lab", "init", "--slug", "ordered")
+        initialized = self.cli("exactory-lab", "init", "--slug", "ordered", "--preparation-policy", "exhaustive-v1")
         self.assertEqual(initialized.returncode, 0, initialized.stderr)
         self.assertIsNone(self.store.snapshot()["records"]["configuration"]["research"]["target"])
         self.assertEqual(self.cli("exactory-lab", "state", "set", "--stage", "cohort").returncode, 0)
