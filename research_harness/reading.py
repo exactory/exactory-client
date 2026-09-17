@@ -36,7 +36,8 @@ from .visual_assets import asset_dependencies
 
 
 NOTE_FIELDS = ("problem", "claims", "assumptions", "methods", "evidence", "limitations", "relevance")
-FULLTEXT_PURPOSES = ("major_claim", "novelty", "innovation", "validity", "exemplar")
+FULLTEXT_PURPOSES = ("major_claim", "novelty", "innovation", "validity", "exemplar", "lineage", "classic", "core", "contradiction")
+DEPENDENT_PURPOSES = ("lineage", "classic", "core")
 BATCH_LIMIT = 100
 RELEVANCE = ("none", "weak", "strong")
 
@@ -385,14 +386,21 @@ def fulltext_coverage(records, artifacts, version_id, *, target=None):
 
 def require_fulltext(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
-        fields(value, ("id", "profile", "version_id", "purpose", "reason"), ("historical_cutoff",))
+        fields(value, ("id", "profile", "version_id", "purpose", "reason"), ("historical_cutoff", "depends_on"))
         profile_name(value["profile"])
         exact_work(records, value["version_id"])
         text(value["reason"], "Full-depth reason")
         if value["purpose"] not in FULLTEXT_PURPOSES:
             raise ResearchError("invalid_input", "A full-depth dependency needs a supported consequential purpose")
+        if value["purpose"] in DEPENDENT_PURPOSES:
+            text(value.get("depends_on"), "The claim, lineage entry or finding that depends on this source")
         if value.get("historical_cutoff") is not None:
             iso_date(value["historical_cutoff"])
+        if value["purpose"] == "core":
+            from .sampling import CORE_LIMIT, core_requirements
+            if len(core_requirements(records)) >= CORE_LIMIT:
+                raise ResearchError("core_limit_reached", "A verification reads at most " + str(CORE_LIMIT) + " core papers in full",
+                                    {"limit": CORE_LIMIT})
         value = dict(value, critical=True)
         return [immutable_record(records, "fulltext_requirement", value["id"], value)], value
 

@@ -295,3 +295,21 @@ class ExtractionOptionTests(LiteratureCase):
         coverage = fulltext_coverage(self.store.snapshot()["records"], self.artifacts, a)
         self.assertTrue(coverage["complete"])
 
+
+class FulltextPurposeTests(LiteratureCase):
+    def requirement(self, number, purpose, **extra):
+        return dict({"id": "req-" + str(number), "profile": "verification", "version_id": self.metadata(number),
+                     "purpose": purpose, "reason": "The verdict rests on this source."}, **extra)
+
+    def test_lineage_classic_and_core_name_what_depends_on_them(self):
+        from research_harness.reading import require_fulltext
+        self.assert_error("invalid_input", lambda: self.mutate(require_fulltext, self.requirement(1, "core")))
+        saved = self.mutate(require_fulltext, self.requirement(2, "core", depends_on="finding-1"))["result"]
+        self.assertEqual(saved["depends_on"], "finding-1")
+        self.mutate(require_fulltext, self.requirement(3, "contradiction"))
+
+    def test_core_papers_stop_at_ten(self):
+        from research_harness.reading import require_fulltext
+        for number in range(1, 11):
+            self.mutate(require_fulltext, self.requirement(number, "core", depends_on="finding-" + str(number)))
+        self.assert_error("core_limit_reached", lambda: self.mutate(require_fulltext, self.requirement(11, "core", depends_on="finding-11")))
