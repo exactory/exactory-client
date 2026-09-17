@@ -47,6 +47,10 @@ class LiteratureCase(unittest.TestCase):
                             expected_revision=self.store.revision, request_id="refs-" + str(self.sequence))
         return identifier
 
+    def verification_target(self, number=999):
+        """An unpinned verification target: the work is registered, its main document is not captured yet."""
+        return {"kind": "work", "id": self.metadata(number), "source_id": None, "sha256": None}
+
     def cohort(self, numbers=(1, 2, 3)):
         http, _, _ = client([xml_response(atom([entry("2601.%05dv1" % n,
             abstract="Source %d studies bounded sequences and reports a finite example." % n) for n in numbers], total=len(numbers)))])
