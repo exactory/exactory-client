@@ -3,7 +3,7 @@ import importlib
 import json
 from unittest.mock import patch
 
-from literature_fixtures import LiteratureCase
+from literature_fixtures import FIELDS, LiteratureCase
 from research_harness.acquisition import import_response
 from research_harness.literature import foundation_report, import_bundle, record_search
 from research_harness.reading import record_reading
@@ -727,3 +727,39 @@ class SectionDependencyTests(SynthesisCase):
         other.scope([b], [wider])
         self.assertNotEqual(first, foundation_report(other.store, "research")["population_digest"])
 
+
+
+class LineageInnovationTests(SynthesisCase):
+    def configured(self, profile="research"):
+        api = self.api("principles")
+        work = self.metadata()
+        target = {"kind": "objective", "id": "full-objective", "statement": "Establish finite bounds for all bounded input sequences."}
+        self.mutate(api.initialize_research, {"profile": profile, "target": target, "preparation_policy": "lineage-v1"})
+        self.scope([work])
+        return work
+
+    def candidate(self, link):
+        from research_harness.reading import record_reading_batch
+        item = {"version_id": link["version_id"], "note": "Read the complete abstract.",
+                "notes": {f: {"text": "The abstract discusses " + f + ".", "status": "present"} for f in FIELDS}, "innovation_candidate": True}
+        self.sequence += 1
+        self.mutate(record_reading_batch, {"id": "cand-" + str(self.sequence), "depth": "abstract", "items": [item]})
+
+    def test_exactly_five_external_cases_chosen_from_ten_candidates(self):
+        self.configured()
+        links = [self.read_source(n) for n in range(2, 13)]
+        api = self.api()
+        self.mutate(api.record_standards, self.standards(links[0]))
+        cases = [self.case(link, n) for n, link in enumerate(links[:5], 1)]
+        codes = lambda: {o["code"] for o in self.mutate(api.record_innovation, self.innovation(cases, "inn-" + str(self.sequence)))["result"]["obligations"]}
+        self.assertIn("innovation_candidates_missing", codes())
+        for link in links[:10]:
+            self.candidate(link)
+        found = codes()
+        self.assertNotIn("innovation_candidates_missing", found)
+        self.assertNotIn("within_field_case_missing", found)
+        self.assertNotIn("external_cases_insufficient", found)
+        six = cases + [self.case(links[10], 6)]
+        found = {o["code"] for o in self.mutate(api.record_innovation, self.innovation(six, "inn-six"))["result"]["obligations"]}
+        self.assertIn("external_cases_excess", found)
+        self.assertIn("innovation_case_not_candidate", found)
