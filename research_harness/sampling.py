@@ -145,3 +145,8 @@ def prediction(records):
     return {"sample_id": sample["id"], "size": len(sample["members"]), "n": len(judged), "placed": placed,
             "above": above, "below": below, "unplaced": unplaced,
             "percentile": percentile, "standard_error": round(error, 2), "band": band, "widen_required": unplaced > UNPLACED_WIDEN}
+
+
+def search_readings(records):
+    """Abstract readings a verification registered from targeted search hits."""
+    return sorted((r for r in records.get("reading", {}).values() if (r.get("batch") or {}).get("search_hit")), key=lambda r: r["id"])

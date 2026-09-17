@@ -1,6 +1,6 @@
 import copy
 
-from literature_fixtures import LiteratureCase
+from literature_fixtures import FIELDS, LiteratureCase
 from research_harness.literature import foundation_report, import_bundle
 from research_harness.reading import require_fulltext, record_reading, validate_read_evidence
 
@@ -313,3 +313,48 @@ class FulltextPurposeTests(LiteratureCase):
         for number in range(1, 11):
             self.mutate(require_fulltext, self.requirement(number, "core", depends_on="finding-" + str(number)))
         self.assert_error("core_limit_reached", lambda: self.mutate(require_fulltext, self.requirement(11, "core", depends_on="finding-11")))
+
+
+class BatchExtrasTests(LiteratureCase):
+    def note(self, version, **extra):
+        return dict({"version_id": version, "note": "Read the complete abstract.",
+                     "notes": {f: {"text": "The abstract discusses " + f + ".", "status": "present"} for f in FIELDS}}, **extra)
+
+    def batch(self, items, batch_id="b"):
+        from research_harness.reading import record_reading_batch
+        self.sequence += 1
+        return self.mutate(record_reading_batch, {"id": batch_id + str(self.sequence), "depth": "abstract", "items": items})
+
+    def test_loop_extras_need_the_lineage_policy_and_a_known_disposition(self):
+        from research_harness.principles import initialize_research
+        self.mutate(initialize_research, {"profile": "research", "target": None, "preparation_policy": "exhaustive-v1"})
+        version = self.metadata(1)
+        loop = {"purposes": ["direct"], "disposition": "relevant", "source": "search"}
+        self.assert_error("invalid_batch", lambda: self.batch([self.note(version, loop=loop)]))
+
+    def test_loop_readings_stop_at_the_limit(self):
+        from research_harness import lineage
+        from research_harness.principles import initialize_research
+        self.mutate(initialize_research, {"profile": "research", "target": None, "preparation_policy": "lineage-v1"})
+        versions = [self.metadata(n) for n in range(1, lineage.LOOP_LIMIT + 2)]
+        loop = {"purposes": ["recent"], "disposition": "out_of_scope", "source": "population"}
+        for start in range(0, lineage.LOOP_LIMIT, 50):
+            self.batch([self.note(v, loop=loop) for v in versions[start:start + 50]])
+        self.assertEqual(len(lineage.loop_readings(self.store.snapshot()["records"])), lineage.LOOP_LIMIT)
+        self.assert_error("loop_limit_reached", lambda: self.batch([self.note(versions[-1], loop=loop)]))
+        self.assert_error("invalid_batch", lambda: self.batch([self.note(versions[-1], loop={"purposes": ["nowhere"], "disposition": "relevant", "source": "search"})]))
+
+    def test_placement_needs_the_sample_and_search_hits_stop_at_twenty(self):
+        from research_harness import sampling
+        from research_harness.principles import initialize_research
+        self.mutate(initialize_research, {"profile": "verification", "target": self.verification_target(),
+                                          "preparation_policy": "sampled-v1"})
+        collection = self.cohort((1, 2))
+        outside = self.metadata(50)
+        self.assert_error("invalid_batch", lambda: self.batch([self.note(outside, placement={"position": "above", "reason": "r"})]))
+        self.mutate(sampling.record_sample, {"id": "s", "collection_id": collection, "size": 2, "seed": "x"})
+        sampled = sampling.current_sample(self.store.snapshot()["records"])["members"][0]["version_id"]
+        self.batch([self.note(sampled, placement={"position": "below", "reason": "r"})])
+        hits = [self.metadata(n) for n in range(60, 60 + sampling.SEARCH_READING_LIMIT + 1)]
+        self.batch([self.note(v, search_hit=True) for v in hits[:-1]])
+        self.assert_error("search_reading_limit_reached", lambda: self.batch([self.note(hits[-1], search_hit=True)]))
