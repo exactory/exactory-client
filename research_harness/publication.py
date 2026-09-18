@@ -186,11 +186,45 @@ def record_manuscript_review(store, payload, *, expected_revision, request_id):
                              expected_revision=expected_revision, request_id=request_id)
 
 
+def _citation_tokens(work):
+    """The strings whose presence in a bibliography counts as a citation of this work."""
+    tokens = []
+    for identifier in [work["id"], *work.get("aliases", [])]:
+        scheme, _, value = identifier.partition(":")
+        if scheme in ("arxiv", "doi") and value:
+            tokens.append(value.casefold())
+            if scheme == "arxiv":
+                tokens.append(value.casefold().rsplit("v", 1)[0])
+    title = " ".join((work.get("title") or "").casefold().split())
+    if title:
+        tokens.append(title)
+    return tokens
+
+
+def lineage_citation_obligations(records, artifacts, bundle):
+    """Every lineage and classic entry is cited in the pinned bibliography (lineage-v1)."""
+    from .lineage import LINEAGE
+    from .principles import preparation_policy
+    if preparation_policy(records) != LINEAGE:
+        return []
+    bibliography = " ".join(artifacts.read(bundle["files"]["bibliography"]["artifact"]).decode("utf-8").casefold().split())
+    found = []
+    for requirement in sorted(records.get("fulltext_requirement", {}).values(), key=lambda r: r["id"]):
+        if requirement["profile"] != "research" or requirement["purpose"] not in ("lineage", "classic"):
+            continue
+        work = records.get("work", {}).get(requirement["version_id"])
+        if work is None or not any(token in bibliography for token in _citation_tokens(work)):
+            found.append(obligation("lineage_citation_missing", "Cite this lineage or classic entry in the manuscript bibliography.",
+                                    version_id=requirement["version_id"], title=(work or {}).get("title")))
+    return found
+
+
 def publication_state(records, artifacts, action="publication"):
     artifacts = Evaluation.of(records, artifacts)
     bundle, reviews, obligations = None, [], []
     try:
         bundle = _bundle(records, artifacts)
+        obligations.extend(lineage_citation_obligations(records, artifacts, bundle))
         cores = {}
         for saved in records.get("manuscript_review", {}).values():
             if saved["bundle_digest"] == bundle["digest"]:

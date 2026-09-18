@@ -109,6 +109,37 @@ class ResearchPublicationTests(DevelopmentCase):
             self.root / "other.pdf", self.root / "draft/abstract.txt", None))
         self.assertEqual(self.store.snapshot(), before)
 
+    def select_versions(self, count):
+        """The first registered work versions in id order; the fixture study registers six."""
+        return sorted(self.store.snapshot()["records"]["work"])[:count]
+
+    def require_entries(self, entries):
+        """Pin the bundle, adopt lineage-v1, then require each (purpose, version) in full; returns the pinned bundle."""
+        from research_harness.principles import change_policy
+        from research_harness.reading import require_fulltext
+        api = self.publication()
+        bundle = self.mutate(api.prepare_publication, self.bundle_payload())["result"]
+        self.mutate(change_policy, {"previous": "exhaustive-v1", "policy": "lineage-v1", "reason": "Adopt the lineage policy."})
+        for purpose, version in entries:
+            self.mutate(require_fulltext, {"id": purpose + "-1", "profile": "research", "version_id": version,
+                                           "purpose": purpose, "reason": "The " + purpose + " paper.", "depends_on": "claim-1"})
+        return bundle
+
+    def collect_citation_codes(self, bundle):
+        from research_harness.publication import lineage_citation_obligations
+        return [o["code"] for o in lineage_citation_obligations(self.store.snapshot()["records"], self.artifacts, bundle)]
+
+    def test_lineage_and_classic_entries_must_be_cited(self):
+        parent, classic = self.select_versions(2)
+        bundle = self.require_entries([("lineage", parent), ("classic", classic)])
+        self.assertEqual(self.collect_citation_codes(bundle), ["lineage_citation_missing"] * 2)
+
+    def test_a_cited_lineage_entry_closes_the_citation_obligation(self):
+        parent = self.select_versions(1)[0]
+        (self.root / "draft/references.bib").write_text(
+            "@article{parent,title={Authored parent},eprint={" + parent[6:] + "}}\n")
+        self.assertEqual(self.collect_citation_codes(self.require_entries([("lineage", parent)])), [])
+
     def remote_binding(self):
         api = self.publication()
         bundle = self.mutate(api.prepare_publication, self.bundle_payload())["result"]
