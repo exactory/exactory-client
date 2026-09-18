@@ -2,7 +2,8 @@
 
 A prediction is the percentile a blind assessor expects the paper to reach in the study's
 frozen cohort, in the shape the market's verdict carries. Predictions are recorded and
-summarized as results; no gate rule reads them.
+summarized as results. The next pin and the round decision need a complete measurement,
+three paired reviews and predictions; no gate rule reads their values.
 """
 
 from statistics import median

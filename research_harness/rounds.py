@@ -5,8 +5,9 @@ either proposes the next round's goal (`continue`) or stops. An independent roun
 judges it (`round-review`). `round-admit` opens the proposed round, applies a widened
 objective and records the round's opening state; `round-assess` judges a finished round
 against its goal. `round_state` is the gate between `evaluate` and either a new round or
-`deposit`. Blind review scores and predictions are derived and reported; no rule here
-reads them.
+`deposit`. A decision needs the bundle's complete measurement and its contribution
+analysis; the values of blind review scores and predictions are derived and reported,
+and no rule here reads them.
 """
 
 from .artifacts import ArtifactStore
@@ -196,8 +197,8 @@ def _carried(records, values):
 
 
 def _goal(value, evidence, pursued):
-    _fields(value, ("direction", "criterion_ids", "field_change", "statement", "contribution_delta", "beneficiaries", "success_criteria",
-                    "stop_conditions", "continuity", "route", "risks", "evidence"))
+    _fields(value, ("direction", "criterion_ids", "field_change", "statement", "contribution_delta", "beneficiaries",
+                    "success_criteria", "stop_conditions", "continuity", "route", "risks", "evidence"))
     for key in ("statement", "contribution_delta", "continuity", "route"):
         _text(value[key], "Goal " + key)
     _choice(value["direction"], DIRECTIONS, "Goal direction")

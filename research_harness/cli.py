@@ -6,8 +6,8 @@ from pathlib import Path
 import sys
 import time
 
-from . import (acquisition, challenge, cohort_evidence, contribution, development, graph, lineage, literature, predictions, principles, reading,
-                resources, rounds, sampling, screening, synthesis, visual_assets)
+from . import (acquisition, challenge, cohort_evidence, contribution, development, graph, lineage, literature, predictions,
+                principles, reading, resources, rounds, sampling, screening, synthesis, visual_assets)
 from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evaluation import Evaluation

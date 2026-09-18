@@ -21,6 +21,7 @@ study-specific field relationship.
 """
 
 from .artifacts import ArtifactStore
+from .challenge import find_current_challenge
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
@@ -28,7 +29,6 @@ from .graph import obligation
 from .identities import resolve_family
 from .literature import _historical_status, foundation_state
 from .operations import fields, immutable_record, iso_date, prepared_mutation, profile_name, strings, text
-from .challenge import find_current_challenge
 from .principles import configuration_state, preparation_policy
 from .reading import fulltext_coverage, required_unit_obligations, validate_read_evidence
 from .source_links import captured_source, exact_work, original_identity, validate_link
