@@ -7,6 +7,7 @@ from pathlib import Path
 import threading
 from unittest import mock
 
+from literature_fixtures import FIELDS
 from test_research_synthesis import SynthesisCase
 
 
@@ -213,3 +214,99 @@ class ResearchVerificationTests(SynthesisCase):
         assess("explicit-third", third)
         send_verdict(self.store, stale, third, client, expected_revision=self.store.revision, request_id="confirmed-third")
         self.assertEqual(calls, [body, revised, third])
+
+
+class SampledVerificationCase(SynthesisCase):
+    """A sampled-v1 verification workspace: a pinned target, a drawn sample and a bindable task.
+
+    `works` is the population the cohort collects, and `positions` is one placement
+    judgment per sampled member, in the sample's own order. A `positions` shorter than
+    the sample leaves its last members unread for the test to record.
+    """
+
+    works = ()
+    positions = ()
+
+    def setUp(self):
+        super().setUp()
+        from research_harness import sampling
+        api = self.api("principles")
+        work = self.metadata()
+        capture = self.capture(work)
+        target = {"kind": "work", "id": work, "source_id": capture["source_id"], "sha256": capture["original"]["sha256"]}
+        self.mutate(api.initialize_research, {"profile": "verification", "target": target, "preparation_policy": "sampled-v1"})
+        collection = self.cohort(self.works)
+        self.scope([work], [collection], profile="verification", target=target)
+        self.linked = self.read_source()
+        self.mutate(sampling.record_sample, {"id": "s", "collection_id": collection, "size": len(self.works), "seed": "x"})
+        self.members = sampling.current_sample(self.store.snapshot()["records"])["members"]
+        self.read_members("b", self.members, self.positions)
+        # The sampled policy takes the target's own full reading, the placed sample and the
+        # five searches; a second cohort would replace the population the sample was drawn from.
+        self.foundation_searches("verification")
+        self.mutate(self.api().record_standards, self.standards(self.linked, "verification"))
+        self.task = {"verificationId": "11111111-1111-4111-8111-111111111111", "doi": "10.48550/arxiv.2601.00001",
+                     "source": "arxiv", "sourceId": "2601.00001", "sourceVersion": 1,
+                     "url": "https://arxiv.org/abs/2601.00001v1", "requestedByViewer": True, "viewerVerdictId": None}
+
+    def read_members(self, batch_id, members, positions):
+        """Record one abstract reading with its placement judgment for each paired sampled member."""
+        from research_harness.reading import record_reading_batch
+        items = [{"version_id": member["version_id"], "note": "Read the complete abstract.",
+                  "notes": {field: {"text": "The abstract discusses " + field + ".", "status": "present"} for field in FIELDS},
+                  "placement": {"position": position, "reason": "The abstract states its own bound."}}
+                 for member, position in zip(members, positions)]
+        return self.mutate(record_reading_batch, {"id": batch_id, "depth": "abstract", "items": items})
+
+    def bind(self, percentile, band):
+        api = self.api("verification")
+        task = self.mutate(api.record_task, {"task": self.task})["result"]
+        body = {"stance": "sound", "summary": "The finite bound is supported.", "rationaleSections": [],
+                "prediction": {"corpus": "arxiv", "category": "cs.LG", "windowStart": "2026-01-01", "windowEnd": "2026-01-31",
+                               "percentile": percentile, "band": band}}
+        payload = {"id": "verdict-%d-%d-%d" % (percentile, band["best"], band["worst"]), "task_digest": task["digest"],
+                   "body": self.artifacts.put(json.dumps(body).encode(), "application/json"),
+                   "assessment": {"assessor": "independent-verifier", "provenance": self.artifacts.put(b"Authored separate verification context.", "text/plain"),
+                       "independence_basis": "The verifier is not an author and read no other verdicts.", "blind": True,
+                       "checks": [{"dimension": d, "reason": "The scoped source supports this separate assessment.", "evidence": [self.linked]}
+                                  for d in ("soundness", "novelty", "impact")]}}
+        return self.mutate(api.bind_verdict, payload)["result"]
+
+
+class SampledVerificationTests(SampledVerificationCase):
+    works = (2, 3, 4, 5)
+    positions = ("above", "above", "above", "below")
+
+    def test_the_verdict_carries_the_sample_prediction(self):
+        from research_harness import sampling
+        expected = sampling.prediction(self.store.snapshot()["records"])
+        self.assertEqual(expected["percentile"], 25)
+        self.assertEqual(expected["band"], {"best": 3, "worst": 47})
+        self.assertFalse(expected["widen_required"])
+        self.assert_error("prediction_mismatch", lambda: self.bind(50, {"best": 35, "worst": 65}))
+        self.assert_error("prediction_mismatch", lambda: self.bind(25, {"best": 24, "worst": 26}))
+        bound = self.bind(25, {"best": 1, "worst": 60})
+        self.assertEqual(bound["sample_prediction"]["percentile"], 25)
+        self.assertEqual(bound["sample_prediction"]["band"], {"best": 3, "worst": 47})
+
+
+class WidenedSampleVerificationTests(SampledVerificationCase):
+    """Twenty-two of twenty-five sampled members stay unplaced, so the verdict widens the band."""
+
+    works = tuple(range(2, 27))
+    positions = ("above", "above", "below") + ("unplaced",) * 21
+
+    def test_an_unplaced_heavy_sample_needs_a_band_wider_than_the_computed_one(self):
+        from research_harness import sampling
+        # Every sampled member owes a placed abstract reading before any verdict binds.
+        self.assert_error("readiness_required", lambda: self.bind(33, {"best": 5, "worst": 60}))
+        self.read_members("b2", self.members[len(self.positions):], ("unplaced",))
+        expected = sampling.prediction(self.store.snapshot()["records"])
+        self.assertEqual((expected["above"], expected["below"], expected["unplaced"]), (2, 1, 22))
+        self.assertEqual(expected["percentile"], 33)
+        self.assertEqual(expected["band"], {"best": 6, "worst": 60})
+        self.assertTrue(expected["widen_required"])
+        self.assert_error("prediction_mismatch", lambda: self.bind(33, {"best": 6, "worst": 60}))
+        bound = self.bind(33, {"best": 5, "worst": 60})
+        self.assertTrue(bound["sample_prediction"]["widen_required"])
+        self.assertEqual(bound["sample_prediction"]["band"], {"best": 6, "worst": 60})

@@ -3,6 +3,12 @@
 The server does not supply an original-document hash. Local acquisition supplies
 that pin. A request's creator can independently verify an external paper; the
 requestedByViewer flag is not an authorship declaration.
+
+Under sampled-v1, a bound verdict states the percentile its own sample computes
+and a band that contains the computed band, and it widens that band on one side
+once the sample leaves more than sampling.UNPLACED_WIDEN members unplaced. The
+bound record keeps the estimate in sample_prediction, which the other
+preparation policies leave null.
 """
 
 from .artifacts import ArtifactStore
@@ -11,6 +17,7 @@ from .evaluation import Evaluation
 from .evidence import digest
 from .identities import normalize_identifier
 from .operations import fields, immutable_record, prepared_mutation, text
+from .principles import preparation_policy
 from .reading import validate_read_evidence
 from .source_links import validate_link
 from .synthesis import synthesis_state
@@ -85,6 +92,7 @@ def _body(artifacts, reference):
 def bind_verdict(store, payload, *, expected_revision, request_id):
     """Bind {id, task_digest, body:ArtifactRef, assessment} without changing the wire schema."""
     def prepare(records, value):
+        from .sampling import SAMPLED, prediction
         artifacts = Evaluation(records, ArtifactStore(store.root))
         fields(value, ("id", "task_digest", "body", "assessment"))
         text(value["id"], "Verdict assessment ID")
@@ -92,7 +100,26 @@ def bind_verdict(store, payload, *, expected_revision, request_id):
         if task is None:
             raise ResearchError("verification_task_required", "Acquire and bind the task-only server target first")
         report, target, identity = _preparation(records, artifacts, task["task"])
-        _body(artifacts, value["body"])
+        body = _body(artifacts, value["body"])
+        sample_prediction = None
+        if preparation_policy(records) == SAMPLED:
+            sample_prediction = prediction(records)
+            claimed = body["prediction"]
+            band = claimed.get("band") or {}
+            computed = sample_prediction["band"]
+            # A sample that placed no member states no percentile. Otherwise the verdict
+            # claims the computed percentile and a band that contains the computed one,
+            # and it widens that band on one side once the sample leaves more than
+            # UNPLACED_WIDEN of its members unplaced.
+            is_consistent_with_sample = (
+                computed is not None and claimed["percentile"] == sample_prediction["percentile"]
+                and band.get("best") is not None and band.get("worst") is not None
+                and band["best"] <= computed["best"] and band["worst"] >= computed["worst"]
+                and (not sample_prediction["widen_required"]
+                     or band["best"] < computed["best"] or band["worst"] > computed["worst"]))
+            if not is_consistent_with_sample:
+                raise ResearchError("prediction_mismatch", "The verdict's percentile equals the sample estimate and its band contains the sample band",
+                                    {"sample": sample_prediction, "claimed": claimed})
         assessment = value["assessment"]
         fields(assessment, ("assessor", "provenance", "independence_basis", "blind", "checks"))
         text(assessment["assessor"], "Verifier identity")
@@ -119,7 +146,8 @@ def bind_verdict(store, payload, *, expected_revision, request_id):
         if not any(link["version_id"] == target["id"] for c in assessment["checks"] if c["dimension"] == "soundness" for link in c["evidence"]):
             raise ResearchError("invalid_verdict_assessment", "The soundness reasoning must inspect the exact target itself")
         record = dict(value, target=target, task_identity=identity, verification_id=task["task"]["verificationId"],
-                      preparation_digest=report["digest"], evidence=evidence, reviewed_revision=expected_revision)
+                      preparation_digest=report["digest"], evidence=evidence, sample_prediction=sample_prediction,
+                      reviewed_revision=expected_revision)
         record["digest"] = digest(record)
         return [immutable_record(records, "verdict_assessment", value["id"], record),
                 ("verification_selection", "verdict", {"id": value["id"]})], record
