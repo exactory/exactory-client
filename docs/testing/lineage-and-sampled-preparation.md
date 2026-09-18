@@ -60,17 +60,19 @@ study (`math-ph`, 2026-03-01 to 2026-08-31, 893 members).
 | The preparation gate passes without a harness repair | `ready: true`, no obligations, no repair | yes |
 | At most 2 hours from initialization to the gate | 41 minutes 23 seconds | yes |
 
-The same criterion also asks that each lineage and classic entry is cited in the
-existing manuscript. The preparation gate does not read the manuscript. That
-check belongs to the manuscript gate, which reports `lineage_citation_missing`.
+The criterion about the four lineage and classic entries also asks that each one
+is cited in the existing manuscript. The preparation gate does not read the
+manuscript. That check belongs to the manuscript gate, which reports
+`lineage_citation_missing`.
 
 `status.limits` at the gate reported policy `lineage-v1`, loop 52 readings
 against the limit of 100 with all five purposes covered, and 10 innovation
 candidate families against the 10 required. The run came in below the expected
 band of 60 to 90 because each of the five stage-1 queries was written narrowly
 enough to enumerate completely, which returned 17 hits in total instead of the
-50 the estimate assumed. The other 35 loop readings came from `population-query`
-and from the candidate list.
+50 the estimate assumed. Of the other 35 loop readings, 30 came from
+`population-query` and 5 carry the source `author`, for innovation candidates
+that no search returned.
 
 Obligation codes that blocked the gate, and how each was resolved:
 
@@ -165,3 +167,13 @@ abstract. The two routes are therefore exclusive under the current code: a nativ
 capture is readable and must enumerate completely, and a mapped capture
 enumerates freely and cannot be read. This did not block the run, which stayed
 inside the native route with five narrow queries.
+
+## Final
+
+The whole suite, run once on the release commit tree:
+
+```
+Ran 1154 tests in 2290.744s
+
+OK
+```
