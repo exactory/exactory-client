@@ -125,9 +125,12 @@ class ResearchPublicationTests(DevelopmentCase):
                                            "purpose": purpose, "reason": "The " + purpose + " paper.", "depends_on": "claim-1"})
         return bundle
 
-    def collect_citation_codes(self, bundle):
+    def collect_citation_obligations(self, bundle):
         from research_harness.publication import lineage_citation_obligations
-        return [o["code"] for o in lineage_citation_obligations(self.store.snapshot()["records"], self.artifacts, bundle)]
+        return lineage_citation_obligations(self.store.snapshot()["records"], self.artifacts, bundle)
+
+    def collect_citation_codes(self, bundle):
+        return [o["code"] for o in self.collect_citation_obligations(bundle)]
 
     def test_lineage_and_classic_entries_must_be_cited(self):
         parent, classic = self.select_versions(2)
@@ -139,6 +142,26 @@ class ResearchPublicationTests(DevelopmentCase):
         (self.root / "draft/references.bib").write_text(
             "@article{parent,title={Authored parent},eprint={" + parent[6:] + "}}\n")
         self.assertEqual(self.collect_citation_codes(self.require_entries([("lineage", parent)])), [])
+
+    def test_a_bibliography_that_is_not_utf8_still_reports_its_citations(self):
+        cited, uncited = self.select_versions(2)
+        (self.root / "draft/references.bib").write_bytes(
+            b"@article{parent,title={Bound\xe9 sequences},eprint={" + cited[6:].encode() + b"}}\n")
+        obligations = self.collect_citation_obligations(self.require_entries([("lineage", cited), ("classic", uncited)]))
+        self.assertEqual([o["version_id"] for o in obligations], [uncited])
+
+    def test_an_arxiv_citation_token_keeps_a_subject_class_that_ends_in_v(self):
+        from research_harness.publication import _citation_tokens
+        for identifier in ("arxiv:math.CV/0601001v1", "arxiv:math.CV/0601001"):
+            with self.subTest(identifier=identifier):
+                tokens = _citation_tokens({"id": identifier, "aliases": [], "title": "An authored example"})
+                self.assertEqual(tokens, ["math.cv/0601001", "an authored example"])
+                self.assertNotIn("math.c", tokens)
+
+    def test_a_one_word_title_is_not_citation_evidence(self):
+        from research_harness.publication import _citation_tokens
+        work = {"id": "arxiv:2601.00001v1", "aliases": ["doi:10.5281/zenodo.1"], "title": "Entropy"}
+        self.assertEqual(_citation_tokens(work), ["2601.00001", "10.5281/zenodo.1"])
 
     def remote_binding(self):
         api = self.publication()

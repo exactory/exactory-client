@@ -13,15 +13,18 @@ consequential?, placement?, loop?, innovation_candidate?, search_hit?}. The
 preparation policy decides which extras apply: placement and search_hit belong
 to sampled-v1, loop and innovation_candidate to lineage-v1. A batch that carries
 the study past the loop or search-hit limit, or an active development round past
-its own loop limit, is rejected whole. The harness
-derives the inspection as the whole complete abstract artifact with a span
-locator, then applies the single-reading rules to every item. One failing item
-rejects the whole batch with its index; one event records every reading. Reading
-ids are reading:<sha256 of [batch id, version]>.
+its own loop limit, is rejected whole. The harness derives the inspection as the
+whole complete abstract artifact with a span locator, then applies the
+single-reading rules to every item. One failing item rejects the whole batch with
+its index; one event records every reading. Reading ids are
+reading:<sha256 of [batch id, version]>.
 
 require_fulltext accepts {id, profile, version_id, purpose, reason,
-historical_cutoff?}; purposes are major_claim, novelty, innovation, validity.
-These are critical exact-version dependencies, independent of citation tier.
+historical_cutoff?, depends_on?}; the purposes are FULLTEXT_PURPOSES, that is
+major_claim, novelty, innovation, validity, exemplar, lineage, classic, core and
+contradiction. lineage, classic and core name the claim, lineage entry or finding
+they serve in depends_on. These are critical exact-version dependencies,
+independent of citation tier.
 
 record_availability accepts {id, profile, version_id, depth, source_ids, reason,
 policy: {id, minimum_attempts, allowed_statuses, rationale}}. Only explicit

@@ -480,16 +480,24 @@ class RoundLiteratureTests(RoundsCase):
         from research_harness.reading import record_reading_batch
         self.open_round()
         self.mutate(change_policy, {"previous": "exhaustive-v1", "policy": "lineage-v1", "reason": "Adopt the lineage policy."})
-        versions = [self.metadata(n) for n in range(200, 200 + lineage.ROUND_LOOP_LIMIT + 1)]
+        versions = [self.metadata(n) for n in range(200, 200 + lineage.ROUND_LOOP_LIMIT + 6)]
+        loop, plain = versions[:lineage.ROUND_LOOP_LIMIT + 1], versions[lineage.ROUND_LOOP_LIMIT + 1:]
 
-        def batch(items, name):
-            return self.mutate(record_reading_batch, {"id": name, "depth": "abstract", "items": [
-                {"version_id": v, "note": "Read the complete abstract.",
-                 "notes": {f: {"text": "The abstract discusses " + f + ".", "status": "present"} for f in FIELDS},
-                 "loop": {"purposes": ["recent"], "disposition": "out_of_scope", "source": "search"}} for v in items]})
+        def make_item(version, in_loop):
+            item = {"version_id": version, "note": "Read the complete abstract.",
+                    "notes": {f: {"text": "The abstract discusses " + f + ".", "status": "present"} for f in FIELDS}}
+            if in_loop:
+                item["loop"] = {"purposes": ["recent"], "disposition": "out_of_scope", "source": "search"}
+            return item
 
-        batch(versions[:lineage.ROUND_LOOP_LIMIT], "round-loop-1")
-        self.assert_error("round_loop_limit_reached", lambda: batch(versions[-1:], "round-loop-2"))
+        def record_batch(name, loop_versions, plain_versions=()):
+            return self.mutate(record_reading_batch, {"id": name, "depth": "abstract", "items":
+                [make_item(v, True) for v in loop_versions] + [make_item(v, False) for v in plain_versions]})
+
+        # The five plain readings in this batch are readings, not loop entries, so the round has one left.
+        record_batch("round-loop-1", loop[:lineage.ROUND_LOOP_LIMIT - 1], plain)
+        record_batch("round-loop-2", loop[lineage.ROUND_LOOP_LIMIT - 1:lineage.ROUND_LOOP_LIMIT])
+        self.assert_error("round_loop_limit_reached", lambda: record_batch("round-loop-3", loop[-1:]))
 
     def test_an_exemplar_the_round_opened_with_does_not_count(self):
         self.exemplar_requirement("early")
