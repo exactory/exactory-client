@@ -15,3 +15,5 @@ the suites run after it. Suites marked "(frozen copy)" ran on a copy of the tree
 | T04 RED | `test_research_challenge.py` | ImportError: `research_harness.challenge` did not exist |
 | T04 GREEN | `test_research_challenge.py`, `test_research_synthesis.py` | Ran 5 tests OK; Ran 34 tests OK after three hand-built syntheses recorded the Grand Challenge |
 | T04 (frozen copy) | development, cli, guidance, report_views, publication, literature, lineage | Ran 65, 23, 5, 12, 22, 24, 8 tests OK |
+| T05 RED | `test_research_principles.py` | `AssertionError: '4' != '5'` |
+| T05 GREEN | `test_research_principles.py`, `test_research_guidance.py` | OK, OK |
