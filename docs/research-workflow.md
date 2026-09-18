@@ -542,9 +542,10 @@ abstract readings from search hits, each carrying `search_hit: true`
 
 `status` reports the percentile, the band and the placement counts under
 `limits.sample`. The verdict body carries that percentile and band, and
-`bind-verdict` refuses `prediction_mismatch` when the body states a different
-percentile, a band that does not contain the sample band, or, when more than 20
-sampled members are unplaced, a band no wider than the sample band.
+`bind-verdict` refuses `prediction_mismatch` when the sample places no member,
+when the body states a different percentile, when its band does not contain the
+sample band, or, when more than 20 sampled members are unplaced, when its band is
+no wider than the sample band.
 
 `exactory verify` sends a verdict from any directory; a verification workspace that
 bound the verdict with `task --bind` and `bind-verdict` also records its receipt.

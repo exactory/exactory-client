@@ -84,7 +84,8 @@ full (`round_exemplar_missing` until the requirement exists, then
 `fulltext_reading_missing` until it is read); analyze it as one more innovation
 case (`within_field` when it comes from the study's field; an `external` exemplar
 counts toward the external cases, so replace an older external case rather than
-exceed the count the policy allows). When the frontier changes, re-record the earlier
+exceed the count the policy allows: exactly five under `lineage-v1`, and ten
+under the legacy policies). When the frontier changes, re-record the earlier
 judgments with their carried findings, and re-record `rationale`, `context` and
 `innovation` for the round.
 
@@ -126,7 +127,7 @@ still in `literature`. Record source-grounded field standards and cohort doctrin
 And/But/Therefore rationale, innovation studies, and scientific context. Under
 `lineage-v1` the innovation study reads ten candidate papers at abstract depth,
 five of them in full: register each candidate with `innovation_candidate: true`
-in its loop reading (`innovation_candidates_missing` until ten are read), and
+in its abstract reading (`innovation_candidates_missing` until ten are read), and
 choose exactly five external cases among them
 (`innovation_case_not_candidate`, `external_cases_insufficient`,
 `external_cases_excess`); the lineage supplies the within-field case. Under

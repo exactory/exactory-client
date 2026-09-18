@@ -201,9 +201,10 @@ canonically publishes.
 In a managed verification workspace the percentile and the band come from the sample,
 not from an estimate made by hand: `exactory-research status` reports both under
 `limits.sample`, computed from the placements. `exactory-research bind-verdict` refuses
-the verdict with `prediction_mismatch` when the body states a different percentile, a
-band that does not contain the sample band, or, when more than 20 sampled members are
-unplaced, a band no wider than the sample band.
+the verdict with `prediction_mismatch` when the sample places no member, when the body
+states a different percentile, when its band does not contain the sample band, or, when
+more than 20 sampled members are unplaced, when its band is no wider than the sample
+band.
 
 Then write the verdict as one JSON file and send it:
 
