@@ -328,6 +328,46 @@ os._exit(23)
         self.assertNotEqual(export.returncode, 0)
         self.assertIn("publication_bundle_missing", export.stderr)
 
+    def test_sample_loop_close_and_population_query_are_wired(self):
+        from research_harness.cli import build_parser
+        parser = build_parser()
+        for command in ("sample", "loop-close"):
+            args = parser.parse_args([command, "--file", "x.json", "--expected-revision", "1", "--request-id", "r"])
+            self.assertEqual(args.command, command)
+        args = parser.parse_args(["population-query", "--terms", "Haar", "purity", "--limit", "5"])
+        self.assertEqual((args.terms, args.limit), (["Haar", "purity"], 5))
+        args = parser.parse_args(["batches", "--destination", "d", "--loop", "--candidates", "c.json"])
+        self.assertTrue(args.loop)
+        args = parser.parse_args(["policy-report", "--policy", "lineage-v1"])
+        self.assertEqual(args.policy, "lineage-v1")
+
+    def test_examples_cover_the_new_operations(self):
+        from research_harness.cli import build_parser, run
+        for operation in ("sample", "loop-close"):
+            self.assertIn("id", run(build_parser().parse_args(["example", operation])))
+
+    def test_status_and_the_policy_report_carry_the_recorded_policy_limits(self):
+        from research_harness.report_views import priority
+        self.init_lab()
+        limits = json.loads(self.run_cli("exactory-research", "status").stdout)["limits"]
+        self.assertEqual(limits["policy"], "lineage-v1")
+        self.assertEqual(limits["loop"], {"readings": 0, "limit": 100, "covered": []})
+        self.assertEqual(limits["innovation_candidates"], {"families": 0, "required": 10})
+        self.assertEqual((limits["sample"], limits["search_readings"], limits["core_papers"]), (None, None, None))
+        summary = json.loads(self.run_cli("exactory-research", "status", "--summary").stdout)
+        self.assertEqual(summary["limits"], limits)
+        for policy in ("lineage-v1", "sampled-v1"):
+            bounded = self.run_cli("exactory-research", "policy-report", "--policy", policy)
+            self.assertEqual(bounded.returncode, 0, bounded.stderr)
+            report = json.loads(bounded.stdout)
+            self.assertEqual((report["policy"], report["recorded_policy"], report["limits"]), (policy, "lineage-v1", limits))
+            self.assertNotIn("collections", report)
+        legacy = self.run_cli("exactory-research", "policy-report", "--policy", "exhaustive-v1")
+        self.assertEqual(legacy.returncode, 0, legacy.stderr)
+        self.assertIn("collections", json.loads(legacy.stdout))
+        self.assertNotIn("limits", json.loads(legacy.stdout))
+        self.assertLess(priority({"code": "sample_missing"}), priority({"code": "never_seen_code"}))
+
 
 class ResearchPreparationTests(DevelopmentCase):
     def cli(self, command, *args):

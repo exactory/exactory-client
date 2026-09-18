@@ -285,12 +285,38 @@
     ],
     "resolved": []
   },
+  "loop-close": {
+    "id": "loop-closure-1",
+    "purposes": {
+      "direct": {
+        "status": "covered",
+        "note": "Two relevant papers read; one contradicts the comparison."
+      },
+      "originals": {
+        "status": "covered",
+        "note": "The original bound paper read in full as lineage."
+      },
+      "theory": {
+        "status": "gap",
+        "note": "Two queries returned no relevant work."
+      },
+      "adjacent": {
+        "status": "covered",
+        "note": "One neighboring-field mechanism read."
+      },
+      "recent": {
+        "status": "covered",
+        "note": "Citing papers of the parent read."
+      }
+    }
+  },
   "require-fulltext": {
     "id": "dependency-1",
     "profile": "research",
     "version_id": "arxiv:2601.00001v1",
-    "purpose": "major_claim",
-    "reason": "The proposed mechanism depends on this original source."
+    "purpose": "lineage",
+    "reason": "The proposed mechanism depends on this original source.",
+    "depends_on": "claim-1"
   },
   "availability": {
     "id": "availability-1",
@@ -316,6 +342,12 @@
     "unresolved_assertion_id": "UNRESOLVED_ASSERTION_ID",
     "selected_assertion_id": "EXACT_VERSION_ASSERTION_ID",
     "reason": "Select captured exact-version abstract evidence for this retained unknown-version member."
+  },
+  "sample": {
+    "id": "sample-1",
+    "collection_id": "cohort:COLLECTION_ID",
+    "size": 100,
+    "seed": "RECORDED_SEED"
   },
   "visual": {
     "link": {
@@ -2810,6 +2842,51 @@
           "conventions": [
             "Reports a numerical bound with its assumptions."
           ]
+        },
+        "loop": {
+          "purposes": [
+            "direct"
+          ],
+          "disposition": "relevant",
+          "source": "search"
+        }
+      },
+      {
+        "version_id": "arxiv:2601.00002v1",
+        "note": "Read the complete saved abstract.",
+        "notes": {
+          "problem": {
+            "text": "Record what the abstract says about problem.",
+            "status": "present"
+          },
+          "claims": {
+            "text": "Record what the abstract says about claims.",
+            "status": "present"
+          },
+          "assumptions": {
+            "text": "Record what the abstract says about assumptions.",
+            "status": "present"
+          },
+          "methods": {
+            "text": "Record what the abstract says about methods.",
+            "status": "present"
+          },
+          "evidence": {
+            "text": "Record what the abstract says about evidence.",
+            "status": "present"
+          },
+          "limitations": {
+            "text": "Record what the abstract says about limitations.",
+            "status": "present"
+          },
+          "relevance": {
+            "text": "Record what the abstract says about relevance.",
+            "status": "present"
+          }
+        },
+        "placement": {
+          "position": "above",
+          "reason": "The target's exact result ranks above this member's partial bound."
         }
       }
     ],

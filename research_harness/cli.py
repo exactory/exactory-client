@@ -6,14 +6,15 @@ from pathlib import Path
 import sys
 import time
 
-from . import (acquisition, cohort_evidence, development, graph, literature, predictions, principles, reading, resources, rounds,
-                screening, synthesis, visual_assets)
+from . import (acquisition, cohort_evidence, development, graph, lineage, literature, predictions, principles, reading, resources,
+                rounds, sampling, screening, synthesis, visual_assets)
 from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
 from .gates import gate_report, gate_state, require_ready
 from .integration import adopt_workspace, current_store, export_workspace, pin_artifact
+from .limits import limits_report
 from .operations import fields
 from .provenance import runtime_provenance
 from .report_views import current_obligations, next_summary, obligations_page, order_obligations, status_summary
@@ -33,9 +34,11 @@ OPERATIONS = {
     "read": reading.record_reading,
     "read-batch": reading.record_reading_batch,
     "search": literature.record_search,
+    "loop-close": lineage.record_loop_closure,
     "require-fulltext": reading.require_fulltext,
     "availability": reading.record_availability,
     "select-cohort-abstract": cohort_evidence.select_cohort_abstract,
+    "sample": sampling.record_sample,
     "standards": synthesis.record_standards,
     "rationale": synthesis.record_rationale,
     "innovation": synthesis.record_innovation,
@@ -123,11 +126,12 @@ def build_parser():
         item.add_argument("--workspace", default=".")
         item.add_argument("--file", required=True, help="UTF-8 JSON input, without duplicate keys or nonfinite numbers.")
         add_identity(item)
-    for command in ("status", "next", "obligations", "batches", "policy-report", "gate", "export", "recover"):
+    for command in ("status", "next", "obligations", "batches", "population-query", "policy-report", "gate", "export", "recover"):
         item = commands.add_parser(command, allow_abbrev=False,
             help={"status": "Read current obligations and source paths.", "next": "Read actionable current preparation obligations.",
                   "obligations": "Read one revision-bound page of the obligations that carry a code.",
                   "batches": "Write the current unread abstracts as reader batch files without changing the store.",
+                  "population-query": "Rank the enumerated population's stored abstracts by query terms without changing the store.",
                   "policy-report": "Describe the preparation set under the recorded or a hypothetical policy, without changing the store.",
                   "gate": "Validate a current gate without mutation.", "export": "Rebuild disposable projections or deliver exact reviewer bytes.",
                   "recover": "Explicitly recover a hot SQLite journal without migrating or certifying research."}[command])
@@ -145,8 +149,13 @@ def build_parser():
             item.add_argument("--destination", required=True, help="New directory for batch-NNN.json files.")
             item.add_argument("--profile", choices=("research", "verification"), help="Defaults to the configured profile.")
             item.add_argument("--screen", action="store_true", help="Export the unscreened members for screen-batch instead of unread abstracts.")
+            item.add_argument("--loop", action="store_true", help="Export the selected searches' found works without a loop reading, plus --candidates.")
+            item.add_argument("--candidates", help="JSON file: either a list of version ids or a population-query result.")
+        if command == "population-query":
+            item.add_argument("--terms", nargs="+", required=True, help="Query terms taken from the target statement and the parent's title and abstract.")
+            item.add_argument("--limit", type=int, default=30, help="Matches to return, 1 to 100.")
         if command == "policy-report":
-            item.add_argument("--policy", choices=("exhaustive-v1", "screened-v1"), help="Report a hypothetical policy instead of the recorded one.")
+            item.add_argument("--policy", choices=principles.POLICIES, help="Report a hypothetical policy instead of the recorded one.")
             item.add_argument("--reference", help="JSON file {prior_art, contradictions, methods, doctrine} of family ids for recall.")
         if command == "gate":
             item.add_argument("action", choices=GATES)
@@ -219,7 +228,8 @@ def status_report(store, *, counters=False):
     upcoming = preparation.get("next") if study and study["stage"] == "cohort" else None
     obligations = current_obligations({"obligations": report["obligations"], "preparation": preparation})
     return dict(report, revision=snapshot["revision"], profile=profile, runtime=runtime_provenance(),
-                study=study, preparation=preparation, resources=resources.account_report(records, profile), **diagnostics,
+                study=study, preparation=preparation, resources=resources.account_report(records, profile),
+                limits=limits_report(records), **diagnostics,
                 round=round_summary(round_report) if round_report else None,
                 next=upcoming or (order_obligations(obligations)[0] if obligations else None),
                 pending_executions=[key for key in records.get("execution_admission", {}) if key not in records.get("execution_outcome", {})],
@@ -269,7 +279,14 @@ def run(args):
         return obligations_page(status_report(store), args.code, limit=args.limit, cursor=args.cursor)
     if args.command == "batches":
         from .batches import export_batches
-        return export_batches(store, depth=args.depth, size=args.size, destination=args.destination, profile=args.profile, screen=args.screen)
+        candidates = []
+        if args.candidates:
+            loaded = strict_json(Path(args.candidates).read_bytes())
+            candidates = [m["version_id"] for m in loaded["matches"]] if isinstance(loaded, dict) else list(loaded)
+        return export_batches(store, depth=args.depth, size=args.size, destination=args.destination, profile=args.profile,
+                              screen=args.screen, loop=args.loop, candidates=candidates)
+    if args.command == "population-query":
+        return lineage.population_query(store, args.terms, limit=args.limit)
     if args.command == "policy-report":
         reference = strict_json(Path(args.reference).read_bytes()) if args.reference else None
         return screening.policy_report(store, policy=args.policy, reference=reference)

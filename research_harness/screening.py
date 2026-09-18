@@ -20,7 +20,7 @@ from .errors import ResearchError
 from .evidence import digest
 from .graph import obligation
 from .operations import fields, prepared_mutation, strings, text
-from .principles import preparation_policy
+from .principles import POLICIES, preparation_policy
 from .reading import RELEVANCE, _usage
 from .source_links import exact_work
 from . import resources
@@ -301,14 +301,22 @@ def policy_report(store, *, policy=None, reference=None):
     from .artifacts import ArtifactStore
     from .evaluation import Evaluation
     from .gates import gate_state
+    # limits imports lineage, which imports literature, which imports screening, so the bounded policies stay local imports.
+    from .limits import limits_report
+    from .lineage import LINEAGE
+    from .sampling import SAMPLED
     snapshot = store.snapshot()
     records = snapshot["records"]
     config = records.get("configuration", {}).get("research")
     if config is None:
         raise ResearchError("migration_required", "Initialize or adopt the research contract before a policy report")
     policy = policy or preparation_policy(records)
-    if policy not in ("exhaustive-v1", SCREENED):
+    if policy not in POLICIES:
         raise ResearchError("invalid_input", "Unknown preparation policy")
+    if policy in (LINEAGE, SAMPLED):
+        # A bounded policy prepares a loop or a sample, not a screened selection, so it reports its limits instead of the collections.
+        return {"revision": snapshot["revision"], "policy": policy, "recorded_policy": preparation_policy(records),
+                "limits": limits_report(records), "mechanical_only": True}
     evaluation = Evaluation(records, ArtifactStore(store.root))
     cohort = gate_state(records, evaluation, "cohort", profile=config["profile"])
     collections = {}
