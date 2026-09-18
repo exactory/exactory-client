@@ -541,7 +541,7 @@ class PredictionTests(RoundsCase):
         self.assert_error("publication_review_stale", lambda: self.mutate(predictions.record_prediction, stale))
 
     def test_measurement_summary_reports_medians_and_spreads(self):
-        bundle = self.pin()
+        bundle = self.pin(measure=False)
         self.measure(bundle, "one", percentiles=(30, 25, 40))
         summary = predictions.measurement_summary(self.store.snapshot()["records"], bundle)
         self.assertEqual(summary["predictions"], {"count": 3, "percentile": {"median": 30, "spread": [25, 40]}})
@@ -577,7 +577,7 @@ class RoundAssessmentTests(RoundsCase):
         # An abstract reading inside the round is not one of the round's full readings.
         self.mutate(record_reading, self.abstract_note(self.links[1]["version_id"], "abstract-r2"))
         self.run_round_work("r2")
-        bundle = self.pin(self.claims("wider"), identifier="paper-r2")
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2", measure=False)
         self.measure(bundle, "r2")
         # A charge inside the round, through the real account: the round's usage is the difference since its opening.
         self.mutate(lambda store, payload, **identity: prepared_mutation(store, "test.charge", payload,
@@ -947,7 +947,7 @@ class RoundStatusTests(RoundsCase):
     def test_a_manuscript_awaiting_reviews_is_led_to_the_reviews_before_the_round(self):
         from research_harness.cli import status_report
         self.set_stage("evaluate")
-        self.pin(reviews=0)
+        self.pin(reviews=0, measure=False)
         codes = [o["code"] for o in status_report(self.store)["obligations"]]
         self.assertEqual(codes, ["manuscript_reviews_required", "round_decision_missing"])
 

@@ -19,3 +19,5 @@ the suites run after it. Suites marked "(frozen copy)" ran on a copy of the tree
 | T05 GREEN | `test_research_principles.py`, `test_research_guidance.py` | OK, OK |
 | T06 RED | `test_research_contribution.py` | ImportError: `research_harness.contribution` did not exist |
 | T06 GREEN | `test_research_contribution.py` | Ran 10 tests OK |
+| T07 RED | `test_research_contribution.py -k NextBundle` | `AssertionError: ResearchError not raised` |
+| T07 GREEN | `test_research_contribution.py` | OK |

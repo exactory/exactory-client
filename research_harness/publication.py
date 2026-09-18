@@ -50,6 +50,12 @@ def prepare_publication(store, payload, *, expected_revision, request_id):
         fields(value, ("id", "files", "claim_evidence"))
         text(value["id"], "Publication bundle ID")
         fields(value["files"], tuple(FILE_TYPES))
+        # contribution imports this module through predictions, so it is imported here.
+        from .contribution import find_bundle_owing_analysis
+        owing = find_bundle_owing_analysis(records)
+        if owing is not None:
+            raise ResearchError("contribution_analysis_missing", "Record the contribution analysis of the measured bundle "
+                                "before pinning the next one", {"bundle_id": owing["id"]})
         report = _ready(records, artifacts)
         saved = {}
         for kind, path in value["files"].items():

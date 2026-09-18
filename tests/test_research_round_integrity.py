@@ -141,7 +141,7 @@ class ManuscriptHistoryTests(RoundsCase):
         claims = self.claims("withdrawn", superseded=("withdrawn",))
         source = self.source_evidence()
         result = self.result_evidence(self.execution_payload)
-        bundle = self.pin(claims, reviews=0, evidence=[source, result])
+        bundle = self.pin(claims, reviews=0, evidence=[source, result], measure=False)
         files = {key: None if value is None else value["path"] for key, value in bundle["files"].items()}
         for index, (current, withdrawn) in enumerate(((source, result), (result, source))):
             with self.subTest(current=current["kind"]):
@@ -163,7 +163,7 @@ class ManuscriptHistoryTests(RoundsCase):
 
 class MeasurementPopulationTests(RoundsCase):
     def test_measurement_uses_the_three_reviewers_with_predictions(self):
-        bundle = self.pin(reviews=0)
+        bundle = self.pin(reviews=0, measure=False)
         for name, score in (("gate-a", 5), ("gate-b", 5), ("measure-a", 7), ("measure-b", 8), ("measure-c", 9)):
             payload = self.manuscript_review(bundle, name)
             payload["review"] = self.artifacts.put(json.dumps(dict(self.core(), overall=score)).encode(), "application/json")
@@ -177,7 +177,7 @@ class MeasurementPopulationTests(RoundsCase):
         self.assertEqual(len(publication.publication_report(self.store)["reviews"]), 5)
 
     def test_incomplete_measurement_has_counts_without_a_measurement_value(self):
-        bundle = self.pin()
+        bundle = self.pin(measure=False)
         self.mutate(predictions.record_prediction, self.prediction_payload(bundle, "measurement-a"))
         self.mutate(publication.record_manuscript_review, self.manuscript_review(bundle, "measurement-a"))
         summary = predictions.measurement_summary(self.store.snapshot()["records"], bundle)
@@ -188,7 +188,7 @@ class MeasurementPopulationTests(RoundsCase):
         self.assertEqual(summary["predictions"]["percentile"], {"median": None, "spread": None})
 
     def test_extra_or_duplicate_predictions_do_not_define_a_three_reviewer_measurement(self):
-        bundle = self.pin()
+        bundle = self.pin(measure=False)
         self.measure(bundle, "complete")
         records = self.store.snapshot()["records"]
         self.assertTrue(predictions.measurement_summary(records, bundle)["complete"])

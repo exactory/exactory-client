@@ -118,3 +118,14 @@ class ContributionAnalysisTests(RoundsCase):
         bundle = self.measured()
         with patch("research_harness.contribution.resolve_criterion_ids", return_value=set()):
             self.assert_error("grand_challenge_missing", lambda: self.record(self.analysis_payload(bundle, "one")))
+
+
+class NextBundleTests(RoundsCase):
+    def test_the_next_bundle_waits_for_the_analysis_of_a_measured_bundle(self):
+        self.pin(identifier="paper-first", measure=False)
+        second = self.pin(identifier="paper-second", measure=False)
+        self.measure(second, "two")
+        self.assert_error("contribution_analysis_missing", lambda: self.pin(identifier="paper-third", measure=False))
+        self.analyze(second, "two")
+        third = self.pin(identifier="paper-third", measure=False)
+        self.assertEqual(publication.publication_report(self.store)["bundle"]["digest"], third["digest"])

@@ -98,7 +98,7 @@ class RoundPacketTests(RoundsCase):
         directory = self.root / "reviews" / "round-1"
         self.assert_error("publication_bundle_missing", lambda: deliver_round(self.store, directory))
         # A source closure enters the packet through the claim's source evidence: its work carries the author names.
-        bundle = self.pin(evidence=[self.result_evidence(self.execution_payload), self.source_evidence()])
+        bundle = self.pin(evidence=[self.result_evidence(self.execution_payload), self.source_evidence()], measure=False)
         self.assert_error("round_decision_missing", lambda: deliver_round(self.store, directory))
         self.measure(bundle, "one")
         decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
@@ -144,7 +144,7 @@ class RoundPacketTests(RoundsCase):
                                    "--destination", str(self.root / name)], cwd=self.root, capture_output=True, text=True,
                                   env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
 
-        bundle = self.pin(evidence=[self.result_evidence(self.execution_payload), self.source_evidence()])
+        bundle = self.pin(evidence=[self.result_evidence(self.execution_payload), self.source_evidence()], measure=False)
         refused = export("packet-1")
         self.assertNotEqual(refused.returncode, 0)
         self.assertIn("round_decision_missing", refused.stderr)
@@ -160,7 +160,7 @@ class RoundPacketTests(RoundsCase):
         from research_harness.review_delivery import deliver_manuscript, deliver_round
         decision, review, admission = self.open_round()
         self.run_round_work("r2")
-        bundle = self.pin(self.claims("wider"), identifier="paper-r2")
+        bundle = self.pin(self.claims("wider"), identifier="paper-r2", measure=False)
         self.measure(bundle, "r2")
         directory = self.root / "reviews" / "manuscript-r2"
         deliver_manuscript(self.store, directory)
