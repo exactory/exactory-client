@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from datetime import datetime, timezone
 from email.utils import format_datetime
 from pathlib import Path
@@ -13,6 +14,7 @@ from urllib.parse import parse_qs, urlsplit
 from research_harness.acquisition import collect_cohort, resume_cohort, collection_status, acquire_work
 from research_harness.artifacts import ArtifactStore
 from research_harness.errors import ResearchError
+from research_harness.providers import Arxiv
 from research_harness.storage import Store
 from research_fixtures import atom, entry, client, xml_response
 
@@ -111,6 +113,41 @@ class CollectionTests(unittest.TestCase):
                          datetime.strptime(partitions[1]["start"], "%Y%m%d%H%M"))
         self.assertEqual(result["status"], "paused")
         self.assertEqual(collection["definition"], DEFINITION)
+
+    def test_cursor_reaching_the_query_ceiling_splits_the_partition(self):
+        # A window the provider reports as smaller than the former ceiling still runs the cursor into
+        # the ceiling the API enforces; the request builder raises before any HTTP attempt is made.
+        http, wire, _ = client([xml_response(atom([entry()], total=3, size=1)),
+                                xml_response(atom([entry("2601.00002v1")], total=3, start=1, size=1))])
+        first = collect_cohort(self.store, DEFINITION, request_id="cursor-ceiling", expected_revision=0,
+                               max_requests=2, http=http, page_size=1)
+        collection_id = first["collection_id"]
+        stalled = self.store.snapshot()["records"]["collection"][collection_id]["partitions"][0]
+        self.assertEqual((stalled["offset"], stalled["status"]), (2, "pending"))
+        wire.responses.extend([xml_response(atom([entry()], total=2, size=1)),
+                               xml_response(atom([entry("2601.00002v1")], total=2, start=1, size=1)),
+                               xml_response(atom([], total=0, size=1))])
+        with unittest.mock.patch.object(Arxiv, "query_ceiling", 2):
+            later = resume_cohort(self.store, collection_id, request_id="cursor-resume",
+                                  expected_revision=self.store.revision, http=http, max_requests=4)
+        self.assertEqual(later["status"], "complete")
+        self.assertEqual(later["member_count"], 2)
+        records = self.store.snapshot()["records"]
+        partitions = records["collection"][collection_id]["partitions"]
+        self.assertEqual([p["id"] for p in partitions], [stalled["id"] + ".0", stalled["id"] + ".1"])
+        self.assertEqual((partitions[0]["start"], partitions[1]["end"]), (stalled["start"], stalled["end"]))
+        from datetime import timedelta
+        self.assertEqual(datetime.strptime(partitions[0]["end"], "%Y%m%d%H%M") + timedelta(minutes=1),
+                         datetime.strptime(partitions[1]["start"], "%Y%m%d%H%M"))
+        pages = sorted(records["collection_page"].values(), key=lambda page: page["sequence"])
+        split = next(page for page in pages if page["disposition"] == "split")
+        self.assertEqual((split["requested"]["id"], split["requested"]["offset"]), (stalled["id"], 2))
+        self.assertEqual((split["failures"], split["source_ids"]), ([], []))
+        self.assertEqual([page["requested"]["offset"] for page in pages[pages.index(split) + 1:]], [0, 1, 0])
+        self.assertNotIn("failed", [page["disposition"] for page in pages])
+        self.assertEqual(len([e for e in records["cohort_partition_entry"].values()
+                              if e["partition_id"] == stalled["id"]]), 2)
+        self.assertEqual(len(wire.requests), 5)
 
     def test_rate_limit_budget_keeps_failed_response_and_resume_progresses(self):
         http, wire, _ = client([(429, {"Retry-After": "3", "Content-Type": "text/plain"}, b"Please wait."),

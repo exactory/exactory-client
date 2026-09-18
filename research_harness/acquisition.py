@@ -106,6 +106,16 @@ def _partition(identifier, start, end):
             "seen_count": 0, "entries_seen": 0, "epoch": 0, "status": "pending", "restart": False}
 
 
+def _split_partition(collection, partition):
+    """Replace a multi-minute partition by two date halves that restart at offset zero."""
+    begin, end = (datetime.strptime(partition[key], "%Y%m%d%H%M") for key in ("start", "end"))
+    middle = begin + timedelta(minutes=int((end - begin).total_seconds() // 120))
+    children = [_partition(partition["id"] + ".0", partition["start"], middle.strftime("%Y%m%d%H%M")),
+                _partition(partition["id"] + ".1", (middle + timedelta(minutes=1)).strftime("%Y%m%d%H%M"), partition["end"])]
+    index = collection["partitions"].index(partition)
+    collection["partitions"][index:index + 1] = children
+
+
 def _supersede(transaction, operation, target, request_id):
     for identifier, record in transaction.records("acquisition_operation").items():
         if record["state"] == "admitted" and record["operation"] == operation and record["target"] == target and identifier != request_id:
@@ -359,7 +369,12 @@ def _page_update(transaction, collection, partition_id, page, prepared, sources,
     for failure in excluded_entries:
         entry_keys.append("position:" + str(partition["offset"] + failure["index"]))
     disposition = "accepted"
-    if error:
+    if error and error.code == "query_ceiling" and partition["start"] != partition["end"]:
+        # The cursor reached the provider's query ceiling before the partition
+        # completed; its retained entries stay and its date range splits.
+        _split_partition(collection, partition)
+        disposition = "split"
+    elif error:
         failures.insert(0, {"code": error.code})
         disposition = "failed"
     elif page.start != partition["offset"]:
@@ -369,15 +384,10 @@ def _page_update(transaction, collection, partition_id, page, prepared, sources,
         failures.insert(0, {"code": "changed_total", "previous": partition["total"], "observed": page.total})
         partition["restart"] = True
     elif page.total > Arxiv.query_ceiling:
-        begin, end = (datetime.strptime(partition[key], "%Y%m%d%H%M") for key in ("start", "end"))
-        if begin == end:
+        if partition["start"] == partition["end"]:
             failures.insert(0, {"code": "query_ceiling", "partition_id": partition["id"], "reported_total": page.total})
         else:
-            middle = begin + timedelta(minutes=int((end - begin).total_seconds() // 120))
-            children = [_partition(partition["id"] + ".0", partition["start"], middle.strftime("%Y%m%d%H%M")),
-                        _partition(partition["id"] + ".1", (middle + timedelta(minutes=1)).strftime("%Y%m%d%H%M"), partition["end"])]
-            index = collection["partitions"].index(partition)
-            collection["partitions"][index:index + 1] = children
+            _split_partition(collection, partition)
             disposition = "split"
     elif page.returned_count == 0 and page.total != partition["offset"]:
         failures.insert(0, {"code": "empty_page"})
@@ -446,10 +456,10 @@ def _run_collection(store, collection_id, request_id, budget, http):
             break
         if collection["last_attempt_at"]:
             http.pace_from("export.arxiv.org", collection["last_attempt_at"])
-        request = provider.collection_request(collection["definition"]["primaryCategory"], partition["start"], partition["end"],
-                                                start=partition["offset"], page_size=collection["page_size"])
         page, failure, attempts, prepared = None, None, [], []
         try:
+            request = provider.collection_request(collection["definition"]["primaryCategory"], partition["start"], partition["end"],
+                                                    start=partition["offset"], page_size=collection["page_size"])
             response = http.get(request.url, headers=request.headers, accept=request.accept, budget=budget,
                                 not_before=collection.get("next_eligible_at"))
             attempts = response.attempts

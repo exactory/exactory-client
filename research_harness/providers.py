@@ -204,7 +204,10 @@ def _query(parameters, allowed):
 class Arxiv:
     name = "arxiv"
     page_size = 100
-    query_ceiling = 30000
+    # export.arxiv.org answers HTTP 500 whenever start + max_results exceeds
+    # 10000 (observed 2026-09-16 against the documented 30000), so a window
+    # with more entries must be partitioned by date.
+    query_ceiling = 10000
     accept = ("application/atom+xml", "application/xml", "text/xml")
     ns = {"a": "http://www.w3.org/2005/Atom", "ar": "http://arxiv.org/schemas/atom",
           "os": "http://a9.com/-/spec/opensearch/1.1/"}
