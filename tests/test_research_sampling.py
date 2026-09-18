@@ -183,3 +183,18 @@ class CohortGateTests(LiteratureCase):
         placed = dict(plain, placement={"position": "above", "reason": "r"})
         self.mutate(record_reading_batch, {"id": "b2", "depth": "abstract", "items": [placed]})
         self.assertNotIn("placement_missing", self.codes(collection)[0])
+
+
+class SampledExportTests(LiteratureCase):
+    def test_default_export_under_sampled_lists_unread_sampled_members(self):
+        from pathlib import Path
+        import json
+        from research_harness.batches import export_batches
+        from research_harness.principles import initialize_research
+        self.mutate(initialize_research, {"profile": "verification", "target": self.verification_target(),
+                                          "preparation_policy": "sampled-v1"})
+        collection = self.cohort((1, 2, 3, 4))
+        self.mutate(sampling.record_sample, {"id": "s", "collection_id": collection, "size": 2, "seed": "x"})
+        result = export_batches(self.store, destination=str(Path(self.temporary.name) / "sample"))
+        listed = {item["version_id"] for item in json.loads(Path(result["files"][0]).read_text())["items"]}
+        self.assertEqual(listed, {m["version_id"] for m in sampling.current_sample(self.store.snapshot()["records"])["members"]})

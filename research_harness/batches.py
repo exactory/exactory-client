@@ -13,6 +13,7 @@ from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .gates import gate_state
+from .lineage import LINEAGE, loop_readings
 from .literature import foundation_state
 from .principles import preparation_policy
 from .reading import NOTE_FIELDS, selected_abstract
@@ -38,15 +39,32 @@ def _entry(records, evaluation, version_id):
                      "locator": span_locator(content, 0, len(content))}}
 
 
-def unread_abstracts(records, evaluation, profile, *, screen=False):
-    """Current unread (or, with screen, unscreened) abstracts: cohort members first, then Tier 3 references."""
+def unread_abstracts(records, evaluation, profile, *, screen=False, loop=False, candidates=()):
+    """Current unread (or unscreened) abstracts: cohort members, then Tier 3 references; under sampled-v1 the
+    unread sampled members; under lineage-v1 with loop, the selected searches' found works without a loop reading
+    plus the caller's candidates."""
     versions = []
+    if loop:
+        read = {r["version_id"] for r in loop_readings(records)}
+        selections = records.get("search_selection", {})
+        for key in sorted(selections):
+            if not key.startswith(profile + ":"):
+                continue
+            search = records.get("literature_search", {}).get(selections[key]["search_id"])
+            for version in (search or {}).get("found_work_ids", []):
+                if version not in read and version not in versions and version in records.get("work", {}):
+                    versions.append(version)
+        for version in candidates:
+            if version not in versions and version in records.get("work", {}):
+                versions.append(version)
+        return versions
     cohort = gate_state(records, evaluation, "cohort", profile=profile)
-    wanted = {"screening_missing"} if screen else {"cohort_abstract_reading_missing", "screening_audit_reading_missing"}
+    wanted = {"screening_missing"} if screen else {"cohort_abstract_reading_missing", "screening_audit_reading_missing", "sample_reading_missing"}
     pending = {o.get("version_id") for o in cohort.get("obligations", []) if o["code"] in wanted}
     for item in cohort.get("inventory", []):
         if item["artifact"] is not None and (item["version_id"] in pending or (not screen and item["reading_id"] is None
-                                                                               and not cohort.get("counts", {}).get("screening"))):
+                                                                               and not cohort.get("counts", {}).get("screening")
+                                                                               and not cohort.get("counts", {}).get("sample"))):
             versions.append(item["version_id"])
     if records.get("literature_scope", {}).get(profile):
         for item in foundation_state(records, evaluation, profile)["obligations"]:
@@ -61,7 +79,7 @@ SCREEN_SHAPE = {"id": "screen-001", "screener": {"kind": "agent", "model": None}
                            "relevance": "none|weak|strong", "reason": "Why.", "conventions": [], "context": "Citation context for a reference."}]}
 
 
-def export_batches(store, *, depth="abstract", size=60, destination, profile=None, screen=False):
+def export_batches(store, *, depth="abstract", size=60, destination, profile=None, screen=False, loop=False, candidates=()):
     if depth != "abstract":
         raise ResearchError("invalid_input", "Batches export abstract readings")
     if type(size) is not int or not 1 <= size <= 100:
@@ -77,9 +95,11 @@ def export_batches(store, *, depth="abstract", size=60, destination, profile=Non
     profile = profile or config["profile"]
     if screen and preparation_policy(records) != SCREENED:
         raise ResearchError("policy_inapplicable", "Screening batches need the screened-v1 preparation policy")
+    if loop and preparation_policy(records) != LINEAGE:
+        raise ResearchError("policy_inapplicable", "Loop batches need the lineage-v1 preparation policy")
     evaluation = Evaluation(records, ArtifactStore(store.root))
     entries = []
-    for version in unread_abstracts(records, evaluation, profile, screen=screen):
+    for version in unread_abstracts(records, evaluation, profile, screen=screen, loop=loop, candidates=candidates):
         entry = _entry(records, evaluation, version)
         if entry is None:
             continue

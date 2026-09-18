@@ -134,3 +134,24 @@ class LoopTests(LineageCase):
         self.mutate(change_policy, {"previous": "lineage-v1", "policy": "exhaustive-v1",
                                     "reason": "The study returns to the legacy preparation policy."})
         self.assert_error("policy_inapplicable", lambda: self.mutate(lineage.record_loop_closure, {"id": "legacy", "purposes": closure}))
+
+
+class ExportTests(LineageCase):
+    def test_loop_export_lists_search_hits_without_a_loop_reading_and_candidates(self):
+        from pathlib import Path
+        from research_harness.batches import export_batches
+        root = self.metadata(1)
+        self.scope([root])
+        found = [self.metadata(n) for n in range(2, 5)]
+        self.mutate(record_search, self.search("direct", found))
+        self.loop_read(found[:1], "direct", "relevant")
+        extra = self.metadata(9)
+        result = export_batches(self.store, destination=str(Path(self.temporary.name) / "loop"), loop=True, candidates=[extra])
+        listed = [item["version_id"] for item in json.loads(Path(result["files"][0]).read_text())["items"]]
+        self.assertEqual(listed, found[1:] + [extra])
+
+    def test_population_query_ranks_members_by_matched_terms(self):
+        collection = self.cohort((1, 2, 3))
+        report = lineage.population_query(self.store, ["bounded", "finite", "missingterm"], limit=2)
+        self.assertEqual(len(report["matches"]), 2)
+        self.assertEqual(report["matches"][0]["matched_terms"], ["bounded", "finite"])

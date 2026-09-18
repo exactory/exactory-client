@@ -1,11 +1,16 @@
 """Lineage preparation (lineage-v1): the bounded five-purpose loop, innovation candidates, the population query."""
 
+import re
+
+from .artifacts import ArtifactStore
 from .errors import ResearchError
+from .evaluation import Evaluation
 from .evidence import digest
 from .graph import obligation
 from .literature import SEARCH_PURPOSES  # literature imports lineage inside functions only, so this stays acyclic.
 from .operations import fields, immutable_record, prepared_mutation, text
 from .principles import preparation_policy
+from .reading import selected_abstract  # reading imports lineage inside functions only, so this stays acyclic.
 
 LINEAGE = "lineage-v1"
 LOOP_LIMIT = 100
@@ -95,3 +100,28 @@ def loop_obligations(records, profile="research"):
     if closure["loop_digest"] != loop_state(records, profile)["digest"]:
         return [obligation("loop_closure_stale", "Loop readings or searches changed after the closure; close the loop again.", closure_id=closure["id"])]
     return []
+
+
+def population_query(store, terms, *, limit=30):
+    """Rank the enumerated population's stored abstracts by how many of the terms they contain (read-only)."""
+    if not isinstance(terms, list) or not terms or any(not isinstance(t, str) or not t.strip() for t in terms):
+        raise ResearchError("invalid_input", "Give one or more nonblank query terms")
+    if type(limit) is not int or not 1 <= limit <= LOOP_LIMIT:
+        raise ResearchError("invalid_input", "The limit is between 1 and " + str(LOOP_LIMIT))
+    records = store.snapshot()["records"]
+    evaluation = Evaluation(records, ArtifactStore(store.root))
+    patterns = {t: re.compile(r"\b" + re.escape(t) + r"\w*", re.IGNORECASE) for t in terms}
+    matches = []
+    for member in records.get("cohort_member", {}).values():
+        version = member["version_ids"][-1]
+        work = records.get("work", {}).get(version)
+        abstract = selected_abstract(work) if work else None
+        if abstract is None:
+            continue
+        content = work.get("title", "") + "\n" + evaluation.text(abstract["artifact"])
+        matched = [t for t in terms if patterns[t].search(content)]
+        if matched:
+            matches.append({"version_id": version, "work_id": member["work_id"], "title": work.get("title"),
+                            "matched_terms": matched, "score": len(matched)})
+    matches.sort(key=lambda m: (-m["score"], m["version_id"]))
+    return {"terms": terms, "population": len(records.get("cohort_member", {})), "matches": matches[:limit], "read_only": True}
