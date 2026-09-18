@@ -27,6 +27,13 @@ def loop_readings(records):
     return sorted((r for r in records.get("reading", {}).values() if (r.get("batch") or {}).get("loop")), key=lambda r: r["id"])
 
 
+def round_loop_readings(records, admission):
+    """Loop readings whose batch was recorded after the round's admission."""
+    batches = records.get("reading_batch", {})
+    return [r for r in loop_readings(records)
+            if batches.get(r["batch"]["batch_id"], {}).get("revision", 0) > admission["admitted_revision"]]
+
+
 def candidate_readings(records):
     """Abstract readings registered as innovation candidates, in id order."""
     return sorted((r for r in records.get("reading", {}).values() if (r.get("batch") or {}).get("innovation_candidate")),

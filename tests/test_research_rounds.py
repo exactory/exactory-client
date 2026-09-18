@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 from unittest.mock import patch
 
+from literature_fixtures import FIELDS
 from research_fixtures import atom, client, entry, xml_response
 from research_harness import predictions, principles, publication, resources, rounds
 from research_harness.acquisition import collect_cohort
@@ -472,6 +473,23 @@ class RoundLiteratureTests(RoundsCase):
         self.assertEqual(stale, ["adjacent", "direct", "downstream", "originals", "recent", "theory"])
         self.record_purpose("downstream", "downstream-round-2b")
         self.assertNotIn("downstream", [o["purpose"] for o in self.store_obligations() if o["code"] == "search_evidence_stale"])
+
+    def test_a_round_adds_at_most_forty_loop_readings(self):
+        from research_harness import lineage
+        from research_harness.principles import change_policy
+        from research_harness.reading import record_reading_batch
+        self.open_round()
+        self.mutate(change_policy, {"previous": "exhaustive-v1", "policy": "lineage-v1", "reason": "Adopt the lineage policy."})
+        versions = [self.metadata(n) for n in range(200, 200 + lineage.ROUND_LOOP_LIMIT + 1)]
+
+        def batch(items, name):
+            return self.mutate(record_reading_batch, {"id": name, "depth": "abstract", "items": [
+                {"version_id": v, "note": "Read the complete abstract.",
+                 "notes": {f: {"text": "The abstract discusses " + f + ".", "status": "present"} for f in FIELDS},
+                 "loop": {"purposes": ["recent"], "disposition": "out_of_scope", "source": "search"}} for v in items]})
+
+        batch(versions[:lineage.ROUND_LOOP_LIMIT], "round-loop-1")
+        self.assert_error("round_loop_limit_reached", lambda: batch(versions[-1:], "round-loop-2"))
 
     def test_an_exemplar_the_round_opened_with_does_not_count(self):
         self.exemplar_requirement("early")

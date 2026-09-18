@@ -12,7 +12,8 @@ record_reading_batch accepts {id, depth: abstract, items, usage?}. Each item is
 consequential?, placement?, loop?, innovation_candidate?, search_hit?}. The
 preparation policy decides which extras apply: placement and search_hit belong
 to sampled-v1, loop and innovation_candidate to lineage-v1. A batch that carries
-the study past the loop or search-hit limit is rejected whole. The harness
+the study past the loop or search-hit limit, or an active development round past
+its own loop limit, is rejected whole. The harness
 derives the inspection as the whole complete abstract artifact with a span
 locator, then applies the single-reading rules to every item. One failing item
 rejects the whole batch with its index; one event records every reading. Reading
@@ -331,12 +332,20 @@ def record_reading_batch(store, payload, *, expected_revision, request_id):
                 failures.append({"index": index, "code": error.code, "message": error.message})
         if failures:
             raise ResearchError("invalid_batch", "Correct the failing items and resubmit the whole batch", {"items": failures})
-        from .lineage import LOOP_LIMIT, ROUND_LOOP_LIMIT, loop_readings
+        from .lineage import LOOP_LIMIT, ROUND_LOOP_LIMIT, loop_readings, round_loop_readings
         from .sampling import SEARCH_READING_LIMIT, search_readings
         new_loop = sum(1 for item in items if "loop" in item)
-        if new_loop and len(loop_readings(records)) + new_loop > LOOP_LIMIT:
-            raise ResearchError("loop_limit_reached", "The loop reads at most " + str(LOOP_LIMIT) + " abstracts per study; close the loop with the gaps recorded",
-                                {"limit": LOOP_LIMIT, "registered": len(loop_readings(records)), "requested": new_loop})
+        if new_loop:
+            if len(loop_readings(records)) + new_loop > LOOP_LIMIT:
+                raise ResearchError("loop_limit_reached", "The loop reads at most " + str(LOOP_LIMIT) + " abstracts per study; close the loop with the gaps recorded",
+                                    {"limit": LOOP_LIMIT, "registered": len(loop_readings(records)), "requested": new_loop})
+            from .rounds import active_round
+            active = active_round(records)
+            if active is not None:
+                registered = len(round_loop_readings(records, active))
+                if registered + new_loop > ROUND_LOOP_LIMIT:
+                    raise ResearchError("round_loop_limit_reached", "A development round adds at most " + str(ROUND_LOOP_LIMIT) + " loop readings",
+                                        {"limit": ROUND_LOOP_LIMIT, "registered": registered, "requested": new_loop})
         new_hits = sum(1 for item in items if "search_hit" in item)
         if new_hits and len(search_readings(records)) + new_hits > SEARCH_READING_LIMIT:
             raise ResearchError("search_reading_limit_reached", "A verification reads at most " + str(SEARCH_READING_LIMIT) + " search hits",
