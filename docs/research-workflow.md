@@ -97,7 +97,9 @@ exactory-lab state set --stage literature --status pending
 returns one notes file and one coordinator records it with `read-batch`, which
 derives the whole-abstract inspection and applies the single-reading rules to
 every item. Repeat the reading mutations with distinct actual records for all
-members before the gate.
+members before the gate. Under `lineage-v1` this plain export is refused with
+`policy_inapplicable`: that policy reads no cohort member, and its abstracts come
+out of the loop export below, `batches --loop`.
 
 Under `lineage-v1` the population is enumerated but never read as a whole. Run
 `collect` and `resume` until the collection is complete, or import an original
@@ -259,13 +261,18 @@ Under `lineage-v1` the five purposes are covered by a bounded loop over recent
 work rather than by a reading of the whole population. Stage 1 captures one
 search per purpose, keeps the top 10 hits of each query, and adds two local
 sources: a `population-query` over the enumerated population's stored abstracts,
-and the papers that cite the parent within the window. Read every candidate
-abstract and register it as a loop entry that names its purposes, its
-disposition and the source it came from (`search`, `population`, `citing` or
-`author`).
+and the papers that cite the parent within the window. A native registry
+capture must enumerate completely, because a captured page that returns fewer
+records than its reported total is `search_response_incomplete` and leaves the
+search a `search_pending` obligation on the foundation: write each native query
+narrow enough to return at most ten results in total, or import the results as a
+mapped capture and acquire every kept hit with `acquire` before it is read. Read
+every candidate abstract and register it as a loop entry that names its
+purposes, its disposition and the source it came from (`search`, `population`,
+`citing` or `author`).
 
 ```sh
-exactory-research search --file direct-search.json --expected-revision REVISION --request-id search-direct-001   # top 10 hits per query
+exactory-research search --file direct-search.json --expected-revision REVISION --request-id search-direct-001   # at most 10 results, enumerated completely
 exactory-research population-query --terms Haar purity "random state" --limit 30 > candidates.json
 exactory-research batches --destination loop/round-1 --loop --candidates candidates.json
 exactory-research read-batch --file loop/round-1/notes-001.json --expected-revision REVISION --request-id loop-read-001   # items carry "loop"
@@ -538,7 +545,10 @@ against, or was placed below; hits of a targeted search judged `relevant` or
 Prior-art evidence for a specific finding comes from a targeted search: each
 captured query keeps its top 10 hits, and a verification registers at most 20
 abstract readings from search hits, each carrying `search_hit: true`
-(`search_reading_limit_reached` beyond that).
+(`search_reading_limit_reached` beyond that). A native capture also enumerates
+completely, so write the query narrow enough to return at most ten results in
+total, or import the results as a mapped capture and acquire each kept hit with
+`acquire` before it is read.
 
 `status` reports the percentile, the band and the placement counts under
 `limits.sample`. The verdict body carries that percentile and band, and

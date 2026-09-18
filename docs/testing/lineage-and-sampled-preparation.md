@@ -170,10 +170,10 @@ inside the native route with five narrow queries.
 
 ## Final
 
-The whole suite, run once on the release commit tree:
+The whole suite, run once on the final fix tree:
 
 ```
-Ran 1154 tests in 2290.744s
+Ran 1155 tests in 2287.630s
 
 OK
 ```

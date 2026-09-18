@@ -151,7 +151,10 @@ members the target could not be placed against, or was placed below; hits of a t
 search judged `relevant` or `contradictory`. Run a targeted search only for a specific
 finding: each captured query keeps its top 10 hits, and one verification registers at
 most 20 abstract readings from search hits, each carrying `search_hit: true`
-(`search_reading_limit_reached` beyond that).
+(`search_reading_limit_reached` beyond that). A native capture also enumerates
+completely, so write the query narrow enough to return at most ten results in total,
+or import the results as a mapped capture and acquire each kept hit with `acquire`
+before it is read.
 
 ### 3. Judge it
 

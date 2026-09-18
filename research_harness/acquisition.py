@@ -21,10 +21,12 @@ retains the latest observed Retry-After deadline as a UTC ISO timestamp, even
 after expiry. Every resume restores it in a fresh client; a future deadline
 beyond the fetch wait allowance produces pending without a new HTTP attempt.
 Inclusive minute partitions
-are disjoint; a query above 30000 is bisected until enumerable or explicitly
-pending at a single minute. cohort_member/cohort_exclusion/cohort_seen records
-are keyed by a hash of collection/family and hold collection_id, work_id,
-version_ids and source_ids. Family counts never count versions twice.
+are disjoint; a query above the provider's 10,000-result ceiling is bisected
+until enumerable or explicitly pending at a single minute, and a partition also
+splits when the cursor reaches that ceiling before the partition completes.
+cohort_member/cohort_exclusion/cohort_seen records are keyed by a hash of
+collection/family and hold collection_id, work_id, version_ids and source_ids.
+Family counts never count versions twice.
 cohort_partition_member binds family membership to an enumeration epoch;
 cohort_partition_entry binds every listed entry (exact id, or the listing
 position of an entry without one) so a partition completes when the entries
@@ -54,10 +56,13 @@ or verified bibliography completeness. Fulltext availability is source-specific.
 Fulltext capture values contain source_id, requested_version_id, observed version,
 url, original/text artifacts, availability (available|pending), extraction_status,
 includes_abstract, visual_inspection_required, and extraction (extractor, version,
-options, and the measures of the extracted text). A capture with different
-extraction options is a distinct capture of the same original. Missing bytes, extraction or
-exact-version agreement remain pending. All PDF/HTML captures retain a separate
-visual inspection obligation for non-text content.
+media_type, format_detection, options, and the measures of the extracted text).
+media_type is the type the extraction used and format_detection names how it was
+decided, so a PDF served as application/octet-stream is identifiable afterwards.
+A capture with different extraction options is a distinct capture of the same
+original. Missing bytes, extraction or exact-version agreement remain pending.
+All PDF/HTML captures retain a separate visual inspection obligation for
+non-text content.
 
 source_import/{request_id} holds provider, source_url, captured_at,
 response_sha256, media_type, mappings, source_id, work_ids and parser failures.

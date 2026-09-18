@@ -1,12 +1,17 @@
 """Conservative full-text extraction, independent of acquisition and reading.
 
 extract(data, media_type, *, extractor=None, layout=True) -> {status, text,
-includes_abstract, visual_inspection_required, extractor, version, options}. PDF
-extractor injection accepts bytes and returns {status, text}; its successful
-status is 'extracted'. extraction_measures(text, original_size) describes an
-extraction (bytes, pages, longest line, whitespace fraction, expansion) so a
-coordinator sees layout padding before a reader does; a high value is a signal
-to inspect, never a reason to truncate. Missing, scanned, malformed or timed-out extraction remains pending.
+includes_abstract, visual_inspection_required, extractor, version, options,
+media_type, format_detection}. media_type is the type the extraction used and
+format_detection names how it was decided: 'reported_media_type', or
+'pdf_signature_from_generic_binary' for an application/octet-stream body whose
+bytes start with the PDF signature. PDF extractor injection accepts bytes and
+returns {status, text}; its successful status is 'extracted'.
+extraction_measures(text, original_size) describes an extraction (bytes, pages,
+longest line, whitespace fraction, expansion) so a coordinator sees layout
+padding before a reader does; a high value is a signal to inspect, never a
+reason to truncate. Missing, scanned, malformed or timed-out extraction remains
+pending.
 The default pdftotext invocation uses explicit argv, a timeout, a private temp
 directory, and a bounded output read. HTML requires article-body structure with
 nonempty content blocks beyond titles, metadata and abstracts. includes_abstract

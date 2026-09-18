@@ -17,7 +17,7 @@ JSON responses allow at most 128 nested object/array containers, counting the
 root container. The bound covers unused fields and is independent of Python's
 interpreter recursion limit.
 
-Arxiv uses stable submitted-date ascending pages, max 2000 and a 30000 query
+Arxiv uses stable submitted-date ascending pages, max 2000 and a 10,000 query
 ceiling. Acquisition partitions larger queries. OpenAlex uses cursor paging,
 per_page <=100 and an optional bearer token. Crossref uses rows <=1000 and stops
 when fewer than rows are returned, even when next-cursor remains present.

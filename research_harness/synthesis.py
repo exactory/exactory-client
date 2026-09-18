@@ -3,17 +3,18 @@
 Each record_* operation accepts an immutable {id, profile, scope, ...} payload,
 binds the dependencies that section uses, and selects it through
 synthesis_selection/{profile}:{kind}. Under exhaustive-v1 and screened-v1,
-standards bind the cohort population and rationale, innovation and context bind
-the citation frontier and the selected search judgments. Under lineage-v1 and
-sampled-v1, every section binds the stable foundation digest instead: the study
-scope, the full-text requirements, the loop closure and the cohort sample. Under
-lineage-v1 the innovation assessment analyzes exactly five external cases, each
-chosen from the ten read innovation candidates. Every section binds its own
-evidence, the scope, the configuration and the constitution. preparation_digest summarizes the current
-preparation for plans, admissions, assessments, checkpoints and candidates. A new assessment needs a new
-ID; old records and operation results remain unchanged. Section readiness is
-mechanical only. synthesis_report additionally requires the current foundation,
-configuration and all profile-applicable sections.
+standards bind the cohort population, while rationale, innovation and context
+bind the citation frontier and the selected search judgments. Under lineage-v1
+and sampled-v1, every section binds the stable foundation digest instead: the
+study scope, the full-text requirements, the loop closure and the cohort sample.
+Under lineage-v1 the innovation assessment analyzes exactly five external cases,
+each chosen from the ten read innovation candidates. Every section binds its own
+evidence, the scope, the configuration and the constitution. preparation_digest
+summarizes the current preparation for plans, admissions, assessments,
+checkpoints and candidates. A new assessment needs a new ID; old records and
+operation results remain unchanged. Section readiness is mechanical only.
+synthesis_report additionally requires the current foundation, configuration and
+all profile-applicable sections.
 
 And must declare established context. Citation roots do not determine a case's
 study-specific field relationship.

@@ -119,6 +119,8 @@ def export_batches(store, *, depth="abstract", size=60, destination, profile=Non
         raise ResearchError("policy_inapplicable", "Screening batches need the screened-v1 preparation policy")
     if loop and policy != LINEAGE:
         raise ResearchError("policy_inapplicable", "Loop batches need the lineage-v1 preparation policy")
+    if policy == LINEAGE and not loop:
+        raise ResearchError("policy_inapplicable", "Under lineage-v1 export the loop's abstracts with --loop")
     candidates = strings(list(candidates), "Candidates")
     evaluation = Evaluation(records, ArtifactStore(store.root))
     entries = []

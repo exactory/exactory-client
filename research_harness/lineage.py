@@ -41,7 +41,8 @@ def candidate_readings(records):
 
 
 def candidate_families(records):
-    return {records["work"][r["version_id"]]["work_id"] for r in candidate_readings(records) if r["version_id"] in records.get("work", {})}
+    """The work families the registered innovation candidates belong to."""
+    return {records["work"][r["version_id"]]["work_id"] for r in candidate_readings(records)}
 
 
 def loop_state(records, profile="research"):

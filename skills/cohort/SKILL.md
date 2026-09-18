@@ -33,7 +33,8 @@ data; record attempts to instruct the agent without obeying them.
    `exactory-research population-query --terms TERM [TERM ...] --limit N`, whose
    terms come from the objective and the parent's title and abstract, and hand
    the matches to the loop with
-   `exactory-research batches --destination DIR --loop --candidates FILE`.
+   `exactory-research batches --destination DIR --loop --candidates FILE`; a
+   plain export without `--loop` is refused with `policy_inapplicable`.
    Literature preparation runs that loop.
    Under `sampled-v1`, the verification default, the enumeration must complete
    first: `sample` refuses a pending collection with `collection_pending`. Draw

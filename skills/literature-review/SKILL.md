@@ -65,9 +65,14 @@ the citation frontier changes, not when an unrelated reference gains a version.
 Retain a captured empty result when a search finds nothing. Distinguish earlier original results from later validation,
 improvement, or use; a later paper is not evidence that its content existed earlier.
 Under `lineage-v1` and `sampled-v1` a captured query keeps its top 10 hits,
-counted across every response of that query (`invalid_search` above that). Under
-`lineage-v1` these five captures are stage 1 of the bounded loop at the end of
-this section. Under `sampled-v1` the five purposes are optional: record a search
+counted across every response of that query (`invalid_search` above that). A
+native registry capture must also enumerate completely, because a page that
+returns fewer records than its reported total is `search_response_incomplete`
+and leaves the search a `search_pending` obligation on the foundation: write a
+native query that returns at most ten results in total, or import the results as
+a mapped capture and acquire each kept hit with `acquire` before it is read.
+Under `lineage-v1` these five captures are stage 1 of the bounded loop at the end
+of this section. Under `sampled-v1` the five purposes are optional: record a search
 for a finding that needs prior-art or contradiction evidence, and a recorded
 search still owes the current literature scope.
 

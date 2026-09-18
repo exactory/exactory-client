@@ -154,6 +154,13 @@ class ExportTests(LineageCase):
         self.assertEqual(template["loop"]["source"], "|".join(lineage.LOOP_SOURCES))
         self.assertIs(template["innovation_candidate"], True)
 
+    def test_a_plain_export_is_refused_under_lineage(self):
+        from pathlib import Path
+        from research_harness.batches import export_batches
+        self.cohort((1, 2, 3))
+        self.assert_error("policy_inapplicable",
+                          lambda: export_batches(self.store, destination=str(Path(self.temporary.name) / "plain")))
+
     def test_population_query_ranks_members_by_matched_terms(self):
         collection = self.cohort((1, 2, 3))
         report = lineage.population_query(self.store, ["bounded", "finite", "missingterm"], limit=2)
