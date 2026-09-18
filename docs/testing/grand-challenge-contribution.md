@@ -10,3 +10,5 @@ the suites run after it. Suites marked "(frozen copy)" ran on a copy of the tree
 | T02 RED | `test_research_publication.py` | the two new tests errored: the validator refused the ninth field (`Expected fields: ...`) |
 | T02 GREEN | `test_research_publication.py` | Ran 22 tests OK |
 | T02 (frozen copy) | `test_research_rounds.py`, `test_research_round_integrity.py`, `test_research_review_packets.py`, `test_draft.py`, `test_research_cli.py` | Ran 63, 12, 51, 81, 23 tests OK |
+| T03 RED | `test_research_literature.py -k grand_challenge`, `test_research_contribution.py` | `invalid_search`: the purpose was unknown |
+| T03 GREEN | `test_research_literature.py`, `test_research_contribution.py`, `test_research_lineage.py` | OK, OK, OK |
