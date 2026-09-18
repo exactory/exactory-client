@@ -13,10 +13,12 @@ from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .gates import gate_state
-from .lineage import LINEAGE, loop_readings
-from .literature import foundation_state
+from .lineage import INNOVATION_CANDIDATES, LINEAGE, LOOP_SOURCES, loop_readings
+from .literature import DISPOSITIONS, foundation_state
+from .operations import strings
 from .principles import preparation_policy
 from .reading import NOTE_FIELDS, selected_abstract
+from .sampling import POSITIONS, SAMPLED
 from .screening import SCREENED
 from .source_links import span_locator
 
@@ -59,12 +61,13 @@ def unread_abstracts(records, evaluation, profile, *, screen=False, loop=False, 
                 versions.append(version)
         return versions
     cohort = gate_state(records, evaluation, "cohort", profile=profile)
+    counts = cohort.get("counts", {})
     wanted = {"screening_missing"} if screen else {"cohort_abstract_reading_missing", "screening_audit_reading_missing", "sample_reading_missing"}
     pending = {o.get("version_id") for o in cohort.get("obligations", []) if o["code"] in wanted}
+    # Screened and sampled preparation each name the members they owe; every other policy reads the cohort whole.
+    read_everything = not screen and not counts.get("screening") and not counts.get("sample")
     for item in cohort.get("inventory", []):
-        if item["artifact"] is not None and (item["version_id"] in pending or (not screen and item["reading_id"] is None
-                                                                               and not cohort.get("counts", {}).get("screening")
-                                                                               and not cohort.get("counts", {}).get("sample"))):
+        if item["artifact"] is not None and (item["version_id"] in pending or (read_everything and item["reading_id"] is None)):
             versions.append(item["version_id"])
     if records.get("literature_scope", {}).get(profile):
         for item in foundation_state(records, evaluation, profile)["obligations"]:
@@ -77,6 +80,24 @@ SCREEN_SHAPE = {"id": "screen-001", "screener": {"kind": "agent", "model": None}
                 "items": [{"collection_id": "COLLECTION_ID_OR_NULL", "work_id": "FAMILY_ID", "version_id": "EXACT_VERSION_ID",
                            "disposition": "promote|doctrine|exclude|pending", "promotion_reasons": ["prior_art"],
                            "relevance": "none|weak|strong", "reason": "Why.", "conventions": [], "context": "Citation context for a reference."}]}
+
+
+_INNOVATION_CANDIDATE_NOTE = ("Set innovation_candidate to true on a reading that names one of the "
+                              + str(INNOVATION_CANDIDATES) + " innovation candidates; leave the key out otherwise.")
+
+
+def _build_notes_shape(screen, loop, policy):
+    """The item template a coordinator fills: the screening shape, or NOTES_SHAPE plus the key this export's readings carry."""
+    if screen:
+        return SCREEN_SHAPE
+    if loop:
+        extra = {"loop": {"purposes": ["direct"], "disposition": "|".join(DISPOSITIONS), "source": "|".join(LOOP_SOURCES)},
+                 "innovation_candidate": True}
+    elif policy == SAMPLED:
+        extra = {"placement": {"position": "|".join(POSITIONS), "reason": "Why."}}
+    else:
+        return NOTES_SHAPE
+    return dict(NOTES_SHAPE, items=[dict(NOTES_SHAPE["items"][0], **extra)])
 
 
 def export_batches(store, *, depth="abstract", size=60, destination, profile=None, screen=False, loop=False, candidates=()):
@@ -93,10 +114,12 @@ def export_batches(store, *, depth="abstract", size=60, destination, profile=Non
     if config is None:
         raise ResearchError("migration_required", "Initialize or adopt the research contract before exporting batches")
     profile = profile or config["profile"]
-    if screen and preparation_policy(records) != SCREENED:
+    policy = preparation_policy(records)
+    if screen and policy != SCREENED:
         raise ResearchError("policy_inapplicable", "Screening batches need the screened-v1 preparation policy")
-    if loop and preparation_policy(records) != LINEAGE:
+    if loop and policy != LINEAGE:
         raise ResearchError("policy_inapplicable", "Loop batches need the lineage-v1 preparation policy")
+    candidates = strings(list(candidates), "Candidates")
     evaluation = Evaluation(records, ArtifactStore(store.root))
     entries = []
     for version in unread_abstracts(records, evaluation, profile, screen=screen, loop=loop, candidates=candidates):
@@ -118,8 +141,9 @@ def export_batches(store, *, depth="abstract", size=60, destination, profile=Non
                    "screen": screen, "items": entries[start:start + size]}
         (destination / name).write_text(json.dumps(content, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         files.append(str(destination / name))
-    (destination / "README.json").write_text(json.dumps(
-        {"notes_shape": SCREEN_SHAPE if screen else NOTES_SHAPE,
-         "submit": "exactory-research " + ("screen-batch" if screen else "read-batch") + " --file NOTES.json --expected-revision REVISION --request-id ID"},
-        indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    readme = {"notes_shape": _build_notes_shape(screen, loop, policy),
+              "submit": "exactory-research " + ("screen-batch" if screen else "read-batch") + " --file NOTES.json --expected-revision REVISION --request-id ID"}
+    if loop:
+        readme["innovation_candidate"] = _INNOVATION_CANDIDATE_NOTE
+    (destination / "README.json").write_text(json.dumps(readme, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return {"revision": snapshot["revision"], "entries": len(entries), "files": files, "mechanical_only": True}

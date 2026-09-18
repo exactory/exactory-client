@@ -149,9 +149,14 @@ class ExportTests(LineageCase):
         result = export_batches(self.store, destination=str(Path(self.temporary.name) / "loop"), loop=True, candidates=[extra])
         listed = [item["version_id"] for item in json.loads(Path(result["files"][0]).read_text())["items"]]
         self.assertEqual(listed, found[1:] + [extra])
+        template = json.loads((Path(result["files"][0]).parent / "README.json").read_text())["notes_shape"]["items"][0]
+        self.assertEqual(set(template["loop"]), {"purposes", "disposition", "source"})
+        self.assertEqual(template["loop"]["source"], "|".join(lineage.LOOP_SOURCES))
+        self.assertIs(template["innovation_candidate"], True)
 
     def test_population_query_ranks_members_by_matched_terms(self):
         collection = self.cohort((1, 2, 3))
         report = lineage.population_query(self.store, ["bounded", "finite", "missingterm"], limit=2)
         self.assertEqual(len(report["matches"]), 2)
         self.assertEqual(report["matches"][0]["matched_terms"], ["bounded", "finite"])
+        self.assert_error("invalid_input", lambda: lineage.population_query(self.store, ["bounded", "bounded"]))

@@ -198,3 +198,5 @@ class SampledExportTests(LiteratureCase):
         result = export_batches(self.store, destination=str(Path(self.temporary.name) / "sample"))
         listed = {item["version_id"] for item in json.loads(Path(result["files"][0]).read_text())["items"]}
         self.assertEqual(listed, {m["version_id"] for m in sampling.current_sample(self.store.snapshot()["records"])["members"]})
+        template = json.loads((Path(result["files"][0]).parent / "README.json").read_text())["notes_shape"]["items"][0]
+        self.assertEqual(template["placement"], {"position": "|".join(sampling.POSITIONS), "reason": "Why."})

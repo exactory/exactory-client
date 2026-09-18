@@ -8,7 +8,7 @@ from .evaluation import Evaluation
 from .evidence import digest
 from .graph import obligation
 from .literature import SEARCH_PURPOSES  # literature imports lineage inside functions only, so this stays acyclic.
-from .operations import fields, immutable_record, prepared_mutation, text
+from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .principles import preparation_policy
 from .reading import selected_abstract  # reading imports lineage inside functions only, so this stays acyclic.
 
@@ -104,8 +104,7 @@ def loop_obligations(records, profile="research"):
 
 def population_query(store, terms, *, limit=30):
     """Rank the enumerated population's stored abstracts by how many of the terms they contain (read-only)."""
-    if not isinstance(terms, list) or not terms or any(not isinstance(t, str) or not t.strip() for t in terms):
-        raise ResearchError("invalid_input", "Give one or more nonblank query terms")
+    strings(terms, "Query terms", nonempty=True)
     if type(limit) is not int or not 1 <= limit <= LOOP_LIMIT:
         raise ResearchError("invalid_input", "The limit is between 1 and " + str(LOOP_LIMIT))
     records = store.snapshot()["records"]

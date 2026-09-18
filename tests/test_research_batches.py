@@ -98,6 +98,7 @@ class BatchExportTests(LiteratureCase):
         self.assertEqual(self.store.snapshot(), before)
         self.assert_error("review_destination_exists", lambda: export_batches(self.store, destination=self.root / "cohort/batches"))
         self.assert_error("policy_inapplicable", lambda: export_batches(self.store, destination=self.root / "cohort/screens", screen=True))
+        self.assert_error("policy_inapplicable", lambda: export_batches(self.store, destination=self.root / "cohort/loop", loop=True))
 
     def test_export_includes_tier_3_abstracts_after_the_cohort(self):
         from research_harness.batches import export_batches
