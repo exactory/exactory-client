@@ -99,7 +99,8 @@ submits nothing.
 
 Read `RUBRIC.md` in this skill's directory first. It defines the core review JSON
 (summary, strengths, weaknesses, soundness / presentation / contribution on 1-4,
-overall on 1-10, decision accept or reject), the scale anchors, the calibration
+overall on 1-10, decision accept or reject, and the changes that would bring each
+score below 4 to 4), the scale anchors, the calibration
 rules, and the record files. Every review emits exactly that schema. If the
 `scholar-evaluation` skill is installed, invoke it for evidence judgment; without
 it, the rubric's soundness scale governs.
@@ -154,7 +155,7 @@ values into the prediction unchanged; `manuscript-prediction` refuses any other
 cohort with `prediction_cohort_mismatch`. Record both unchanged with
 `manuscript-prediction`, adding `id`, the exact current `bundle_digest`,
 `blind: true` and the reviewer's `assessor` (provenance saved with `artifact`). The
-core stays exactly the eight fields; the prediction never enters it.
+core stays exactly the nine fields; the prediction never enters it.
 
 Use the same assessor identity for each review and its prediction on the same
 bundle. The harness matches identities after case and whitespace normalization.
@@ -199,6 +200,32 @@ it never moves a score. A truthful 6.5 beats a fake 8. When honest work plateaus
 below the bar, the right report is the plateau and what it would take to clear it,
 never a more generous reviewer.
 
+### 2b. Contribution analysis, after each complete measurement
+
+In a managed study, every complete measurement of a bundle is followed by the
+author's contribution analysis of that bundle. The blind reviewers never see it
+and never see the study's Grand Challenge record.
+
+1. Read the three reviews' `changes_for_maximum.contribution` items, the study's
+   current Grand Challenge record (`status` reports it), and the paper's current
+   claims.
+2. Investigate briefly: one to three captured searches with the purpose
+   `grand_challenge` about the frontier of those challenges and who is working
+   on them, and the full reading of each source a step rests on. These searches
+   stay outside the preparation, so the measured bundle stays current. Reading
+   in full a work that is already in the study's citation graph changes the
+   preparation; leave such a reading to the next round's literature stage.
+3. Record `contribution-analysis` for the bundle: the position against the
+   record's criteria, one disposition for every reviewer contribution change
+   (`adopted` into a step, or `rejected` with a reason), and at least one step.
+   Each step names the criteria it advances, its direction, whether it fits this
+   round's objective (`this_round`) or needs a new round (`next_round`), the
+   current claims it builds on, and the community that gains, with evidence. A
+   step follows from established results; a bold leap is not a step.
+
+`exactory-research example contribution-analysis` shows the complete payload.
+The next bundle is pinned and the round is decided only after this record.
+
 ### 3. Anticipate the market
 
 The market's verifier agents read the deposited paper and each file one verdict: a
@@ -225,7 +252,7 @@ predictions with their medians, the decision under review, and every earlier
 round's goal, assessment and decision.
 
 The assessor answers each check of the decision's kind once. A `continue` decision
-has six checks and a `stop` decision has two:
+has seven checks and a `stop` decision has two:
 
 - `impact` (continue): Does the goal name something concrete the field could do
   after the round that it cannot do with the current paper, and is that named with
@@ -243,6 +270,11 @@ has six checks and a `stop` decision has two:
 - `continuity` (continue): Does the round build on the previous rounds' products in
   full, keeping their claims, evidence and readings in use, rather than replacing
   them or migrating the study elsewhere?
+- `grand_challenge` (continue): Does the goal advance the named criteria of the
+  study's current Grand Challenge record by a step that follows from the paper's
+  established claims without a leap, and does it pursue the step of greatest
+  value to the community among the contribution analysis's steps, or justify
+  another choice?
 - `stop` (stop): Were the candidates and carried items judged fairly against the
   paper's evidence and reviews?
 

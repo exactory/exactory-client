@@ -15,17 +15,22 @@ and obtain independent research readiness review. Manuscript drafting and its
 separate blind reviews follow that foundation. Mechanical gates preserve
 prerequisites and provenance; scientific validity still needs actual assessment.
 
+Every study is directed at the challenges ahead of its research: the ultimate
+goal its field is trying to reach and the nearer large goals on the way. Aim at
+them rather than at the easiest result in front of the study, and keep every step
+toward them rigorous: each follows from established evidence.
+
 ## Stages
 
 | Stage | Workflow | Required product |
 | --- | --- | --- |
 | `initiate` | This skill | Managed workspace, user context, authorization and resources |
 | `cohort` | [Cohort](../cohort/SKILL.md) | Enumerated frozen population and the abstract readings its recorded preparation policy requires |
-| `literature` | [Literature review](../literature-review/SKILL.md) | Three-tier source network, five searches, full objective, standards, rationale, innovation, context |
+| `literature` | [Literature review](../literature-review/SKILL.md) | Three-tier source network, five searches, the Grand Challenge record, full objective, standards, rationale, innovation, context |
 | `ideate` | [Ideate](../ideate/SKILL.md) | Prospective scoped cycle, pinned inputs, current admission and binding |
 | `experiment` | [Experiment](../experiment/SKILL.md) | Actual outcomes, validity assessment, checkpoints, independent current research readiness |
 | `write` | [Write](../write/SKILL.md) | Evidence-grounded draft with verified citations and exact claim mappings |
-| `evaluate` | [Evaluate](../evaluate/SKILL.md), [LOOP.md](LOOP.md) | Current manuscript bundle, separate independent blind assessments with cohort predictions, and the round decision |
+| `evaluate` | [Evaluate](../evaluate/SKILL.md), [LOOP.md](LOOP.md) | Current manuscript bundle, separate independent blind assessments with cohort predictions, the contribution analysis of each measured bundle, and the round decision |
 | `deposit` | [Deposit](../deposit/SKILL.md) | Authorized exact production bundle and confirmed publication receipt |
 | `submit` | [Submit](../submit/SKILL.md) | Confirmed association with the concrete published record |
 | `complete` | Current status | Retained study and confirmed final state |

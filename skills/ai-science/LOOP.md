@@ -50,7 +50,10 @@ For each iteration:
 2. Refresh affected literature and synthesis before a new claim or reframing.
    Source, scope, or policy changes require current preparation and dependent
    reassessment.
-3. Select the most consequential supported weakness. Revise presentation directly
+3. Read the latest contribution analysis first. A `this_round` step becomes the
+   next cycle's hypothesis; a `next_round` step waits for the round gate.
+   Otherwise select the most consequential supported weakness, using the
+   reviews' `changes_for_maximum`. Revise presentation directly
    when the evidence stands. An evidence gap returns through the supported state
    transition to a prospective admitted cycle, actual assessment, checkpoint, and
    renewed independent research readiness before rewriting.
@@ -61,6 +64,8 @@ For each iteration:
 5. Preserve a source checkpoint and record the predicted score separately from
    the reviewer delivery. Obtain three fresh blind reviews, save their unchanged
    JSON, and record the actual median, spread, and reasons for any difference.
+   Then record the contribution analysis of the measured bundle (the evaluate
+   skill, section 2b) before pinning the next bundle.
 6. Select the better supported manuscript version using scientific accuracy and
    review evidence. A higher score cannot justify a false claim. If restoring an
    earlier source variant, make that limited source change explicitly and retain
@@ -103,14 +108,19 @@ The round gate, at the end of `evaluate`:
    number 2 or more, its assessment on this bundle (`round-assess`), the four
    consequence searches, the exemplar, an assessed cycle, a new claim, and claims
    continuity.
-2. Write the candidates from the carried developments (`next_round` dispositions
+   For every bundle it also names the complete measurement and the contribution
+   analysis that the decision needs.
+2. Write the candidates from every step of the bundle's contribution analysis
+   (each listed with its id, direction and statement; `contribution_step_missing`
+   otherwise), the carried developments (`next_round` dispositions
    of the closing round's cycle assessments), the review findings, the `context`
    and `innovation` sections, and the open Grand Challenges. Each candidate has a
    direction (`vertical` or `horizontal`), a disposition and evidence; a source
    cited as evidence needs a full reading of that source.
 3. Choose with `round`. `continue` pursues exactly one candidate and states the
    goal: the direction, the contribution delta, the beneficiaries, the success
-   criteria, the stop conditions, the continuity with the current paper, the
+   criteria, the stop conditions, the criteria of the current Grand Challenge
+   record it advances (`criterion_ids`), the continuity with the current paper, the
    route and the risks. `stop` lists at least one candidate, disposes of every
    candidate and carried development, and pursues none of them. Either decision
    disposes of every carried development of the closing round in `carried`, once
