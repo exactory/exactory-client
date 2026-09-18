@@ -508,14 +508,17 @@ An external-paper verification uses a separate `verification` profile. Acquire
 the exact metadata first in the fresh directory, then initialize that known
 version with nullable main-body fields. Acquire and inspect the original body,
 pin its source and hash with `target`, and set matching verification roots.
-Complete the same network, reading, five search purposes, and applicable standards.
+Complete the same network, reading, and applicable standards. Every policy
+except `sampled-v1` also requires the five search purposes.
 Keep historical prior art tied to the version that existed at the target's date.
 Current work can explain a result without becoming earlier prior art. Author
 innovation goals and contribution targets are not verification prerequisites.
 
 Under `sampled-v1` the verifier's population work is the sample. Draw it, read
 every sampled abstract completely with a placement judgment, and read at most
-ten core papers in full.
+ten core papers in full. The five search purposes are optional here: record one
+for a finding that needs prior-art or contradiction evidence. A recorded search
+still needs the current literature scope.
 
 ```sh
 exactory-research sample --file sample.json --expected-revision REVISION --request-id draw-sample-001

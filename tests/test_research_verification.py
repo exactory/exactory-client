@@ -8,6 +8,7 @@ import threading
 from unittest import mock
 
 from literature_fixtures import FIELDS
+from research_harness.literature import foundation_report
 from test_research_synthesis import SynthesisCase
 
 
@@ -221,11 +222,13 @@ class SampledVerificationCase(SynthesisCase):
 
     `works` is the population the cohort collects, and `positions` is one placement
     judgment per sampled member, in the sample's own order. A `positions` shorter than
-    the sample leaves its last members unread for the test to record.
+    the sample leaves its last members unread for the test to record. `searches` records
+    the five purposes, which this policy allows and does not require.
     """
 
     works = ()
     positions = ()
+    searches = True
 
     def setUp(self):
         super().setUp()
@@ -241,9 +244,10 @@ class SampledVerificationCase(SynthesisCase):
         self.mutate(sampling.record_sample, {"id": "s", "collection_id": collection, "size": len(self.works), "seed": "x"})
         self.members = sampling.current_sample(self.store.snapshot()["records"])["members"]
         self.read_members("b", self.members, self.positions)
-        # The sampled policy takes the target's own full reading, the placed sample and the
-        # five searches; a second cohort would replace the population the sample was drawn from.
-        self.foundation_searches("verification")
+        # The sampled policy takes the target's own full reading and the placed sample; the five
+        # searches are targeted, and a second cohort would replace the population the sample was drawn from.
+        if self.searches:
+            self.foundation_searches("verification")
         self.mutate(self.api().record_standards, self.standards(self.linked, "verification"))
         self.task = {"verificationId": "11111111-1111-4111-8111-111111111111", "doi": "10.48550/arxiv.2601.00001",
                      "source": "arxiv", "sourceId": "2601.00001", "sourceVersion": 1,
@@ -350,3 +354,28 @@ class UnplacedSampleVerificationTests(SampledVerificationCase):
         refused = self.refusal(50, {"best": 35, "worst": 65})
         self.assertEqual(refused.code, "prediction_mismatch")
         self.assertEqual(refused.message, "The sample places no member; revise the placements before binding")
+
+
+class TargetedSearchVerificationTests(SampledVerificationCase):
+    """Under sampled-v1 a search is targeted, so a purpose with no recorded search owes nothing."""
+
+    works = (2, 3, 4, 5)
+    positions = ("above", "above", "above", "below")
+    searches = False
+
+    def test_preparation_is_ready_with_no_search_recorded(self):
+        report = foundation_report(self.store, "verification")
+        self.assertEqual([o["code"] for o in report["obligations"]], [])
+        self.assertTrue(report["ready"])
+        self.assertTrue(report["passed"]["searches"])
+
+    def test_a_recorded_search_still_owes_the_current_scope(self):
+        self.record_purpose("direct", "direct-search", "verification")
+        self.assertTrue(foundation_report(self.store, "verification")["ready"])
+        scope = self.store.snapshot()["records"]["literature_scope"]["verification"]
+        added = self.read_source(7)
+        self.scope(scope["roots"] + [added["version_id"]], scope["collection_ids"],
+                   profile="verification", target=scope["target"])
+        report = foundation_report(self.store, "verification")
+        self.assertEqual([o["code"] for o in report["obligations"]], ["search_scope_stale"])
+        self.assertFalse(report["passed"]["searches"])

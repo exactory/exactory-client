@@ -516,7 +516,9 @@ def _foundation_state(evaluation, profile):
     for purpose in selected_searches:
         matches = [s for s in searches.values() if s["id"] == selected_searches[purpose] and s["purpose"] == purpose]
         current = [s for s in matches if s["scope_digest"] == digest(scope)]
-        if not current:
+        # Under sampled-v1 the searches are targeted, so a purpose with no recorded search owes
+        # nothing; a search that was recorded still owes the current scope.
+        if not current and (matches or policy != SAMPLED):
             obligations.append(obligation("search_scope_stale" if matches else "search_purpose_missing",
                 "Record this purpose's saved search responses against the current literature scope.", purpose=purpose))
         for search in current:
