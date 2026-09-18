@@ -368,6 +368,31 @@ os._exit(23)
         self.assertNotIn("limits", json.loads(legacy.stdout))
         self.assertLess(priority({"code": "sample_missing"}), priority({"code": "never_seen_code"}))
 
+    def test_candidates_file_is_validated_before_it_reaches_the_batches_export(self):
+        from research_harness.cli import build_parser, load_candidates, run
+        from research_harness.errors import ResearchError
+        query = self.root / "query.json"
+        query.write_text(json.dumps({"terms": ["Haar"], "population": 2, "read_only": True,
+                                     "matches": [{"version_id": "arxiv:2601.00001v1", "score": 1}]}))
+        self.assertEqual(load_candidates(query), ["arxiv:2601.00001v1"])
+        listed = self.root / "list.json"
+        listed.write_text(json.dumps(["arxiv:2601.00001v1", "arxiv:2601.00002v1"]))
+        self.assertEqual(load_candidates(listed), ["arxiv:2601.00001v1", "arxiv:2601.00002v1"])
+        for content in ({}, {"matches": [{"id": "a"}]}, [{"version_id": "arxiv:2601.00001v1"}], 5, "arxiv:2601.00001v1"):
+            refused = self.root / "refused.json"
+            refused.write_text(json.dumps(content))
+            with self.assertRaises(ResearchError) as raised:
+                load_candidates(refused)
+            self.assertEqual((raised.exception.code, raised.exception.message),
+                             ("invalid_input", "The candidates file is a population-query result or a list of version ids"))
+        self.init_lab()
+        unpaired = build_parser().parse_args(["batches", "--workspace", str(self.root), "--destination", str(self.root / "batches"),
+                                              "--candidates", str(listed)])
+        with self.assertRaises(ResearchError) as raised:
+            run(unpaired)
+        self.assertEqual((raised.exception.code, raised.exception.message), ("invalid_input", "--candidates needs --loop"))
+        self.assertFalse((self.root / "batches").exists())
+
 
 class ResearchPreparationTests(DevelopmentCase):
     def cli(self, command, *args):

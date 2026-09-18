@@ -238,6 +238,18 @@ def status_report(store, *, counters=False):
                 historical_adoptions=list(records.get("workspace_adoption", {}).values()))
 
 
+def load_candidates(path):
+    """Read a --candidates file as version ids: a population-query result's matches, or a plain list of ids."""
+    loaded = strict_json(Path(path).read_bytes())
+    if isinstance(loaded, dict):
+        matches = loaded.get("matches")
+        if isinstance(matches, list) and all(isinstance(m, dict) and isinstance(m.get("version_id"), str) for m in matches):
+            return [m["version_id"] for m in matches]
+    elif isinstance(loaded, list) and all(isinstance(item, str) for item in loaded):
+        return loaded
+    raise ResearchError("invalid_input", "The candidates file is a population-query result or a list of version ids")
+
+
 def run(args):
     if args.command == "example":
         examples = strict_json((Path(__file__).resolve().parents[1] / "docs/research-cli-examples.json").read_bytes())
@@ -279,12 +291,11 @@ def run(args):
         return obligations_page(status_report(store), args.code, limit=args.limit, cursor=args.cursor)
     if args.command == "batches":
         from .batches import export_batches
-        candidates = []
-        if args.candidates:
-            loaded = strict_json(Path(args.candidates).read_bytes())
-            candidates = [m["version_id"] for m in loaded["matches"]] if isinstance(loaded, dict) else list(loaded)
+        if args.candidates and not args.loop:
+            raise ResearchError("invalid_input", "--candidates needs --loop")
         return export_batches(store, depth=args.depth, size=args.size, destination=args.destination, profile=args.profile,
-                              screen=args.screen, loop=args.loop, candidates=candidates)
+                              screen=args.screen, loop=args.loop,
+                              candidates=load_candidates(args.candidates) if args.candidates else ())
     if args.command == "population-query":
         return lineage.population_query(store, args.terms, limit=args.limit)
     if args.command == "policy-report":

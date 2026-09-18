@@ -1,7 +1,6 @@
-"""Counts against every limit of the recorded preparation policy, for status and the policy report."""
+"""The single reading of the bounded policies' counts that both status and the policy report serve."""
 
 from . import lineage, principles, sampling
-from .errors import ResearchError
 
 
 def limits_report(records):
@@ -14,11 +13,9 @@ def limits_report(records):
                           "covered": [p for p, s in state["purposes"].items() if s["covered"]]}
         report["innovation_candidates"] = {"families": len(lineage.candidate_families(records)), "required": lineage.INNOVATION_CANDIDATES}
     if policy == sampling.SAMPLED:
-        try:
+        if sampling.current_sample(records) is not None:
             prediction = sampling.prediction(records)
             report["sample"] = {k: prediction[k] for k in ("n", "placed", "unplaced", "percentile", "band", "widen_required")}
-        except ResearchError:
-            report["sample"] = None
         report["search_readings"] = {"readings": len(sampling.search_readings(records)), "limit": sampling.SEARCH_READING_LIMIT}
         report["core_papers"] = {"requirements": len(sampling.core_requirements(records)), "limit": sampling.CORE_LIMIT}
     return report

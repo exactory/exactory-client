@@ -310,12 +310,13 @@ def policy_report(store, *, policy=None, reference=None):
     config = records.get("configuration", {}).get("research")
     if config is None:
         raise ResearchError("migration_required", "Initialize or adopt the research contract before a policy report")
-    policy = policy or preparation_policy(records)
+    recorded = preparation_policy(records)
+    policy = policy or recorded
     if policy not in POLICIES:
         raise ResearchError("invalid_input", "Unknown preparation policy")
     if policy in (LINEAGE, SAMPLED):
         # A bounded policy prepares a loop or a sample, not a screened selection, so it reports its limits instead of the collections.
-        return {"revision": snapshot["revision"], "policy": policy, "recorded_policy": preparation_policy(records),
+        return {"revision": snapshot["revision"], "policy": policy, "recorded_policy": recorded,
                 "limits": limits_report(records), "mechanical_only": True}
     evaluation = Evaluation(records, ArtifactStore(store.root))
     cohort = gate_state(records, evaluation, "cohort", profile=config["profile"])
@@ -352,5 +353,5 @@ def policy_report(store, *, policy=None, reference=None):
             missed = sorted(set(families) - selected)
             recall[category] = {"total": len(families), "found": len(families) - len(missed),
                                 "recall": None if not families else round((len(families) - len(missed)) / len(families), 4), "missed": missed}
-    return {"revision": snapshot["revision"], "policy": policy, "recorded_policy": preparation_policy(records),
+    return {"revision": snapshot["revision"], "policy": policy, "recorded_policy": recorded,
             "collections": collections, "saturation": saturation_covers(records), "recall": recall, "mechanical_only": True}
