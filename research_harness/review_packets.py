@@ -17,6 +17,8 @@ revision labels still never enter it. Delivery copies exactly the artifacts a
 packet references.
 """
 
+from .challenge import find_current_challenge
+from .contribution import find_analysis
 from .evidence import digest
 from .predictions import measurement_summary
 from .publication import latest_reviews
@@ -112,10 +114,14 @@ def round_packet(records, bundle, decision):
         if selected is not None:
             search = records["literature_search"][selected["search_id"]]
             searches[purpose] = {k: search[k] for k in ("purpose", "found_work_ids", "dispositions", "impact", "gaps")}
+    current_challenge = find_current_challenge(records)
+    analysis = find_analysis(records, bundle["digest"])
     manifest = {"kind": "round", "manuscript": manuscript_packet(records, bundle), "reviews": reviews, "predictions": predictions,
                 "measurement": measurement_summary(records, bundle),
                 "decision": {"payload": decision["payload"], "digest": decision["digest"], "closes": decision["closes"]},
                 "rounds": history, "development": development, "synthesis": synthesis, "searches": searches,
+                "grand_challenge": current_challenge["payload"] if current_challenge else None,
+                "contribution_analysis": analysis["payload"] if analysis else None,
                 "resources": account_report(records, "research"),
                 "digest": digest({"bundle": bundle["digest"], "decision": decision["digest"]})}
     return scrub(manifest, _FORBIDDEN_KEYS + ("authors", "author"))

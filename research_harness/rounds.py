@@ -16,14 +16,14 @@ from .evidence import digest
 from .graph import obligation
 from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .workspace import strict_json
-from . import development, literature, predictions, principles, publication, resources
+from . import challenge, contribution, development, literature, predictions, principles, publication, resources
 
 
 DECISIONS = ("continue", "stop")
 DIRECTIONS = ("vertical", "horizontal")
 CANDIDATE_DISPOSITIONS = ("pursue", "rejected", "deferred")
 CRITERION_KINDS = ("claim", "scope")
-CHECKS_CONTINUE = ("impact", "demand", "novelty_risk", "feasibility", "distinctness", "continuity")
+CHECKS_CONTINUE = ("impact", "demand", "novelty_risk", "feasibility", "distinctness", "continuity", "grand_challenge")
 CHECKS_STOP = ("stop", "demand")
 VERDICTS = ("approved", "not_approved", "unresolved")
 CHECK_STATUSES = ("passed", "failed", "unresolved")
@@ -196,7 +196,7 @@ def _carried(records, values):
 
 
 def _goal(value, evidence, pursued):
-    _fields(value, ("direction", "field_change", "statement", "contribution_delta", "beneficiaries", "success_criteria",
+    _fields(value, ("direction", "criterion_ids", "field_change", "statement", "contribution_delta", "beneficiaries", "success_criteria",
                     "stop_conditions", "continuity", "route", "risks", "evidence"))
     for key in ("statement", "contribution_delta", "continuity", "route"):
         _text(value[key], "Goal " + key)
@@ -291,6 +291,26 @@ def _development_exhausted(records):
     return [o for o in resources.obligations(records, "research") if o["purpose"] == "development"]
 
 
+def _list_analysis_obligations(records, bundle):
+    """What a decision on the bundle needs first: its complete measurement and its contribution analysis (design 7.6)."""
+    if predictions.select_measurement_reviews(records, bundle) is None:
+        return [obligation("manuscript_measurement_missing", "Measure the exact bundle with three paired blind reviews and predictions.")]
+    if contribution.find_analysis(records, bundle["digest"]) is None:
+        return [obligation("contribution_analysis_missing", "Record the contribution analysis of the measured bundle.", bundle_id=bundle["id"])]
+    return []
+
+
+def _check_steps_listed(candidates, analysis):
+    """Every step of the bundle's contribution analysis appears among the candidates with its direction and statement."""
+    listed = {candidate["id"]: candidate for candidate in candidates}
+    missing = [step["id"] for step in analysis["payload"]["steps"]
+               if step["id"] not in listed or listed[step["id"]]["direction"] != step["direction"]
+               or _normalized(listed[step["id"]]["statement"]) != _normalized(step["statement"])]
+    if missing:
+        raise ResearchError("contribution_step_missing", "List every step of the bundle's contribution analysis as a candidate",
+                            {"step_ids": missing})
+
+
 def _next(records, context, evidence, value, number, pursued):
     _fields(value, ("number", "objective", "objective_lineage", "goal", "resource_limits", "reopening"))
     if value["number"] != number + 1:
@@ -301,6 +321,7 @@ def _next(records, context, evidence, value, number, pursued):
     else:
         principles.widen_objective(records, value["objective"], value["objective_lineage"], "proposed")
     goal = _goal(value["goal"], evidence, pursued)
+    challenge.validate_criterion_ids(records, goal["criterion_ids"], "Goal criterion IDs", _ERROR)
     _limits(value["resource_limits"], goal)
     reopened_round_id = _reopening(records, value["reopening"], evidence)
     _distinct(records, goal, reopened_round_id)
@@ -334,8 +355,13 @@ def record_round(store, payload, *, expected_revision, request_id):
             unkept = _unkept_claim_ids(derive_progress(records, context.artifacts, latest, bundle))
             if unkept:
                 raise ResearchError("round_claims_dropped", "Keep, revise or supersede every claim of the round's opening bundle", {"claim_ids": unkept})
+        owed = _list_analysis_obligations(records, bundle)
+        if owed:
+            raise ResearchError(owed[0]["code"], owed[0]["explanation"],
+                                {key: item for key, item in owed[0].items() if key not in ("code", "explanation")})
         evidence = _RoundEvidence(context, bundle)
         pursued = _candidates(value["candidates"], evidence)
+        _check_steps_listed(value["candidates"], contribution.find_analysis(records, bundle["digest"]))
         carried = _carried(records, value["carried"])
         if value["decision"] == "continue":
             if len(pursued) != 1:
@@ -616,7 +642,8 @@ def _decision_obligations(records, bundle, number):
         pending = any(r["round_id"] == latest["id"] for r in reviews)
         code = "round_review_pending" if pending else "round_review_missing"
         return None, exhausted + [obligation(code, "Obtain an approving independent review of the round decision.", decision_id=latest["id"])]
-    return None, exhausted + [obligation("round_decision_missing", "Decide on this exact manuscript: continue with a goal, or stop.", round=number)]
+    return None, exhausted + _list_analysis_obligations(records, bundle) + [
+        obligation("round_decision_missing", "Decide on this exact manuscript: continue with a goal, or stop.", round=number)]
 
 
 def round_state(records, artifacts):
@@ -659,6 +686,7 @@ def round_state(records, artifacts):
             "decision": decision["decision"] if decision else None, "decision_id": decision["id"] if decision else None,
             "next": decision["payload"]["next"] if decision and decision["decision"] == "continue" else None,
             "progress": progress,
+            "analysis": bundle is not None and contribution.find_analysis(records, bundle["digest"]) is not None,
             "measurement": predictions.measurement_summary(records, bundle) if bundle else None,
             "limits": latest["resource_limits"] if latest is not None else None,
             "budget": resources.account_report(records, "research").get("development"),
@@ -671,7 +699,7 @@ def round_summary(report):
     the admitted round's limits, the development budget line and the usage since the admission (spec sections 12 and 14)."""
     progress = report["progress"]
     return {"number": report["round"], "active": report["active"], "assessed": report["assessed"],
-            "decision": report["decision"], "obligations": len(report["obligations"]),
+            "decision": report["decision"], "analysis": report["analysis"], "obligations": len(report["obligations"]),
             "progress": None if progress is None else {
                 "fresh_purposes": progress["fresh_purposes"], "exemplar": progress["exemplar"], "cycles": len(progress["cycles"]),
                 "new_claims": len(progress["new_claim_ids"]), "dropped_claims": len(progress["dropped_claim_ids"]),

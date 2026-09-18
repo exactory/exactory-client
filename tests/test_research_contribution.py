@@ -1,9 +1,10 @@
 """The Grand Challenge search, the contribution analysis, the next pin and the round decision (design 7.3 to 7.6)."""
 
 import copy
+import json
 from unittest.mock import patch
 
-from research_harness import contribution, predictions, publication
+from research_harness import contribution, predictions, publication, rounds
 from research_harness.evaluation import Evaluation
 from rounds_fixtures import RoundsCase
 
@@ -129,3 +130,62 @@ class NextBundleTests(RoundsCase):
         self.analyze(second, "two")
         third = self.pin(identifier="paper-third", measure=False)
         self.assertEqual(publication.publication_report(self.store)["bundle"]["digest"], third["digest"])
+
+
+class RoundContributionTests(RoundsCase):
+    def round_codes(self):
+        records = self.store.snapshot()["records"]
+        return {item["code"] for item in rounds.round_state(records, self.artifacts)["obligations"]}
+
+    def test_a_decision_needs_the_measurement_and_the_analysis_of_its_bundle(self):
+        bundle = self.pin(measure=False)
+        self.assert_error("manuscript_measurement_missing", lambda: self.mutate(rounds.record_round, self.decision_payload(bundle)))
+        self.assertIn("manuscript_measurement_missing", self.round_codes())
+        self.measure(bundle, "one")
+        self.assert_error("contribution_analysis_missing", lambda: self.mutate(rounds.record_round, self.decision_payload(bundle)))
+        self.assertIn("contribution_analysis_missing", self.round_codes())
+        analysis = self.analyze(bundle, "one")
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        self.assertIn(analysis["payload"]["steps"][0]["id"], [c["id"] for c in decision["payload"]["candidates"]])
+
+    def test_the_candidates_list_every_step_of_the_analysis(self):
+        bundle = self.pin()
+        step_id = "step-" + bundle["id"]
+        omitted = self.decision_payload(bundle)
+        omitted["candidates"] = [c for c in omitted["candidates"] if c["id"] != step_id]
+        self.assert_error("contribution_step_missing", lambda: self.mutate(rounds.record_round, omitted))
+        turned = self.decision_payload(bundle)
+        next(c for c in turned["candidates"] if c["id"] == step_id)["direction"] = "horizontal"
+        self.assert_error("contribution_step_missing", lambda: self.mutate(rounds.record_round, turned))
+        self.mutate(rounds.record_round, self.decision_payload(bundle))
+
+    def test_a_continue_goal_names_the_grand_challenge_criteria_it_advances(self):
+        bundle = self.pin()
+        for identifiers in ([], ["rc-absent"]):
+            payload = self.decision_payload(bundle)
+            payload["next"]["goal"]["criterion_ids"] = identifiers
+            with self.subTest(criterion_ids=identifiers):
+                self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round, payload))
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        self.assertEqual(decision["payload"]["next"]["goal"]["criterion_ids"], ["rc-general"])
+
+    def test_a_continue_review_answers_the_grand_challenge_check(self):
+        bundle = self.pin()
+        decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        review = self.review_payload(decision)
+        self.assertIn("grand_challenge", [check["kind"] for check in review["checks"]])
+        partial = copy.deepcopy(review)
+        partial["checks"] = [check for check in partial["checks"] if check["kind"] != "grand_challenge"]
+        self.assert_error("invalid_round", lambda: self.mutate(rounds.record_round_review, partial))
+        self.mutate(rounds.record_round_review, review)
+
+    def test_the_round_packet_and_the_summary_carry_the_grand_challenge_and_the_analysis(self):
+        from research_harness.review_delivery import deliver_round
+        bundle = self.pin()
+        self.mutate(rounds.record_round, self.decision_payload(bundle))
+        deliver_round(self.store, self.root / "round-packet")
+        manifest = json.loads((self.root / "round-packet" / "inputs.json").read_text())
+        self.assertEqual(manifest["grand_challenge"]["challenges"][0]["criteria"][0]["id"], "rc-general")
+        self.assertEqual(manifest["contribution_analysis"]["steps"][0]["id"], "step-" + bundle["id"])
+        records = self.store.snapshot()["records"]
+        self.assertTrue(rounds.round_summary(rounds.round_state(records, self.artifacts))["analysis"])

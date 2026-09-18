@@ -28,7 +28,7 @@ PRIORITY = ("migration_required", "profile_mismatch", "configuration_missing", "
             "publication_bundle_missing", "publication_readiness_stale", "publication_artifact_changed",
             "manuscript_reviews_required", "lineage_citation_missing",
             "round_assessment_missing", "round_search_missing", "round_exemplar_missing", "round_cycle_missing", "round_claims_dropped",
-            "round_claim_missing", "round_decision_missing", "round_review_missing", "round_review_pending", "round_admission_missing")
+            "round_claim_missing", "manuscript_measurement_missing", "contribution_analysis_missing", "round_decision_missing", "round_review_missing", "round_review_pending", "round_admission_missing")
 _HINT_LIMITS = {"code": 48, "version_id": 64, "work_id": 64, "collection_id": 64, "unit_id": 64, "explanation": 120}
 _MAX_PAGE = 500
 

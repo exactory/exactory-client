@@ -101,6 +101,7 @@ class RoundPacketTests(RoundsCase):
         bundle = self.pin(evidence=[self.result_evidence(self.execution_payload), self.source_evidence()], measure=False)
         self.assert_error("round_decision_missing", lambda: deliver_round(self.store, directory))
         self.measure(bundle, "one")
+        self.analyze(bundle, "one")
         decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
         deliver_round(self.store, directory)
         text = (directory / "inputs.json").read_text()
@@ -149,6 +150,7 @@ class RoundPacketTests(RoundsCase):
         self.assertNotEqual(refused.returncode, 0)
         self.assertIn("round_decision_missing", refused.stderr)
         self.measure(bundle, "one")
+        self.analyze(bundle, "one")
         decision = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
         delivered = export("packet-2")
         self.assertEqual(delivered.returncode, 0, delivered.stderr)
@@ -162,10 +164,12 @@ class RoundPacketTests(RoundsCase):
         self.run_round_work("r2")
         bundle = self.pin(self.claims("wider"), identifier="paper-r2", measure=False)
         self.measure(bundle, "r2")
+        self.analyze(bundle, "r2")
         directory = self.root / "reviews" / "manuscript-r2"
         deliver_manuscript(self.store, directory)
         text = (directory / "inputs.json").read_text()
-        for forbidden in ('"round', '"percentile"', '"core"', '"goal"', '"overall"'):
+        for forbidden in ('"round', '"percentile"', '"core"', '"goal"', '"overall"', '"grand_challenge"', '"challenges"',
+                          '"reviewer_changes"', '"changes_for_maximum"'):
             self.assertNotIn(forbidden, text)
         # The round packet after the round: its history, the closing round's assessments and its consequence searches.
         assessed = self.mutate(rounds.assess_round, self.assess_payload(admission, bundle))["result"]

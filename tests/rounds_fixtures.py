@@ -127,7 +127,7 @@ class RoundsCase(DevelopmentCase):
                                                       "assessed_revision": self.store.revision + 1})
 
     def goal(self, direction="vertical", statement="Extend the finite bound to every integer in [0, 5]."):
-        return {"direction": direction, "field_change": None, "statement": statement,
+        return {"direction": direction, "criterion_ids": ["rc-general"], "field_change": None, "statement": statement,
                 "contribution_delta": "Readers can apply the bound over the wider range without a new enumeration.",
                 "beneficiaries": [{"who": "Authors of bounded-sequence proofs", "bottleneck": "The finite range stops at 3.",
                                    "evidence": self.round_evidence()}],
@@ -154,6 +154,15 @@ class RoundsCase(DevelopmentCase):
                                "objective_lineage": lineage, "goal": goal,
                                "resource_limits": {"literature": {"network_requests": 20, "readings": 10}, "experiment": {"wall_seconds": 600}},
                                "reopening": reopening}
+        # The candidates list every step of the bundle's contribution analysis; the fixture defers the ones a test did not list.
+        from research_harness import contribution
+        analysis = contribution.find_analysis(self.store.snapshot()["records"], bundle["digest"])
+        listed = {candidate["id"] for candidate in payload["candidates"]}
+        for step in (analysis["payload"]["steps"] if analysis else []):
+            if step["id"] not in listed:
+                payload["candidates"].append({"id": step["id"], "direction": step["direction"], "statement": step["statement"],
+                                              "disposition": "deferred", "reason": "Kept for a later round.",
+                                              "evidence": self.round_evidence()})
         return payload
 
     def review_payload(self, decision, verdict="approved", assessor="round-assessor", checks=None):

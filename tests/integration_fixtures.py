@@ -199,15 +199,26 @@ def prepare_manuscript(case, *, pdf="draft/paper.pdf", sources=None, stop=False)
 
 
 def approve_publication_stop(case, bundle):
-    """Close a publication fixture through the real independent round review."""
-    from research_harness import rounds
+    """Close a publication fixture through the real independent round review.
+
+    The decision needs the bundle's complete measurement and contribution analysis: the fixture records
+    them when the bundle has none, and lists the analysis's steps as deferred candidates."""
+    from research_harness import contribution, predictions, rounds
+    suffix = "stop-" + bundle["id"]
+    if predictions.select_measurement_reviews(case.store.snapshot()["records"], bundle) is None:
+        record_measurement(case, bundle, suffix)
+    analysis = contribution.find_analysis(case.store.snapshot()["records"], bundle["digest"]) \
+        or record_contribution_analysis(case, bundle, suffix)
     evidence = [case.result_evidence(case.execution_payload)]
+    deferred = [{"id": step["id"], "direction": step["direction"], "statement": step["statement"], "disposition": "deferred",
+                 "reason": "The fixture keeps the Grand Challenge step for a later study.", "evidence": evidence}
+                for step in analysis["payload"]["steps"]]
     decision = case.mutate(rounds.record_round, {
         "id": "stop-" + bundle["id"], "closes": rounds.current_number(case.store.snapshot()["records"]),
         "decision": "stop", "bundle_digest": bundle["digest"],
         "candidates": [{"id": "wider-range", "direction": "vertical", "statement": "Extend the finite range.",
                         "disposition": "rejected", "reason": "The fixture supports the stated finite result only.",
-                        "evidence": evidence}],
+                        "evidence": evidence}] + deferred,
         "carried": [], "next": None, "reason": "The fixture records its final bounded contribution."})["result"]
     return case.mutate(rounds.record_round_review, {
         "id": "review-" + decision["id"], "round_id": decision["id"], "round_digest": decision["digest"],

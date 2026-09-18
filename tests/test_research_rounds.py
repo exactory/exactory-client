@@ -949,7 +949,7 @@ class RoundStatusTests(RoundsCase):
         self.set_stage("evaluate")
         self.pin(reviews=0, measure=False)
         codes = [o["code"] for o in status_report(self.store)["obligations"]]
-        self.assertEqual(codes, ["manuscript_reviews_required", "round_decision_missing"])
+        self.assertEqual(codes, ["manuscript_reviews_required", "manuscript_measurement_missing", "round_decision_missing"])
 
     def test_the_round_summary_is_bounded_and_carries_the_active_round(self):
         from research_harness.cli import status_report
