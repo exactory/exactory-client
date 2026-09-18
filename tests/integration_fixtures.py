@@ -31,6 +31,53 @@ def build_manuscript_review(case, bundle, assessor, decision="accept"):
             "review": case.artifacts.put(json.dumps(build_review_core(decision)).encode(), "application/json"), "blind": True}
 
 
+def build_prediction(case, bundle, assessor, percentile=30, band=(20, 40)):
+    """One blind assessor's cohort prediction on the bundle, in the study fixture's cohort."""
+    return {"id": assessor + "-prediction", "bundle_digest": bundle["digest"], "blind": True,
+            "assessor": {"id": assessor, "kind": "agent",
+                         "provenance": case.artifacts.put(("Blind context " + assessor).encode(), "text/plain"),
+                         "relationship": "A separate fixture assessor.", "independence_basis": "A blind context received the exact manuscript."},
+            "prediction": {"corpus": "arxiv", "category": "cs.LG", "windowStart": "2026-01-01", "windowEnd": "2026-01-31",
+                           "percentile": percentile, "band": {"best": band[0], "worst": band[1]}},
+            "reasons": ["The authored fixture states a narrow finite result."]}
+
+
+def record_measurement(case, bundle, suffix, percentiles=(30, 25, 40)):
+    """Three blind reviews and three predictions on the bundle, as one complete measurement."""
+    from research_harness import predictions, publication
+    for number, percentile in enumerate(percentiles, 1):
+        assessor = "measure-" + suffix + "-" + str(number)
+        case.mutate(publication.record_manuscript_review, build_manuscript_review(case, bundle, assessor))
+        case.mutate(predictions.record_prediction, build_prediction(case, bundle, assessor, percentile))
+
+
+def build_contribution_analysis(case, bundle, suffix):
+    """The analysis of a measured bundle: one next-round step that adopts every reviewer contribution change."""
+    from research_harness import predictions
+    reviews = predictions.select_measurement_reviews(case.store.snapshot()["records"], bundle) or []
+    claims = json.loads(case.artifacts.read(bundle["files"]["claims"]["artifact"]))
+    current_claim_ids = [claim["id"] for claim in claims if "superseded" not in claim]
+    step = {"id": "step-" + suffix, "statement": "Extend the finite bound to every bounded input sequence (" + suffix + ").",
+            "criterion_ids": ["rc-general"], "direction": "vertical", "reach": "next_round", "builds_on": current_claim_ids[:1],
+            "community": {"who": "Authors of bounded-sequence proofs", "capability": "Apply the bound without a new enumeration.",
+                          "evidence": [case.source_evidence()]},
+            "risks": ["An unbounded input may violate the bound."], "evidence": [case.source_evidence()]}
+    return {"id": "analysis-" + suffix, "bundle_digest": bundle["digest"], "searches": ["gc-" + suffix],
+            "position": {"criterion_ids": ["rc-finite"], "established": "The bound holds on the stated finite range.",
+                         "remaining": "Every bounded input sequence beyond the finite range.", "evidence": [case.source_evidence()]},
+            "reviewer_changes": [{"review_id": saved["id"], "change": change, "disposition": "adopted", "step_id": step["id"],
+                                  "reason": "The step pursues the reviewer's requirement for the highest contribution."}
+                                 for saved in reviews for change in saved["core"].get("changes_for_maximum", {}).get("contribution", [])],
+            "steps": [step]}
+
+
+def record_contribution_analysis(case, bundle, suffix):
+    """A grand_challenge search after the pin, then the contribution analysis of the measured bundle."""
+    from research_harness import contribution
+    case.record_purpose("grand_challenge", "gc-" + suffix)
+    return case.mutate(contribution.record_contribution_analysis, build_contribution_analysis(case, bundle, suffix))["result"]
+
+
 def prepare_verification(root):
     from test_research_synthesis import SynthesisCase
     case = SynthesisCase(methodName="runTest")

@@ -96,6 +96,7 @@ def prepare_publication(store, payload, *, expected_revision, request_id):
                       readiness_review=records["readiness_review"][records["development_selection"]["review"]["review_id"]],
                       review_inputs=report["review_inputs"], prepared_revision=expected_revision,
                       execution_observations=report["execution_observations"],
+                      search_ids=sorted(records.get("literature_search", {})),
                       mechanical_only=True)
         bundle["digest"] = digest(bundle)
         return [immutable_record(records, "publication_bundle", value["id"], bundle),

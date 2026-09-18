@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 import time
 
-from . import (acquisition, challenge, cohort_evidence, development, graph, lineage, literature, predictions, principles, reading,
+from . import (acquisition, challenge, cohort_evidence, contribution, development, graph, lineage, literature, predictions, principles, reading,
                 resources, rounds, sampling, screening, synthesis, visual_assets)
 from .artifacts import ArtifactStore
 from .errors import ResearchError
@@ -57,6 +57,7 @@ OPERATIONS = {
     "round-admit": rounds.admit_round,
     "round-assess": rounds.assess_round,
     "manuscript-prediction": predictions.record_prediction,
+    "contribution-analysis": contribution.record_contribution_analysis,
 }
 
 from .execution import bind_execution, reconcile_execution, record_imported_execution

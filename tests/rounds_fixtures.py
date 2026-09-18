@@ -4,8 +4,9 @@ import copy
 import json
 
 from development_fixtures import DevelopmentCase
-from integration_fixtures import observe_run, observed_candidate
-from research_harness import predictions, publication, rounds
+from integration_fixtures import (build_contribution_analysis, build_prediction, observe_run, observed_candidate,
+                                  record_contribution_analysis, record_measurement)
+from research_harness import publication, rounds
 from test_research_publication import ResearchPublicationTests
 
 DEVELOPMENT_SEARCHES = ("downstream", "next_step", "exemplars", "changes")
@@ -38,9 +39,10 @@ class RoundsCase(DevelopmentCase):
             item["superseded"] = {"reason": "Replaced by a wider claim."}
         return items
 
-    def pin(self, claims=None, identifier=None, reviews=2, *, evidence=None):
-        """Write claims.json, pin the bundle with `evidence` on every claim (the candidate's result by default)
-        and record `reviews` accepting blind reviews."""
+    def pin(self, claims=None, identifier=None, reviews=2, *, evidence=None, measure=False):
+        """Write claims.json, pin the bundle with `evidence` on every claim (the candidate's result by default),
+        record `reviews` accepting blind reviews and, when `measure` is true, one complete measurement and its
+        contribution analysis."""
         claims = self.claims() if claims is None else claims
         (self.root / "evidence/claims.json").write_text(json.dumps(claims))
         identifier = identifier or ("paper-" + str(self.store.revision))
@@ -51,23 +53,24 @@ class RoundsCase(DevelopmentCase):
             "claim_evidence": [{"claim_id": c["id"], "evidence": evidence} for c in claims]})["result"]
         for number in range(1, reviews + 1):
             self.mutate(publication.record_manuscript_review, self.manuscript_review(bundle, identifier + "-gate-" + str(number)))
+        if measure:
+            self.measure(bundle, identifier)
+            self.analyze(bundle, identifier)
         return bundle
 
     def prediction_payload(self, bundle, assessor, percentile=30, band=(20, 40)):
-        return {"id": assessor + "-prediction", "bundle_digest": bundle["digest"], "blind": True,
-                "assessor": {"id": assessor, "kind": "agent",
-                             "provenance": self.artifacts.put(("Blind context " + assessor).encode(), "text/plain"),
-                             "relationship": "A separate fixture assessor.", "independence_basis": "A blind context received the exact manuscript."},
-                "prediction": {"corpus": "arxiv", "category": "cs.LG", "windowStart": "2026-01-01", "windowEnd": "2026-01-31",
-                               "percentile": percentile, "band": {"best": band[0], "worst": band[1]}},
-                "reasons": ["The authored fixture states a narrow finite result."]}
+        return build_prediction(self, bundle, assessor, percentile, band)
 
     def measure(self, bundle, suffix, percentiles=(30, 25, 40)):
         """Three blind reviews and three predictions on the bundle, as one measurement."""
-        for number, percentile in enumerate(percentiles, 1):
-            assessor = "measure-" + suffix + "-" + str(number)
-            self.mutate(publication.record_manuscript_review, self.manuscript_review(bundle, assessor))
-            self.mutate(predictions.record_prediction, self.prediction_payload(bundle, assessor, percentile))
+        record_measurement(self, bundle, suffix, percentiles)
+
+    def analysis_payload(self, bundle, suffix):
+        return build_contribution_analysis(self, bundle, suffix)
+
+    def analyze(self, bundle, suffix):
+        """A grand_challenge search after the pin, then the contribution analysis of the measured bundle."""
+        return record_contribution_analysis(self, bundle, suffix)
 
     def round_evidence(self):
         return [self.source_evidence(), self.result_evidence(self.execution_payload)]
