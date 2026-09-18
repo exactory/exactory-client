@@ -2258,6 +2258,9 @@
       "objective_lineage": null,
       "goal": {
         "direction": "vertical",
+        "criterion_ids": [
+          "rc-multivariate"
+        ],
         "field_change": null,
         "statement": "Extend the finite bound to the multivariate case under the same evidence standard.",
         "contribution_delta": "After this round the field has a multivariate bound with evidence; the current paper gives only the univariate one.",
@@ -2613,6 +2616,51 @@
         "kind": "continuity",
         "status": "passed",
         "reason": "The goal keeps the univariate claims, evidence and readings in full use.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          }
+        ]
+      },
+      {
+        "kind": "grand_challenge",
+        "status": "passed",
+        "reason": "The multivariate bound advances rc-multivariate and follows from the paper's established univariate claim.",
         "evidence": [
           {
             "kind": "source",

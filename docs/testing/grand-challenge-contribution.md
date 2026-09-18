@@ -23,3 +23,4 @@ the suites run after it. Suites marked "(frozen copy)" ran on a copy of the tree
 | T07 GREEN | `test_research_contribution.py` | OK |
 | T08 RED | `test_research_contribution.py -k RoundContribution` | 2 failures and 3 errors: no measurement or analysis rule; `criterion_ids` refused |
 | T08 GREEN | `test_research_contribution.py` | Ran 16 tests OK |
+| T09 | `test_research_guidance.py`, `test_research_cli.py` | OK, OK |
