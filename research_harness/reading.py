@@ -9,14 +9,22 @@ methods or word-count padding. Partial inspections remain recorded as partial.
 
 record_reading_batch accepts {id, depth: abstract, items, usage?}. Each item is
 {version_id, note, notes: {seven fields: {text, status}}, screening?, audit?,
-consequential?}. The harness derives the inspection as the whole complete
-abstract artifact with a span locator, then applies the single-reading rules to
-every item. One failing item rejects the whole batch with its index; one event
-records every reading. Reading ids are reading:<sha256 of [batch id, version]>.
+consequential?, placement?, loop?, innovation_candidate?, search_hit?}. The
+preparation policy decides which extras apply: placement and search_hit belong
+to sampled-v1, loop and innovation_candidate to lineage-v1. A batch that carries
+the study past the loop or search-hit limit, or an active development round past
+its own loop limit, is rejected whole. The harness derives the inspection as the
+whole complete abstract artifact with a span locator, then applies the
+single-reading rules to every item. One failing item rejects the whole batch with
+its index; one event records every reading. Reading ids are
+reading:<sha256 of [batch id, version]>.
 
 require_fulltext accepts {id, profile, version_id, purpose, reason,
-historical_cutoff?}; purposes are major_claim, novelty, innovation, validity.
-These are critical exact-version dependencies, independent of citation tier.
+historical_cutoff?, depends_on?}; the purposes are FULLTEXT_PURPOSES, that is
+major_claim, novelty, innovation, validity, exemplar, lineage, classic, core and
+contradiction. lineage, classic and core name the claim, lineage entry or finding
+they serve in depends_on. These are critical exact-version dependencies,
+independent of citation tier.
 
 record_availability accepts {id, profile, version_id, depth, source_ids, reason,
 policy: {id, minimum_attempts, allowed_statuses, rationale}}. Only explicit
@@ -30,13 +38,15 @@ from .evaluation import Evaluation
 from .evidence import digest
 from .graph import main_captures, obligation, selected_bundle
 from .operations import fields, immutable_record, iso_date, prepared_mutation, profile_name, strings, text
+from .principles import preparation_policy
 from . import resources
 from .source_links import TEXT_KINDS, complete_original, contains, covers_text, exact_work, link_identity, original_identity, span_locator, validate_link
 from .visual_assets import asset_dependencies
 
 
 NOTE_FIELDS = ("problem", "claims", "assumptions", "methods", "evidence", "limitations", "relevance")
-FULLTEXT_PURPOSES = ("major_claim", "novelty", "innovation", "validity", "exemplar")
+FULLTEXT_PURPOSES = ("major_claim", "novelty", "innovation", "validity", "exemplar", "lineage", "classic", "core", "contradiction")
+DEPENDENT_PURPOSES = ("lineage", "classic", "core")
 BATCH_LIMIT = 100
 RELEVANCE = ("none", "weak", "strong")
 
@@ -204,6 +214,29 @@ def _batch_extras(item):
         if type(item["consequential"]) is not bool:
             raise ResearchError("invalid_batch", "consequential is a boolean")
         extras["consequential"] = item["consequential"]
+    if "placement" in item:
+        from .sampling import POSITIONS
+        placement = item["placement"]
+        fields(placement, ("position", "reason"), code="invalid_batch")
+        if placement["position"] not in POSITIONS:
+            raise ResearchError("invalid_batch", "Placement is above, below or unplaced")
+        text(placement["reason"], "Placement reason", code="invalid_batch")
+        extras["placement"] = placement
+    if "loop" in item:
+        from .lineage import LOOP_SOURCES
+        from .literature import DEVELOPMENT_PURPOSES, DISPOSITIONS, SEARCH_PURPOSES
+        loop = item["loop"]
+        fields(loop, ("purposes", "disposition", "source"), code="invalid_batch")
+        strings(loop["purposes"], "Loop purposes", nonempty=True, code="invalid_batch")
+        if any(p not in SEARCH_PURPOSES + DEVELOPMENT_PURPOSES for p in loop["purposes"]) or loop["disposition"] not in DISPOSITIONS \
+                or loop["source"] not in LOOP_SOURCES:
+            raise ResearchError("invalid_batch", "A loop entry names known purposes, a search disposition and a source")
+        extras["loop"] = loop
+    for flag in ("innovation_candidate", "search_hit"):
+        if flag in item:
+            if item[flag] is not True:
+                raise ResearchError("invalid_batch", flag + " is true when present")
+            extras[flag] = True
     return extras
 
 
@@ -223,13 +256,25 @@ def _audit_round(records, work):
 
 
 def _batch_item(records, evaluation, batch_id, item):
-    fields(item, ("version_id", "note", "notes"), ("screening", "audit", "consequential"), code="invalid_batch")
+    fields(item, ("version_id", "note", "notes"),
+           ("screening", "audit", "consequential", "placement", "loop", "innovation_candidate", "search_hit"), code="invalid_batch")
     work = exact_work(records, text(item["version_id"], "Version", code="invalid_batch"))
     text(item["note"], "Inspection note", code="invalid_batch")
     fields(item["notes"], NOTE_FIELDS, code="invalid_batch")
     for name, note in item["notes"].items():
         fields(note, ("text", "status"), code="invalid_batch")
     extras = _batch_extras(item)
+    from .lineage import LINEAGE
+    from .sampling import SAMPLED, current_sample
+    policy = preparation_policy(records)
+    if ("loop" in extras or "innovation_candidate" in extras) and policy != LINEAGE:
+        raise ResearchError("invalid_batch", "Loop and candidate readings belong to the lineage-v1 policy", {"policy": policy})
+    if ("placement" in extras or "search_hit" in extras) and policy != SAMPLED:
+        raise ResearchError("invalid_batch", "Placement and search-hit readings belong to the sampled-v1 policy", {"policy": policy})
+    if "placement" in extras:
+        sample = current_sample(records)
+        if sample is None or work["id"] not in {m["version_id"] for m in sample["members"]}:
+            raise ResearchError("invalid_batch", "A placement judges a member of the current sample", {"version_id": work["id"]})
     if "audit" in extras:
         extras["audit"] = dict(extras["audit"], round=_audit_round(records, work))
     abstract = selected_abstract(work)
@@ -290,6 +335,24 @@ def record_reading_batch(store, payload, *, expected_revision, request_id):
                 failures.append({"index": index, "code": error.code, "message": error.message})
         if failures:
             raise ResearchError("invalid_batch", "Correct the failing items and resubmit the whole batch", {"items": failures})
+        from .lineage import LOOP_LIMIT, ROUND_LOOP_LIMIT, loop_readings, round_loop_readings
+        from .sampling import SEARCH_READING_LIMIT, search_readings
+        new_loop = sum(1 for item in items if "loop" in item)
+        if new_loop:
+            if len(loop_readings(records)) + new_loop > LOOP_LIMIT:
+                raise ResearchError("loop_limit_reached", "The loop reads at most " + str(LOOP_LIMIT) + " abstracts per study; close the loop with the gaps recorded",
+                                    {"limit": LOOP_LIMIT, "registered": len(loop_readings(records)), "requested": new_loop})
+            from .rounds import active_round
+            active = active_round(records)
+            if active is not None:
+                registered = len(round_loop_readings(records, active))
+                if registered + new_loop > ROUND_LOOP_LIMIT:
+                    raise ResearchError("round_loop_limit_reached", "A development round adds at most " + str(ROUND_LOOP_LIMIT) + " loop readings",
+                                        {"limit": ROUND_LOOP_LIMIT, "registered": registered, "requested": new_loop})
+        new_hits = sum(1 for item in items if "search_hit" in item)
+        if new_hits and len(search_readings(records)) + new_hits > SEARCH_READING_LIMIT:
+            raise ResearchError("search_reading_limit_reached", "A verification reads at most " + str(SEARCH_READING_LIMIT) + " search hits",
+                                {"limit": SEARCH_READING_LIMIT, "registered": len(search_readings(records)), "requested": new_hits})
         charge = resources.charge(records, "literature", {"readings": len(results), "model_input_tokens": usage["input_tokens"],
                                                           "model_output_tokens": usage["output_tokens"], "wall_seconds": usage["wall_seconds"]})
         if charge is not None:
@@ -385,14 +448,21 @@ def fulltext_coverage(records, artifacts, version_id, *, target=None):
 
 def require_fulltext(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
-        fields(value, ("id", "profile", "version_id", "purpose", "reason"), ("historical_cutoff",))
+        fields(value, ("id", "profile", "version_id", "purpose", "reason"), ("historical_cutoff", "depends_on"))
         profile_name(value["profile"])
         exact_work(records, value["version_id"])
         text(value["reason"], "Full-depth reason")
         if value["purpose"] not in FULLTEXT_PURPOSES:
             raise ResearchError("invalid_input", "A full-depth dependency needs a supported consequential purpose")
+        if value["purpose"] in DEPENDENT_PURPOSES:
+            text(value.get("depends_on"), "The claim, lineage entry or finding that depends on this source")
         if value.get("historical_cutoff") is not None:
             iso_date(value["historical_cutoff"])
+        if value["purpose"] == "core":
+            from .sampling import CORE_LIMIT, core_requirements
+            if len(core_requirements(records)) >= CORE_LIMIT:
+                raise ResearchError("core_limit_reached", "A verification reads at most " + str(CORE_LIMIT) + " core papers in full",
+                                    {"limit": CORE_LIMIT})
         value = dict(value, critical=True)
         return [immutable_record(records, "fulltext_requirement", value["id"], value)], value
 

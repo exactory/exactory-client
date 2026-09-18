@@ -22,8 +22,10 @@ citation frontier (graph families and tiers) are unchanged; a new version of an
 unrelated reference does not invalidate it. Native registry captures
 use their parser; web/MCP JSON requires results_pointer into the actual array
 and the original import mappings for every result. Query provenance is a saved
-response locator or the exact query in its captured URL. Search records describe
-bounded searches and do not establish universal novelty.
+response locator or the exact query in its captured URL. Under the bounded
+preparation policies each captured query carries at most ten results across all
+its responses. Search records describe bounded searches and do not establish
+universal novelty.
 """
 
 import copy
@@ -41,6 +43,7 @@ from .graph import citation_graph, obligation, selected_bundle, validate_target
 from .http import safe_url
 from .imports import _pointer
 from .operations import fields, immutable_record, iso_date, prepared_mutation, profile_name, strings, text, timestamp
+from .principles import preparation_policy
 from .providers import _json
 from . import resources
 from . import screening
@@ -349,20 +352,29 @@ def record_search(store, payload, *, expected_revision, request_id):
         date = timestamp(value["captured_at"])
         if not isinstance(value["responses"], list) or not value["responses"]:
             raise ResearchError("invalid_search", "An empty user list without original captured responses is not a search")
-        found, pending, queries, pages = set(), [], set(), []
+        found, pending, pages, by_query = set(), [], [], {}
         evaluation = Evaluation(records, ArtifactStore(store.root))
+        from .lineage import HITS_PER_QUERY, LINEAGE
+        from .sampling import SAMPLED
+        bounded = preparation_policy(records) in (LINEAGE, SAMPLED)
         for response in value["responses"]:
             source, identifiers, gaps, page = _search_response(records, evaluation, response, value["scope"])
             if timestamp(source["captured_at"]) > date:
                 raise ResearchError("invalid_search", "A search cannot precede its captured responses")
             found.update(identifiers)
+            by_query.setdefault(response["query"], set()).update(identifiers)
             pending.extend(gaps)
-            queries.add(response["query"])
             if page is not None:
                 pages.append(page)
+        if bounded:
+            for query, hits in sorted(by_query.items()):
+                if len(hits) > HITS_PER_QUERY:
+                    raise ResearchError("invalid_search", "Capture at most " + str(HITS_PER_QUERY)
+                                        + " hits per query under this policy; rank and keep the top " + str(HITS_PER_QUERY),
+                                        {"query": query, "found": len(hits), "limit": HITS_PER_QUERY})
         page_groups, enumeration_pending = enumerate_pages(pages)
         pending.extend(enumeration_pending)
-        if found != set(value["found_work_ids"]) or queries != set(value["queries"]):
+        if found != set(value["found_work_ids"]) or set(by_query) != set(value["queries"]):
             raise ResearchError("invalid_search", "Search results and queries must account for every saved response")
         if not set(value["cited_work_ids"]) <= found or value["verdict"] == "replicate-extend" and not value["cited_work_ids"]:
             raise ResearchError("invalid_search", "A replicate-extend verdict must cite acquired work from the search")
@@ -395,7 +407,10 @@ def _historical_status(work, cutoff):
     # arXiv explicitly distinguishes original submission from this capture's
     # update date. A first submission inside the cohort does not date later text.
     if work["id"].startswith("arxiv:"):
-        updates = [a.get("updated") for a in assertions if a.get("updated")]
+        # Official OAI version histories can contain reversed original dates.
+        # Their current-version date alone cannot establish temporal priority.
+        updates = [a.get("updated") for a in assertions if a.get("updated")
+                   and not any(d.get("code") == "nonmonotone_version_dates" for d in a.get("diagnostics", []))]
         if not updates:
             return "unknown"
         return "known_before" if all(timestamp(d).date() <= cutoff for d in updates) else "later_capture"
@@ -444,6 +459,11 @@ def _foundation_state(evaluation, profile):
     scope = records.get("literature_scope", {}).get(profile, {})
     graph = _graph(evaluation, profile)
     obligations = list(graph["obligations"])
+    from .lineage import LINEAGE, loop_obligations
+    from .sampling import SAMPLED
+    policy = preparation_policy(records)
+    bounded = policy in (LINEAGE, SAMPLED)
+    notices = []
     target = scope.get("target")
     if profile == "verification" and scope:
         try:
@@ -473,7 +493,11 @@ def _foundation_state(evaluation, profile):
     cohort_state = cohort_report(records, artifacts, scope.get("collection_ids", []), target=target)
     collections, cohort, historical = cohort_state["collections"], cohort_state["inventory"], set(requirements)
     obligations.extend(cohort_state["obligations"])
+    notices.extend(cohort_state["notices"])
     for item in cohort:
+        if bounded:
+            historical.add(item["version_id"])
+            continue
         requirements.setdefault(item["version_id"], "abstract")
         reasons.setdefault(item["version_id"], []).append("cohort")
         historical.add(item["version_id"])
@@ -492,7 +516,9 @@ def _foundation_state(evaluation, profile):
     for purpose in selected_searches:
         matches = [s for s in searches.values() if s["id"] == selected_searches[purpose] and s["purpose"] == purpose]
         current = [s for s in matches if s["scope_digest"] == digest(scope)]
-        if not current:
+        # Under sampled-v1 the searches are targeted, so a purpose with no recorded search owes
+        # nothing; a search that was recorded still owes the current scope.
+        if not current and (matches or policy != SAMPLED):
             obligations.append(obligation("search_scope_stale" if matches else "search_purpose_missing",
                 "Record this purpose's saved search responses against the current literature scope.", purpose=purpose))
         for search in current:
@@ -505,11 +531,13 @@ def _foundation_state(evaluation, profile):
                 obligations.append(obligation("search_dispositions_missing", "Re-record this search with a disposition for every found work.",
                                               purpose=purpose, search_id=search["id"]))
             if search["evidence_digest"] != _search_evidence_digest(evaluation, scope, search["found_work_ids"], search["cited_work_ids"]):
-                obligations.append(obligation("search_evidence_stale", "Reassess this search judgment after relevant source, identity or version changes.",
-                                              purpose=purpose, search_id=search["id"]))
+                (notices if bounded else obligations).append(
+                    obligation("search_evidence_stale", "Reassess this search judgment after relevant source, identity or version changes.",
+                               purpose=purpose, search_id=search["id"]))
             if search.get("frontier_digest") != frontier_digest(evaluation, profile):
-                obligations.append(obligation("search_frontier_stale", "Assess the works that entered the citation frontier since this judgment.",
-                                              purpose=purpose, search_id=search["id"]))
+                (notices if bounded else obligations).append(
+                    obligation("search_frontier_stale", "Assess the works that entered the citation frontier since this judgment.",
+                               purpose=purpose, search_id=search["id"]))
     relevant = set(requirements) | {v for s in searches.values() for v in s["found_work_ids"]}
     inventory, used_readings, bundles, availability = [], dict(cohort_state["readings"]), {}, []
     reference_sample = screening.reference_sample(records, profile)
@@ -566,7 +594,7 @@ def _foundation_state(evaluation, profile):
                     obligations.extend(required_unit_obligations(records, artifacts, bundle))
                 for reading in partial:
                     obligations.extend(reading["assessment"]["pending"])
-        if depth == "abstract" and "cohort" not in reasons.get(version, []):
+        if depth == "abstract" and "cohort" not in reasons.get(version, []) and not bounded:
             obligations.extend(screening.reference_obligations(records, profile, version, work, abstract, accepted, qualified,
                                                                reference_sample, reference_round, paths))
         cutoff = scope.get("historical_cutoff") if version in historical else None
@@ -595,6 +623,8 @@ def _foundation_state(evaluation, profile):
                                          for c in work["fulltexts"]]})
     # An exhausted development budget is the round gate's obligation, never a foundation or readiness one.
     obligations.extend(o for o in resources.obligations(records, profile) if o["purpose"] != "development")
+    if policy == LINEAGE:
+        obligations.extend(loop_obligations(records, profile))
     # Deduplicate repeated unit obligations while retaining each occurrence and
     # each independent cohort/version obligation.
     obligations = sorted({digest(o): o for o in obligations}.values(), key=lambda o: (o["code"], o.get("version_id", ""), digest(o)))
@@ -622,10 +652,15 @@ def _foundation_state(evaluation, profile):
               "reference_occurrences": len(graph["references"]), "obligations": len(obligations),
               "fulltext_read": sum(x["fulltext_read"] for x in inventory), "abstract_read": sum(x["abstract_read"] for x in inventory)}
     counts.update({"tier_" + str(t): sum(n["tier"] == t for n in graph["nodes"]) for t in (1, 2, 3)})
-    return {"ready": not obligations, "digest": digest(dependencies), "obligations": obligations, "counts": counts,
+    return {"ready": not obligations, "digest": digest(dependencies), "obligations": obligations, "notices": notices, "counts": counts,
             "population_digest": digest(population), "frontier_digest": frontier_digest(evaluation, profile),
             "judgments_digest": digest(judgments), "requirements_digest": digest(full_requirements),
-            "passed": {"graph": not graph["obligations"], "cohort": bool(collections) and not any(o["code"] in ("collection_pending", "cohort_abstract_reading_missing") for o in obligations),
+            "stable_digest": digest({"scope": scope, "requirements": sorted(full_requirements),
+                                     "closure": (records.get("loop_closure_selection", {}).get("current") or {}).get("id"),
+                                     "sample": (records.get("cohort_sample_selection", {}).get("current") or {}).get("id")}),
+            "passed": {"graph": not graph["obligations"],
+                       "cohort": bool(collections) and not any(o["code"] in ("collection_pending", "cohort_abstract_reading_missing", "sample_missing",
+                                                                             "sample_stale", "sample_reading_missing", "placement_missing") for o in obligations),
                        "searches": not any(o["code"].startswith("search_") for o in obligations)},
             "invalid_references": [r for r in graph["references"] if r["status"] not in ("resolved", "nonpaper")],
             "inventory": inventory, "collections": collections, "cohort": cohort_state, "availability_qualified": availability,

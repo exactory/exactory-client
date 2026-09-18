@@ -11,6 +11,32 @@ from research_fixtures import atom, entry, openalex, crossref
 
 
 class ProviderTests(unittest.TestCase):
+    def test_openalex_keeps_works_with_legacy_sici_doi_aliases(self):
+        identifiers = [
+            "10.1002/(sici)1099-1638(199903/04)15:2<123::aid-qre211>3.0.co;2-f",
+            "10.1577/1548-8659(1976)105<116:tdfrsg>2.0.co;2",
+        ]
+        for identifier in identifiers:
+            with self.subTest(identifier=identifier):
+                data = openalex()
+                data["doi"] = "https://doi.org/" + identifier
+                page = OpenAlex().parse(json.dumps(data).encode())
+                self.assertEqual(len(page.works), 1)
+                self.assertEqual(page.failures, [])
+                self.assertEqual(page.works[0]["aliases"], ["doi:" + identifier])
+
+    def test_crossref_keeps_legacy_sici_identity_and_encodes_request_path(self):
+        identifier = "10.1577/1548-8659(1976)105<116:TDFRSG>2.0.CO;2"
+        data = crossref()
+        data["message"]["DOI"] = identifier
+        page = Crossref().parse(json.dumps(data).encode())
+        self.assertEqual(len(page.works), 1)
+        self.assertEqual(page.failures, [])
+        self.assertEqual(page.works[0]["id"], "doi:10.1577/1548-8659(1976)105<116:tdfrsg>2.0.co;2")
+        request = Crossref().work_request(page.works[0]["id"])
+        self.assertEqual(request.url,
+                         "https://api.crossref.org/works/10.1577%2F1548-8659%281976%29105%3C116%3Atdfrsg%3E2.0.co%3B2")
+
     def test_identifiers_keep_versions_and_do_not_guess_from_titles(self):
         for value, expected in [("https://arxiv.org/abs/physics/9801025v1", "arxiv:physics/9801025v1"),
                                 ("arXiv:2601.00001v2", "arxiv:2601.00001v2"),

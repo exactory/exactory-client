@@ -109,6 +109,60 @@ class ResearchPublicationTests(DevelopmentCase):
             self.root / "other.pdf", self.root / "draft/abstract.txt", None))
         self.assertEqual(self.store.snapshot(), before)
 
+    def select_versions(self, count):
+        """The first registered work versions in id order; the fixture study registers six."""
+        return sorted(self.store.snapshot()["records"]["work"])[:count]
+
+    def require_entries(self, entries):
+        """Pin the bundle, adopt lineage-v1, then require each (purpose, version) in full; returns the pinned bundle."""
+        from research_harness.principles import change_policy
+        from research_harness.reading import require_fulltext
+        api = self.publication()
+        bundle = self.mutate(api.prepare_publication, self.bundle_payload())["result"]
+        self.mutate(change_policy, {"previous": "exhaustive-v1", "policy": "lineage-v1", "reason": "Adopt the lineage policy."})
+        for purpose, version in entries:
+            self.mutate(require_fulltext, {"id": purpose + "-1", "profile": "research", "version_id": version,
+                                           "purpose": purpose, "reason": "The " + purpose + " paper.", "depends_on": "claim-1"})
+        return bundle
+
+    def collect_citation_obligations(self, bundle):
+        from research_harness.publication import lineage_citation_obligations
+        return lineage_citation_obligations(self.store.snapshot()["records"], self.artifacts, bundle)
+
+    def collect_citation_codes(self, bundle):
+        return [o["code"] for o in self.collect_citation_obligations(bundle)]
+
+    def test_lineage_and_classic_entries_must_be_cited(self):
+        parent, classic = self.select_versions(2)
+        bundle = self.require_entries([("lineage", parent), ("classic", classic)])
+        self.assertEqual(self.collect_citation_codes(bundle), ["lineage_citation_missing"] * 2)
+
+    def test_a_cited_lineage_entry_closes_the_citation_obligation(self):
+        parent = self.select_versions(1)[0]
+        (self.root / "draft/references.bib").write_text(
+            "@article{parent,title={Authored parent},eprint={" + parent[6:] + "}}\n")
+        self.assertEqual(self.collect_citation_codes(self.require_entries([("lineage", parent)])), [])
+
+    def test_a_bibliography_that_is_not_utf8_still_reports_its_citations(self):
+        cited, uncited = self.select_versions(2)
+        (self.root / "draft/references.bib").write_bytes(
+            b"@article{parent,title={Bound\xe9 sequences},eprint={" + cited[6:].encode() + b"}}\n")
+        obligations = self.collect_citation_obligations(self.require_entries([("lineage", cited), ("classic", uncited)]))
+        self.assertEqual([o["version_id"] for o in obligations], [uncited])
+
+    def test_an_arxiv_citation_token_keeps_a_subject_class_that_ends_in_v(self):
+        from research_harness.publication import _citation_tokens
+        for identifier in ("arxiv:math.CV/0601001v1", "arxiv:math.CV/0601001"):
+            with self.subTest(identifier=identifier):
+                tokens = _citation_tokens({"id": identifier, "aliases": [], "title": "An authored example"})
+                self.assertEqual(tokens, ["math.cv/0601001", "an authored example"])
+                self.assertNotIn("math.c", tokens)
+
+    def test_a_one_word_title_is_not_citation_evidence(self):
+        from research_harness.publication import _citation_tokens
+        work = {"id": "arxiv:2601.00001v1", "aliases": ["doi:10.5281/zenodo.1"], "title": "Entropy"}
+        self.assertEqual(_citation_tokens(work), ["2601.00001", "10.5281/zenodo.1"])
+
     def remote_binding(self):
         api = self.publication()
         bundle = self.mutate(api.prepare_publication, self.bundle_payload())["result"]

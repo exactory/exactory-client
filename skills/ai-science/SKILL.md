@@ -38,10 +38,12 @@ A stage name or historical receipt does not establish readiness.
 
 Create the workspace once with `exactory-lab init --dir PATH --slug SLUG`,
 retaining explicit revision/request identity for reliable retries. The default
-preparation policy is `exhaustive-v1` (every cohort member and Tier 3 reference
-is read); pass `--preparation-policy screened-v1` only when the user chose the
-screened policy, and record the approved resource budget with
-`exactory-research budget` before the costly stages. Change into
+preparation policy is `lineage-v1` (the lineage and the classics in full, a
+bounded five-purpose loop of at most 100 abstracts, five innovation cases from
+ten candidates); pass `--preparation-policy exhaustive-v1` or
+`--preparation-policy screened-v1` only when the user chose them, and record the
+approved resource budget with `exactory-research budget` before the costly
+stages. Change into
 that workspace. Read the user's context and resource limits, preserve original
 material, and record the complete requested scope and pacing. A bare invocation
 permits choosing a research direction; any supplied question or bounds remain

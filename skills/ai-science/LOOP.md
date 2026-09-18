@@ -146,9 +146,10 @@ the previous round), one `require-fulltext` with purpose `exemplar` whose work
 is read in full and analyzed as one more innovation case, and the re-recorded
 `rationale`, `context` and `innovation` sections with the carried findings. The
 exemplar case is `within_field` when it comes from the study's field; an
-`external` exemplar counts toward the five to ten external cases, so replace an
-older external case rather than exceed ten. The re-recorded `rationale` names in
-`but` the bottleneck the goal addresses, and `context` names the round's
+`external` exemplar counts toward the external cases, so replace an older
+external case rather than exceed the count the policy allows: exactly five under
+`lineage-v1`, and ten under the legacy policies. The re-recorded `rationale`
+names in `but` the bottleneck the goal addresses, and `context` names the round's
 beneficiaries. The five foundation purposes keep their own freshness rules.
 
 Before the round's candidate is selected, assess the earlier rounds' cycles again

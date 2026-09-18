@@ -2,14 +2,19 @@
 
 Each record_* operation accepts an immutable {id, profile, scope, ...} payload,
 binds the dependencies that section uses, and selects it through
-synthesis_selection/{profile}:{kind}. Standards bind the cohort population;
-rationale, innovation and context bind the citation frontier and the selected
-search judgments; every section binds its own evidence, the scope, the
-configuration and the constitution. preparation_digest summarizes the current
-preparation for plans, admissions, assessments, checkpoints and candidates. A new assessment needs a new
-ID; old records and operation results remain unchanged. Section readiness is
-mechanical only. synthesis_report additionally requires the current foundation,
-configuration and all profile-applicable sections.
+synthesis_selection/{profile}:{kind}. Under exhaustive-v1 and screened-v1,
+standards bind the cohort population, while rationale, innovation and context
+bind the citation frontier and the selected search judgments. Under lineage-v1
+and sampled-v1, every section binds the stable foundation digest instead: the
+study scope, the full-text requirements, the loop closure and the cohort sample.
+Under lineage-v1 the innovation assessment analyzes exactly five external cases,
+each chosen from the ten read innovation candidates. Every section binds its own
+evidence, the scope, the configuration and the constitution. preparation_digest
+summarizes the current preparation for plans, admissions, assessments,
+checkpoints and candidates. A new assessment needs a new ID; old records and
+operation results remain unchanged. Section readiness is mechanical only.
+synthesis_report additionally requires the current foundation, configuration and
+all profile-applicable sections.
 
 And must declare established context. Citation roots do not determine a case's
 study-specific field relationship.
@@ -23,7 +28,7 @@ from .graph import obligation
 from .identities import resolve_family
 from .literature import _historical_status, foundation_state
 from .operations import fields, immutable_record, iso_date, prepared_mutation, profile_name, strings, text
-from .principles import configuration_state
+from .principles import configuration_state, preparation_policy
 from .reading import fulltext_coverage, required_unit_obligations, validate_read_evidence
 from .source_links import captured_source, exact_work, original_identity, validate_link
 
@@ -243,12 +248,26 @@ def _innovation(state, value):
         state.obligations.append(obligation("case_field_conflict", "Resolve conflicting field relationships for the same original paper family.", work_ids=sorted(overlap)))
     external = {family for relation, family in eligible if relation == "external" and family not in overlap}
     within = {family for relation, family in eligible if relation == "within_field" and family not in overlap}
-    if len(external) < 5:
-        state.obligations.append(obligation("external_cases_insufficient", "Analyze five to ten distinct full-read external original papers.", count=len(external), minimum=5))
-    if len(external) > 10:
-        state.obligations.append(obligation("external_cases_excess", "Select five to ten external original papers for this assessment; keep additional works in the corpus.", count=len(external), maximum=10))
-    if not within:
-        state.obligations.append(obligation("within_field_case_missing", "Analyze at least one full-read within-field original case."))
+    from .lineage import INNOVATION_CANDIDATES, INNOVATION_CASES, LINEAGE, candidate_families
+    if preparation_policy(state.records) == LINEAGE:
+        candidates = candidate_families(state.records)
+        if len(candidates) < INNOVATION_CANDIDATES:
+            state.obligations.append(obligation("innovation_candidates_missing", "Read the abstracts of ten innovation candidates before choosing the five cases.",
+                                                count=len(candidates), required=INNOVATION_CANDIDATES))
+        for case in value["cases"]:
+            if case["relation"] == "external" and resolve_family(state.records, case["work_id"]) not in candidates:
+                state.obligations.append(obligation("innovation_case_not_candidate", "Choose the five cases among the ten read candidates.", case_id=case["id"]))
+        if len(external) < INNOVATION_CASES:
+            state.obligations.append(obligation("external_cases_insufficient", "Analyze exactly five distinct full-read external original papers.", count=len(external), minimum=INNOVATION_CASES))
+        if len(external) > INNOVATION_CASES:
+            state.obligations.append(obligation("external_cases_excess", "Select exactly five external original papers; keep additional works in the corpus.", count=len(external), maximum=INNOVATION_CASES))
+    else:
+        if len(external) < 5:
+            state.obligations.append(obligation("external_cases_insufficient", "Analyze five to ten distinct full-read external original papers.", count=len(external), minimum=5))
+        if len(external) > 10:
+            state.obligations.append(obligation("external_cases_excess", "Select five to ten external original papers for this assessment; keep additional works in the corpus.", count=len(external), maximum=10))
+        if not within:
+            state.obligations.append(obligation("within_field_case_missing", "Analyze at least one full-read within-field original case."))
     return {"cases": len(value["cases"]), "external_papers": len(external), "within_field_papers": len(within)}
 
 
@@ -302,7 +321,11 @@ def _assess(records, artifacts, kind, value, configuration, foundation):
     dependencies = {"configuration": configuration["digest"], "constitution": configuration["constitution"],
                     "scope": digest(records.get("literature_scope", {}).get(value["profile"])),
                     "evidence": digest(evidence)}
-    if kind == "standards":
+    from .lineage import LINEAGE
+    from .sampling import SAMPLED
+    if preparation_policy(records) in (LINEAGE, SAMPLED):
+        dependencies["foundation"] = foundation["stable_digest"]
+    elif kind == "standards":
         dependencies["population"] = foundation["population_digest"]
     else:
         dependencies["frontier"] = foundation["frontier_digest"]

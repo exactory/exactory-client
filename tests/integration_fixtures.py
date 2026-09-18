@@ -7,6 +7,7 @@ import sys
 
 from development_fixtures import DevelopmentCase
 from research_harness.artifacts import ArtifactStore
+from research_harness.principles import preparation_policy
 from research_harness.storage import Store
 
 
@@ -45,9 +46,15 @@ def prepare_research(root, objective=None, *, candidate=False):
     case.sequence = case.store.revision + 1000
     case.objective = objective or {"kind": "objective", "id": "finite-square-bound",
         "statement": "For every integer n in [0, 3], n squared is at most 9, with equality at n = 3."}
-    config = case.store.snapshot()["records"].get("configuration", {}).get("research")
+    records = case.store.snapshot()["records"]
+    config = records.get("configuration", {}).get("research")
+    # A study the product CLI initialized records the research default, lineage-v1; these integration tests prepare under the legacy policy.
+    recorded_policy = preparation_policy(records)
+    if recorded_policy != "exhaustive-v1":
+        case.mutate(case.api("principles").change_policy, {"previous": recorded_policy, "policy": "exhaustive-v1",
+                                                           "reason": "The integration fixture prepares the study under the legacy policy."})
     if config is None:
-        case.mutate(case.api("principles").initialize_research, {"profile": "research", "target": case.objective})
+        case.mutate(case.api("principles").initialize_research, {"profile": "research", "target": case.objective, "preparation_policy": "exhaustive-v1"})
     elif config["target"] is None:
         case.mutate(case.api("principles").set_target, {"target": case.objective, "reason": "Fix the complete fixture objective before planning."})
     else:

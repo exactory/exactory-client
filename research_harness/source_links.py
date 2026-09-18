@@ -110,7 +110,12 @@ def read_locator(artifacts, artifact, locator, *, capture=None):
         return value
     if kind == "pdf":
         fields(locator, ("kind", "page_index", "printed_page", "region"), code="invalid_locator")
-        if (artifact["media_type"] != "application/pdf" or not data.startswith(b"%PDF-")
+        inferred_pdf = (artifact["media_type"] == "application/octet-stream" and capture is not None
+                        and capture.get("availability") == "available"
+                        and capture.get("extraction_status") == "extracted"
+                        and capture.get("extraction", {}).get("media_type") == "application/pdf"
+                        and capture.get("extraction", {}).get("format_detection") == "pdf_signature_from_generic_binary")
+        if ((artifact["media_type"] != "application/pdf" and not inferred_pdf) or not data.startswith(b"%PDF-")
                 or capture is None or capture.get("original") != artifact or capture.get("text") is None):
             raise ResearchError("invalid_locator", "PDF visual locators require the original and an acquired page map")
         pages = artifacts.read(capture["text"]).decode("utf-8").split("\f")

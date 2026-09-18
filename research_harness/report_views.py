@@ -13,16 +13,20 @@ from .evidence import digest
 
 PRIORITY = ("migration_required", "profile_mismatch", "configuration_missing", "constitution_revalidation_required",
             "constitution_archive_missing", "collection_pending", "cohort_missing", "screening_missing",
-            "cohort_abstract_reading_missing", "screening_audit_reading_missing", "screening_audit_failed", "doctrine_coverage_missing",
+            "cohort_abstract_reading_missing", "sample_missing", "sample_stale", "sample_reading_missing", "placement_missing",
+            "screening_audit_reading_missing", "screening_audit_failed", "doctrine_coverage_missing",
             "objective_missing", "objective_mismatch", "roots_missing", "root_missing", "target_source_pin_missing",
             "target_source_pin_invalid", "target_mismatch", "critical_source_unavailable", "fulltext_reading_missing",
             "source_bundle_missing", "source_bundle_incomplete", "required_unit_missing", "required_unit_incomplete",
             "required_unit_uninspected", "reading_bundle_stale", "bibliography_incomplete", "reference_identity_ambiguous",
             "reference_unresolved", "search_purpose_missing", "search_scope_stale", "search_frontier_stale",
-            "search_evidence_stale", "search_dispositions_missing", "search_pending", "abstract_reading_missing",
+            "search_evidence_stale", "search_dispositions_missing", "search_pending", "loop_closure_missing",
+            "loop_closure_stale", "abstract_reading_missing",
             "historical_version_unresolved", "standards_missing", "rationale_missing", "innovation_missing",
-            "context_missing", "synthesis_dependencies_stale", "resource_budget_exhausted",
-            "publication_bundle_missing", "publication_readiness_stale", "publication_artifact_changed", "manuscript_reviews_required",
+            "innovation_candidates_missing", "innovation_case_not_candidate", "context_missing",
+            "synthesis_dependencies_stale", "resource_budget_exhausted",
+            "publication_bundle_missing", "publication_readiness_stale", "publication_artifact_changed",
+            "manuscript_reviews_required", "lineage_citation_missing",
             "round_assessment_missing", "round_search_missing", "round_exemplar_missing", "round_cycle_missing", "round_claims_dropped",
             "round_claim_missing", "round_decision_missing", "round_review_missing", "round_review_pending", "round_admission_missing")
 _HINT_LIMITS = {"code": 48, "version_id": 64, "work_id": 64, "collection_id": 64, "unit_id": 64, "explanation": 120}
@@ -83,6 +87,7 @@ def status_summary(report):
                    "obligations": _obligations(report.get("obligations", [])),
                    "preparation_obligations": _obligations(preparation.get("obligations", [])),
                    "counts": report.get("counts"), "resources": report.get("resources", {}),
+                   "limits": report.get("limits"),
                    "round": report.get("round"), "evaluation": report.get("evaluation")})
     return result
 

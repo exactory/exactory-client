@@ -17,7 +17,7 @@ JSON responses allow at most 128 nested object/array containers, counting the
 root container. The bound covers unused fields and is independent of Python's
 interpreter recursion limit.
 
-Arxiv uses stable submitted-date ascending pages, max 2000 and a 30000 query
+Arxiv uses stable submitted-date ascending pages, max 2000 and a 10,000 query
 ceiling. Acquisition partitions larger queries. OpenAlex uses cursor paging,
 per_page <=100 and an optional bearer token. Crossref uses rows <=1000 and stops
 when fewer than rows are returned, even when next-cursor remains present.
@@ -36,6 +36,11 @@ from .identities import family_id, normalize_identifier, version_of
 
 
 _MAX_JSON_DEPTH = 128
+
+
+class _MetadataTreeBuilder(ET.TreeBuilder):
+    def doctype(self, name, pubid, system):
+        raise ResearchError("invalid_response", "Metadata XML must not contain a document type declaration")
 
 
 @dataclass
@@ -199,7 +204,10 @@ def _query(parameters, allowed):
 class Arxiv:
     name = "arxiv"
     page_size = 100
-    query_ceiling = 30000
+    # export.arxiv.org answers HTTP 500 whenever start + max_results exceeds
+    # 10000 (observed 2026-09-16 against the documented 30000), so a window
+    # with more entries must be partitioned by date.
+    query_ceiling = 10000
     accept = ("application/atom+xml", "application/xml", "text/xml")
     ns = {"a": "http://www.w3.org/2005/Atom", "ar": "http://arxiv.org/schemas/atom",
           "os": "http://a9.com/-/spec/opensearch/1.1/"}
@@ -225,7 +233,9 @@ class Arxiv:
         try:
             if b"<!DOCTYPE" in data.upper() or b"<!ENTITY" in data.upper():
                 raise ValueError()
-            root = ET.fromstring(data)
+            root = ET.fromstring(data, parser=ET.XMLParser(target=_MetadataTreeBuilder()))
+            if root.tag == "{http://www.openarchives.org/OAI/2.0/}OAI-PMH":
+                return self._parse_oai_record(root)
             if root.tag != "{" + self.ns["a"] + "}feed":
                 raise ValueError()
             def integer(name):
@@ -297,6 +307,10 @@ class Arxiv:
             except ResearchError as error:
                 page.failures.append({"index": index, "code": error.code})
         return page
+
+    def _parse_oai_record(self, root):
+        from .oai_records import parse_get_record
+        return parse_get_record(root)
 
 
 class OpenAlex:

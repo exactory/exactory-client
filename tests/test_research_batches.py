@@ -81,7 +81,7 @@ class BatchExportTests(LiteratureCase):
         from research_harness.batches import export_batches
         from research_harness.principles import initialize_research
         from research_harness.reading import record_reading
-        self.mutate(initialize_research, {"profile": "research", "target": None})
+        self.mutate(initialize_research, {"profile": "research", "target": None, "preparation_policy": "exhaustive-v1"})
         self.cohort((1, 2, 3))
         self.mutate(record_reading, self.abstract_note("arxiv:2601.00002v1", "read-2"))
         before = self.store.snapshot()
@@ -98,12 +98,13 @@ class BatchExportTests(LiteratureCase):
         self.assertEqual(self.store.snapshot(), before)
         self.assert_error("review_destination_exists", lambda: export_batches(self.store, destination=self.root / "cohort/batches"))
         self.assert_error("policy_inapplicable", lambda: export_batches(self.store, destination=self.root / "cohort/screens", screen=True))
+        self.assert_error("policy_inapplicable", lambda: export_batches(self.store, destination=self.root / "cohort/loop", loop=True))
 
     def test_export_includes_tier_3_abstracts_after_the_cohort(self):
         from research_harness.batches import export_batches
         from research_harness.principles import initialize_research
         from research_harness.reading import record_reading
-        self.mutate(initialize_research, {"profile": "research", "target": None})
+        self.mutate(initialize_research, {"profile": "research", "target": None, "preparation_policy": "exhaustive-v1"})
         collection = self.cohort((1,))
         root = "arxiv:2601.00001v1"
         self.mutate(record_reading, self.abstract_note(root))

@@ -35,7 +35,7 @@ class EvaluationTests(LiteratureCase):
         from research_harness.cli import status_report
         from research_harness.principles import initialize_research
         from research_harness.reading import record_reading
-        self.mutate(initialize_research, {"profile": "research", "target": None})
+        self.mutate(initialize_research, {"profile": "research", "target": None, "preparation_policy": "exhaustive-v1"})
         collection = self.cohort((1, 2))
         self.mutate(record_reading, self.abstract_note("arxiv:2601.00001v1", "n1"))
         self.scope(["arxiv:2601.00001v1"], [collection])

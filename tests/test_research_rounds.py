@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 from unittest.mock import patch
 
+from literature_fixtures import FIELDS
 from research_fixtures import atom, client, entry, xml_response
 from research_harness import predictions, principles, publication, resources, rounds
 from research_harness.acquisition import collect_cohort
@@ -472,6 +473,31 @@ class RoundLiteratureTests(RoundsCase):
         self.assertEqual(stale, ["adjacent", "direct", "downstream", "originals", "recent", "theory"])
         self.record_purpose("downstream", "downstream-round-2b")
         self.assertNotIn("downstream", [o["purpose"] for o in self.store_obligations() if o["code"] == "search_evidence_stale"])
+
+    def test_a_round_adds_at_most_forty_loop_readings(self):
+        from research_harness import lineage
+        from research_harness.principles import change_policy
+        from research_harness.reading import record_reading_batch
+        self.open_round()
+        self.mutate(change_policy, {"previous": "exhaustive-v1", "policy": "lineage-v1", "reason": "Adopt the lineage policy."})
+        versions = [self.metadata(n) for n in range(200, 200 + lineage.ROUND_LOOP_LIMIT + 6)]
+        loop, plain = versions[:lineage.ROUND_LOOP_LIMIT + 1], versions[lineage.ROUND_LOOP_LIMIT + 1:]
+
+        def make_item(version, in_loop):
+            item = {"version_id": version, "note": "Read the complete abstract.",
+                    "notes": {f: {"text": "The abstract discusses " + f + ".", "status": "present"} for f in FIELDS}}
+            if in_loop:
+                item["loop"] = {"purposes": ["recent"], "disposition": "out_of_scope", "source": "search"}
+            return item
+
+        def record_batch(name, loop_versions, plain_versions=()):
+            return self.mutate(record_reading_batch, {"id": name, "depth": "abstract", "items":
+                [make_item(v, True) for v in loop_versions] + [make_item(v, False) for v in plain_versions]})
+
+        # The five plain readings in this batch are readings, not loop entries, so the round has one left.
+        record_batch("round-loop-1", loop[:lineage.ROUND_LOOP_LIMIT - 1], plain)
+        record_batch("round-loop-2", loop[lineage.ROUND_LOOP_LIMIT - 1:lineage.ROUND_LOOP_LIMIT])
+        self.assert_error("round_loop_limit_reached", lambda: record_batch("round-loop-3", loop[-1:]))
 
     def test_an_exemplar_the_round_opened_with_does_not_count(self):
         self.exemplar_requirement("early")
@@ -966,10 +992,10 @@ class RoundStatusTests(RoundsCase):
 
 
 class ConstitutionUpgradeTests(RoundsCase):
-    """Validation case R24: a study prepared under the 0.38.0 constitution (Version 2) is opened under Version 3.
+    """Validation case R24: a study prepared under the 0.38.0 constitution (Version 2) is opened under Version 4.
 
     The configuration digest covers the constitution, so the update stales every decision that binds it; adopting
-    Version 3 clears only the constitution obligation."""
+    Version 4 clears only the constitution obligation."""
 
     STALE = ["branch_resolution_unverified", "candidate_checkpoint_stale", "development_dependencies_stale",
              "readiness_review_stale", "synthesis_dependencies_stale"]
@@ -979,7 +1005,7 @@ class ConstitutionUpgradeTests(RoundsCase):
         self.addCleanup(directory.cleanup)
         self.shipped = principles.CONSTITUTION_PATH.read_text(encoding="utf-8")
         self.policy = Path(directory.name) / "RESEARCH_CONSTITUTION.md"
-        earlier = self.shipped.split("\n## Development across rounds")[0].replace("Version: 3", "Version: 2", 1)
+        earlier = self.shipped.split("\n## Development across rounds")[0].replace("Version: 4", "Version: 2", 1)
         self.assertNotEqual(earlier, self.shipped)
         self.policy.write_text(earlier, encoding="utf-8")
         patcher = patch.object(principles, "CONSTITUTION_PATH", self.policy)
@@ -991,12 +1017,12 @@ class ConstitutionUpgradeTests(RoundsCase):
         return sorted({o["code"] for o in status_report(self.store)["obligations"]})
 
     def upgrade(self):
-        """The plugin update: the distributed constitution becomes the shipped Version 3."""
+        """The plugin update: the distributed constitution becomes the shipped Version 4."""
         self.policy.write_text(self.shipped, encoding="utf-8")
 
     def adopt(self):
         previous = self.store.snapshot()["records"]["configuration"]["research"]["constitution"]["sha256"]
-        self.mutate(principles.revalidate_constitution, {"previous_sha256": previous, "reason": "Adopt Version 3."})
+        self.mutate(principles.revalidate_constitution, {"previous_sha256": previous, "reason": "Adopt Version 4."})
 
     def test_a_study_before_evaluate_reports_the_staleness_of_its_recorded_decisions(self):
         self.set_stage("experiment")

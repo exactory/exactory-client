@@ -25,10 +25,16 @@ exactory-lab init --dir study --slug study --expected-revision 0 --request-id in
 exactory-lab init --dir screened-study --slug screened-study --preparation-policy screened-v1 --expected-revision 0 --request-id initialize-screened-study
 ```
 
-The preparation policy is recorded at initialization: `exhaustive-v1` (default)
-reads every cohort member and every Tier 3 reference; `screened-v1` selects the
-preparation set through recorded screenings, audits, and doctrine coverage as
-the cohort section describes. Change it later only with `policy` and a reason.
+The preparation policy is recorded at initialization. `exactory-lab init`
+records the research default `lineage-v1` when `--preparation-policy` is absent,
+and `exactory-draft init` always records it: it reads the lineage and the
+classics in full, runs the bounded five-purpose loop below, and leaves every
+other cohort member unread. A verification workspace records `sampled-v1`, which
+reads a random sample of the population. The two legacy policies stay available on `exactory-lab init`:
+`exhaustive-v1` reads every cohort member and every Tier 3 reference, and
+`screened-v1` selects the preparation set through recorded screenings, audits,
+and doctrine coverage as the cohort section describes. Change the recorded
+policy later only with `policy` and a reason.
 
 Change into `study`, read the user's context and constraints, and inspect the
 authoritative state. Read these first when resuming any managed stage:
@@ -70,8 +76,8 @@ work; reservation and reconciliation are automatic, and exhaustion is a
 checkpoint condition, never completion. Put the actual frozen definition into `collect.json`. Inspect the retained
 collection/page receipts and resume its collection ID until enumeration is
 complete. Under `exhaustive-v1` read every member's complete captured abstract,
-including exact-version resolution where required; under `screened-v1` read the
-members the screen selects, as described below. For each, author a `read` payload from actual
+including exact-version resolution where required; every other policy reads the
+members the paragraphs below name. For each, author a `read` payload from actual
 inspections and the seven source-grounded note fields. Set `depth: "abstract"`
 and omit `bundle_id` for an abstract reading. Its inspection uses `unit_id: null`
 and covers the whole saved abstract.
@@ -91,7 +97,33 @@ exactory-lab state set --stage literature --status pending
 returns one notes file and one coordinator records it with `read-batch`, which
 derives the whole-abstract inspection and applies the single-reading rules to
 every item. Repeat the reading mutations with distinct actual records for all
-members before the gate.
+members before the gate. Under `lineage-v1` this plain export is refused with
+`policy_inapplicable`: that policy reads no cohort member, and its abstracts come
+out of the loop export below, `batches --loop`.
+
+Under `lineage-v1` the population is enumerated but never read as a whole. Run
+`collect` and `resume` until the collection is complete, or import an original
+OAI traversal with `import-oai-cohort`; no member owes an abstract reading.
+`gate cohort` passes while acquisition is still pending, because a pending
+collection is reported as a notice instead of an obligation, and the incomplete
+enumeration belongs in the study's recorded limitations. The stored abstracts
+serve the loop as a local source: `population-query` ranks them by terms taken
+from the target statement and the parent's title and abstract, and its matches
+are handed to `batches --loop --candidates`, as the literature section shows.
+
+Under `sampled-v1` the enumeration must complete before any reading: `sample`
+refuses to draw while the collection is pending (`collection_pending`). Draw the
+sample once per verification with `{id, collection_id, size, seed}`. The draw is
+stratified by month with equal allocation, and it takes the whole population
+when the population fits within `size`. The record keeps the seed beside the
+drawn members: the draw repeats from that seed, and two verifiers of the same
+paper choose their own seeds and read different members. A verification scopes
+one frozen population: the sample names one `collection_id`, and any other
+scoped collection reports `sample_missing`. A second draw against the unchanged
+population is refused with `sample_exists`; a population that changed after the
+draw reports `sample_stale`, which a new draw clears. `batches` then exports the
+unread sampled members, and every one of those readings carries a `placement`
+judgment. The verification section below holds the recipe.
 
 Under `screened-v1`, screen every member first: `batches --screen` exports the
 unscreened members, a screener judges each one (promote with reasons, doctrine,
@@ -128,6 +160,15 @@ read in full with its complete bibliography, and its own references become Tier 
 Few papers are read in full; every reference of those papers is still inventoried
 and read at abstract depth. Preserve all occurrences and exact versions.
 
+Under `lineage-v1` and `sampled-v1` the Tier 3 abstract obligation is removed.
+The bibliography of a full-read paper is still inventoried for identity, and it
+creates no reading obligation. Name each entry that is read in full with
+`require-fulltext`: purpose `lineage` for the parent's own line of results,
+`classic` for the foundational papers that line rests on, `core` for a
+verification's decisive papers, and `contradiction` for a source that opposes a
+claim. The first three name the claim, lineage entry or finding they serve in
+`depends_on`.
+
 ```sh
 exactory-research acquire --file root-query.json --expected-revision REVISION --request-id acquire-root-001
 exactory-research roots --file roots.json --expected-revision REVISION --request-id select-roots-001
@@ -154,15 +195,17 @@ Conduct and record each search purpose separately against the current scope:
 | `adjacent` | Which neighboring fields offer a relevant mechanism or counterexample? |
 | `recent` | Which current developments change the proposed claim or comparison? |
 
-These are five purposes, independently required from the five to ten external
-innovation papers below. Save the actual query, original response, enumeration,
+These are five purposes, independently required from the external innovation
+papers below. Save the actual query, original response, enumeration,
 source dates, found works, exact scope, judgment, and remaining gaps. Judge every
 found work with a disposition (relevant, contradictory, potentially relevant, out
 of scope, duplicate, unresolved) and a reason; a later search for the same purpose
 carries its contradictory and unresolved findings forward or resolves them by name. Tool or web
 responses can be retained through `import-response` with original JSON pointer
 mappings. A `nothing-new` result still needs the captured search, including an
-actual empty results array when that is what the search returned.
+actual empty results array when that is what the search returned. Under
+`lineage-v1` these five captures are stage 1 of the bounded loop described at
+the end of this section.
 
 ```sh
 exactory-research example search > direct-search.json
@@ -185,13 +228,17 @@ source-grounded synthesis before entering `ideate`:
 - `rationale`: And gives cited established context, But gives the cited
   consequential unresolved bottleneck, and Therefore proposes a response and
   distinguishing test. Distinguish hypotheses from observed results.
-- `innovation`: study within-field innovations and five to ten distinct external
-  original paper families in full. For each, identify the original bottleneck,
-  prior constraint, conceptual change, evidence, scope, and the proposed transfer's
-  assumptions, limits, distinguishing test, and failure signal. Versions, aliases,
-  and several case labels for one paper still count as one family. Separately
-  date original results, later validation or improvement, and evidenced use or
-  adoption. A shared case collection supplies candidates, not current approval.
+- `innovation`: under `lineage-v1`, read the abstracts of ten candidate papers,
+  each registered with `innovation_candidate: true`, and study exactly five of
+  them in full; the lineage supplies the within-field case. Under
+  `exhaustive-v1` and `screened-v1`, study within-field innovations and five to
+  ten distinct external original paper families in full. For each case, identify
+  the original bottleneck, prior constraint, conceptual change, evidence, scope,
+  and the proposed transfer's assumptions, limits, distinguishing test, and
+  failure signal. Versions, aliases, and several case labels for one paper still
+  count as one family. Separately date original results, later validation or
+  improvement, and evidenced use or adoption. A shared case collection supplies
+  candidates, not current approval.
 - `context`: investigate beneficiaries, scientific capabilities, barriers,
   social connections, and uncertainty. Basic science is eligible when immediate
   applications are unknown. Preserve unknown or inapplicable quantities with
@@ -207,6 +254,65 @@ exactory-research gate preparation
 exactory-lab decide --stage literature --decision "Enter ideation" --why "Current literature and synthesis support the complete objective."
 exactory-lab state set --stage ideate --status pending
 ```
+
+### The five-purpose loop (lineage-v1)
+
+Under `lineage-v1` the five purposes are covered by a bounded loop over recent
+work rather than by a reading of the whole population. Stage 1 captures one
+search per purpose, keeps the top 10 hits of each query, and adds two local
+sources: a `population-query` over the enumerated population's stored abstracts,
+and the papers that cite the parent within the window. A native registry
+capture must enumerate completely, because a captured page that returns fewer
+records than its reported total is `search_response_incomplete` and leaves the
+search a `search_pending` obligation on the foundation: write each native query
+narrow enough to return at most ten results in total, or import the results as a
+mapped capture and acquire every kept hit with `acquire` before it is read. Read
+every candidate abstract and register it as a loop entry that names its
+purposes, its disposition and the source it came from (`search`, `population`,
+`citing` or `author`).
+
+```sh
+exactory-research search --file direct-search.json --expected-revision REVISION --request-id search-direct-001   # at most 10 results, enumerated completely
+exactory-research population-query --terms Haar purity "random state" --limit 30 > candidates.json
+exactory-research batches --destination loop/round-1 --loop --candidates candidates.json
+exactory-research read-batch --file loop/round-1/notes-001.json --expected-revision REVISION --request-id loop-read-001   # items carry "loop"
+exactory-research loop-close --file loop-closure.json --expected-revision REVISION --request-id loop-close-001
+exactory-research require-fulltext --file lineage-parent.json --expected-revision REVISION --request-id lineage-001   # purpose lineage, depends_on
+```
+
+A citing-papers capture is an OpenAlex query with the filter `cites:<parent id>`.
+Save its original response with `import-response` and record it as a `recent`
+search response.
+
+A purpose is covered when its question has an answer grounded in at least one
+read paper judged `relevant` or `contradictory`, or when two distinct captured
+queries for that purpose returned no relevant hit. The record of each purpose
+states which. For each uncovered purpose, a new query is captured and up to 20
+more abstracts are read. The loop stops when every purpose is covered, when a
+round adds no `relevant` or `contradictory` paper to any uncovered purpose, or
+when the study has registered 100 abstract readings in the loop. At the limit,
+the uncovered purposes are recorded as gaps with the queries tried. `loop-close`
+records all five purposes at once, each `covered` or `gap`, and it keeps the
+queries every gap rests on.
+
+A registered abstract reading is one loop entry with a disposition. Stage-1
+candidates count when their abstracts are read, which is all of them. The 100
+limit counts registered readings across all rounds of the same study. When stage
+1 yields more than 100 candidates, they are read in order of how many sources
+returned them, and the remainder are recorded as unread candidates.
+
+| Limit | Value | Enforced by |
+| --- | --- | --- |
+| Registered abstract readings in the loop | 100 per study | `read-batch` rejects the batch with `loop_limit_reached` |
+| New loop readings while a development round is open | 40 per round | `read-batch` rejects the batch with `round_loop_limit_reached` |
+| Abstracts per further loop round | 20 per uncovered purpose | the coordinator follows it; the store does not refuse the batch |
+| Hits kept per captured query | 10, counted across every response of that query | `search` rejects the capture with `invalid_search` |
+| Innovation candidates at abstract depth | 10 | `innovation` reports `innovation_candidates_missing` |
+| External innovation cases read in full | exactly 5 | `innovation` reports `external_cases_insufficient` or `external_cases_excess` |
+
+`status` reports the loop's registered readings, its limit and its covered
+purposes under `limits.loop`, and the candidate count under
+`limits.innovation_candidates`.
 
 ## Ideate and experiment: plan before launching
 
@@ -409,10 +515,48 @@ An external-paper verification uses a separate `verification` profile. Acquire
 the exact metadata first in the fresh directory, then initialize that known
 version with nullable main-body fields. Acquire and inspect the original body,
 pin its source and hash with `target`, and set matching verification roots.
-Complete the same network, reading, five search purposes, and applicable standards.
+Complete the same network, reading, and applicable standards. Every policy
+except `sampled-v1` also requires the five search purposes.
 Keep historical prior art tied to the version that existed at the target's date.
 Current work can explain a result without becoming earlier prior art. Author
 innovation goals and contribution targets are not verification prerequisites.
+
+Under `sampled-v1` the verifier's population work is the sample. Draw it, read
+every sampled abstract completely with a placement judgment, and read at most
+ten core papers in full. The five search purposes are optional here: record one
+for a finding that needs prior-art or contradiction evidence. A recorded search
+still needs the current literature scope.
+
+```sh
+exactory-research sample --file sample.json --expected-revision REVISION --request-id draw-sample-001
+exactory-research batches --depth abstract --size 50 --destination cohort/sampled
+exactory-research read-batch --file cohort/sampled/notes-001.json --expected-revision REVISION --request-id read-sample-001   # items carry "placement"
+exactory-research require-fulltext --file core-reference.json --expected-revision REVISION --request-id core-001   # purpose core, depends_on
+exactory-research bind-verdict --file verdict-assessment.json --expected-revision REVISION --request-id assess-verdict-001
+```
+
+A placement states whether the target ranks `above` or `below` the sampled
+member, or that it is `unplaced` against that member, with a reason. Core papers
+are the papers whose full text decides the verdict's stance or the prediction's
+band; they are chosen in this order until ten are reached: references of the
+target that a finding relies on; sampled members the target could not be placed
+against, or was placed below; hits of a targeted search judged `relevant` or
+`contradictory`. An eleventh requirement is refused with `core_limit_reached`.
+Prior-art evidence for a specific finding comes from a targeted search: each
+captured query keeps its top 10 hits, and a verification registers at most 20
+abstract readings from search hits, each carrying `search_hit: true`
+(`search_reading_limit_reached` beyond that). A native capture also enumerates
+completely, so write the query narrow enough to return at most ten results in
+total, or import the results as a mapped capture and acquire each kept hit with
+`acquire` before it is read.
+
+`status` reports the percentile, the band and the placement counts under
+`limits.sample`. The verdict body carries that percentile and band, and
+`bind-verdict` refuses `prediction_mismatch` when the sample places no member,
+when the body states a different percentile, when its band does not contain the
+sample band, or, when more than 20 sampled members are unplaced, when its band is
+no wider than the sample band.
+
 `exactory verify` sends a verdict from any directory; a verification workspace that
 bound the verdict with `task --bind` and `bind-verdict` also records its receipt.
 The [verification skill](../skills/verify/SKILL.md) states the direct procedure.

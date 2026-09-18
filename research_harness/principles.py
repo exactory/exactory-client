@@ -5,10 +5,11 @@ preparation_policy}. Policy bytes are archived in constitution/{sha256};
 research_objective/{id} fixes the full objective independently of branches;
 objective_lineage/{id} records a widening admitted by a round, with the
 predecessor objective id, so the earlier objective stays retained.
-The preparation policy (exhaustive-v1 by default, or screened-v1) decides which
-population members owe structured reading; a configuration without the field is
-exhaustive-v1. A policy adoption or change does not relabel old decisions: their
-bound dependencies require new current assessments.
+The preparation policy decides which population members owe structured reading.
+A caller that names none gets the profile's default, lineage-v1 for research and
+sampled-v1 for verification; a configuration without the field is exhaustive-v1.
+A policy adoption or change does not relabel old decisions: their bound
+dependencies require new current assessments.
 """
 
 import hashlib
@@ -25,19 +26,30 @@ from .source_links import captured_source, exact_work
 
 
 CONSTITUTION_PATH = Path(__file__).resolve().parent.parent / "RESEARCH_CONSTITUTION.md"
-POLICIES = ("exhaustive-v1", "screened-v1")
-DEFAULT_POLICY = "exhaustive-v1"
+POLICIES = ("exhaustive-v1", "screened-v1", "lineage-v1", "sampled-v1")
+LEGACY_POLICY = "exhaustive-v1"
+POLICY_PROFILES = {"lineage-v1": "research", "sampled-v1": "verification"}
+DEFAULT_POLICIES = {"research": "lineage-v1", "verification": "sampled-v1"}
+
+
+def default_policy(profile):
+    """The policy a new workspace of this profile records when the caller names none."""
+    return DEFAULT_POLICIES[profile_name(profile)]
 
 
 def preparation_policy(records):
-    """The study's recorded preparation policy; studies from earlier releases are exhaustive."""
+    """The study's recorded preparation policy; configurations from earlier releases are exhaustive."""
     config = records.get("configuration", {}).get("research") or {}
-    return (config.get("preparation_policy") or {}).get("id", DEFAULT_POLICY)
+    return (config.get("preparation_policy") or {}).get("id", LEGACY_POLICY)
 
 
-def _policy(value):
+def _policy(value, profile):
     if value not in POLICIES:
         raise ResearchError("invalid_input", "Preparation policy must be one of: " + ", ".join(POLICIES))
+    required = POLICY_PROFILES.get(value)
+    if required is not None and required != profile:
+        raise ResearchError("policy_inapplicable", "The " + value + " policy belongs to the " + required + " profile",
+                            {"policy": value, "profile": profile})
     return {"id": value}
 
 
@@ -96,7 +108,7 @@ def prepare_initialization(records, artifacts, value):
     _validate_target(records, artifacts, value["profile"], value["target"])
     contract, data = _constitution()
     config = {"profile": value["profile"], "target": value["target"], "constitution": contract,
-              "preparation_policy": _policy(value.get("preparation_policy", DEFAULT_POLICY))}
+              "preparation_policy": _policy(value.get("preparation_policy", default_policy(value["profile"])), value["profile"])}
     changes = [_archive_policy(records, artifacts, contract, data), ("configuration", "research", config)]
     if value["profile"] == "research" and value["target"] is not None:
         changes.append(immutable_record(records, "research_objective", value["target"]["id"], value["target"]))
@@ -203,7 +215,7 @@ def change_policy(store, payload, *, expected_revision, request_id):
         if value["previous"] != preparation_policy(records):
             raise ResearchError("policy_conflict", "Name the policy currently recorded for this study",
                                 {"current": preparation_policy(records)})
-        updated = dict(config, preparation_policy=_policy(value["policy"]))
+        updated = dict(config, preparation_policy=_policy(value["policy"], config["profile"]))
         return [("configuration", "research", updated)], dict(updated, decisions_revalidated=False)
 
     return prepared_mutation(store, "research.policy", payload, prepare,

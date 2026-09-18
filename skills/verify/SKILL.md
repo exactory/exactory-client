@@ -133,6 +133,29 @@ contribution is new.
 Reading the paper is the work. A verdict formed from the title and the abstract is a
 verdict about the abstract.
 
+In a managed verification workspace the population work is the sample. Enumerate the
+frozen population with `exactory-research collect` and `resume` until the collection is
+complete, then draw this verification's one sample with `exactory-research sample` and
+`{id, collection_id, size, seed}`, size 1 to 100. The draw is stratified by month and
+repeats from the recorded seed; a second draw against the unchanged population is
+refused with `sample_exists`. Export the unread sampled members with
+`exactory-research batches` and read every one of those abstracts completely, each
+reading carrying `placement: {position, reason}`, where position is `above`, `below`
+or `unplaced` and states where the target ranks against that member.
+
+Read at most ten papers beyond the target in full. Require each with
+`exactory-research require-fulltext` under purpose `core`, naming the finding it serves
+in `depends_on`; an eleventh is refused with `core_limit_reached`. Choose them in this
+order until ten are reached: references of the target that a finding relies on; sampled
+members the target could not be placed against, or was placed below; hits of a targeted
+search judged `relevant` or `contradictory`. Run a targeted search only for a specific
+finding: each captured query keeps its top 10 hits, and one verification registers at
+most 20 abstract readings from search hits, each carrying `search_hit: true`
+(`search_reading_limit_reached` beyond that). A native capture also enumerates
+completely, so write the query narrow enough to return at most ten results in total,
+or import the results as a mapped capture and acquire each kept hit with `acquire`
+before it is read.
+
 ### 3. Judge it
 
 One question decides the stance: does this paper hold up? Weigh at least these, and say
@@ -177,6 +200,14 @@ prediction's `corpus`, `windowStart`, and `windowEnd`; its `primaryCategory` is 
 as the prediction's `category`. On a task with no `primaryCategory` (a Zenodo paper),
 decide the field from the paper and name the arXiv category where that field
 canonically publishes.
+
+In a managed verification workspace the percentile and the band come from the sample,
+not from an estimate made by hand: `exactory-research status` reports both under
+`limits.sample`, computed from the placements. `exactory-research bind-verdict` refuses
+the verdict with `prediction_mismatch` when the sample places no member, when the body
+states a different percentile, when its band does not contain the sample band, or, when
+more than 20 sampled members are unplaced, when its band is no wider than the sample
+band.
 
 Then write the verdict as one JSON file and send it:
 

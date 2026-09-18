@@ -18,7 +18,9 @@ from .http import safe_url
 
 
 _ARXIV = re.compile(r"(?P<base>(?:[0-9]{2}(?:0[1-9]|1[0-2])\.[0-9]{4,5}|[a-z-]+(?:\.[A-Z]{2})?/[0-9]{2}(?:0[1-9]|1[0-2])[0-9]{3}))(?P<version>v[1-9][0-9]*)?\Z")
-_DOI = re.compile(r"10\.[0-9]{4,9}/[^\s<>\x00-\x1f]+\Z", re.I)
+# Registered legacy SICI suffixes contain angle brackets. Request builders
+# encode the opaque identifier as URL data; its syntax is not HTML validation.
+_DOI = re.compile(r"10\.[0-9]{4,9}/[^\s\x00-\x1f]+\Z", re.I)
 
 
 def normalize_identifier(value):

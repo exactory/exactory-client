@@ -124,10 +124,15 @@ def cohort_report(records, artifacts, collection_ids, *, target=None):
 
 def _cohort_report(evaluation, collection_ids, target):
     from .acquisition import _collection_summary
+    from .lineage import LINEAGE
+    from .sampling import SAMPLED
     evaluation.counters["cohort_reports"] += 1
     records, artifacts = evaluation.records, evaluation
     summaries, obligations, inventory, dependencies, readings = [], [], [], {}, {}
-    screened = preparation_policy(records) == "screened-v1"
+    policy = preparation_policy(records)
+    screened = policy == "screened-v1"
+    lineage, sampled = policy == LINEAGE, policy == SAMPLED
+    notices, sample_counts = [], {}
     screening_counts = {}
     if not collection_ids:
         obligations.append(obligation("cohort_missing", "Select the complete frozen cohort collection."))
@@ -136,10 +141,14 @@ def _cohort_report(evaluation, collection_ids, target):
         if collection is None:
             obligations.append(obligation("cohort_missing", "Restore the selected frozen cohort collection.", collection_id=collection_id))
             continue
+        from .oai_cohort import enumeration_evidence
+        enumeration = enumeration_evidence(records, artifacts, collection)
+        if enumeration:
+            dependencies["enumeration:" + collection_id] = enumeration
         summary = _collection_summary(records, collection)
         summaries.append(summary)
         for pending in summary["pending"]:
-            obligations.append(obligation("collection_pending", "Resume or resolve acquisition without shrinking the frozen corpus.",
+            (notices if lineage else obligations).append(obligation("collection_pending", "Resume or resolve acquisition without shrinking the frozen corpus.",
                 collection_id=collection_id, reason=pending, next_eligible_at=summary["next_eligible_at"]))
         items, accepted_by_version = [], {}
         for item in summary["reading_obligations"]:
@@ -158,13 +167,17 @@ def _cohort_report(evaluation, collection_ids, target):
             matched = abstract_reading(records, artifacts, accepted, item)
             if matched:
                 readings[matched["id"]] = matched
-            elif not screened:
+            elif not (screened or lineage or sampled):
                 obligations.append(obligation("cohort_abstract_reading_missing", "Read the selected complete cohort abstract; downloaded content is not a reading.",
                     version_id=version, work_id=item["work_id"], collection_id=collection_id, paths=paths))
             items.append(dict(item, collection_id=collection_id, paths=paths, reading_id=matched["id"] if matched else None))
         if screened:
             from .screening import member_obligations
             found, screening_counts[collection_id] = member_obligations(records, collection, items, accepted_by_version)
+            obligations.extend(found)
+        if sampled:
+            from .sampling import sample_obligations
+            found, sample_counts[collection_id] = sample_obligations(records, collection, items)
             obligations.extend(found)
         inventory.extend(items)
         for historical in summary.get("historical_unresolved", []):
@@ -177,9 +190,11 @@ def _cohort_report(evaluation, collection_ids, target):
               "abstracts_read": sum(x["reading_id"] is not None for x in inventory), "obligations": len(obligations)}
     if screened:
         counts["screening"] = screening_counts
+    if sampled:
+        counts["sample"] = sample_counts
     unread = {o.get("version_id") for o in obligations}
     return {"ready": not obligations, "digest": digest([summaries, dependencies, readings, preparation_policy(records)]), "obligations": obligations,
-            "counts": counts, "collections": summaries, "inventory": inventory, "readings": readings,
+            "notices": notices, "counts": counts, "collections": summaries, "inventory": inventory, "readings": readings,
             "next": next((i for i in inventory if i["reading_id"] is None and i["paths"] and i["version_id"] in unread),
                          obligations[0] if obligations else None),
             "limits": "Mechanical source anchoring records inspection; it does not establish comprehension."}

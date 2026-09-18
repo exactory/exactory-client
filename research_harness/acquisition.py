@@ -21,10 +21,12 @@ retains the latest observed Retry-After deadline as a UTC ISO timestamp, even
 after expiry. Every resume restores it in a fresh client; a future deadline
 beyond the fetch wait allowance produces pending without a new HTTP attempt.
 Inclusive minute partitions
-are disjoint; a query above 30000 is bisected until enumerable or explicitly
-pending at a single minute. cohort_member/cohort_exclusion/cohort_seen records
-are keyed by a hash of collection/family and hold collection_id, work_id,
-version_ids and source_ids. Family counts never count versions twice.
+are disjoint; a query above the provider's 10,000-result ceiling is bisected
+until enumerable or explicitly pending at a single minute, and a partition also
+splits when the cursor reaches that ceiling before the partition completes.
+cohort_member/cohort_exclusion/cohort_seen records are keyed by a hash of
+collection/family and hold collection_id, work_id, version_ids and source_ids.
+Family counts never count versions twice.
 cohort_partition_member binds family membership to an enumeration epoch;
 cohort_partition_entry binds every listed entry (exact id, or the listing
 position of an entry without one) so a partition completes when the entries
@@ -54,10 +56,13 @@ or verified bibliography completeness. Fulltext availability is source-specific.
 Fulltext capture values contain source_id, requested_version_id, observed version,
 url, original/text artifacts, availability (available|pending), extraction_status,
 includes_abstract, visual_inspection_required, and extraction (extractor, version,
-options, and the measures of the extracted text). A capture with different
-extraction options is a distinct capture of the same original. Missing bytes, extraction or
-exact-version agreement remain pending. All PDF/HTML captures retain a separate
-visual inspection obligation for non-text content.
+media_type, format_detection, options, and the measures of the extracted text).
+media_type is the type the extraction used and format_detection names how it was
+decided, so a PDF served as application/octet-stream is identifiable afterwards.
+A capture with different extraction options is a distinct capture of the same
+original. Missing bytes, extraction or exact-version agreement remain pending.
+All PDF/HTML captures retain a separate visual inspection obligation for
+non-text content.
 
 source_import/{request_id} holds provider, source_url, captured_at,
 response_sha256, media_type, mappings, source_id, work_ids and parser failures.
@@ -104,6 +109,16 @@ _CATEGORY_FAILURES = ("missing_primary_category", "invalid_primary_category")
 def _partition(identifier, start, end):
     return {"id": identifier, "start": start, "end": end, "offset": 0, "total": None,
             "seen_count": 0, "entries_seen": 0, "epoch": 0, "status": "pending", "restart": False}
+
+
+def _split_partition(collection, partition):
+    """Replace a multi-minute partition by two date halves that restart at offset zero."""
+    begin, end = (datetime.strptime(partition[key], "%Y%m%d%H%M") for key in ("start", "end"))
+    middle = begin + timedelta(minutes=int((end - begin).total_seconds() // 120))
+    children = [_partition(partition["id"] + ".0", partition["start"], middle.strftime("%Y%m%d%H%M")),
+                _partition(partition["id"] + ".1", (middle + timedelta(minutes=1)).strftime("%Y%m%d%H%M"), partition["end"])]
+    index = collection["partitions"].index(partition)
+    collection["partitions"][index:index + 1] = children
 
 
 def _supersede(transaction, operation, target, request_id):
@@ -229,7 +244,11 @@ def collection_status(store, collection_id=None):
         raise ResearchError("unknown_collection", "No collection has this identifier")
     selected = list(collections.values()) if collection_id is None else [collections[collection_id]]
     summaries = [_collection_summary(snapshot["records"], c) for c in selected]
-    artifacts = ArtifactStore(store.root)
+    from .evaluation import Evaluation
+    from .oai_cohort import enumeration_evidence
+    artifacts = Evaluation(snapshot["records"], ArtifactStore(store.root))
+    for collection in selected:
+        enumeration_evidence(snapshot["records"], artifacts, collection)
     for summary in summaries:
         for obligation in summary["reading_obligations"]:
             if obligation["artifact"]:
@@ -355,7 +374,12 @@ def _page_update(transaction, collection, partition_id, page, prepared, sources,
     for failure in excluded_entries:
         entry_keys.append("position:" + str(partition["offset"] + failure["index"]))
     disposition = "accepted"
-    if error:
+    if error and error.code == "query_ceiling" and partition["start"] != partition["end"]:
+        # The cursor reached the provider's query ceiling before the partition
+        # completed; its retained entries stay and its date range splits.
+        _split_partition(collection, partition)
+        disposition = "split"
+    elif error:
         failures.insert(0, {"code": error.code})
         disposition = "failed"
     elif page.start != partition["offset"]:
@@ -365,15 +389,10 @@ def _page_update(transaction, collection, partition_id, page, prepared, sources,
         failures.insert(0, {"code": "changed_total", "previous": partition["total"], "observed": page.total})
         partition["restart"] = True
     elif page.total > Arxiv.query_ceiling:
-        begin, end = (datetime.strptime(partition[key], "%Y%m%d%H%M") for key in ("start", "end"))
-        if begin == end:
+        if partition["start"] == partition["end"]:
             failures.insert(0, {"code": "query_ceiling", "partition_id": partition["id"], "reported_total": page.total})
         else:
-            middle = begin + timedelta(minutes=int((end - begin).total_seconds() // 120))
-            children = [_partition(partition["id"] + ".0", partition["start"], middle.strftime("%Y%m%d%H%M")),
-                        _partition(partition["id"] + ".1", (middle + timedelta(minutes=1)).strftime("%Y%m%d%H%M"), partition["end"])]
-            index = collection["partitions"].index(partition)
-            collection["partitions"][index:index + 1] = children
+            _split_partition(collection, partition)
             disposition = "split"
     elif page.returned_count == 0 and page.total != partition["offset"]:
         failures.insert(0, {"code": "empty_page"})
@@ -442,10 +461,10 @@ def _run_collection(store, collection_id, request_id, budget, http):
             break
         if collection["last_attempt_at"]:
             http.pace_from("export.arxiv.org", collection["last_attempt_at"])
-        request = provider.collection_request(collection["definition"]["primaryCategory"], partition["start"], partition["end"],
-                                                start=partition["offset"], page_size=collection["page_size"])
         page, failure, attempts, prepared = None, None, [], []
         try:
+            request = provider.collection_request(collection["definition"]["primaryCategory"], partition["start"], partition["end"],
+                                                    start=partition["offset"], page_size=collection["page_size"])
             response = http.get(request.url, headers=request.headers, accept=request.accept, budget=budget,
                                 not_before=collection.get("next_eligible_at"))
             attempts = response.attempts
@@ -576,7 +595,7 @@ def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, h
     http, artifacts = http or HttpClient(), ArtifactStore(store.root)
     attempts, pending, extracted, observed_identifier = [], [], None, None
     try:
-        response = http.get(url, accept=("application/pdf", "text/html", "application/xhtml+xml"), budget=budget,
+        response = http.get(url, accept=("application/pdf", "text/html", "application/xhtml+xml", "application/octet-stream"), budget=budget,
                             not_before=_next_eligible(snapshot["records"], identifier))
         attempts = response.attempts
         if identifier.startswith("arxiv:"):
@@ -603,6 +622,8 @@ def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, h
                "visual_inspection_required": extracted["visual_inspection_required"] if extracted else True,
                "extraction": dict({"extractor": extracted["extractor"] if extracted else None,
                                    "version": extracted["version"] if extracted else None,
+                                   "media_type": extracted["media_type"] if extracted else None,
+                                   "format_detection": extracted["format_detection"] if extracted else None,
                                    "options": extracted["options"] if extracted else options},
                                   **(extraction_measures(extracted["text"], len(response.body))
                                      if extracted and extracted["text"] is not None else
@@ -675,3 +696,9 @@ def import_response(store, provider, response, *, source_url, captured_at, reque
 def digest_bytes(data):
     import hashlib
     return hashlib.sha256(data).hexdigest()
+
+
+def import_oai_cohort(store, collection_id, pages, *, request_id, expected_revision):
+    """Import an original complete OAI chain into an existing frozen collection."""
+    from .oai_cohort import import_cohort
+    return import_cohort(store, collection_id, pages, request_id=request_id, expected_revision=expected_revision)
