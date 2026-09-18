@@ -35,6 +35,15 @@ def authored_pdf():
     return bytes(body)
 
 
+AUTHORED_PDF_TEXT = "An authored full text for acquisition testing.\n\f"
+
+
+def extract_authored_pdf(data):
+    """Stand in for pdftotext on the authored document, so no test needs the system tool."""
+    return {"status": "extracted", "text": AUTHORED_PDF_TEXT, "extractor": "pdftotext",
+            "version": None, "options": {"layout": True}}
+
+
 class BinaryPdfTests(unittest.TestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
@@ -44,12 +53,12 @@ class BinaryPdfTests(unittest.TestCase):
         http, _, _ = client([xml_response(atom([entry()], total=1))])
         acquire_work(self.store, "2601.00001v1", request_id="metadata", expected_revision=0, http=http)
 
-    def acquire(self, body, headers=None, request_id="binary", **kwargs):
+    def acquire(self, body, headers=None, request_id="binary", extractor=None, **kwargs):
         headers = {"Content-Type": "application/octet-stream"} if headers is None else headers
         http, _, _ = client([(200, headers, body)])
         return acquire_fulltext(self.store, "2601.00001v1", "https://arxiv.org/pdf/2601.00001v1",
                                 request_id=request_id, expected_revision=self.store.revision,
-                                http=http, max_requests=1, **kwargs)
+                                http=http, max_requests=1, extractor=extractor or extract_authored_pdf, **kwargs)
 
     def test_binary_pdf_is_parsed_without_rewriting_reported_media(self):
         original = authored_pdf()
@@ -80,11 +89,20 @@ class BinaryPdfTests(unittest.TestCase):
                 self.assertIsNone(result["capture"]["text"])
 
     def test_signature_does_not_accept_malformed_pdf(self):
-        for index, body in enumerate((b"%PDF-1.4\ntruncated", b"%PDF-1.4\nnot a valid document\n%%EOF")):
+        """A document without its trailer is refused before extraction; a corrupt one is refused by the parser."""
+        for index, (body, extractions) in enumerate(((b"%PDF-1.4\ntruncated", 0),
+                                                     (b"%PDF-1.4\nnot a valid document\n%%EOF", 1))):
             with self.subTest(index=index):
-                result = self.acquire(body, request_id=f"malformed-{index}")
+                attempted = []
+
+                def refuse_as_malformed(data, seen=attempted):
+                    seen.append(data)
+                    return {"status": "malformed_pdf", "text": None}
+
+                result = self.acquire(body, request_id=f"malformed-{index}", extractor=refuse_as_malformed)
                 self.assertEqual(result["pending"], [{"code": "malformed_pdf"}])
                 self.assertIsNone(result["capture"]["text"])
+                self.assertEqual(len(attempted), extractions)
 
     def test_explicit_non_generic_media_remains_rejected(self):
         result = self.acquire(authored_pdf(), headers={"Content-Type": "text/plain"})
