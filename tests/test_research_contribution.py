@@ -19,3 +19,9 @@ class GrandChallengeSearchTests(RoundsCase):
         self.pin()
         self.record_purpose("recent", "recent-after-pin")
         self.assert_error("readiness_required", self.current_bundle)
+
+    def test_a_new_grand_challenge_record_keeps_the_pinned_bundle_current(self):
+        from research_harness import challenge
+        bundle = self.pin()
+        self.mutate(challenge.record_grand_challenge, self.grand_challenge(self.links[0], "grand-challenge-2"))
+        self.assertEqual(self.current_bundle()["digest"], bundle["digest"])

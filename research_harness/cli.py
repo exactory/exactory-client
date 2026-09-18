@@ -6,8 +6,8 @@ from pathlib import Path
 import sys
 import time
 
-from . import (acquisition, cohort_evidence, development, graph, lineage, literature, predictions, principles, reading, resources,
-                rounds, sampling, screening, synthesis, visual_assets)
+from . import (acquisition, challenge, cohort_evidence, development, graph, lineage, literature, predictions, principles, reading,
+                resources, rounds, sampling, screening, synthesis, visual_assets)
 from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evaluation import Evaluation
@@ -43,6 +43,7 @@ OPERATIONS = {
     "rationale": synthesis.record_rationale,
     "innovation": synthesis.record_innovation,
     "context": synthesis.record_context,
+    "grand-challenge": challenge.record_grand_challenge,
     "cycle": development.plan_cycle,
     "admit": development.admit_execution,
     "assess": development.assess_cycle,
@@ -227,10 +228,12 @@ def status_report(store, *, counters=False):
     # takes the highest-priority current obligation in preparation order.
     upcoming = preparation.get("next") if study and study["stage"] == "cohort" else None
     obligations = current_obligations({"obligations": report["obligations"], "preparation": preparation})
+    current_challenge = challenge.find_current_challenge(records) if profile == "research" else None
     return dict(report, revision=snapshot["revision"], profile=profile, runtime=runtime_provenance(),
                 study=study, preparation=preparation, resources=resources.account_report(records, profile),
                 limits=limits_report(records), **diagnostics,
                 round=round_summary(round_report) if round_report else None,
+                grand_challenge=current_challenge["payload"] if current_challenge else None,
                 next=upcoming or (order_obligations(obligations)[0] if obligations else None),
                 pending_executions=[key for key in records.get("execution_admission", {}) if key not in records.get("execution_outcome", {})],
                 remote_intents=list(records.get("remote_intent", {}).values()),

@@ -435,6 +435,7 @@ class ResearchPreparationTests(DevelopmentCase):
         cases = [self.case(self.links[0], 0, "within_field")]
         cases.extend(self.case(link, n) for n, link in enumerate(self.links[1:], 1))
         self.json_command("innovation", self.innovation(cases))
+        self.json_command("grand-challenge", self.grand_challenge(self.links[0]))
         entered = self.cli("exactory-lab", "state", "set", "--stage", "ideate")
         self.assertEqual(entered.returncode, 0, entered.stderr)
         self.assertEqual(self.store.snapshot()["records"]["workspace"]["study"]["stage"], "ideate")

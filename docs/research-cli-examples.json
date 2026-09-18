@@ -1127,6 +1127,80 @@
       }
     ]
   },
+  "grand-challenge": {
+    "id": "grand-challenge-1",
+    "reason": "The finite bound is a step toward a bound for every bounded input sequence.",
+    "challenges": [
+      {
+        "id": "general-bound",
+        "horizon": "ultimate",
+        "statement": "A finite bound for every bounded input sequence.",
+        "state": "Bounds are known only on finite ranges, and no construction extends them.",
+        "criteria": [
+          {
+            "id": "rc-general",
+            "statement": "A finite bound is established for every bounded input sequence."
+          }
+        ],
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "multivariate-bound",
+        "horizon": "near_term",
+        "statement": "The finite bound in the multivariate case.",
+        "state": "Only the univariate case is established.",
+        "criteria": [
+          {
+            "id": "rc-multivariate",
+            "statement": "The finite bound is established for multivariate inputs."
+          }
+        ],
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
   "cycle": {
     "id": "cycle-1",
     "author": "cycle-author",

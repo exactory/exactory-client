@@ -28,6 +28,7 @@ from .graph import obligation
 from .identities import resolve_family
 from .literature import _historical_status, foundation_state
 from .operations import fields, immutable_record, iso_date, prepared_mutation, profile_name, strings, text
+from .challenge import find_current_challenge
 from .principles import configuration_state, preparation_policy
 from .reading import fulltext_coverage, required_unit_obligations, validate_read_evidence
 from .source_links import captured_source, exact_work, original_identity, validate_link
@@ -409,6 +410,9 @@ def _synthesis_state(evaluation, profile):
         section["counts"] = dict(section.get("counts", {}), obligations=len(section["obligations"]))
         sections[kind] = section
         obligations.extend(dict(o, section=kind) for o in section["obligations"])
+    # The challenges ahead are study-level and outside the preparation digest; only their presence is owed (design 7.1).
+    if profile == "research" and find_current_challenge(records) is None:
+        obligations.append(obligation("grand_challenge_missing", "Record the challenges ahead of the study before ideation."))
     obligations = _unique(obligations)
     counts = {"sections": len(sections), "current_sections": sum(s["ready"] for s in sections.values()), "obligations": len(obligations)}
     counts.update({k: v for k, v in sections.get("innovation", {}).get("counts", {}).items() if k != "obligations"})

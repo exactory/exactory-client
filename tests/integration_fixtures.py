@@ -90,6 +90,7 @@ def prepare_research(root, objective=None, *, candidate=False):
     cases = [case.case(case.links[0], 0, "within_field")]
     cases.extend(case.case(link, n) for n, link in enumerate(case.links[1:], 1))
     case.mutate(api.record_innovation, case.innovation(cases))
+    case.mutate(case.api("challenge").record_grand_challenge, case.grand_challenge(case.links[0]))
     case.assertTrue(api.synthesis_report(case.store, "research")["ready"])
     if candidate:
         observed_candidate(case)
