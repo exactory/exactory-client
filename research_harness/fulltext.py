@@ -178,7 +178,11 @@ class _Article(HTMLParser):
 
 def extract(data, media_type, *, extractor=None, layout=True):
     result = {"status": "unsupported_fulltext", "text": None, "includes_abstract": None, "visual_inspection_required": True,
-              "extractor": None, "version": None, "options": {}}
+              "extractor": None, "version": None, "options": {},
+              "media_type": media_type, "format_detection": "reported_media_type"}
+    if media_type == "application/octet-stream" and data.startswith(b"%PDF-"):
+        media_type = "application/pdf"
+        result.update({"media_type": media_type, "format_detection": "pdf_signature_from_generic_binary"})
     if media_type == "application/pdf":
         result.update({"extractor": PdfExtractor.name, "options": {"layout": layout}})
         if not data.startswith(b"%PDF-") or b"%%EOF" not in data[-4096:]:

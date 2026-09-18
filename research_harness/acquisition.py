@@ -580,7 +580,7 @@ def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, h
     http, artifacts = http or HttpClient(), ArtifactStore(store.root)
     attempts, pending, extracted, observed_identifier = [], [], None, None
     try:
-        response = http.get(url, accept=("application/pdf", "text/html", "application/xhtml+xml"), budget=budget,
+        response = http.get(url, accept=("application/pdf", "text/html", "application/xhtml+xml", "application/octet-stream"), budget=budget,
                             not_before=_next_eligible(snapshot["records"], identifier))
         attempts = response.attempts
         if identifier.startswith("arxiv:"):
@@ -607,6 +607,8 @@ def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, h
                "visual_inspection_required": extracted["visual_inspection_required"] if extracted else True,
                "extraction": dict({"extractor": extracted["extractor"] if extracted else None,
                                    "version": extracted["version"] if extracted else None,
+                                   "media_type": extracted["media_type"] if extracted else None,
+                                   "format_detection": extracted["format_detection"] if extracted else None,
                                    "options": extracted["options"] if extracted else options},
                                   **(extraction_measures(extracted["text"], len(response.body))
                                      if extracted and extracted["text"] is not None else
