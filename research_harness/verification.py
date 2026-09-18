@@ -92,7 +92,7 @@ def _body(artifacts, reference):
 def bind_verdict(store, payload, *, expected_revision, request_id):
     """Bind {id, task_digest, body:ArtifactRef, assessment} without changing the wire schema."""
     def prepare(records, value):
-        from .sampling import SAMPLED, prediction
+        from .sampling import SAMPLED, UNPLACED_WIDEN, prediction
         artifacts = Evaluation(records, ArtifactStore(store.root))
         fields(value, ("id", "task_digest", "body", "assessment"))
         text(value["id"], "Verdict assessment ID")
@@ -105,21 +105,28 @@ def bind_verdict(store, payload, *, expected_revision, request_id):
         if preparation_policy(records) == SAMPLED:
             sample_prediction = prediction(records)
             claimed = body["prediction"]
-            band = claimed.get("band") or {}
+            fields(claimed.get("band"), ("best", "worst"))
+            band = claimed["band"]
+            if any(type(n) is not int or not 1 <= n <= 100 for n in (claimed["percentile"], band["best"], band["worst"])):
+                raise ResearchError("invalid_input", "Percentile and band are integers from 1 to 100")
             computed = sample_prediction["band"]
-            # A sample that placed no member states no percentile. Otherwise the verdict
-            # claims the computed percentile and a band that contains the computed one,
-            # and it widens that band on one side once the sample leaves more than
-            # UNPLACED_WIDEN of its members unplaced.
-            is_consistent_with_sample = (
-                computed is not None and claimed["percentile"] == sample_prediction["percentile"]
-                and band.get("best") is not None and band.get("worst") is not None
-                and band["best"] <= computed["best"] and band["worst"] >= computed["worst"]
-                and (not sample_prediction["widen_required"]
-                     or band["best"] < computed["best"] or band["worst"] > computed["worst"]))
-            if not is_consistent_with_sample:
-                raise ResearchError("prediction_mismatch", "The verdict's percentile equals the sample estimate and its band contains the sample band",
-                                    {"sample": sample_prediction, "claimed": claimed})
+            # The clauses in the order the refusal names them: a sample that placed no member
+            # states no percentile; the verdict claims the computed percentile; its band contains
+            # the computed one; and it widens that band once more than UNPLACED_WIDEN of the
+            # sampled members stay unplaced (spec 5.2).
+            if computed is None:
+                mismatch_msg = "The sample places no member; revise the placements before binding"
+            elif claimed["percentile"] != sample_prediction["percentile"]:
+                mismatch_msg = "The verdict's percentile equals the sample estimate of %d" % sample_prediction["percentile"]
+            elif band["best"] > computed["best"] or band["worst"] < computed["worst"]:
+                mismatch_msg = "The verdict's band contains the sample band %d..%d" % (computed["best"], computed["worst"])
+            elif sample_prediction["widen_required"] and (band["best"], band["worst"]) == (computed["best"], computed["worst"]):
+                mismatch_msg = ("More than %d sampled members are unplaced; widen the band beyond the sample band %d..%d"
+                                % (UNPLACED_WIDEN, computed["best"], computed["worst"]))
+            else:
+                mismatch_msg = None
+            if mismatch_msg is not None:
+                raise ResearchError("prediction_mismatch", mismatch_msg, {"sample": sample_prediction, "claimed": claimed})
         assessment = value["assessment"]
         fields(assessment, ("assessor", "provenance", "independence_basis", "blind", "checks"))
         text(assessment["assessor"], "Verifier identity")

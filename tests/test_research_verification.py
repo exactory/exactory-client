@@ -264,13 +264,20 @@ class SampledVerificationCase(SynthesisCase):
         body = {"stance": "sound", "summary": "The finite bound is supported.", "rationaleSections": [],
                 "prediction": {"corpus": "arxiv", "category": "cs.LG", "windowStart": "2026-01-01", "windowEnd": "2026-01-31",
                                "percentile": percentile, "band": band}}
-        payload = {"id": "verdict-%d-%d-%d" % (percentile, band["best"], band["worst"]), "task_digest": task["digest"],
+        payload = {"id": "verdict-" + str(self.sequence), "task_digest": task["digest"],
                    "body": self.artifacts.put(json.dumps(body).encode(), "application/json"),
                    "assessment": {"assessor": "independent-verifier", "provenance": self.artifacts.put(b"Authored separate verification context.", "text/plain"),
                        "independence_basis": "The verifier is not an author and read no other verdicts.", "blind": True,
                        "checks": [{"dimension": d, "reason": "The scoped source supports this separate assessment.", "evidence": [self.linked]}
                                   for d in ("soundness", "novelty", "impact")]}}
         return self.mutate(api.bind_verdict, payload)["result"]
+
+    def refusal(self, percentile, band):
+        """The error that binding this claimed prediction raises."""
+        from research_harness.errors import ResearchError
+        with self.assertRaises(ResearchError) as raised:
+            self.bind(percentile, band)
+        return raised.exception
 
 
 class SampledVerificationTests(SampledVerificationCase):
@@ -283,11 +290,21 @@ class SampledVerificationTests(SampledVerificationCase):
         self.assertEqual(expected["percentile"], 25)
         self.assertEqual(expected["band"], {"best": 3, "worst": 47})
         self.assertFalse(expected["widen_required"])
-        self.assert_error("prediction_mismatch", lambda: self.bind(50, {"best": 35, "worst": 65}))
-        self.assert_error("prediction_mismatch", lambda: self.bind(25, {"best": 24, "worst": 26}))
+        wrong_percentile = self.refusal(50, {"best": 35, "worst": 65})
+        self.assertEqual(wrong_percentile.code, "prediction_mismatch")
+        self.assertEqual(wrong_percentile.message, "The verdict's percentile equals the sample estimate of 25")
+        narrow_band = self.refusal(25, {"best": 24, "worst": 26})
+        self.assertEqual(narrow_band.code, "prediction_mismatch")
+        self.assertEqual(narrow_band.message, "The verdict's band contains the sample band 3..47")
+        self.assertEqual(narrow_band.details["sample"]["band"], {"best": 3, "worst": 47})
         bound = self.bind(25, {"best": 1, "worst": 60})
         self.assertEqual(bound["sample_prediction"]["percentile"], 25)
         self.assertEqual(bound["sample_prediction"]["band"], {"best": 3, "worst": 47})
+
+    def test_a_band_that_is_not_two_integers_in_range_is_refused_before_the_comparison(self):
+        self.assertEqual(self.refusal(25, [1, 60]).code, "invalid_input")
+        self.assertEqual(self.refusal(25, {"best": "1", "worst": 60}).code, "invalid_input")
+        self.assertEqual(self.refusal(25, {"best": 0, "worst": 60}).message, "Percentile and band are integers from 1 to 100")
 
 
 class WidenedSampleVerificationTests(SampledVerificationCase):
@@ -306,7 +323,30 @@ class WidenedSampleVerificationTests(SampledVerificationCase):
         self.assertEqual(expected["percentile"], 33)
         self.assertEqual(expected["band"], {"best": 6, "worst": 60})
         self.assertTrue(expected["widen_required"])
-        self.assert_error("prediction_mismatch", lambda: self.bind(33, {"best": 6, "worst": 60}))
+        equal_band = self.refusal(33, {"best": 6, "worst": 60})
+        self.assertEqual(equal_band.code, "prediction_mismatch")
+        self.assertEqual(equal_band.message, "More than 20 sampled members are unplaced; widen the band beyond the sample band 6..60")
         bound = self.bind(33, {"best": 5, "worst": 60})
         self.assertTrue(bound["sample_prediction"]["widen_required"])
         self.assertEqual(bound["sample_prediction"]["band"], {"best": 6, "worst": 60})
+        wider_on_both_sides = self.bind(33, {"best": 4, "worst": 61})
+        self.assertEqual(wider_on_both_sides["sample_prediction"]["band"], {"best": 6, "worst": 60})
+
+
+class UnplacedSampleVerificationTests(SampledVerificationCase):
+    """A sample that placed no member supports no percentile, so it binds no verdict."""
+
+    works = (2, 3, 4, 5)
+    positions = ("unplaced",) * 4
+
+    def test_a_sample_that_places_no_member_binds_no_verdict(self):
+        from research_harness import sampling
+        expected = sampling.prediction(self.store.snapshot()["records"])
+        self.assertEqual((expected["n"], expected["placed"], expected["unplaced"]), (4, 0, 4))
+        self.assertIsNone(expected["percentile"])
+        self.assertIsNone(expected["band"])
+        # The cohort gate accepts this preparation, so the refusal below is the binding rule.
+        self.assertTrue(self.api().synthesis_report(self.store, "verification")["ready"])
+        refused = self.refusal(50, {"best": 35, "worst": 65})
+        self.assertEqual(refused.code, "prediction_mismatch")
+        self.assertEqual(refused.message, "The sample places no member; revise the placements before binding")
