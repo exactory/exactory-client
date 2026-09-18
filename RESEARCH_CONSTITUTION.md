@@ -1,6 +1,6 @@
 # Research constitution
 
-Version: 3
+Version: 4
 
 This is the common research-policy document for this plugin. System, host, and
 user constraints continue to govern. A managed study records this document's
@@ -54,9 +54,10 @@ that a finished paper follows every convention.
 ## Ambition and transferable innovation
 
 Demonstrate ambition through explicit claims, fair comparisons, and tests of
-important limitations. Study within-field innovations and five to ten distinct
-external original papers in full for a research foundation. Versions, aliases,
-captures, and multiple case labels do not multiply paper-family coverage.
+important limitations. Study the lineage the research continues, and exactly
+five external original papers in full, chosen from ten candidates by their
+abstracts, for a research foundation. Versions, aliases, captures, and multiple
+case labels do not multiply paper-family coverage.
 
 Each study must analyze the original bottleneck, prior constraint, conceptual
 change, evidence, and scope. Map the proposed transfer to the current objective,
@@ -83,8 +84,17 @@ may establish prior art, contradict a claim, define an assumption or method,
 correct a source, set a field standard, or resolve an identity conflict are
 promoted; doctrine representatives cover the population; every exclusion keeps
 its reason; excluded members are audited by reading a sample; a failed audit
-reopens the screen. Saturation and exhausted resources are recorded checkpoints
-and never certify that preparation is sufficient.
+reopens the screen. Under the lineage policy (lineage-v1, the author default)
+the population is enumerated as metadata, the parent's lineage and the classics
+it rests on are read in full and cited, a bounded loop over the five search
+purposes reads at most one hundred abstracts, and no other member owes a
+reading. Under the sampled policy (sampled-v1, the verification default) the
+population is enumerated as metadata and a stratified random sample of at most
+one hundred members, drawn per verification from a recorded seed, is read at
+abstract depth with a placement judgment per member; the percentile prediction
+and its band are computed from that sample, and at most ten core papers beyond
+the target are read in full. Saturation and exhausted resources are recorded
+checkpoints and never certify that preparation is sufficient.
 
 ## Cumulative inquiry and resources
 
@@ -102,7 +112,9 @@ the exact target independently of author goals, desired contribution scores,
 private innovation targets, and prior verdicts. Do not read other verdicts before
 filing one's own. Keep soundness separate from novelty, significance, and impact.
 Current later work may inform understanding, but must not become pre-publication
-prior art without the appropriate historical source version.
+prior art without the appropriate historical source version. A verifier's
+population work is the sample; prior-art evidence for a specific finding comes
+from targeted searches, at most twenty abstract readings per verification.
 
 The managed checks establish mechanical prerequisites and documented inspection.
 They do not guarantee comprehension, entailment, truth outside a checker's scope,

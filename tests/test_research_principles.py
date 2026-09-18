@@ -146,9 +146,6 @@ class PreparationPolicyTests(LiteratureCase):
         self.assertEqual(report["preparation_policy"], "screened-v1")
         self.assertNotEqual(report["digest"], before)
 
-    def test_distributed_constitution_is_version_three(self):
-        self.assertEqual(self.api().constitution_contract()["version"], "3")
-
     def test_new_workspaces_default_by_profile_and_legacy_configs_stay_exhaustive(self):
         from research_harness.principles import default_policy, initialize_research, preparation_policy
         self.assertEqual(default_policy("research"), "lineage-v1")
@@ -165,3 +162,10 @@ class PreparationPolicyTests(LiteratureCase):
         self.assert_error("policy_inapplicable", lambda: self.mutate(change_policy,
             {"previous": "exhaustive-v1", "policy": "sampled-v1", "reason": "Wrong profile."}))
         self.mutate(change_policy, {"previous": "exhaustive-v1", "policy": "lineage-v1", "reason": "Adopt the lineage policy."})
+
+    def test_constitution_is_version_four_and_names_the_bounded_policies(self):
+        from research_harness.principles import CONSTITUTION_PATH, constitution_contract
+        self.assertEqual(constitution_contract()["version"], "4")
+        text = CONSTITUTION_PATH.read_text(encoding="utf-8")
+        for phrase in ("lineage-v1", "sampled-v1", "five external original papers", "ten candidates", "random sample"):
+            self.assertIn(phrase, text)

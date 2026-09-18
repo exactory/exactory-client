@@ -992,10 +992,10 @@ class RoundStatusTests(RoundsCase):
 
 
 class ConstitutionUpgradeTests(RoundsCase):
-    """Validation case R24: a study prepared under the 0.38.0 constitution (Version 2) is opened under Version 3.
+    """Validation case R24: a study prepared under the 0.38.0 constitution (Version 2) is opened under Version 4.
 
     The configuration digest covers the constitution, so the update stales every decision that binds it; adopting
-    Version 3 clears only the constitution obligation."""
+    Version 4 clears only the constitution obligation."""
 
     STALE = ["branch_resolution_unverified", "candidate_checkpoint_stale", "development_dependencies_stale",
              "readiness_review_stale", "synthesis_dependencies_stale"]
@@ -1005,7 +1005,7 @@ class ConstitutionUpgradeTests(RoundsCase):
         self.addCleanup(directory.cleanup)
         self.shipped = principles.CONSTITUTION_PATH.read_text(encoding="utf-8")
         self.policy = Path(directory.name) / "RESEARCH_CONSTITUTION.md"
-        earlier = self.shipped.split("\n## Development across rounds")[0].replace("Version: 3", "Version: 2", 1)
+        earlier = self.shipped.split("\n## Development across rounds")[0].replace("Version: 4", "Version: 2", 1)
         self.assertNotEqual(earlier, self.shipped)
         self.policy.write_text(earlier, encoding="utf-8")
         patcher = patch.object(principles, "CONSTITUTION_PATH", self.policy)
@@ -1017,12 +1017,12 @@ class ConstitutionUpgradeTests(RoundsCase):
         return sorted({o["code"] for o in status_report(self.store)["obligations"]})
 
     def upgrade(self):
-        """The plugin update: the distributed constitution becomes the shipped Version 3."""
+        """The plugin update: the distributed constitution becomes the shipped Version 4."""
         self.policy.write_text(self.shipped, encoding="utf-8")
 
     def adopt(self):
         previous = self.store.snapshot()["records"]["configuration"]["research"]["constitution"]["sha256"]
-        self.mutate(principles.revalidate_constitution, {"previous_sha256": previous, "reason": "Adopt Version 3."})
+        self.mutate(principles.revalidate_constitution, {"previous_sha256": previous, "reason": "Adopt Version 4."})
 
     def test_a_study_before_evaluate_reports_the_staleness_of_its_recorded_decisions(self):
         self.set_stage("experiment")
