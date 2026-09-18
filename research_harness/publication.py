@@ -18,6 +18,8 @@ FILE_TYPES = {"pdf": "application/pdf", "abstract": "text/plain", "bibliography"
               "claims": "application/json", "sources": "application/octet-stream"}
 # The rubric's numeric scores and their unchanged maximum (every scale starts at 1).
 SCORE_SCALES = (("soundness", 4), ("presentation", 4), ("contribution", 4), ("overall", 10))
+# The axes whose score below its maximum names the changes that would reach it (design 7.2).
+CHANGE_AXES = ("soundness", "presentation", "contribution")
 
 
 def _ready(records, artifacts):
@@ -159,7 +161,10 @@ def _review(records, artifacts, value, bundle):
         raise ResearchError("review_not_independent", "Supply an identified independent blind reviewer")
     validate_assessor(artifacts, value["assessor"], bundle["candidate"]["authors"])
     core = strict_json(artifacts.read(value["review"]))
-    fields(core, ("summary", "strengths", "weaknesses", "soundness", "presentation", "contribution", "overall", "decision"))
+    # Optional here because the publication gate re-reads reviews recorded before 0.42.0;
+    # record_manuscript_review requires it for every new review.
+    fields(core, ("summary", "strengths", "weaknesses", "soundness", "presentation", "contribution", "overall", "decision"),
+           ("changes_for_maximum",))
     text(core["summary"], "Review summary")
     for key in ("strengths", "weaknesses"):
         strings(core[key], key, nonempty=True)
@@ -168,7 +173,21 @@ def _review(records, artifacts, value, bundle):
             raise ResearchError("invalid_review", "Review scores must use the unchanged rubric scales")
     if core["decision"] not in ("accept", "reject"):
         raise ResearchError("invalid_review", "The rubric decision must be accept or reject")
+    if "changes_for_maximum" in core:
+        _check_changes_for_maximum(core)
     return core
+
+
+def _check_changes_for_maximum(core):
+    """Each axis below its maximum lists the changes that reach it; an axis at its maximum lists none."""
+    changes = core["changes_for_maximum"]
+    fields(changes, CHANGE_AXES, code="invalid_review")
+    maxima = dict(SCORE_SCALES)
+    for axis in CHANGE_AXES:
+        strings(changes[axis], "Changes for the maximum " + axis, code="invalid_review")
+        if bool(changes[axis]) != (core[axis] < maxima[axis]):
+            raise ResearchError("invalid_review", "List the changes that bring each score below its maximum to the maximum, "
+                                "and none for a score at the maximum", {"axis": axis})
 
 
 def record_manuscript_review(store, payload, *, expected_revision, request_id):
@@ -176,6 +195,8 @@ def record_manuscript_review(store, payload, *, expected_revision, request_id):
         artifacts = Evaluation(records, ArtifactStore(store.root))
         bundle = _bundle(records, artifacts)
         core = _review(records, artifacts, value, bundle)
+        if "changes_for_maximum" not in core:
+            raise ResearchError("invalid_review", "A review lists the changes that bring each score below its maximum to the maximum")
         key = _assessor_key(value["assessor"]["id"])
         for saved in records.get("manuscript_review", {}).values():
             if saved["bundle_digest"] == bundle["digest"] and _assessor_key(saved["assessor"]["id"]) == key:

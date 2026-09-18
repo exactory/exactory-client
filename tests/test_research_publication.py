@@ -7,7 +7,7 @@ from pathlib import Path
 from research_harness.errors import ResearchError
 
 from development_fixtures import DevelopmentCase
-from integration_fixtures import approve_publication_stop, observed_candidate
+from integration_fixtures import approve_publication_stop, build_manuscript_review, build_review_core, observed_candidate
 
 
 PLUGIN = Path(__file__).resolve().parents[1]
@@ -35,15 +35,48 @@ class ResearchPublicationTests(DevelopmentCase):
             "claim_evidence": [{"claim_id": "bound", "evidence": [self.result_evidence(self.execution_payload)]}]}
 
     def core(self, decision="accept"):
-        return {"summary": "The authored finite result is explicitly scoped.", "strengths": ["All four integers are enumerated."],
-                "weaknesses": ["The result establishes no unbounded generalization."], "soundness": 3,
-                "presentation": 3, "contribution": 3, "overall": 6, "decision": decision}
+        return build_review_core(decision)
 
     def manuscript_review(self, bundle, assessor, decision="accept"):
-        return {"id": assessor, "bundle_digest": bundle["digest"], "assessor": {"id": assessor, "kind": "agent",
-            "provenance": self.artifacts.put(("Authored independent context " + assessor).encode(), "text/plain"),
-            "relationship": "A separate fixture assessor.", "independence_basis": "A new blind context received the manuscript and exact evidence bytes."},
-            "review": self.artifacts.put(json.dumps(self.core(decision)).encode(), "application/json"), "blind": True}
+        return build_manuscript_review(self, bundle, assessor, decision)
+
+    def review_of(self, bundle, assessor, core):
+        payload = self.manuscript_review(bundle, assessor)
+        payload["review"] = self.artifacts.put(json.dumps(core).encode(), "application/json")
+        return payload
+
+    def test_a_review_names_the_changes_for_each_score_below_the_maximum(self):
+        api = self.publication()
+        bundle = self.mutate(api.prepare_publication, self.bundle_payload())["result"]
+        changes = self.core()["changes_for_maximum"]
+        without = {key: value for key, value in self.core().items() if key != "changes_for_maximum"}
+        refused = {"missing": without,
+                   "empty below the maximum": dict(self.core(), changes_for_maximum=dict(changes, contribution=[])),
+                   "listed at the maximum": dict(self.core(), soundness=4),
+                   "axes": dict(self.core(), changes_for_maximum={"soundness": ["x"], "presentation": ["y"]}),
+                   "blank": dict(self.core(), changes_for_maximum=dict(changes, presentation=[" "]))}
+        for name, core in refused.items():
+            with self.subTest(case=name):
+                self.assert_error("invalid_review", lambda: self.mutate(
+                    api.record_manuscript_review, self.review_of(bundle, "reviewer-" + name.replace(" ", "-"), core)))
+        at_maximum = dict(self.core(), soundness=4, changes_for_maximum=dict(changes, soundness=[]))
+        recorded = self.mutate(api.record_manuscript_review, self.review_of(bundle, "reviewer-at-maximum", at_maximum))["result"]
+        self.assertEqual(recorded["core"]["changes_for_maximum"]["soundness"], [])
+
+    def test_a_review_recorded_before_the_changes_field_still_counts(self):
+        from research_harness.evidence import digest
+        from research_harness.operations import prepared_mutation
+        api = self.publication()
+        bundle = self.mutate(api.prepare_publication, self.bundle_payload())["result"]
+        self.mutate(api.record_manuscript_review, self.manuscript_review(bundle, "reviewer-a"))
+        saved = self.store.snapshot()["records"]["manuscript_review"]["reviewer-a"]
+        legacy_core = {key: value for key, value in saved["core"].items() if key != "changes_for_maximum"}
+        legacy = dict(saved, id="reviewer-legacy", assessor=dict(saved["assessor"], id="reviewer-legacy"),
+                      review=self.artifacts.put(json.dumps(legacy_core).encode(), "application/json"), core=legacy_core)
+        legacy["digest"] = digest({key: legacy[key] for key in ("id", "bundle_digest", "assessor", "review", "blind")})
+        self.mutate(lambda store, payload, **identity: prepared_mutation(store, "test.legacy-review", payload,
+                    lambda records, value: ([("manuscript_review", legacy["id"], legacy)], legacy), **identity), {})
+        self.assertTrue(api.publication_report(self.store)["ready"])
 
     def test_readiness_alone_is_not_a_manuscript_or_dual_review_receipt(self):
         api = self.publication()

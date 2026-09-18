@@ -11,6 +11,26 @@ from research_harness.principles import preparation_policy
 from research_harness.storage import Store
 
 
+def build_review_core(decision="accept"):
+    """The fixture's blind review core: every score below 4 names the change that would bring it to 4."""
+    return {"summary": "The authored finite result is explicitly scoped.", "strengths": ["All four integers are enumerated."],
+            "weaknesses": ["The result establishes no unbounded generalization."], "soundness": 3,
+            "presentation": 3, "contribution": 3, "overall": 6, "decision": decision,
+            "changes_for_maximum": {
+                "soundness": ["Section 2: state the enumeration's input range beside the claimed bound."],
+                "presentation": ["Section 1: name the finite range in the first sentence."],
+                "contribution": ["Establish the bound for every bounded input sequence, not only for n in [0, 3]."]}}
+
+
+def build_manuscript_review(case, bundle, assessor, decision="accept"):
+    """One blind reviewer's unchanged rubric JSON, wrapped for `manuscript-review` on the exact bundle."""
+    return {"id": assessor, "bundle_digest": bundle["digest"], "assessor": {"id": assessor, "kind": "agent",
+            "provenance": case.artifacts.put(("Authored independent context " + assessor).encode(), "text/plain"),
+            "relationship": "A separate fixture assessor.",
+            "independence_basis": "A new blind context received the manuscript and exact evidence bytes."},
+            "review": case.artifacts.put(json.dumps(build_review_core(decision)).encode(), "application/json"), "blind": True}
+
+
 def prepare_verification(root):
     from test_research_synthesis import SynthesisCase
     case = SynthesisCase(methodName="runTest")
@@ -113,7 +133,6 @@ def observed_candidate(case):
 def prepare_manuscript(case, *, pdf="draft/paper.pdf", sources=None, stop=False):
     """Pin the existing manuscript and record two actual independent reviews."""
     from research_harness import publication
-    from test_research_publication import ResearchPublicationTests
     claims = case.root / "evidence/claims.json"
     claims.parent.mkdir(parents=True, exist_ok=True)
     claims.write_text(json.dumps([{"id": "bound", "claim": "The maximum is 9."}]))
@@ -123,13 +142,8 @@ def prepare_manuscript(case, *, pdf="draft/paper.pdf", sources=None, stop=False)
                   "claims": "evidence/claims.json", "sources": sources},
         "claim_evidence": [{"claim_id": "bound", "evidence": [case.result_evidence(case.execution_payload)]}]})["result"]
     for number in (1, 2):
-        assessor = identifier + "-reviewer-" + str(number)
-        core = ResearchPublicationTests.core(case)
-        review = {"id": assessor, "bundle_digest": bundle["digest"], "assessor": {"id": assessor, "kind": "agent",
-            "provenance": case.artifacts.put(("Independent fixture context " + assessor).encode(), "text/plain"),
-            "relationship": "Independent fixture assessor.", "independence_basis": "Separate blind context received the exact manuscript and evidence."},
-            "review": case.artifacts.put(json.dumps(core).encode(), "application/json"), "blind": True}
-        case.mutate(publication.record_manuscript_review, review)
+        case.mutate(publication.record_manuscript_review,
+                    build_manuscript_review(case, bundle, identifier + "-reviewer-" + str(number)))
     case.assertTrue(publication.publication_report(case.store)["ready"])
     if stop:
         approve_publication_stop(case, bundle)
