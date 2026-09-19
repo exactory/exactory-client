@@ -175,6 +175,17 @@ class ContributionAnalysisTests(RoundsCase):
 
 
 class NextBundleTests(RoundsCase):
+    def test_a_fourth_predicting_assessor_is_refused_so_a_complete_measurement_stays_complete(self):
+        bundle = self.pin(identifier="paper-first", measure=False)
+        self.measure(bundle, "one")
+        fourth = self.prediction_payload(bundle, "fourth-predictor")
+        self.assert_error("manuscript_prediction_excess", lambda: self.mutate(predictions.record_prediction, fourth))
+        records = self.store.snapshot()["records"]
+        self.assertIsNotNone(predictions.select_measurement_reviews(records, bundle))
+        # The measured bundle still owes its analysis, so the next pin still waits for it.
+        self.assertEqual(contribution.find_bundle_owing_analysis(records)["id"], "paper-first")
+        self.assert_error("contribution_analysis_missing", lambda: self.pin(identifier="paper-second", measure=False))
+
     def test_the_next_bundle_waits_for_the_analysis_of_a_measured_bundle(self):
         self.pin(identifier="paper-first", measure=False)
         second = self.pin(identifier="paper-second", measure=False)

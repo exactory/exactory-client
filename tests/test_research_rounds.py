@@ -518,7 +518,7 @@ class PredictionTests(RoundsCase):
     def test_a_prediction_binds_the_bundle_the_cohort_and_a_blind_assessor(self):
         self.assert_error("publication_bundle_missing", lambda: self.mutate(predictions.record_prediction,
                                                                             self.prediction_payload({"digest": "0" * 64}, "predictor-0")))
-        bundle = self.pin()
+        bundle = self.pin(measure=False)
         recorded = self.mutate(predictions.record_prediction, self.prediction_payload(bundle, "predictor-a"))["result"]
         self.assertEqual(recorded["prediction"]["percentile"], 30)
         self.assertEqual(recorded["bundle_digest"], bundle["digest"])
