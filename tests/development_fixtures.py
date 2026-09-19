@@ -39,6 +39,7 @@ class DevelopmentCase(SynthesisCase):
         cases = [self.case(self.links[0], 0, "within_field")]
         cases.extend(self.case(link, n) for n, link in enumerate(self.links[1:], 1))
         self.mutate(synthesis.record_innovation, self.innovation(cases))
+        self.mutate(self.api("challenge").record_grand_challenge, self.grand_challenge(self.links[0]))
         self.assertTrue(synthesis.synthesis_report(self.store, "research")["ready"])
 
     def result_scope(self, partial=False):

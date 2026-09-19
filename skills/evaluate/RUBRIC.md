@@ -22,11 +22,22 @@ measure the paper, not to encourage its author.
   "presentation": 3,
   "contribution": 2,
   "overall": 5,
-  "decision": "reject"
+  "decision": "reject",
+  "changes_for_maximum": {
+    "soundness": ["Section 3: the claimed rate needs the missing variance bound for the non-Gaussian case."],
+    "presentation": ["Section 2: define the estimator before Lemma 1 uses it."],
+    "contribution": ["Establish the rate for every sub-Gaussian family, which the cited open problem asks for, not only the Gaussian case."]
+  }
 }
 ```
 
-`decision` is `"accept"` or `"reject"`, nothing else. Vague weaknesses are
+`decision` is `"accept"` or `"reject"`, nothing else. `changes_for_maximum` has
+exactly the keys `soundness`, `presentation` and `contribution`. For a score below
+4, its list names the concrete changes that would bring that score to 4: the
+section, claim or result, and the change. For contribution, name the result the
+paper would need to establish, even when that is new research rather than a
+revision. For a score of 4 the list is empty. The harness refuses any other shape.
+Vague weaknesses are
 worthless: each one drives the next revision, so it names what is wrong, where, and
 what would fix it.
 
@@ -102,7 +113,7 @@ real.
 In a managed study, each blind measurement reviewer (not a dual-reviewer gate
 reviewer) also returns a second file beside the core JSON: the cohort prediction
 in the market's shape and the reasons for it, as a nonempty list of strings. The
-core stays exactly the eight fields above.
+core stays exactly the nine fields above.
 
 The author gives the reviewer the study's cohort with the packet: `corpus`,
 `category`, `windowStart` and `windowEnd`. Copy these four values unchanged; the

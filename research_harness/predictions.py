@@ -2,7 +2,8 @@
 
 A prediction is the percentile a blind assessor expects the paper to reach in the study's
 frozen cohort, in the shape the market's verdict carries. Predictions are recorded and
-summarized as results; no gate rule reads them.
+summarized as results. The next pin and the round decision need a complete measurement,
+three paired reviews and predictions; no gate rule reads their values.
 """
 
 from statistics import median
@@ -69,6 +70,22 @@ def _measure(values):
     return {"median": median(values) if values else None, "spread": [min(values), max(values)] if values else None}
 
 
+def _pair_measurement(records, bundle):
+    """(the predictions on the bundle, the latest review of each predicting assessor in assessor order, complete)."""
+    selected = [saved for saved in records.get("manuscript_prediction", {}).values()
+                if saved["bundle_digest"] == bundle["digest"]]
+    assessors = {_assessor_key(saved["payload"]["assessor"]["id"]) for saved in selected}
+    current_reviews = latest_reviews(records, bundle["digest"])
+    paired = [current_reviews[key] for key in sorted(assessors) if key in current_reviews]
+    return selected, paired, len(selected) == len(assessors) == len(paired) == 3
+
+
+def select_measurement_reviews(records, bundle):
+    """The three measurement reviews on the bundle when its measurement is complete, otherwise None."""
+    _, paired, complete = _pair_measurement(records, bundle)
+    return paired if complete else None
+
+
 def measurement_summary(records, bundle):
     """Measure three paired blind reviews and predictions on the exact bundle.
 
@@ -76,12 +93,8 @@ def measurement_summary(records, bundle):
     remain available to the publication gate. An incomplete or ambiguous group
     reports its counts, with no measurement value.
     """
-    selected = [saved for saved in records.get("manuscript_prediction", {}).values()
-                if saved["bundle_digest"] == bundle["digest"]]
-    assessors = {_assessor_key(saved["payload"]["assessor"]["id"]) for saved in selected}
-    current_reviews = latest_reviews(records, bundle["digest"])
-    cores = [current_reviews[key]["core"] for key in sorted(assessors) if key in current_reviews]
-    complete = len(selected) == len(assessors) == len(cores) == 3
+    selected, paired, complete = _pair_measurement(records, bundle)
+    cores = [saved["core"] for saved in paired]
     percentiles = [saved["prediction"]["percentile"] for saved in selected] if complete else []
     reviews = {"count": len(cores)}
     reviews.update({key: _measure([core[key] for core in cores] if complete else []) for key, _ in SCORE_SCALES})

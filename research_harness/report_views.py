@@ -23,12 +23,13 @@ PRIORITY = ("migration_required", "profile_mismatch", "configuration_missing", "
             "search_evidence_stale", "search_dispositions_missing", "search_pending", "loop_closure_missing",
             "loop_closure_stale", "abstract_reading_missing",
             "historical_version_unresolved", "standards_missing", "rationale_missing", "innovation_missing",
-            "innovation_candidates_missing", "innovation_case_not_candidate", "context_missing",
+            "innovation_candidates_missing", "innovation_case_not_candidate", "context_missing", "grand_challenge_missing",
             "synthesis_dependencies_stale", "resource_budget_exhausted",
             "publication_bundle_missing", "publication_readiness_stale", "publication_artifact_changed",
             "manuscript_reviews_required", "lineage_citation_missing",
             "round_assessment_missing", "round_search_missing", "round_exemplar_missing", "round_cycle_missing", "round_claims_dropped",
-            "round_claim_missing", "round_decision_missing", "round_review_missing", "round_review_pending", "round_admission_missing")
+            "round_claim_missing", "manuscript_measurement_missing", "contribution_analysis_missing", "round_decision_missing",
+            "round_review_missing", "round_review_pending", "round_admission_missing")
 _HINT_LIMITS = {"code": 48, "version_id": 64, "work_id": 64, "collection_id": 64, "unit_id": 64, "explanation": 120}
 _MAX_PAGE = 500
 
@@ -79,6 +80,7 @@ def status_summary(report):
     """Summarize obligations without embedding evidence or author notes."""
     result = next_summary(report)
     preparation = report.get("preparation") or {}
+    challenge = report.get("grand_challenge")
     study = report.get("study") or {}
     result.update({"schema": "research-status-summary-v1", "runtime": report.get("runtime"),
                    "profile": _short(report.get("profile"), 24), "stage": _short(study.get("stage"), 32),
@@ -88,7 +90,12 @@ def status_summary(report):
                    "preparation_obligations": _obligations(preparation.get("obligations", [])),
                    "counts": report.get("counts"), "resources": report.get("resources", {}),
                    "limits": report.get("limits"),
-                   "round": report.get("round"), "evaluation": report.get("evaluation")})
+                   "round": report.get("round"), "evaluation": report.get("evaluation"),
+                   "grand_challenge": None if challenge is None else {
+                       "id": _short(challenge["id"], 64),
+                       "challenges": [{"id": _short(item["id"], 64), "horizon": item["horizon"],
+                                       "criterion_ids": [_short(criterion["id"], 64) for criterion in item["criteria"]]}
+                                      for item in challenge["challenges"]]}})
     return result
 
 

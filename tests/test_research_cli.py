@@ -310,11 +310,12 @@ os._exit(23)
         self.assertEqual(Store(self.root).snapshot(), before)
 
     def test_round_commands_are_registered_with_examples_and_the_round_gate(self):
-        from research_harness import predictions, rounds
+        from research_harness import contribution, predictions, rounds
         from research_harness.cli import GATES, OPERATIONS
         expected = {"round": rounds.record_round, "round-review": rounds.record_round_review,
                     "round-admit": rounds.admit_round, "round-assess": rounds.assess_round,
-                    "manuscript-prediction": predictions.record_prediction}
+                    "manuscript-prediction": predictions.record_prediction,
+                    "contribution-analysis": contribution.record_contribution_analysis}
         for command, function in expected.items():
             self.assertIs(OPERATIONS[command], function)
             example = self.run_cli("exactory-research", "example", command)
@@ -435,6 +436,7 @@ class ResearchPreparationTests(DevelopmentCase):
         cases = [self.case(self.links[0], 0, "within_field")]
         cases.extend(self.case(link, n) for n, link in enumerate(self.links[1:], 1))
         self.json_command("innovation", self.innovation(cases))
+        self.json_command("grand-challenge", self.grand_challenge(self.links[0]))
         entered = self.cli("exactory-lab", "state", "set", "--stage", "ideate")
         self.assertEqual(entered.returncode, 0, entered.stderr)
         self.assertEqual(self.store.snapshot()["records"]["workspace"]["study"]["stage"], "ideate")

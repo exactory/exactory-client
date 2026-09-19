@@ -11,6 +11,73 @@ from research_harness.principles import preparation_policy
 from research_harness.storage import Store
 
 
+def build_review_core(decision="accept"):
+    """The fixture's blind review core: every score below 4 names the change that would bring it to 4."""
+    return {"summary": "The authored finite result is explicitly scoped.", "strengths": ["All four integers are enumerated."],
+            "weaknesses": ["The result establishes no unbounded generalization."], "soundness": 3,
+            "presentation": 3, "contribution": 3, "overall": 6, "decision": decision,
+            "changes_for_maximum": {
+                "soundness": ["Section 2: state the enumeration's input range beside the claimed bound."],
+                "presentation": ["Section 1: name the finite range in the first sentence."],
+                "contribution": ["Establish the bound for every bounded input sequence, not only for n in [0, 3]."]}}
+
+
+def build_manuscript_review(case, bundle, assessor, decision="accept"):
+    """One blind reviewer's unchanged rubric JSON, wrapped for `manuscript-review` on the exact bundle."""
+    return {"id": assessor, "bundle_digest": bundle["digest"], "assessor": {"id": assessor, "kind": "agent",
+            "provenance": case.artifacts.put(("Authored independent context " + assessor).encode(), "text/plain"),
+            "relationship": "A separate fixture assessor.",
+            "independence_basis": "A new blind context received the manuscript and exact evidence bytes."},
+            "review": case.artifacts.put(json.dumps(build_review_core(decision)).encode(), "application/json"), "blind": True}
+
+
+def build_prediction(case, bundle, assessor, percentile=30, band=(20, 40)):
+    """One blind assessor's cohort prediction on the bundle, in the study fixture's cohort."""
+    return {"id": assessor + "-prediction", "bundle_digest": bundle["digest"], "blind": True,
+            "assessor": {"id": assessor, "kind": "agent",
+                         "provenance": case.artifacts.put(("Blind context " + assessor).encode(), "text/plain"),
+                         "relationship": "A separate fixture assessor.", "independence_basis": "A blind context received the exact manuscript."},
+            "prediction": {"corpus": "arxiv", "category": "cs.LG", "windowStart": "2026-01-01", "windowEnd": "2026-01-31",
+                           "percentile": percentile, "band": {"best": band[0], "worst": band[1]}},
+            "reasons": ["The authored fixture states a narrow finite result."]}
+
+
+def record_measurement(case, bundle, suffix, percentiles=(30, 25, 40)):
+    """Three blind reviews and three predictions on the bundle, as one complete measurement."""
+    from research_harness import predictions, publication
+    for number, percentile in enumerate(percentiles, 1):
+        assessor = "measure-" + suffix + "-" + str(number)
+        case.mutate(publication.record_manuscript_review, build_manuscript_review(case, bundle, assessor))
+        case.mutate(predictions.record_prediction, build_prediction(case, bundle, assessor, percentile))
+
+
+def build_contribution_analysis(case, bundle, suffix):
+    """The analysis of a measured bundle: one next-round step that adopts every reviewer contribution change."""
+    from research_harness import predictions
+    reviews = predictions.select_measurement_reviews(case.store.snapshot()["records"], bundle) or []
+    claims = json.loads(case.artifacts.read(bundle["files"]["claims"]["artifact"]))
+    current_claim_ids = [claim["id"] for claim in claims if "superseded" not in claim]
+    step = {"id": "step-" + suffix, "statement": "Extend the finite bound to every bounded input sequence (" + suffix + ").",
+            "criterion_ids": ["rc-general"], "direction": "vertical", "reach": "next_round", "builds_on": current_claim_ids[:1],
+            "community": {"who": "Authors of bounded-sequence proofs", "capability": "Apply the bound without a new enumeration.",
+                          "evidence": [case.source_evidence()]},
+            "risks": ["An unbounded input may violate the bound."], "evidence": [case.source_evidence()]}
+    return {"id": "analysis-" + suffix, "bundle_digest": bundle["digest"], "searches": ["gc-" + suffix],
+            "position": {"criterion_ids": ["rc-finite"], "established": "The bound holds on the stated finite range.",
+                         "remaining": "Every bounded input sequence beyond the finite range.", "evidence": [case.source_evidence()]},
+            "reviewer_changes": [{"review_id": saved["id"], "change": change, "disposition": "adopted", "step_id": step["id"],
+                                  "reason": "The step pursues the reviewer's requirement for the highest contribution."}
+                                 for saved in reviews for change in saved["core"].get("changes_for_maximum", {}).get("contribution", [])],
+            "steps": [step]}
+
+
+def record_contribution_analysis(case, bundle, suffix):
+    """A grand_challenge search after the pin, then the contribution analysis of the measured bundle."""
+    from research_harness import contribution
+    case.record_purpose("grand_challenge", "gc-" + suffix)
+    return case.mutate(contribution.record_contribution_analysis, build_contribution_analysis(case, bundle, suffix))["result"]
+
+
 def prepare_verification(root):
     from test_research_synthesis import SynthesisCase
     case = SynthesisCase(methodName="runTest")
@@ -70,6 +137,7 @@ def prepare_research(root, objective=None, *, candidate=False):
     cases = [case.case(case.links[0], 0, "within_field")]
     cases.extend(case.case(link, n) for n, link in enumerate(case.links[1:], 1))
     case.mutate(api.record_innovation, case.innovation(cases))
+    case.mutate(case.api("challenge").record_grand_challenge, case.grand_challenge(case.links[0]))
     case.assertTrue(api.synthesis_report(case.store, "research")["ready"])
     if candidate:
         observed_candidate(case)
@@ -113,7 +181,6 @@ def observed_candidate(case):
 def prepare_manuscript(case, *, pdf="draft/paper.pdf", sources=None, stop=False):
     """Pin the existing manuscript and record two actual independent reviews."""
     from research_harness import publication
-    from test_research_publication import ResearchPublicationTests
     claims = case.root / "evidence/claims.json"
     claims.parent.mkdir(parents=True, exist_ok=True)
     claims.write_text(json.dumps([{"id": "bound", "claim": "The maximum is 9."}]))
@@ -123,13 +190,8 @@ def prepare_manuscript(case, *, pdf="draft/paper.pdf", sources=None, stop=False)
                   "claims": "evidence/claims.json", "sources": sources},
         "claim_evidence": [{"claim_id": "bound", "evidence": [case.result_evidence(case.execution_payload)]}]})["result"]
     for number in (1, 2):
-        assessor = identifier + "-reviewer-" + str(number)
-        core = ResearchPublicationTests.core(case)
-        review = {"id": assessor, "bundle_digest": bundle["digest"], "assessor": {"id": assessor, "kind": "agent",
-            "provenance": case.artifacts.put(("Independent fixture context " + assessor).encode(), "text/plain"),
-            "relationship": "Independent fixture assessor.", "independence_basis": "Separate blind context received the exact manuscript and evidence."},
-            "review": case.artifacts.put(json.dumps(core).encode(), "application/json"), "blind": True}
-        case.mutate(publication.record_manuscript_review, review)
+        case.mutate(publication.record_manuscript_review,
+                    build_manuscript_review(case, bundle, identifier + "-reviewer-" + str(number)))
     case.assertTrue(publication.publication_report(case.store)["ready"])
     if stop:
         approve_publication_stop(case, bundle)
@@ -137,15 +199,26 @@ def prepare_manuscript(case, *, pdf="draft/paper.pdf", sources=None, stop=False)
 
 
 def approve_publication_stop(case, bundle):
-    """Close a publication fixture through the real independent round review."""
-    from research_harness import rounds
+    """Close a publication fixture through the real independent round review.
+
+    The decision needs the bundle's complete measurement and contribution analysis: the fixture records
+    them when the bundle has none, and lists the analysis's steps as deferred candidates."""
+    from research_harness import contribution, predictions, rounds
+    suffix = "stop-" + bundle["id"]
+    if predictions.select_measurement_reviews(case.store.snapshot()["records"], bundle) is None:
+        record_measurement(case, bundle, suffix)
+    analysis = contribution.find_analysis(case.store.snapshot()["records"], bundle["digest"]) \
+        or record_contribution_analysis(case, bundle, suffix)
     evidence = [case.result_evidence(case.execution_payload)]
+    deferred = [{"id": step["id"], "direction": step["direction"], "statement": step["statement"], "disposition": "deferred",
+                 "reason": "The fixture keeps the Grand Challenge step for a later study.", "evidence": evidence}
+                for step in analysis["payload"]["steps"]]
     decision = case.mutate(rounds.record_round, {
         "id": "stop-" + bundle["id"], "closes": rounds.current_number(case.store.snapshot()["records"]),
         "decision": "stop", "bundle_digest": bundle["digest"],
         "candidates": [{"id": "wider-range", "direction": "vertical", "statement": "Extend the finite range.",
                         "disposition": "rejected", "reason": "The fixture supports the stated finite result only.",
-                        "evidence": evidence}],
+                        "evidence": evidence}] + deferred,
         "carried": [], "next": None, "reason": "The fixture records its final bounded contribution."})["result"]
     return case.mutate(rounds.record_round_review, {
         "id": "review-" + decision["id"], "round_id": decision["id"], "round_digest": decision["digest"],

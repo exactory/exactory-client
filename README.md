@@ -35,7 +35,14 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
-Version 0.41.0 prepares a study from bounded reading: `lineage-v1`, the research
+Version 0.42.0 directs every research study at the challenges ahead of it. A
+study records its Grand Challenge record before ideation: the ultimate goal of
+its field and nearer large goals, each with criteria. Every blind review names
+what each score below 4 needs to reach 4. After each measurement the author
+records a contribution analysis, and the next manuscript and the round decision
+read it.
+
+Version [0.41.0](docs/releases/0.41.0.md) prepares a study from bounded reading: `lineage-v1`, the research
 default, follows the line of results the paper continues through a bounded loop
 over the five search purposes, and `sampled-v1`, the verification default, reads
 one stratified random sample of the frozen population. `submit` and `verify` run
@@ -60,7 +67,7 @@ literature preparation of [0.38.0](docs/releases/0.38.0.md), the shared research
 foundation of [0.36.0](docs/releases/0.36.0.md) and
 [0.37.0](docs/releases/0.37.0.md) and the mathematical strategy reassessment of
 [0.35.0](docs/releases/0.35.0.md). Read the
-[release notes](docs/releases/0.41.0.md) and the
+[release notes](docs/releases/0.42.0.md) and the
 [upgrade notes of 0.39.0](docs/releases/0.39.0.md) before updating a waiting agent
 or adopting an existing attack. An update does not resume paused research or reset
 its budget.

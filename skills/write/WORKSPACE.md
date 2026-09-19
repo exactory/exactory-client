@@ -124,8 +124,10 @@ At the start of each iteration:
    claim or reframes the contribution, search for that specific change before
    making it, and log the pass. A result that was novel last iteration can be
    scooped by now.
-3. Rank the latest review's weaknesses by how much each holds the overall
-   score down, and revise the highest-leverage ones first.
+3. Read the latest contribution analysis and the reviews' `changes_for_maximum`.
+   Rank the weaknesses by how much each holds the overall score down, and revise
+   the highest-leverage ones first. A contribution change that needs new
+   evidence goes back to a cycle, not into the text.
 
 At the end of each iteration, save the reviews under `reviews/` and append
 one line to `reviews/score_history.jsonl`, so the score trajectory stays

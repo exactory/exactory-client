@@ -4,8 +4,9 @@ import copy
 import json
 
 from development_fixtures import DevelopmentCase
-from integration_fixtures import observe_run, observed_candidate
-from research_harness import predictions, publication, rounds
+from integration_fixtures import (build_contribution_analysis, build_prediction, observe_run, observed_candidate,
+                                  record_contribution_analysis, record_measurement)
+from research_harness import publication, rounds
 from test_research_publication import ResearchPublicationTests
 
 DEVELOPMENT_SEARCHES = ("downstream", "next_step", "exemplars", "changes")
@@ -38,9 +39,10 @@ class RoundsCase(DevelopmentCase):
             item["superseded"] = {"reason": "Replaced by a wider claim."}
         return items
 
-    def pin(self, claims=None, identifier=None, reviews=2, *, evidence=None):
-        """Write claims.json, pin the bundle with `evidence` on every claim (the candidate's result by default)
-        and record `reviews` accepting blind reviews."""
+    def pin(self, claims=None, identifier=None, reviews=2, *, evidence=None, measure=True):
+        """Write claims.json, pin the bundle with `evidence` on every claim (the candidate's result by default),
+        record `reviews` accepting blind reviews and, unless `measure` is false, one complete measurement and its
+        contribution analysis, which the next pin and the round decision on the bundle require."""
         claims = self.claims() if claims is None else claims
         (self.root / "evidence/claims.json").write_text(json.dumps(claims))
         identifier = identifier or ("paper-" + str(self.store.revision))
@@ -51,23 +53,24 @@ class RoundsCase(DevelopmentCase):
             "claim_evidence": [{"claim_id": c["id"], "evidence": evidence} for c in claims]})["result"]
         for number in range(1, reviews + 1):
             self.mutate(publication.record_manuscript_review, self.manuscript_review(bundle, identifier + "-gate-" + str(number)))
+        if measure:
+            self.measure(bundle, identifier)
+            self.analyze(bundle, identifier)
         return bundle
 
     def prediction_payload(self, bundle, assessor, percentile=30, band=(20, 40)):
-        return {"id": assessor + "-prediction", "bundle_digest": bundle["digest"], "blind": True,
-                "assessor": {"id": assessor, "kind": "agent",
-                             "provenance": self.artifacts.put(("Blind context " + assessor).encode(), "text/plain"),
-                             "relationship": "A separate fixture assessor.", "independence_basis": "A blind context received the exact manuscript."},
-                "prediction": {"corpus": "arxiv", "category": "cs.LG", "windowStart": "2026-01-01", "windowEnd": "2026-01-31",
-                               "percentile": percentile, "band": {"best": band[0], "worst": band[1]}},
-                "reasons": ["The authored fixture states a narrow finite result."]}
+        return build_prediction(self, bundle, assessor, percentile, band)
 
     def measure(self, bundle, suffix, percentiles=(30, 25, 40)):
         """Three blind reviews and three predictions on the bundle, as one measurement."""
-        for number, percentile in enumerate(percentiles, 1):
-            assessor = "measure-" + suffix + "-" + str(number)
-            self.mutate(publication.record_manuscript_review, self.manuscript_review(bundle, assessor))
-            self.mutate(predictions.record_prediction, self.prediction_payload(bundle, assessor, percentile))
+        record_measurement(self, bundle, suffix, percentiles)
+
+    def analysis_payload(self, bundle, suffix):
+        return build_contribution_analysis(self, bundle, suffix)
+
+    def analyze(self, bundle, suffix):
+        """A grand_challenge search after the pin, then the contribution analysis of the measured bundle."""
+        return record_contribution_analysis(self, bundle, suffix)
 
     def round_evidence(self):
         return [self.source_evidence(), self.result_evidence(self.execution_payload)]
@@ -124,7 +127,7 @@ class RoundsCase(DevelopmentCase):
                                                       "assessed_revision": self.store.revision + 1})
 
     def goal(self, direction="vertical", statement="Extend the finite bound to every integer in [0, 5]."):
-        return {"direction": direction, "field_change": None, "statement": statement,
+        return {"direction": direction, "criterion_ids": ["rc-general"], "field_change": None, "statement": statement,
                 "contribution_delta": "Readers can apply the bound over the wider range without a new enumeration.",
                 "beneficiaries": [{"who": "Authors of bounded-sequence proofs", "bottleneck": "The finite range stops at 3.",
                                    "evidence": self.round_evidence()}],
@@ -151,6 +154,15 @@ class RoundsCase(DevelopmentCase):
                                "objective_lineage": lineage, "goal": goal,
                                "resource_limits": {"literature": {"network_requests": 20, "readings": 10}, "experiment": {"wall_seconds": 600}},
                                "reopening": reopening}
+        # The candidates list every step of the bundle's contribution analysis; the fixture defers the ones a test did not list.
+        from research_harness import contribution
+        analysis = contribution.find_analysis(self.store.snapshot()["records"], bundle["digest"])
+        listed = {candidate["id"] for candidate in payload["candidates"]}
+        for step in (analysis["payload"]["steps"] if analysis else []):
+            if step["id"] not in listed:
+                payload["candidates"].append({"id": step["id"], "direction": step["direction"], "statement": step["statement"],
+                                              "disposition": "deferred", "reason": "Kept for a later round.",
+                                              "evidence": self.round_evidence()})
         return payload
 
     def review_payload(self, decision, verdict="approved", assessor="round-assessor", checks=None):

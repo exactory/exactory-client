@@ -1127,6 +1127,80 @@
       }
     ]
   },
+  "grand-challenge": {
+    "id": "grand-challenge-1",
+    "reason": "The finite bound is a step toward a bound for every bounded input sequence.",
+    "challenges": [
+      {
+        "id": "general-bound",
+        "horizon": "ultimate",
+        "statement": "A finite bound for every bounded input sequence.",
+        "state": "Bounds are known only on finite ranges, and no construction extends them.",
+        "criteria": [
+          {
+            "id": "rc-general",
+            "statement": "A finite bound is established for every bounded input sequence."
+          }
+        ],
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "multivariate-bound",
+        "horizon": "near_term",
+        "statement": "The finite bound in the multivariate case.",
+        "state": "Only the univariate case is established.",
+        "criteria": [
+          {
+            "id": "rc-multivariate",
+            "statement": "The finite bound is established for multivariate inputs."
+          }
+        ],
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
   "cycle": {
     "id": "cycle-1",
     "author": "cycle-author",
@@ -2184,6 +2258,9 @@
       "objective_lineage": null,
       "goal": {
         "direction": "vertical",
+        "criterion_ids": [
+          "rc-multivariate"
+        ],
         "field_change": null,
         "statement": "Extend the finite bound to the multivariate case under the same evidence standard.",
         "contribution_delta": "After this round the field has a multivariate bound with evidence; the current paper gives only the univariate one.",
@@ -2579,6 +2656,51 @@
             }
           }
         ]
+      },
+      {
+        "kind": "grand_challenge",
+        "status": "passed",
+        "reason": "The multivariate bound advances rc-multivariate and follows from the paper's established univariate claim.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          }
+        ]
       }
     ],
     "limitations": [
@@ -2705,6 +2827,100 @@
     },
     "reasons": [
       "The claim is sound and narrow; papers of this cohort with one established bound sit in the upper quarter."
+    ]
+  },
+  "contribution-analysis": {
+    "id": "contribution-analysis-1",
+    "bundle_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "searches": [
+      "grand-challenge-search-1"
+    ],
+    "position": {
+      "criterion_ids": [
+        "rc-multivariate"
+      ],
+      "established": "The paper establishes the univariate bound.",
+      "remaining": "The multivariate case and every bounded input sequence.",
+      "evidence": [
+        {
+          "kind": "review",
+          "review_id": "manuscript-review-1"
+        }
+      ]
+    },
+    "reviewer_changes": [
+      {
+        "review_id": "manuscript-review-1",
+        "change": "Establish the bound for multivariate inputs, not only the univariate case.",
+        "disposition": "adopted",
+        "step_id": "multivariate-bound",
+        "reason": "The step pursues the reviewer's requirement for the highest contribution."
+      }
+    ],
+    "steps": [
+      {
+        "id": "multivariate-bound",
+        "statement": "Extend the finite bound to multivariate inputs.",
+        "criterion_ids": [
+          "rc-multivariate"
+        ],
+        "direction": "vertical",
+        "reach": "next_round",
+        "builds_on": [
+          "bound"
+        ],
+        "community": {
+          "who": "Authors of bounded-sequence proofs",
+          "capability": "Apply the bound to multivariate inputs without a new enumeration.",
+          "evidence": [
+            {
+              "kind": "source",
+              "link": {
+                "version_id": "arxiv:2601.00001v1",
+                "source_id": "SOURCE_ID",
+                "artifact": {
+                  "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                  "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                  "size": 15,
+                  "media_type": "text/plain"
+                },
+                "locator": {
+                  "kind": "span",
+                  "start": 0,
+                  "end": 15,
+                  "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                  "excerpt": "Source passage."
+                }
+              }
+            }
+          ]
+        },
+        "risks": [
+          "A multivariate input may violate the bound."
+        ],
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          }
+        ]
+      }
     ]
   },
   "bind-verdict": {

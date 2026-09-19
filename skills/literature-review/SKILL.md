@@ -127,8 +127,16 @@ rests on out of the loop with `require-fulltext`.
 
 ## Synthesize before ideation
 
-For a research profile, fix the complete original objective with `target` while
-still in `literature`. Record source-grounded field standards and cohort doctrine,
+For a research profile, first investigate the challenges ahead of the research:
+the ultimate goal the field is trying to reach and, where useful, nearer large
+goals on the way. Read the field's lineage, reviews and stated open problems,
+and the open Grand Challenges of the cohort's field on exactory as one input.
+Record them with `grand-challenge` before ideation: each challenge with its
+horizon, its state, criteria that would show it reached, and evidence read in
+full. Then fix the complete original objective with `target` while still in
+`literature`, written against those challenges. The record stays current for
+the whole study. Record a new one, with the reason, only when the direction
+changes; an unchanged direction is not investigated again. Record source-grounded field standards and cohort doctrine,
 And/But/Therefore rationale, innovation studies, and scientific context. Under
 `lineage-v1` the innovation study reads ten candidate papers at abstract depth,
 five of them in full: register each candidate with `innovation_candidate: true`

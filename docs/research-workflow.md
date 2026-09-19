@@ -244,12 +244,18 @@ source-grounded synthesis before entering `ideate`:
   applications are unknown. Preserve unknown or inapplicable quantities with
   reasons, including units, population/denominator, observation interval, outcome,
   and baseline; distinguish fitted values, external inputs, and derivations.
+- `grand-challenge`: the challenges ahead of the study, recorded before the
+  objective is written: the ultimate goal the field is trying to reach and,
+  where useful, nearer large goals, each with criteria and evidence. Open
+  Grand Challenges on exactory for the field are one input. The record stays
+  current for the whole study; record a new one only when the direction changes.
 
 ```sh
 exactory-research standards --file standards.json --expected-revision REVISION --request-id assess-standards-001
 exactory-research rationale --file rationale.json --expected-revision REVISION --request-id assess-rationale-001
 exactory-research innovation --file innovation.json --expected-revision REVISION --request-id assess-innovation-001
 exactory-research context --file scientific-context.json --expected-revision REVISION --request-id assess-context-001
+exactory-research grand-challenge --file grand-challenge.json --expected-revision REVISION --request-id record-grand-challenge-001
 exactory-research gate preparation
 exactory-lab decide --stage literature --decision "Enter ideation" --why "Current literature and synthesis support the complete objective."
 exactory-lab state set --stage ideate --status pending
@@ -507,6 +513,24 @@ parks.
 ```sh
 exactory-lab decide --stage evaluate --decision "Stop after round 2" --why "Every recorded candidate was rejected or deferred on its evidence."
 exactory-lab state set --stage deposit --status pending
+```
+
+### After each measurement: the contribution analysis
+
+Every blind review names, for each of soundness, presentation and contribution
+below 4, the changes that would bring it to 4. After the three measurement
+reviews of a bundle, run a small investigation with one to three searches of
+purpose `grand_challenge`, read in full the sources a step rests on, and record
+the contribution analysis: where the paper stands against the current Grand
+Challenge record, a disposition of every reviewer contribution change, and the
+steps toward the challenges with the community each serves. A `this_round`
+step becomes the next cycle's hypothesis; a `next_round` step waits for the
+round gate. The next bundle and the round decision need the analysis.
+
+```sh
+exactory-research search --file grand-challenge-search.json --expected-revision REVISION --request-id search-grand-challenge-001
+exactory-research contribution-analysis --file contribution-analysis.json --expected-revision REVISION --request-id analyze-contribution-001
+exactory-research gate round
 ```
 
 ## Verification and native mathematics

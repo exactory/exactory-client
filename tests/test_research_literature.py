@@ -63,6 +63,20 @@ class LiteratureTests(LiteratureCase):
         self.mutate(record_search, self.search("changes"))
         self.assertEqual(self.store.snapshot()["records"]["search_selection"]["research:changes"], {"search_id": "changes"})
 
+    def test_a_grand_challenge_search_stays_outside_the_foundation_and_requires_no_full_text(self):
+        a = self.metadata()
+        self.scope([a])
+        before = foundation_report(self.store, "research")
+        search = self.search("grand_challenge", ["arxiv:2602.00009v1"], "replicate-extend")
+        search["cited_work_ids"] = search["found_work_ids"]
+        self.mutate(record_search, search)
+        records = self.store.snapshot()["records"]
+        self.assertEqual(records["search_selection"]["research:grand_challenge"], {"search_id": "grand_challenge"})
+        self.assertEqual(records.get("fulltext_requirement", {}), {})
+        after = foundation_report(self.store, "research")
+        self.assertEqual(after["digest"], before["digest"])
+        self.assertNotIn("arxiv:2602.00009v1", {item["version_id"] for item in after["inventory"]})
+
     def test_scope_digest_ignores_unrelated_notes_and_tracks_relevant_versions_and_aliases(self):
         a, b = self.metadata(), self.metadata(2)
         self.scope([a])

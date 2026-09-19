@@ -85,6 +85,19 @@ class SynthesisCase(LiteratureCase):
                 "barriers": ["No implementation is known for the unbounded setting."],
                 "uncertainties": [self.gap()], "speculative_links": [self.gap()]}
 
+    def grand_challenge(self, link, identifier="grand-challenge"):
+        evidence = [{"kind": "source", "link": copy.deepcopy(link)}]
+        return {"id": identifier, "reason": "The finite-bound study continues toward a bound for every bounded sequence.",
+                "challenges": [
+                    {"id": "general-bound", "horizon": "ultimate", "statement": "A finite bound for every bounded input sequence.",
+                     "state": "Bounds are known only on finite ranges.",
+                     "criteria": [{"id": "rc-general", "statement": "A finite bound is established for every bounded input sequence."}],
+                     "evidence": evidence},
+                    {"id": "finite-range", "horizon": "near_term", "statement": "An exact bound on a stated finite range.",
+                     "state": "The range [0, 3] has not been enumerated.",
+                     "criteria": [{"id": "rc-finite", "statement": "A finite bound is established on a stated finite range."}],
+                     "evidence": copy.deepcopy(evidence)}]}
+
     def complete_foundation(self, work, profile="research"):
         collection = self.cohort((1,))
         scope = self.store.snapshot()["records"]["literature_scope"][profile]
@@ -144,6 +157,7 @@ class SynthesisTests(SynthesisCase):
         self.mutate(api.record_context, self.context(links[0]))
         cases = [self.case(links[0], 0, "within_field")] + [self.case(link, n) for n, link in enumerate(links[1:], 1)]
         self.mutate(api.record_innovation, self.innovation(cases))
+        self.mutate(self.api("challenge").record_grand_challenge, self.grand_challenge(links[0]))
         historical = []
         for status in ("refuted", "unresolved", "proposed", "established"):
             payload = self.rationale(links[0], "and-" + status)
@@ -246,6 +260,7 @@ class SynthesisTests(SynthesisCase):
         cases = [self.case(links[0], 0, "within_field")] + [self.case(link, n) for n, link in enumerate(links[1:], 1)]
         payload = self.innovation(cases)
         original = self.mutate(api.record_innovation, payload)
+        self.mutate(self.api("challenge").record_grand_challenge, self.grand_challenge(links[0]))
         self.assertTrue(api.synthesis_report(self.store, "research")["ready"])
         records = self.store.snapshot()["records"]
         scope = records["literature_scope"]["research"]
@@ -395,6 +410,7 @@ class SynthesisTests(SynthesisCase):
         result = api.record_rationale(self.store, payload, expected_revision=revision, request_id="rationale-original")
         cases = [self.case(links[0], 0, "within_field")] + [self.case(link, n) for n, link in enumerate(links[1:], 1)]
         self.mutate(api.record_innovation, self.innovation(cases))
+        self.mutate(self.api("challenge").record_grand_challenge, self.grand_challenge(links[0]))
         report = api.synthesis_report(self.store, "research")
         self.assertTrue(report["ready"], report["obligations"])
         self.assertIn("entailment", report["limits"])

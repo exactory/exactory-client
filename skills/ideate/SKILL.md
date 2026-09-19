@@ -43,10 +43,12 @@ literature-review skill is part of this plugin and governs the refresh. Record
 with actual sources, scope, and unresolved gaps. Reframe a scooped claim or test a
 contradiction explicitly. Keep basic science eligible when applications are unknown.
 
-When a market key is available, read open Grand Challenges and recorded next
-steps on the closest work with `exactory challenges`. They can reveal questions
-and demand, but do not prove novelty, correctness, or authorship. If unavailable,
-record that optional input and continue from the acquired scientific sources.
+Every hypothesis serves the study's Grand Challenge record. Name the criteria it
+advances (`status` reports the current record) and the established results it
+follows from. Prefer the hypothesis that moves the community furthest toward
+those challenges over the one that is easiest to finish, when its assumptions and
+tests can be made precise. Grand Challenges on exactory and recorded next steps
+show questions and demand; they do not prove novelty, correctness, or authorship.
 
 ## Plan, admit, and hand off
 

@@ -1,6 +1,6 @@
 # Research constitution
 
-Version: 4
+Version: 5
 
 This is the common research-policy document for this plugin. System, host, and
 user constraints continue to govern. A managed study records this document's
@@ -18,6 +18,21 @@ deployment date, commercial use, or measured benefit to satisfy a form.
 Keep the complete objective distinct from special cases, branch scopes, and
 remaining obligations. A successful branch contributes evidence to the full
 objective; it does not silently replace that objective.
+
+## Direction by Grand Challenge
+
+A study is directed at the challenges ahead of its research: the ultimate
+goal its field is trying to reach and, where useful, the nearer large goals
+on the way, each with criteria that would show it reached. The author records
+them before ideation and keeps them for the whole study; they are investigated
+again only when evidence changes them. Contribution is judged by how far the
+paper moves the community working on these challenges toward them. Every step
+toward them follows from established evidence, without a leap. After each
+measurement of the manuscript, the author compares the reviewers' stated
+requirements for the highest scores with the challenges, investigates briefly,
+and records the next steps and the community each one serves; the paper
+develops along those steps. Blind reviewers and verifiers judge the paper
+without the challenges.
 
 ## Faithful study and attribution
 
@@ -127,8 +142,8 @@ A study produces one paper and develops it across rounds. Each round begins from
 the paper as it stands and ends with a paper that contains what the earlier rounds
 established; intermediate states are not published. A round is authorized by a
 goal that states what the field will be able to do afterwards, for whom, in which
-direction, with the criteria that recognize success and the conditions that end
-the round early. An independent assessor judges the goal before the round and
+direction, which criteria of the Grand Challenge it advances, with the criteria
+that recognize success and the conditions that end the round early. An independent assessor judges the goal before the round and
 judges the decision to stop before publication. Every round performs new
 investigation of the paper's consequences and adds evidence and claims; a round
 spent on presentation alone does not count as development. Stopping on evidence
