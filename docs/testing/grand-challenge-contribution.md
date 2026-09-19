@@ -46,3 +46,28 @@ In both studies the only obligation the release adds is `grand_challenge_missing
 `constitution_revalidation_required`; every other code was owed before the migration.
 `contribution_analysis_missing` does not appear yet because both round gates first owe a current bundle; it
 appears once a study measures a current bundle.
+
+## 0.42.1: review of 0.42.0 and its corrections
+
+A lead review and two independent reviews (correctness; conformance with the design) read `3e14b24..61d5dc6`.
+Every finding below was reproduced before it was changed. "RED" is the failure seen with the new test before the
+implementation changed; "GREEN" is the suite after it.
+
+| Finding | RED | GREEN |
+| --- | --- | --- |
+| The capture import that precedes a `grand_challenge` search changes the record of every held work the response returns, so the measured bundle became stale | probe on `61d5dc6`: a capture that returns the study's root gives `readiness_required` with 13 obligations after `import_response`; a capture that returns `arxiv:2601.00001v2` gives `readiness_required` with 6 | the investigation is kept as captured responses; `test_an_investigation_that_names_held_works_keeps_the_pinned_bundle_current` records an analysis whose capture names the root, a held source and a newer version, and then the round decision; `test_research_contribution.py` Ran 22 tests OK |
+| A fourth predicting assessor made a complete measurement incomplete | `AssertionError: ResearchError not raised`; probe: `owing after a fourth prediction alone: False`, next pin accepted | `manuscript_prediction_excess`; OK |
+| `batches --loop` exported the hits of a `grand_challenge` search | the export listed `arxiv:2601.00005v1` | fixed in `d0042b9`, then made moot: the purpose is removed and `literature.py` and `batches.py` equal `3e14b24` again (`git diff 3e14b24 -- research_harness/literature.py research_harness/batches.py` is empty) |
+| `next` named `objective_missing` before `grand_challenge_missing` | `order_obligations` returned the objective first | OK; the CLI stage test records `grand-challenge` before `target` |
+| A Grand Challenge record was accepted without a research configuration, and stored a shared source twice | `ResearchError not raised`; two identical evidence items | `configuration_missing`, `profile_inapplicable`, one item; `test_research_challenge.py` Ran 9 tests OK |
+| `status --summary` with a large record | `AssertionError: 811173 not less than or equal to 16384` | three challenges and three criterion ids each; worst case 15,899 bytes |
+| Malformed evidence of an analysis | `'invalid_round' != 'invalid_contribution_analysis'` for three payloads | OK |
+| `round.analysis` on a stale selected bundle; owed analysis hidden by `gate round` | `False is not true`; `[] != ['paper-75']` | OK |
+| Criterion ids were not bound to a Grand Challenge record | `KeyError: 'grand_challenge'` | the analysis and the decision keep `{id, digest}`; the packet carries `analysis_grand_challenge` |
+| A list in a field of an artifact reference | `TypeError: unhashable type: 'list'` | typed `ResearchError`; `test_research_evaluation.py` OK |
+| The four CLI examples could not be recorded together | read: the step statement differed from the candidate and goal statements, and `builds_on` named no claim of the `manuscript` example | `test_the_grand_challenge_examples_can_be_recorded_together` |
+
+Tests added without a production change, because 0.42.0 held the behaviour and nothing pinned it: a full reading of a
+source the study does not hold keeps the bundle current and serves as step evidence; the preparation gate owes exactly
+`grand_challenge_missing` when the record is the only thing missing; reviews without `changes_for_maximum` leave nothing
+to dispose of; a reworded step is refused as a candidate.
