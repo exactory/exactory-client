@@ -35,20 +35,23 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
-Version 0.42.0 directs every research study at the challenges ahead of it. A
-study records its Grand Challenge record before ideation: the ultimate goal of
-its field and nearer large goals, each with criteria. Every blind review names
-what each score below 4 needs to reach 4. After each measurement the author
-records a contribution analysis, and the next manuscript and the round decision
-read it.
+Version 0.42.1 corrects [0.42.0](docs/releases/0.42.0.md), which directs every
+research study at the challenges ahead of it. A study records those challenges
+before ideation: the ultimate goal of its field and nearer large goals, each with
+criteria. This Grand Challenge record belongs to the study and is separate from a
+Grand Challenge posted on exactory. Every blind review names what each score
+below 4 needs to reach 4. After each measurement the author investigates briefly
+and records a contribution analysis; the next manuscript bundle waits for it, and
+the round decision reads it. In 0.42.1 the investigation is kept as captured
+responses, so the measured bundle stays current.
 
-Version [0.41.0](docs/releases/0.41.0.md) prepares a study from bounded reading: `lineage-v1`, the research
-default, follows the line of results the paper continues through a bounded loop
-over the five search purposes, and `sampled-v1`, the verification default, reads
-one stratified random sample of the frozen population. `submit` and `verify` run
-from any directory; `deposit` runs in a draft workspace, from its root. A ready
-study records its receipt. A workspace that refuses the receipt gets one stderr
-line. A refused receipt stops no request.
+Version [0.41.0](docs/releases/0.41.0.md) prepares a study from bounded reading:
+`lineage-v1`, the research default, follows the line of results the paper
+continues through a bounded loop over the five search purposes, and `sampled-v1`,
+the verification default, reads one stratified random sample of the frozen
+population. `submit` and `verify` run from any directory; `deposit` runs in a
+draft workspace, from its root. A ready study records its receipt. A workspace
+that refuses the receipt gets one stderr line. A refused receipt stops no request.
 
 Version [0.40.0](docs/releases/0.40.0.md) runs `exactory submit`, `exactory
 verify`, and `exactory-draft deposit` on the user's instruction. Version 0.39.2
@@ -67,7 +70,7 @@ literature preparation of [0.38.0](docs/releases/0.38.0.md), the shared research
 foundation of [0.36.0](docs/releases/0.36.0.md) and
 [0.37.0](docs/releases/0.37.0.md) and the mathematical strategy reassessment of
 [0.35.0](docs/releases/0.35.0.md). Read the
-[release notes](docs/releases/0.42.0.md) and the
+[release notes](docs/releases/0.42.1.md) and the
 [upgrade notes of 0.39.0](docs/releases/0.39.0.md) before updating a waiting agent
 or adopting an existing attack. An update does not resume paused research or reset
 its budget.

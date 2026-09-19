@@ -29,6 +29,11 @@ class Evaluation:
         if not isinstance(reference, dict):
             return self.store.read(reference)
         key = (reference.get("sha256"), reference.get("size"), reference.get("path"), reference.get("media_type"))
+        try:
+            hash(key)
+        except TypeError:
+            # A list or an object in a field is a malformed reference; the store names what is wrong with it.
+            return self.store.read(reference)
         if key not in self._bytes:
             data = self.store.read(reference)
             self.counters["artifacts_verified"] += 1

@@ -13,6 +13,7 @@ from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
 from .operations import fields, immutable_record, prepared_mutation, strings, text
+from .principles import _configuration
 
 HORIZONS = ("ultimate", "near_term")
 _ERROR = "invalid_grand_challenge"
@@ -57,8 +58,10 @@ def record_grand_challenge(store, payload, *, expected_revision, request_id):
         fields(value, ("id", "reason", "challenges"), code=_ERROR)
         text(value["id"], "Grand Challenge record ID", code=_ERROR)
         text(value["reason"], "Grand Challenge record reason", code=_ERROR)
+        if _configuration(records)["profile"] != "research":
+            raise ResearchError("profile_inapplicable", "A Grand Challenge record belongs to a research study")
         evidence = _Evidence(_Context(records, Evaluation(records, artifacts)))
-        challenge_ids, criterion_ids, linked = set(), set(), []
+        challenge_ids, criterion_ids = set(), set()
         for item in _check_items(value["challenges"], "Challenges"):
             fields(item, ("id", "horizon", "statement", "state", "criteria", "evidence"), code=_ERROR)
             for key in ("id", "statement", "state"):
@@ -75,12 +78,13 @@ def record_grand_challenge(store, payload, *, expected_revision, request_id):
                 if criterion["id"] in criterion_ids:
                     raise ResearchError(_ERROR, "Criterion IDs must be unique across the record")
                 criterion_ids.add(criterion["id"])
-            linked.extend(evidence.one(reference) for reference in _check_items(item["evidence"], "Challenge evidence"))
+            for reference in _check_items(item["evidence"], "Challenge evidence"):
+                evidence.one(reference)
         if not any(item["horizon"] == "ultimate" for item in value["challenges"]):
             raise ResearchError(_ERROR, "Name the ultimate goal the study is directed at")
         current = find_current_challenge(records)
         record = {"id": value["id"], "payload": value, "previous_id": current["id"] if current else None,
-                  "evidence": linked, "recorded_revision": expected_revision + 1, "request_id": request_id}
+                  "evidence": evidence.summary(), "recorded_revision": expected_revision + 1, "request_id": request_id}
         record["digest"] = digest(record)
         return [immutable_record(records, "grand_challenge", value["id"], record),
                 ("grand_challenge_selection", "current", {"id": value["id"]})], record

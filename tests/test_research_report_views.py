@@ -22,6 +22,18 @@ def report_fixture():
             "runtime": {"plugin_version": "0.39.0"}, "counts": {"obligations": 20}}
 
 
+def grand_challenge_view(challenges=100, criteria=100):
+    """A Grand Challenge record at its widest: many challenges and criteria, and ids of the costliest character.
+
+    The store refuses only NUL in text, and JSON writes another control character as six bytes."""
+    return {"id": "\x01" * 10000, "reason": "PRIVATE_REASON_SENTINEL" * 1000, "challenges": [
+        {"id": "c%03d" % number + "\x01" * 10000, "horizon": "ultimate" if number % 2 == 0 else "near_term",
+         "statement": "PRIVATE_STATEMENT_SENTINEL" * 1000, "state": "s" * 10000, "evidence": [],
+         "criteria": [{"id": "r%03d-%03d" % (number, item) + "\x01" * 10000, "statement": "t" * 10000}
+                      for item in range(criteria)]}
+        for number in range(challenges)]}
+
+
 def round_view():
     """A round summary at its widest: every purpose fresh, every count and measure at a large value."""
     measure = {"median": 10 ** 9 + 0.5, "spread": [10 ** 9, 10 ** 9]}
@@ -75,6 +87,7 @@ class ReportViewTests(unittest.TestCase):
                                 "readings_assessed": 10 ** 6, "links_validated": 10 ** 6, "graph_builds": 3, "cohort_reports": 1,
                                 "elapsed_seconds": 123456.789}
         report["round"] = round_view()
+        report["grand_challenge"] = grand_challenge_view()
         status, upcoming = status_summary(report), next_summary(report)
         self.assertLessEqual(encoded_size(status), 16 * 1024)
         self.assertLessEqual(encoded_size(upcoming), 4 * 1024)
@@ -109,6 +122,24 @@ class ReportViewTests(unittest.TestCase):
         self.assertLessEqual(encoded_size(view), 16 * 1024)
         self.assertNotIn("round", next_summary(report))
 
+    def test_the_grand_challenge_view_names_criterion_ids_and_counts_what_it_omits(self):
+        report = report_fixture()
+        self.assertIsNone(status_summary(report)["grand_challenge"])
+        report["grand_challenge"] = {"id": "grand-challenge", "reason": "PRIVATE_REASON_SENTINEL", "challenges": [
+            {"id": "general", "horizon": "ultimate", "criteria": [{"id": "rc-general", "statement": "PRIVATE_STATEMENT_SENTINEL"}]},
+            {"id": "finite", "horizon": "near_term", "criteria": [{"id": "rc-finite", "statement": "PRIVATE_STATEMENT_SENTINEL"}]}]}
+        self.assertEqual(status_summary(report)["grand_challenge"],
+                         {"id": "grand-challenge", "ultimate": 1, "near_term": 1, "criterion_ids": ["rc-general", "rc-finite"],
+                          "omitted_criterion_ids": 0})
+        report["grand_challenge"] = grand_challenge_view()
+        view = status_summary(report)["grand_challenge"]
+        self.assertEqual((view["ultimate"], view["near_term"]), (50, 50))
+        self.assertEqual(len(view["criterion_ids"]) + view["omitted_criterion_ids"], 100 * 100)
+        self.assertGreater(view["omitted_criterion_ids"], 0)
+        encoded = json.dumps(status_summary(report))
+        self.assertNotIn("PRIVATE_STATEMENT_SENTINEL", encoded)
+        self.assertNotIn("PRIVATE_REASON_SENTINEL", encoded)
+
     def test_missing_preparation_is_unknown_not_ready(self):
         report = report_fixture()
         del report["preparation"]
@@ -131,6 +162,15 @@ class ReportViewTests(unittest.TestCase):
         self.assertEqual(hint["version_id"], "arxiv:2601.00001v1")
         self.assertTrue(hint["details_required"])
         self.assertNotIn("paths", hint)
+
+    def test_the_grand_challenge_record_is_named_after_the_searches_and_before_the_synthesis(self):
+        # The record needs a source read in full, so it never hides the roots, the readings or the searches.
+        ordered = order_obligations([{"code": "standards_missing"}, {"code": "grand_challenge_missing"},
+                                     {"code": "search_purpose_missing"}, {"code": "fulltext_reading_missing"},
+                                     {"code": "roots_missing"}])
+        self.assertEqual([item["code"] for item in ordered],
+                         ["roots_missing", "fulltext_reading_missing", "search_purpose_missing", "grand_challenge_missing",
+                          "standards_missing"])
 
     def test_obligations_page_is_bound_to_the_revision(self):
         report = report_fixture()

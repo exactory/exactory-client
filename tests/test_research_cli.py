@@ -310,12 +310,13 @@ os._exit(23)
         self.assertEqual(Store(self.root).snapshot(), before)
 
     def test_round_commands_are_registered_with_examples_and_the_round_gate(self):
-        from research_harness import contribution, predictions, rounds
+        from research_harness import challenge, contribution, predictions, rounds
         from research_harness.cli import GATES, OPERATIONS
         expected = {"round": rounds.record_round, "round-review": rounds.record_round_review,
                     "round-admit": rounds.admit_round, "round-assess": rounds.assess_round,
                     "manuscript-prediction": predictions.record_prediction,
-                    "contribution-analysis": contribution.record_contribution_analysis}
+                    "contribution-analysis": contribution.record_contribution_analysis,
+                    "grand-challenge": challenge.record_grand_challenge}
         for command, function in expected.items():
             self.assertIs(OPERATIONS[command], function)
             example = self.run_cli("exactory-research", "example", command)
@@ -341,6 +342,22 @@ os._exit(23)
         self.assertTrue(args.loop)
         args = parser.parse_args(["policy-report", "--policy", "lineage-v1"])
         self.assertEqual(args.policy, "lineage-v1")
+
+    def test_the_grand_challenge_examples_can_be_recorded_together(self):
+        from research_harness.rounds import CHECKS_CONTINUE
+        examples = json.loads((PLUGIN / "docs/research-cli-examples.json").read_text())
+        criteria = {c["id"] for item in examples["grand-challenge"]["challenges"] for c in item["criteria"]}
+        analysis, decision = examples["contribution-analysis"], examples["round"]
+        named = set(analysis["position"]["criterion_ids"]) | set(decision["next"]["goal"]["criterion_ids"])
+        candidates = {c["id"]: c for c in decision["candidates"]}
+        for step in analysis["steps"]:
+            named |= set(step["criterion_ids"])
+            self.assertEqual((candidates[step["id"]]["direction"], candidates[step["id"]]["statement"]),
+                             (step["direction"], step["statement"]))
+            self.assertLessEqual(set(step["builds_on"]), {c["claim_id"] for c in examples["manuscript"]["claim_evidence"]})
+        self.assertLessEqual(named, criteria)
+        self.assertLessEqual({c["step_id"] for c in analysis["reviewer_changes"] if "step_id" in c}, {s["id"] for s in analysis["steps"]})
+        self.assertEqual({c["kind"] for c in examples["round-review"]["checks"]}, set(CHECKS_CONTINUE))
 
     def test_examples_cover_the_new_operations(self):
         from research_harness.cli import build_parser, run
@@ -428,6 +445,8 @@ class ResearchPreparationTests(DevelopmentCase):
         self.json_command("roots", {"profile": "research", "roots": [work], "collection_ids": [collection]})
         self.links = [self.read_source(n) for n in range(1, 7)]
         self.foundation_searches()
+        # The challenges ahead are recorded before the objective is written against them.
+        self.json_command("grand-challenge", self.grand_challenge(self.links[0]))
         self.objective = {"kind": "objective", "id": "ordered-objective", "statement": "Establish the complete finite bound."}
         self.json_command("target", {"target": self.objective, "reason": "Fix the full objective while preparing literature."})
         self.json_command("standards", self.standards(self.links[0]))
@@ -436,7 +455,6 @@ class ResearchPreparationTests(DevelopmentCase):
         cases = [self.case(self.links[0], 0, "within_field")]
         cases.extend(self.case(link, n) for n, link in enumerate(self.links[1:], 1))
         self.json_command("innovation", self.innovation(cases))
-        self.json_command("grand-challenge", self.grand_challenge(self.links[0]))
         entered = self.cli("exactory-lab", "state", "set", "--stage", "ideate")
         self.assertEqual(entered.returncode, 0, entered.stderr)
         self.assertEqual(self.store.snapshot()["records"]["workspace"]["study"]["stage"], "ideate")

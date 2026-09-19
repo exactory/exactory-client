@@ -54,10 +54,6 @@ from .source_links import captured_source, complete_original, contains, covers_t
 
 SEARCH_PURPOSES = ("direct", "originals", "theory", "adjacent", "recent")
 DEVELOPMENT_PURPOSES = ("downstream", "next_step", "exemplars", "changes")
-# A contribution analysis's forward-looking search (design 7.3). It informs the next steps, not the
-# literature the current claims rest on, so the foundation state leaves it out and its cited works
-# create no full-text requirement; a measured bundle therefore stays current after it.
-GRAND_CHALLENGE_PURPOSE = "grand_challenge"
 NOVELTY_VERDICTS = ("nothing-new", "scooped", "replicate-extend", "contradicted", "novel-confirmed")
 DISPOSITIONS = ("relevant", "contradictory", "potentially_relevant", "out_of_scope", "duplicate", "unresolved")
 CARRIED_DISPOSITIONS = ("contradictory", "unresolved")
@@ -345,10 +341,8 @@ def record_search(store, payload, *, expected_revision, request_id):
         fields(value, ("id", "profile", "purpose", "queries", "responses", "captured_at", "scope", "found_work_ids", "verdict",
                        "cited_work_ids", "impact", "gaps", "dispositions"), ("resolved",), code="invalid_search")
         profile_name(value["profile"])
-        if value["purpose"] not in SEARCH_PURPOSES + DEVELOPMENT_PURPOSES + (GRAND_CHALLENGE_PURPOSE,) \
-                or value["verdict"] not in NOVELTY_VERDICTS:
-            raise ResearchError("invalid_search", "Use the five search purposes, the four development purposes, the grand_challenge "
-                                "purpose, and the existing novelty verdict vocabulary")
+        if value["purpose"] not in SEARCH_PURPOSES + DEVELOPMENT_PURPOSES or value["verdict"] not in NOVELTY_VERDICTS:
+            raise ResearchError("invalid_search", "Use the five search purposes, the four development purposes, and the existing novelty verdict vocabulary")
         strings(value["queries"], "Queries", nonempty=True, code="invalid_search")
         strings(value["found_work_ids"], "Found works", code="invalid_search")
         strings(value["cited_work_ids"], "Cited works", code="invalid_search")
@@ -393,8 +387,7 @@ def record_search(store, payload, *, expected_revision, request_id):
                       frontier_digest=frontier_digest(evaluation, value["profile"]))
         changes = [immutable_record(records, "literature_search", value["id"], record)]
         changes.append(("search_selection", value["profile"] + ":" + value["purpose"], {"search_id": value["id"]}))
-        cited = value["cited_work_ids"] if value["purpose"] != GRAND_CHALLENGE_PURPOSE else ()
-        for version in cited:
+        for version in value["cited_work_ids"]:
             identifier = "search:" + digest([value["id"], version])
             requirement = {"id": identifier, "profile": value["profile"], "version_id": version, "purpose": "novelty",
                            "reason": "Source cited in search judgment " + value["id"] + ": " + value["impact"], "critical": True}
@@ -511,8 +504,7 @@ def _foundation_state(evaluation, profile):
     from .rounds import active_round, fresh_searches, has_round_exemplar, latest_admission, literature_obligations
     latest = latest_admission(records) if profile == "research" else None
     active = active_round(records) if latest is not None else None
-    searches = {k: s for k, s in records.get("literature_search", {}).items()
-                if s["profile"] == profile and s["purpose"] != GRAND_CHALLENGE_PURPOSE}
+    searches = {k: s for k, s in records.get("literature_search", {}).items() if s["profile"] == profile}
     selections = records.get("search_selection", {})
     selected_searches = {purpose: selections.get(profile + ":" + purpose, {}).get("search_id") for purpose in SEARCH_PURPOSES}
     # The current round's consequence searches are judgments beside the five purposes. A selection the

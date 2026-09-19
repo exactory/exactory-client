@@ -2,8 +2,9 @@
 
 A prediction is the percentile a blind assessor expects the paper to reach in the study's
 frozen cohort, in the shape the market's verdict carries. Predictions are recorded and
-summarized as results. The next pin and the round decision need a complete measurement,
-three paired reviews and predictions; no gate rule reads their values.
+summarized as results. The round decision needs a complete measurement (three paired reviews
+and predictions), and the next pin needs the contribution analysis of a bundle whose
+measurement is complete. No gate rule reads the values.
 """
 
 from statistics import median
@@ -17,6 +18,8 @@ from .development import cycle_authors
 from .publication import SCORE_SCALES, _assessor_key, _bundle, latest_reviews, validate_assessor
 
 _ERROR = "invalid_prediction"
+# One measurement is three blind assessors, each with a review and a prediction on the exact bundle.
+MEASUREMENT_ASSESSORS = 3
 _COHORT_ERROR = "prediction_cohort_mismatch"
 
 
@@ -54,10 +57,18 @@ def record_prediction(store, payload, *, expected_revision, request_id):
         strings(value["reasons"], "Prediction reasons", nonempty=True, code=_ERROR)
         _prediction(records, value["prediction"])
         key = _assessor_key(value["assessor"]["id"])
+        predicting = set()
         for saved in records.get("manuscript_prediction", {}).values():
-            if saved["bundle_digest"] == bundle["digest"] and _assessor_key(saved["payload"]["assessor"]["id"]) == key:
+            if saved["bundle_digest"] != bundle["digest"]:
+                continue
+            if _assessor_key(saved["payload"]["assessor"]["id"]) == key:
                 raise ResearchError("manuscript_prediction_duplicate", "This assessor already predicted this exact bundle",
                                     {"prediction_id": saved["id"]})
+            predicting.add(_assessor_key(saved["payload"]["assessor"]["id"]))
+        # The next pin and the round decision read completeness, so a complete measurement stays complete.
+        if len(predicting) >= MEASUREMENT_ASSESSORS:
+            raise ResearchError("manuscript_prediction_excess", "This bundle already has the three predicting assessors of its "
+                                "measurement; measure again on the next bundle", {"assessors": len(predicting)})
         record = {"id": value["id"], "payload": value, "bundle_digest": bundle["digest"], "prediction": value["prediction"],
                   "reviewed_revision": expected_revision + 1, "request_id": request_id}
         record["digest"] = digest(record)
@@ -77,7 +88,7 @@ def _pair_measurement(records, bundle):
     assessors = {_assessor_key(saved["payload"]["assessor"]["id"]) for saved in selected}
     current_reviews = latest_reviews(records, bundle["digest"])
     paired = [current_reviews[key] for key in sorted(assessors) if key in current_reviews]
-    return selected, paired, len(selected) == len(assessors) == len(paired) == 3
+    return selected, paired, len(selected) == len(assessors) == len(paired) == MEASUREMENT_ASSESSORS
 
 
 def select_measurement_reviews(records, bundle):
