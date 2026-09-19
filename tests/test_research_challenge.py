@@ -47,6 +47,23 @@ class GrandChallengeRecordTests(SynthesisCase):
         self.assert_error("reading_missing", lambda: self.record(unread))
         self.record(payload)
 
+    def test_the_record_belongs_to_a_configured_research_study(self):
+        unconfigured = self.grand_challenge(self.read_source())
+        self.assert_error("configuration_missing", lambda: self.record(unconfigured))
+        self.assertNotIn("grand_challenge", self.store.snapshot()["records"])
+
+    def test_a_verification_workspace_takes_no_grand_challenge_record(self):
+        self.configured("verification")
+        payload = self.grand_challenge(self.read_source(2))
+        self.assert_error("profile_inapplicable", lambda: self.record(payload))
+
+    def test_a_source_that_two_challenges_cite_is_stored_once(self):
+        link = self.prepared()
+        payload = self.grand_challenge(link)
+        self.assertEqual(payload["challenges"][0]["evidence"], payload["challenges"][1]["evidence"])
+        recorded = self.record(payload)["result"]
+        self.assertEqual([item["reference"] for item in recorded["evidence"]], payload["challenges"][0]["evidence"])
+
     def test_a_new_record_replaces_the_current_one_and_keeps_the_history(self):
         link = self.prepared()
         self.record(self.grand_challenge(link))
