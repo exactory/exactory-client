@@ -115,6 +115,16 @@ class ContributionAnalysisTests(RoundsCase):
         recorded = self.record(self.analysis_payload(bundle, "one"))["result"]
         self.assertEqual(recorded["bundle_digest"], bundle["digest"])
 
+    def test_a_full_reading_outside_the_citation_graph_serves_a_step_and_keeps_the_bundle_current(self):
+        # The evaluate skill tells the author to read in full the sources a step rests on, after the pin.
+        bundle = self.measured()
+        link = self.read_source(50)
+        payload = self.analysis_payload(bundle, "one")
+        payload["steps"][0]["evidence"] = [{"kind": "source", "link": copy.deepcopy(link)}]
+        self.record(payload)
+        records = self.store.snapshot()["records"]
+        self.assertEqual(publication._bundle(records, Evaluation(records, self.artifacts))["digest"], bundle["digest"])
+
     def test_an_analysis_needs_the_study_grand_challenge(self):
         bundle = self.measured()
         with patch("research_harness.contribution.resolve_criterion_ids", return_value=set()):
