@@ -25,6 +25,9 @@ the suites run after it. Suites marked "(frozen copy)" ran on a copy of the tree
 | T08 GREEN | `test_research_contribution.py` | Ran 16 tests OK |
 | T09 | `test_research_guidance.py`, `test_research_cli.py` | OK, OK |
 | T10 | `python3 codex/generate.py --check` | exit 0; the generated entrypoints did not change |
+| Finished tree (frozen copy, before 0c1c4f7) | `python3 -m unittest discover -s tests` | Ran 1183 tests: 3 failures, all expectations the plan did not list (provenance pinned constitution 4; a stop decision now needs a complete measurement; the round summary gained `analysis`); fixed in 0c1c4f7 |
+| T12 on 9d01b2f | `python3 -m unittest discover -s tests` | Ran 1183 tests in 3157.487s OK |
+| T12 on 9d01b2f | `python3 codex/generate.py --check` | exit 0 |
 
 ## T11: migration of two existing studies
 
