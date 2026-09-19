@@ -32,6 +32,10 @@ PRIORITY = ("migration_required", "profile_mismatch", "configuration_missing", "
             "round_review_missing", "round_review_pending", "round_admission_missing")
 _HINT_LIMITS = {"code": 48, "version_id": 64, "work_id": 64, "collection_id": 64, "unit_id": 64, "explanation": 120}
 _MAX_PAGE = 500
+# How many challenges, and criterion ids per challenge, the status summary names before it counts the rest.
+# Three of each keeps the summary's worst case inside its 16 KiB bound; `status` reports the whole record.
+_SUMMARY_CHALLENGES = 3
+_SUMMARY_CRITERIA = 3
 
 
 def priority(item):
@@ -76,11 +80,23 @@ def next_summary(report):
             "details": "exactory-research obligations --code CODE [--limit N] [--cursor CURSOR]"}
 
 
+def _summarize_grand_challenge(challenge):
+    """The ids, horizons and criterion ids of the current Grand Challenge record, with counts of what is left out."""
+    if challenge is None:
+        return None
+    items = challenge["challenges"]
+    return {"id": _short(challenge["id"], 64),
+            "challenges": [{"id": _short(item["id"], 64), "horizon": item["horizon"],
+                            "criterion_ids": [_short(criterion["id"], 64) for criterion in item["criteria"][:_SUMMARY_CRITERIA]],
+                            "omitted_criteria": max(0, len(item["criteria"]) - _SUMMARY_CRITERIA)}
+                           for item in items[:_SUMMARY_CHALLENGES]],
+            "omitted_challenges": max(0, len(items) - _SUMMARY_CHALLENGES)}
+
+
 def status_summary(report):
     """Summarize obligations without embedding evidence or author notes."""
     result = next_summary(report)
     preparation = report.get("preparation") or {}
-    challenge = report.get("grand_challenge")
     study = report.get("study") or {}
     result.update({"schema": "research-status-summary-v1", "runtime": report.get("runtime"),
                    "profile": _short(report.get("profile"), 24), "stage": _short(study.get("stage"), 32),
@@ -91,11 +107,7 @@ def status_summary(report):
                    "counts": report.get("counts"), "resources": report.get("resources", {}),
                    "limits": report.get("limits"),
                    "round": report.get("round"), "evaluation": report.get("evaluation"),
-                   "grand_challenge": None if challenge is None else {
-                       "id": _short(challenge["id"], 64),
-                       "challenges": [{"id": _short(item["id"], 64), "horizon": item["horizon"],
-                                       "criterion_ids": [_short(criterion["id"], 64) for criterion in item["criteria"]]}
-                                      for item in challenge["challenges"]]}})
+                   "grand_challenge": _summarize_grand_challenge(report.get("grand_challenge"))})
     return result
 
 

@@ -89,4 +89,6 @@ class GrandChallengeRecordTests(SynthesisCase):
         report = status_report(self.store)
         self.assertEqual(report["grand_challenge"]["id"], "grand-challenge")
         summary = status_summary(report)["grand_challenge"]
-        self.assertEqual(summary["challenges"][0], {"id": "general-bound", "horizon": "ultimate", "criterion_ids": ["rc-general"]})
+        self.assertEqual(summary["challenges"][0], {"id": "general-bound", "horizon": "ultimate",
+                                                   "criterion_ids": ["rc-general"], "omitted_criteria": 0})
+        self.assertEqual(summary["omitted_challenges"], 0)
