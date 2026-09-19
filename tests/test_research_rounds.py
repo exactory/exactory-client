@@ -783,7 +783,8 @@ class RoundGateTests(RoundsCase):
         self.mutate(rounds.record_round_review, self.review_payload(decision))
         report = self.gate()
         self.assertEqual((report["ready"], report["decision"], report["next"]), (True, "stop", None))
-        self.assertEqual(report["measurement"]["reviews"]["count"], 0)
+        # The decision needed the bundle's complete measurement, which the fixture recorded with the pin.
+        self.assertEqual((report["measurement"]["complete"], report["measurement"]["reviews"]["count"]), (True, 3))
 
     def test_the_gate_reports_the_round_claims_and_the_stale_assessment(self):
         from research_harness.gates import validate_transition
@@ -971,8 +972,8 @@ class RoundStatusTests(RoundsCase):
         self.assertEqual(summary["budget"]["rounds"], {"limit": None, "charged": 1, "reserved": 0, "unknown": 0})
         self.assertEqual(summary["usage"]["literature"]["network_requests"], 0)
         self.assertTrue(set(summary["usage"]) <= {"literature", "experiment"})
-        self.assertEqual(sorted(summary), ["active", "assessed", "budget", "decision", "limits", "measurement", "number",
-                                           "obligations", "progress", "usage"])
+        self.assertEqual(sorted(summary), ["active", "analysis", "assessed", "budget", "decision", "limits", "measurement",
+                                           "number", "obligations", "progress", "usage"])
         self.run_round_work("r2-work")
         bundle = self.pin(self.claims("wider"), identifier="paper-r2")
         # A charge inside the round, through the real account: the usage is the difference since the admission.
