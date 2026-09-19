@@ -15,6 +15,7 @@ from .evidence import digest
 from .literature import GRAND_CHALLENGE_PURPOSE
 from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .predictions import select_measurement_reviews
+from .publication import find_selected_bundle
 from .workspace import strict_json
 
 REACHES = ("this_round", "next_round")
@@ -29,11 +30,8 @@ def find_analysis(records, bundle_digest):
 
 def find_bundle_owing_analysis(records):
     """The selected bundle when its measurement is complete and it has no contribution analysis; otherwise None."""
-    selected = records.get("publication_selection", {}).get("bundle")
-    if selected is None:
-        return None
-    bundle = records["publication_bundle"][selected["id"]]
-    if select_measurement_reviews(records, bundle) is None or find_analysis(records, bundle["digest"]) is not None:
+    bundle = find_selected_bundle(records)
+    if bundle is None or select_measurement_reviews(records, bundle) is None or find_analysis(records, bundle["digest"]) is not None:
         return None
     return bundle
 
@@ -43,7 +41,7 @@ def _check_searches(records, bundle, values):
     identifiers = strings(values, "Contribution analysis searches", nonempty=True, code=_ERROR)
     saved = records.get("literature_search", {})
     if any(i not in saved or saved[i]["profile"] != "research" or saved[i]["purpose"] != GRAND_CHALLENGE_PURPOSE for i in identifiers):
-        raise ResearchError(_ERROR, "Name the analysis's own research searches with the grand_challenge purpose")
+        raise ResearchError(_ERROR, "Every entry of searches names a recorded research search with the grand_challenge purpose")
     # A bundle pinned before 0.42.0 has no snapshot of searches; any grand_challenge search then counts.
     if set(identifiers) <= set(bundle.get("search_ids", ())):
         raise ResearchError("contribution_search_missing", "Record at least one grand_challenge search after the bundle was pinned")
@@ -121,10 +119,9 @@ def record_contribution_analysis(store, payload, *, expected_revision, request_i
         from .rounds import DIRECTIONS, _RoundEvidence
         fields(value, ("id", "bundle_digest", "searches", "position", "reviewer_changes", "steps"), code=_ERROR)
         text(value["id"], "Contribution analysis ID", code=_ERROR)
-        selected = records.get("publication_selection", {}).get("bundle")
-        if selected is None:
+        bundle = find_selected_bundle(records)
+        if bundle is None:
             raise ResearchError("publication_bundle_missing", "Prepare the exact PDF, abstract, bibliography and claims")
-        bundle = records["publication_bundle"][selected["id"]]
         if value["bundle_digest"] != bundle["digest"]:
             raise ResearchError("contribution_analysis_stale", "Analyze the selected manuscript bundle")
         if find_analysis(records, bundle["digest"]) is not None:
@@ -137,7 +134,7 @@ def record_contribution_analysis(store, payload, *, expected_revision, request_i
         evaluation = Evaluation(records, artifacts)
         context = _Context(records, evaluation)
         context.require_objective()
-        evidence = _RoundEvidence(context, bundle)
+        evidence = _RoundEvidence(context, bundle, error_code=_ERROR)
         _check_searches(records, bundle, value["searches"])
         _check_position(records, value["position"], evidence)
         claims = strict_json(evaluation.read(bundle["files"]["claims"]["artifact"]))

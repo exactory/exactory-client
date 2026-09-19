@@ -136,6 +136,23 @@ class LoopTests(LineageCase):
         self.assert_error("policy_inapplicable", lambda: self.mutate(lineage.record_loop_closure, {"id": "legacy", "purposes": closure}))
 
 
+class GrandChallengeSearchTests(LineageCase):
+    def test_a_grand_challenge_search_leaves_a_closed_loop_and_the_foundation_unchanged(self):
+        from research_harness.literature import foundation_report
+        root = self.metadata(1)
+        self.scope([root])
+        for purpose in lineage.SEARCH_PURPOSES:
+            self.mutate(record_search, self.judgment(purpose, [(purpose + " one", []), (purpose + " two", [])]))
+        self.mutate(lineage.record_loop_closure, {"id": "closure", "purposes": {
+            purpose: {"status": "covered", "note": "Two distinct queries returned nothing relevant."} for purpose in lineage.SEARCH_PURPOSES}})
+        before = foundation_report(self.store, "research")
+        self.assertNotIn("loop_closure_missing", {o["code"] for o in before["obligations"]})
+        self.mutate(record_search, self.search("grand_challenge", [self.metadata(9)]))
+        after = foundation_report(self.store, "research")
+        self.assertEqual((after["digest"], after["stable_digest"]), (before["digest"], before["stable_digest"]))
+        self.assertEqual({o["code"] for o in after["obligations"]}, {o["code"] for o in before["obligations"]})
+
+
 class ExportTests(LineageCase):
     def test_loop_export_lists_search_hits_without_a_loop_reading_and_candidates(self):
         from pathlib import Path

@@ -159,6 +159,13 @@ class ReportViewTests(unittest.TestCase):
         self.assertTrue(hint["details_required"])
         self.assertNotIn("paths", hint)
 
+    def test_the_grand_challenge_record_is_named_before_the_objective(self):
+        # The challenges ahead are recorded first, and the objective is written against them.
+        ordered = order_obligations([{"code": "objective_missing"}, {"code": "grand_challenge_missing"},
+                                     {"code": "constitution_revalidation_required"}])
+        self.assertEqual([item["code"] for item in ordered],
+                         ["constitution_revalidation_required", "grand_challenge_missing", "objective_missing"])
+
     def test_obligations_page_is_bound_to_the_revision(self):
         report = report_fixture()
         report["preparation"]["obligations"] = []

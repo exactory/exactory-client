@@ -412,7 +412,7 @@ def _synthesis_state(evaluation, profile):
         obligations.extend(dict(o, section=kind) for o in section["obligations"])
     # The challenges ahead are study-level and outside the preparation digest; only their presence is owed (design 7.1).
     if profile == "research" and find_current_challenge(records) is None:
-        obligations.append(obligation("grand_challenge_missing", "Record the challenges ahead of the study before ideation."))
+        obligations.append(obligation("grand_challenge_missing", "Record the challenges ahead of the study with grand-challenge before ideation."))
     obligations = _unique(obligations)
     counts = {"sections": len(sections), "current_sections": sum(s["ready"] for s in sections.values()), "obligations": len(obligations)}
     counts.update({k: v for k, v in sections.get("innovation", {}).get("counts", {}).items() if k != "obligations"})

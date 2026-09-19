@@ -310,12 +310,13 @@ os._exit(23)
         self.assertEqual(Store(self.root).snapshot(), before)
 
     def test_round_commands_are_registered_with_examples_and_the_round_gate(self):
-        from research_harness import contribution, predictions, rounds
+        from research_harness import challenge, contribution, predictions, rounds
         from research_harness.cli import GATES, OPERATIONS
         expected = {"round": rounds.record_round, "round-review": rounds.record_round_review,
                     "round-admit": rounds.admit_round, "round-assess": rounds.assess_round,
                     "manuscript-prediction": predictions.record_prediction,
-                    "contribution-analysis": contribution.record_contribution_analysis}
+                    "contribution-analysis": contribution.record_contribution_analysis,
+                    "grand-challenge": challenge.record_grand_challenge}
         for command, function in expected.items():
             self.assertIs(OPERATIONS[command], function)
             example = self.run_cli("exactory-research", "example", command)

@@ -114,6 +114,8 @@ class ContributionAnalysisTests(RoundsCase):
         self.record_purpose("recent", "recent-late")
         recorded = self.record(self.analysis_payload(bundle, "one"))["result"]
         self.assertEqual(recorded["bundle_digest"], bundle["digest"])
+        # The summary still says that the selected bundle has its analysis, so the author sees the next pin is open.
+        self.assertTrue(rounds.round_state(self.store.snapshot()["records"], self.artifacts)["analysis"])
 
     def test_a_full_reading_outside_the_citation_graph_serves_a_step_and_keeps_the_bundle_current(self):
         # The evaluate skill tells the author to read in full the sources a step rests on, after the pin.
@@ -124,6 +126,47 @@ class ContributionAnalysisTests(RoundsCase):
         self.record(payload)
         records = self.store.snapshot()["records"]
         self.assertEqual(publication._bundle(records, Evaluation(records, self.artifacts))["digest"], bundle["digest"])
+
+    def test_a_malformed_analysis_fails_with_its_own_code(self):
+        bundle = self.measured()
+        payload = self.analysis_payload(bundle, "one")
+        no_position_evidence = copy.deepcopy(payload)
+        no_position_evidence["position"]["evidence"] = []
+        no_community_evidence = copy.deepcopy(payload)
+        no_community_evidence["steps"][0]["community"]["evidence"] = []
+        wide_review_item = copy.deepcopy(payload)
+        wide_review_item["position"]["evidence"] = [{"kind": "review", "review_id": "measure-one-1", "extra": 1}]
+        no_steps = dict(copy.deepcopy(payload), steps=[])
+        unknown_position = copy.deepcopy(payload)
+        unknown_position["position"]["criterion_ids"] = ["rc-absent"]
+        listed_id = copy.deepcopy(payload)
+        listed_id["steps"][0]["id"] = ["step-one"]
+        for name, wrong in (("position evidence", no_position_evidence), ("community evidence", no_community_evidence),
+                            ("review item", wide_review_item), ("steps", no_steps), ("position criterion", unknown_position),
+                            ("listed id", listed_id)):
+            with self.subTest(case=name):
+                self.assert_error("invalid_contribution_analysis", lambda: self.record(wrong))
+        self.record(payload)
+
+    def test_a_bundle_pinned_before_the_search_snapshot_takes_any_grand_challenge_search(self):
+        self.record_purpose("grand_challenge", "gc-early")
+        bundle = self.pin(measure=False)
+        legacy = {key: value for key, value in self.store.snapshot()["records"]["publication_bundle"][bundle["id"]].items()
+                  if key != "search_ids"}
+        self.write_record("publication_bundle", legacy)
+        self.measure(bundle, "one")
+        payload = self.analysis_payload(bundle, "one")
+        payload["searches"] = ["gc-early"]
+        self.assertEqual(self.record(payload)["result"]["bundle_digest"], bundle["digest"])
+
+    def test_reviews_recorded_before_the_changes_field_leave_nothing_to_dispose_of(self):
+        bundle = self.measured()
+        for saved in predictions.select_measurement_reviews(self.store.snapshot()["records"], bundle):
+            core = {key: value for key, value in saved["core"].items() if key != "changes_for_maximum"}
+            self.write_record("manuscript_review", dict(saved, core=core))
+        payload = self.analysis_payload(bundle, "one")
+        self.assertEqual(payload["reviewer_changes"], [])
+        self.record(payload)
 
     def test_an_analysis_needs_the_study_grand_challenge(self):
         bundle = self.measured()
@@ -167,6 +210,9 @@ class RoundContributionTests(RoundsCase):
         turned = self.decision_payload(bundle)
         next(c for c in turned["candidates"] if c["id"] == step_id)["direction"] = "horizontal"
         self.assert_error("contribution_step_missing", lambda: self.mutate(rounds.record_round, turned))
+        reworded = self.decision_payload(bundle)
+        next(c for c in reworded["candidates"] if c["id"] == step_id)["statement"] = "Another statement than the step's."
+        self.assert_error("contribution_step_missing", lambda: self.mutate(rounds.record_round, reworded))
         self.mutate(rounds.record_round, self.decision_payload(bundle))
 
     def test_a_continue_goal_names_the_grand_challenge_criteria_it_advances(self):
