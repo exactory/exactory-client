@@ -84,3 +84,9 @@ The same review confirmed by running: the corrected flow through the real `artif
 and the round decision is accepted; the four CLI examples were recorded together through the real operations; a 0.42.0
 analysis without `investigation` crashes neither `round_state`, `record_round` nor the round packet. A test now holds,
 under `lineage-v1`, that a full reading of a source the study does not hold leaves the foundation unchanged.
+
+| Suite | Command | Result |
+| --- | --- | --- |
+| Affected files after the investigation change (frozen copy) | literature, lineage, batches, rounds, review_packets, round_integrity, publication, draft, development | Ran 23, 8, 7, 63, 51, 12, 22, 81, 65 tests OK |
+| Full suite on `fa32917` (frozen copy) | `python3 -m unittest discover -s tests` | Ran 1197 tests in 2974.618s OK (skipped=1) |
+| `fa32917` | `python3 codex/generate.py --check` | exit 0 |
