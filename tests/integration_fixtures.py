@@ -51,6 +51,14 @@ def record_measurement(case, bundle, suffix, percentiles=(30, 25, 40)):
         case.mutate(predictions.record_prediction, build_prediction(case, bundle, assessor, percentile))
 
 
+def build_investigation(case, suffix, results=()):
+    """One captured query of the small investigation, its original response pinned as an artifact."""
+    query = "bounded sequence frontier " + suffix
+    response = json.dumps({"query": query, "results": [{"id": identifier} for identifier in results]}).encode()
+    return {"query": query, "response": case.artifacts.put(response, "application/json"),
+            "finding": "No group has established the bound beyond finite ranges."}
+
+
 def build_contribution_analysis(case, bundle, suffix):
     """The analysis of a measured bundle: one next-round step that adopts every reviewer contribution change."""
     from research_harness import predictions
@@ -62,7 +70,7 @@ def build_contribution_analysis(case, bundle, suffix):
             "community": {"who": "Authors of bounded-sequence proofs", "capability": "Apply the bound without a new enumeration.",
                           "evidence": [case.source_evidence()]},
             "risks": ["An unbounded input may violate the bound."], "evidence": [case.source_evidence()]}
-    return {"id": "analysis-" + suffix, "bundle_digest": bundle["digest"], "searches": ["gc-" + suffix],
+    return {"id": "analysis-" + suffix, "bundle_digest": bundle["digest"], "investigation": [build_investigation(case, suffix)],
             "position": {"criterion_ids": ["rc-finite"], "established": "The bound holds on the stated finite range.",
                          "remaining": "Every bounded input sequence beyond the finite range.", "evidence": [case.source_evidence()]},
             "reviewer_changes": [{"review_id": saved["id"], "change": change, "disposition": "adopted", "step_id": step["id"],
@@ -72,9 +80,8 @@ def build_contribution_analysis(case, bundle, suffix):
 
 
 def record_contribution_analysis(case, bundle, suffix):
-    """A grand_challenge search after the pin, then the contribution analysis of the measured bundle."""
+    """The contribution analysis of the measured bundle, with its own captured investigation."""
     from research_harness import contribution
-    case.record_purpose("grand_challenge", "gc-" + suffix)
     return case.mutate(contribution.record_contribution_analysis, build_contribution_analysis(case, bundle, suffix))["result"]
 
 

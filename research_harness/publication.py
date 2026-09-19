@@ -102,7 +102,6 @@ def prepare_publication(store, payload, *, expected_revision, request_id):
                       readiness_review=records["readiness_review"][records["development_selection"]["review"]["review_id"]],
                       review_inputs=report["review_inputs"], prepared_revision=expected_revision,
                       execution_observations=report["execution_observations"],
-                      search_ids=sorted(records.get("literature_search", {})),
                       mechanical_only=True)
         bundle["digest"] = digest(bundle)
         return [immutable_record(records, "publication_bundle", value["id"], bundle),
@@ -111,11 +110,16 @@ def prepare_publication(store, payload, *, expected_revision, request_id):
                              expected_revision=expected_revision, request_id=request_id)
 
 
-def _bundle(records, artifacts):
+def find_selected_bundle(records):
+    """The selected publication bundle, current or not, or None before the first pin."""
     selected = records.get("publication_selection", {}).get("bundle")
-    if selected is None:
+    return records["publication_bundle"][selected["id"]] if selected else None
+
+
+def _bundle(records, artifacts):
+    bundle = find_selected_bundle(records)
+    if bundle is None:
         raise ResearchError("publication_bundle_missing", "Prepare the exact PDF, abstract, bibliography and claims")
-    bundle = records["publication_bundle"][selected["id"]]
     report = _ready(records, artifacts)
     if digest(report) != bundle["readiness_digest"]:
         raise ResearchError("publication_readiness_stale", "Prepare and review the manuscript against current whole-candidate readiness")

@@ -6,11 +6,11 @@ description: Develop a falsifiable hypothesis and prospective research cycle wit
 
 Read the [research constitution](../../RESEARCH_CONSTITUTION.md) and follow the
 [managed research workflow](../../docs/research-workflow.md). Start with current
-`exactory-research status --summary`, `next --summary`, and `gate preparation`. The complete original
-objective, closed five-purpose loop, field synthesis, and the five innovation
-cases are established in [literature review](../literature-review/SKILL.md)
-before this stage. If preparation is pending, complete its named obligations
-first.
+`exactory-research status --summary`, `next --summary`, and `gate preparation`.
+The Grand Challenge record, the complete original objective, closed five-purpose
+loop, field synthesis, and the five innovation cases are established in
+[literature review](../literature-review/SKILL.md) before this stage. If
+preparation is pending, complete its named obligations first.
 
 ## Develop the next question
 
@@ -43,12 +43,13 @@ literature-review skill is part of this plugin and governs the refresh. Record
 with actual sources, scope, and unresolved gaps. Reframe a scooped claim or test a
 contradiction explicitly. Keep basic science eligible when applications are unknown.
 
-Every hypothesis serves the study's Grand Challenge record. Name the criteria it
-advances (`status` reports the current record) and the established results it
-follows from. Prefer the hypothesis that moves the community furthest toward
-those challenges over the one that is easiest to finish, when its assumptions and
-tests can be made precise. Grand Challenges on exactory and recorded next steps
-show questions and demand; they do not prove novelty, correctness, or authorship.
+Every hypothesis advances at least one criterion of the study's Grand Challenge
+record (`status` reports the current record). Name those criterion ids and the
+established results the hypothesis follows from in `idea/idea.md`. Prefer the
+hypothesis that moves the community furthest toward those challenges over the one
+that is easiest to finish, when its assumptions and tests can be made precise.
+Grand Challenges on exactory and recorded next steps show questions and demand;
+they do not prove novelty, correctness, or authorship.
 
 ## Plan, admit, and hand off
 

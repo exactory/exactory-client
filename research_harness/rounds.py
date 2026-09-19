@@ -49,9 +49,9 @@ def _choice(value, choices, name):
         raise ResearchError(_ERROR, name + " must be one of: " + ", ".join(choices))
 
 
-def _items(value, name, nonempty=True):
+def _items(value, name, nonempty=True, code=_ERROR):
     if not isinstance(value, list) or nonempty and not value:
-        raise ResearchError(_ERROR, name + " must be an array" + (" with at least one entry" if nonempty else ""))
+        raise ResearchError(code, name + " must be an array" + (" with at least one entry" if nonempty else ""))
     return value
 
 
@@ -116,19 +116,22 @@ def has_round_exemplar(records, admission):
 
 
 class _RoundEvidence:
-    """Source and result evidence as the development layer validates it, plus manuscript-review evidence."""
+    """Source and result evidence as the development layer validates it, plus manuscript-review evidence.
 
-    def __init__(self, context, bundle):
-        self.records, self.bundle = context.records, bundle
+    A malformed list or review item fails with the caller's `error_code`, so another operation that takes
+    round evidence answers with its own code."""
+
+    def __init__(self, context, bundle, error_code=_ERROR):
+        self.records, self.bundle, self.error_code = context.records, bundle, error_code
         self.development = development._Evidence(context)
         self.items = {}
 
     def many(self, values, name):
         linked = []
-        for value in _items(values, name):
+        for value in _items(values, name, code=self.error_code):
             if isinstance(value, dict) and value.get("kind") == "review":
-                _fields(value, ("kind", "review_id"))
-                _text(value["review_id"], "Review evidence ID")
+                fields(value, ("kind", "review_id"), code=self.error_code)
+                text(value["review_id"], "Review evidence ID", code=self.error_code)
                 review = self.records.get("manuscript_review", {}).get(value["review_id"])
                 if review is None or review["bundle_digest"] != self.bundle["digest"]:
                     raise ResearchError("round_evidence_mismatch", "Review evidence names a manuscript review of the current bundle")
@@ -370,7 +373,10 @@ def record_round(store, payload, *, expected_revision, request_id):
             _next(records, context, evidence, value["next"], number, pursued[0])
         elif pursued or value["next"] is not None or any(item["disposition"] == "pursue" for item in carried):
             raise ResearchError(_ERROR, "A stop decision pursues no candidate or carried development and proposes no round")
+        # A record exists here: the analysis required above cannot be recorded without one, and records are never deleted.
+        current_challenge = challenge.find_current_challenge(records)
         record = {"id": value["id"], "payload": value, "closes": number, "decision": value["decision"],
+                  "grand_challenge": {"id": current_challenge["id"], "digest": current_challenge["digest"]},
                   "bundle_id": bundle["id"], "bundle_digest": bundle["digest"], "evidence": evidence.summary(),
                   "decided_revision": expected_revision + 1, "request_id": request_id}
         record["digest"] = digest(record)
@@ -651,8 +657,11 @@ def round_state(records, artifacts):
     """The gate between evaluate and either a new development round or deposit (spec section 6).
 
     In order: the current bundle; for an admitted round, its assessment on this bundle, what it still
-    owes while it is active, and its claims continuity until its closing decision; then the decision
-    closing the current round, its approving review and, for a continue, its admission. `decision` is
+    owes while it is active, and its claims continuity until its closing decision; then the bundle's
+    complete measurement and its contribution analysis, the decision closing the current round, its
+    approving review and, for a continue, its admission. While no bundle is current, an owed contribution
+    analysis follows the bundle's own obligation, because the next pin waits for it. `analysis` reports
+    whether the selected bundle has its contribution analysis. `decision` is
     set only when an approved decision closing the current round binds the current bundle; an admitted
     decision is never reported, because its admission opened the round that the gate now closes."""
     evaluation = Evaluation.of(records, artifacts)
@@ -661,11 +670,19 @@ def round_state(records, artifacts):
     active = active_round(records)
     assessment = assessment_for(records, latest["id"]) if latest is not None else None
     decision_obligations, progress_obligations, progress = [], [], None
+    # The analysis belongs to the selected bundle even when later work made that bundle stale (design 7.4).
+    selected = publication.find_selected_bundle(records)
     bundle = None
     try:
         bundle = publication._bundle(records, evaluation)
     except ResearchError as error:
         decision_obligations.append(obligation(error.code, error.message, **(error.details or {})))
+    if bundle is None:
+        # Without a current bundle the decision is out of reach, but the next pin still waits for an owed analysis.
+        owing = contribution.find_bundle_owing_analysis(records)
+        if owing is not None:
+            decision_obligations.append(obligation("contribution_analysis_missing", "Record the contribution analysis of the "
+                                                   "measured bundle.", bundle_id=owing["id"]))
     assessed = bundle is not None and assessment is not None and assessment["bundle_digest"] == bundle["digest"]
     if latest is not None:
         # The round's counts are reported whenever a round was admitted, with or without a current bundle (spec section 14).
@@ -687,7 +704,7 @@ def round_state(records, artifacts):
             "decision": decision["decision"] if decision else None, "decision_id": decision["id"] if decision else None,
             "next": decision["payload"]["next"] if decision and decision["decision"] == "continue" else None,
             "progress": progress,
-            "analysis": bundle is not None and contribution.find_analysis(records, bundle["digest"]) is not None,
+            "analysis": selected is not None and contribution.find_analysis(records, selected["digest"]) is not None,
             "measurement": predictions.measurement_summary(records, bundle) if bundle else None,
             "limits": latest["resource_limits"] if latest is not None else None,
             "budget": resources.account_report(records, "research").get("development"),

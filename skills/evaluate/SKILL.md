@@ -100,8 +100,8 @@ submits nothing.
 Read `RUBRIC.md` in this skill's directory first. It defines the core review JSON
 (summary, strengths, weaknesses, soundness / presentation / contribution on 1-4,
 overall on 1-10, decision accept or reject, and the changes that would bring each
-score below 4 to 4), the scale anchors, the calibration
-rules, and the record files. Every review emits exactly that schema. If the
+score below 4 to 4), the scale anchors, the calibration rules, and the record
+files. Every review emits exactly that schema. If the
 `scholar-evaluation` skill is installed, invoke it for evidence judgment; without
 it, the rubric's soundness scale governs.
 
@@ -113,14 +113,15 @@ neutral packet written by `exactory-research export --kind manuscript`; it carri
 no plan, author list, revision label, prior score or assessment history, and the
 harness accepts one review per assessor per exact bundle, so a rejection stands
 until the manuscript changes. The reviewer is never told a round or revision
-number and never sees `reviews/`, `learnings/`, a prior score, or an expected
-score. The paper itself must carry no revision markers: no "v2", no changelog, no
-response-to-reviewers text. The manuscript export derives a separate claims file
-for the reviewer. It contains current claims and omits their `revised` metadata
-and all `superseded` entries. Its evidence map contains only those current claims.
-Keep the complete ledger and its markers in the study for the round gate.
-The round assessor receives that original ledger. A score anchored on
-"it has improved" is not a measurement.
+number and never sees `reviews/`, `learnings/`, a prior score, an expected score,
+the study's Grand Challenge record, a contribution analysis, or another reviewer's
+`changes_for_maximum`. The paper itself must carry no revision markers: no "v2",
+no changelog, no response-to-reviewers text. The manuscript export derives a
+separate claims file for the reviewer. It contains current claims and omits their
+`revised` metadata and all `superseded` entries. Its evidence map contains only
+those current claims. Keep the complete ledger and its markers in the study for
+the round gate. The round assessor receives that original ledger. A score anchored
+on "it has improved" is not a measurement.
 
 **Spot-check claim support on the load-bearing citations.** Step 1 proved each
 reference exists and carries the metadata the registry states. It did not prove the
@@ -160,15 +161,16 @@ core stays exactly the nine fields; the prediction never enters it.
 Use the same assessor identity for each review and its prediction on the same
 bundle. The harness matches identities after case and whitespace normalization.
 The measurement is complete when exactly three distinct prediction assessors
-each have a review. Duplicate or extra predictions make the group ambiguous.
-`round.measurement.complete` reports this condition. An incomplete or ambiguous
-group reports counts and null medians. Publication reviewers without predictions
-remain outside this measurement. If one reviewer is missing, relaunch that
-reviewer alone. Preserve the original review and prediction files.
-If extra or duplicate predictions make the group ambiguous, retain it as an
-invalid measurement. Record the group's identity and the reason in the
-measurement history. After the next substantive manuscript revision, obtain
-three fresh review/prediction pairs for that revised bundle.
+each have a review. `round.measurement.complete` reports this condition, and an
+incomplete group reports counts and null medians. Publication reviewers without
+predictions remain outside this measurement. A bundle takes three predicting
+assessors: a second prediction by one assessor and a prediction by a fourth are
+refused, so a complete measurement stays complete. Record each review before its
+prediction. If one reviewer is missing, relaunch that reviewer alone. When an
+assessor that already predicted cannot supply its review, pin the same files
+again and measure that bundle. Preserve the original review and prediction
+files. A group made ambiguous by records from before this rule stays an invalid
+measurement in the measurement history.
 
 **Before deposit, run the dual-reviewer gate.** If the `santa-method` skill is
 installed, use it; the essential protocol is stated here in full either way. Launch
@@ -209,22 +211,30 @@ and never see the study's Grand Challenge record.
 1. Read the three reviews' `changes_for_maximum.contribution` items, the study's
    current Grand Challenge record (`status` reports it), and the paper's current
    claims.
-2. Investigate briefly: one to three captured searches with the purpose
-   `grand_challenge` about the frontier of those challenges and who is working
-   on them, and the full reading of each source a step rests on. These searches
-   stay outside the preparation, so the measured bundle stays current. Reading
-   in full a work that is already in the study's citation graph changes the
-   preparation; leave such a reading to the next round's literature stage.
-3. Record `contribution-analysis` for the bundle: the position against the
+2. Investigate briefly: run one to three queries about the frontier of those
+   challenges and who is working on them. Save each original response in the
+   workspace and pin it with `exactory-research artifact`. Do not import these
+   responses and do not record them as a `search`: an import changes the record
+   of every held work a response returns, and the measured bundle is then no
+   longer current. As evidence for a step, cite sources the study has already
+   read in full, results, reviews of this bundle, or a source the study does not
+   hold yet, read in full now. A work the study already holds without a full
+   reading (a reference, a cohort member, a search hit) waits for the next
+   round's literature stage, because reading it changes the preparation.
+3. Record `contribution-analysis` for the bundle: the investigation (each
+   query, its pinned response, and what it shows), the position against the
    record's criteria, one disposition for every reviewer contribution change
    (`adopted` into a step, or `rejected` with a reason), and at least one step.
    Each step names the criteria it advances, its direction, whether it fits this
    round's objective (`this_round`) or needs a new round (`next_round`), the
    current claims it builds on, and the community that gains, with evidence. A
-   step follows from established results; a bold leap is not a step.
+   step follows from established results, with no gap in the argument. Each
+   analysis has its own investigation: a query with a response that an earlier
+   analysis already used is refused.
 
 `exactory-research example contribution-analysis` shows the complete payload.
-The next bundle is pinned and the round is decided only after this record.
+The next bundle is pinned and the round is decided only after this record;
+`status --summary` reports it as `round.analysis`.
 
 ### 3. Anticipate the market
 
@@ -248,8 +258,11 @@ In a managed study, `exactory-research export --kind round --destination PATH`
 writes the packet for the round assessor. The assessor is a fresh subagent that is
 not a cycle author, or a human. Deliver the whole directory and this section. The
 round review is not blind: the packet carries the manuscript, its reviews and
-predictions with their medians, the decision under review, and every earlier
-round's goal, assessment and decision.
+predictions with their medians, the decision under review, every earlier
+round's goal, assessment and decision, the study's current Grand Challenge record,
+the bundle's contribution analysis with the captured responses of its
+investigation, and the record that analysis named its criteria against when
+another record has replaced it.
 
 The assessor answers each check of the decision's kind once. A `continue` decision
 has seven checks and a `stop` decision has two:
@@ -258,8 +271,8 @@ has seven checks and a `stop` decision has two:
   after the round that it cannot do with the current paper, and is that named with
   evidence rather than asserted?
 - `demand` (continue and stop): Are the beneficiaries real, as shown by sources
-  whose stated bottleneck this addresses, by Grand Challenges, or by review
-  findings, and not invented to satisfy the form?
+  whose stated bottleneck this addresses, by open Grand Challenges on exactory, or
+  by review findings, and not invented to satisfy the form?
 - `novelty_risk` (continue): As far as the current sources show, is the next step
   still open, and does the goal state how it will be tested for prior art before
   experiments?
@@ -309,6 +322,7 @@ failed changes, checkpoints, and resource history.
 - Do not edit `.exactory/citation-check.json` or a review file to change a result.
   Fixes happen in the references and the paper.
 - Do not show a blind reviewer the revision history, a prior score, the iteration
-  number, or the improvement target.
+  number, the improvement target, the study's Grand Challenge record, a
+  contribution analysis, or another reviewer's `changes_for_maximum`.
 - Do not let the two gate reviewers share context, and do not reuse a reviewer
   across gate rounds.

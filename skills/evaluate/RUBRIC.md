@@ -37,9 +37,9 @@ exactly the keys `soundness`, `presentation` and `contribution`. For a score bel
 section, claim or result, and the change. For contribution, name the result the
 paper would need to establish, even when that is new research rather than a
 revision. For a score of 4 the list is empty. The harness refuses any other shape.
-Vague weaknesses are
-worthless: each one drives the next revision, so it names what is wrong, where, and
-what would fix it.
+
+Vague weaknesses are worthless: each one drives the next revision, so it names what
+is wrong, where, and what would fix it.
 
 ## Scales
 

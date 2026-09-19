@@ -136,6 +136,24 @@ class LoopTests(LineageCase):
         self.assert_error("policy_inapplicable", lambda: self.mutate(lineage.record_loop_closure, {"id": "legacy", "purposes": closure}))
 
 
+class OutsideReadingTests(LineageCase):
+    def test_a_full_reading_of_a_source_the_study_does_not_hold_leaves_the_foundation_unchanged(self):
+        # A contribution analysis cites such a reading after the bundle is pinned, under the research default policy.
+        from research_harness.literature import foundation_report, import_bundle
+        from research_harness.reading import record_reading
+        root = self.metadata(1)
+        self.scope([root])
+        self.mutate(record_search, self.search("direct", [self.metadata(2)]))
+        before = foundation_report(self.store, "research")
+        outside = self.metadata(50)
+        bundle = self.bundle(outside, bundle_id="outside-bundle")
+        self.mutate(import_bundle, bundle)
+        self.mutate(record_reading, self.full_note(bundle, note_id="outside-reading"))
+        after = foundation_report(self.store, "research")
+        self.assertEqual((after["digest"], after["stable_digest"], after["frontier_digest"]),
+                         (before["digest"], before["stable_digest"], before["frontier_digest"]))
+
+
 class ExportTests(LineageCase):
     def test_loop_export_lists_search_hits_without_a_loop_reading_and_candidates(self):
         from pathlib import Path

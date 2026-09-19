@@ -15,15 +15,16 @@ PRIORITY = ("migration_required", "profile_mismatch", "configuration_missing", "
             "constitution_archive_missing", "collection_pending", "cohort_missing", "screening_missing",
             "cohort_abstract_reading_missing", "sample_missing", "sample_stale", "sample_reading_missing", "placement_missing",
             "screening_audit_reading_missing", "screening_audit_failed", "doctrine_coverage_missing",
-            "objective_missing", "objective_mismatch", "roots_missing", "root_missing", "target_source_pin_missing",
-            "target_source_pin_invalid", "target_mismatch", "critical_source_unavailable", "fulltext_reading_missing",
+            "objective_missing", "objective_mismatch", "roots_missing", "root_missing",
+            "target_source_pin_missing", "target_source_pin_invalid", "target_mismatch", "critical_source_unavailable",
+            "fulltext_reading_missing",
             "source_bundle_missing", "source_bundle_incomplete", "required_unit_missing", "required_unit_incomplete",
             "required_unit_uninspected", "reading_bundle_stale", "bibliography_incomplete", "reference_identity_ambiguous",
             "reference_unresolved", "search_purpose_missing", "search_scope_stale", "search_frontier_stale",
             "search_evidence_stale", "search_dispositions_missing", "search_pending", "loop_closure_missing",
             "loop_closure_stale", "abstract_reading_missing",
-            "historical_version_unresolved", "standards_missing", "rationale_missing", "innovation_missing",
-            "innovation_candidates_missing", "innovation_case_not_candidate", "context_missing", "grand_challenge_missing",
+            "historical_version_unresolved", "grand_challenge_missing", "standards_missing", "rationale_missing", "innovation_missing",
+            "innovation_candidates_missing", "innovation_case_not_candidate", "context_missing",
             "synthesis_dependencies_stale", "resource_budget_exhausted",
             "publication_bundle_missing", "publication_readiness_stale", "publication_artifact_changed",
             "manuscript_reviews_required", "lineage_citation_missing",
@@ -32,6 +33,11 @@ PRIORITY = ("migration_required", "profile_mismatch", "configuration_missing", "
             "round_review_missing", "round_review_pending", "round_admission_missing")
 _HINT_LIMITS = {"code": 48, "version_id": 64, "work_id": 64, "collection_id": 64, "unit_id": 64, "explanation": 120}
 _MAX_PAGE = 500
+# The status summary names this many criterion ids of the Grand Challenge record, cut at this length, and counts
+# the rest. A control character costs six bytes in JSON, so seven ids of 32 characters stay inside the room the
+# 16 KiB bound leaves; `status` reports the whole record.
+_SUMMARY_CRITERION_IDS = 6
+_SUMMARY_ID_LENGTH = 32
 
 
 def priority(item):
@@ -76,11 +82,21 @@ def next_summary(report):
             "details": "exactory-research obligations --code CODE [--limit N] [--cursor CURSOR]"}
 
 
+def _summarize_grand_challenge(challenge):
+    """The record id, how many challenges each horizon has, and the first criterion ids, with a count of the rest."""
+    if challenge is None:
+        return None
+    horizons = Counter(item["horizon"] for item in challenge["challenges"])
+    criterion_ids = [criterion["id"] for item in challenge["challenges"] for criterion in item["criteria"]]
+    return {"id": _short(challenge["id"], _SUMMARY_ID_LENGTH), "ultimate": horizons["ultimate"], "near_term": horizons["near_term"],
+            "criterion_ids": [_short(identifier, _SUMMARY_ID_LENGTH) for identifier in criterion_ids[:_SUMMARY_CRITERION_IDS]],
+            "omitted_criterion_ids": max(0, len(criterion_ids) - _SUMMARY_CRITERION_IDS)}
+
+
 def status_summary(report):
     """Summarize obligations without embedding evidence or author notes."""
     result = next_summary(report)
     preparation = report.get("preparation") or {}
-    challenge = report.get("grand_challenge")
     study = report.get("study") or {}
     result.update({"schema": "research-status-summary-v1", "runtime": report.get("runtime"),
                    "profile": _short(report.get("profile"), 24), "stage": _short(study.get("stage"), 32),
@@ -91,11 +107,7 @@ def status_summary(report):
                    "counts": report.get("counts"), "resources": report.get("resources", {}),
                    "limits": report.get("limits"),
                    "round": report.get("round"), "evaluation": report.get("evaluation"),
-                   "grand_challenge": None if challenge is None else {
-                       "id": _short(challenge["id"], 64),
-                       "challenges": [{"id": _short(item["id"], 64), "horizon": item["horizon"],
-                                       "criterion_ids": [_short(criterion["id"], 64) for criterion in item["criteria"]]}
-                                      for item in challenge["challenges"]]}})
+                   "grand_challenge": _summarize_grand_challenge(report.get("grand_challenge"))})
     return result
 
 
