@@ -38,10 +38,11 @@ Record any user target, pacing, or iteration budget. A score target is a stoppin
 condition for manuscript improvement, never an instruction to a reviewer.
 
 At the first manuscript evaluation, measure with three independent blind reviews
-and keep their median and spread. The reviewers receive the actual manuscript
-and prescribed evidence, without author expectations, prior scores, or revision
-history. These measurements are separate from the two accepting current reviews
-required for publication.
+and keep their median and spread. The reviewers receive the actual manuscript and
+prescribed evidence, without author expectations, prior scores, revision history,
+the study's Grand Challenge record, a contribution analysis, or another reviewer's
+`changes_for_maximum`. These measurements are separate from the two accepting
+current reviews required for publication.
 
 For each iteration:
 
@@ -51,12 +52,12 @@ For each iteration:
    Source, scope, or policy changes require current preparation and dependent
    reassessment.
 3. Read the latest contribution analysis first. A `this_round` step becomes the
-   next cycle's hypothesis; a `next_round` step waits for the round gate.
-   Otherwise select the most consequential supported weakness, using the
-   reviews' `changes_for_maximum`. Revise presentation directly when the evidence
-   stands. An evidence gap returns through the supported state transition to a
-   prospective admitted cycle, actual assessment, checkpoint, and renewed
-   independent research readiness before rewriting.
+   next cycle's hypothesis; a `next_round` step waits for the round gate. When the
+   analysis has no `this_round` step, select the most consequential supported
+   weakness, using the reviews' `changes_for_maximum`. Revise presentation
+   directly when the evidence stands. An evidence gap returns through the
+   supported state transition to a prospective admitted cycle, actual assessment,
+   checkpoint, and renewed independent research readiness before rewriting.
 4. Keep claims, quantitative conditions, and evidence mappings consistent. Add
    references through the registry command, compile, check citations, and check
    applicable derivations. Resolve findings in sources or code, never by editing
@@ -84,8 +85,9 @@ study owes.
 
 The study produces one paper and develops it across rounds. Each round starts
 from the paper as it stands and ends with a decision on the exact bundle. Scores
-and predictions are recorded results of a round and never criteria: no gate rule
-and no goal reads them.
+and predictions are recorded results of a round and never criteria. The round
+decision needs the complete measurement and its contribution analysis, but no
+gate rule and no goal reads the values.
 
 At every measurement, each of the three blind reviewers returns the rubric core
 and, in a separate file, a cohort prediction in the market's shape with its
@@ -107,21 +109,23 @@ The round gate, at the end of `evaluate`:
 1. Read `gate round`. It names what the closing round still owes: for a round of
    number 2 or more, its assessment on this bundle (`round-assess`), the four
    consequence searches, the exemplar, an assessed cycle, a new claim, and claims
-   continuity.
-   For every bundle it also names the complete measurement and the contribution
-   analysis that the decision needs.
+   continuity. For every bundle it also names the complete measurement and the
+   contribution analysis that the decision needs.
 2. Write the candidates from every step of the bundle's contribution analysis
    (each listed with its id, direction and statement; `contribution_step_missing`
-   otherwise), the carried developments (`next_round` dispositions
-   of the closing round's cycle assessments), the review findings, the `context`
-   and `innovation` sections, and the open Grand Challenges. Each candidate has a
-   direction (`vertical` or `horizontal`), a disposition and evidence; a source
-   cited as evidence needs a full reading of that source.
+   otherwise), the carried developments (`next_round` dispositions of the closing
+   round's cycle assessments), the review findings, the `context` and
+   `innovation` sections, and the open Grand Challenges on exactory. Each
+   candidate has a direction (`vertical` or `horizontal`), a disposition and
+   evidence; a source cited as evidence needs a full reading of that source.
+   Dispose of a step you do not pursue as `deferred` unless the evidence rejects
+   it: a `rejected` candidate can never become a goal, and the analysis fixes
+   the step's statement for this bundle.
 3. Choose with `round`. `continue` pursues exactly one candidate and states the
    goal: the direction, the contribution delta, the beneficiaries, the success
    criteria, the stop conditions, the criteria of the current Grand Challenge
-   record it advances (`criterion_ids`), the continuity with the current paper, the
-   route and the risks. `stop` lists at least one candidate, disposes of every
+   record it advances (`criterion_ids`), the continuity with the current paper,
+   the route and the risks. `stop` lists at least one candidate, disposes of every
    candidate and carried development, and pursues none of them. Either decision
    disposes of every carried development of the closing round in `carried`, once
    each: `{assessment_id, kind, question or cycle_id, disposition, reason}`, where

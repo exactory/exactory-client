@@ -134,16 +134,18 @@ one line to `reviews/score_history.jsonl`, so the score trajectory stays
 readable after the fact.
 
 Blind-review hygiene: the paper text carries no revision markers (no "v2", no
-changelog, no response-to-reviewers text), and the reviewer is
-never shown `reviews/`, `learnings/`, or a prior score. Those directories
-exist for the user and for the next iteration, not for the reviewer. In a
-managed study, `exactory-research export --kind manuscript` delivers a neutral
-packet: the exact paper files, the current claim-to-evidence map, the cited evidence, the
-observed executions and the field standards, with no plan, author list,
-revision label or assessment history. Give the reviewer that directory. Its
-separate claims file contains current claims, with `revised` metadata and
-`superseded` entries omitted. Their internal history stays in the pinned ledger
-for the round gate and round assessor. Export leaves that ledger unchanged.
+changelog, no response-to-reviewers text), and the reviewer is never shown
+`reviews/`, `learnings/`, a prior score, the study's Grand Challenge record, a
+contribution analysis, or another reviewer's `changes_for_maximum`. Those
+directories exist for the user and for the next iteration, not for the reviewer.
+In a managed study, `exactory-research export --kind manuscript` delivers a
+neutral packet: the exact paper files, the current claim-to-evidence map, the
+cited evidence, the observed executions and the field standards, with no plan,
+author list, revision label or assessment history. Give the reviewer that
+directory. Its separate claims file contains current claims, with `revised`
+metadata and `superseded` entries omitted. Their internal history stays in the
+pinned ledger for the round gate and round assessor. Export leaves that ledger
+unchanged.
 
 ## The measurement (the improvement loop)
 
@@ -168,9 +170,12 @@ reviewer's `assessor`.
 Use the same assessor identity for the review and prediction on the same bundle.
 The harness measures the three paired reviewers and excludes publication-only
 reviewers. `round.measurement.complete` is true when exactly three distinct
-prediction assessors each have a review. Duplicate or extra predictions make
-the group ambiguous. Counts remain visible, but incomplete or ambiguous groups
-have null medians. Save all raw responses before reporting the measurement.
+prediction assessors each have a review. A bundle takes three predicting
+assessors, so a complete measurement stays complete. Counts remain visible, but
+an incomplete group has null medians. Save all raw responses before reporting the
+measurement. In a managed study, record the contribution analysis of the measured
+bundle next (the evaluate skill, section 2b); the next bundle cannot be pinned
+before it.
 
 ## Commits and reverts (the improvement loop)
 

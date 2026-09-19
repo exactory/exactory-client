@@ -458,9 +458,38 @@ and, once nothing is owed, asks for the decision.
 
 Use the same assessor identity for each review and its prediction on the bundle.
 `round.measurement.complete` reports whether exactly three distinct prediction
-assessors each have a review. Duplicate or extra predictions make the group
-ambiguous. Incomplete or ambiguous groups report counts and null medians.
+assessors each have a review. A bundle takes three predicting assessors, so a
+complete measurement stays complete; an incomplete group, or an ambiguous one
+recorded before this rule, reports counts and null medians.
 Publication-only reviewers remain outside the measurement.
+
+### After each measurement: the contribution analysis
+
+Every blind review names, for each of soundness, presentation and contribution
+below 4, the changes that would bring it to 4. After the three measurement
+reviews of a bundle, investigate briefly: run one to three queries about the
+frontier of the study's challenges and who is working on it, save each original
+response in the workspace, and pin it with `artifact`. Do not import these
+responses and do not record them as a `search`: an import changes the record of
+every held work a response returns, and the measured bundle is then no longer
+current. Then record the contribution analysis: the captured investigation with
+what each response shows, where the paper stands against the current Grand
+Challenge record, a disposition of every reviewer contribution change, and the
+steps toward the challenges with the community each serves. As evidence, cite
+sources the study has already read in full, results, reviews of this bundle, or a
+source the study does not hold yet, read in full now. A work the study already
+holds without a full reading (a reference, a cohort member, a search hit) waits
+for the next round's literature stage, because reading it changes the
+preparation. A `this_round` step becomes the next cycle's hypothesis; a
+`next_round` step waits for the round gate. The next bundle and the round
+decision need the analysis.
+
+```sh
+exactory-research artifact --file investigation-capture.json --expected-revision REVISION --request-id pin-investigation-001
+exactory-research example contribution-analysis > contribution-analysis.json
+exactory-research contribution-analysis --file contribution-analysis.json --expected-revision REVISION --request-id analyze-contribution-001
+exactory-research gate round
+```
 
 Decide on the exact bundle with `round`: `continue` with one pursued candidate
 and a goal the current paper does not meet, or `stop`. Either decision disposes
@@ -476,6 +505,7 @@ return to `literature`.
 ```sh
 exactory-research example manuscript-prediction > prediction.json
 exactory-research manuscript-prediction --file prediction.json --expected-revision REVISION --request-id predict-001
+exactory-research contribution-analysis --file contribution-analysis.json --expected-revision REVISION --request-id analyze-contribution-001
 exactory-research gate round
 exactory-research example round > round-decision.json
 exactory-research round --file round-decision.json --expected-revision REVISION --request-id round-decide-001
@@ -498,6 +528,7 @@ criterion and stop condition id of the saved goal exactly once (`invalid_round`
 otherwise). Then decide again.
 
 ```sh
+exactory-research contribution-analysis --file contribution-analysis-2.json --expected-revision REVISION --request-id analyze-contribution-002
 exactory-research round-assess --file round-assessment.json --expected-revision REVISION --request-id round-assess-002
 exactory-research gate round
 exactory-research round --file round-decision-2.json --expected-revision REVISION --request-id round-decide-002
@@ -517,24 +548,6 @@ parks.
 ```sh
 exactory-lab decide --stage evaluate --decision "Stop after round 2" --why "Every recorded candidate was rejected or deferred on its evidence."
 exactory-lab state set --stage deposit --status pending
-```
-
-### After each measurement: the contribution analysis
-
-Every blind review names, for each of soundness, presentation and contribution
-below 4, the changes that would bring it to 4. After the three measurement
-reviews of a bundle, run a small investigation with one to three searches of
-purpose `grand_challenge`, read in full the sources a step rests on, and record
-the contribution analysis: where the paper stands against the current Grand
-Challenge record, a disposition of every reviewer contribution change, and the
-steps toward the challenges with the community each serves. A `this_round`
-step becomes the next cycle's hypothesis; a `next_round` step waits for the
-round gate. The next bundle and the round decision need the analysis.
-
-```sh
-exactory-research search --file grand-challenge-search.json --expected-revision REVISION --request-id search-grand-challenge-001
-exactory-research contribution-analysis --file contribution-analysis.json --expected-revision REVISION --request-id analyze-contribution-001
-exactory-research gate round
 ```
 
 ## Verification and native mathematics
