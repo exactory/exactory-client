@@ -21,6 +21,18 @@ class EvaluationTests(LiteratureCase):
         path.write_bytes(b"changed")
         self.assert_error("artifact_corrupt", lambda: Evaluation(records, self.artifacts).read(reference))
 
+    def test_a_malformed_artifact_reference_fails_typed_instead_of_crashing(self):
+        from research_harness.errors import ResearchError
+        from research_harness.evaluation import Evaluation
+        evaluation = Evaluation({}, self.artifacts)
+        reference = self.artifacts.put(b"Saved bytes.", "text/plain")
+        self.assertEqual(evaluation.read(reference), b"Saved bytes.")
+        for field, value in (("sha256", [reference["sha256"]]), ("size", {"bytes": 12}), ("path", [reference["path"]]),
+                             ("media_type", ["text/plain"])):
+            with self.subTest(field=field):
+                with self.assertRaises(ResearchError):
+                    evaluation.read(dict(reference, **{field: value}))
+
     def test_of_shares_memo_for_the_same_records_and_not_for_others(self):
         from research_harness.evaluation import Evaluation
         records = self.store.snapshot()["records"]
