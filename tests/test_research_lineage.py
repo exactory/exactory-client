@@ -136,23 +136,6 @@ class LoopTests(LineageCase):
         self.assert_error("policy_inapplicable", lambda: self.mutate(lineage.record_loop_closure, {"id": "legacy", "purposes": closure}))
 
 
-class GrandChallengeSearchTests(LineageCase):
-    def test_a_grand_challenge_search_leaves_a_closed_loop_and_the_foundation_unchanged(self):
-        from research_harness.literature import foundation_report
-        root = self.metadata(1)
-        self.scope([root])
-        for purpose in lineage.SEARCH_PURPOSES:
-            self.mutate(record_search, self.judgment(purpose, [(purpose + " one", []), (purpose + " two", [])]))
-        self.mutate(lineage.record_loop_closure, {"id": "closure", "purposes": {
-            purpose: {"status": "covered", "note": "Two distinct queries returned nothing relevant."} for purpose in lineage.SEARCH_PURPOSES}})
-        before = foundation_report(self.store, "research")
-        self.assertNotIn("loop_closure_missing", {o["code"] for o in before["obligations"]})
-        self.mutate(record_search, self.search("grand_challenge", [self.metadata(9)]))
-        after = foundation_report(self.store, "research")
-        self.assertEqual((after["digest"], after["stable_digest"]), (before["digest"], before["stable_digest"]))
-        self.assertEqual({o["code"] for o in after["obligations"]}, {o["code"] for o in before["obligations"]})
-
-
 class ExportTests(LineageCase):
     def test_loop_export_lists_search_hits_without_a_loop_reading_and_candidates(self):
         from pathlib import Path
@@ -170,19 +153,6 @@ class ExportTests(LineageCase):
         self.assertEqual(set(template["loop"]), {"purposes", "disposition", "source"})
         self.assertEqual(template["loop"]["source"], "|".join(lineage.LOOP_SOURCES))
         self.assertIs(template["innovation_candidate"], True)
-
-    def test_loop_export_leaves_out_the_hits_of_a_grand_challenge_search(self):
-        from pathlib import Path
-        from research_harness.batches import export_batches
-        root = self.metadata(1)
-        self.scope([root])
-        loop_hits = [self.metadata(n) for n in range(2, 4)]
-        self.mutate(record_search, self.search("direct", loop_hits))
-        self.mutate(record_search, self.search("downstream", [self.metadata(4)]))
-        self.mutate(record_search, self.search("grand_challenge", [self.metadata(5)]))
-        result = export_batches(self.store, destination=str(Path(self.temporary.name) / "loop"), loop=True)
-        listed = [item["version_id"] for item in json.loads(Path(result["files"][0]).read_text())["items"]]
-        self.assertEqual(listed, loop_hits + ["arxiv:2601.00004v1"])
 
     def test_a_plain_export_is_refused_under_lineage(self):
         from pathlib import Path

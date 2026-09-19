@@ -343,6 +343,22 @@ os._exit(23)
         args = parser.parse_args(["policy-report", "--policy", "lineage-v1"])
         self.assertEqual(args.policy, "lineage-v1")
 
+    def test_the_grand_challenge_examples_can_be_recorded_together(self):
+        from research_harness.rounds import CHECKS_CONTINUE
+        examples = json.loads((PLUGIN / "docs/research-cli-examples.json").read_text())
+        criteria = {c["id"] for item in examples["grand-challenge"]["challenges"] for c in item["criteria"]}
+        analysis, decision = examples["contribution-analysis"], examples["round"]
+        named = set(analysis["position"]["criterion_ids"]) | set(decision["next"]["goal"]["criterion_ids"])
+        candidates = {c["id"]: c for c in decision["candidates"]}
+        for step in analysis["steps"]:
+            named |= set(step["criterion_ids"])
+            self.assertEqual((candidates[step["id"]]["direction"], candidates[step["id"]]["statement"]),
+                             (step["direction"], step["statement"]))
+            self.assertLessEqual(set(step["builds_on"]), {c["claim_id"] for c in examples["manuscript"]["claim_evidence"]})
+        self.assertLessEqual(named, criteria)
+        self.assertLessEqual({c["step_id"] for c in analysis["reviewer_changes"] if "step_id" in c}, {s["id"] for s in analysis["steps"]})
+        self.assertEqual({c["kind"] for c in examples["round-review"]["checks"]}, set(CHECKS_CONTINUE))
+
     def test_examples_cover_the_new_operations(self):
         from research_harness.cli import build_parser, run
         for operation in ("sample", "loop-close"):

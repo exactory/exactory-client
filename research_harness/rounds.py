@@ -373,7 +373,9 @@ def record_round(store, payload, *, expected_revision, request_id):
             _next(records, context, evidence, value["next"], number, pursued[0])
         elif pursued or value["next"] is not None or any(item["disposition"] == "pursue" for item in carried):
             raise ResearchError(_ERROR, "A stop decision pursues no candidate or carried development and proposes no round")
+        current_challenge = challenge.find_current_challenge(records)
         record = {"id": value["id"], "payload": value, "closes": number, "decision": value["decision"],
+                  "grand_challenge": {"id": current_challenge["id"], "digest": current_challenge["digest"]},
                   "bundle_id": bundle["id"], "bundle_digest": bundle["digest"], "evidence": evidence.summary(),
                   "decided_revision": expected_revision + 1, "request_id": request_id}
         record["digest"] = digest(record)
@@ -673,6 +675,12 @@ def round_state(records, artifacts):
         bundle = publication._bundle(records, evaluation)
     except ResearchError as error:
         decision_obligations.append(obligation(error.code, error.message, **(error.details or {})))
+    if bundle is None:
+        # Without a current bundle the decision is out of reach, but the next pin still waits for an owed analysis.
+        owing = contribution.find_bundle_owing_analysis(records)
+        if owing is not None:
+            decision_obligations.append(obligation("contribution_analysis_missing", "Record the contribution analysis of the "
+                                                   "measured bundle.", bundle_id=owing["id"]))
     assessed = bundle is not None and assessment is not None and assessment["bundle_digest"] == bundle["digest"]
     if latest is not None:
         # The round's counts are reported whenever a round was admitted, with or without a current bundle (spec section 14).

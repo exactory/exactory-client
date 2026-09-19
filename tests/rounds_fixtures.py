@@ -69,7 +69,7 @@ class RoundsCase(DevelopmentCase):
         return build_contribution_analysis(self, bundle, suffix)
 
     def analyze(self, bundle, suffix):
-        """A grand_challenge search after the pin, then the contribution analysis of the measured bundle."""
+        """The contribution analysis of the measured bundle, with its own captured investigation."""
         return record_contribution_analysis(self, bundle, suffix)
 
     def round_evidence(self):

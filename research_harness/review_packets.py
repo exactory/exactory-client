@@ -12,8 +12,9 @@ the paper's quality, so the round packet deliberately carries history: the
 manuscript packet, every blind review and prediction of the bundle, the
 decision under review, every round's goal and assessment, the closing round's
 development blocks, the synthesis sections, the consequence searches, the
-study's current Grand Challenge record, the bundle's contribution analysis and
-the resource accounts; author names, request identities, launcher tokens and
+study's current Grand Challenge record, the bundle's contribution analysis with
+the captured responses of its investigation, the record that analysis named its
+criteria against when another has replaced it, and the resource accounts; author names, request identities, launcher tokens and
 revision labels still never enter it. Delivery copies exactly the artifacts a
 packet references.
 """
@@ -117,12 +118,16 @@ def round_packet(records, bundle, decision):
             searches[purpose] = {k: search[k] for k in ("purpose", "found_work_ids", "dispositions", "impact", "gaps")}
     current_challenge = find_current_challenge(records)
     analysis = find_analysis(records, bundle["digest"])
+    # The analysis named its criteria against the record that was current then; deliver it when another record replaced it.
+    analyzed_against = (analysis or {}).get("grand_challenge")
+    replaced = analyzed_against is not None and current_challenge is not None and analyzed_against["id"] != current_challenge["id"]
     manifest = {"kind": "round", "manuscript": manuscript_packet(records, bundle), "reviews": reviews, "predictions": predictions,
                 "measurement": measurement_summary(records, bundle),
                 "decision": {"payload": decision["payload"], "digest": decision["digest"], "closes": decision["closes"]},
                 "rounds": history, "development": development, "synthesis": synthesis, "searches": searches,
                 "grand_challenge": current_challenge["payload"] if current_challenge else None,
                 "contribution_analysis": analysis["payload"] if analysis else None,
+                "analysis_grand_challenge": records["grand_challenge"][analyzed_against["id"]]["payload"] if replaced else None,
                 "resources": account_report(records, "research"),
                 "digest": digest({"bundle": bundle["digest"], "decision": decision["digest"]})}
     return scrub(manifest, _FORBIDDEN_KEYS + ("authors", "author"))

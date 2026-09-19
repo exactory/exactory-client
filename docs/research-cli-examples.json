@@ -1166,7 +1166,7 @@
         ]
       },
       {
-        "id": "multivariate-bound",
+        "id": "multivariate-case",
         "horizon": "near_term",
         "statement": "The finite bound in the multivariate case.",
         "state": "Only the univariate case is established.",
@@ -2832,8 +2832,17 @@
   "contribution-analysis": {
     "id": "contribution-analysis-1",
     "bundle_digest": "0000000000000000000000000000000000000000000000000000000000000000",
-    "searches": [
-      "grand-challenge-search-1"
+    "investigation": [
+      {
+        "query": "finite bound multivariate inputs open problem",
+        "response": {
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+          "size": 15,
+          "media_type": "application/json"
+        },
+        "finding": "Two groups state the multivariate case as open; no paper establishes it."
+      }
     ],
     "position": {
       "criterion_ids": [
@@ -2860,14 +2869,14 @@
     "steps": [
       {
         "id": "multivariate-bound",
-        "statement": "Extend the finite bound to multivariate inputs.",
+        "statement": "Extend the finite bound to the multivariate case under the same evidence standard.",
         "criterion_ids": [
           "rc-multivariate"
         ],
         "direction": "vertical",
         "reach": "next_round",
         "builds_on": [
-          "bound"
+          "claim-1"
         ],
         "community": {
           "who": "Authors of bounded-sequence proofs",

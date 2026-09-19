@@ -1,18 +1,20 @@
 """The author's contribution analysis of one measured manuscript bundle (design 7.4).
 
-After a complete measurement, the author records where the paper stands against the study's
-Grand Challenge record, disposes of every contribution change the measurement reviewers named,
-and lists the steps toward the challenges that the next iteration or round takes. The analysis
-binds the selected bundle even when later work has made that bundle stale for publication, so a
-measured bundle can always receive its analysis. The next pin and the round decision wait for it.
+After a complete measurement, the author investigates briefly and records where the paper stands
+against the study's Grand Challenge record, disposes of every contribution change the measurement
+reviewers named, and lists the steps toward the challenges that the next iteration or round takes.
+The investigation is kept as captured responses pinned as artifacts, not as search records: a
+search record needs its capture imported first, and that import changes the record of every held
+work it returns, which makes the measured bundle stale. The analysis binds the selected bundle
+even when later work has made that bundle stale for publication, so a measured bundle can always
+receive its analysis. The next pin and the round decision wait for it.
 """
 
 from .artifacts import ArtifactStore
-from .challenge import resolve_criterion_ids, validate_criterion_ids
+from .challenge import find_current_challenge, validate_criterion_ids
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
-from .literature import GRAND_CHALLENGE_PURPOSE
 from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .predictions import select_measurement_reviews
 from .publication import find_selected_bundle
@@ -36,15 +38,21 @@ def find_bundle_owing_analysis(records):
     return bundle
 
 
-def _check_searches(records, bundle, values):
-    """Every search is a research grand_challenge search, and at least one was recorded after the pin."""
-    identifiers = strings(values, "Contribution analysis searches", nonempty=True, code=_ERROR)
-    saved = records.get("literature_search", {})
-    if any(i not in saved or saved[i]["profile"] != "research" or saved[i]["purpose"] != GRAND_CHALLENGE_PURPOSE for i in identifiers):
-        raise ResearchError(_ERROR, "Every entry of searches names a recorded research search with the grand_challenge purpose")
-    # A bundle pinned before 0.42.0 has no snapshot of searches; any grand_challenge search then counts.
-    if set(identifiers) <= set(bundle.get("search_ids", ())):
-        raise ResearchError("contribution_search_missing", "Record at least one grand_challenge search after the bundle was pinned")
+def _check_investigation(records, evaluation, values):
+    """At least one captured query with its saved original response and what it shows; each response serves one analysis."""
+    if not isinstance(values, list) or not values:
+        raise ResearchError(_ERROR, "Investigation must be an array with at least one captured query")
+    # An analysis recorded under 0.42.0 named search ids instead and holds no captured response.
+    used = {entry["response"]["sha256"] for saved in records.get("contribution_analysis", {}).values()
+            for entry in saved["payload"].get("investigation", ())}
+    for entry in values:
+        fields(entry, ("query", "response", "finding"), code=_ERROR)
+        text(entry["query"], "Investigation query", code=_ERROR)
+        text(entry["finding"], "Investigation finding", code=_ERROR)
+        evaluation.read(entry["response"])
+        if entry["response"]["sha256"] in used:
+            raise ResearchError("contribution_investigation_reused", "An earlier analysis already used this captured response; "
+                                "capture a new one for this measurement", {"sha256": entry["response"]["sha256"]})
 
 
 def _check_position(records, value, evidence):
@@ -117,7 +125,7 @@ def record_contribution_analysis(store, payload, *, expected_revision, request_i
         # rounds imports this module for the round gate, so its vocabulary and evidence validator are imported here.
         from .development import _Context
         from .rounds import DIRECTIONS, _RoundEvidence
-        fields(value, ("id", "bundle_digest", "searches", "position", "reviewer_changes", "steps"), code=_ERROR)
+        fields(value, ("id", "bundle_digest", "investigation", "position", "reviewer_changes", "steps"), code=_ERROR)
         text(value["id"], "Contribution analysis ID", code=_ERROR)
         bundle = find_selected_bundle(records)
         if bundle is None:
@@ -129,19 +137,22 @@ def record_contribution_analysis(store, payload, *, expected_revision, request_i
         reviews = select_measurement_reviews(records, bundle)
         if reviews is None:
             raise ResearchError("manuscript_measurement_missing", "Measure the bundle with three paired blind reviews and predictions first")
-        if not resolve_criterion_ids(records):
-            raise ResearchError("grand_challenge_missing", "Record the study's Grand Challenge first")
+        current_challenge = find_current_challenge(records)
+        if current_challenge is None:
+            raise ResearchError("grand_challenge_missing", "Record the challenges ahead of the study with grand-challenge first")
         evaluation = Evaluation(records, artifacts)
         context = _Context(records, evaluation)
         context.require_objective()
         evidence = _RoundEvidence(context, bundle, error_code=_ERROR)
-        _check_searches(records, bundle, value["searches"])
+        _check_investigation(records, evaluation, value["investigation"])
         _check_position(records, value["position"], evidence)
         claims = strict_json(evaluation.read(bundle["files"]["claims"]["artifact"]))
         current_claim_ids = {claim["id"] for claim in claims if "superseded" not in claim}
         steps = _check_steps(records, value["steps"], current_claim_ids, evidence, DIRECTIONS)
         _check_reviewer_changes(value["reviewer_changes"], reviews, steps)
+        # A later record may reuse or drop a criterion id, so the analysis keeps the record its ids were checked against.
         record = {"id": value["id"], "payload": value, "bundle_id": bundle["id"], "bundle_digest": bundle["digest"],
+                  "grand_challenge": {"id": current_challenge["id"], "digest": current_challenge["digest"]},
                   "evidence": evidence.summary(), "analyzed_revision": expected_revision + 1, "request_id": request_id}
         record["digest"] = digest(record)
         return [immutable_record(records, "contribution_analysis", value["id"], record)], record
