@@ -14,7 +14,7 @@ from .errors import ResearchError
 from .evaluation import Evaluation
 from .gates import gate_state
 from .lineage import INNOVATION_CANDIDATES, LINEAGE, LOOP_SOURCES, loop_readings
-from .literature import DISPOSITIONS, foundation_state
+from .literature import DEVELOPMENT_PURPOSES, DISPOSITIONS, SEARCH_PURPOSES, foundation_state
 from .operations import strings
 from .principles import preparation_policy
 from .reading import NOTE_FIELDS, selected_abstract
@@ -48,9 +48,11 @@ def unread_abstracts(records, evaluation, profile, *, screen=False, loop=False, 
     versions = []
     if loop:
         read = {r["version_id"] for r in loop_readings(records)}
+        # The loop reads the hits of the purposes a loop reading can name. A grand_challenge search stays outside the
+        # preparation, so its hits never become loop readings (design 7.3 of the Grand Challenge work).
         selections = records.get("search_selection", {})
-        for key in sorted(selections):
-            if not key.startswith(profile + ":"):
+        for key in sorted(profile + ":" + purpose for purpose in SEARCH_PURPOSES + DEVELOPMENT_PURPOSES):
+            if key not in selections:
                 continue
             search = records.get("literature_search", {}).get(selections[key]["search_id"])
             for version in (search or {}).get("found_work_ids", []):

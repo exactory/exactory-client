@@ -154,6 +154,19 @@ class ExportTests(LineageCase):
         self.assertEqual(template["loop"]["source"], "|".join(lineage.LOOP_SOURCES))
         self.assertIs(template["innovation_candidate"], True)
 
+    def test_loop_export_leaves_out_the_hits_of_a_grand_challenge_search(self):
+        from pathlib import Path
+        from research_harness.batches import export_batches
+        root = self.metadata(1)
+        self.scope([root])
+        loop_hits = [self.metadata(n) for n in range(2, 4)]
+        self.mutate(record_search, self.search("direct", loop_hits))
+        self.mutate(record_search, self.search("downstream", [self.metadata(4)]))
+        self.mutate(record_search, self.search("grand_challenge", [self.metadata(5)]))
+        result = export_batches(self.store, destination=str(Path(self.temporary.name) / "loop"), loop=True)
+        listed = [item["version_id"] for item in json.loads(Path(result["files"][0]).read_text())["items"]]
+        self.assertEqual(listed, loop_hits + ["arxiv:2601.00004v1"])
+
     def test_a_plain_export_is_refused_under_lineage(self):
         from pathlib import Path
         from research_harness.batches import export_batches
