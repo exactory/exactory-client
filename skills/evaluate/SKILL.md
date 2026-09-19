@@ -248,8 +248,9 @@ In a managed study, `exactory-research export --kind round --destination PATH`
 writes the packet for the round assessor. The assessor is a fresh subagent that is
 not a cycle author, or a human. Deliver the whole directory and this section. The
 round review is not blind: the packet carries the manuscript, its reviews and
-predictions with their medians, the decision under review, and every earlier
-round's goal, assessment and decision.
+predictions with their medians, the decision under review, every earlier
+round's goal, assessment and decision, the study's current Grand Challenge record
+and the bundle's contribution analysis.
 
 The assessor answers each check of the decision's kind once. A `continue` decision
 has seven checks and a `stop` decision has two:

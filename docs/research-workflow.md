@@ -214,10 +214,20 @@ exactory-research search --file originals-search.json --expected-revision REVISI
 exactory-research search --file theory-search.json --expected-revision REVISION --request-id search-theory-001
 exactory-research search --file adjacent-search.json --expected-revision REVISION --request-id search-adjacent-001
 exactory-research search --file recent-search.json --expected-revision REVISION --request-id search-recent-001
+exactory-research grand-challenge --file grand-challenge.json --expected-revision REVISION --request-id record-grand-challenge-001
 exactory-research target --file complete-objective.json --expected-revision REVISION --request-id fix-complete-objective
 ```
 
-Set the complete original objective while still in `literature`. A branch's
+Before the objective, investigate the challenges ahead of the research and record
+them with `grand-challenge`: the ultimate goal the field is trying to reach and,
+where useful, nearer large goals, each with criteria that would show it reached
+and evidence read in full. Open Grand Challenges on exactory for the field are one
+input. The record is not a synthesis section: it stays current for the whole
+study, and a new record with a reason replaces it only when the direction
+changes. `gate preparation` owes `grand_challenge_missing` until it exists.
+
+Set the complete original objective while still in `literature`, written against
+that record. A branch's
 special case, restricted parameter range, or conditional hypothesis belongs in
 its cycle scope and leaves the original objective intact. Develop the following
 source-grounded synthesis before entering `ideate`:
@@ -244,18 +254,12 @@ source-grounded synthesis before entering `ideate`:
   applications are unknown. Preserve unknown or inapplicable quantities with
   reasons, including units, population/denominator, observation interval, outcome,
   and baseline; distinguish fitted values, external inputs, and derivations.
-- `grand-challenge`: the challenges ahead of the study, recorded before the
-  objective is written: the ultimate goal the field is trying to reach and,
-  where useful, nearer large goals, each with criteria and evidence. Open
-  Grand Challenges on exactory for the field are one input. The record stays
-  current for the whole study; record a new one only when the direction changes.
 
 ```sh
 exactory-research standards --file standards.json --expected-revision REVISION --request-id assess-standards-001
 exactory-research rationale --file rationale.json --expected-revision REVISION --request-id assess-rationale-001
 exactory-research innovation --file innovation.json --expected-revision REVISION --request-id assess-innovation-001
 exactory-research context --file scientific-context.json --expected-revision REVISION --request-id assess-context-001
-exactory-research grand-challenge --file grand-challenge.json --expected-revision REVISION --request-id record-grand-challenge-001
 exactory-research gate preparation
 exactory-lab decide --stage literature --decision "Enter ideation" --why "Current literature and synthesis support the complete objective."
 exactory-lab state set --stage ideate --status pending

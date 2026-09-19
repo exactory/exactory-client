@@ -53,10 +53,10 @@ For each iteration:
 3. Read the latest contribution analysis first. A `this_round` step becomes the
    next cycle's hypothesis; a `next_round` step waits for the round gate.
    Otherwise select the most consequential supported weakness, using the
-   reviews' `changes_for_maximum`. Revise presentation directly
-   when the evidence stands. An evidence gap returns through the supported state
-   transition to a prospective admitted cycle, actual assessment, checkpoint, and
-   renewed independent research readiness before rewriting.
+   reviews' `changes_for_maximum`. Revise presentation directly when the evidence
+   stands. An evidence gap returns through the supported state transition to a
+   prospective admitted cycle, actual assessment, checkpoint, and renewed
+   independent research readiness before rewriting.
 4. Keep claims, quantitative conditions, and evidence mappings consistent. Add
    references through the registry command, compile, check citations, and check
    applicable derivations. Resolve findings in sources or code, never by editing

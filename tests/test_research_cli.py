@@ -428,6 +428,8 @@ class ResearchPreparationTests(DevelopmentCase):
         self.json_command("roots", {"profile": "research", "roots": [work], "collection_ids": [collection]})
         self.links = [self.read_source(n) for n in range(1, 7)]
         self.foundation_searches()
+        # The challenges ahead are recorded before the objective is written against them.
+        self.json_command("grand-challenge", self.grand_challenge(self.links[0]))
         self.objective = {"kind": "objective", "id": "ordered-objective", "statement": "Establish the complete finite bound."}
         self.json_command("target", {"target": self.objective, "reason": "Fix the full objective while preparing literature."})
         self.json_command("standards", self.standards(self.links[0]))
@@ -436,7 +438,6 @@ class ResearchPreparationTests(DevelopmentCase):
         cases = [self.case(self.links[0], 0, "within_field")]
         cases.extend(self.case(link, n) for n, link in enumerate(self.links[1:], 1))
         self.json_command("innovation", self.innovation(cases))
-        self.json_command("grand-challenge", self.grand_challenge(self.links[0]))
         entered = self.cli("exactory-lab", "state", "set", "--stage", "ideate")
         self.assertEqual(entered.returncode, 0, entered.stderr)
         self.assertEqual(self.store.snapshot()["records"]["workspace"]["study"]["stage"], "ideate")

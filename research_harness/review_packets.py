@@ -11,8 +11,9 @@ those never enter a packet. A round assessor judges the research program, not
 the paper's quality, so the round packet deliberately carries history: the
 manuscript packet, every blind review and prediction of the bundle, the
 decision under review, every round's goal and assessment, the closing round's
-development blocks, the synthesis sections, the consequence searches and the
-resource accounts; author names, request identities, launcher tokens and
+development blocks, the synthesis sections, the consequence searches, the
+study's current Grand Challenge record, the bundle's contribution analysis and
+the resource accounts; author names, request identities, launcher tokens and
 revision labels still never enter it. Delivery copies exactly the artifacts a
 packet references.
 """
