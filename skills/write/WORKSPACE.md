@@ -136,8 +136,8 @@ readable after the fact.
 Blind-review hygiene: the paper text carries no revision markers (no "v2", no
 changelog, no response-to-reviewers text), and the reviewer is never shown
 `reviews/`, `learnings/`, a prior score, the study's Grand Challenge record, a
-contribution analysis, or another reviewer's `changes_for_maximum`. Those
-directories exist for the user and for the next iteration, not for the reviewer.
+contribution analysis, or another reviewer's `changes_for_maximum`. `reviews/` and
+`learnings/` exist for the user and for the next iteration, not for the reviewer.
 In a managed study, `exactory-research export --kind manuscript` delivers a
 neutral packet: the exact paper files, the current claim-to-evidence map, the
 cited evidence, the observed executions and the field standards, with no plan,

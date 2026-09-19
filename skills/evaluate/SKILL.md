@@ -161,15 +161,16 @@ core stays exactly the nine fields; the prediction never enters it.
 Use the same assessor identity for each review and its prediction on the same
 bundle. The harness matches identities after case and whitespace normalization.
 The measurement is complete when exactly three distinct prediction assessors
-each have a review. Duplicate or extra predictions make the group ambiguous.
-`round.measurement.complete` reports this condition. An incomplete or ambiguous
-group reports counts and null medians. Publication reviewers without predictions
-remain outside this measurement. If one reviewer is missing, relaunch that
-reviewer alone. Preserve the original review and prediction files.
-If extra or duplicate predictions make the group ambiguous, retain it as an
-invalid measurement. Record the group's identity and the reason in the
-measurement history. After the next substantive manuscript revision, obtain
-three fresh review/prediction pairs for that revised bundle.
+each have a review. `round.measurement.complete` reports this condition, and an
+incomplete group reports counts and null medians. Publication reviewers without
+predictions remain outside this measurement. A bundle takes three predicting
+assessors: a second prediction by one assessor and a prediction by a fourth are
+refused, so a complete measurement stays complete. Record each review before its
+prediction. If one reviewer is missing, relaunch that reviewer alone. When an
+assessor that already predicted cannot supply its review, pin the same files
+again and measure that bundle. Preserve the original review and prediction
+files. A group made ambiguous by records from before this rule stays an invalid
+measurement in the measurement history.
 
 **Before deposit, run the dual-reviewer gate.** If the `santa-method` skill is
 installed, use it; the essential protocol is stated here in full either way. Launch
@@ -228,8 +229,8 @@ and never see the study's Grand Challenge record.
    round's objective (`this_round`) or needs a new round (`next_round`), the
    current claims it builds on, and the community that gains, with evidence. A
    step follows from established results, with no gap in the argument. Each
-   analysis has its own captured responses; one used by an earlier analysis is
-   refused.
+   analysis has its own investigation: a query with a response that an earlier
+   analysis already used is refused.
 
 `exactory-research example contribution-analysis` shows the complete payload.
 The next bundle is pinned and the round is decided only after this record;

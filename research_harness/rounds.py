@@ -373,6 +373,7 @@ def record_round(store, payload, *, expected_revision, request_id):
             _next(records, context, evidence, value["next"], number, pursued[0])
         elif pursued or value["next"] is not None or any(item["disposition"] == "pursue" for item in carried):
             raise ResearchError(_ERROR, "A stop decision pursues no candidate or carried development and proposes no round")
+        # A record exists here: the analysis required above cannot be recorded without one, and records are never deleted.
         current_challenge = challenge.find_current_challenge(records)
         record = {"id": value["id"], "payload": value, "closes": number, "decision": value["decision"],
                   "grand_challenge": {"id": current_challenge["id"], "digest": current_challenge["digest"]},
@@ -658,8 +659,9 @@ def round_state(records, artifacts):
     In order: the current bundle; for an admitted round, its assessment on this bundle, what it still
     owes while it is active, and its claims continuity until its closing decision; then the bundle's
     complete measurement and its contribution analysis, the decision closing the current round, its
-    approving review and, for a continue, its admission. `analysis` reports whether the selected bundle
-    has its contribution analysis. `decision` is
+    approving review and, for a continue, its admission. While no bundle is current, an owed contribution
+    analysis follows the bundle's own obligation, because the next pin waits for it. `analysis` reports
+    whether the selected bundle has its contribution analysis. `decision` is
     set only when an approved decision closing the current round binds the current bundle; an admitted
     decision is never reported, because its admission opened the round that the gate now closes."""
     evaluation = Evaluation.of(records, artifacts)

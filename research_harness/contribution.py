@@ -39,20 +39,23 @@ def find_bundle_owing_analysis(records):
 
 
 def _check_investigation(records, evaluation, values):
-    """At least one captured query with its saved original response and what it shows; each response serves one analysis."""
+    """At least one captured query with its saved original response and what it shows; a capture serves one analysis.
+
+    A capture is a query with its response, because another query may return the same bytes, for example an empty
+    result. The harness compares them and no more: the round assessor receives the responses and judges them."""
     if not isinstance(values, list) or not values:
         raise ResearchError(_ERROR, "Investigation must be an array with at least one captured query")
     # An analysis recorded under 0.42.0 named search ids instead and holds no captured response.
-    used = {entry["response"]["sha256"] for saved in records.get("contribution_analysis", {}).values()
+    used = {(entry["query"], entry["response"]["sha256"]) for saved in records.get("contribution_analysis", {}).values()
             for entry in saved["payload"].get("investigation", ())}
     for entry in values:
         fields(entry, ("query", "response", "finding"), code=_ERROR)
         text(entry["query"], "Investigation query", code=_ERROR)
         text(entry["finding"], "Investigation finding", code=_ERROR)
         evaluation.read(entry["response"])
-        if entry["response"]["sha256"] in used:
-            raise ResearchError("contribution_investigation_reused", "An earlier analysis already used this captured response; "
-                                "capture a new one for this measurement", {"sha256": entry["response"]["sha256"]})
+        if (entry["query"], entry["response"]["sha256"]) in used:
+            raise ResearchError("contribution_investigation_reused", "An earlier analysis already used this query with this "
+                                "response; investigate again for this measurement", {"query": entry["query"]})
 
 
 def _check_position(records, value, evidence):

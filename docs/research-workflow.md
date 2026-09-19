@@ -482,14 +482,8 @@ holds without a full reading (a reference, a cohort member, a search hit) waits
 for the next round's literature stage, because reading it changes the
 preparation. A `this_round` step becomes the next cycle's hypothesis; a
 `next_round` step waits for the round gate. The next bundle and the round
-decision need the analysis.
-
-```sh
-exactory-research artifact --file investigation-capture.json --expected-revision REVISION --request-id pin-investigation-001
-exactory-research example contribution-analysis > contribution-analysis.json
-exactory-research contribution-analysis --file contribution-analysis.json --expected-revision REVISION --request-id analyze-contribution-001
-exactory-research gate round
-```
+decision need the analysis. The command block below records it after the
+predictions and before `gate round`.
 
 Decide on the exact bundle with `round`: `continue` with one pursued candidate
 and a goal the current paper does not meet, or `stop`. Either decision disposes
@@ -505,6 +499,8 @@ return to `literature`.
 ```sh
 exactory-research example manuscript-prediction > prediction.json
 exactory-research manuscript-prediction --file prediction.json --expected-revision REVISION --request-id predict-001
+exactory-research artifact --file investigation-artifact.json --expected-revision REVISION --request-id pin-investigation-001
+exactory-research example contribution-analysis > contribution-analysis.json
 exactory-research contribution-analysis --file contribution-analysis.json --expected-revision REVISION --request-id analyze-contribution-001
 exactory-research gate round
 exactory-research example round > round-decision.json

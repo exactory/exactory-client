@@ -110,7 +110,10 @@ class ContributionAnalysisTests(RoundsCase):
         reused = self.analysis_payload(second, "two")
         reused["investigation"] = copy.deepcopy(payload["investigation"])
         self.assert_error("contribution_investigation_reused", lambda: self.record(reused))
-        self.record(self.analysis_payload(second, "two"))
+        # Another query may return the same bytes, for example an empty result without an echo of the query.
+        another = self.analysis_payload(second, "two")
+        another["investigation"] = [dict(copy.deepcopy(payload["investigation"][0]), query="another frontier query")]
+        self.record(another)
 
     def test_steps_build_on_current_claims_and_name_the_grand_challenge_criteria(self):
         bundle = self.measured(self.claims("wider", superseded=("bound",)))

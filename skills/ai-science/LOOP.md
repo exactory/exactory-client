@@ -99,10 +99,10 @@ exact bundle: keep its `prediction` and `reasons` unchanged and add `id`,
 `bundle_digest`, `blind: true` and the reviewer's `assessor`. Use the same assessor
 identity for the review and prediction on that bundle. `status --summary` reports
 the paired measurement under `round.measurement`. Its `complete` field is true
-when exactly three distinct prediction assessors each have a review.
-Duplicate or extra predictions make the group ambiguous. Incomplete or ambiguous
-groups report counts and null medians. Publication-only reviewers remain outside
-this measurement. The evaluate skill states the recording procedure.
+when exactly three distinct prediction assessors each have a review. A bundle
+takes three predicting assessors, so a complete measurement stays complete. An
+incomplete group reports counts and null medians. Publication-only reviewers
+remain outside this measurement. The evaluate skill states the recording procedure.
 
 The round gate, at the end of `evaluate`:
 
