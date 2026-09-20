@@ -3199,5 +3199,38 @@
         "captured_at": "2026-09-14T02:00:00Z"
       }
     ]
+  },
+  "defer-source": {
+    "id": "defer-classic-1",
+    "profile": "research",
+    "version_id": "arxiv:2601.00002v1",
+    "reason": "The required supplement remains unavailable after the documented retrieval attempts.",
+    "authorization": {
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "size": 64,
+      "path": "research/sources/objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "media_type": "text/plain"
+    },
+    "acquisition_evidence": [
+      {
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "size": 64,
+        "path": "research/sources/objects/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "media_type": "text/plain"
+      }
+    ],
+    "dependent_claims": [
+      "Do not use the unread derivation to support the claimed bound."
+    ],
+    "continuing_work": [
+      "Develop the complete objective using independently read alternative derivations."
+    ]
+  },
+  "resume-source": {
+    "id": "resume-classic-1",
+    "profile": "research",
+    "version_id": "arxiv:2601.00002v1",
+    "deferral_id": "defer-classic-1",
+    "reason": "Resume acquisition and the ordinary reading requirements."
   }
 }

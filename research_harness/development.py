@@ -171,6 +171,10 @@ class _Evidence:
         if isinstance(value, dict) and value.get("kind") == "source":
             _fields(value, ("kind", "link"))
             linked = context.artifacts.link(value["link"])
+            if any(d["version_id"] == linked["work"]["id"] and d["status"] == "active"
+                   for d in context.foundation["source_deferrals"]):
+                raise ResearchError("source_deferred", "A deferred source cannot supply research or manuscript claim evidence",
+                                    {"version_id": linked["work"]["id"]})
             reading = validate_read_evidence(context.records, context.artifacts, value["link"], depth="fulltext")
             work = linked["work"]
             # Common source validation also checks source-backed metadata and

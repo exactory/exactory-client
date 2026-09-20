@@ -19,6 +19,7 @@ from .operations import fields
 from .provenance import runtime_provenance
 from .report_views import current_obligations, next_summary, obligations_page, order_obligations, status_summary
 from .storage import Store
+from .source_deferrals import defer_source, resume_source, assess_deferrals
 from .workspace import find_workspace, strict_json
 
 
@@ -37,6 +38,8 @@ OPERATIONS = {
     "loop-close": lineage.record_loop_closure,
     "require-fulltext": reading.require_fulltext,
     "availability": reading.record_availability,
+    "defer-source": defer_source,
+    "resume-source": resume_source,
     "select-cohort-abstract": cohort_evidence.select_cohort_abstract,
     "sample": sampling.record_sample,
     "standards": synthesis.record_standards,
@@ -231,6 +234,8 @@ def status_report(store, *, counters=False):
     obligations = current_obligations({"obligations": report["obligations"], "preparation": preparation})
     current_challenge = challenge.find_current_challenge(records) if profile == "research" else None
     return dict(report, revision=snapshot["revision"], profile=profile, runtime=runtime_provenance(),
+                source_deferrals=assess_deferrals(records, evaluation, profile),
+                deferred_obligations=literature.foundation_state(records, evaluation, profile)["deferred_obligations"],
                 study=study, preparation=preparation, resources=resources.account_report(records, profile),
                 limits=limits_report(records), **diagnostics,
                 round=round_summary(round_report) if round_report else None,

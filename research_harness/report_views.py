@@ -109,6 +109,8 @@ def status_summary(report):
                    "limits": report.get("limits"),
                    "round": report.get("round"), "evaluation": report.get("evaluation"),
                    "grand_challenge": _summarize_grand_challenge(report.get("grand_challenge"))})
+    result["source_deferrals"] = dict(Counter(item["status"] for item in report.get("source_deferrals", [])))
+    result["deferred_obligations"] = _obligations(report.get("deferred_obligations", []))
     return result
 
 

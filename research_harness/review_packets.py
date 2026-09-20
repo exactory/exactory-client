@@ -26,6 +26,7 @@ from .predictions import measurement_summary
 from .publication import latest_reviews
 from .resources import account_report
 from .rounds import admissions, assessment_for, closing_round_assessments
+from .source_deferrals import build_source_gap_disclosure
 
 
 _FORBIDDEN_KEYS = ("request_id", "token")
@@ -46,6 +47,9 @@ def readiness_packet(report):
     """The six readiness checks' evidence, without labels, history or author names at any depth."""
     inputs = dict(report["review_inputs"])
     inputs["synthesis"] = {key: value for key, value in inputs["synthesis"].items() if key != "history"}
+    foundation = dict(inputs["synthesis"]["foundation"])
+    foundation["source_deferrals"] = build_source_gap_disclosure(foundation.get("source_deferrals", []))
+    inputs["synthesis"]["foundation"] = foundation
     return scrub({"kind": "readiness", "inputs": inputs, "execution_observations": report["execution_observations"]},
                  _FORBIDDEN_KEYS + ("authors",))
 
@@ -85,9 +89,10 @@ def manuscript_packet(records, bundle):
         results[identifier] = {"execution": execution["payload"] if execution else None,
                                "observation": bundle["execution_observations"].get(identifier)}
     standards = bundle["review_inputs"]["synthesis"]["sections"].get("standards", {}).get("payload")
+    source_gaps = build_source_gap_disclosure(bundle["review_inputs"]["synthesis"]["foundation"].get("source_deferrals", []))
     return scrub({"kind": "manuscript", "bundle_digest": bundle["digest"], "files": bundle["files"],
                   "claim_evidence": bundle["claim_evidence"], "evidence": _source_closure(records, versions),
-                  "results": results, "standards": standards,
+                  "results": results, "standards": standards, "source_gaps": source_gaps,
                   "digest": digest({"bundle": bundle["digest"], "claims": bundle["claim_evidence"]})})
 
 

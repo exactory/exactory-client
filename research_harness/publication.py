@@ -240,7 +240,7 @@ def _citation_tokens(work):
 
 
 def lineage_citation_obligations(records, artifacts, bundle):
-    """Every lineage and classic entry is cited in the pinned bibliography (lineage-v1).
+    """Every lineage and nondeferred classic entry is cited in the pinned bibliography (lineage-v1).
 
     The bibliography is read for citation evidence, not validated: a manuscript may pin one
     in any encoding, and undecodable bytes become replacement characters rather than a gate
@@ -252,8 +252,12 @@ def lineage_citation_obligations(records, artifacts, bundle):
     bibliography_bytes = artifacts.read(bundle["files"]["bibliography"]["artifact"])
     bibliography = " ".join(bibliography_bytes.decode("utf-8", errors="replace").casefold().split())
     found = []
+    from .source_deferrals import assess_deferrals
+    deferred = {d["version_id"] for d in assess_deferrals(records, artifacts) if d["status"] == "active"}
     for requirement in sorted(records.get("fulltext_requirement", {}).values(), key=lambda r: r["id"]):
         if requirement["profile"] != "research" or requirement["purpose"] not in ("lineage", "classic"):
+            continue
+        if requirement["purpose"] == "classic" and requirement["version_id"] in deferred:
             continue
         work = records["work"][requirement["version_id"]]
         if not any(token in bibliography for token in _citation_tokens(work)):
