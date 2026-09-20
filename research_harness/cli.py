@@ -190,7 +190,7 @@ def acquisition_command(store, command, payload, identity):
         # durable metadata collector. It does not declare its bibliography read.
         return acquisition.acquire_work(store, **payload, **identity)
     if command == "fulltext":
-        fields(payload, ("identifier", "url"), ("max_requests", "extraction_options"))
+        fields(payload, ("identifier", "url"), ("max_requests", "extraction_options", "component"))
         return acquisition.acquire_fulltext(store, **payload, **identity)
     if command == "visual":
         fields(payload, ("link", "url"), ("max_requests",))

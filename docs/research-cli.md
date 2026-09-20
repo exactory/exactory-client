@@ -93,7 +93,7 @@ The example for each operation contains all its required keys and shows the comp
 | `collect` | `definition: {corpus, primaryCategory, windowStart, windowEnd}` | `max_requests`, `page_size`; current corpus is `arxiv`. Dates are ISO calendar dates. |
 | `resume` | `collection_id` | `max_requests`; resumes retained collection/page evidence. |
 | `acquire`, `expand` | `identifier` | `provider`, `max_requests`; expansion acquires an unresolved identifier without asserting its bibliography has been read. |
-| `fulltext` | `identifier`, `url` | `max_requests`; `extraction_options: {"layout": bool}` (default true) chooses the PDF extractor's layout mode. For scanned PDFs, `extraction_options: {"ocr": true}` uses bounded English OCR with pdfinfo, pdftoppm and Tesseract, retaining every PDF page boundary and actual tool versions. OCR has a 600-second deadline, 200-page limit, 5000-pixel maximum page dimension, and 32 MiB limits for each rendered page and total text. OCR and layout options are mutually exclusive. OCR text requires original-page visual inspection for scientific interpretation. Preserves the exact original and extraction result, and records `extraction` (extractor, version, options, text bytes, page count, longest line, whitespace fraction, expansion ratio) on the capture. A capture with other options is a distinct capture of the same original; a reading on any capture of that original satisfies its full-text coverage. |
+| `fulltext` | `identifier`, `url` | Optional `component` declares a pinned supplement relationship (see below). `max_requests`; `extraction_options: {"layout": bool}` (default true) chooses the PDF extractor's layout mode. For scanned PDFs, `extraction_options: {"ocr": true}` uses bounded English OCR with pdfinfo, pdftoppm and Tesseract, retaining every PDF page boundary and actual tool versions. OCR has a 600-second deadline, 200-page limit, 5000-pixel maximum page dimension, and 32 MiB limits for each rendered page and total text. OCR and layout options are mutually exclusive. OCR text requires original-page visual inspection for scientific interpretation. Preserves the exact original and extraction result, and records `extraction` (extractor, version, options, text bytes, page count, longest line, whitespace fraction, expansion ratio) on the capture. A capture with other options is a distinct capture of the same original; a reading on any capture of that original satisfies its full-text coverage. |
 | `import-response` | `provider`, `response_file`, `source_url`, `captured_at` | `media_type`, `mappings`; `web`/`mcp` mappings use JSON pointers into the original saved response for every work. |
 | `import-oai-cohort` | `collection_id`, `pages: [{response_file, source_url, captured_at}]` | Existing arXiv math-ph collection only. Each file is an original XML response at a checked workspace-relative path. Supply the complete ordered arXivRaw whole-set token chain; no authored works, totals, flags or HTTP receipts. |
 | `roots` | `profile`, `roots: string[]`, `collection_ids: string[]` | `target` is required for verification; optional `historical_cutoff`. Research objective identity is set by `target`, not by this scope. |
@@ -136,6 +136,142 @@ The example for each operation contains all its required keys and shows the comp
 A fulltext note uses `depth: "fulltext"`, its current `bundle_id`, and inspections for the actual required units. Abstract inspections use `unit_id: null` and cover the complete saved abstract. Notes report `present`, `absent`, or `not_applicable` as supported by the source. Saving text about a paper without matching its captured location cannot satisfy a reading.
 
 A retry deadline exposed as `next_eligible_at` is a pending condition until that deadline. Resuming earlier can make zero requests and preserve all evidence. An expired deadline is retained history, not a permanent block. Unversioned arXiv material remains unresolved until exact-version evidence is explicitly selected. PDF extraction uses installed `pdftotext` with bounded execution; unavailable extraction remains pending.
+
+## Explicit supplement components
+
+`fulltext` normally retrieves the exact main article. Its arXiv final-URL and
+version checks remain strict. An optional `component` object retrieves a
+supplement through an explicit assessed relationship to an already acquired
+main original. This first contract supports only `component_correspondence`.
+It does not establish historical arXiv attachment identity or main-article
+version equivalence.
+
+The request shape is:
+
+```json
+{
+  "identifier": "arxiv:2601.00001v1",
+  "url": "https://publisher.example/supplement.pdf",
+  "component": {
+    "kind": "supplement",
+    "unit_id": "external-supporting-information",
+    "parent_source_id": "acq:REPLACE_WITH_PARENT_SOURCE_ID",
+    "parent_original_sha256": "REPLACE_WITH_64_HEX_PARENT_SHA256",
+    "expected_original_sha256": "REPLACE_WITH_64_HEX_COMPONENT_SHA256",
+    "basis": "component_correspondence",
+    "assessment": {
+      "sha256": "REPLACE_WITH_ASSESSMENT_SHA256",
+      "path": "research/sources/objects/REPLACE_WITH_ASSESSMENT_SHA256",
+      "size": 1234,
+      "media_type": "application/json"
+    }
+  }
+}
+```
+
+Replace the example pins with actual values. `assessment` is an immutable
+`ArtifactRef` to a JSON object. Pin that JSON with `artifact` before acquisition;
+registration alone grants neither acquired provenance nor reading authority.
+The assessment requires all these fields:
+
+| Field | Contract |
+|---|---|
+| `status` | `accepted` or `pending`, an explicit research assessment. |
+| `scope` | Exactly `required_supplement_only`. |
+| `conclusion` | Nonempty source-grounded scoped conclusion. |
+| `limitations` | Nonempty array of distinct nonempty strings. |
+| `historical_attachment_identity` | Exactly `false`. |
+| `main_article_equivalence` | Exactly `false`. |
+| `evidence.requirement` | A parent `Link` locating the citation that requires the supplement. |
+| `evidence.identity` | Object with `title` and `authors` evidence pairs; optional `affiliations` pair. Locate the component cover identity. |
+| `evidence.references` | Nonempty array of evidence pairs locating corresponding figures or sections. |
+| `evidence.conditions` | Nonempty array of evidence pairs locating the compared scientific conditions. |
+
+Each evidence pair has precisely `parent`, `component`, and `judgment`:
+
+```json
+{
+  "parent": {
+    "version_id": "arxiv:2601.00001v1",
+    "source_id": "acq:REPLACE_WITH_PARENT_SOURCE_ID",
+    "artifact": "REPLACE_WITH_ACTUAL_PARENT_ARTIFACT_REF",
+    "locator": "REPLACE_WITH_ACTUAL_PARENT_LOCATOR"
+  },
+  "component": {
+    "document": "original",
+    "locator": {
+      "kind": "pdf",
+      "page_index": 0,
+      "printed_page": null,
+      "region": [0, 0, 1, 1]
+    }
+  },
+  "judgment": "The located cover and parent passages identify the same title and authors."
+}
+```
+
+The two placeholder strings in `parent` stand for structured `ArtifactRef` and
+locator objects, using the source-link contracts above. A component location is
+`{document: "original" | "text", locator}`. It resolves against the fresh HTTP
+original or its actual extraction, not a local note or an earlier failed
+capture. A text/span locator must match that extraction exactly. PDF locators
+use its acquired page map. `expected_original_sha256` must match the fresh
+response bytes. Scientific judgments remain the assessor's assertions; the
+runtime checks locations and declared scope and does not infer scientific truth
+from matching strings.
+
+The parent must be an exact version with complete acquired main original bytes.
+An existing imported article bundle for that source must already contain the
+named required supplement unit. Every cited parent location must be covered by
+an actual recorded inspection of that exact parent source. A partial parent
+reading is sufficient; the missing supplement may be why it remains partial.
+Publisher landing captures and offline comparison notes can inform the
+assessment and remain separately retained under their real provenance. They
+cannot be presented as native HTTP acquisitions by attaching them to a note.
+
+Successful acquisition retains the real final publisher URL, HTTP response and
+headers. Observed arXiv identifier and version remain null. The capture's
+`component` field records `status: "bound" | "pending"`, `parent_version_id`,
+the complete request `spec`, and its content `identity`. An unresolved or invalid
+binding retains the fetched bytes and extraction while leaving the capture
+pending. Retry with a new request ID and assessment as needed; old finalized
+request IDs replay their original outcomes.
+
+Import a new immutable bundle to fill the existing required supplement unit
+with a whole-component text link. For a PDF component, add required original
+visual units (`figure`, `table`, or `equation`) with whole-page PDF locators
+(`region: [0, 0, 1, 1]`) for every extracted page, including the cover. Retain
+all prior required units and register ordinary reading inspections for every
+required text and visual unit. Missing pages, partial text and omitted
+inspections remain incomplete. Component acquisition and an accepted assessment
+do not close reading obligations.
+
+A component cannot be a bundle main source, verification main-original target,
+or main-original coverage substitute. Every bundle component link rechecks the
+exact parent original SHA-256. The binding and assessment identity participate
+in source-link, reading and preparation dependencies; a new assessment can
+require a new reading while previous acquisitions and readings remain intact.
+Current validation rereads the pinned evidence, so missing or changed evidence
+cannot retain current acceptance.
+
+Component-specific failures use typed `ResearchError` codes, returned in the
+acquisition `pending` array after retrieval or raised at later linking boundaries:
+
+| Code | Meaning |
+|---|---|
+| `invalid_component` | Invalid fields, unsupported kind/basis, invalid scope, missing paired evidence, or changed binding identity. |
+| `component_parent_mismatch` | Wrong exact parent version/source/original, incomplete main original, or a different bundle main original. |
+| `component_hash_mismatch` | Fresh component original does not match its expected hash. |
+| `component_requirement_missing` | The existing required supplement unit is absent, or a reading has not filled it with this component. |
+| `component_evidence_uninspected` | A cited parent location lacks a recorded native inspection. |
+| `component_pending` | Unresolved assessment/binding or unavailable component extraction. |
+| `component_page_missing` | Reading obligation: an original PDF component page lacks a required whole-page visual unit. |
+
+Existing errors remain applicable: `missing_version`, `invalid_locator`,
+artifact integrity errors, HTTP/extraction failures, and `source_pending` for a
+pending capture. Main-source promotion raises `invalid_bundle` or
+`invalid_target`. Standard reading obligations still report
+`required_unit_incomplete` and `required_unit_uninspected`.
 
 ## Actual execution
 

@@ -9,7 +9,7 @@ collection_status(store, collection_id=None)
 acquire_work(store, identifier, *, request_id, expected_revision, http=None,
              provider=None, max_requests=None)
 acquire_fulltext(store, identifier, url, *, request_id, expected_revision,
-                 http=None, max_requests=None, extractor=None, extraction_options=None)
+                 http=None, max_requests=None, extractor=None, extraction_options=None, component=None)
 import_response(store, provider, response: bytes, *, source_url, captured_at,
                 request_id, expected_revision, media_type=None, mappings=None)
 
@@ -578,10 +578,11 @@ def _extraction_options(value):
 
 
 def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, http=None, max_requests=None, extractor=None,
-                     extraction_options=None):
+                     extraction_options=None, component=None):
     identifier, url = normalize_identifier(identifier), safe_url(url)
     budget = RequestBudget(max_requests)
     options = _extraction_options(extraction_options)
+    component = copy.deepcopy(component)
 
     def admission(transaction):
         if transaction.get("work", identifier) is None:
@@ -590,6 +591,8 @@ def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, h
     payload = {"identifier": identifier, "url": url, "max_requests": max_requests}
     if options:
         payload["extraction_options"] = options
+    if component is not None:
+        payload["component"] = component
     replay = _begin(store, "fulltext.acquire", payload, request_id, expected_revision, target=identifier, apply=admission)
     if replay is not None:
         return replay
@@ -600,7 +603,7 @@ def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, h
         response = http.get(url, accept=("application/pdf", "text/html", "application/xhtml+xml", "application/octet-stream"), budget=budget,
                             not_before=_next_eligible(snapshot["records"], identifier))
         attempts = response.attempts
-        if identifier.startswith("arxiv:"):
+        if component is None and identifier.startswith("arxiv:"):
             observed_identifier = normalize_identifier(response.url)
             if observed_identifier != identifier or version_of(observed_identifier) is None:
                 raise ResearchError("version_mismatch", "Full-text destination differs from the requested arXiv version")
@@ -615,6 +618,8 @@ def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, h
     sources = prepare_sources(artifacts, attempts, "fulltext", request_id, requested_identifier=identifier)
     if observed_identifier and sources:
         sources[-1].update({"exact_version": version_of(observed_identifier), "observed_identifier": observed_identifier})
+    if component is not None and sources:
+        sources[-1].update({"exact_version": None, "observed_identifier": None})
     capture = {"source_id": sources[-1]["id"] if sources else None, "version": version_of(observed_identifier) if observed_identifier else None,
                "requested_version_id": identifier,
                "url": sources[-1]["url"] if sources else url, "original": sources[-1]["response"] if sources else None,
@@ -631,6 +636,18 @@ def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, h
                                      if extracted and extracted["text"] is not None else
                                      {"text_bytes": None, "page_count": None, "max_line_length": None,
                                       "whitespace_fraction": None, "expansion_ratio": None}))}
+
+    if component is not None:
+        from .components import validate_spec
+        capture["component"] = {"status": "pending", "parent_version_id": identifier,
+                                "spec": component, "identity": digest([identifier, component])}
+        if not pending:
+            try:
+                validate_spec(snapshot["records"], artifacts, identifier, capture, component)
+                capture["component"]["status"] = "bound"
+            except ResearchError as error:
+                pending.append({"code": error.code})
+                capture["availability"] = "pending"
 
     def commit(transaction):
         put_sources(transaction, sources)

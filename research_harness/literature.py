@@ -37,6 +37,7 @@ from urllib.parse import parse_qsl, urlsplit
 from .artifacts import ArtifactStore, _Workspace
 from .cohort_evidence import cohort_report
 from .errors import ResearchError
+from .components import binding_identity, is_component, validate_binding
 from .evaluation import Evaluation
 from .evidence import digest
 from .graph import citation_graph, obligation, selected_bundle, validate_target
@@ -87,6 +88,8 @@ def import_bundle(store, payload, *, expected_revision, request_id):
         capture = fulltext_capture(work, source["id"])
         if value["scope"] not in ("article", "passage") or value["completeness"] not in ("complete", "partial"):
             raise ResearchError("invalid_bundle", "Declare article/passage scope and complete/partial bundle inventory")
+        if is_component(capture):
+            raise ResearchError("invalid_bundle", "A supplement component cannot be an article main source")
         if value["scope"] == "article" and (capture is None or capture["availability"] != "available"
                 or source["capture_method"] != "http" or source["origin_verified"] is not True):
             raise ResearchError("invalid_bundle", "Article bundles require acquired original full text; tool responses remain passages")
@@ -106,6 +109,8 @@ def import_bundle(store, payload, *, expected_revision, request_id):
                 safe_url(unit.get("url"))
                 continue
             context = validate_link(records, artifacts, unit["link"])
+            validate_binding(records, artifacts, value["version_id"], context["capture"],
+                             main_sha256=capture["original"]["sha256"] if capture else source["response"]["sha256"])
             if context["work"]["id"] != value["version_id"]:
                 raise ResearchError("source_mismatch", "A bundle cannot borrow another article or version's units")
             if unit["kind"] in ("figure", "table", "equation") and unit["link"]["locator"]["kind"] not in ("pdf", "html"):
@@ -122,7 +127,10 @@ def import_bundle(store, payload, *, expected_revision, request_id):
         if not isinstance(inventory["links"], list) or not inventory["links"]:
             raise ResearchError("invalid_bundle", "Anchor the article-boundary and required-material inventory in saved sources")
         for link in inventory["links"]:
-            if validate_link(records, artifacts, link)["work"]["id"] != value["version_id"]:
+            context = validate_link(records, artifacts, link)
+            validate_binding(records, artifacts, value["version_id"], context["capture"],
+                             main_sha256=capture["original"]["sha256"] if capture else source["response"]["sha256"])
+            if context["work"]["id"] != value["version_id"]:
                 raise ResearchError("source_mismatch", "The inventory must describe this exact version")
         bibliography = value["bibliography"]
         fields(bibliography, ("complete", "unit_id", "entries"), code="invalid_bibliography")
@@ -289,7 +297,8 @@ def _search_evidence_digest(evaluation, scope, found, cited=()):
         content["abstracts"] = sorted({digest([a["artifact"]["sha256"], a["completeness"]]) for a in work.get("abstracts", [])})
         content["date_assertions"] = sorted({digest(a["values"]) for a in work.get("date_assertions", [])})
         content["fulltexts"] = sorted({digest([c["original"]["sha256"] if c["original"] else None,
-            c["text"]["sha256"] if c["text"] else None, c["availability"], c["includes_abstract"]]) for c in work.get("fulltexts", [])})
+            c["text"]["sha256"] if c["text"] else None, c["availability"], c["includes_abstract"]] + ([binding_identity(c)] if is_component(c) else []))
+            for c in work.get("fulltexts", [])})
         content["references"] = sorted({digest([r["target"], r["kind"], r["raw"]]) for r in graph["references"] if r["version_id"] == version})
         content["aliases"] = {k: sorted({a["work_id"] for a in record["assertions"]}) for k, record in records.get("alias", {}).items()
                               if k in work.get("aliases", []) or any(a["work_id"] == work.get("work_id") for a in record["assertions"])}

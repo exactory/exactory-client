@@ -158,6 +158,8 @@ def validate_link(records, artifacts, link):
         raise ResearchError("source_mismatch", "A response passage must stay within this work's actual mapped fields or record")
     if capture is not None and capture["availability"] != "available":
         raise ResearchError("source_pending", "An incomplete full-text capture cannot establish a reading")
+    from .components import validate_binding
+    validate_binding(records, artifacts, work["id"], capture)
     value = read_locator(artifacts, link["artifact"], link["locator"], capture=capture)
     visual = None
     if link["locator"]["kind"] == "html":
@@ -224,8 +226,13 @@ def link_identity(link, records):
         locator = {"kind": "html", "anchor": _span_identity(locator["anchor"]),
                    "assets": sorted(({"url": a["url"], "sha256": a["artifact"]["sha256"]} for a in locator.get("assets", [])),
                                     key=lambda a: a["url"])}
-    return {"version_id": link["version_id"], "original_sha256": original_identity(records, link),
-            "sha256": link["artifact"]["sha256"], "locator": locator}
+    identity = {"version_id": link["version_id"], "original_sha256": original_identity(records, link),
+                "sha256": link["artifact"]["sha256"], "locator": locator}
+    from .components import binding_identity, is_component
+    capture = fulltext_capture(exact_work(records, link["version_id"]), link["source_id"])
+    if is_component(capture):
+        identity["component"] = binding_identity(capture)
+    return identity
 
 
 def contains(outer, inner, records):

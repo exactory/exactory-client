@@ -17,6 +17,7 @@ of its unambiguous family without claiming their contents are interchangeable.
 """
 
 from .errors import ResearchError
+from .components import is_component
 from .identities import family_versions, normalize_identifier
 from .operations import fields, iso_date, prepared_mutation, profile_name, strings
 from .source_links import exact_work, fulltext_capture
@@ -36,7 +37,7 @@ def validate_target(records, target, roots):
             raise ResearchError("invalid_target", "An incomplete source pin must leave both source_id and sha256 null")
         return
     capture = fulltext_capture(work, target["source_id"])
-    if (capture is None or capture["original"] is None or capture["original"]["sha256"] != target["sha256"]
+    if (capture is None or is_component(capture) or capture["original"] is None or capture["original"]["sha256"] != target["sha256"]
             or capture["availability"] != "available"):
         raise ResearchError("invalid_target", "The pin must identify the exact work's available original main document")
 
@@ -96,7 +97,7 @@ def main_captures(records, work, target=None):
                    for u in b["units"] if u["kind"] == "supplement" and u["link"] is not None and u["link"]["source_id"] != b["source_id"]}
     captures = {}
     for capture in work["fulltexts"]:
-        if capture["availability"] != "available" or capture["source_id"] in supplements:
+        if is_component(capture) or capture["availability"] != "available" or capture["source_id"] in supplements:
             continue
         if target and target.get("id") == work["id"] and capture["original"]["sha256"] != target.get("sha256"):
             continue
