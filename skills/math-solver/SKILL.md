@@ -9,9 +9,11 @@ harness_entries: [consolidate-the-proof, declare-the-stall-and-inventory-what-st
 Read the [research constitution](../../RESEARCH_CONSTITUTION.md) and the
 [managed research workflow](../../docs/research-workflow.md). Before a fresh
 proposal, complete current common preparation for the full original objective:
-cohort and source network, actual required readings, five search purposes, field
-standards, and applicable research synthesis. Export the actual foundation for
-independent review of the schema-3 native proposal, using
+cohort and source network, actual required readings, five search purposes, the
+Grand Challenge record (the ultimate goal the objective serves and nearer large
+goals, with criteria and evidence read in full; `grand_challenge_missing` until
+it exists), field standards, and applicable research synthesis. Export the actual
+foundation for independent review of the schema-3 native proposal, using
 [the native preparation contract](../../docs/research-cli.md#native-math-preparation).
 The common foundation does not replace this attack's novelty study, strategy
 studies, proof rules, finite task admission, or resource accounts.

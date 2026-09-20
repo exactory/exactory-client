@@ -63,6 +63,11 @@ def admissions(records):
     return sorted(records.get("round_admission", {}).values(), key=lambda a: a["number"])
 
 
+def approved_decision_ids(records):
+    """The round decisions an independent review approved; only those bind a later goal."""
+    return {review["round_id"] for review in records.get("round_review", {}).values() if review["verdict"] == "approved"}
+
+
 def latest_admission(records):
     items = admissions(records)
     return items[-1] if items else None
@@ -265,11 +270,16 @@ def _reopening(records, value, evidence):
 
 
 def _distinct(records, goal, reopened_round_id):
-    """The goal repeats no rejected candidate, and repeats an earlier round's goal only by reopening that round."""
+    """The goal repeats no candidate an approved decision rejected, and repeats an earlier round's goal only by reopening that round.
+
+    A decision the review did not approve binds nothing: the reviewer may have objected to the rejection itself."""
     statement = _normalized(goal["statement"])
+    approved = approved_decision_ids(records)
     for decision in records.get("round_decision", {}).values():
+        if decision["id"] not in approved:
+            continue
         if any(_normalized(c["statement"]) == statement for c in decision["payload"]["candidates"] if c["disposition"] == "rejected"):
-            raise ResearchError("round_goal_repeated", "A goal cannot repeat a rejected candidate")
+            raise ResearchError("round_goal_repeated", "A goal cannot repeat a candidate an approved decision rejected")
     repeated = [a["id"] for a in admissions(records) if _normalized(a["goal"]["statement"]) == statement]
     if repeated and reopened_round_id not in repeated:
         raise ResearchError("round_goal_repeated", "A goal that repeats an earlier round's goal reopens that round with changed evidence",
@@ -638,7 +648,7 @@ def _decision_obligations(records, bundle, number):
     stands beside every pending step but an approved stop (spec sections 6 and 10)."""
     reviews = records.get("round_review", {}).values()
     candidates = [d for d in records.get("round_decision", {}).values() if d["bundle_digest"] == bundle["digest"] and d["closes"] == number]
-    approved = next((d for d in candidates if any(r["round_id"] == d["id"] and r["verdict"] == "approved" for r in reviews)), None)
+    approved = next((d for d in candidates if d["id"] in approved_decision_ids(records)), None)
     exhausted = _development_exhausted(records)
     if approved is not None:
         if approved["decision"] == "stop":

@@ -90,3 +90,26 @@ under `lineage-v1`, that a full reading of a source the study does not hold leav
 | Affected files after the investigation change (frozen copy) | literature, lineage, batches, rounds, review_packets, round_integrity, publication, draft, development | Ran 23, 8, 7, 63, 51, 12, 22, 81, 65 tests OK |
 | Full suite on `fa32917` (frozen copy) | `python3 -m unittest discover -s tests` | Ran 1197 tests in 2974.618s OK (skipped=1) |
 | `fa32917` | `python3 codex/generate.py --check` | exit 0 |
+
+## 0.42.2: what the review left open
+
+The user allowed changes outside the seven approved skill files and left the open items of the 0.42.1 review to
+the author's judgment. Each behaviour change was reproduced with a failing test on a frozen copy of `bd8e0f4`
+before the implementation changed.
+
+| Finding | RED | GREEN |
+| --- | --- | --- |
+| `next` named `objective_missing` beside the roots, before `grand_challenge_missing`, although the objective is written against the record and cannot be replaced once set (`objective_locked`) | `['objective_missing', 'roots_missing', 'fulltext_reading_missing', 'search_purpose_missing', 'grand_challenge_missing', 'standards_missing'] != ['roots_missing', 'fulltext_reading_missing', 'search_purpose_missing', 'grand_challenge_missing', 'objective_missing', 'standards_missing']`; the 0.38 order test failed the same way | `objective_missing` and `objective_mismatch` follow `grand_challenge_missing`; `test_research_report_views.py` Ran 14 tests OK |
+| A goal could not repeat a candidate that a decision the review did not approve rejected; the only way past the rule was to reword the goal | `ResearchError: A goal cannot repeat a rejected candidate` (frozen copy: Ran 2 tests, errors=1); the approved case was refused before and after | only decisions with an approving review bind (`approved_decision_ids`); the decision, review, admission and gate classes of `test_research_rounds.py` Ran 42 tests OK |
+
+Skill and document edits without a production change: `STUDY.md`, `cohort/SKILL.md` and `math-solver/SKILL.md`
+name the Grand Challenge record, and the CLI reference and LOOP.md state both rules. The manifests, README and
+version tests move to 0.42.2.
+
+| Suite | Command | Result |
+| --- | --- | --- |
+| Report views on `4fac55e` | `python3 -m unittest tests.test_research_report_views` | Ran 14 tests OK |
+| Rounds (decision, review, admission, gate) on `4fac55e` | `python3 -m unittest discover -s tests -p test_research_rounds.py -k RoundDecisionTests -k RoundReviewTests -k RoundAdmissionTests -k RoundGateTests` | Ran 42 tests in 520.979s OK |
+| Guidance, manifest and Codex on `6941f35` | `python3 -m unittest discover -s tests -p FILE` for each | Ran 5, 7 and 29 tests OK |
+| `6941f35` | `python3 codex/generate.py --check` | exit 0 |
+| Full suite on `c1a7779` (frozen copy) | `python3 -m unittest discover -s tests` | Ran 1198 tests in 2981.052s OK (skipped=1) |

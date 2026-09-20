@@ -163,14 +163,15 @@ class ReportViewTests(unittest.TestCase):
         self.assertTrue(hint["details_required"])
         self.assertNotIn("paths", hint)
 
-    def test_the_grand_challenge_record_is_named_after_the_searches_and_before_the_synthesis(self):
-        # The record needs a source read in full, so it never hides the roots, the readings or the searches.
-        ordered = order_obligations([{"code": "standards_missing"}, {"code": "grand_challenge_missing"},
-                                     {"code": "search_purpose_missing"}, {"code": "fulltext_reading_missing"},
-                                     {"code": "roots_missing"}])
+    def test_the_grand_challenge_record_is_named_after_the_searches_and_before_the_objective(self):
+        # The record needs a source read in full, so it never hides the roots, the readings or the searches. The
+        # objective is written against the record and cannot be replaced once set, so the record comes first.
+        ordered = order_obligations([{"code": "standards_missing"}, {"code": "objective_missing"},
+                                     {"code": "grand_challenge_missing"}, {"code": "search_purpose_missing"},
+                                     {"code": "fulltext_reading_missing"}, {"code": "roots_missing"}])
         self.assertEqual([item["code"] for item in ordered],
                          ["roots_missing", "fulltext_reading_missing", "search_purpose_missing", "grand_challenge_missing",
-                          "standards_missing"])
+                          "objective_missing", "standards_missing"])
 
     def test_obligations_page_is_bound_to_the_revision(self):
         report = report_fixture()
@@ -203,8 +204,9 @@ class ReportViewTests(unittest.TestCase):
                  {"code": "abstract_reading_missing", "version_id": "a"}, {"code": "collection_pending"},
                  {"code": "objective_missing"}, {"code": "never_seen_code"}]
         ordered = order_obligations(items)
-        self.assertEqual([o["code"] for o in ordered][:3], ["collection_pending", "objective_missing", "abstract_reading_missing"])
-        self.assertEqual(ordered[2]["version_id"], "a")
+        self.assertEqual([o["code"] for o in ordered][:4],
+                         ["collection_pending", "abstract_reading_missing", "abstract_reading_missing", "objective_missing"])
+        self.assertEqual(ordered[1]["version_id"], "a")
         self.assertEqual(ordered[-1]["code"], "never_seen_code")
 
 

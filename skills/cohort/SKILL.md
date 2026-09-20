@@ -80,16 +80,19 @@ unread. A screen is never a reading; a strong audit judgment reopens the screen.
 Maintain `cohort/doctrine.md` with source-linked formal and implicit conventions,
 authorities and what they established, and open problems with advance criteria.
 For each criterion, identify the papers whose limitations, claims, or unresolved
-questions support it. Scope expectations to the field, article type, and venue
-when chosen. Record uncertain applicability instead of imposing universal page,
-citation, or presentation quotas. Abstract observations are provisional where a
+questions support it. The open problems and their advance criteria are the first
+input to the study's Grand Challenge record, which the literature stage records
+from sources read in full. Scope expectations to the field, article type, and
+venue when chosen. Record uncertain applicability instead of imposing universal
+page, citation, or presentation quotas. Abstract observations are provisional where a
 claim needs the full source; complete those readings in literature preparation.
 
 When `exactory-research gate cohort` passes, record the decision and enter
 `exactory-lab state set --stage literature --status pending`. Continue with the
 [literature-review skill](../literature-review/SKILL.md): choose exact roots,
-expand the three-tier source network, complete the five search purposes, and
-ground the complete objective and synthesis before ideation. Doctrine remains
+expand the three-tier source network, complete the five search purposes, record
+the challenges ahead of the study with `grand-challenge`, and ground the complete
+objective and synthesis against them before ideation. Doctrine remains
 available throughout the study and is refreshed when new evidence changes it.
 
 On a resumed collection, preserve its original definition and page history.
