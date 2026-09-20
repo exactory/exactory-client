@@ -119,13 +119,22 @@ class RoundDecisionTests(RoundsCase):
         second = self.decision_payload(bundle, closes=2, statement="Extend the finite bound to every integer in [0, 7].")
         self.assert_error("round_assessment_missing", lambda: self.mutate(rounds.record_round, second))
 
-    def test_a_rejected_candidate_cannot_become_a_goal(self):
+    def test_a_rejected_candidate_of_an_approved_decision_cannot_become_a_goal(self):
+        bundle = self.pin()
+        first = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
+        self.mutate(rounds.record_round_review, self.review_payload(first))
+        self.write_round(first, "round-2", successful=True, bundle_digest=bundle["digest"])
+        repeated = self.decision_payload(bundle, closes=2, direction="horizontal", statement="Transfer the bound to real inputs.")
+        self.assert_error("round_goal_repeated", lambda: self.mutate(rounds.record_round, repeated))
+
+    def test_a_rejected_candidate_of_a_decision_that_was_not_approved_may_become_the_goal(self):
+        # A decision the review did not approve binds nothing: the reviewer may have objected to the rejection itself.
         bundle = self.pin()
         first = self.mutate(rounds.record_round, self.decision_payload(bundle))["result"]
         self.mutate(rounds.record_round_review, self.review_payload(first, verdict="not_approved", assessor="first-assessor"))
-        repeated = self.decision_payload(bundle, statement="Transfer the bound to real inputs.")
-        repeated["candidates"][0]["direction"] = repeated["next"]["goal"]["direction"] = "horizontal"
-        self.assert_error("round_goal_repeated", lambda: self.mutate(rounds.record_round, repeated))
+        repeated = self.decision_payload(bundle, direction="horizontal", statement="Transfer the bound to real inputs.")
+        recorded = self.mutate(rounds.record_round, repeated)["result"]
+        self.assertEqual(recorded["payload"]["next"]["goal"]["statement"], "Transfer the bound to real inputs.")
 
     def test_a_deferred_candidate_may_become_a_later_goal(self):
         bundle = self.pin()
