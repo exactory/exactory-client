@@ -356,8 +356,8 @@ its capture imported, the import changes the record of every held work the captu
 that makes the measured bundle stale. `manuscript` refuses to pin the next bundle while the
 selected bundle has a complete measurement and no analysis (`contribution_analysis_missing`),
 and `round` reads the analysis of the bundle it decides on. A step that is not pursued is
-`deferred` unless the evidence rejects it: a `rejected` candidate can never become a goal, and
-a step's statement is fixed by the analysis of its bundle.
+`deferred` unless the evidence rejects it: a candidate that an approved decision rejected never
+becomes a goal, and a step's statement is fixed by the analysis of its bundle.
 
 `round` closes the current round on the exact bundle (`round_bundle_mismatch`
 otherwise) and decides: `continue` with one pursued candidate and `next`, or `stop`.
@@ -375,8 +375,9 @@ malformed objective or lineage, which includes a changed objective with
 `objective_lineage: null`). Containment is the author's recorded assertion, judged
 by the round reviewer; the harness does not check it.
 
-The goal states the pursued candidate. Its statement never repeats an earlier
-`rejected` candidate (`round_goal_repeated`), even with a reopening. It repeats an
+The goal states the pursued candidate. Its statement never repeats a candidate
+that an approved decision rejected (`round_goal_repeated`), even with a reopening;
+a decision the review did not approve binds nothing. It repeats an
 earlier round's goal only when `next.reopening: {round_id, reason, evidence}` names
 that round (`round_goal_repeated` otherwise). The named round must have been
 assessed unsuccessful (`invalid_round` otherwise), and the reopening carries
@@ -566,7 +567,7 @@ Complete retained run/journal reconciliation before an amendment. Recovery, paus
 
 ## Status, projections, and recovery
 
-`status` and `next` expose the current revision, study, preparation, actionable obligations, pending admissions, remote intents/observations, retained adoptions, the `round` (number, active, assessed, decision, whether the selected bundle has its contribution analysis, the count of round gate obligations, progress counts, the measurement's medians and spreads, the admitted round's limits, the `development` budget line and the usage since admission), and the `runtime` that produced the report (plugin version, source commit, dirty flag, package digest, constitution digest). `status` also carries `grand_challenge`, the payload of the current Grand Challenge record; `status --summary` reduces it to the record id, the number of `ultimate` and `near_term` challenges, the first six criterion ids and a count of the rest, each id cut at 32 characters. `next` is the highest-priority current obligation in preparation order (configuration, collection, cohort abstracts, objective and roots, critical full text, bundles and units, searches, Tier 3 abstracts, the Grand Challenge record, synthesis); at the cohort stage it is the next unread cohort abstract. At the `evaluate` stage the status obligations also carry the publication gate's and the round gate's obligations, publication first, so the study finishes the manuscript measurement before the round decision.
+`status` and `next` expose the current revision, study, preparation, actionable obligations, pending admissions, remote intents/observations, retained adoptions, the `round` (number, active, assessed, decision, whether the selected bundle has its contribution analysis, the count of round gate obligations, progress counts, the measurement's medians and spreads, the admitted round's limits, the `development` budget line and the usage since admission), and the `runtime` that produced the report (plugin version, source commit, dirty flag, package digest, constitution digest). `status` also carries `grand_challenge`, the payload of the current Grand Challenge record; `status --summary` reduces it to the record id, the number of `ultimate` and `near_term` challenges, the first six criterion ids and a count of the rest, each id cut at 32 characters. `next` is the highest-priority current obligation in preparation order (configuration, collection, cohort abstracts, roots, critical full text, bundles and units, searches, Tier 3 abstracts, the Grand Challenge record, the objective, synthesis); at the cohort stage it is the next unread cohort abstract. At the `evaluate` stage the status obligations also carry the publication gate's and the round gate's obligations, publication first, so the study finishes the manuscript measurement before the round decision.
 
 `status` also carries `limits`, the counts of the recorded policy against its own bounds: `{policy, loop, sample, innovation_candidates, search_readings, core_papers}`. Under `lineage-v1`, `loop` is `{readings, limit, covered}`, the registered loop readings, the 100-reading limit and the purposes already covered, and `innovation_candidates` is `{families, required}`. Under `sampled-v1`, `sample` is `{n, placed, unplaced, percentile, band, widen_required}` once a sample is drawn and null before that, `search_readings` is `{readings, limit}` against 20, and `core_papers` is `{requirements, limit}` against 10. A field that the recorded policy does not bound stays null. The verifier reads the percentile and the band it files from `limits.sample`.
 

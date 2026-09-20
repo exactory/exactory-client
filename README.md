@@ -35,15 +35,17 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
-Version 0.42.1 corrects [0.42.0](docs/releases/0.42.0.md), which directs every
+Version 0.42.2 completes [0.42.0](docs/releases/0.42.0.md), which directs every
 research study at the challenges ahead of it. A study records those challenges
-before ideation: the ultimate goal of its field and nearer large goals, each with
-criteria. This Grand Challenge record belongs to the study and is separate from a
-Grand Challenge posted on exactory. Every blind review names what each score
-below 4 needs to reach 4. After each measurement the author investigates briefly
-and records a contribution analysis; the next manuscript bundle waits for it, and
-the round decision reads it. In 0.42.1 the investigation is kept as captured
-responses, so the measured bundle stays current.
+before the objective: the ultimate goal of its field and nearer large goals, each
+with criteria. This Grand Challenge record belongs to the study and is separate
+from a Grand Challenge posted on exactory. Every blind review names what each
+score below 4 needs to reach 4. After each measurement the author investigates
+briefly and records a contribution analysis; the next manuscript bundle waits for
+it, and the round decision reads it. [0.42.1](docs/releases/0.42.1.md) keeps the
+investigation as captured responses, so the measured bundle stays current, and
+[0.42.2](docs/releases/0.42.2.md) names the record before the objective in
+`next` and lets only an approved round decision bind a later goal.
 
 Version [0.41.0](docs/releases/0.41.0.md) prepares a study from bounded reading:
 `lineage-v1`, the research default, follows the line of results the paper

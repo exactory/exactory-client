@@ -32,10 +32,11 @@ research preparation pending. Every path is relative to the workspace root.
 └── learnings/iter_NNN.md   predictions, observations and next questions
 ```
 
-SQLite records configuration, source collections, versions, readings, synthesis,
-cycles, admissions, execution observations, assessments, checkpoints, reviews,
-round decisions, round reviews, round admissions, round assessments, cohort
-predictions, and remote intents. Read `exactory-research status --summary` and
+SQLite records configuration, source collections, versions, readings, the Grand
+Challenge record, synthesis, cycles, admissions, execution observations,
+assessments, checkpoints, reviews, contribution analyses, round decisions, round
+reviews, round admissions, round assessments, cohort predictions, and remote
+intents. Read `exactory-research status --summary` and
 `next --summary` for current obligations; `status` reports `round` with the
 current round number, whether it is active or assessed, its decision, the number
 of its open round obligations, counts of its derived progress, the bundle's

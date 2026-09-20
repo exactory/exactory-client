@@ -119,8 +119,8 @@ The round gate, at the end of `evaluate`:
    candidate has a direction (`vertical` or `horizontal`), a disposition and
    evidence; a source cited as evidence needs a full reading of that source.
    Dispose of a step you do not pursue as `deferred` unless the evidence rejects
-   it: a `rejected` candidate can never become a goal, and the analysis fixes
-   the step's statement for this bundle.
+   it: a candidate that an approved decision rejected never becomes a goal, and
+   the analysis fixes the step's statement for this bundle.
 3. Choose with `round`. `continue` pursues exactly one candidate and states the
    goal: the direction, the contribution delta, the beneficiaries, the success
    criteria, the stop conditions, the criteria of the current Grand Challenge
@@ -132,12 +132,13 @@ The round gate, at the end of `evaluate`:
    `kind` is `alternative` (named by its exact `question` text) or `branch`
    (named by its `cycle_id`) and `disposition` is `pursue`, `rejected` or
    `deferred`. A missing one is refused with `carried_development_missing`. A goal
-   never repeats an earlier rejected candidate (`round_goal_repeated`), even with
-   a `reopening`. It repeats an earlier round's goal only with a `reopening` that
-   names that round (`round_goal_repeated` otherwise). The named round must have
-   been assessed unsuccessful (`invalid_round` otherwise), and the reopening
-   carries evidence the earlier decision did not (`round_reopening_unchanged`
-   otherwise).
+   never repeats a candidate that an approved decision rejected
+   (`round_goal_repeated`), even with a `reopening`; a decision the review did
+   not approve binds nothing. It repeats an earlier round's goal only with a
+   `reopening` that names that round (`round_goal_repeated` otherwise). The named
+   round must have been assessed unsuccessful (`invalid_round` otherwise), and the
+   reopening carries evidence the earlier decision did not
+   (`round_reopening_unchanged` otherwise).
 4. Deliver `export --kind round` to a fresh subagent that is not a cycle author.
    It returns the review JSON with one judgment per check; record it with
    `round-review`. The questions and the returned fields are in the evaluate
