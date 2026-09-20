@@ -79,6 +79,47 @@ def bibliography_digest(bundle, records):
 bundle_digest = unit_digest
 
 
+def covers_embedded_supplement(evaluation, bundle, context):
+    """Require complete main-original text coverage for an embedded SI unit.
+
+    A section or PDF-page locator need not cover the whole document itself.
+    Its original must be the bundle's main original, and required text units
+    must collectively cover that original's complete extraction. Standalone
+    supplements retain their separate whole-document completeness boundary.
+    """
+    capture = context["capture"]
+    if (capture is None or capture.get("original", {}).get("sha256") != bundle["original_sha256"]
+            or capture.get("text") is None):
+        return False
+
+    def compute():
+        extractions = {}
+        for unit in bundle["units"]:
+            link = unit["link"]
+            if (not unit["required"] or unit["kind"] != "text" or link is None
+                    or link["locator"]["kind"] not in TEXT_KINDS):
+                continue
+            linked = evaluation.link(link)
+            if (complete_original(linked)
+                    and linked["capture"]["original"]["sha256"] == bundle["original_sha256"]
+                    and link["artifact"] == linked["capture"]["text"]):
+                group = extractions.setdefault(link["artifact"]["sha256"], {"artifact": link["artifact"], "spans": []})
+                group["spans"].append((link["locator"]["start"], link["locator"]["end"]))
+        for group in extractions.values():
+            content, end = evaluation.text(group["artifact"]), 0
+            for start, stop in sorted(group["spans"]):
+                if content[end:start].strip():
+                    break
+                end = max(end, stop)
+            else:
+                if not content[end:].strip():
+                    return True
+        return False
+
+    return evaluation.once(("embedded_supplement_coverage", bundle["id"],
+                            bundle["original_sha256"]), compute)
+
+
 def required_unit_obligations(records, artifacts, bundle):
     """Shared completeness boundary, actionable before any reading is written."""
     evaluation = Evaluation.of(records, artifacts)
@@ -95,7 +136,9 @@ def required_unit_obligations(records, artifacts, bundle):
         if context["visual"] is not None:
             pending.extend(obligation(p["code"], "Acquire, link and inspect the complete static visual bytes.",
                 **dict(affected, **{k: v for k, v in p.items() if k != "code"})) for p in context["visual"]["pending"])
-        if not complete_original(context) or (unit["kind"] == "supplement" and not covers_text(evaluation, unit["link"])):
+        if not complete_original(context) or (unit["kind"] == "supplement"
+                and not covers_text(evaluation, unit["link"])
+                and not covers_embedded_supplement(evaluation, bundle, context)):
             pending.append(obligation("required_unit_incomplete", "Acquire the complete original required unit; a scoped passage remains partial.",
                                       paths=[unit["link"]["artifact"]["path"]], **affected))
     return pending

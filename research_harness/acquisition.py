@@ -570,8 +570,10 @@ def acquire_work(store, identifier, *, request_id, expected_revision, http=None,
 def _extraction_options(value):
     if value is None:
         return {}
-    if not isinstance(value, dict) or not set(value) <= {"layout"} or any(type(v) is not bool for v in value.values()):
-        raise ResearchError("invalid_input", "Extraction options accept only a boolean layout flag")
+    if not isinstance(value, dict) or not set(value) <= {"layout", "ocr"} or any(type(v) is not bool for v in value.values()):
+        raise ResearchError("invalid_input", "Extraction options accept boolean layout and ocr flags")
+    if value.get("ocr") and "layout" in value:
+        raise ResearchError("invalid_input", "The layout flag applies to pdftotext; OCR uses its recorded page segmentation mode")
     return dict(value)
 
 
@@ -603,7 +605,7 @@ def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, h
             if observed_identifier != identifier or version_of(observed_identifier) is None:
                 raise ResearchError("version_mismatch", "Full-text destination differs from the requested arXiv version")
         extracted = extract(response.body, response_media_type(response.headers), extractor=extractor,
-                            layout=options.get("layout", True))
+                            layout=options.get("layout", True), ocr=options.get("ocr", False))
         if extracted["status"] != "extracted":
             pending.append({"code": extracted["status"]})
     except HttpFailure as error:
