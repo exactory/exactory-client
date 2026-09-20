@@ -239,6 +239,14 @@ def contains(outer, inner, records):
     if (outer["version_id"] != inner["version_id"] or outer["artifact"]["sha256"] != inner["artifact"]["sha256"]
             or original_identity(records, outer) != original_identity(records, inner)):
         return False
+    # Identical component bytes can have different assessed parent bindings.
+    # A location inspected under one relationship cannot cover another one.
+    from .components import binding_identity
+    work = exact_work(records, outer["version_id"])
+    outer_capture = fulltext_capture(work, outer["source_id"])
+    inner_capture = fulltext_capture(work, inner["source_id"])
+    if binding_identity(outer_capture) != binding_identity(inner_capture):
+        return False
     a, b = outer["locator"], inner["locator"]
     if a["kind"] in TEXT_KINDS and b["kind"] in TEXT_KINDS:
         return a["start"] <= b["start"] < b["end"] <= a["end"]

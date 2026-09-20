@@ -288,3 +288,64 @@ class ComponentTests(LiteratureCase):
         self.assertFalse(coverage['complete'])
         self.assertEqual({c['original_sha256'] for c in coverage['missing']}, {self.main['original']['sha256']})
         self.assertNotIn(capture['original']['sha256'], {c['original_sha256'] for c in coverage['missing']})
+
+    def test_inspections_cannot_cross_component_parent_original_bindings(self):
+        first = self.acquire()['capture']
+        self.main = self.capture(self.identifier, body='Different main original. References: none.')
+        new_parent_bundle = self.bundle(self.identifier, self.main, bundle_id='second-parent')
+        new_parent_bundle['units'].append(copy.deepcopy(self.initial['units'][-1]))
+        self.initial = new_parent_bundle
+        self.mutate(import_bundle, new_parent_bundle)
+        self.mutate(record_reading, self.full_note(new_parent_bundle, 'second-parent-inspected'))
+        self.component['parent_source_id'] = self.main['source_id']
+        self.component['parent_original_sha256'] = self.main['original']['sha256']
+        parent = self.link(self.identifier, self.main['source_id'], self.main['text'])
+        self.assessment['evidence']['requirement'] = parent
+        for pair in [*self.assessment['evidence']['identity'].values(), *self.assessment['evidence']['references'],
+                     *self.assessment['evidence']['conditions']]:
+            pair['parent'] = parent
+        second = self.acquire()['capture']
+        self.assertEqual(first['original'], second['original'])
+        self.assertNotEqual(first['component']['spec']['parent_original_sha256'],
+                            second['component']['spec']['parent_original_sha256'])
+        bundle = self.filled_bundle(second)
+        self.mutate(import_bundle, bundle)
+        note = self.full_note(bundle, 'incompatible-parent-inspections')
+        for inspection in note['inspections']:
+            if inspection['link']['source_id'] == second['source_id']:
+                inspection['link']['source_id'] = first['source_id']
+                validate_link(self.store.snapshot()['records'], self.artifacts, inspection['link'])
+        self.assert_error('outside_reading_unit', lambda: self.mutate(record_reading, note))
+        self.assertEqual(self.mutate(record_reading, self.full_note(bundle, 'matching-parent-inspections'))['result']['status'],
+                         'complete')
+
+    def test_inspections_cannot_cross_component_assessment_bindings(self):
+        first = self.acquire()['capture']
+        assessment = copy.deepcopy(self.assessment)
+        assessment['limitations'].append('The scientific assessment now records another limitation.')
+        second = self.acquire(assessment=assessment)['capture']
+        self.assertEqual(first['original'], second['original'])
+        self.assertNotEqual(first['component']['spec']['assessment'], second['component']['spec']['assessment'])
+        bundle = self.filled_bundle(second)
+        self.mutate(import_bundle, bundle)
+        note = self.full_note(bundle, 'incompatible-assessment-inspections')
+        for inspection in note['inspections']:
+            if inspection['link']['source_id'] == second['source_id']:
+                inspection['link']['source_id'] = first['source_id']
+                validate_link(self.store.snapshot()['records'], self.artifacts, inspection['link'])
+        self.assert_error('outside_reading_unit', lambda: self.mutate(record_reading, note))
+        self.assertEqual(self.mutate(record_reading, self.full_note(bundle, 'matching-assessment-inspections'))['result']['status'],
+                         'complete')
+
+    def test_same_component_binding_allows_identical_capture_inspection_reuse(self):
+        first = self.acquire()['capture']
+        second = self.acquire()['capture']
+        self.assertNotEqual(first['source_id'], second['source_id'])
+        self.assertEqual(first['component'], second['component'])
+        bundle = self.filled_bundle(second)
+        self.mutate(import_bundle, bundle)
+        note = self.full_note(bundle, 'same-binding-inspections')
+        for inspection in note['inspections']:
+            if inspection['link']['source_id'] == second['source_id']:
+                inspection['link']['source_id'] = first['source_id']
+        self.assertEqual(self.mutate(record_reading, note)['result']['status'], 'complete')
