@@ -112,3 +112,4 @@ version tests move to 0.42.2.
 | Rounds (decision, review, admission, gate) on `4fac55e` | `python3 -m unittest discover -s tests -p test_research_rounds.py -k RoundDecisionTests -k RoundReviewTests -k RoundAdmissionTests -k RoundGateTests` | Ran 42 tests in 520.979s OK |
 | Guidance, manifest and Codex on `6941f35` | `python3 -m unittest discover -s tests -p FILE` for each | Ran 5, 7 and 29 tests OK |
 | `6941f35` | `python3 codex/generate.py --check` | exit 0 |
+| Full suite on `c1a7779` (frozen copy) | `python3 -m unittest discover -s tests` | Ran 1198 tests in 2981.052s OK (skipped=1) |
