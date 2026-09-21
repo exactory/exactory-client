@@ -204,6 +204,10 @@ class ScientificDelivery:
         for deferred in records.get("source_deferral", {}).values():
             self.private.update(_references(deferred["authorization"]))
             acquisition_evidence.extend(deferred["acquisition_evidence"])
+        for ref in acquisition_evidence:
+            # Descriptor extensions are internal acquisition context, including
+            # nested references. Only the top-level original can qualify below.
+            self.private.update(_references({key: value for key, value in ref.items() if key not in _REF_KEYS}))
         protected = set(self.private)
         for saved in records.get("publication_scope", {}).values():
             payload = saved["payload"]

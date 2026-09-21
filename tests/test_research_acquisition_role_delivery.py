@@ -102,3 +102,32 @@ class AcquisitionRoleDeliveryTests(LiteratureCase):
         with self.assertRaises(ResearchError) as raised:
             self.deliver(records, capture["original"])
         self.assertEqual(raised.exception.code, "private_mixed_artifact_required")
+
+    def test_nested_acquisition_descriptor_stays_private_despite_projection(self):
+        _, capture, records, _ = self.setup_case()
+        note = self.artifacts.put(b"PRIVATE NESTED ACQUISITION NOTE", "text/plain")
+        records["source_deferral"]["gap"]["acquisition_evidence"][0]["nested"] = {"note": note}
+        quote = self.artifacts.read(note).decode()
+        contract = {"payload": {"scientific_delivery": [{"original_sha256": note["sha256"],
+            "disposition": "project", "projection": {"kind": "text_spans",
+                "context": "A nested acquisition note must remain private.",
+                "locators": [{"kind": "text", "start": 0, "end": len(quote), "quote": quote}]}}]}}
+        with self.assertRaises(ResearchError) as raised:
+            project_delivery(records, self.artifacts, contract, {"result": note})
+        self.assertEqual(raised.exception.code, "private_mixed_artifact_required")
+
+    def test_nested_private_role_dominates_an_independent_public_alias(self):
+        _, capture, records, _ = self.setup_case()
+        other = self.capture(self.metadata(2))
+        current = self.store.snapshot()["records"]
+        current["source_deferral"] = records["source_deferral"]
+        current["source_deferral"]["gap"]["acquisition_evidence"][0]["nested"] = other["original"]
+        current["source_deferral"]["gap"]["acquisition_evidence"].append(other["original"])
+        for reverse in (False, True):
+            attempt = copy.deepcopy(current)
+            if reverse:
+                attempt["source_deferral"]["gap"]["acquisition_evidence"].reverse()
+            with self.subTest(reverse=reverse):
+                with self.assertRaises(ResearchError) as raised:
+                    self.deliver(attempt, other["original"])
+                self.assertEqual(raised.exception.code, "private_mixed_artifact_required")
