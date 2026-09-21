@@ -17,6 +17,7 @@ Printed pagination is a retained assertion. Neither valid coordinates nor a
 quoted passage prove comprehension or scientific truth.
 """
 
+import copy
 import hashlib
 import math
 
@@ -69,6 +70,16 @@ def fulltext_capture(work, source_id):
     return next((c for c in work.get("fulltexts", []) if c["source_id"] == source_id), None)
 
 
+def _json_value(artifacts, artifact, data, pointer):
+    from .evaluation import Evaluation
+    if isinstance(artifacts, Evaluation):
+        identity = tuple(artifact[key] for key in ("path", "sha256", "size", "media_type"))
+        parsed = artifacts.once(("source_json", identity), lambda: _json(data, require_object=False))
+        # A caller may mutate its selected value, never the shared checked parse.
+        return copy.deepcopy(_pointer(parsed, pointer))
+    return _pointer(_json(data, require_object=False), pointer)
+
+
 def read_locator(artifacts, artifact, locator, *, capture=None):
     data = artifacts.read(artifact)
     if not isinstance(locator, dict):
@@ -102,7 +113,7 @@ def read_locator(artifacts, artifact, locator, *, capture=None):
             return span
         fields(locator, ("kind", "pointer", "value"), code="invalid_locator")
         try:
-            value = _pointer(_json(data, require_object=False), locator["pointer"])
+            value = _json_value(artifacts, artifact, data, locator["pointer"])
         except ResearchError as error:
             raise ResearchError("invalid_locator", "The JSON locator does not identify a saved response value") from error
         if _canonical(value) != _canonical(locator["value"], "invalid_locator"):
