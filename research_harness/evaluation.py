@@ -6,12 +6,17 @@ once per key. Nothing here outlives the process or the snapshot it was built
 for, and nothing here grants readiness: the same checks run, once.
 """
 
+from .artifacts import validate_reference
 from .evidence import digest
 from .source_links import validate_link
 
 
 class Evaluation:
     def __init__(self, records, artifacts):
+        # A new evaluation owns fresh caches even when its caller supplies an
+        # older evaluation as the artifact interface. Only of() may reuse one.
+        while isinstance(artifacts, Evaluation):
+            artifacts = artifacts.store
         self.records, self.store, self.root = records, artifacts, artifacts.root
         self._bytes, self._text, self._memo = {}, {}, {}
         self.counters = {"reads": 0, "artifacts_verified": 0, "bytes_verified": 0, "computed": 0,
@@ -26,14 +31,8 @@ class Evaluation:
 
     def read(self, reference):
         self.counters["reads"] += 1
-        if not isinstance(reference, dict):
-            return self.store.read(reference)
-        key = (reference.get("sha256"), reference.get("size"), reference.get("path"), reference.get("media_type"))
-        try:
-            hash(key)
-        except TypeError:
-            # A list or an object in a field is a malformed reference; the store names what is wrong with it.
-            return self.store.read(reference)
+        validate_reference(reference)
+        key = (reference["sha256"], reference["size"], reference["path"], reference["media_type"])
         if key not in self._bytes:
             data = self.store.read(reference)
             self.counters["artifacts_verified"] += 1
@@ -42,9 +41,10 @@ class Evaluation:
         return self._bytes[key]
 
     def text(self, reference):
+        data = self.read(reference)
         key = reference["sha256"]
         if key not in self._text:
-            self._text[key] = self.read(reference).decode("utf-8")
+            self._text[key] = data.decode("utf-8")
         return self._text[key]
 
     def put(self, data, media_type):
