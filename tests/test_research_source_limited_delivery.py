@@ -241,15 +241,9 @@ class SourceLimitedDeliveryTests(SourceLimitedCase):
     def test_round_preserves_current_manuscript_review_cores(self):
         from integration_fixtures import approve_publication_stop
         from research_harness.review_delivery import deliver_round
-        payload = self.prepare_delivery(accept=False)
-        query = "bounded sequence frontier stop-paper-1"
-        response = json.dumps({"query": query, "results": []}).encode()
-        payload["scientific_delivery"].append({"original_sha256": describe_artifact(response, "application/json")["sha256"],
-            "disposition": "project", "projection": {"kind": "json_locators", "context": "The fixture contribution investigation.",
-                "locators": [{"kind": "json", "pointer": "/query", "value": query}, {"kind": "json", "pointer": "/results", "value": []}]}})
-        payload["id"] = "scope-for-round"
-        self.record_scope(payload)
-        self.accept_scope()
+        # The investigation happens after readiness, pinning and measurement.
+        # Its bytes cannot be declared prospectively in the scientific scope.
+        self.prepare_delivery()
         bundle = self.scoped_manuscript()
         approve_publication_stop(self, bundle)
         directory = self.root / "round-review"
@@ -258,6 +252,11 @@ class SourceLimitedDeliveryTests(SourceLimitedCase):
         self.assertEqual(len(packet["reviews"]), 3)
         self.assertTrue(all(review["core"]["decision"] == "accept" for review in packet["reviews"]))
         self.assertNotIn(b"PRIVATE", self.bytes_in(directory))
+        response = packet["contribution_analysis"]["investigation"][0]["response"]
+        self.assertEqual((directory / response["path"]).read_bytes(), self.artifacts.read(response))
+        blind = self.root / "blind-after-investigation"
+        deliver_manuscript(self.store, blind)
+        self.assertFalse((blind / response["path"]).exists())
 
     def test_correction_scientific_evidence_remains_deliverable_before_and_after_review(self):
         from test_research_publication_scope import PublicationScopeTests

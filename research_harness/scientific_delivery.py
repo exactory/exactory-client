@@ -179,6 +179,7 @@ def _scientific_record(value):
 
 class ScientificDelivery:
     def __init__(self, records, artifacts, contract, manifest, *, manuscript_files=(), corrective=False):
+        from .review_packets import find_round_investigation_responses
         self.records, self.artifacts = records, artifacts
         declarations = contract["payload"].get("scientific_delivery", [])
         validate_declarations(declarations)
@@ -188,6 +189,7 @@ class ScientificDelivery:
         self.required, self.private, self.generated = {}, {}, {}
         self.output_bytes, self.output_hashes, self.numerical_elements = 0, set(), 0
         self.exact_files = {ref["sha256"] for ref in manuscript_files}
+        self.round_responses = {digest(ref) for ref in find_round_investigation_responses(records, manifest)}
         self.public, self.validated_public = {}, set()
         def register(ref, source_id, work=None, capture=None):
             if ref is not None:
@@ -428,10 +430,11 @@ class ScientificDelivery:
 
     def reference(self, ref):
         identifier = ref["sha256"]
+        descriptor_digest = digest(ref)
         if identifier in self.private:
             raise ResearchError(_PRIVATE, "A required scientific reference has an internal private role", {"sha256": identifier})
-        if identifier in self.mapped:
-            return self.mapped[identifier]
+        if descriptor_digest in self.mapped:
+            return self.mapped[descriptor_digest]
         if identifier in self.visiting:
             raise ResearchError(_CODE, "Scientific artifact references must not form a recursive byte closure")
         self.visiting.add(identifier)
@@ -440,20 +443,37 @@ class ScientificDelivery:
             if identifier in self.generated:
                 mapped = self._emit({"derivative": True, "original_sha256": identifier,
                                      "projection_kind": "service_record", "value": self.generated[identifier]})
-            elif not data:
+            elif not data and descriptor_digest not in self.round_responses:
                 mapped = self._emit({"derivative": True, "original_sha256": identifier,
                                      "projection_kind": "empty_observation", "value": ""})
-            elif identifier in self.public or identifier in self.exact_files:
+            elif identifier in self.public or identifier in self.exact_files or descriptor_digest in self.round_responses:
                 # Exact manuscript/source bytes retain their identity. JSON or
                 # archives cannot smuggle nested internal references through it.
                 self._check_bytes(data)
                 if identifier in self.public:
                     self._public_reference(ref)
-                is_json, structured = scientific_json(data, ref["media_type"])
+                if descriptor_digest in self.round_responses:
+                    # Program captures keep their exact identity without becoming
+                    # public sources. Descriptor extensions retain all checks.
+                    extensions = {key: value for key, value in ref.items() if key not in _REF_KEYS}
+                    self._public_nested(extensions)
+                    self.walk(extensions)
+                    try:
+                        decoded = data.decode(json.detect_encoding(data))
+                    except UnicodeError as error:
+                        raise ResearchError(_PRIVATE, "A round query capture needs inspectable text; binary content needs a typed projection") from error
+                    self._check_bytes(decoded.encode())
+                empty_capture = not data and descriptor_digest in self.round_responses
+                is_json, structured = (False, None) if empty_capture else scientific_json(
+                    data, ref["media_type"], encoded_string=descriptor_digest in self.round_responses)
                 if is_json:
                     self._public_nested(structured)
                     self.walk(structured)
-                if zipfile.is_zipfile(io.BytesIO(data)) or ref["media_type"] in ("application/x-tar", "application/zip"):
+                mime = ref["media_type"].split(";", 1)[0].strip().lower()
+                compressed = data.startswith((b"\x1f\x8b", b"BZh", b"\xfd7zXZ\x00"))
+                if not empty_capture and (zipfile.is_zipfile(io.BytesIO(data)) or compressed or tarfile.is_tarfile(io.BytesIO(data))
+                        or mime in ("application/x-tar", "application/zip", "application/gzip",
+                                    "application/x-bzip2", "application/x-xz")):
                     raise ResearchError(_PRIVATE, "Authored archives require an explicit typed member projection")
                 mapped = ref
                 self._count_output(ref, data)
@@ -462,7 +482,7 @@ class ScientificDelivery:
                 if declaration is None or declaration["disposition"] != "project":
                     raise ResearchError(_PRIVATE, "A required authored artifact needs a checked typed scientific projection", {"sha256": identifier})
                 mapped, _ = self._project(ref, declaration["projection"])
-            self.mapped[identifier] = mapped
+            self.mapped[descriptor_digest] = mapped
             return mapped
         finally:
             self.visiting.remove(identifier)

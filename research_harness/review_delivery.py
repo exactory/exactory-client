@@ -13,7 +13,7 @@ from .execution_evidence import author_readiness_state
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .publication import _bundle, publication_state
-from .review_packets import manuscript_packet, readiness_packet, round_packet
+from .review_packets import manuscript_packet, readiness_packet, round_packet, find_round_investigation_responses
 from .scientific_json import scientific_json
 from .scientific_delivery import encode_delivery
 from .workspace import strict_json, write_projection
@@ -34,7 +34,7 @@ def references(value):
     return [found[key] for key in sorted(found)]
 
 
-def _deliver(store, destination, manifest, *, derived=None, transitive=False):
+def _deliver(store, destination, manifest, *, derived=None, transitive=False, empty_captures=()):
     destination = Path(destination).absolute()
     if destination.exists() or destination.is_symlink():
         raise ResearchError("review_destination_exists", "Deliver into a new independent directory")
@@ -48,7 +48,7 @@ def _deliver(store, destination, manifest, *, derived=None, transitive=False):
         seen.add(ref["path"])
         data = derived[ref["path"]] if ref["path"] in derived else artifacts.read(ref)
         values.append((ref, data))
-        if transitive:
+        if transitive and (data or ref not in empty_captures):
             is_json, structured = scientific_json(data, ref["media_type"])
             if is_json:
                 pending.extend(references(structured))
@@ -138,7 +138,8 @@ def deliver_round(store, destination):
     if bundle.get("publication_scope") is not None:
         from .scientific_delivery import project_delivery
         from .publication_scope import find_publication_scope
+        captures = find_round_investigation_responses(records, packet)
         packet, derived = project_delivery(records, ArtifactStore(store.root), find_publication_scope(records), packet,
             manuscript_files=[bundle["files"][kind]["artifact"] for kind in ("pdf", "abstract", "bibliography", "claims")])
-        return _deliver(store, destination, packet, derived=derived, transitive=True)
+        return _deliver(store, destination, packet, derived=derived, transitive=True, empty_captures=captures)
     return _deliver(store, destination, packet)

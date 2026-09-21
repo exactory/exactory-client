@@ -139,3 +139,21 @@ def round_packet(records, bundle, decision):
                 "resources": account_report(records, "research"),
                 "digest": digest({"bundle": bundle["digest"], "decision": decision["digest"]})}
     return scrub(manifest, _FORBIDDEN_KEYS + ("authors", "author"))
+
+
+def find_round_investigation_responses(records, manifest):
+    """Bind post-measurement captures to this nonblind program assessment only.
+
+    A captured query is not a source import or a scientific reading. Its original
+    bytes let the round assessor judge the author's investigation independently.
+    They are created after the scientific scope and manuscript have been pinned.
+    """
+    if manifest.get("kind") != "round":
+        return []
+    analysis = find_analysis(records, manifest.get("manuscript", {}).get("bundle_digest"))
+    if analysis is None:
+        return []
+    payload = scrub(analysis["payload"], _FORBIDDEN_KEYS + ("authors", "author"))
+    if manifest.get("contribution_analysis") != payload:
+        return []
+    return [entry["response"] for entry in payload.get("investigation", [])]

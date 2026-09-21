@@ -9,6 +9,7 @@ from unittest import mock
 from research_harness import scientific_delivery
 from research_harness.artifacts import ArtifactStore, describe_artifact
 from research_harness.errors import ResearchError
+from research_harness.evidence import digest
 
 
 class DerivedMappingMemoTests(unittest.TestCase):
@@ -93,7 +94,7 @@ class DerivedMappingMemoTests(unittest.TestCase):
             projector.walk(self.create_evidence())
             ref = describe_artifact(data, "application/json")
             projector.derived[ref["path"]] = data
-            projector.mapped[self.ref["sha256"]] = ref
+            projector.mapped[digest(self.ref)] = ref
             with self.subTest(data=data), self.assertRaises(ResearchError) as error:
                 projector.walk(self.create_evidence())
             self.assertEqual(error.exception.code, code)
