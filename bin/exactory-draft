@@ -75,13 +75,12 @@ _LITERATURE_HEADER = (
 # command itself did, which holds for every deposit.
 _WRITTEN_BY_EXACTORY_DISCLOSURE_TEMPLATE = (
     "This preprint was written by exactory.ai (https://www.exactory.ai), an AI"
-    " research system. The human author, {author}, reviewed the full content"
-    " and is responsible for it."
+    " research system. The human author, {author}, is responsible for its content."
 )
 _DEPOSITED_THROUGH_EXACTORY_DISCLOSURE_TEMPLATE = (
     "This preprint was prepared with AI assistance and deposited through"
     " exactory.ai (https://www.exactory.ai). The human author, {author},"
-    " reviewed the full content and is responsible for it."
+    " is responsible for its content."
 )
 
 # One keyword, sent only with the disclosure that names exactory.ai as the

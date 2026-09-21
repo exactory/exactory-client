@@ -293,13 +293,13 @@ def _write_passing_citation_report(workspace_dir: Path) -> None:
 # "Shiroshita, Ryosuke" first, so that is the author each sentence carries.
 _WRITTEN_BY_EXACTORY_SENTENCE = (
     "This preprint was written by exactory.ai (https://www.exactory.ai), an AI"
-    " research system. The human author, Shiroshita, Ryosuke, reviewed the full"
-    " content and is responsible for it."
+    " research system. The human author, Shiroshita, Ryosuke, is responsible"
+    " for its content."
 )
 _DEPOSITED_THROUGH_EXACTORY_SENTENCE = (
     "This preprint was prepared with AI assistance and deposited through"
     " exactory.ai (https://www.exactory.ai). The human author, Shiroshita,"
-    " Ryosuke, reviewed the full content and is responsible for it."
+    " Ryosuke, is responsible for its content."
 )
 
 # The keyword the record carries with the first disclosure, spelled out here
@@ -492,7 +492,13 @@ class TestDeposit(_DepositTestCase):
     def _read_sent_metadata(self) -> dict:
         metadata_request = _read_request(self.fake_api.requests, "PUT",
                                          "/deposit/depositions/4242")
-        return json.loads(metadata_request.data.decode())["metadata"]
+        metadata = json.loads(metadata_request.data.decode())["metadata"]
+        intents = Store(self.workspace_dir).snapshot()["records"]["remote_intent"]
+        self.assertEqual(len(intents), 1)
+        intent = next(iter(intents.values()))
+        self.assertEqual(metadata["description"], intent["binding"]["metadata"]["description"])
+        self.assertNotIn("reviewed the full content", metadata["description"])
+        return metadata
 
     def test_deposit_targets_the_sandbox_by_default(self) -> None:
         self._deposit(["--creator", "Shiroshita, Ryosuke"])
@@ -536,7 +542,7 @@ class TestDeposit(_DepositTestCase):
             description.find("second paragraph"),
             description.find(_DEPOSITED_THROUGH_EXACTORY_SENTENCE),
         )
-        self.assertTrue(description.endswith("responsible for it.</p>"))
+        self.assertTrue(description.endswith("responsible for its content.</p>"))
 
     def test_an_abstract_with_crlf_line_endings_describes_the_record_as_the_pinned_bytes_do(self) -> None:
         """A Windows abstract reaches Zenodo with the description the pinned
@@ -583,7 +589,7 @@ class TestDeposit(_DepositTestCase):
             description.find("second paragraph"),
             description.find(_WRITTEN_BY_EXACTORY_SENTENCE),
         )
-        self.assertTrue(description.endswith("responsible for it.</p>"))
+        self.assertTrue(description.endswith("responsible for its content.</p>"))
 
     def test_the_record_the_hook_writes_is_the_record_this_command_reads(self) -> None:
         """Run the real hook on a paper source, then deposit. The hook and this
