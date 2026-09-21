@@ -147,8 +147,10 @@ class _Context:
             try:
                 report = _assess(self, record["payload"], historical=True)
                 if report["dependencies"] != record["dependencies"]:
-                    report["obligations"].append(obligation("development_dependencies_stale",
-                        "Reassess the result against current policy, literature, sources and executions.", assessment_id=identifier))
+                    stale = obligation("development_dependencies_stale",
+                        "Reassess the result against current policy, literature, sources and executions.", assessment_id=identifier)
+                    report["obligations"].append(stale)
+                    report["prerequisites"]["validity"].append(stale)
                     report["validated_result"] = False
                     report["complete"] = False
                 report["obligations"] = _unique(report["obligations"])
@@ -930,18 +932,19 @@ def _assess(context, value, *, historical=False):
     inherited = _inheritance(context, evidence, effective_plan, stale)
     if stale:
         valid_obligations.extend(stale)
-    obligations = list(valid_obligations) + list(context.synthesis["obligations"])
+    workflow = list(context.synthesis["obligations"])
+    objective_progress = []
     remaining = list(dict.fromkeys(value["scope"]["remaining_obligations"] + value["remaining_obligations"]))
     # A refuted hypothesis can produce a valid negative result. Result
     # validity comes from the separate evidence-linked checks, not whether
     # the expected scientific hypothesis survived its distinguishing test.
     unresolved_outcomes = [o["outcome_id"] for o in outcomes if o["status"] == "unresolved"]
     if unresolved_outcomes:
-        obligations.append(obligation("expected_outcome_unresolved", "Resolve the explicitly uncertain planned outcomes before completing this candidate.",
+        workflow.append(obligation("expected_outcome_unresolved", "Resolve the explicitly uncertain planned outcomes before completing this candidate.",
                                       outcomes=unresolved_outcomes))
     unresolved = [f for f in failed if f["status"] == "unresolved"]
     if unresolved:
-        obligations.append(obligation("failure_signal_unresolved", "Resolve the uncertainty about the planned failure conditions.",
+        workflow.append(obligation("failure_signal_unresolved", "Resolve the uncertainty about the planned failure conditions.",
                                       signals=[f["signal_id"] for f in unresolved]))
     for execution in executions:
         origin = execution["payload"]["origin"]
@@ -949,37 +952,39 @@ def _assess(context, value, *, historical=False):
             admission = context.records["execution_admission"][origin["admission_id"]]
             units = execution["payload"]["usage"]["units"]
             if units is not None and units > admission["reserved_units"]:
-                obligations.append(obligation("resource_limit_exceeded", "Retain the result and the actual overrun without satisfying the admitted resource contract.",
+                workflow.append(obligation("resource_limit_exceeded", "Retain the result and the actual overrun without satisfying the admitted resource contract.",
                                               admission_id=admission["id"], reserved_units=admission["reserved_units"], used_units=units))
                 remaining.append("Resolve the exceeded resource contract for run " + admission["id"] + ".")
     # A full scope of an ancestor objective is a special case of the widened current one.
     if value["scope"]["kind"] != "full" or plan["payload"]["scope"]["kind"] != "full" or plan["payload"]["objective"] != context.objective:
-        obligations.append(obligation("objective_scope_incomplete", "A special case contributes to the fixed complete objective but cannot close it."))
+        objective_progress.append(obligation("objective_scope_incomplete", "A special case contributes to the fixed complete objective but cannot close it."))
         remaining = list(dict.fromkeys(remaining + plan["payload"]["scope"]["remaining_obligations"]))
         if not remaining:
             remaining.append(context.objective["statement"])
     if value["objective_status"] != "achieved" or value["disposition"] != "complete":
-        obligations.append(obligation("objective_incomplete", "Retain the complete objective until all of its obligations are established."))
+        objective_progress.append(obligation("objective_incomplete", "Retain the complete objective until all of its obligations are established."))
         if not remaining:
             remaining.append(context.objective["statement"])
     if remaining:
-        obligations.append(obligation("remaining_obligations", "Complete the retained objective obligations.", remaining=remaining))
+        objective_progress.append(obligation("remaining_obligations", "Complete the retained objective obligations.", remaining=remaining))
     if not any(x["origin"]["kind"] == "managed" for x in own_results):
-        obligations.append(obligation("prospective_execution_missing", "Imported evidence can motivate development but is not a new prospective test."))
+        workflow.append(obligation("prospective_execution_missing", "Imported evidence can motivate development but is not a new prospective test."))
     for admission in context.records.get("execution_admission", {}).values():
         if admission["cycle_id"] == cycle["id"] and admission["id"] not in context.records.get("execution_outcome", {}):
-            obligations.append(obligation("execution_pending", "Reconcile the admitted run's actual outcome.", admission_id=admission["id"]))
-    obligations.extend(_development(context, evidence, value["development"], value["scope"], cycle["id"]))
+            workflow.append(obligation("execution_pending", "Reconcile the admitted run's actual outcome.", admission_id=admission["id"]))
+    workflow.extend(_development(context, evidence, value["development"], value["scope"], cycle["id"]))
     dependencies = dict(context.dependencies(), plan=plan["digest"], executions=digest(executions),
                         cycle_executions=digest(cycle["execution_ids"]), inheritance=inherited, evidence=digest(evidence.summary()))
     if "inheritance_refresh" in value:
         dependencies["inheritance_refresh"] = digest(value["inheritance_refresh"])
     if stale:
         dependencies["stale_ancestor"] = _unique(stale)
-    obligations = _unique(obligations)
+    prerequisites = {"validity": _unique(valid_obligations), "workflow": _unique(workflow),
+                     "objective_progress": _unique(objective_progress)}
+    obligations = _unique(valid_obligations + workflow + objective_progress)
     report = {"id": value["id"], "payload": value, "validated_result": not valid_obligations,
             "complete": not obligations, "obligations": obligations, "remaining_obligations": remaining,
-            "evidence": evidence.summary(), "dependencies": dependencies,
+            "evidence": evidence.summary(), "dependencies": dependencies, "prerequisites": prerequisites,
             "digest": digest({"payload": value, "dependencies": dependencies}), "mechanical_only": True}
     if stale:
         report["stale_ancestor"] = dependencies["stale_ancestor"]
@@ -1057,6 +1062,9 @@ def _branch_inputs(context):
             "executions": executions, "assessment": context.assessment(cycle["assessment_id"]) if cycle["assessment_id"] is not None else None,
             "admissions": {i: a for i, a in context.records.get("execution_admission", {}).items() if a["cycle_id"] == identifier},
             "checkpoints": {i: c for i, c in context.records.get("checkpoint", {}).items() if c["cycle_id"] == identifier}}
+        if branches[identifier]["assessment"] is not None:
+            branches[identifier]["assessment"] = {k: v for k, v in branches[identifier]["assessment"].items()
+                                                  if k != "prerequisites"}
     return branches
 
 
@@ -1104,22 +1112,22 @@ def _candidate(context):
         return None, [obligation("development_assessment_missing", "Assess actual results before selecting a readiness candidate.")]
     assessment = context.assessment(checkpoint["assessment_id"])
     context.branches = _branch_inputs(context)
-    obligations = list(assessment["obligations"])
+    workflow = []
     cycle = context.records["cycle"][checkpoint["cycle_id"]]
     if cycle["assessment_id"] != checkpoint["assessment_id"] or checkpoint["assessment_digest"] != assessment["digest"]:
-        obligations.append(obligation("candidate_checkpoint_stale", "Checkpoint the currently assessed candidate and its exact evidence."))
+        workflow.append(obligation("candidate_checkpoint_stale", "Checkpoint the currently assessed candidate and its exact evidence."))
     branches = assessment["payload"]["development"]["branches"] if assessment["payload"]["development"] else []
     branch_ids = {b["cycle_id"] for b in branches}
     for identifier in context.records.get("cycle", {}):
         if identifier not in branch_ids:
-            obligations.append(obligation("branch_disposition_missing", "Assess the disposition of each retained branch for this candidate.", cycle_id=identifier))
+            workflow.append(obligation("branch_disposition_missing", "Assess the disposition of each retained branch for this candidate.", cycle_id=identifier))
     for branch in branches:
         assessed_branch = context.branches[branch["cycle_id"]]["assessment"]
         if branch["disposition"] == "resolved" and (assessed_branch is None or not assessed_branch["validated_result"]):
-            obligations.append(obligation("branch_resolution_unverified", "A declared resolved branch needs its actual currently validated result.", cycle_id=branch["cycle_id"]))
+            workflow.append(obligation("branch_resolution_unverified", "A declared resolved branch needs its actual currently validated result.", cycle_id=branch["cycle_id"]))
     for admission in context.records.get("execution_admission", {}).values():
         if admission["id"] not in context.records.get("execution_outcome", {}):
-            obligations.append(obligation("execution_pending", "Reconcile every admitted run before independent readiness review.", admission_id=admission["id"]))
+            workflow.append(obligation("execution_pending", "Reconcile every admitted run before independent readiness review.", admission_id=admission["id"]))
     all_evidence = {digest(e["reference"]): e for e in assessment["evidence"]}
     for branch in context.branches.values():
         all_evidence.update({digest(e["reference"]): e for e in branch["plan_evidence"]})
@@ -1138,7 +1146,9 @@ def _candidate(context):
                  "source_records_digest": digest(context.sources),
                  "authors": cycle_authors(context.records)}
     candidate["digest"] = digest(candidate)
-    return candidate, _unique(obligations)
+    context.prerequisites = dict(assessment["prerequisites"],
+                                workflow=_unique(assessment["prerequisites"]["workflow"] + workflow))
+    return candidate, _unique(assessment["obligations"] + workflow)
 
 
 def _review(context, value, candidate):

@@ -1,5 +1,29 @@
 # Research CLI
 
+## Explicit source-limited manuscripts
+
+`publication-scope` records and selects an immutable `source-limited-v1` contract. `select-publication-scope` selects an existing contract ID or `null`. Both use normal expected-revision and request-ID semantics. `scoped-review` records a separately targeted independent review. Use `example OPERATION` for the payload shapes. The complete objective and old readiness reviews remain unchanged.
+
+`gate readiness` still checks the complete objective. `gate manuscript-readiness` checks a selected supported manuscript, every ordinary evidence/development prerequisite, exact active deferral coverage, and an independent scoped acceptance. It reports manuscript readiness separately from the open complete objective. An adverse review permanently blocks its scientific target. Renaming IDs or selecting a later acceptance cannot remove that finding. A different scientific target needs a service-derived correction response covering every adverse predecessor, exact scientific changes, and a fresh independent corrective review. Scientific preparers and prior scope preparers cannot independently review the study.
+
+The manuscript claim registry must match every accepted claim ID, statement, polarity, assumption, evidence mapping and public limitation. Each claim uses `claim` for its statement plus `polarity`, `assumptions`, `limitation_ids`, and the associated exact `public_limitations`. Manuscript reviews, three paired measurements, contribution analysis and the independent round stop retain their ordinary requirements.
+
+Selected source-limited publication commands always retain these flags on retries:
+
+```sh
+exactory-draft deposit --managed-only --scope-contract-id CONTRACT --scope-target-digest TARGET --production --publish --confirm-publish --pdf draft/paper.pdf --abstract-file draft/abstract.txt --creator AUTHOR
+exactory submit --doi RECORD_DOI --managed-only --scope-contract-id CONTRACT --scope-target-digest TARGET
+```
+
+The paired scope arguments require `--managed-only`. Native state failures, stale scopes, declined reviews, changed manuscripts and round refusals stop before remote writes. Never retry a refused scoped command without its strict flags. Existing ordinary commands without flags retain their established direct fallback. Scope identities are retained in managed intents and historical receipts. Later source recovery invalidates current eligibility without erasing historical publication.
+
+An optional immutable `scientific_delivery` array declares `{original_sha256, disposition, projection}`. Author artifacts require `disposition: project` with checked JSON locators, text spans or archive members; a `public` label cannot authorize raw authored bytes or override internal roles. Exact public source originals retain their provenance. Exact manuscript PDF, abstract, bibliography and claim registry are delivered as pinned; the authored `sources` archive always requires explicit checked member projection. Every required evidence locator must retain its exact value in a derivative, with scalar original hashes and locator mapping. Missing scientific context requires refusal or independent rejection, never silent omission. Initial scoped review receives the same mechanically bounded projections before acceptance. Blind manuscript packets exclude private instructions, preparer records, correction responses and earlier readiness verdicts. Identified corrective review receives the required finding response; round review retains its ordinary current manuscript reviews and scientific context.
+
+Projection kinds are `json_locators` with native `locators`, `text_spans` with native text/span `locators`, `archive_members` with `{path, sha256, media_type, projection}` members, and `npy_array` for a complete primitive NPY array. Each includes a nonempty scientific `context`. Numerical derivatives preserve dtype, shape, C/Fortran element strides, every storage-order value and exact per-element storage hex. Integers use exact decimal strings, and nonfinite real/complex components use typed tags. Fixed-width Unicode retains interior NULs and exact UCS-4 padding bytes. Object/pickle, structured and native-endian dtypes are refused. Generic archives allow 1,000 members; complete declared NPY populations allow 20,000 members. Individual raw/derived artifacts and archive expansion are bounded to 64 MiB, headers to 64 KiB, rank to 32, aggregate numerical elements to 8,000,000, and the complete delivery including its manifest to 512 MiB. Exceeding a bound fails before destination creation and never truncates science.
+
+`source_component` declares `source_sha256`, `start` and `end` byte offsets for an unchanged JPEG stream within an established complete original PDF. Its exact bytes, native public source provenance and private-role precedence are checked; rendered or recompressed images cannot use this path. Required JSON values containing native public source descriptors retain those exact values and checked source closure. Unknown, authored or private nested descriptors fail. No projection or corrective-response permission overrides an authorization, preparer, acquisition or prior-review role sharing the same hash.
+
+
 `exactory-research` exposes the shared research store through Python 3.9 or later and the standard library. `exactory-lab`, `exactory-draft`, `exactory`, and the native math controller consume its current evidence at their own authoritative boundaries. A download, marker file, process exit code, old receipt, or stage name does not establish scientific readiness.
 
 Follow the [managed research workflow](research-workflow.md) for the executable

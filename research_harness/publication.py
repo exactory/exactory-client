@@ -23,6 +23,13 @@ CHANGE_AXES = ("soundness", "presentation", "contribution")
 
 
 def _ready(records, artifacts):
+    from .publication_scope import assess_manuscript_readiness, has_publication_scope
+    if has_publication_scope(records):
+        report = assess_manuscript_readiness(records, artifacts)
+        if not report["manuscript_ready"]:
+            raise ResearchError("manuscript_readiness_required", "Current independent scoped manuscript readiness is required",
+                                {"obligations": report["manuscript_obligations"]})
+        return report
     report = author_readiness_state(records, artifacts)
     if not report["ready"]:
         raise ResearchError("readiness_required", "Current whole-candidate readiness is required for the manuscript",
@@ -98,11 +105,24 @@ def prepare_publication(store, payload, *, expected_revision, request_id):
                 raise ResearchError("publication_evidence_mismatch", "Every manuscript claim must link actual current candidate evidence")
         if seen != set(claim_ids):
             raise ResearchError("publication_claims_missing", "Map every manuscript claim to evidence")
-        bundle = dict(value, files=saved, candidate=report["candidate"], readiness_digest=digest(report),
-                      readiness_review=records["readiness_review"][records["development_selection"]["review"]["review_id"]],
+        scoped = report.get("contract")
+        if scoped is not None:
+            from .publication_scope import validate_manuscript_claims, scientific_authors
+            validate_manuscript_claims(scoped, claims, value["claim_evidence"])
+            candidate = dict(report["candidate"], authors=scientific_authors(records, scoped))
+            readiness_review = report["review"]
+        else:
+            candidate = report["candidate"]
+            readiness_review = records["readiness_review"][records["development_selection"]["review"]["review_id"]]
+        bundle = dict(value, files=saved, candidate=candidate, readiness_digest=digest(report),
+                      readiness_review=readiness_review,
                       review_inputs=report["review_inputs"], prepared_revision=expected_revision,
                       execution_observations=report["execution_observations"],
                       mechanical_only=True)
+        if scoped is not None:
+            bundle["publication_scope"] = {"mode": scoped["payload"]["policy"], "contract_id": scoped["id"],
+                                           "scientific_target_digest": scoped["scientific_target_digest"],
+                                           "objective_complete": False, "projection": scoped["public_projection"]}
         bundle["digest"] = digest(bundle)
         return [immutable_record(records, "publication_bundle", value["id"], bundle),
                 ("publication_selection", "bundle", {"id": value["id"]})], bundle
@@ -290,6 +310,8 @@ def publication_state(records, artifacts, action="publication"):
     except ResearchError as error:
         obligations.append(obligation(error.code, error.message, **(error.details or {})))
     return {"ready": not obligations, "obligations": obligations, "bundle": bundle, "reviews": reviews,
+            "historical_publications": list(records.get("publication_receipt", {}).values()),
+            "historical_submissions": list(records.get("submission_receipt", {}).values()),
             "digest": digest({"bundle": bundle["digest"] if bundle else None, "reviews": reviews, "obligations": obligations}),
             "mechanical_only": True}
 

@@ -90,10 +90,13 @@ def manuscript_packet(records, bundle):
                                "observation": bundle["execution_observations"].get(identifier)}
     standards = bundle["review_inputs"]["synthesis"]["sections"].get("standards", {}).get("payload")
     source_gaps = build_source_gap_disclosure(bundle["review_inputs"]["synthesis"]["foundation"].get("source_deferrals", []))
-    return scrub({"kind": "manuscript", "bundle_digest": bundle["digest"], "files": bundle["files"],
+    packet = {"kind": "manuscript", "bundle_digest": bundle["digest"], "files": bundle["files"],
                   "claim_evidence": bundle["claim_evidence"], "evidence": _source_closure(records, versions),
                   "results": results, "standards": standards, "source_gaps": source_gaps,
-                  "digest": digest({"bundle": bundle["digest"], "claims": bundle["claim_evidence"]})})
+                  "digest": digest({"bundle": bundle["digest"], "claims": bundle["claim_evidence"]})}
+    if bundle.get("publication_scope") is not None:
+        packet["scientific_scope"] = bundle["publication_scope"]["projection"]
+    return scrub(packet)
 
 
 def round_packet(records, bundle, decision):

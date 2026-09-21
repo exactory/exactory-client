@@ -32,14 +32,22 @@ def references(value):
     return [found[key] for key in sorted(found)]
 
 
-def _deliver(store, destination, manifest, *, derived=None):
+def _deliver(store, destination, manifest, *, derived=None, transitive=False):
     destination = Path(destination).absolute()
     if destination.exists() or destination.is_symlink():
         raise ResearchError("review_destination_exists", "Deliver into a new independent directory")
     artifacts = ArtifactStore(store.root)
     derived = derived or {}
-    values = [(ref, derived[ref["path"]] if ref["path"] in derived else artifacts.read(ref))
-              for ref in references(manifest)]
+    values, pending, seen = [], references(manifest), set()
+    while pending:
+        ref = pending.pop()
+        if ref["path"] in seen:
+            continue
+        seen.add(ref["path"])
+        data = derived[ref["path"]] if ref["path"] in derived else artifacts.read(ref)
+        values.append((ref, data))
+        if transitive and data.lstrip().startswith((b"{", b"[")):
+            pending.extend(references(strict_json(data)))
     destination.mkdir(parents=True, mode=0o700)
     for ref, data in values:
         write_projection(destination, ref["path"], data)
@@ -51,10 +59,34 @@ def _deliver(store, destination, manifest, *, derived=None):
 def deliver_readiness(store, destination):
     snapshot = store.snapshot()
     evaluation = Evaluation(snapshot["records"], ArtifactStore(store.root))
-    report = dict(author_readiness_state(snapshot["records"], evaluation), revision=snapshot["revision"])
+    from .publication_scope import has_publication_scope, assess_manuscript_readiness
+    scoped = has_publication_scope(snapshot["records"])
+    report = dict((assess_manuscript_readiness if scoped else author_readiness_state)(snapshot["records"], evaluation), revision=snapshot["revision"])
     if report["review_inputs"] is None:
         raise ResearchError("candidate_checkpoint_missing", "Select an actual assessed candidate before independent delivery")
-    return _deliver(store, destination, readiness_packet(report))
+    packet = readiness_packet(report)
+    if scoped:
+        from .scientific_delivery import project_delivery
+        from .review_packets import scrub
+        contract = report["contract"]
+        if contract is None:
+            raise ResearchError("publication_scope_stale", "Deliver the explicit current scoped candidate", {"obligations": report["obligations"]})
+        packet = scrub(packet, ("author", "authors", "request_id", "token"))
+        packet["scientific_scope"] = contract["public_projection"]
+        packet["review_target"] = {"kind": "source_limited_manuscript", "contract_id": contract["id"],
+                                   "scientific_target_digest": report["scientific_target_digest"],
+                                   "candidate_digest": report["candidate_digest"]}
+        correction = contract["payload"]["correction"]
+        if correction is not None:
+            packet["scientific_correction"] = correction
+            packet["predecessor_findings"] = [{"review_id": r["review_id"], "kind": r["kind"],
+                "scientific_target_digest": r["scientific_target_digest"],
+                "verdict": snapshot["records"][r["kind"]][r["review_id"]]["payload"]["verdict"],
+                "checks": snapshot["records"][r["kind"]][r["review_id"]]["payload"]["checks"]}
+                for r in contract["required_corrections"]]
+        packet, derived = project_delivery(snapshot["records"], evaluation, contract, packet, corrective=correction is not None)
+        return _deliver(store, destination, packet, derived=derived, transitive=True)
+    return _deliver(store, destination, packet)
 
 
 def _project_current_claims(bundle, artifacts):
@@ -78,7 +110,15 @@ def deliver_manuscript(store, destination):
     if not report["ready"]:
         raise ResearchError("readiness_required", "Prepare a current manuscript bundle before independent delivery", {"obligations": report["obligations"]})
     bundle, derived = _project_current_claims(report["bundle"], ArtifactStore(store.root))
-    return _deliver(store, destination, manuscript_packet(snapshot["records"], bundle), derived=derived)
+    packet = manuscript_packet(snapshot["records"], bundle)
+    if bundle.get("publication_scope") is not None:
+        from .scientific_delivery import project_delivery
+        from .publication_scope import find_publication_scope
+        packet, projected = project_delivery(snapshot["records"], ArtifactStore(store.root), find_publication_scope(snapshot["records"]), packet,
+            manuscript_files=[bundle["files"][kind]["artifact"] for kind in ("pdf", "abstract", "bibliography", "claims")])
+        derived.update(projected)
+        return _deliver(store, destination, packet, derived=derived, transitive=True)
+    return _deliver(store, destination, packet, derived=derived)
 
 
 def deliver_round(store, destination):
@@ -88,4 +128,11 @@ def deliver_round(store, destination):
     decisions = [d for d in records.get("round_decision", {}).values() if d["bundle_digest"] == bundle["digest"]]
     if not decisions:
         raise ResearchError("round_decision_missing", "Record the round decision before delivering it for review")
-    return _deliver(store, destination, round_packet(records, bundle, max(decisions, key=lambda d: d["decided_revision"])))
+    packet = round_packet(records, bundle, max(decisions, key=lambda d: d["decided_revision"]))
+    if bundle.get("publication_scope") is not None:
+        from .scientific_delivery import project_delivery
+        from .publication_scope import find_publication_scope
+        packet, derived = project_delivery(records, ArtifactStore(store.root), find_publication_scope(records), packet,
+            manuscript_files=[bundle["files"][kind]["artifact"] for kind in ("pdf", "abstract", "bibliography", "claims")])
+        return _deliver(store, destination, packet, derived=derived, transitive=True)
+    return _deliver(store, destination, packet)
