@@ -33,6 +33,10 @@ def _ordered(values):
     return sorted(values, key=lambda value: json.dumps(value, sort_keys=True, ensure_ascii=False))
 
 
+def _scientific_set(values):
+    return _ordered({digest(value): value for value in values}.values())
+
+
 def find_publication_scope(records):
     selection = records.get("publication_scope_selection", {}).get("current")
     if selection is None or selection["id"] is None:
@@ -74,17 +78,17 @@ def _canonical_locator(value):
 def build_scientific_target(context, payload):
     """Canonical scientific content, never an independent support certificate."""
     limitations = {item["id"]: {"statement": _prose(item["statement"]),
-                              "version_ids": sorted(item["version_ids"])}
+                              "version_ids": sorted(set(item["version_ids"]))}
                    for item in payload["public_limitations"]}
     claims = [{"statement": _prose(c["statement"]), "polarity": c["polarity"],
                "assumptions": sorted({_prose(a) for a in c["assumptions"]}),
-               "evidence": _ordered([_canonical_evidence(context, e) for e in c["evidence"]]),
-               "limitations": _ordered([limitations[i] for i in c["limitation_ids"]])}
+               "evidence": _scientific_set([_canonical_evidence(context, e) for e in c["evidence"]]),
+               "limitations": _scientific_set([limitations[i] for i in c["limitation_ids"]])}
               for c in payload["supported_claims"]]
     return {"scope": {"statement": _prose(payload["scope"]["statement"]),
                       "assumptions": sorted({_prose(a) for a in payload["scope"]["assumptions"]})},
-            "claims": _ordered(claims), "limitations": _ordered(list(limitations.values())),
-            "source_debt": _ordered([{k: _prose(d[k]) if k != "version_id" else d[k]
+            "claims": _scientific_set(claims), "limitations": _scientific_set(list(limitations.values())),
+            "source_debt": _scientific_set([{k: _prose(d[k]) if k != "version_id" else d[k]
                                        for k in ("obligation", "version_id", "dependent_claim")}
                                       for d in payload["deferred_objective_obligations"]])}
 

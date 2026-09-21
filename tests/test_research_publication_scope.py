@@ -122,6 +122,25 @@ class PublicationScopeTests(SourceLimitedCase):
         self.mutate(self.scope_api().record_scoped_readiness_review, self.scope_review("later", assessor="later-reviewer"))
         self.assertIn("scoped_target_rejected", {o["code"] for o in self.manuscript_readiness()["obligations"]})
 
+    def test_duplicate_propositions_limitations_and_evidence_do_not_change_scientific_target(self):
+        from research_harness.development import _Context
+        self.prepare_source_limited()
+        original = self.record_scope()
+        context = _Context(self.store.snapshot()["records"], self.artifacts)
+        payload = copy.deepcopy(original["payload"])
+        duplicate = copy.deepcopy(payload["supported_claims"][0])
+        duplicate["id"] = "duplicate-proposition-alias"
+        payload["supported_claims"].append(duplicate)
+        limitation = copy.deepcopy(payload["public_limitations"][0])
+        limitation["id"] = "duplicate-limitation-alias"
+        payload["public_limitations"].append(limitation)
+        for claim in payload["supported_claims"]:
+            claim["evidence"] += copy.deepcopy(claim["evidence"])
+            claim["limitation_ids"].append(limitation["id"])
+        self.assertEqual(self.scope_api().build_scientific_target(context, payload), original["scientific_projection"])
+        payload["supported_claims"][1]["polarity"] = "negative"
+        self.assertNotEqual(self.scope_api().build_scientific_target(context, payload), original["scientific_projection"])
+
     def corrected_scope(self):
         from research_harness.development import _Context
         payload = self.scope_payload("corrected")
