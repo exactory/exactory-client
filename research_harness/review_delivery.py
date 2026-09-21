@@ -15,6 +15,7 @@ from .evaluation import Evaluation
 from .publication import _bundle, publication_state
 from .review_packets import manuscript_packet, readiness_packet, round_packet
 from .scientific_json import scientific_json
+from .scientific_delivery import encode_delivery
 from .workspace import strict_json, write_projection
 
 
@@ -54,7 +55,9 @@ def _deliver(store, destination, manifest, *, derived=None, transitive=False):
     destination.mkdir(parents=True, mode=0o700)
     for ref, data in values:
         write_projection(destination, ref["path"], data)
-    write_projection(destination, "inputs.json", (json.dumps(manifest, indent=2, ensure_ascii=False) + "\n").encode())
+    # Transitive scientific packets use the same bytes as their bounded count.
+    data = encode_delivery(manifest) if transitive else (json.dumps(manifest, indent=2, ensure_ascii=False) + "\n").encode()
+    write_projection(destination, "inputs.json", data)
     return {"destination": str(destination), "artifacts": [ref for ref, _ in values],
             "revision": store.revision, "mechanical_only": True}
 
