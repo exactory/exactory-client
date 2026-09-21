@@ -84,6 +84,16 @@ class SourceLimitedDeliveryTests(SourceLimitedCase):
     def bytes_in(self, directory):
         return b"\n".join(path.read_bytes() for path in directory.rglob("*") if path.is_file())
 
+    def json_in(self, directory):
+        for path in directory.rglob("*"):
+            if path.is_file():
+                try:
+                    value = json.loads(path.read_bytes())
+                except (ValueError, UnicodeError):
+                    continue
+                if isinstance(value, dict):
+                    yield value
+
     def test_initial_scoped_delivery_uses_typed_projections_before_acceptance(self):
         self.prepare_delivery(accept=False)
         directory = self.root / "independent-readiness"
@@ -94,7 +104,7 @@ class SourceLimitedDeliveryTests(SourceLimitedCase):
         manifest = json.loads((directory / "inputs.json").read_text())
         self.assertEqual(manifest["scientific_scope"]["scope"]["statement"], self.contract["payload"]["scope"]["statement"])
         self.assertIn(self.objective["statement"].encode(), content)
-        self.assertIn(b'"derivative": true', content)
+        self.assertTrue(any(value.get("derivative") is True for value in self.json_in(directory)))
         self.assertFalse(self.manuscript_readiness()["ready"])
 
     def test_blind_manuscript_excludes_preparer_directive_and_previous_verdict_bytes(self):
@@ -214,7 +224,14 @@ class SourceLimitedDeliveryTests(SourceLimitedCase):
         self.assertNotIn(b"PRIVATE", content)
         self.assertIn(ref["sha256"].encode(), content)
         self.assertFalse((directory / ref["path"]).exists())
-        self.assertIn(b'"value": 9', content)
+        manifest = json.loads((directory / "inputs.json").read_bytes())
+        archive = json.loads((directory / manifest["files"]["sources"]["artifact"]["path"]).read_bytes())
+        self.assertEqual(archive["original_sha256"], ref["sha256"])
+        self.assertEqual(len(archive["entries"]), 1)
+        member = archive["entries"][0]
+        self.assertEqual(member["member"], "result.json")
+        result = json.loads((directory / member["artifact"]["path"]).read_bytes())
+        self.assertEqual(result["entries"][0]["value"], 9)
 
     def test_readiness_retains_negative_branch_and_all_locator_mappings(self):
         self.prepare_delivery(accept=False, negative=True)
@@ -279,7 +296,8 @@ class SourceLimitedDeliveryTests(SourceLimitedCase):
         blind = self.root / "corrected-blind"
         deliver_manuscript(self.store, blind)
         self.assertNotIn(quote.encode(), self.bytes_in(blind))
-        self.assertIn(b'"value": 9', self.bytes_in(blind))
+        self.assertTrue(any(item["value"] == 9 for value in self.json_in(blind)
+                            if value.get("projection_kind") == "json_locators" for item in value["entries"]))
 
     def test_correction_response_alias_cannot_declassify_authorization(self):
         from test_research_publication_scope import PublicationScopeTests

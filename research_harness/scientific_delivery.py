@@ -34,7 +34,7 @@ _REF_KEYS = {"path", "sha256", "size", "media_type"}
 
 def encode_delivery(value):
     """Encode generated delivery JSON without changing any scientific value."""
-    return (json.dumps(value, ensure_ascii=False) + "\n").encode()
+    return (json.dumps(value, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
 
 
 def _references(value):
@@ -337,9 +337,10 @@ class ScientificDelivery:
 
     def _emit(self, content):
         content = self.walk(content)
-        # Preserve the previous privacy and per-artifact checks as well as
-        # checking the bytes actually delivered by the compact serializer.
+        # Preserve both previous serialization checks as well as checking
+        # the bytes actually delivered by the compact serializer.
         self._check_bytes((json.dumps(content, ensure_ascii=False, indent=2) + "\n").encode())
+        self._check_bytes((json.dumps(content, ensure_ascii=False) + "\n").encode())
         data = encode_delivery(content)
         self._check_bytes(data)
         ref = describe_artifact(data, "application/json")
@@ -547,6 +548,7 @@ def project_delivery(records, artifacts, contract, manifest, *, manuscript_files
                                    manuscript_files=manuscript_files, corrective=corrective)
     projected = projector.walk(manifest)
     projector._check_bytes((json.dumps(projected, ensure_ascii=False, indent=2) + "\n").encode(), artifact=False)
+    projector._check_bytes((json.dumps(projected, ensure_ascii=False) + "\n").encode(), artifact=False)
     manifest_bytes = encode_delivery(projected)
     projector._check_bytes(manifest_bytes, artifact=False)
     projector._count_output(describe_artifact(manifest_bytes, "application/json"), manifest_bytes)
