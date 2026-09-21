@@ -231,17 +231,26 @@ class ScientificDelivery:
         key = (digest(ref), original_pdf)
         if key in self.validated_public:
             return
-        for exact, source_id, work, capture in self.public.get(ref["sha256"], []):
-            if exact != ref or original_pdf and (capture is None or capture.get("original") != ref):
-                continue
+        candidates = [entry for entry in self.public.get(ref["sha256"], [])
+                      if entry[0] == ref and (not original_pdf or
+                          entry[3] is not None and entry[3].get("original") == ref)]
+        captures = [entry for entry in candidates if entry[3] is not None]
+        if captures:
+            # Capture-owned bytes cannot fall back to an unbound raw response.
+            # Earlier failed attempts stay historical when the exact bytes have
+            # a later available capture, whose binding is checked below.
+            candidates = [entry for entry in captures if entry[3]["availability"] == "available"]
+            if not candidates:
+                raise ResearchError(_PRIVATE, "A pending source capture cannot establish public provenance")
+        if not candidates:
+            raise ResearchError(_PRIVATE, "Nested provenance must exactly identify an established public source artifact")
+        for _, source_id, work, capture in candidates:
             source = captured_source(self.records, self.artifacts, source_id)
             if source["response"]["sha256"] in self.private:
                 raise ResearchError(_PRIVATE, "A public extraction cannot declassify its internally classified original")
             self._check_bytes(self.artifacts.read(source["response"]))
             if capture is not None:
                 from .components import validate_binding
-                if capture["availability"] != "available":
-                    raise ResearchError(_PRIVATE, "A pending source capture cannot establish public provenance")
                 validate_binding(self.records, self.artifacts, work["id"], capture)
             if original_pdf:
                 if not complete_original({"source": source, "capture": capture}):
@@ -251,10 +260,10 @@ class ScientificDelivery:
                             and capture.get("extraction", {}).get("format_detection") == "pdf_signature_from_generic_binary")
                 if ref["media_type"] != "application/pdf" and not inferred:
                     raise ResearchError(_CODE, "A JPEG source component requires an original PDF")
-            self.artifacts.read(ref)
-            self.validated_public.add(key)
-            return
-        raise ResearchError(_PRIVATE, "Nested provenance must exactly identify an established public source artifact")
+        # Validate all eligible native bindings so an invalid available alias
+        # cannot be hidden by record order. Integrity errors are never skipped.
+        self.artifacts.read(ref)
+        self.validated_public.add(key)
 
     def _public_nested(self, value, depth=0):
         if depth > _MAX_DEPTH:
