@@ -200,8 +200,10 @@ class ScientificDelivery:
                 register(abstract["artifact"], abstract["source_id"], work)
         for source in records.get("source", {}).values():
             register(source.get("response"), source["id"])
+        acquisition_evidence = []
         for deferred in records.get("source_deferral", {}).values():
-            self.private.update(_references([deferred["authorization"], deferred["acquisition_evidence"]]))
+            self.private.update(_references(deferred["authorization"]))
+            acquisition_evidence.extend(deferred["acquisition_evidence"])
         protected = set(self.private)
         for saved in records.get("publication_scope", {}).values():
             payload = saved["payload"]
@@ -216,6 +218,14 @@ class ScientificDelivery:
                                              saved.get("assessor"), saved.get("payload", {}).get("assessor")])
                 protected.update(private_roles)
                 self.private.update(private_roles)
+        for ref in acquisition_evidence:
+            # An acquired public original may document an access gap elsewhere.
+            # Its presence in that history does not make the original private.
+            # Authorization, reviews and every other internal role still win.
+            artifacts.read(ref)
+            if ref["sha256"] in self.private or not self._public_acquisition_original(ref):
+                self.private[ref["sha256"]] = ref
+                protected.add(ref["sha256"])
         if corrective and contract["payload"]["correction"] is not None:
             # Only this explicitly requested response can be projected, and only
             # for identified corrective review. Unrelated private context stays private.
@@ -232,6 +242,21 @@ class ScientificDelivery:
             terminal = observation["terminal"]
             self.generated[terminal["sha256"]] = _scientific_record(strict_json(artifacts.read(terminal)))
         self._inventory(manifest)
+
+    def _public_acquisition_original(self, ref):
+        from .components import validate_binding
+        candidates = [entry for entry in self.public.get(ref["sha256"], [])
+                      if entry[3] is not None and entry[3].get("original") == entry[0]
+                      and entry[3]["availability"] == "available"]
+        if not candidates:
+            return False
+        for original, source_id, work, capture in candidates:
+            source = captured_source(self.records, self.artifacts, source_id)
+            if not complete_original({"source": source, "capture": capture}):
+                return False
+            validate_binding(self.records, self.artifacts, work["id"], capture)
+            self.artifacts.read(original)
+        return True
 
     def _public_reference(self, ref, *, original_pdf=False):
         if ref["sha256"] in self.private:
