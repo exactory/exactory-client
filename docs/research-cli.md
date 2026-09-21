@@ -123,7 +123,7 @@ The example for each operation contains all its required keys and shows the comp
 | `bind-run` | `admission_id`, `script`, `backend`, `timeout_seconds`, `inputs`, `outputs`, `usage_unit` | Backend is `local` or `colab`; usage is planned `execution` or `wall_seconds`. Inputs map each admitted artifact to a relative path. |
 | `reconcile-run` | `admission_id` | Optional `resolution`, `reason`: `interrupted` for a confirmed dead local owner, or `not_released` for a Colab claim with no durable release. Unknown released remote work remains pending. |
 | `result` | `id`, `cycle_id`, `origin`, `command`, `status`, `exit_code`, `usage`, `outputs`, `notes` | Public JSON permits imported history only. Its exact `origin.original`, `reason`, and `deduction` fields are shown in the example. Managed outcomes come from run/reconcile. |
-| `assess` | `id`, `cycle_id`, `author`, `scope`, `execution_ids`, `result`, `validity_checks`, `outcomes`, `failures`, `findings`, `assumptions`, `remaining_obligations`, `objective_status`, `disposition`, `development` | Full nested example includes outcome judgments, distinct validity checks, and development/branch assessments. |
+| `assess` | `id`, `cycle_id`, `author`, `scope`, `execution_ids`, `result`, `validity_checks`, `outcomes`, `failures`, `findings`, `assumptions`, `remaining_obligations`, `objective_status`, `disposition`, `development` | Full nested example includes outcome judgments, distinct validity checks, and development/branch assessments. Optional `inheritance_refresh` explicitly binds current reassessments of the same ancestors without changing the prospective plan. |
 | `checkpoint` | `id`, `cycle_id`, `assessment_id`, `reason`, `next_hypothesis`, `select_for_readiness` | An unassessed unresolved checkpoint may have null assessment; it supplies no validated-result credit. |
 | `review` | `id`, `candidate_digest`, `assessor`, `verdict`, `checks`, `limitations` | Checks separately cover `validity`, `scope`, `novelty`, `contribution`, `development`, `branches` and their exact evidence. |
 | `manuscript` | `id`, `files`, `claim_evidence` | Refused with `contribution_analysis_missing` while the selected bundle has a complete measurement and no `contribution-analysis`. Files contains `pdf`, `abstract`, `bibliography`, `claims`, `sources`; `sources` may be null. Each claim mapping has `claim_id`, `evidence`. `claims` is a nonempty JSON array of objects with nonblank text `id` and `claim` and unique ids (`publication_claims_missing` for a non-array, an empty array, a non-object entry or a repeated id; `invalid_input` for a missing or blank `id` or `claim`). A claim carries at most one marker, `revised: {previous, reason}` or `superseded: {reason}`, with exactly those fields as nonblank text (`publication_claims_missing` otherwise). |
@@ -475,6 +475,89 @@ Observing a scientific failure signal can establish a valid negative result.
 Setting an assessment's `disposition` to `failed` does not by itself establish
 that the underlying result is invalid, and setting it to `complete` does not
 establish readiness. Inspect the resulting obligations and current whole gate.
+
+## Refreshing inherited assessment dependencies
+
+A source or preparation change can make an inherited assessment stale. Reassess
+the ancestor's actual retained execution first and save a new checkpoint. Its
+old checkpoint remains historical. A descendant's original plan still names
+that old checkpoint; the harness never substitutes the latest one implicitly.
+
+When reassessing the same descendant execution, add optional
+`inheritance_refresh: {plan_digest, bindings}` to the full `assess` payload.
+`plan_digest` is the original immutable descendant plan's digest. Each binding
+has exactly `previous_checkpoint_id`, `previous_assessment_id`, `checkpoint_id`,
+`assessment_id`, `evidence`, `assumptions`, and `deduction`. Refresh each original
+edge at most once. Both old and replacement checkpoints must bind their exact
+assessments of the same ancestor cycle within the objective lineage. The new
+checkpoint must preserve that ancestor's current, dependency-fresh assessment.
+
+For example, this is a partial edit to a full reassessment payload, not a new
+plan or standalone command. Replace all placeholders with actual records and
+copy the complete original edge's evidence list unchanged:
+
+```json
+{
+  "inheritance_refresh": {
+    "plan_digest": "ORIGINAL_DESCENDANT_PLAN_DIGEST",
+    "bindings": [
+      {
+        "previous_checkpoint_id": "parent-checkpoint-original",
+        "previous_assessment_id": "parent-assessment-original",
+        "checkpoint_id": "parent-checkpoint-current",
+        "assessment_id": "parent-assessment-current",
+        "evidence": [
+          {
+            "kind": "result",
+            "execution_id": "execution-parent",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "application/json"
+            },
+            "locator": {"kind": "json", "pointer": "/result", "value": {"bound": 9}}
+          }
+        ],
+        "assumptions": ["Every original edge assumption and every old/current parent assessment assumption."],
+        "deduction": "Explain why these exact retained results still contribute under all current qualifications."
+      }
+    ]
+  }
+}
+```
+
+The binding and the new assessment's top-level `assumptions` must retain all
+original edge assumptions and both parent assessments' assumptions. Preserve
+the scientific meaning of added qualifications in the deduction and assessed
+scope. Changed relied-on locators are rejected. For `validated_result`, the
+replacement must remain validated and explicitly assess those exact result
+references. For `failure` or assessed `unresolved`, its current assessment must
+retain the exact evidence; numerical validity need not become passing. The
+original `use` is retained automatically. A binding has no credit-override
+field, and this operation cannot turn a failed branch into a validated result.
+An unassessed checkpoint with a null assessment uses the separate unresolved
+successor workflow above.
+
+Refresh ancestors in dependency order, including assessed failure chains.
+Historical evaluation checks the entire assessment, including later inherited
+checkpoints, refresh bindings and development evidence. It collects explicit
+inheritance freshness obligations and reports stale ancestry as nonvalidated
+and incomplete, preserving the original payload and recomputing its evidence.
+It never substitutes a saved report after an early dependency failure.
+That report is not a current replacement. A new reassessment of recursively
+stale ancestry still needs explicit bindings. Artifact corruption, missing or
+invalid evidence and forged lineage remain errors; they are not converted to
+dependency-staleness reports.
+
+The original plan, admissions, executions, outputs, checkpoints and resource
+counters are unchanged. Prior failure observations remain; reassessing an
+observed signal appends it under the new assessment ID, preserving the ordinary
+changed-evidence reopening requirements. The new assessment records the
+explicit refresh in its dependency digest. Later preparation or parent-assessment changes
+make it stale again. Normal revision CAS, request replay, fresh checkpoints and
+independent readiness review remain required. A refresh never authorizes a run.
 
 ## Review, publication, and verification
 
