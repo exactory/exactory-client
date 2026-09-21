@@ -14,6 +14,7 @@ import zipfile
 
 from .artifacts import describe_artifact, validate_reference
 from .errors import ResearchError
+from .evaluation import Evaluation
 from .evidence import digest
 from .operations import fields, text
 from .source_links import read_locator, captured_source, complete_original
@@ -365,6 +366,8 @@ class ScientificDelivery:
         else:
             # Use the same source locator validator on an immutable byte view.
             class Bytes:
+                root = self.artifacts.root
+
                 def read(self, reference):
                     if reference != ref:
                         raise ResearchError(_CODE, "A projection cannot read another artifact implicitly")
@@ -373,8 +376,9 @@ class ScientificDelivery:
             selected = {digest(l): l for l in projection["locators"]}
             if not set(self.required.get(ref["sha256"], {})) <= set(selected):
                 raise ResearchError("scientific_projection_incomplete", "Retain every required scientific locator in the typed derivative")
+            reader = Evaluation({}, Bytes())
             for index, locator in enumerate(selected.values()):
-                value = read_locator(Bytes(), ref, locator)
+                value = read_locator(reader, ref, locator)
                 self._public_nested(value)
                 # Inspect actual preserved values. A nested private descriptor
                 # fails rather than being copied through a JSON value.
