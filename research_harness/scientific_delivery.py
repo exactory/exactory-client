@@ -215,7 +215,8 @@ class ScientificDelivery:
             response = contract["payload"]["correction"]["response"]
             if response["sha256"] not in protected:
                 self.private.pop(response["sha256"], None)
-        self.private_bytes = [artifacts.read(ref) for ref in self.private.values()]
+        self.private_bytes = tuple(artifacts.read(ref) for ref in self.private.values())
+        self.minimum_private_bytes = min((len(data) for data in self.private_bytes if data), default=0)
         for checkpoint in records.get("checkpoint", {}).values():
             self.generated[checkpoint["artifact"]["sha256"]] = _scientific_record({k: v for k, v in checkpoint.items() if k != "artifact"})
         for claim in records.get("execution_claim", {}).values():
@@ -291,6 +292,8 @@ class ScientificDelivery:
     def _check_bytes(self, data, *, artifact=True):
         if artifact and len(data) > _MAX_BYTES:
             raise ResearchError(_CODE, "Scientific delivery artifact exceeds the byte bound")
+        if not self.minimum_private_bytes or len(data) < self.minimum_private_bytes:
+            return
         if any(private and private in data for private in self.private_bytes):
             raise ResearchError(_PRIVATE, "Delivered bytes contain an internally classified artifact's content")
 
