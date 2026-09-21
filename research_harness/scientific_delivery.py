@@ -17,6 +17,7 @@ from .errors import ResearchError
 from .evidence import digest
 from .operations import fields, text
 from .source_links import read_locator, captured_source, complete_original
+from .scientific_json import scientific_json
 from .workspace import strict_json
 
 
@@ -394,8 +395,8 @@ class ScientificDelivery:
                 self._check_bytes(data)
                 if identifier in self.public:
                     self._public_reference(ref)
-                if data.lstrip().startswith((b"{", b"[")):
-                    structured = strict_json(data)
+                is_json, structured = scientific_json(data, ref["media_type"])
+                if is_json:
                     self._public_nested(structured)
                     self.walk(structured)
                 if zipfile.is_zipfile(io.BytesIO(data)) or ref["media_type"] in ("application/x-tar", "application/zip"):
@@ -434,19 +435,22 @@ class ScientificDelivery:
                     result.update(original_sha256=original["sha256"], original_locator=locator, derivative=True,
                                   locator={"kind": "json", "pointer": found["derived_pointer"], "value": exact_value})
                 return result
-            return {key: self.walk(child, depth + 1) for key, child in value.items()}
+            return {self.walk(key, depth + 1): self.walk(child, depth + 1) for key, child in value.items()}
         if isinstance(value, list):
             return [self.walk(child, depth + 1) for child in value]
         if isinstance(value, str):
             self._check_bytes(value.encode())
-            # JSON encoded into a string is a nested structured artifact too.
-            if value.lstrip().startswith(("{", "[")):
-                try:
-                    nested = strict_json(value.encode())
-                except ResearchError:
-                    return value
+            # Preserve the exact string while inspecting every decoded level.
+            try:
+                is_json, nested = scientific_json(value.encode(), encoded_string=True)
+            except ResearchError as error:
+                if error.code != "invalid_json":
+                    raise
+                return value
+            if is_json:
                 if _references(nested):
                     raise ResearchError(_PRIVATE, "Encoded nested artifact references require a typed scientific value")
+                self.walk(nested, depth + 1)
         return value
 
 

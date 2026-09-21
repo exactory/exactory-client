@@ -14,6 +14,7 @@ from .errors import ResearchError
 from .evaluation import Evaluation
 from .publication import _bundle, publication_state
 from .review_packets import manuscript_packet, readiness_packet, round_packet
+from .scientific_json import scientific_json
 from .workspace import strict_json, write_projection
 
 
@@ -46,8 +47,10 @@ def _deliver(store, destination, manifest, *, derived=None, transitive=False):
         seen.add(ref["path"])
         data = derived[ref["path"]] if ref["path"] in derived else artifacts.read(ref)
         values.append((ref, data))
-        if transitive and data.lstrip().startswith((b"{", b"[")):
-            pending.extend(references(strict_json(data)))
+        if transitive:
+            is_json, structured = scientific_json(data, ref["media_type"])
+            if is_json:
+                pending.extend(references(structured))
     destination.mkdir(parents=True, mode=0o700)
     for ref, data in values:
         write_projection(destination, ref["path"], data)

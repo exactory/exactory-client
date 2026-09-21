@@ -23,6 +23,8 @@ Projection kinds are `json_locators` with native `locators`, `text_spans` with n
 
 `source_component` declares `source_sha256`, `start` and `end` byte offsets for an unchanged JPEG stream within an established complete original PDF. Its exact bytes, native public source provenance and private-role precedence are checked; rendered or recompressed images cannot use this path. Required JSON values containing native public source descriptors retain those exact values and checked source closure. Unknown, authored or private nested descriptors fail. No projection or corrective-response permission overrides an authorization, preparer, acquisition or prior-review role sharing the same hash.
 
+JSON validation and delivery share one byte decoder for JSON media types (including parameters and `+json`), structural JSON, UTF-8 BOM and UTF-16/32. Decoded JSON string values and keys also undergo privacy checks, with depth bounded to 40. Exact bytes remain unchanged; encoded nested artifact descriptors are refused rather than becoming an implicit delivery channel.
+
 
 `exactory-research` exposes the shared research store through Python 3.9 or later and the standard library. `exactory-lab`, `exactory-draft`, `exactory`, and the native math controller consume its current evidence at their own authoritative boundaries. A download, marker file, process exit code, old receipt, or stage name does not establish scientific readiness.
 
