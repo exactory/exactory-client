@@ -177,6 +177,14 @@ def _scientific_record(value):
     return value
 
 
+def _locator_identity(locator):
+    """The locator without its selected value, plus the digest of the complete locator.
+
+    A derivative stores each selected value once, under its entry; the identity
+    names which declared locator the entry came from without repeating the value."""
+    return dict({key: value for key, value in locator.items() if key != "value"}, locator_digest=digest(locator))
+
+
 class ScientificDelivery:
     def __init__(self, records, artifacts, contract, manifest, *, manuscript_files=(), corrective=False):
         from .review_packets import find_round_investigation_responses
@@ -423,8 +431,9 @@ class ScientificDelivery:
                 # Inspect actual preserved values. A nested private descriptor
                 # fails rather than being copied through a JSON value.
                 value = self.walk(value)
-                entries.append({"original_locator": locator, "value": value})
-                mapping.append({"original_locator": locator, "derived_pointer": "/entries/" + str(index) + "/value"})
+                identity = _locator_identity(locator)
+                entries.append({"original_locator": identity, "value": value})
+                mapping.append({"original_locator": identity, "derived_pointer": "/entries/" + str(index) + "/value"})
         content = {"derivative": True, "original_sha256": ref["sha256"], "projection_kind": projection["kind"],
                    "context": projection["context"], "entries": entries, "locator_mapping": mapping}
         return self._emit(content), mapping
@@ -517,7 +526,9 @@ class ScientificDelivery:
                 mapped = self.reference(original)
                 result.update(artifact=mapped, locator=locator)
                 if mapped != original:
-                    found = next((item for item in self._read_derived_locator_mapping(mapped) if item["original_locator"] == locator), None)
+                    wanted = digest(locator)
+                    found = next((item for item in self._read_derived_locator_mapping(mapped)
+                                  if item["original_locator"].get("locator_digest") == wanted), None)
                     if found is None:
                         raise ResearchError("scientific_projection_incomplete", "A required scientific locator has no derivative mapping")
                     exact_value = read_locator(self.artifacts, original, locator)

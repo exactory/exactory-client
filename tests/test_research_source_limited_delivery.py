@@ -251,7 +251,8 @@ class SourceLimitedDeliveryTests(SourceLimitedCase):
                 if isinstance(value, dict) and value.get("projection_kind") == "json_locators":
                     for item in value["locator_mapping"]:
                         index = int(item["derived_pointer"].split("/")[2])
-                        self.assertEqual(value["entries"][index]["value"], item["original_locator"]["value"])
+                        self.assertEqual(value["entries"][index]["original_locator"], item["original_locator"])
+                        self.assertNotIn("value", item["original_locator"])
                         mapped.append(item["original_locator"]["pointer"])
         self.assertTrue({"/result", "/validation"} <= set(mapped))
 

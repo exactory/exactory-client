@@ -13,6 +13,7 @@ import zipfile
 from research_harness import scientific_delivery, source_links
 from research_harness.artifacts import ArtifactStore, describe_artifact
 from research_harness.errors import ResearchError
+from research_harness.evidence import digest
 from test_research_numerical_projection import npy
 
 
@@ -42,7 +43,9 @@ class SourceProjectionMemoTests(unittest.TestCase):
                 projected, mapping = projector._project(ref, self.create_projection(locators))
         result = json.loads(projector.derived[projected["path"]])
         self.assertEqual([entry["value"] for entry in result["entries"]], [1, {"values": [2, 3]}, 3])
-        self.assertEqual([entry["original_locator"] for entry in mapping], locators)
+        self.assertEqual([(entry["original_locator"]["pointer"], entry["original_locator"]["locator_digest"]) for entry in mapping],
+                         [(locator["pointer"], digest(locator)) for locator in locators])
+        self.assertTrue(all("value" not in entry["original_locator"] for entry in mapping))
         self.assertEqual(checked.call_count, 3)
         self.assertEqual(parsed.call_count, 1)
 
