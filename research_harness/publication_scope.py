@@ -458,13 +458,21 @@ def manuscript_readiness_report(store):
 
 
 def validate_manuscript_claims(contract, claims, claim_evidence):
+    """The current claims equal the approved claims exactly; continuity markers are round metadata.
+
+    A `revised` marker records the earlier wording of an approved claim and a
+    `superseded` claim is a withdrawn opening claim that the scope no longer
+    supports, so neither takes part in the comparison with the contract."""
     payload = contract["payload"]
     expected = [{"id": c["id"], "claim": c["statement"], "polarity": c["polarity"],
                  "assumptions": c["assumptions"], "limitation_ids": c["limitation_ids"],
                  "public_limitations": [l for l in payload["public_limitations"] if l["id"] in c["limitation_ids"]]}
                 for c in payload["supported_claims"]]
     mappings = [{"claim_id": c["id"], "evidence": c["evidence"]} for c in payload["supported_claims"]]
-    if _ordered(claims) != _ordered(expected) or _ordered(claim_evidence) != _ordered(mappings):
+    withdrawn = {c["id"] for c in claims if "superseded" in c}
+    current = [{key: value for key, value in c.items() if key != "revised"} for c in claims if c["id"] not in withdrawn]
+    links = [link for link in claim_evidence if link["claim_id"] not in withdrawn]
+    if _ordered(current) != _ordered(expected) or _ordered(links) != _ordered(mappings):
         raise ResearchError("publication_scope_claim_mismatch", "The manuscript must retain every exact approved claim, polarity, assumption, evidence mapping and public limitation")
 
 
