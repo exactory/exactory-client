@@ -187,13 +187,13 @@ def _build_locator_identity(locator):
 
 
 class ScientificDelivery:
-    def __init__(self, records, artifacts, contract, manifest, *, manuscript_files=(), corrective=False):
+    def __init__(self, records, artifacts, contract, manifest, *, manuscript_files=(), corrective=False, derived=None):
         from .review_packets import find_round_investigation_responses
         self.records, self.artifacts = records, artifacts
         declarations = contract["payload"].get("scientific_delivery", [])
         validate_declarations(declarations)
         self.declarations = {d["original_sha256"]: d for d in declarations}
-        self.derived, self.mapped, self.visiting = {}, {}, set()
+        self.derived, self.mapped, self.visiting = dict(derived or {}), {}, set()
         self._parsed_locator_mappings = {}
         self.required, self.private, self.generated = {}, {}, {}
         self.output_bytes, self.output_hashes, self.numerical_elements = 0, set(), 0
@@ -257,6 +257,16 @@ class ScientificDelivery:
             terminal = observation["terminal"]
             self.generated[terminal["sha256"]] = _scientific_record(strict_json(artifacts.read(terminal)))
         self._inventory(manifest)
+        for data in list(self.derived.values()):
+            # Bytes generated before projection, such as the current-claims
+            # file of a blind manuscript delivery, pass the same checks as
+            # an exact manuscript file and count toward the output bound.
+            self._check_bytes(data)
+            is_json, structured = scientific_json(data, "application/json")
+            if is_json:
+                self._public_nested(structured)
+                self.walk(structured)
+            self._count_output(describe_artifact(data, "application/json"), data)
 
     def _public_acquisition_original(self, ref):
         from .components import validate_binding
@@ -550,9 +560,9 @@ class ScientificDelivery:
         return value
 
 
-def project_delivery(records, artifacts, contract, manifest, *, manuscript_files=(), corrective=False):
+def project_delivery(records, artifacts, contract, manifest, *, manuscript_files=(), corrective=False, derived=None):
     projector = ScientificDelivery(records, artifacts, contract, manifest,
-                                   manuscript_files=manuscript_files, corrective=corrective)
+                                   manuscript_files=manuscript_files, corrective=corrective, derived=derived)
     projected = projector.walk(manifest)
     projector._check_bytes((json.dumps(projected, ensure_ascii=False, indent=2) + "\n").encode(), artifact=False)
     projector._check_bytes((json.dumps(projected, ensure_ascii=False) + "\n").encode(), artifact=False)

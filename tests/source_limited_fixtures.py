@@ -84,6 +84,74 @@ class SourceLimitedCase(DeferralCase, DevelopmentCase):
     def accept_scope(self):
         return self.mutate(self.scope_api().record_scoped_readiness_review, self.scope_review())["result"]
 
+    def prepare_delivery(self, accept=True, negative=False):
+        from research_harness.execution_evidence import author_readiness_state
+        from research_harness.review_delivery import references
+        from research_harness.review_packets import readiness_packet
+        payload = self.prepare_source_limited()
+        if negative:
+            plan = copy.deepcopy(self.store.snapshot()["records"]["cycle_plan"]["cycle-1"]["payload"])
+            plan.update(id="negative-branch", question="Does a strict bound of 8 survive enumeration?", hypothesis="The finite maximum is at most 8.")
+            plan["strategy"]["mechanism"] = "Test a stronger finite hypothesis and retain its counterexample."
+            run = observe_run(self, plan=plan, run_id="negative-run", request_id="negative-launch")
+            assessment = self.assessment(plan, run, "negative-assessment")
+            assessment.update(objective_status="open", disposition="failed")
+            assessment["result"]["statement"] = "The observed value 9 refutes the proposed strict bound of 8."
+            assessment["outcomes"][0]["status"] = "not_observed"
+            assessment["failures"][0]["status"] = "observed"
+            self.mutate(self.development().assess_cycle, assessment)
+            self.save_checkpoint("negative-branch", "negative-assessment", "negative-checkpoint", select=False)
+            current = copy.deepcopy(self.assessment_payload)
+            current["id"] = "assessment-with-negative"
+            current["development"]["branches"].append({"cycle_id": "negative-branch", "disposition": "not_useful",
+                "reason": "The stronger hypothesis was refuted and its counterexample is retained.", "evidence": [self.result_evidence(run)]})
+            self.mutate(self.development().assess_cycle, current)
+            self.save_checkpoint("cycle-1", "assessment-with-negative", "checkpoint-with-negative")
+            payload = self.scope_payload()
+        report = author_readiness_state(self.store.snapshot()["records"], self.artifacts)
+        packet = readiness_packet(report)
+        # Fixture declarations are reviewed like scientific scope, never runtime flags.
+        declarations = []
+        required = {}
+        def gather(value):
+            if isinstance(value, dict):
+                if isinstance(value.get("artifact"), dict) and isinstance(value.get("locator"), dict):
+                    required.setdefault(value["artifact"]["sha256"], []).append(value["locator"])
+                for child in value.values():
+                    gather(child)
+            elif isinstance(value, list):
+                for child in value:
+                    gather(child)
+        gather(packet)
+        for ref in references(packet):
+            data = self.artifacts.read(ref)
+            if ref["sha256"] in required:
+                locators = list({json.dumps(l, sort_keys=True): l for l in required[ref["sha256"]]}.values())
+                if all(l["kind"] == "json" for l in locators):
+                    projection = {"kind": "json_locators", "locators": locators, "context": "All required finite result values."}
+                else:
+                    continue
+            elif data.lstrip().startswith(b"{"):
+                structured = json.loads(data)
+                projection = {"kind": "json_locators", "locators": [
+                    {"kind": "json", "pointer": "/" + key.replace("~", "~0").replace("/", "~1"), "value": value}
+                    for key, value in structured.items()], "context": "Typed fixture observations."}
+            elif data:
+                try:
+                    value = data.decode()
+                except UnicodeError:
+                    continue
+                projection = {"kind": "text_spans", "locators": [{"kind": "text", "start": 0, "end": len(value), "quote": value}],
+                              "context": "The entire authored scientific fixture program or log."}
+            else:
+                continue
+            declarations.append({"original_sha256": ref["sha256"], "disposition": "project", "projection": projection})
+        payload["scientific_delivery"] = declarations
+        self.contract = self.record_scope(payload)
+        if accept:
+            self.accept_scope()
+        return payload
+
     def scoped_manuscript(self, identifier="paper-1"):
         from research_harness.publication import prepare_publication
         payload = self.manuscript_readiness()["contract"]["payload"]

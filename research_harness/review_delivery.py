@@ -121,7 +121,8 @@ def deliver_manuscript(store, destination):
         from .scientific_delivery import project_delivery
         from .publication_scope import find_publication_scope
         packet, projected = project_delivery(snapshot["records"], ArtifactStore(store.root), find_publication_scope(snapshot["records"]), packet,
-            manuscript_files=[bundle["files"][kind]["artifact"] for kind in ("pdf", "abstract", "bibliography", "claims")])
+            manuscript_files=[bundle["files"][kind]["artifact"] for kind in ("pdf", "abstract", "bibliography", "claims")],
+            derived=derived)
         derived.update(projected)
         return _deliver(store, destination, packet, derived=derived, transitive=True)
     return _deliver(store, destination, packet, derived=derived)
