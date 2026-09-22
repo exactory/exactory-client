@@ -43,6 +43,20 @@ class DerivativeLocatorIdentityTests(unittest.TestCase):
         self.assertEqual(manifest["summary"]["locator"], {"kind": "json", "pointer": "/entries/1/value", "value": {"count": 2000}})
         self.assertEqual(manifest["summary"]["artifact"], manifest["whole"]["artifact"])
 
+    def test_a_reordered_manifest_locator_maps_by_digest(self):
+        population = {"count": 3, "rows": [1, 2, 3]}
+        ref = self.artifacts.put(json.dumps(population).encode(), "application/json")
+        declared = {"kind": "json", "pointer": "", "value": population}
+        reordered = {"value": {"rows": [1, 2, 3], "count": 3}, "pointer": "", "kind": "json"}
+        contract = {"payload": {"scientific_delivery": [{"original_sha256": ref["sha256"], "disposition": "project",
+            "projection": {"kind": "json_locators", "context": "Complete synthetic population.", "locators": [declared]}}]}}
+        manifest, derived = project_delivery({}, self.artifacts, contract, {"whole": {"artifact": ref, "locator": reordered}})
+        self.assertEqual(manifest["whole"]["locator"], {"kind": "json", "pointer": "/entries/0/value", "value": population})
+        self.assertEqual(manifest["whole"]["original_locator"], reordered)
+        derivative = json.loads(derived[manifest["whole"]["artifact"]["path"]])
+        self.assertEqual(derivative["entries"][0]["original_locator"]["locator_digest"], digest(declared))
+        self.assertEqual(digest(declared), digest(reordered))
+
     def test_text_span_locators_keep_their_identity_fields(self):
         text = "Observed 12 of 12 checks passed.\nRetained failure: none.\n"
         ref = self.artifacts.put(text.encode(), "text/plain")

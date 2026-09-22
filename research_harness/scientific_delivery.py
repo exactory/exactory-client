@@ -177,11 +177,12 @@ def _scientific_record(value):
     return value
 
 
-def _locator_identity(locator):
-    """The locator without its selected value, plus the digest of the complete locator.
+def _build_locator_identity(locator):
+    """The locator without its `value` key, plus the digest of the complete locator.
 
     A derivative stores each selected value once, under its entry; the identity
-    names which declared locator the entry came from without repeating the value."""
+    names which declared locator the entry came from without repeating that
+    value. A `text` locator keeps its `quote`, and a span keeps its excerpt."""
     return dict({key: value for key, value in locator.items() if key != "value"}, locator_digest=digest(locator))
 
 
@@ -431,7 +432,7 @@ class ScientificDelivery:
                 # Inspect actual preserved values. A nested private descriptor
                 # fails rather than being copied through a JSON value.
                 value = self.walk(value)
-                identity = _locator_identity(locator)
+                identity = _build_locator_identity(locator)
                 entries.append({"original_locator": identity, "value": value})
                 mapping.append({"original_locator": identity, "derived_pointer": "/entries/" + str(index) + "/value"})
         content = {"derivative": True, "original_sha256": ref["sha256"], "projection_kind": projection["kind"],
