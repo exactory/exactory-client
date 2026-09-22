@@ -530,12 +530,7 @@ class ScientificDelivery:
         if isinstance(value, str):
             self._check_bytes(value.encode())
             # Preserve the exact string while inspecting every decoded level.
-            try:
-                is_json, nested = scientific_json(value.encode(), encoded_string=True)
-            except ResearchError as error:
-                if error.code != "invalid_json":
-                    raise
-                return value
+            is_json, nested = scientific_json(value.encode(), encoded_string=True)
             if is_json:
                 if _references(nested):
                     raise ResearchError(_PRIVATE, "Encoded nested artifact references require a typed scientific value")

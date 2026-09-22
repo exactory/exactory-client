@@ -41,5 +41,11 @@ def scientific_json(data, media_type="", *, encoded_string=False):
     starts = ("{", "[", '"') if encoded_string else ("{", "[")
     if declared or decoded.lstrip().startswith(starts):
         _bounded_nesting(decoded)
-        return True, strict_json(data)
+        try:
+            return True, strict_json(data)
+        except ResearchError as error:
+            # A leading bracket or quote is only a hint. Undeclared text that
+            # does not parse is text; declared JSON must parse.
+            if declared or error.code != "invalid_json":
+                raise
     return False, None
