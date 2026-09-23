@@ -188,6 +188,84 @@ class ResearchStorageTests(unittest.TestCase):
         self.assertEqual(row, ('{"a":2,"z":1}',
                               "c2985c5ba6f7d2a55e768f92490ca09388e95bc4cccb9fdf11b15f4d42f93e73"))
 
+    def test_snapshot_materializes_each_current_record_once_in_its_transaction(self):
+        from research_harness import storage
+        store = Store(self.workspace, create=True)
+
+        def apply(tx):
+            tx.put("work", "z", {"title": "Last", "authors": ["One"]})
+            tx.put("work", "a", {"title": "First"})
+            tx.put("reading", "note", {"read": True})
+
+        store.mutate("add", {}, apply, expected_revision=0, request_id="add")
+        encoded_records = ('{"authors":["One"],"title":"Last"}',
+                           '{"title":"First"}', '{"read":true}')
+        counts = {encoded: 0 for encoded in encoded_records}
+        original = storage._load
+
+        def count_load(encoded, *args):
+            if encoded in counts:
+                counts[encoded] += 1
+            return original(encoded, *args)
+
+        with mock.patch.object(storage, "_load", count_load):
+            snapshot = store.snapshot()
+        self.assertEqual(counts, dict.fromkeys(encoded_records, 1))
+        self.assertEqual(snapshot, {"revision": 1, "records": {
+            "reading": {"note": {"read": True}},
+            "work": {"a": {"title": "First"},
+                     "z": {"title": "Last", "authors": ["One"]}}}})
+        self.assertEqual(list(snapshot["records"]), ["reading", "work"])
+        self.assertEqual(list(snapshot["records"]["work"]), ["a", "z"])
+        snapshot["records"]["work"]["z"]["authors"].append("Caller")
+        self.assertEqual(store.snapshot()["records"]["work"]["z"]["authors"], ["One"])
+
+    def test_validated_snapshot_never_hides_same_revision_tampering_on_next_use(self):
+        corruptions = (
+            ("event digest", "UPDATE events SET digest = 'bad'"),
+            ("event noncanonical JSON", "UPDATE events SET payload = '{ }'"),
+            ("receipt digest", "UPDATE receipts SET digest = 'bad'"),
+            ("receipt bytes", "UPDATE receipts SET response = '{}'"),
+            ("record digest", "UPDATE records SET digest = 'bad'"),
+            ("record bytes", "UPDATE records SET value = '{\"title\":\"Forged\"}'"),
+            ("record noncanonical JSON", "UPDATE records SET value = '{\"title\": \"Original\"}'"),
+            ("record wrong JSON type", "UPDATE records SET value = '[]'"),
+            ("missing record", "DELETE FROM records"),
+            ("schema guard", "DROP TRIGGER events_no_update"),
+        )
+        for name, statement in corruptions:
+            with self.subTest(corruption=name):
+                if self.database.exists():
+                    self.database.unlink()
+                store = Store(self.workspace, create=True)
+                self.add(store)
+                self.assertEqual(store.snapshot()["revision"], 1)
+                with self.database_connection() as connection:
+                    guards = connection.execute(
+                        "SELECT name, sql FROM sqlite_master WHERE type = 'trigger'").fetchall()
+                    for guard, _ in guards:
+                        connection.execute("DROP TRIGGER " + guard)
+                    # Corrupt offline history while restoring its exact schema.
+                    if name != "schema guard":
+                        connection.execute(statement)
+                    for _, sql in guards:
+                        connection.execute(sql)
+                    if name == "schema guard":
+                        connection.execute(statement)
+                    self.assertEqual(connection.execute(
+                        "SELECT revision FROM metadata").fetchone()[0], 1)
+
+                def must_not_run(tx):
+                    self.fail("A corrupt store reached its mutation callback")
+
+                for action in (store.snapshot, lambda: store.revision,
+                               lambda: store.committed_request("add-1"),
+                               lambda: store.mutate("add", {"key": "paper", "title": "Original"},
+                                   must_not_run, expected_revision=0, request_id="add-1"),
+                               lambda: store.mutate("new", {}, must_not_run,
+                                   expected_revision=1, request_id="new")):
+                    self.assert_error("corrupt_state", action)
+
     def test_read_only_missing_store_and_failed_mutation_do_not_create_files(self):
         self.assert_error("store_missing", lambda: Store(self.workspace))
         self.assertFalse(self.workspace.exists())

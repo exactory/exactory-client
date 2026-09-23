@@ -102,6 +102,73 @@ class SourceContractTests(LiteratureCase):
         self.mutate(import_bundle, bundle)
         self.assertIn("required_unit_incomplete", {p["code"] for p in self.mutate(record_reading, self.full_note(bundle))["result"]["pending"]})
 
+    def test_embedded_supplement_section_with_complete_main_text_is_complete(self):
+        a = self.metadata()
+        capture = self.capture(a, pdf_text="Main result.\fSupplement derivation. References: none.\f")
+        bundle = self.bundle(a, capture)
+        bundle["units"].append({"id": "supplement", "kind": "supplement", "required": True,
+            "link": self.link(a, capture["source_id"], capture["text"], "Supplement derivation.")})
+        self.mutate(import_bundle, bundle)
+        self.assertEqual(self.mutate(record_reading, self.full_note(bundle))["result"]["status"], "complete")
+
+    def test_embedded_supplement_pdf_page_with_complete_main_text_is_complete(self):
+        a = self.metadata()
+        capture = self.capture(a, pdf_text="Main result.\fSupplement derivation. References: none.\f")
+        bundle = self.bundle(a, capture)
+        bundle["units"].append({"id": "supplement", "kind": "supplement", "required": True,
+            "link": {"version_id": a, "source_id": capture["source_id"], "artifact": capture["original"],
+                     "locator": {"kind": "pdf", "page_index": 1, "printed_page": "S1", "region": [0, 0, 1, 1]}}})
+        self.mutate(import_bundle, bundle)
+        self.assertEqual(self.mutate(record_reading, self.full_note(bundle))["result"]["status"], "complete")
+
+    def test_embedded_supplement_requires_complete_required_text_coverage(self):
+        a = self.metadata()
+        capture = self.capture(a, pdf_text="Main result.\n\fSupplement derivation.\nReferences: none.\f")
+        for case, body_quote, tail_quote, tail_required, expected in (
+                ("complete", "Main result.", "Supplement derivation.\nReferences: none.", True, "complete"),
+                ("missing_tail", "Main result.", "Supplement derivation.", True, "partial"),
+                ("missing_middle", "Main result.", "References: none.", True, "partial"),
+                ("missing_start", "result.", "Supplement derivation.\nReferences: none.", True, "partial"),
+                ("optional", "Main result.", "Supplement derivation.\nReferences: none.", False, "partial")):
+            with self.subTest(case=case):
+                # Check prospective inventories independently of the separate
+                # monotonicity rule for already registered inventories.
+                bundle = self.bundle(a, capture, bundle_id=case)
+                bundle["units"][0]["id"] = "body-" + case
+                bundle["units"][0]["link"] = self.link(a, capture["source_id"], capture["text"], body_quote)
+                bundle["units"].extend([
+                    {"id": "tail-" + case, "kind": "text", "required": tail_required,
+                     "link": self.link(a, capture["source_id"], capture["text"], tail_quote)},
+                    {"id": "supplement-" + case, "kind": "supplement", "required": True,
+                     "link": self.link(a, capture["source_id"], capture["text"], "Supplement derivation.")}])
+                from research_harness.reading import required_unit_obligations
+                bundle["original_sha256"] = capture["original"]["sha256"]
+                pending = required_unit_obligations(self.store.snapshot()["records"], self.artifacts, bundle)
+                self.assertEqual("partial" if pending else "complete", expected)
+
+    def test_embedded_supplement_still_requires_its_own_inspection(self):
+        a = self.metadata()
+        capture = self.capture(a, pdf_text="Main result.\fSupplement derivation. References: none.\f")
+        bundle = self.bundle(a, capture)
+        bundle["units"].append({"id": "supplement", "kind": "supplement", "required": True,
+            "link": self.link(a, capture["source_id"], capture["text"], "Supplement derivation.")})
+        self.mutate(import_bundle, bundle)
+        result = self.mutate(record_reading, self.full_note(bundle, omit=("supplement",)))["result"]
+        self.assertEqual(result["status"], "partial")
+        self.assertIn("required_unit_uninspected", {item["code"] for item in result["pending"]})
+
+    def test_embedded_supplement_can_reuse_prior_capture_of_identical_original(self):
+        a = self.metadata()
+        first = self.capture(a, pdf_text="Main    result.\fSupplement    derivation. References: none.\f")
+        second = self.capture(a, pdf_text="Main result.\fSupplement derivation. References: none.\f")
+        self.assertEqual(first["original"], second["original"])
+        bundle = self.bundle(a, second)
+        bundle["units"].append({"id": "supplement", "kind": "supplement", "required": True,
+            "link": {"version_id": a, "source_id": first["source_id"], "artifact": first["original"],
+                     "locator": {"kind": "pdf", "page_index": 1, "printed_page": "S1", "region": [0, 0, 1, 1]}}})
+        self.mutate(import_bundle, bundle)
+        self.assertEqual(self.mutate(record_reading, self.full_note(bundle))["result"]["status"], "complete")
+
     def test_equal_extraction_does_not_cross_distinct_original_pin(self):
         a = self.metadata()
         first = self.bundle(a)
@@ -564,4 +631,3 @@ class SpanLocatorTests(LiteratureCase):
         self.mutate(import_bundle, bundle)
         self.mutate(record_reading, self.full_note(bundle))
         self.assertTrue(cohort_reading_report(self.store, [collection])["ready"])
-

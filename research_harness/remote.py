@@ -51,8 +51,8 @@ def begin_intent(store, kind, binding, *, expected_revision, request_id, dedupli
     return get_intent(store, receipt["result"]["id"])
 
 
-def _change(store, identifier, action, data, transform):
-    expected = store.revision
+def _change(store, identifier, action, data, transform, *, expected_revision=None):
+    expected = store.revision if expected_revision is None else expected_revision
     def prepare(records, value):
         current = records["remote_intent"][identifier]
         record = transform(current)
@@ -61,7 +61,7 @@ def _change(store, identifier, action, data, transform):
                              expected_revision=expected, request_id=identifier + ":" + action + ":" + str(expected))["result"]
 
 
-def remote_step(store, identifier, name, request, perform):
+def remote_step(store, identifier, name, request, perform, *, expected_revision=None):
     current = get_intent(store, identifier)
     if name in current["responses"]:
         return current["responses"][name]["response"]
@@ -69,7 +69,8 @@ def remote_step(store, identifier, name, request, perform):
         raise ResearchError("remote_reconciliation_required", "A prior remote mutation has an unknown outcome; reconcile it before another write",
                             {"request_id": identifier, "pending": current["pending"]})
     _change(store, identifier, "claim", {"name": name, "request": request},
-            lambda r: dict(r, pending={"name": name, "request": request}, status="in_flight"))
+            lambda r: dict(r, pending={"name": name, "request": request}, status="in_flight"),
+            expected_revision=expected_revision)
     # Exceptions and process death intentionally leave the claimed operation.
     response = perform()
     return resolve_step(store, identifier, name, response, {"kind": "direct_response"})

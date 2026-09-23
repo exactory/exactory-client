@@ -1,4 +1,605 @@
 {
+  "publication-scope": {
+    "id": "supported-manuscript-1",
+    "policy": "source-limited-v1",
+    "objective_digest": "<current objective digest>",
+    "checkpoint_id": "checkpoint-1",
+    "assessment_id": "assessment-1",
+    "assessment_digest": "<current assessed digest>",
+    "authorization": {
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "size": 64,
+      "path": "research/sources/objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "media_type": "text/plain"
+    },
+    "scientific_preparers": [
+      {
+        "id": "scope-preparer",
+        "kind": "agent",
+        "provenance": {
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "size": 64,
+          "path": "research/sources/objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "media_type": "text/plain"
+        },
+        "contributions": [
+          "claim_selection",
+          "gap_classification"
+        ]
+      }
+    ],
+    "scope": {
+      "id": "supported-domain",
+      "statement": "The finite result without the unavailable external comparison.",
+      "assumptions": [
+        "Only the stated finite inputs are covered."
+      ]
+    },
+    "supported_claims": [
+      {
+        "id": "finite-bound",
+        "statement": "The observed finite maximum is 9.",
+        "polarity": "positive",
+        "assumptions": [
+          "Only the stated finite inputs are covered."
+        ],
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "validation",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/validation",
+              "value": {
+                "passed": true
+              }
+            }
+          }
+        ],
+        "limitation_ids": [
+          "external-gap"
+        ]
+      }
+    ],
+    "public_limitations": [
+      {
+        "id": "external-gap",
+        "statement": "The required external comparison remains unavailable and untested.",
+        "version_ids": [
+          "arxiv:2601.00002v1"
+        ]
+      }
+    ],
+    "deferred_objective_obligations": [
+      {
+        "obligation": "Compare the finite result with the external dataset.",
+        "deferral_id": "defer-classic-1",
+        "version_id": "arxiv:2601.00002v1",
+        "dependency_digest": "<active exact source deferral digest>",
+        "dependent_claim": "Compare the finite result with the external dataset.",
+        "reason": "The required external supplement remains unavailable."
+      }
+    ],
+    "correction": null,
+    "scientific_delivery": []
+  },
+  "select-publication-scope": {
+    "id": "supported-manuscript-1"
+  },
+  "scoped-review": {
+    "id": "scoped-review-1",
+    "candidate_digest": "<exact current scoped candidate digest>",
+    "assessor": {
+      "id": "independent-assessor",
+      "kind": "agent",
+      "provenance": {
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+        "size": 15,
+        "media_type": "text/plain"
+      },
+      "relationship": "The fixture assessor is distinct from the cycle author.",
+      "independence_basis": "A separately declared review context received the exact candidate and evidence."
+    },
+    "verdict": "ready",
+    "checks": [
+      {
+        "kind": "validity",
+        "status": "passed",
+        "reason": "The authored candidate documents the exact finite claim, evidence and limits.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "validation",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/validation",
+              "value": {
+                "passed": true
+              }
+            }
+          }
+        ]
+      },
+      {
+        "kind": "scope",
+        "status": "passed",
+        "reason": "The authored candidate documents the exact finite claim, evidence and limits.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "validation",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/validation",
+              "value": {
+                "passed": true
+              }
+            }
+          }
+        ]
+      },
+      {
+        "kind": "novelty",
+        "status": "passed",
+        "reason": "The authored candidate documents the exact finite claim, evidence and limits.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "validation",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/validation",
+              "value": {
+                "passed": true
+              }
+            }
+          }
+        ]
+      },
+      {
+        "kind": "contribution",
+        "status": "passed",
+        "reason": "The authored candidate documents the exact finite claim, evidence and limits.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "validation",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/validation",
+              "value": {
+                "passed": true
+              }
+            }
+          }
+        ]
+      },
+      {
+        "kind": "development",
+        "status": "passed",
+        "reason": "The authored candidate documents the exact finite claim, evidence and limits.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "validation",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/validation",
+              "value": {
+                "passed": true
+              }
+            }
+          }
+        ]
+      },
+      {
+        "kind": "branches",
+        "status": "passed",
+        "reason": "The authored candidate documents the exact finite claim, evidence and limits.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "validation",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/validation",
+              "value": {
+                "passed": true
+              }
+            }
+          }
+        ]
+      },
+      {
+        "kind": "source_limits",
+        "status": "passed",
+        "reason": "The authored candidate documents the exact finite claim, evidence and limits.",
+        "evidence": [
+          {
+            "kind": "source",
+            "link": {
+              "version_id": "arxiv:2601.00001v1",
+              "source_id": "SOURCE_ID",
+              "artifact": {
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+                "size": 15,
+                "media_type": "text/plain"
+              },
+              "locator": {
+                "kind": "span",
+                "start": 0,
+                "end": 15,
+                "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+                "excerpt": "Source passage."
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/result",
+              "value": {
+                "bound": 9
+              }
+            }
+          },
+          {
+            "kind": "result",
+            "execution_id": "external-observation",
+            "output_id": "validation",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "text/plain"
+            },
+            "locator": {
+              "kind": "json",
+              "pointer": "/validation",
+              "value": {
+                "passed": true
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "limitations": [
+      "This authored receipt does not establish comprehension, impartiality or scientific novelty."
+    ],
+    "target": {
+      "kind": "source_limited_manuscript",
+      "contract_id": "supported-manuscript-1",
+      "scientific_target_digest": "<scientific target digest from manuscript-readiness>"
+    }
+  }
+,
   "init": {
     "profile": "research",
     "target": null,
@@ -3209,5 +3810,38 @@
         "captured_at": "2026-09-14T02:00:00Z"
       }
     ]
+  },
+  "defer-source": {
+    "id": "defer-classic-1",
+    "profile": "research",
+    "version_id": "arxiv:2601.00002v1",
+    "reason": "The required supplement remains unavailable after the documented retrieval attempts.",
+    "authorization": {
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "size": 64,
+      "path": "research/sources/objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "media_type": "text/plain"
+    },
+    "acquisition_evidence": [
+      {
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "size": 64,
+        "path": "research/sources/objects/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "media_type": "text/plain"
+      }
+    ],
+    "dependent_claims": [
+      "Do not use the unread derivation to support the claimed bound."
+    ],
+    "continuing_work": [
+      "Develop the complete objective using independently read alternative derivations."
+    ]
+  },
+  "resume-source": {
+    "id": "resume-classic-1",
+    "profile": "research",
+    "version_id": "arxiv:2601.00002v1",
+    "deferral_id": "defer-classic-1",
+    "reason": "Resume acquisition and the ordinary reading requirements."
   }
 }

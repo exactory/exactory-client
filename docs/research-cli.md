@@ -1,5 +1,31 @@
 # Research CLI
 
+## Explicit source-limited manuscripts
+
+`publication-scope` records and selects an immutable `source-limited-v1` contract. `select-publication-scope` selects an existing contract ID or `null`. Both use normal expected-revision and request-ID semantics. `scoped-review` records a separately targeted independent review. Use `example OPERATION` for the payload shapes. The complete objective and old readiness reviews remain unchanged.
+
+`gate readiness` still checks the complete objective. `gate manuscript-readiness` checks a selected supported manuscript, every ordinary evidence/development prerequisite, exact active deferral coverage, and an independent scoped acceptance. It reports manuscript readiness separately from the open complete objective. An adverse review permanently blocks its scientific target. Renaming IDs or selecting a later acceptance cannot remove that finding. A different scientific target needs a service-derived correction response covering every adverse predecessor, exact scientific changes, and a fresh independent corrective review. Scientific preparers and prior scope preparers cannot independently review the study.
+
+The manuscript claim registry must match every accepted claim ID, statement, polarity, assumption, evidence mapping and public limitation. Each claim uses `claim` for its statement plus `polarity`, `assumptions`, `limitation_ids`, and the associated exact `public_limitations`. Manuscript reviews, three paired measurements, contribution analysis and the independent round stop retain their ordinary requirements.
+
+Selected source-limited publication commands always retain these flags on retries:
+
+```sh
+exactory-draft deposit --managed-only --scope-contract-id CONTRACT --scope-target-digest TARGET --production --publish --confirm-publish --pdf draft/paper.pdf --abstract-file draft/abstract.txt --creator AUTHOR
+exactory submit --doi RECORD_DOI --managed-only --scope-contract-id CONTRACT --scope-target-digest TARGET
+```
+
+The paired scope arguments require `--managed-only`. Native state failures, stale scopes, declined reviews, changed manuscripts and round refusals stop before remote writes. Never retry a refused scoped command without its strict flags. Existing ordinary commands without flags retain their established direct fallback. Scope identities are retained in managed intents and historical receipts. Later source recovery invalidates current eligibility without erasing historical publication.
+
+An optional immutable `scientific_delivery` array declares `{original_sha256, disposition, projection}`. Author artifacts require `disposition: project` with checked JSON locators, text spans or archive members; a `public` label cannot authorize raw authored bytes or override internal roles. Exact public source originals retain their provenance. Exact manuscript PDF, abstract, bibliography and claim registry are delivered as pinned; the authored `sources` archive always requires explicit checked member projection. Every required evidence locator must retain its exact value in a derivative, with scalar original hashes and locator mapping. Missing scientific context requires refusal or independent rejection, never silent omission. Initial scoped review receives the same mechanically bounded projections before acceptance. Blind manuscript packets exclude private instructions, preparer records, correction responses and earlier readiness verdicts. Identified corrective review receives the required finding response; round review retains its ordinary current manuscript reviews and scientific context.
+
+Projection kinds are `json_locators` with native `locators`, `text_spans` with native text/span `locators`, `archive_members` with `{path, sha256, media_type, projection}` members, and `npy_array` for a complete primitive NPY array. Each includes a nonempty scientific `context`. Numerical derivatives preserve dtype, shape, C/Fortran element strides, every storage-order value and exact per-element storage hex. Integers use exact decimal strings, and nonfinite real/complex components use typed tags. Fixed-width Unicode retains interior NULs and exact UCS-4 padding bytes. Object/pickle, structured and native-endian dtypes are refused. Generic archives allow 1,000 members; complete declared NPY populations allow 20,000 members. Individual raw/derived artifacts and archive expansion are bounded to 64 MiB, headers to 64 KiB, rank to 32, aggregate numerical elements to 8,000,000, and the complete delivery including its manifest to 512 MiB. Exceeding a bound fails before destination creation and never truncates science.
+
+`source_component` declares `source_sha256`, `start` and `end` byte offsets for an unchanged JPEG stream within an established complete original PDF. Its exact bytes, native public source provenance and private-role precedence are checked; rendered or recompressed images cannot use this path. Required JSON values containing native public source descriptors retain those exact values and checked source closure. Unknown, authored or private nested descriptors fail. No projection or corrective-response permission overrides an authorization, preparer, acquisition or prior-review role sharing the same hash.
+
+JSON validation and delivery share one byte decoder for JSON media types (including parameters and `+json`), structural JSON, UTF-8 BOM and UTF-16/32. Decoded JSON string values and keys also undergo privacy checks, with depth bounded to 40. Exact bytes remain unchanged; encoded nested artifact descriptors are refused rather than becoming an implicit delivery channel.
+
+
 `exactory-research` exposes the shared research store through Python 3.9 or later and the standard library. `exactory-lab`, `exactory-draft`, `exactory`, and the native math controller consume its current evidence at their own authoritative boundaries. A download, marker file, process exit code, old receipt, or stage name does not establish scientific readiness.
 
 Follow the [managed research workflow](research-workflow.md) for the executable
@@ -93,7 +119,7 @@ The example for each operation contains all its required keys and shows the comp
 | `collect` | `definition: {corpus, primaryCategory, windowStart, windowEnd}` | `max_requests`, `page_size`; current corpus is `arxiv`. Dates are ISO calendar dates. |
 | `resume` | `collection_id` | `max_requests`; resumes retained collection/page evidence. |
 | `acquire`, `expand` | `identifier` | `provider`, `max_requests`; expansion acquires an unresolved identifier without asserting its bibliography has been read. |
-| `fulltext` | `identifier`, `url` | `max_requests`; `extraction_options: {"layout": bool}` (default true) chooses the PDF extractor's layout mode. Preserves the exact original and extraction result, and records `extraction` (extractor, version, options, text bytes, page count, longest line, whitespace fraction, expansion ratio) on the capture. A capture with other options is a distinct capture of the same original; a reading on any capture of that original satisfies its full-text coverage. |
+| `fulltext` | `identifier`, `url` | Optional `component` declares a pinned supplement relationship (see below). `max_requests`; `extraction_options: {"layout": bool}` (default true) chooses the PDF extractor's layout mode. For scanned PDFs, `extraction_options: {"ocr": true}` uses bounded English OCR with pdfinfo, pdftoppm and Tesseract, retaining every PDF page boundary and actual tool versions. OCR has a 600-second deadline, 200-page limit, 5000-pixel maximum page dimension, and 32 MiB limits for each rendered page and total text. OCR and layout options are mutually exclusive. OCR text requires original-page visual inspection for scientific interpretation. Preserves the exact original and extraction result, and records `extraction` (extractor, version, options, text bytes, page count, longest line, whitespace fraction, expansion ratio) on the capture. A capture with other options is a distinct capture of the same original; a reading on any capture of that original satisfies its full-text coverage. |
 | `import-response` | `provider`, `response_file`, `source_url`, `captured_at` | `media_type`, `mappings`; `web`/`mcp` mappings use JSON pointers into the original saved response for every work. |
 | `import-oai-cohort` | `collection_id`, `pages: [{response_file, source_url, captured_at}]` | Existing arXiv math-ph collection only. Each file is an original XML response at a checked workspace-relative path. Supply the complete ordered arXivRaw whole-set token chain; no authored works, totals, flags or HTTP receipts. |
 | `roots` | `profile`, `roots: string[]`, `collection_ids: string[]` | `target` is required for verification; optional `historical_cutoff`. Research objective identity is set by `target`, not by this scope. |
@@ -106,10 +132,13 @@ The example for each operation contains all its required keys and shows the comp
 | `sample` | `id`, `collection_id`, `size`, `seed` | Under `sampled-v1` only (`policy_inapplicable` otherwise). Draws and records the verification's sample of one frozen population, stratified by month with equal allocation, a short month's shortfall passed to the next months, and the whole population when it fits within `size` (1 to 100). The enumeration must be complete (`collection_pending`). The record keeps the seed, the per-month population and sampled counts, the population digest and the drawn members; the draw repeats from that seed, and two verifications of one paper choose their own seeds and read different members. A second draw against the unchanged population is refused with `sample_exists`; a population that changed after the draw reports `sample_stale`, which a new draw clears. Every sampled member then owes an abstract reading (`sample_reading_missing`) carrying a placement (`placement_missing`), and a scoped collection that is not the sampled one reports `sample_missing`. |
 | `loop-close` | `id`, `purposes` | Under `lineage-v1` only (`policy_inapplicable` otherwise). Closes the bounded loop. `purposes` names all five search purposes exactly once, each `{status, note}` with status `covered` or `gap`. A `covered` purpose needs a loop reading judged `relevant` or `contradictory`, or two distinct captured queries for it with no such hit; a `gap` needs two distinct queries tried, or the loop at its 100-reading limit. The record keeps the queries each purpose tried and a digest of the loop it closed: a later loop reading or search reports `loop_closure_stale`, and no closure at all reports `loop_closure_missing`. |
 | `search` | `id`, `profile`, `purpose`, `queries`, `responses`, `captured_at`, `scope`, `found_work_ids`, `verdict`, `cited_work_ids`, `impact`, `gaps`, `dispositions` | Optional `resolved`. Bind the original query and every result. `nothing-new` needs an actual captured search, including an actual empty result array when appropriate. `dispositions` judges every found work once: `{work_id, disposition, reason}` with `relevant`, `contradictory`, `potentially_relevant`, `out_of_scope`, `duplicate`, or `unresolved`; cited works are relevant or contradictory. A new search for a purpose carries forward each `contradictory` or `unresolved` work of the selected search or lists it under `resolved: [{work_id, reason}]`, else `search_findings_dropped`. A judgment is stale when its scope changes (`search_scope_stale`), when a root, required full text, found or cited work changes content (`search_evidence_stale`), or when a family enters or moves in the citation graph (`search_frontier_stale`); a new version of an unrelated reference changes nothing. Searches recorded before dispositions existed report `search_dispositions_missing`. Under `lineage-v1` and `sampled-v1` a captured query keeps at most 10 hits, counted across every response of that query; rank the results and keep the top 10 (`invalid_search` above that). A capture also enumerates completely: a page that returns fewer records than its reported total is `search_response_incomplete` and leaves the search a `search_pending` obligation on the foundation, so write a native query that returns at most ten results in total, or import the results as a mapped capture and acquire each kept hit with `acquire` before it is read. |
-| `require-fulltext` | `id`, `profile`, `version_id`, `purpose`, `reason` | Optional `historical_cutoff`, `depends_on`. Purposes: `major_claim`, `novelty`, `innovation`, `validity`, `exemplar`, `lineage` (the parent's own line of results), `classic` (a foundational paper that line rests on), `core` (a paper whose full text decides a verdict's stance or its prediction band) and `contradiction` (a source that opposes a claim). `lineage`, `classic` and `core` name the claim, lineage entry or finding they serve in `depends_on`. An eleventh `core` requirement is refused with `core_limit_reached`. Every `lineage` and `classic` entry is cited in the pinned bibliography (see "Review, publication, and verification"). An `exemplar` requirement under the `research` profile, recorded while a round is active, is that round's exemplar (see "Development rounds"). |
+| `require-fulltext` | `id`, `profile`, `version_id`, `purpose`, `reason` | Optional `historical_cutoff`, `depends_on`. Purposes: `major_claim`, `novelty`, `innovation`, `validity`, `exemplar`, `lineage` (the parent's own line of results), `classic` (a foundational paper that line rests on), `core` (a paper whose full text decides a verdict's stance or its prediction band) and `contradiction` (a source that opposes a claim). `lineage`, `classic` and `core` name the claim, lineage entry or finding they serve in `depends_on`. An eleventh `core` requirement is refused with `core_limit_reached`. Every `lineage` and nondeferred `classic` entry is cited in the pinned bibliography (see "Review, publication, and verification"). An `exemplar` requirement under the `research` profile, recorded while a round is active, is that round's exemplar (see "Development rounds"). |
 | `availability` | `id`, `profile`, `version_id`, `depth`, `source_ids`, `reason`, `policy` | Policy has `id`, `minimum_attempts`, `allowed_statuses`, `rationale`. Two policies qualify: captured terminal HTTP 403/404/410/451 failures, or (abstract depth, non-arXiv work) `allowed_statuses` `[200]` with complete captures of the work from every registry that addresses its identifiers (Crossref and OpenAlex for a DOI, OpenAlex for an OpenAlex id, the saved web/MCP import for a `url:` work), none carrying an abstract. Critical sources remain required. |
+| `defer-source` | `id`, `profile`, `version_id`, `reason`, `authorization`, `acquisition_evidence`, `dependent_claims`, `continuing_work` | Research only. Names one registered exact version with a current missing full-text requirement. `authorization` is a checked, nonempty artifact reference; `acquisition_evidence` is a nonempty array of checked, nonempty artifact references. The last two fields are nonempty string arrays recording claims that cannot use the source and work that can continue. Roots and verification targets cannot be deferred. |
+| `resume-source` | `id`, `profile`, `version_id`, `deferral_id`, `reason` | Restores ordinary obligations for the selected active or stale research deferral. Names its exact `deferral_id`; all earlier decisions and receipts remain immutable. |
 | `select-cohort-abstract` | `collection_id`, `work_id`, `unresolved_assertion_id`, `selected_assertion_id`, `reason` | Resolves a retained versionless family member to same-family exact abstract evidence. It cannot replace a known v1 obligation with v2. |
 | `visual` | `link`, `url` | Optional `max_requests`; acquires an asset referenced by the saved source. |
+
 | `standards` | `id`, `profile`, `scope`, `field`, `article_type`, `venue`, `cohort_doctrine`, `methodology`, `reporting`, `citation`, `presentation`, `applicability_questions` | `article_type` and `venue` may be null; evidence claims retain scientific status, timing, assumptions, and uncertainties. |
 | `rationale` | `id`, `profile`, `scope`, `and`, `but`, `therefore`, `value` | Research only. The established context in `and` must be supported as scoped; a proposed or refuted context is retained but pending. |
 | `innovation` | `id`, `profile`, `scope`, `cases` | Research only. Optional `origin_collection: {id, version}`. Cases separately describe original constraint, conceptual change, validation, adoption, and tested transfer limits. |
@@ -120,7 +149,7 @@ The example for each operation contains all its required keys and shows the comp
 | `bind-run` | `admission_id`, `script`, `backend`, `timeout_seconds`, `inputs`, `outputs`, `usage_unit` | Backend is `local` or `colab`; usage is planned `execution` or `wall_seconds`. Inputs map each admitted artifact to a relative path. |
 | `reconcile-run` | `admission_id` | Optional `resolution`, `reason`: `interrupted` for a confirmed dead local owner, or `not_released` for a Colab claim with no durable release. Unknown released remote work remains pending. |
 | `result` | `id`, `cycle_id`, `origin`, `command`, `status`, `exit_code`, `usage`, `outputs`, `notes` | Public JSON permits imported history only. Its exact `origin.original`, `reason`, and `deduction` fields are shown in the example. Managed outcomes come from run/reconcile. |
-| `assess` | `id`, `cycle_id`, `author`, `scope`, `execution_ids`, `result`, `validity_checks`, `outcomes`, `failures`, `findings`, `assumptions`, `remaining_obligations`, `objective_status`, `disposition`, `development` | Full nested example includes outcome judgments, distinct validity checks, and development/branch assessments. |
+| `assess` | `id`, `cycle_id`, `author`, `scope`, `execution_ids`, `result`, `validity_checks`, `outcomes`, `failures`, `findings`, `assumptions`, `remaining_obligations`, `objective_status`, `disposition`, `development` | Full nested example includes outcome judgments, distinct validity checks, and development/branch assessments. Optional `inheritance_refresh` explicitly binds current reassessments of the same ancestors without changing the prospective plan. |
 | `checkpoint` | `id`, `cycle_id`, `assessment_id`, `reason`, `next_hypothesis`, `select_for_readiness` | An unassessed unresolved checkpoint may have null assessment; it supplies no validated-result credit. |
 | `review` | `id`, `candidate_digest`, `assessor`, `verdict`, `checks`, `limitations` | Checks separately cover `validity`, `scope`, `novelty`, `contribution`, `development`, `branches` and their exact evidence. |
 | `manuscript` | `id`, `files`, `claim_evidence` (optional `citation_accounting`) | Refused with `contribution_analysis_missing` while the selected bundle has a complete measurement and no `contribution-analysis`. Files contains `pdf`, `abstract`, `bibliography`, `claims`, `sources`; `sources` may be null. Each claim mapping has `claim_id`, `evidence`. `claims` is a nonempty JSON array of objects with nonblank text `id` and `claim` and unique ids (`publication_claims_missing` for a non-array, an empty array, a non-object entry or a repeated id; `invalid_input` for a missing or blank `id` or `claim`). A claim carries at most one marker, `revised: {previous, reason}` or `superseded: {reason}`, with exactly those fields as nonblank text (`publication_claims_missing` otherwise). Optional `citation_accounting` covers every work with a recorded full-text reading and every work that a selected research search of the five purposes cites. A BibTeX entry cites such a work when it carries the work's arXiv family or DOI, or a DOI of a provider alias, as a whole identifier. An entry also cites the work when its title field equals the work's title of two or more words. Titles compare after casefolding, removing accents, naming Greek letters and dropping LaTeX commands, braces, punctuation and spaces. Another bibliography format cites the work when its text carries an identifier or contains the title; there, a shorter title inside a longer one also counts. The lineage gate reads the same evidence. Each work that no entry cites needs one item: `{work_id, cited_as}` with a BibTeX key of the pinned bibliography, or `{work_id, reason}` with nonblank text. `citation_accounting_incomplete` lists each work without an item and its reasons (`fulltext`, `search:<purpose>`). A wrong item is `invalid_citation_accounting`, with its `index` and `cause`: `fields`, `already_cited`, `unknown_work`, `duplicate`, `cited_as_and_reason`, `neither` or `unknown_key`. The bundle keeps `citation_accounting: {cited: [{work_id, key, basis}], not_cited: [{work_id, reason}]}`. `basis` is `bibliography` or `declared`. `key` is the first citing entry in file order, or null for a bibliography that is not BibTeX. |
@@ -133,9 +162,178 @@ The example for each operation contains all its required keys and shows the comp
 | `round-admit` | `id`, `round_id`, `review_id`, `reason` | Opens the round of an approved `continue` decision on the current bundle. Records the round's number, goal, objective, limits and opening state; applies a widened objective through its lineage. While the round runs, its receipt is the only output that reports the admitted goal (see "Development rounds"). |
 | `round-assess` | `id`, `round_id`, `bundle_digest`, `criteria`, `stop_conditions`, `summary` | Judges every success criterion and stop condition of the admitted goal once with `status` (`observed`, `not_observed`, `unresolved`), an explanation and evidence, on the exact current bundle. The harness derives and stores the round's progress with the record. |
 
+Source deferral requires an explicit authorization artifact and the actual retained
+retrieval evidence. It creates no HTTP failure, availability qualification or
+reading. At least one main original or required component must be unavailable.
+An acquired original without a bundle, a complete unread bundle, or available
+units awaiting inspection cannot be deferred. A missing required external image
+or a captured HTTP/network retrieval failure can qualify. Malformed, unsupported,
+unlinked or stale visual material keeps its ordinary validity or inventory checks.
+Source-access and reading-completeness obligations for that exact version
+move unchanged to `deferred_obligations` in the foundation report. The inventory
+still reports `fulltext_read: false`. Identity, unresolved references, historical
+validity, contradiction handling, budgets, actual execution and independent
+review remain ordinary obligations.
+
+The decision binds the source captures, required units, readings and current
+requirements. A change makes it `stale` and restores ordinary blocking obligations.
+Record a new decision with a new ID to reassess the gap. `resume-source` restores
+the ordinary obligations explicitly. `status` retains active, stale, superseded
+and resumed decisions, and `status --summary` counts them and deferred obligations.
+Both operations use `--expected-revision` and immutable `--request-id` receipts;
+replaying an old request never reactivates its decision.
+
+Deferral changes the preparation dependencies and invalidates dependent admissions
+and reviews. Refresh affected synthesis and comparisons before continuing. A
+deferred version cannot provide source evidence to a research cycle, assessment
+or manuscript claim, even if an earlier body of that version was read. Historical
+context and limited source statements remain recorded. An active deferred classic
+is exempt from the mandatory primary-citation check; retain its historical
+attribution and use actually read alternative evidence for scientific claims.
+Lineage citations remain required. Independent reviewers receive the scientific
+source-gap disclosure, including excluded claims and missing requirements, without
+the private authorization or retrieval-log artifacts. The full objective and all
+readiness and publication checks still apply.
+
 A fulltext note uses `depth: "fulltext"`, its current `bundle_id`, and inspections for the actual required units. Abstract inspections use `unit_id: null` and cover the complete saved abstract. Notes report `present`, `absent`, or `not_applicable` as supported by the source. Saving text about a paper without matching its captured location cannot satisfy a reading.
 
 A retry deadline exposed as `next_eligible_at` is a pending condition until that deadline. Resuming earlier can make zero requests and preserve all evidence. An expired deadline is retained history, not a permanent block. Unversioned arXiv material remains unresolved until exact-version evidence is explicitly selected. PDF extraction uses installed `pdftotext` with bounded execution; unavailable extraction remains pending.
+
+## Explicit supplement components
+
+`fulltext` normally retrieves the exact main article. Its arXiv final-URL and
+version checks remain strict. An optional `component` object retrieves a
+supplement through an explicit assessed relationship to an already acquired
+main original. This first contract supports only `component_correspondence`.
+It does not establish historical arXiv attachment identity or main-article
+version equivalence.
+
+The request shape is:
+
+```json
+{
+  "identifier": "arxiv:2601.00001v1",
+  "url": "https://publisher.example/supplement.pdf",
+  "component": {
+    "kind": "supplement",
+    "unit_id": "external-supporting-information",
+    "parent_source_id": "acq:REPLACE_WITH_PARENT_SOURCE_ID",
+    "parent_original_sha256": "REPLACE_WITH_64_HEX_PARENT_SHA256",
+    "expected_original_sha256": "REPLACE_WITH_64_HEX_COMPONENT_SHA256",
+    "basis": "component_correspondence",
+    "assessment": {
+      "sha256": "REPLACE_WITH_ASSESSMENT_SHA256",
+      "path": "research/sources/objects/REPLACE_WITH_ASSESSMENT_SHA256",
+      "size": 1234,
+      "media_type": "application/json"
+    }
+  }
+}
+```
+
+Replace the example pins with actual values. `assessment` is an immutable
+`ArtifactRef` to a JSON object. Pin that JSON with `artifact` before acquisition;
+registration alone grants neither acquired provenance nor reading authority.
+The assessment requires all these fields:
+
+| Field | Contract |
+|---|---|
+| `status` | `accepted` or `pending`, an explicit research assessment. |
+| `scope` | Exactly `required_supplement_only`. |
+| `conclusion` | Nonempty source-grounded scoped conclusion. |
+| `limitations` | Nonempty array of distinct nonempty strings. |
+| `historical_attachment_identity` | Exactly `false`. |
+| `main_article_equivalence` | Exactly `false`. |
+| `evidence.requirement` | A parent `Link` locating the citation that requires the supplement. |
+| `evidence.identity` | Object with `title` and `authors` evidence pairs; optional `affiliations` pair. Locate the component cover identity. |
+| `evidence.references` | Nonempty array of evidence pairs locating corresponding figures or sections. |
+| `evidence.conditions` | Nonempty array of evidence pairs locating the compared scientific conditions. |
+
+Each evidence pair has precisely `parent`, `component`, and `judgment`:
+
+```json
+{
+  "parent": {
+    "version_id": "arxiv:2601.00001v1",
+    "source_id": "acq:REPLACE_WITH_PARENT_SOURCE_ID",
+    "artifact": "REPLACE_WITH_ACTUAL_PARENT_ARTIFACT_REF",
+    "locator": "REPLACE_WITH_ACTUAL_PARENT_LOCATOR"
+  },
+  "component": {
+    "document": "original",
+    "locator": {
+      "kind": "pdf",
+      "page_index": 0,
+      "printed_page": null,
+      "region": [0, 0, 1, 1]
+    }
+  },
+  "judgment": "The located cover and parent passages identify the same title and authors."
+}
+```
+
+The two placeholder strings in `parent` stand for structured `ArtifactRef` and
+locator objects, using the source-link contracts above. A component location is
+`{document: "original" | "text", locator}`. It resolves against the fresh HTTP
+original or its actual extraction, not a local note or an earlier failed
+capture. A text/span locator must match that extraction exactly. PDF locators
+use its acquired page map. `expected_original_sha256` must match the fresh
+response bytes. Scientific judgments remain the assessor's assertions; the
+runtime checks locations and declared scope and does not infer scientific truth
+from matching strings.
+
+The parent must be an exact version with complete acquired main original bytes.
+An existing imported article bundle for that source must already contain the
+named required supplement unit. Every cited parent location must be covered by
+an actual recorded inspection of that exact parent source. A partial parent
+reading is sufficient; the missing supplement may be why it remains partial.
+Publisher landing captures and offline comparison notes can inform the
+assessment and remain separately retained under their real provenance. They
+cannot be presented as native HTTP acquisitions by attaching them to a note.
+
+Successful acquisition retains the real final publisher URL, HTTP response and
+headers. Observed arXiv identifier and version remain null. The capture's
+`component` field records `status: "bound" | "pending"`, `parent_version_id`,
+the complete request `spec`, and its content `identity`. An unresolved or invalid
+binding retains the fetched bytes and extraction while leaving the capture
+pending. Retry with a new request ID and assessment as needed; old finalized
+request IDs replay their original outcomes.
+
+Import a new immutable bundle to fill the existing required supplement unit
+with a whole-component text link. For a PDF component, add required original
+visual units (`figure`, `table`, or `equation`) with whole-page PDF locators
+(`region: [0, 0, 1, 1]`) for every extracted page, including the cover. Retain
+all prior required units and register ordinary reading inspections for every
+required text and visual unit. Missing pages, partial text and omitted
+inspections remain incomplete. Component acquisition and an accepted assessment
+do not close reading obligations.
+
+A component cannot be a bundle main source, verification main-original target,
+or main-original coverage substitute. Every bundle component link rechecks the
+exact parent original SHA-256. The binding and assessment identity participate
+in source-link, reading and preparation dependencies; a new assessment can
+require a new reading while previous acquisitions and readings remain intact.
+Current validation rereads the pinned evidence, so missing or changed evidence
+cannot retain current acceptance.
+
+Component-specific failures use typed `ResearchError` codes, returned in the
+acquisition `pending` array after retrieval or raised at later linking boundaries:
+
+| Code | Meaning |
+|---|---|
+| `invalid_component` | Invalid fields, unsupported kind/basis, invalid scope, missing paired evidence, or changed binding identity. |
+| `component_parent_mismatch` | Wrong exact parent version/source/original, incomplete main original, or a different bundle main original. |
+| `component_hash_mismatch` | Fresh component original does not match its expected hash. |
+| `component_requirement_missing` | The existing required supplement unit is absent, or a reading has not filled it with this component. |
+| `component_evidence_uninspected` | A cited parent location lacks a recorded native inspection. |
+| `component_pending` | Unresolved assessment/binding or unavailable component extraction. |
+| `component_page_missing` | Reading obligation: an original PDF component page lacks a required whole-page visual unit. |
+
+Existing errors remain applicable: `missing_version`, `invalid_locator`,
+artifact integrity errors, HTTP/extraction failures, and `source_pending` for a
+pending capture. Main-source promotion raises `invalid_bundle` or
+`invalid_target`. Standard reading obligations still report
+`required_unit_incomplete` and `required_unit_uninspected`.
 
 ## Actual execution
 
@@ -303,6 +501,89 @@ Observing a scientific failure signal can establish a valid negative result.
 Setting an assessment's `disposition` to `failed` does not by itself establish
 that the underlying result is invalid, and setting it to `complete` does not
 establish readiness. Inspect the resulting obligations and current whole gate.
+
+## Refreshing inherited assessment dependencies
+
+A source or preparation change can make an inherited assessment stale. Reassess
+the ancestor's actual retained execution first and save a new checkpoint. Its
+old checkpoint remains historical. A descendant's original plan still names
+that old checkpoint; the harness never substitutes the latest one implicitly.
+
+When reassessing the same descendant execution, add optional
+`inheritance_refresh: {plan_digest, bindings}` to the full `assess` payload.
+`plan_digest` is the original immutable descendant plan's digest. Each binding
+has exactly `previous_checkpoint_id`, `previous_assessment_id`, `checkpoint_id`,
+`assessment_id`, `evidence`, `assumptions`, and `deduction`. Refresh each original
+edge at most once. Both old and replacement checkpoints must bind their exact
+assessments of the same ancestor cycle within the objective lineage. The new
+checkpoint must preserve that ancestor's current, dependency-fresh assessment.
+
+For example, this is a partial edit to a full reassessment payload, not a new
+plan or standalone command. Replace all placeholders with actual records and
+copy the complete original edge's evidence list unchanged:
+
+```json
+{
+  "inheritance_refresh": {
+    "plan_digest": "ORIGINAL_DESCENDANT_PLAN_DIGEST",
+    "bindings": [
+      {
+        "previous_checkpoint_id": "parent-checkpoint-original",
+        "previous_assessment_id": "parent-assessment-original",
+        "checkpoint_id": "parent-checkpoint-current",
+        "assessment_id": "parent-assessment-current",
+        "evidence": [
+          {
+            "kind": "result",
+            "execution_id": "execution-parent",
+            "output_id": "result",
+            "artifact": {
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 15,
+              "media_type": "application/json"
+            },
+            "locator": {"kind": "json", "pointer": "/result", "value": {"bound": 9}}
+          }
+        ],
+        "assumptions": ["Every original edge assumption and every old/current parent assessment assumption."],
+        "deduction": "Explain why these exact retained results still contribute under all current qualifications."
+      }
+    ]
+  }
+}
+```
+
+The binding and the new assessment's top-level `assumptions` must retain all
+original edge assumptions and both parent assessments' assumptions. Preserve
+the scientific meaning of added qualifications in the deduction and assessed
+scope. Changed relied-on locators are rejected. For `validated_result`, the
+replacement must remain validated and explicitly assess those exact result
+references. For `failure` or assessed `unresolved`, its current assessment must
+retain the exact evidence; numerical validity need not become passing. The
+original `use` is retained automatically. A binding has no credit-override
+field, and this operation cannot turn a failed branch into a validated result.
+An unassessed checkpoint with a null assessment uses the separate unresolved
+successor workflow above.
+
+Refresh ancestors in dependency order, including assessed failure chains.
+Historical evaluation checks the entire assessment, including later inherited
+checkpoints, refresh bindings and development evidence. It collects explicit
+inheritance freshness obligations and reports stale ancestry as nonvalidated
+and incomplete, preserving the original payload and recomputing its evidence.
+It never substitutes a saved report after an early dependency failure.
+That report is not a current replacement. A new reassessment of recursively
+stale ancestry still needs explicit bindings. Artifact corruption, missing or
+invalid evidence and forged lineage remain errors; they are not converted to
+dependency-staleness reports.
+
+The original plan, admissions, executions, outputs, checkpoints and resource
+counters are unchanged. Prior failure observations remain; reassessing an
+observed signal appends it under the new assessment ID, preserving the ordinary
+changed-evidence reopening requirements. The new assessment records the
+explicit refresh in its dependency digest. Later preparation or parent-assessment changes
+make it stale again. Normal revision CAS, request replay, fresh checkpoints and
+independent readiness review remain required. A refresh never authorizes a run.
 
 ## Review, publication, and verification
 

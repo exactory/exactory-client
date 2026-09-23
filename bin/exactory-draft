@@ -75,13 +75,12 @@ _LITERATURE_HEADER = (
 # command itself did, which holds for every deposit.
 _WRITTEN_BY_EXACTORY_DISCLOSURE_TEMPLATE = (
     "This preprint was written by exactory.ai (https://www.exactory.ai), an AI"
-    " research system. The human author, {author}, reviewed the full content"
-    " and is responsible for it."
+    " research system. The human author, {author}, is responsible for its content."
 )
 _DEPOSITED_THROUGH_EXACTORY_DISCLOSURE_TEMPLATE = (
     "This preprint was prepared with AI assistance and deposited through"
     " exactory.ai (https://www.exactory.ai). The human author, {author},"
-    " reviewed the full content and is responsible for it."
+    " is responsible for its content."
 )
 
 # One keyword, sent only with the disclosure that names exactory.ai as the
@@ -312,6 +311,11 @@ def _name_sources_upload(sources_path: Path) -> str:
 
 
 def _run_deposit(args: argparse.Namespace) -> None:
+    from research_harness.cli import managed_scope_arguments
+    strict = managed_scope_arguments(args)
+    strict_store = None
+    if strict["managed_only"]:
+        strict_store, _, _ = select_managed_path(lambda workspace_store: True, **strict)
     state = _load_draft_state()
     pdf_path = Path(args.pdf) if args.pdf else _find_newest_pdf()
     if not pdf_path.exists():
@@ -341,9 +345,14 @@ def _run_deposit(args: argparse.Namespace) -> None:
     # otherwise the record is created directly, and the user reads why on stderr.
     # The direct path keeps the store this call opened, so the command opens the
     # workspace once and notes a refusal once.
-    store, deposit_report, store_open_error = select_managed_path(lambda workspace_store: validate_deposit(
-        workspace_store, pdf_path, abstract_path, sources_path,
-        new_version=args.new_version, environment=environment))
+    if strict_store is not None:
+        store, store_open_error = strict_store, None
+        deposit_report = validate_deposit(store, pdf_path, abstract_path, sources_path,
+                                          new_version=args.new_version, environment=environment)
+    else:
+        store, deposit_report, store_open_error = select_managed_path(lambda workspace_store: validate_deposit(
+            workspace_store, pdf_path, abstract_path, sources_path,
+            new_version=args.new_version, environment=environment), **strict)
     if deposit_report is not None:
         _deposit_managed(store, deposit_report, args, base_url, environment, metadata, sources_path, token)
     else:
@@ -361,6 +370,11 @@ def _deposit_managed(store, report: dict, args: argparse.Namespace, base_url: st
                "base_url": base_url, "environment": environment, "new_version": args.new_version,
                "publish": args.publish, "metadata": metadata, "uploads": uploads,
                "prior": store.snapshot()["records"].get("workspace", {}).get("deposit") if args.new_version else None}
+    from research_harness.publication_scope import publication_scope_binding, validate_caller_scope
+    scope = publication_scope_binding(bundle)
+    validate_caller_scope(scope, getattr(args, "scope_contract_id", None), getattr(args, "scope_target_digest", None))
+    if scope is not None:
+        binding["publication_scope"] = scope
     identity = command_identity(store, args)
     # CAS validates the snapshot that supplied the exact upload bytes.
     if args.expected_revision is None:
@@ -546,6 +560,8 @@ def _build_parser() -> argparse.ArgumentParser:
     deposit.add_argument("--creator", action="append", required=True,
                          help='Author as "Family name, Given names". Repeat for more authors.')
     deposit.set_defaults(handler=_run_deposit)
+    from research_harness.cli import add_managed_scope
+    add_managed_scope(deposit)
     add_identity(deposit, required=False)
     reconcile = commands.add_parser("reconcile", allow_abbrev=False, help="Settle the claimed step of a saved deposit intent, then continue that deposit.")
     reconcile.add_argument("intent_id")

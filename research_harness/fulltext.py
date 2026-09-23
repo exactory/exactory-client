@@ -181,7 +181,7 @@ class _Article(HTMLParser):
                 self.body_text.append(data)
 
 
-def extract(data, media_type, *, extractor=None, layout=True):
+def extract(data, media_type, *, extractor=None, layout=True, ocr=False):
     result = {"status": "unsupported_fulltext", "text": None, "includes_abstract": None, "visual_inspection_required": True,
               "extractor": None, "version": None, "options": {},
               "media_type": media_type, "format_detection": "reported_media_type"}
@@ -189,12 +189,17 @@ def extract(data, media_type, *, extractor=None, layout=True):
         media_type = "application/pdf"
         result.update({"media_type": media_type, "format_detection": "pdf_signature_from_generic_binary"})
     if media_type == "application/pdf":
-        result.update({"extractor": PdfExtractor.name, "options": {"layout": layout}})
+        if extractor is None and ocr:
+            from .ocr import OcrPdfExtractor
+            extractor = OcrPdfExtractor()
+        result.update({"extractor": getattr(extractor, "name", PdfExtractor.name),
+                       "options": {"ocr": True} if ocr else {"layout": layout}})
         if not data.startswith(b"%PDF-") or b"%%EOF" not in data[-4096:]:
             result["status"] = "malformed_pdf"
             return result
         extracted = (extractor or PdfExtractor(layout=layout))(data)
         result.update({"status": extracted["status"], "text": extracted["text"],
+                       "extractor": extracted.get("extractor", result["extractor"]),
                        "version": extracted.get("version"), "options": extracted.get("options", {"layout": layout})})
         if result["status"] == "extracted" and (not isinstance(result["text"], str) or not result["text"].strip()):
             result["status"], result["text"] = "empty_text", None
