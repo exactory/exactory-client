@@ -16,8 +16,8 @@ no_query, and network_error. A network failure is never treated as fabrication,
 and a report where nothing was verified does not pass the gate.
 
 lookup also reads the manuscript next to the bibliography: the main LaTeX file
-(paper.tex, the only file with \documentclass, or --main) and the files it
-includes. An entry that no citation command cites is blocking, and \nocite does
+(--main, else paper.tex, else the only file with \documentclass) and the files
+it includes. An entry that no citation command cites is blocking, and \nocite does
 not count as a citation. A sentence that makes a prior-art statement (classical,
 well known, established, previously, has been shown, and similar) without a
 citation is a warning. The report records the SHA-256 of each file read, so the
@@ -1236,8 +1236,8 @@ def _resolve_preprint_citation(arxiv_id: str, keep_preprint: bool) -> tuple[dict
     preprint = resolution["meta"]
     if keep_preprint:
         named = preprint.get("published_doi")
-        return resolution, (f"The arXiv record names a published version, DOI {named}. The entry"
-                            " cites the preprint because of --preprint." if named else "")
+        return resolution, ((f"The arXiv record names a published version, DOI {named}. " if named else "")
+                            + "The entry cites the preprint because of --preprint.")
     published, how = _find_published_version(preprint)
     if published is None:
         return resolution, (f"The entry cites the preprint arXiv:{arxiv_id}: {how}. If the paper has"

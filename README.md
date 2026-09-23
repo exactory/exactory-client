@@ -36,11 +36,11 @@ paper-verification market. One plugin serves both personas:
 ## Install
 
 Version [0.43.0](docs/releases/0.43.0.md) makes a manuscript account for the
-literature that its study used. At the manuscript pin, every work that the study
-read in full, and every work that a five-purpose search cites, is cited or has a
-stated reason. `exactory-check add --arxiv-id` cites the published version when
-one exists, and `lookup` blocks bibliography entries that the manuscript never
-cites.
+literature that its study used. The manuscript pin covers every work that the
+study read in full and every work that a selected five-purpose search cites.
+Each of these works is cited, or has a stated reason. `exactory-check add
+--arxiv-id` cites the published version when one exists. `lookup` blocks
+bibliography entries that the manuscript never cites.
 
 Version 0.42.2 completes [0.42.0](docs/releases/0.42.0.md), which directs every
 research study at the challenges ahead of it. A study records those challenges
@@ -266,11 +266,12 @@ the registry (Crossref, DataCite, or the arXiv API) and writes the BibTeX
 entry itself. As a result, an entry cannot carry a wrong title or author
 list. `add --arxiv-id` cites the published version when the arXiv record or
 Crossref names one (`--preprint` keeps the preprint). `lookup` checks every
-reference against the registries, blocks entries that the LaTeX under `draft/`
-never cites, lists prior-art sentences without a citation as warnings, and
-writes a report to `.exactory/citation-check.json`. `gate` checks that report
-offline, including that the bibliography and the LaTeX are unchanged, and exits
-non-zero when the citation gate does not pass.
+reference against the registries. It also reads the manuscript: entries that
+the manuscript never cites are blocking, and prior-art sentences without a
+citation are warnings. `lookup` writes a report to
+`.exactory/citation-check.json`. `gate` checks that report offline and exits
+non-zero when the citation gate does not pass. The gate also fails when the
+bibliography or the manuscript changed after the report.
 
 **`exactory-draft`** manages the paper workspace. `init` creates the layout,
 and `deposit` sends the built PDF and sources to Zenodo. The sandbox API and

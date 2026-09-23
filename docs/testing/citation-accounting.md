@@ -1,6 +1,6 @@
 # Citation accounting (0.43.0): test record
 
-Source plan: the v8 harness-improvement design and tasks (T1 to T3) in the
+Source plan: the v8 harness-improvement design and tasks (T1 to T5) in the
 exactory repository, `misc/harness-improvement/v8/`. The journeys below come
 from that design.
 
@@ -14,33 +14,40 @@ from that design.
    the compiled bibliography shows the formula, not HTML tags.
 4. As an author, I want `lookup` to block bibliography entries that the
    manuscript never cites and to list prior-art sentences without a citation.
-5. As a reviewer of a study, I want the manuscript pin to show that every fully
-   read or search-cited work is cited or has a stated reason.
+5. As the person who supervises a study, I want the manuscript pin to show that
+   every fully read or search-cited work is cited or has a stated reason.
 
 ## RED and GREEN evidence
 
 | Task | RED commit and cause | GREEN commit | Command |
 | --- | --- | --- | --- |
-| T1 cache, markup, published version | `b7e43a9`: SystemExit 1 with `author_mismatch` from a title-keyed preprint record; literal `<sub>` titles; `misc` entry although the arXiv record names a DOI; no `--preprint` | `b89360f`: 41 tests OK | `python3 -m unittest tests.test_check` |
-| T2 manuscript checks | `9e420b6`: `KeyError: 'manuscript'`; an uncited entry did not block; the gate passed after a LaTeX change | see the T2 and T3 commit | `python3 -m unittest tests.test_check` (48 tests OK) |
-| T3 accounting at the pin | `e2bb414`: `ModuleNotFoundError: research_harness.citations` | see the T2 and T3 commit | `python3 -m unittest discover -s tests -p test_research_citation_accounting.py` (9 tests OK) |
+| T1 cache, markup, published version | `b7e43a9`: SystemExit 1 with `author_mismatch` from a title-keyed preprint record; literal `<sub>` titles; `misc` entry although the arXiv record names a DOI; no `--preprint` | `b89360f` | `python3 -m unittest tests.test_check` |
+| MathML titles | test in `b557e6b`: words glued (`Films ofBiGrown`), scripts lost | `b557e6b` | `python3 -m unittest tests.test_check` |
+| T2 manuscript checks | `9e420b6`: `KeyError: 'manuscript'`; an uncited entry did not block; the gate passed after a LaTeX change | `4f7ef06` | `python3 -m unittest tests.test_check` |
+| T3 accounting at the pin | `e2bb414`: `ModuleNotFoundError: research_harness.citations` | `4f7ef06` | `python3 -m unittest discover -s tests -p test_research_citation_accounting.py` |
+| First review (exactory-check, 2 Major, 13 Minor) | `82d1f3e`: 19 failures and 15 errors in `tests.test_check` | `a34a247` | `python3 -m unittest tests.test_check` |
+| Second review (citation evidence, 1 Major, 10 Minor) | `c1a7104`: `ImportError` for `read_bibliography`, `find_citing_entry`, `collect_accountable_works` | see the pull request | `python3 -m unittest discover -s tests -p test_research_citation_accounting.py` |
 
 ## Guarantees
 
 | # | Guarantee | Test |
 | --- | --- | --- |
 | 1 | A DOI entry is compared with its DOI record even when the cache holds a preprint record under the same title | `test_check.TestCacheIdentity` |
-| 2 | Records are cached only under the primary identity | `test_check.TestCacheIdentity` |
-| 3 | `<sub>`, `<sup>`, `<i>`, `<b>`, `<scp>` and inline MathML (`msub`, `msup`) render as LaTeX; other tags are dropped; MathML that does not parse keeps its text; tagged and LaTeX titles match | `test_check.TestRegistryMarkup` |
-| 4 | `add --arxiv-id` cites the DOI in the arXiv record, or a unique Crossref title and first-author match; a second match, another first author or no match keeps the preprint; `--preprint` keeps it | `test_check.TestVersionOfRecord` |
-| 5 | An entry that no citation command cites is blocking; commented citations do not count; `\nocite{*}` counts all; bracketed options and starred forms count | `test_check.TestManuscriptChecks` |
-| 6 | Prior-art sentences without a citation are warnings with file and line; the abstract is excluded | `test_check.TestManuscriptChecks` |
-| 7 | The gate treats a report as stale when a LaTeX file changes or is added, or when the report has no manuscript object | `test_check.TestGateSubcommand` |
-| 8 | Accounted works are full-text readings and the citations of selected research searches, with their reasons | `test_research_citation_accounting.AccountableWorkTests` |
-| 9 | Bibliography evidence, declared keys and reasons account for every work; non-BibTeX bibliographies cite without a key | `test_research_citation_accounting.AccountCitationsTests` |
-| 10 | Incomplete and invalid accountings are refused with their codes | `test_research_citation_accounting.AccountCitationsTests` |
-| 11 | The pin refuses unaccounted works and stores the accounting in the bundle | `test_research_citation_accounting.ManuscriptPinTests` |
-| 12 | The lineage gate reads the same citation evidence as before | `test_research_publication` (token tests and lineage tests) |
+| 2 | Records are cached only under the primary identity, in cache schema version 2; an older cache is ignored | `test_check.TestCacheIdentity` |
+| 3 | `<sub>`, `<sup>`, `<i>`, `<b>`, `<scp>` and inline MathML (`msub`, `msup`) render as LaTeX with one math group at the outermost level; crossed tags and MathML that does not parse keep their text | `test_check.TestRegistryMarkup` |
+| 4 | Only registry tag names are markup: a fabricated suffix in angle brackets is a `title_mismatch`, and inequalities stay text | `test_check.TestRegistryMarkup` |
+| 5 | `add --arxiv-id` accepts a published version only as a journal, proceedings or chapter record by the same first and second authors; each DOI in the arXiv record is checked; a Crossref match also needs a year no earlier than the preprint's minus one | `test_check.TestVersionOfRecord` |
+| 6 | `add` names an unreachable Crossref, prints a notice for `--preprint`, and refuses a work that the bibliography holds under any key | `test_check.TestVersionOfRecord` |
+| 7 | The manuscript is `paper.tex`, the only root file or `--main`, and the files it includes; several roots without `--main` exit 2 | `test_check.TestManuscriptChecks` |
+| 8 | Every citation form counts (`\cites` with notes, `\cite<...>`, `\Citet`, URLs with `%`); `\nocite`, comments after an even number of backslashes, `\iffalse` blocks and comment environments do not | `test_check.TestManuscriptChecks` |
+| 9 | Prior-art sentences without a citation are warnings with file and line; the abstract is excluded | `test_check.TestManuscriptChecks` |
+| 10 | `counts` stay per reference; the top-level `blocking` count adds the uncited entries | `test_check.TestManuscriptChecks` |
+| 11 | The gate treats a report as stale when a manuscript file changes or an included file appears, and when the report has no manuscript object; an unrelated LaTeX file does not matter | `test_check.TestGateSubcommand` |
+| 12 | Accounted works are full-text readings and the citations of selected research searches, with their reasons | `test_research_citation_accounting.AccountableWorkTests` |
+| 13 | Evidence is a whole identifier or the whole entry title; a DOI prefix, a longer arXiv id, a title inside a longer title and `@comment` text are not evidence; the key is the first citing entry in file order | `test_research_citation_accounting.CitationEvidenceTests` |
+| 14 | Incomplete and invalid accountings are refused; each refused item names its index and cause | `test_research_citation_accounting.AccountCitationsTests` |
+| 15 | The pin refuses unaccounted works and stores the accounting in the bundle | `test_research_citation_accounting.ManuscriptPinTests` |
+| 16 | The lineage gate reads the same evidence as the accounting | `test_research_publication` (lineage and token tests) |
 
 ## Real-data checks
 
@@ -52,9 +59,8 @@ from that design.
   10.1103/PhysRevLett.115.217602 render `Bi$_{2}$Se$_{3}$` and
   `Cu$_{0.02}$Bi$_{2}$Se$_{3}$` and verify in `lookup`.
 - Dry accounting on a real study store (read-only snapshot): 32 accounted
-  works, all read in full; the selected five-purpose searches cite 17 of
-  them. The
-  bibliography of the deposited paper left 16 works neither cited nor
+  works, all read in full; the selected five-purpose searches cite 17 of them.
+  The bibliography of the deposited paper left 16 works neither cited nor
   explained. After the citation revision, 8 remain. One work counted as cited
   only through an entry that the LaTeX never cites; `lookup` now blocks such
   an entry.

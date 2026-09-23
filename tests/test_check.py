@@ -872,6 +872,10 @@ class TestVersionOfRecord(_CheckTestCase):
         stdout_text, entry = self._add(["--arxiv-id", "2401.01234", "--preprint"])
         self.assertEqual(entry["type"], "misc")
         self.assertIn("10.1234/exact.5678", stdout_text)
+        self.bib_path.unlink()
+        _check._open_url = self._route(None, [])
+        stdout_text, entry = self._add(["--arxiv-id", "2401.01234", "--preprint"])
+        self.assertIn("because of --preprint", stdout_text)
 
 
 class TestParserStrictness(unittest.TestCase):

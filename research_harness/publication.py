@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 
 from .artifacts import ArtifactStore
-from .citations import account_citations, find_citation_tokens, normalize_bibliography
+from .citations import account_citations, find_citing_entry, read_bibliography
 from .execution_evidence import author_readiness_state
 from .errors import ResearchError
 from .evaluation import Evaluation
@@ -235,13 +235,13 @@ def lineage_citation_obligations(records, artifacts, bundle):
     from .principles import preparation_policy
     if preparation_policy(records) != LINEAGE:
         return []
-    bibliography = normalize_bibliography(artifacts.read(bundle["files"]["bibliography"]["artifact"]))
+    bibliography = read_bibliography(artifacts.read(bundle["files"]["bibliography"]["artifact"]))
     found = []
     for requirement in sorted(records.get("fulltext_requirement", {}).values(), key=lambda r: r["id"]):
         if requirement["profile"] != "research" or requirement["purpose"] not in ("lineage", "classic"):
             continue
         work = records["work"][requirement["version_id"]]
-        if not any(token in bibliography for token in find_citation_tokens(work)):
+        if not find_citing_entry(bibliography, [work])[0]:
             found.append(obligation("lineage_citation_missing", "Cite this lineage or classic entry in the manuscript bibliography.",
                                     version_id=requirement["version_id"], title=work["title"]))
     return found
