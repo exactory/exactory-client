@@ -27,7 +27,8 @@ from that design.
 | T3 accounting at the pin | `e2bb414`: `ModuleNotFoundError: research_harness.citations` | `4f7ef06` | `python3 -m unittest discover -s tests -p test_research_citation_accounting.py` |
 | First review (exactory-check, 2 Major, 13 Minor) | `82d1f3e`: 19 failures and 15 errors in `tests.test_check` | `a34a247` | `python3 -m unittest tests.test_check` |
 | Second review (citation evidence, 1 Major, 10 Minor) | `c1a7104`: `ImportError` for `read_bibliography`, `find_citing_entry`, `collect_accountable_works` | `4aa8001` | `python3 -m unittest discover -s tests -p test_research_citation_accounting.py` |
-| Fix review (2 Major, 10 Minor) | `22549e0`: 11 failures in `tests.test_check`, 11 in `test_research_citation_accounting` | see the pull request | both commands above |
+| Fix review (2 Major, 10 Minor) | `22549e0`: 11 failures in `tests.test_check`, 11 in `test_research_citation_accounting` | `3bd27e2` | both commands above |
+| Docstring escape (found in the suite output) | the strict compile helper fails on `3bd27e2` with `SyntaxError: invalid escape sequence \d` | `460c313` | `python3 -m unittest discover -s tests -p test_manifest.py` |
 
 ## Guarantees
 
@@ -72,4 +73,7 @@ from that design.
 
 ## Full suite
 
-Recorded in the pull request after the candidate run.
+- `python3 -m unittest discover -s tests` on `460c313` with local Python 3.9.6:
+  1,249 tests OK in 3,034 s, no warnings in the output.
+- The GitHub Actions matrix (Python 3.9, 3.12 and 3.14) runs on the pull
+  request.
