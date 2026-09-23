@@ -44,8 +44,15 @@ def scientific_json(data, media_type="", *, encoded_string=False):
         try:
             return True, strict_json(data)
         except ResearchError as error:
-            # A leading bracket or quote is only a hint. Undeclared text that
-            # does not parse is text; declared JSON must parse.
+            # A leading bracket or quote is only a hint: undeclared text that
+            # no JSON decoder reads is text. Text that a decoder reads, such as
+            # JSON with duplicate fields, stays strict, because as text its
+            # decoded strings would miss the privacy checks.
             if declared or error.code != "invalid_json":
                 raise
+            try:
+                json.loads(decoded)
+            except ValueError:
+                return False, None
+            raise
     return False, None
