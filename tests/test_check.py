@@ -232,8 +232,10 @@ class TestReportSchema(_CheckTestCase):
         self.assertEqual(
             set(report),
             {"version", "bib_sha256", "checked_at", "entries", "counts",
-             "blocking", "nothing_verified", "ok"},
+             "blocking", "nothing_verified", "ok", "manuscript"},
         )
+        self.assertEqual(set(report["manuscript"]),
+                         {"tex_sha256", "uncited_keys", "prior_art_without_citation"})
         self.assertEqual(report["version"], 1)
         self.assertRegex(report["checked_at"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
         for entry in report["entries"]:
@@ -484,6 +486,22 @@ class TestGateSubcommand(_CheckTestCase):
         self._write_report(blocking=1, nothing_verified=False)
         self._gate(1)
 
+    def test_a_changed_manuscript_source_makes_the_report_stale(self) -> None:
+        self.bib_path.write_text(_FIXTURE_BIB_TEXT)
+        tex_path = self.scratch_dir / "draft" / "paper.tex"
+        tex_path.write_text("\\nocite{*}\n")
+        self._write_report(blocking=0, nothing_verified=False)
+        report = json.loads(self.report_path.read_text())
+        report["manuscript"] = {"tex_sha256": {"paper.tex": hashlib.sha256(tex_path.read_bytes()).hexdigest()},
+                                "uncited_keys": [], "prior_art_without_citation": []}
+        self.report_path.write_text(json.dumps(report))
+        self.assertIn("Citation gate: pass", self._gate(None))
+        tex_path.write_text("\\cite{example2024deterministic}\n")
+        self.assertIn("manuscript", self._gate(1))
+        tex_path.write_text("\\nocite{*}\n")
+        (self.scratch_dir / "draft" / "appendix.tex").write_text("More text.\n")
+        self.assertIn("manuscript", self._gate(1))
+
     def test_nothing_verified_fails(self) -> None:
         self.bib_path.write_text(_FIXTURE_BIB_TEXT)
         self._write_report(blocking=0, nothing_verified=True)
@@ -585,6 +603,66 @@ class TestRegistryMarkup(_CheckTestCase):
                 self.out_path.parent.joinpath("citation-cache.json").unlink(missing_ok=True)
                 report = self._lookup(["--bib", str(self._write_bib(entry))], None)
                 self.assertEqual(report["entries"][0]["status"], "verified")
+
+
+_TWO_REAL_ENTRIES_BIB_TEXT = "\n\n".join(_FIXTURE_BIB_TEXT.split("\n\n")[:2]) + "\n"
+
+
+class TestManuscriptChecks(_CheckTestCase):
+    """lookup reads the LaTeX sources next to the bibliography."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        _check._open_url = _route_fixture_registry
+        self.draft_dir = self.scratch_dir / "draft"
+        self.draft_dir.mkdir()
+        self.bib_path = self.draft_dir / "references.bib"
+        self.bib_path.write_text(_TWO_REAL_ENTRIES_BIB_TEXT)
+
+    def _lookup_tex(self, tex: str, expected_exit_code: int | None) -> dict:
+        (self.draft_dir / "paper.tex").write_text(tex)
+        return self._lookup(["--bib", str(self.bib_path)], expected_exit_code)
+
+    def test_an_entry_the_manuscript_never_cites_blocks(self) -> None:
+        report = self._lookup_tex("Shown by \\citet{example2024deterministic}.\n"
+                                  "% \\cite{instance2023predicting} in a comment only\n", 1)
+        self.assertEqual(report["manuscript"]["uncited_keys"], ["instance2023predicting"])
+        self.assertEqual(report["blocking"], 1)
+        self.assertEqual(report["counts"]["blocking"], 1)
+        self.assertFalse(report["ok"])
+        output = self._run_command(["lookup", "--out", str(self.out_path), "--bib", str(self.bib_path)], 1)
+        self.assertIn("uncited: instance2023predicting", output)
+
+    def test_every_citation_command_form_counts(self) -> None:
+        report = self._lookup_tex("As in \\citet[see][p.~3]{instance2023predicting} and"
+                                  " \\parencite*{example2024deterministic}.\n", None)
+        self.assertEqual(report["manuscript"]["uncited_keys"], [])
+        self.assertTrue(report["ok"])
+        report = self._lookup_tex("\\nocite{*}\n", None)
+        self.assertEqual(report["manuscript"]["uncited_keys"], [])
+
+    def test_a_prior_art_sentence_without_a_citation_is_a_warning(self) -> None:
+        report = self._lookup_tex(
+            "\\begin{abstract}\nThe classical law is corrected.\n\\end{abstract}\n"
+            "The classical treatment is well known.\n"
+            "It has been shown to hold \\citep{instance2023predicting}. We cite"
+            " \\citet{example2024deterministic}.\n", None)
+        findings = report["manuscript"]["prior_art_without_citation"]
+        self.assertEqual([(finding["file"], finding["line"]) for finding in findings], [("paper.tex", 4)])
+        self.assertEqual(findings[0]["sentence"], "The classical treatment is well known.")
+        self.assertEqual(report["blocking"], 0)
+        self.assertEqual(report["counts"]["warning"], 1)
+        self.assertTrue(report["ok"])
+
+    def test_the_report_records_the_manuscript_sources_it_read(self) -> None:
+        report = self._lookup_tex("\\nocite{*}\n", None)
+        self.assertEqual(report["manuscript"]["tex_sha256"], {
+            "paper.tex": hashlib.sha256((self.draft_dir / "paper.tex").read_bytes()).hexdigest()})
+
+    def test_a_bibliography_without_latex_sources_checks_only_the_registries(self) -> None:
+        report = self._lookup(["--bib", str(self.bib_path)], None)
+        self.assertEqual(report["manuscript"],
+                         {"tex_sha256": {}, "uncited_keys": [], "prior_art_without_citation": []})
 
 
 _ARXIV_TITLE = "Deterministic Citation Verification for Automated Research"
