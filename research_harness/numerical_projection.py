@@ -12,7 +12,7 @@ _CODE = "invalid_numerical_projection"
 MAX_ELEMENTS = 8_000_000
 
 
-def _float(value):
+def _encode_float(value):
     if math.isnan(value):
         return {"nonfinite": "nan"}
     if math.isinf(value):
@@ -76,10 +76,10 @@ def decode_npy(data, *, remaining_elements=MAX_ELEMENTS):
                 raise ResearchError(_CODE, "Boolean NPY storage must contain canonical zero or one values")
             value = element == b"\x01"
         elif kind == "f":
-            value = _float(struct.unpack(order + ("f" if size == 4 else "d"), element)[0])
+            value = _encode_float(struct.unpack(order + ("f" if size == 4 else "d"), element)[0])
         elif kind == "c":
             real, imag = struct.unpack(order + ("ff" if size == 8 else "dd"), element)
-            value = {"complex": {"real": _float(real), "imag": _float(imag)}}
+            value = {"complex": {"real": _encode_float(real), "imag": _encode_float(imag)}}
         else:
             codes = [int.from_bytes(element[i:i + 4], "little" if order == "<" else "big") for i in range(0, size, 4)]
             if any(code > 0x10FFFF or 0xD800 <= code <= 0xDFFF for code in codes):

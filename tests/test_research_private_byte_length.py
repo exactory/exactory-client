@@ -90,7 +90,7 @@ class PrivateByteLengthTests(unittest.TestCase):
         projector = ScientificDelivery(records, self.artifacts, {"payload": {"scientific_delivery": []}}, {})
         records["source_deferral"].clear()
         with self.assertRaises(ResearchError) as error:
-            projector.reference(ref)
+            projector.map_reference(ref)
         self.assertEqual(error.exception.code, "private_mixed_artifact_required")
         with self.assertRaises(ResearchError):
             projector._check_bytes(b"A copy: Original private content")

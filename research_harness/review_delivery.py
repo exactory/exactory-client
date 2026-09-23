@@ -14,7 +14,7 @@ from .errors import ResearchError
 from .evaluation import Evaluation
 from .publication import _bundle, publication_state
 from .review_packets import manuscript_packet, readiness_packet, round_packet, find_round_investigation_responses
-from .scientific_json import scientific_json
+from .scientific_json import parse_scientific_json
 from .scientific_delivery import encode_delivery
 from .workspace import strict_json, write_projection
 
@@ -49,7 +49,7 @@ def _deliver(store, destination, manifest, *, derived=None, transitive=False, em
         data = derived[ref["path"]] if ref["path"] in derived else artifacts.read(ref)
         values.append((ref, data))
         if transitive and (data or ref not in empty_captures):
-            is_json, structured = scientific_json(data, ref["media_type"])
+            is_json, structured = parse_scientific_json(data, ref["media_type"])
             if is_json:
                 pending.extend(references(structured))
     destination.mkdir(parents=True, mode=0o700)

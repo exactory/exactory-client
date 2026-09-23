@@ -37,7 +37,7 @@ from urllib.parse import parse_qsl, urlsplit
 from .artifacts import ArtifactStore, _Workspace
 from .cohort_evidence import cohort_report
 from .errors import ResearchError
-from .components import binding_identity, is_component, validate_binding
+from .components import compute_binding_identity, is_component, validate_binding
 from .evaluation import Evaluation
 from .evidence import digest
 from .graph import citation_graph, obligation, selected_bundle, validate_target
@@ -297,7 +297,7 @@ def _search_evidence_digest(evaluation, scope, found, cited=()):
         content["abstracts"] = sorted({digest([a["artifact"]["sha256"], a["completeness"]]) for a in work.get("abstracts", [])})
         content["date_assertions"] = sorted({digest(a["values"]) for a in work.get("date_assertions", [])})
         content["fulltexts"] = sorted({digest([c["original"]["sha256"] if c["original"] else None,
-            c["text"]["sha256"] if c["text"] else None, c["availability"], c["includes_abstract"]] + ([binding_identity(c)] if is_component(c) else []))
+            c["text"]["sha256"] if c["text"] else None, c["availability"], c["includes_abstract"]] + ([compute_binding_identity(c)] if is_component(c) else []))
             for c in work.get("fulltexts", [])})
         content["references"] = sorted({digest([r["target"], r["kind"], r["raw"]]) for r in graph["references"] if r["version_id"] == version})
         content["aliases"] = {k: sorted({a["work_id"] for a in record["assertions"]}) for k, record in records.get("alias", {}).items()

@@ -164,8 +164,8 @@ def _print_json(payload: dict) -> None:
 
 
 def _run_submit(args: argparse.Namespace) -> None:
-    from research_harness.cli import managed_scope_arguments
-    strict = managed_scope_arguments(args)
+    from research_harness.cli import parse_managed_scope_arguments
+    strict = parse_managed_scope_arguments(args)
     if args.arxiv_id:
         body = {"arxivId": args.arxiv_id}
     elif args.doi:

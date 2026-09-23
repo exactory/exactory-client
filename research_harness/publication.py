@@ -110,9 +110,9 @@ def prepare_publication(store, payload, *, expected_revision, request_id):
             raise ResearchError("publication_claims_missing", "Map every manuscript claim to evidence")
         scoped = report.get("contract")
         if scoped is not None:
-            from .publication_scope import validate_manuscript_claims, scientific_authors
+            from .publication_scope import validate_manuscript_claims, collect_scientific_authors
             validate_manuscript_claims(scoped, claims, value["claim_evidence"])
-            candidate = dict(report["candidate"], authors=scientific_authors(records, scoped))
+            candidate = dict(report["candidate"], authors=collect_scientific_authors(records, scoped))
             readiness_review = report["review"]
         else:
             candidate = report["candidate"]

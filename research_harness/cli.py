@@ -99,7 +99,7 @@ def add_managed_scope(parser):
     parser.add_argument("--scope-target-digest", help="Exact intended scientific target SHA-256.")
 
 
-def managed_scope_arguments(args):
+def parse_managed_scope_arguments(args):
     strict = getattr(args, "managed_only", False)
     contract, target = getattr(args, "scope_contract_id", None), getattr(args, "scope_target_digest", None)
     if bool(contract) != bool(target) or (contract is not None and not strict):

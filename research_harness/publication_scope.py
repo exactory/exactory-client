@@ -17,7 +17,6 @@ from .execution_evidence import _observed, author_readiness_state
 from .graph import obligation
 from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .source_deferrals import assess_deferrals, build_source_gap_disclosure
-from .source_links import read_locator
 from .workspace import strict_json
 
 
@@ -25,16 +24,16 @@ POLICY = "source-limited-v1"
 _CODE = "invalid_publication_scope"
 
 
-def _prose(value):
+def _normalize_prose(value):
     return " ".join(unicodedata.normalize("NFC", value).split())
 
 
-def _ordered(values):
+def _sort_canonically(values):
     return sorted(values, key=lambda value: json.dumps(value, sort_keys=True, ensure_ascii=False))
 
 
-def _scientific_set(values):
-    return _ordered({digest(value): value for value in values}.values())
+def _build_scientific_set(values):
+    return _sort_canonically({digest(value): value for value in values}.values())
 
 
 def find_publication_scope(records):
@@ -54,43 +53,43 @@ def has_publication_scope(records):
     return records.get("publication_scope_selection", {}).get("current", {}).get("id") is not None
 
 
-def _canonical_evidence(context, reference):
+def _build_canonical_evidence(context, reference):
     item = _Evidence(context).one(reference)
     if reference["kind"] == "source":
         link = reference["link"]
         return {"kind": "source", "original_sha256": item["original_sha256"],
                 "content_sha256": link["artifact"]["sha256"], "version_id": context.artifacts.link(link)["work"]["id"],
-                "locator": _canonical_locator(link["locator"])}
+                "locator": _build_canonical_locator(link["locator"])}
     return {"kind": "result", "content_sha256": reference["artifact"]["sha256"],
             "locator": reference["locator"], "role": item["requirement_kind"]}
 
 
-def _canonical_locator(value):
+def _build_canonical_locator(value):
     if isinstance(value, dict):
         if {"path", "sha256", "size", "media_type"} <= value.keys():
             return {"content_sha256": value["sha256"]}
-        return {key: _canonical_locator(item) for key, item in value.items() if key not in ("source_id", "capture_id")}
+        return {key: _build_canonical_locator(item) for key, item in value.items() if key not in ("source_id", "capture_id")}
     if isinstance(value, list):
-        return [_canonical_locator(item) for item in value]
+        return [_build_canonical_locator(item) for item in value]
     return value
 
 
 def build_scientific_target(context, payload):
     """Canonical scientific content, never an independent support certificate."""
-    limitations = {item["id"]: {"statement": _prose(item["statement"]),
+    limitations = {item["id"]: {"statement": _normalize_prose(item["statement"]),
                               "version_ids": sorted(set(item["version_ids"]))}
                    for item in payload["public_limitations"]}
-    claims = [{"statement": _prose(c["statement"]), "polarity": c["polarity"],
-               "assumptions": sorted({_prose(a) for a in c["assumptions"]}),
-               "evidence": _scientific_set([_canonical_evidence(context, e) for e in c["evidence"]]),
-               "limitations": _scientific_set([limitations[i] for i in c["limitation_ids"]])}
+    claims = [{"statement": _normalize_prose(c["statement"]), "polarity": c["polarity"],
+               "assumptions": sorted({_normalize_prose(a) for a in c["assumptions"]}),
+               "evidence": _build_scientific_set([_build_canonical_evidence(context, e) for e in c["evidence"]]),
+               "limitations": _build_scientific_set([limitations[i] for i in c["limitation_ids"]])}
               for c in payload["supported_claims"]]
-    return {"scope": {"statement": _prose(payload["scope"]["statement"]),
-                      "assumptions": sorted({_prose(a) for a in payload["scope"]["assumptions"]})},
-            "claims": _scientific_set(claims), "limitations": _scientific_set(list(limitations.values())),
-            "source_debt": _scientific_set([{k: _prose(d[k]) if k != "version_id" else d[k]
-                                       for k in ("obligation", "version_id", "dependent_claim")}
-                                      for d in payload["deferred_objective_obligations"]])}
+    return {"scope": {"statement": _normalize_prose(payload["scope"]["statement"]),
+                      "assumptions": sorted({_normalize_prose(a) for a in payload["scope"]["assumptions"]})},
+            "claims": _build_scientific_set(claims), "limitations": _build_scientific_set(list(limitations.values())),
+            "source_debt": _build_scientific_set([{k: _normalize_prose(d[k]) if k != "version_id" else d[k]
+                                                   for k in ("obligation", "version_id", "dependent_claim")}
+                                                  for d in payload["deferred_objective_obligations"]])}
 
 
 def build_scientific_scope_projection(payload):
@@ -193,17 +192,17 @@ def _validate_debt(context, payload, assessment):
         raise ResearchError("publication_scope_objective_open", "Source-limited publication retains the incomplete original objective")
 
 
-def _adverse(payload):
+def _is_adverse(payload):
     return payload["verdict"] != "ready" or any(c["status"] != "passed" for c in payload["checks"])
 
 
-def required_corrections(records):
+def find_required_corrections(records):
     """The service derives the retained findings; selection never removes them."""
     result = []
     for kind in ("readiness_review", "scoped_readiness_review"):
         for review in records.get(kind, {}).values():
             payload = review["payload"]
-            if not _adverse(payload):
+            if not _is_adverse(payload):
                 continue
             findings = [c["kind"] for c in payload["checks"] if c["status"] != "passed"]
             if payload["verdict"] != "ready":
@@ -281,7 +280,7 @@ def _validate_correction(context, payload, projection, required):
     return sorted(ancestors)
 
 
-def scientific_authors(records, contract):
+def collect_scientific_authors(records, contract):
     # Scope selection and explicit clearing do not erase scientific authorship
     # within the study, just as cycle selection does not erase cycle authors.
     authors, pending, visited = set(cycle_authors(records)), list(records.get("publication_scope", {}).values()) + [contract], set()
@@ -302,7 +301,7 @@ def record_publication_scope(store, payload, *, expected_revision, request_id):
         candidate, _ = _candidate(context)
         _validate_payload(context, value, candidate)
         projection = build_scientific_target(context, value)
-        required = required_corrections(records)
+        required = find_required_corrections(records)
         ancestors = _validate_correction(context, value, projection, required)
         selected = find_publication_scope(records)
         if selected is not None:
@@ -329,7 +328,7 @@ def select_publication_scope(store, payload, *, expected_revision, request_id):
                              expected_revision=expected_revision, request_id=request_id)
 
 
-def _scope_snapshot(records, artifacts):
+def _load_scope_snapshot(records, artifacts):
     context = _Context(records, artifacts)
     candidate, _ = _candidate(context)
     contract = find_publication_scope(records)
@@ -339,7 +338,7 @@ def _scope_snapshot(records, artifacts):
     projection = build_scientific_target(context, contract["payload"])
     if projection != contract["scientific_projection"] or digest(projection) != contract["scientific_target_digest"]:
         raise ResearchError("publication_scope_stale", "The contract no longer identifies its checked scientific evidence")
-    current_findings = {(r["kind"], r["review_id"]): r for r in required_corrections(records)}
+    current_findings = {(r["kind"], r["review_id"]): r for r in find_required_corrections(records)}
     for required in contract["required_corrections"]:
         if current_findings.get((required["kind"], required["review_id"])) != required:
             raise ResearchError("publication_scope_correction_mismatch", "The retained predecessor record differs from its immutable correction binding")
@@ -361,7 +360,7 @@ def _scope_snapshot(records, artifacts):
     return context, candidate, contract, digest(dependencies), observations, pending
 
 
-def _review(context, value, candidate, contract, candidate_digest):
+def _validate_scoped_review(context, value, candidate, contract, candidate_digest):
     from .publication import validate_assessor
     fields(value, ("id", "target", "candidate_digest", "assessor", "verdict", "checks", "limitations"), code=_CODE)
     text(value["id"], "Scoped review ID", code=_CODE)
@@ -369,7 +368,7 @@ def _review(context, value, candidate, contract, candidate_digest):
                            "scientific_target_digest": contract["scientific_target_digest"]}
             or value["candidate_digest"] != candidate_digest):
         raise ResearchError("scoped_review_stale", "Review the exact current scoped scientific target and freshness snapshot")
-    validate_assessor(context.artifacts, value["assessor"], scientific_authors(context.records, contract))
+    validate_assessor(context.artifacts, value["assessor"], collect_scientific_authors(context.records, contract))
     if value["verdict"] not in ("ready", "not_ready", "unresolved"):
         raise ResearchError(_CODE, "Give an explicit scientific readiness verdict")
     strings(value["limitations"], "Review limitations", nonempty=True, code=_CODE)
@@ -390,8 +389,8 @@ def _review(context, value, candidate, contract, candidate_digest):
 
 def record_scoped_readiness_review(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
-        context, candidate, contract, exact, _, _ = _scope_snapshot(records, Evaluation(records, ArtifactStore(store.root)))
-        _review(context, value, candidate, contract, exact)
+        context, candidate, contract, exact, _, _ = _load_scope_snapshot(records, Evaluation(records, ArtifactStore(store.root)))
+        _validate_scoped_review(context, value, candidate, contract, exact)
         artifact = context.artifacts.put(json.dumps(value, sort_keys=True, ensure_ascii=False).encode(), "application/json")
         saved = {"id": value["id"], "payload": value, "artifact": artifact, "candidate": candidate,
                  "scientific_target_digest": contract["scientific_target_digest"],
@@ -410,7 +409,7 @@ def assess_manuscript_readiness(records, artifacts):
     remaining = []
     try:
         contract = find_publication_scope(records)
-        context, candidate, contract, exact, observations, pending = _scope_snapshot(records, artifacts)
+        context, candidate, contract, exact, observations, pending = _load_scope_snapshot(records, artifacts)
         assessment = context.assessment(candidate["assessment_id"])
         remaining = assessment["remaining_obligations"]
         obligations.extend(context.prerequisites["validity"] + context.prerequisites["workflow"] + pending)
@@ -419,11 +418,11 @@ def assess_manuscript_readiness(records, artifacts):
                 obligations.append(obligation("development_assessment_missing", "Assess every retained actual branch", cycle_id=cycle["id"]))
         current_target = contract["scientific_target_digest"]
         adverse = [r for r in records.get("scoped_readiness_review", {}).values()
-                   if r["scientific_target_digest"] == current_target and _adverse(r["payload"])]
+                   if r["scientific_target_digest"] == current_target and _is_adverse(r["payload"])]
         if adverse:
             obligations.append(obligation("scoped_target_rejected", "A retained adverse review blocks this identical scientific target",
                                           review_ids=sorted(r["id"] for r in adverse)))
-        owed = [r for r in required_corrections(records) if r["scientific_target_digest"] != current_target]
+        owed = [r for r in find_required_corrections(records) if r["scientific_target_digest"] != current_target]
         if owed != contract["required_corrections"]:
             obligations.append(obligation("publication_scope_correction_required", "Bind all newly retained predecessor findings in a new immutable correction"))
         selection = records.get("scoped_review_selection", {}).get(contract["id"])
@@ -433,8 +432,8 @@ def assess_manuscript_readiness(records, artifacts):
             review = records["scoped_readiness_review"][selection["id"]]
             if strict_json(artifacts.read(review["artifact"])) != review["payload"]:
                 raise ResearchError("scoped_review_corrupt", "The current independent review artifact differs from its immutable payload")
-            _review(context, review["payload"], candidate, contract, exact)
-            if _adverse(review["payload"]):
+            _validate_scoped_review(context, review["payload"], candidate, contract, exact)
+            if _is_adverse(review["payload"]):
                 obligations.append(obligation("scoped_review_pending", "Resolve the scientific finding through a substantively corrected target"))
     except ResearchError as error:
         obligations.append(obligation(error.code, error.message, **(error.details or {})))
@@ -443,7 +442,7 @@ def assess_manuscript_readiness(records, artifacts):
               "obligations": obligations, "objective_complete": full["ready"], "objective_obligations": full["obligations"],
               "remaining_obligations": remaining, "contract": contract, "candidate": candidate, "candidate_digest": exact,
               "selected_contract_id": records.get("publication_scope_selection", {}).get("current", {}).get("id"),
-              "required_corrections": required_corrections(records),
+              "required_corrections": find_required_corrections(records),
               "scientific_target_digest": contract["scientific_target_digest"] if contract else None,
               "review": review, "review_inputs": full["review_inputs"], "execution_observations": observations,
               "source_gaps": build_source_gap_disclosure((full.get("synthesis") or {}).get("foundation", {}).get("source_deferrals", [])),
@@ -452,7 +451,7 @@ def assess_manuscript_readiness(records, artifacts):
     return result
 
 
-def manuscript_readiness_report(store):
+def build_manuscript_readiness_report(store):
     snapshot = store.snapshot()
     return dict(assess_manuscript_readiness(snapshot["records"], ArtifactStore(store.root)), revision=snapshot["revision"])
 
@@ -474,11 +473,11 @@ def validate_manuscript_claims(contract, claims, claim_evidence):
     withdrawn = {c["id"] for c in claims if "superseded" in c}
     current = [{key: value for key, value in c.items() if key != "revised"} for c in claims if c["id"] not in withdrawn]
     links = [link for link in claim_evidence if link["claim_id"] not in withdrawn]
-    if _ordered(current) != _ordered(expected) or _ordered(links) != _ordered(mappings):
+    if _sort_canonically(current) != _sort_canonically(expected) or _sort_canonically(links) != _sort_canonically(mappings):
         raise ResearchError("publication_scope_claim_mismatch", "The manuscript must retain every exact approved claim, polarity, assumption, evidence mapping and public limitation")
 
 
-def publication_scope_binding(bundle):
+def build_publication_scope_binding(bundle):
     scope = bundle.get("publication_scope")
     return ({key: scope[key] for key in ("mode", "contract_id", "scientific_target_digest", "objective_complete")}
             if scope is not None else None)
@@ -498,7 +497,7 @@ def validate_expected_scope(store, contract_id, target_digest):
 
 
 def validate_scope_binding(bundle, expected):
-    if publication_scope_binding(bundle) != expected:
+    if build_publication_scope_binding(bundle) != expected:
         raise ResearchError("publication_scope_mismatch", "The current bundle differs from the publication intent's exact scientific scope")
 
 

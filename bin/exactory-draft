@@ -311,8 +311,8 @@ def _name_sources_upload(sources_path: Path) -> str:
 
 
 def _run_deposit(args: argparse.Namespace) -> None:
-    from research_harness.cli import managed_scope_arguments
-    strict = managed_scope_arguments(args)
+    from research_harness.cli import parse_managed_scope_arguments
+    strict = parse_managed_scope_arguments(args)
     strict_store = None
     if strict["managed_only"]:
         strict_store, _, _ = select_managed_path(lambda workspace_store: True, **strict)
@@ -370,8 +370,8 @@ def _deposit_managed(store, report: dict, args: argparse.Namespace, base_url: st
                "base_url": base_url, "environment": environment, "new_version": args.new_version,
                "publish": args.publish, "metadata": metadata, "uploads": uploads,
                "prior": store.snapshot()["records"].get("workspace", {}).get("deposit") if args.new_version else None}
-    from research_harness.publication_scope import publication_scope_binding, validate_caller_scope
-    scope = publication_scope_binding(bundle)
+    from research_harness.publication_scope import build_publication_scope_binding, validate_caller_scope
+    scope = build_publication_scope_binding(bundle)
     validate_caller_scope(scope, getattr(args, "scope_contract_id", None), getattr(args, "scope_target_digest", None))
     if scope is not None:
         binding["publication_scope"] = scope

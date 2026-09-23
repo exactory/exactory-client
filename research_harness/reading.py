@@ -34,7 +34,7 @@ is not reading and cannot satisfy critical dependencies or bibliography coverage
 
 from .artifacts import ArtifactStore
 from .errors import ResearchError
-from .components import component_page_obligations, is_component
+from .components import find_component_page_obligations, is_component
 from .evaluation import Evaluation
 from .evidence import digest
 from .graph import main_captures, obligation, selected_bundle
@@ -124,7 +124,7 @@ def covers_embedded_supplement(evaluation, bundle, context):
 def required_unit_obligations(records, artifacts, bundle):
     """Shared completeness boundary, actionable before any reading is written."""
     evaluation = Evaluation.of(records, artifacts)
-    pending = component_page_obligations(records, evaluation, bundle)
+    pending = find_component_page_obligations(records, evaluation, bundle)
     for unit in bundle["units"]:
         if not unit["required"]:
             continue

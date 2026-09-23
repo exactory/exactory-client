@@ -92,7 +92,7 @@ class SourceProjectionMemoTests(unittest.TestCase):
             if isinstance(value, dict) and "values" in value:
                 value["values"].append(99)
 
-        with mock.patch.object(projector, "_public_nested", side_effect=change_selected_value):
+        with mock.patch.object(projector, "_check_public_nested", side_effect=change_selected_value):
             result, _ = projector._project(ref, self.create_projection(locators))
         self.assertEqual(json.loads(projector.derived[result["path"]])["entries"][1]["value"], [1, 2])
 

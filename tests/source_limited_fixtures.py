@@ -67,7 +67,7 @@ class SourceLimitedCase(DeferralCase, DevelopmentCase):
         return self.mutate(self.scope_api().record_publication_scope, payload or self.scope_payload())["result"]
 
     def manuscript_readiness(self):
-        return self.scope_api().manuscript_readiness_report(self.store)
+        return self.scope_api().build_manuscript_readiness_report(self.store)
 
     def scope_review(self, identifier="scope-review", verdict="ready", assessor="scope-reviewer"):
         report = self.manuscript_readiness()

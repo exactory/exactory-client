@@ -18,11 +18,11 @@ def is_component(capture):
     return capture is not None and 'component' in capture
 
 
-def binding_identity(capture):
+def compute_binding_identity(capture):
     return digest(capture['component']) if is_component(capture) else None
 
 
-def _parent_link(records, artifacts, identifier, parent, link):
+def _check_parent_link(records, artifacts, identifier, parent, link):
     if (not isinstance(link, dict) or link.get('version_id') != identifier
             or link.get('source_id') != parent['source_id']):
         raise ResearchError('component_parent_mismatch', 'Assessment evidence must identify the pinned parent source')
@@ -42,7 +42,7 @@ def _parent_link(records, artifacts, identifier, parent, link):
     raise ResearchError('component_evidence_uninspected', 'Inspect the cited parent evidence before binding its supplement')
 
 
-def _assessment(records, artifacts, identifier, parent, capture, reference):
+def _read_assessment(records, artifacts, identifier, parent, capture, reference):
     try:
         assessment = json.loads(artifacts.read(reference))
     except (ValueError, UnicodeError) as error:
@@ -58,7 +58,7 @@ def _assessment(records, artifacts, identifier, parent, capture, reference):
     strings(assessment['limitations'], 'Correspondence limitations', nonempty=True, code='invalid_component')
     evidence = assessment['evidence']
     fields(evidence, ('requirement', 'identity', 'references', 'conditions'), code='invalid_component')
-    _parent_link(records, artifacts, identifier, parent, evidence['requirement'])
+    _check_parent_link(records, artifacts, identifier, parent, evidence['requirement'])
     fields(evidence['identity'], ('title', 'authors'), ('affiliations',), code='invalid_component')
     pairs = list(evidence['identity'].values())
     for category in ('references', 'conditions'):
@@ -68,7 +68,7 @@ def _assessment(records, artifacts, identifier, parent, capture, reference):
     for pair in pairs:
         fields(pair, ('parent', 'component', 'judgment'), code='invalid_component')
         text(pair['judgment'], 'Scientific correspondence judgment', code='invalid_component')
-        _parent_link(records, artifacts, identifier, parent, pair['parent'])
+        _check_parent_link(records, artifacts, identifier, parent, pair['parent'])
         location = pair['component']
         fields(location, ('document', 'locator'), code='invalid_component')
         if location['document'] not in ('original', 'text') or capture.get(location['document']) is None:
@@ -108,7 +108,7 @@ def validate_spec(records, artifacts, identifier, capture, spec):
     artifacts.read(capture['original'])
     if capture.get('text') is None or capture['extraction_status'] != 'extracted':
         raise ResearchError('component_pending', 'Complete extraction is required to validate component evidence')
-    _assessment(records, artifacts, identifier, parent, capture, spec['assessment'])
+    _read_assessment(records, artifacts, identifier, parent, capture, spec['assessment'])
 
 
 def validate_binding(records, artifacts, identifier, capture, *, main_sha256=None):
@@ -131,7 +131,7 @@ def validate_binding(records, artifacts, identifier, capture, *, main_sha256=Non
         raise ResearchError('component_parent_mismatch', 'The bundle main original differs from the component parent pin')
 
 
-def component_page_obligations(records, artifacts, bundle):
+def find_component_page_obligations(records, artifacts, bundle):
     """Every PDF component page needs an inventoried original-page inspection."""
     from .graph import obligation
     pending, seen = [], set()

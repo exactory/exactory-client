@@ -146,7 +146,7 @@ class PublicationScopeTests(SourceLimitedCase):
         payload = self.scope_payload("corrected")
         payload["supported_claims"][0]["statement"] = "The authored enumeration reports a maximum of 9 for four tested integers."
         api = self.scope_api()
-        required = api.required_corrections(self.store.snapshot()["records"])
+        required = api.find_required_corrections(self.store.snapshot()["records"])
         projection = api.build_scientific_target(_Context(self.store.snapshot()["records"], self.artifacts), payload)
         references = [self.result_evidence(self.execution_payload)]
         predecessors, changes = [], []

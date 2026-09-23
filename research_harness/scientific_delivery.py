@@ -18,7 +18,7 @@ from .evaluation import Evaluation
 from .evidence import digest
 from .operations import fields, text
 from .source_links import read_locator, captured_source, complete_original
-from .scientific_json import scientific_json
+from .scientific_json import parse_scientific_json
 from .workspace import strict_json
 
 
@@ -37,7 +37,7 @@ def encode_delivery(value):
     return (json.dumps(value, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
 
 
-def _references(value):
+def _find_references(value):
     found = {}
     def visit(item):
         if isinstance(item, dict):
@@ -52,12 +52,12 @@ def _references(value):
     return found
 
 
-def _sha(value):
+def _check_sha256(value):
     if not isinstance(value, str) or len(value) != 64 or any(c not in "0123456789abcdef" for c in value):
         raise ResearchError(_CODE, "Supply an exact lowercase original content SHA-256")
 
 
-def _projection_shape(value, depth=0):
+def _validate_projection_shape(value, depth=0):
     if depth > 8:
         raise ResearchError(_CODE, "Scientific archive projection nesting is bounded")
     fields(value, ("kind", "context"), ("locators", "members", "source_sha256", "start", "end"), code=_CODE)
@@ -76,24 +76,24 @@ def _projection_shape(value, depth=0):
     elif value["kind"] == "source_component":
         if set(value) != {"kind", "context", "source_sha256", "start", "end"}:
             raise ResearchError(_CODE, "A source component requires its exact original source byte span")
-        _sha(value["source_sha256"])
+        _check_sha256(value["source_sha256"])
         if type(value["start"]) is not int or type(value["end"]) is not int or not 0 <= value["start"] < value["end"]:
             raise ResearchError(_CODE, "Source byte spans require ordered nonnegative integer offsets")
     elif value["kind"] == "archive_members":
         if "locators" in value or not isinstance(value.get("members"), list) or not 1 <= len(value["members"]) <= _MAX_NUMPY_MEMBERS:
             raise ResearchError(_CODE, "Declare bounded scientific archive members")
-        if len(value["members"]) > _MAX_MEMBERS and not _all_numerical(value["members"]):
+        if len(value["members"]) > _MAX_MEMBERS and not _is_numerical_population(value["members"]):
             raise ResearchError(_CODE, "Only complete numerical populations may exceed the generic archive member bound")
         seen = set()
         for member in value["members"]:
             fields(member, ("path", "sha256", "media_type", "projection"), code=_CODE)
-            _safe_member(member["path"])
-            _sha(member["sha256"])
+            _check_safe_member(member["path"])
+            _check_sha256(member["sha256"])
             text(member["media_type"], "Member media type", code=_CODE)
             if member["path"] in seen:
                 raise ResearchError(_CODE, "Archive member names must be unique")
             seen.add(member["path"])
-            _projection_shape(member["projection"], depth + 1)
+            _validate_projection_shape(member["projection"], depth + 1)
     else:
         raise ResearchError(_CODE, "Use JSON locators, text spans or checked archive members")
 
@@ -104,23 +104,23 @@ def validate_declarations(values):
     seen = set()
     for value in values:
         fields(value, ("original_sha256", "disposition", "projection"), code=_CODE)
-        _sha(value["original_sha256"])
+        _check_sha256(value["original_sha256"])
         if value["original_sha256"] in seen or value["disposition"] not in ("public", "project", "internal"):
             raise ResearchError(_CODE, "Declare each artifact once with an explicit disposition")
         seen.add(value["original_sha256"])
         if value["disposition"] == "project":
-            _projection_shape(value["projection"])
+            _validate_projection_shape(value["projection"])
         elif value["projection"] is not None:
             raise ResearchError(_CODE, "Only projected artifacts carry projection instructions")
 
 
-def _safe_member(name):
+def _check_safe_member(name):
     if (not isinstance(name, str) or not name or "\\" in name or "\x00" in name or name.startswith("/")
             or any(part in ("", ".", "..") for part in name.split("/"))):
         raise ResearchError(_CODE, "Archive members require canonical safe relative paths")
 
 
-def _all_numerical(members):
+def _is_numerical_population(members):
     return all(isinstance(m, dict) and isinstance(m.get("path"), str) and m["path"].endswith(".npy")
                and isinstance(m.get("projection"), dict) and m["projection"].get("kind") == "npy_array" for m in members)
 
@@ -136,7 +136,7 @@ def _read_members(data, max_members):
                 for member in members:
                     if member.is_dir():
                         continue
-                    _safe_member(member.filename)
+                    _check_safe_member(member.filename)
                     mode = member.external_attr >> 16
                     if (mode & 0o170000) == 0o120000 or member.filename in result:
                         raise ResearchError(_CODE, "Archive links and duplicate names cannot be delivered")
@@ -151,7 +151,7 @@ def _read_members(data, max_members):
                         raise ResearchError(_CODE, "Archive member count exceeds the delivery bound")
                     if member.isdir():
                         continue
-                    _safe_member(member.name)
+                    _check_safe_member(member.name)
                     if not member.isfile() or member.name in result:
                         raise ResearchError(_CODE, "Archive links and duplicate names cannot be delivered")
                     total += member.size
@@ -163,17 +163,17 @@ def _read_members(data, max_members):
     return result
 
 
-def _scientific_record(value):
+def _project_scientific_record(value):
     """The typed service-record projection excludes its administrative fields."""
     private = {"author", "authors", "request_id", "token", "authorization", "scientific_preparers",
                "independence_basis", "assessor", "human_goals", "private_context"}
     if isinstance(value, dict):
         if _REF_KEYS <= value.keys():
             return value
-        return {k: _scientific_record(v) for k, v in value.items()
+        return {k: _project_scientific_record(v) for k, v in value.items()
                 if k not in private and not k.endswith("_revision")}
     if isinstance(value, list):
-        return [_scientific_record(v) for v in value]
+        return [_project_scientific_record(v) for v in value]
     return value
 
 
@@ -213,24 +213,24 @@ class ScientificDelivery:
             register(source.get("response"), source["id"])
         acquisition_evidence = []
         for deferred in records.get("source_deferral", {}).values():
-            self.private.update(_references(deferred["authorization"]))
+            self.private.update(_find_references(deferred["authorization"]))
             acquisition_evidence.extend(deferred["acquisition_evidence"])
         for ref in acquisition_evidence:
             # Descriptor extensions are internal acquisition context, including
             # nested references. Only the top-level original can qualify below.
-            self.private.update(_references({key: value for key, value in ref.items() if key not in _REF_KEYS}))
+            self.private.update(_find_references({key: value for key, value in ref.items() if key not in _REF_KEYS}))
         protected = set(self.private)
         for saved in records.get("publication_scope", {}).values():
             payload = saved["payload"]
             response = payload["correction"]["response"] if payload["correction"] is not None else None
-            private_roles = _references([payload["authorization"], payload["scientific_preparers"]])
+            private_roles = _find_references([payload["authorization"], payload["scientific_preparers"]])
             protected.update(private_roles)
             self.private.update(private_roles)
-            self.private.update(_references(response))
+            self.private.update(_find_references(response))
         for kind in ("readiness_review", "scoped_readiness_review", "manuscript_review", "manuscript_prediction", "round_review"):
             for saved in records.get(kind, {}).values():
-                private_roles = _references([saved.get("artifact"), saved.get("review"),
-                                             saved.get("assessor"), saved.get("payload", {}).get("assessor")])
+                private_roles = _find_references([saved.get("artifact"), saved.get("review"),
+                                                  saved.get("assessor"), saved.get("payload", {}).get("assessor")])
                 protected.update(private_roles)
                 self.private.update(private_roles)
         for ref in acquisition_evidence:
@@ -238,7 +238,7 @@ class ScientificDelivery:
             # Its presence in that history does not make the original private.
             # Authorization, reviews and every other internal role still win.
             artifacts.read(ref)
-            if ref["sha256"] in self.private or not self._public_acquisition_original(ref):
+            if ref["sha256"] in self.private or not self._is_public_acquisition_original(ref):
                 self.private[ref["sha256"]] = ref
                 protected.add(ref["sha256"])
         if corrective and contract["payload"]["correction"] is not None:
@@ -250,12 +250,12 @@ class ScientificDelivery:
         self.private_bytes = tuple(artifacts.read(ref) for ref in self.private.values())
         self.minimum_private_bytes = min((len(data) for data in self.private_bytes if data), default=0)
         for checkpoint in records.get("checkpoint", {}).values():
-            self.generated[checkpoint["artifact"]["sha256"]] = _scientific_record({k: v for k, v in checkpoint.items() if k != "artifact"})
+            self.generated[checkpoint["artifact"]["sha256"]] = _project_scientific_record({k: v for k, v in checkpoint.items() if k != "artifact"})
         for claim in records.get("execution_claim", {}).values():
-            self.generated[claim["config_artifact"]["sha256"]] = _scientific_record(claim["config"])
+            self.generated[claim["config_artifact"]["sha256"]] = _project_scientific_record(claim["config"])
         for observation in records.get("execution_observation", {}).values():
             terminal = observation["terminal"]
-            self.generated[terminal["sha256"]] = _scientific_record(strict_json(artifacts.read(terminal)))
+            self.generated[terminal["sha256"]] = _project_scientific_record(strict_json(artifacts.read(terminal)))
         self._inventory(manifest)
         for path, data in list(self.derived.items()):
             # Bytes generated before projection, such as the current-claims
@@ -265,13 +265,13 @@ class ScientificDelivery:
             if ref["path"] != path:
                 raise ResearchError("artifact_corrupt", "Generated delivery bytes must sit at the path of their content")
             self._check_bytes(data)
-            is_json, structured = scientific_json(data, "application/json")
+            is_json, structured = parse_scientific_json(data, "application/json")
             if is_json:
-                self._public_nested(structured)
+                self._check_public_nested(structured)
                 self.walk(structured)
             self._count_output(ref, data)
 
-    def _public_acquisition_original(self, ref):
+    def _is_public_acquisition_original(self, ref):
         from .components import validate_binding
         candidates = [entry for entry in self.public.get(ref["sha256"], [])
                       if entry[3] is not None and entry[3].get("original") == entry[0]
@@ -286,7 +286,7 @@ class ScientificDelivery:
             self.artifacts.read(original)
         return True
 
-    def _public_reference(self, ref, *, original_pdf=False):
+    def _check_public_reference(self, ref, *, original_pdf=False):
         if ref["sha256"] in self.private:
             raise ResearchError(_PRIVATE, "An internal artifact cannot become a public source by alias")
         key = (digest(ref), original_pdf)
@@ -326,17 +326,17 @@ class ScientificDelivery:
         self.artifacts.read(ref)
         self.validated_public.add(key)
 
-    def _public_nested(self, value, depth=0):
+    def _check_public_nested(self, value, depth=0):
         if depth > _MAX_DEPTH:
             raise ResearchError(_CODE, "Scientific source provenance nesting exceeds its bound")
         if isinstance(value, dict):
             if _REF_KEYS <= value.keys():
-                self._public_reference(value)
+                self._check_public_reference(value)
             for child in value.values():
-                self._public_nested(child, depth + 1)
+                self._check_public_nested(child, depth + 1)
         elif isinstance(value, list):
             for child in value:
-                self._public_nested(child, depth + 1)
+                self._check_public_nested(child, depth + 1)
 
     def _inventory(self, value):
         if isinstance(value, dict):
@@ -388,7 +388,7 @@ class ScientificDelivery:
             if not originals:
                 raise ResearchError(_PRIVATE, "An exact source component requires an established original capture")
             source_ref = originals[0]
-            self._public_reference(source_ref, original_pdf=True)
+            self._check_public_reference(source_ref, original_pdf=True)
             source = self.artifacts.read(source_ref)
             self._check_bytes(source)
             self._check_bytes(data)
@@ -411,7 +411,7 @@ class ScientificDelivery:
             return self._emit({"derivative": True, "original_sha256": ref["sha256"], "projection_kind": "npy_array",
                                "context": projection["context"], "array": array, "locator_mapping": []}), []
         if projection["kind"] == "archive_members":
-            numerical = _all_numerical(projection["members"])
+            numerical = _is_numerical_population(projection["members"])
             members = _read_members(data, _MAX_NUMPY_MEMBERS if numerical else _MAX_MEMBERS)
             if len(members) > _MAX_MEMBERS and set(members) != {m["path"] for m in projection["members"]}:
                 raise ResearchError("scientific_projection_incomplete", "The numerical projection must retain the complete archive population")
@@ -441,7 +441,7 @@ class ScientificDelivery:
             reader = Evaluation({}, Bytes())
             for index, locator in enumerate(selected.values()):
                 value = read_locator(reader, ref, locator)
-                self._public_nested(value)
+                self._check_public_nested(value)
                 # Inspect actual preserved values. A nested private descriptor
                 # fails rather than being copied through a JSON value.
                 value = self.walk(value)
@@ -452,7 +452,7 @@ class ScientificDelivery:
                    "context": projection["context"], "entries": entries, "locator_mapping": mapping}
         return self._emit(content), mapping
 
-    def reference(self, ref):
+    def map_reference(self, ref):
         identifier = ref["sha256"]
         descriptor_digest = digest(ref)
         if identifier in self.private:
@@ -475,12 +475,12 @@ class ScientificDelivery:
                 # archives cannot smuggle nested internal references through it.
                 self._check_bytes(data)
                 if identifier in self.public:
-                    self._public_reference(ref)
+                    self._check_public_reference(ref)
                 if descriptor_digest in self.round_responses:
                     # Program captures keep their exact identity without becoming
                     # public sources. Descriptor extensions retain all checks.
                     extensions = {key: value for key, value in ref.items() if key not in _REF_KEYS}
-                    self._public_nested(extensions)
+                    self._check_public_nested(extensions)
                     self.walk(extensions)
                     try:
                         decoded = data.decode(json.detect_encoding(data))
@@ -488,10 +488,9 @@ class ScientificDelivery:
                         raise ResearchError(_PRIVATE, "A round query capture needs inspectable text; binary content needs a typed projection") from error
                     self._check_bytes(decoded.encode())
                 empty_capture = not data and descriptor_digest in self.round_responses
-                is_json, structured = (False, None) if empty_capture else scientific_json(
-                    data, ref["media_type"], encoded_string=descriptor_digest in self.round_responses)
+                is_json, structured = (False, None) if empty_capture else parse_scientific_json(data, ref["media_type"])
                 if is_json:
-                    self._public_nested(structured)
+                    self._check_public_nested(structured)
                     self.walk(structured)
                 mime = ref["media_type"].split(";", 1)[0].strip().lower()
                 compressed = data.startswith((b"\x1f\x8b", b"BZh", b"\xfd7zXZ\x00"))
@@ -533,11 +532,11 @@ class ScientificDelivery:
             if _REF_KEYS <= value.keys():
                 if value["path"] in self.derived:
                     return value
-                return self.reference(value)
+                return self.map_reference(value)
             if isinstance(value.get("artifact"), dict) and isinstance(value.get("locator"), dict):
                 original, locator = value["artifact"], value["locator"]
                 result = {k: self.walk(v, depth + 1) for k, v in value.items() if k not in ("artifact", "locator")}
-                mapped = self.reference(original)
+                mapped = self.map_reference(original)
                 result.update(artifact=mapped, locator=locator)
                 if mapped != original:
                     wanted = digest(locator)
@@ -555,9 +554,9 @@ class ScientificDelivery:
         if isinstance(value, str):
             self._check_bytes(value.encode())
             # Preserve the exact string while inspecting every decoded level.
-            is_json, nested = scientific_json(value.encode(), encoded_string=True)
+            is_json, nested = parse_scientific_json(value.encode())
             if is_json:
-                if _references(nested):
+                if _find_references(nested):
                     raise ResearchError(_PRIVATE, "Encoded nested artifact references require a typed scientific value")
                 self.walk(nested, depth + 1)
         return value

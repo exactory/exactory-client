@@ -7,7 +7,7 @@ from .evidence import digest
 from .execution import _owner
 from .operations import immutable_record, prepared_mutation
 from .publication import publication_report
-from .publication_scope import publication_scope_binding, validate_scope_binding, validate_caller_scope
+from .publication_scope import build_publication_scope_binding, validate_scope_binding, validate_caller_scope
 from .remote import begin_intent, find_intent, finish_intent, get_intent, remote_step, resolve_step
 from .verification import task_identity, validate_verdict
 
@@ -50,7 +50,7 @@ def check_submission_preconditions(store, body):
     its established direct path after a refusal."""
     report, publication = validate_submission(store, body)
     binding = {"bundle_digest": report["bundle"]["digest"], "publication": publication, "body": body}
-    scope = publication_scope_binding(report["bundle"])
+    scope = build_publication_scope_binding(report["bundle"])
     if scope is not None:
         binding["publication_scope"] = scope
     # Equivalent record DOI/URL inputs retain their exact request payloads, but
