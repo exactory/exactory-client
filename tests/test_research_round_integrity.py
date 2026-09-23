@@ -9,7 +9,7 @@ from research_harness.gates import gate_report
 from research_harness.review_delivery import deliver_manuscript, deliver_round
 from research_harness.storage import Store
 from rounds_fixtures import RoundsCase
-from integration_fixtures import approve_publication_stop, prepare_manuscript
+from integration_fixtures import account_fixture_citations, approve_publication_stop, prepare_manuscript
 from test_draft import _DepositTestCase, _draft
 
 
@@ -148,7 +148,8 @@ class ManuscriptHistoryTests(RoundsCase):
                 self.mutate(publication.prepare_publication, {
                     "id": "split-evidence-" + str(index), "files": files,
                     "claim_evidence": [{"claim_id": "bound", "evidence": [current]},
-                                       {"claim_id": "withdrawn", "evidence": [withdrawn]}]})
+                                       {"claim_id": "withdrawn", "evidence": [withdrawn]}],
+                    "citation_accounting": account_fixture_citations(self)})
                 destination = self.root / ("blind-closure-" + str(index))
                 deliver_manuscript(self.store, destination)
                 manifest = json.loads((destination / "inputs.json").read_text())
