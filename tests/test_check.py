@@ -628,6 +628,27 @@ class TestRegistryMarkup(_CheckTestCase):
                   '<mml:mi>x</mml:mi><mml:mi>a</mml:mi></mml:msub><mml:mi>b</mml:mi></mml:msub></mml:math>')
         self.assertEqual(_check._convert_markup_to_latex("Case" + mathml + "here"), "Case ${x_{a}}_{b}$ here")
 
+    def test_isotope_prescripts_and_face_markup_render(self) -> None:
+        isotope = ('<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"><mml:mmultiscripts>'
+                   '<mml:mi>Pb</mml:mi><mml:mprescripts/><mml:none/><mml:mn>208</mml:mn>'
+                   '</mml:mmultiscripts></mml:math>')
+        self.assertEqual(_check._convert_markup_to_latex("Spectra of" + isotope + "nuclei"),
+                         "Spectra of $^{208}$Pb nuclei")
+        self.assertEqual(_check._normalize_for_match("Spectra of" + isotope + "nuclei"),
+                         _check._normalize_for_match("Spectra of $^{208}$Pb nuclei"))
+        self.assertEqual(_check._convert_markup_to_latex("A <tt>code</tt> and <ovl>x</ovl> bar"),
+                         "A \\texttt{code} and x bar")
+
+    def test_attributes_that_carry_text_are_not_markup(self) -> None:
+        self.assertNotEqual(_check._normalize_for_match('Real title <span title="fabricated">'),
+                            _check._normalize_for_match("Real title"))
+        self.assertEqual(_check._convert_markup_to_latex("A <i class='x'>word</i> here"),
+                         "A \\textit{word} here")
+
+    def test_a_script_inside_text_inside_a_script_opens_its_own_math_group(self) -> None:
+        self.assertEqual(_check._convert_markup_to_latex("<sub>a<i>b<sup>c</sup></i></sub>"),
+                         "$_{a\\textit{b$^{c}$}}$")
+
     def test_mathml_renders_as_latex_with_word_boundaries(self) -> None:
         mathml = ('<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline">\n'
                   '  <mml:mrow><mml:msub><mml:mrow><mml:mi>Bi</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn>'
@@ -736,6 +757,32 @@ class TestManuscriptChecks(_CheckTestCase):
         self.assertEqual(sorted(report["manuscript"]["tex_sha256"]), ["paper.tex", "sections/intro.tex"])
         self.assertEqual(report["manuscript"]["prior_art_without_citation"], [])
 
+    def test_includes_resolve_from_the_main_file_directory(self) -> None:
+        (self.draft_dir / "local.tex").write_text("\\documentclass{article}\n\\cite{example2024deterministic}\n")
+        (self.draft_dir / "cumulative" / "sections").mkdir(parents=True)
+        (self.draft_dir / "cumulative" / "main.tex").write_text(
+            "\\documentclass{article}\n\\input{sections/a}\n\\cite{example2024deterministic}\n")
+        (self.draft_dir / "cumulative" / "sections" / "a.tex").write_text("\\cite{instance2023predicting}\n")
+        report = self._lookup(["--bib", str(self.bib_path), "--main", "cumulative/main.tex"], None)
+        self.assertEqual(sorted(report["manuscript"]["tex_sha256"]),
+                         ["cumulative/main.tex", "cumulative/sections/a.tex"])
+        self.assertEqual(report["manuscript"]["uncited_keys"], [])
+
+    def test_conditional_branches_verbatim_and_brace_free_input_are_read_as_latex(self) -> None:
+        (self.draft_dir / "body.tex").write_text("\\cite{instance2023predicting}\n")
+        forms = ("\\iffalse \\cite{nothing}\\else \\cite{instance2023predicting}\\fi \\cite{example2024deterministic}\n",
+                 "\\iffalse \\ifx a b x\\fi \\cite{nothing}\\fi \\cite{example2024deterministic}"
+                 " \\cite{instance2023predicting}\n",
+                 "\\cite[{p. [5]}]{example2024deterministic} \\cite{instance2023predicting}\n",
+                 "\\cite{example2024deterministic}\n\\input body\n",
+                 "\\verb|%| \\cite{example2024deterministic} \\nolinkurl{a%b} \\cite{instance2023predicting}\n")
+        for tex in forms:
+            with self.subTest(tex=tex):
+                self.assertEqual(self._lookup_tex(tex, None)["manuscript"]["uncited_keys"], [])
+        report = self._lookup_tex("\\cite{example2024deterministic}\n\\iffalse \\ifx a b x\\fi"
+                                  " \\cite{instance2023predicting}\\fi\n", 1)
+        self.assertEqual(report["manuscript"]["uncited_keys"], ["instance2023predicting"])
+
     def test_several_root_files_need_a_main_file(self) -> None:
         for name in ("local-paper.tex", "cumulative-paper.tex"):
             (self.draft_dir / name).write_text("\\documentclass{article}\n\\cite{example2024deterministic}\n")
@@ -788,6 +835,7 @@ class TestVersionOfRecord(_CheckTestCase):
         stdout_text, entry = self._add(["--arxiv-id", "2401.01234"])
         self.assertEqual(entry["type"], "article")
         self.assertEqual(entry["doi"], "10.1234/exact.5678")
+        self.assertEqual((entry["eprint"], entry["archiveprefix"]), ("2401.01234", "arXiv"))
         self.assertIn("published version", stdout_text)
 
     def test_a_unique_crossref_title_and_first_author_match_selects_the_published_version(self) -> None:
@@ -866,6 +914,14 @@ class TestVersionOfRecord(_CheckTestCase):
         output = self._run_command(["add", "--bib", str(self.bib_path), "--arxiv-id", "2401.01234"], 1)
         self.assertIn("example2024deterministic", output)
         self.assertEqual(len(_check._parse_bib(self.bib_path.read_text())), 1)
+
+    def test_a_preprint_of_a_published_entry_is_refused(self) -> None:
+        self.bib_path.parent.mkdir(parents=True, exist_ok=True)
+        self.bib_path.write_text(_FIXTURE_BIB_TEXT.split("\n\n")[1] + "\n")
+        _check._open_url = self._route("10.1234/exact.5678", [])
+        output = self._run_command(["add", "--bib", str(self.bib_path), "--arxiv-id", "2401.01234",
+                                    "--preprint"], 1)
+        self.assertIn("instance2023predicting", output)
 
     def test_preprint_flag_keeps_the_arxiv_entry(self) -> None:
         _check._open_url = self._route("10.1234/exact.5678", [])

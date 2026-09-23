@@ -56,6 +56,40 @@ class CitationEvidenceTests(unittest.TestCase):
         plain = read_bibliography(b"[1] A. Author, Weyl semimetals, J. Phys. (2020).")
         self.assertEqual(find_citing_entry(plain, [work]), (True, None))
 
+    def test_titles_compare_after_accents_greek_letters_braces_and_scripts(self):
+        cases = {"accent command": ('Schr\\"odinger cat states', "Schrödinger Cat States", True),
+                 "greek letters": ("$\\alpha$-RuCl$_3$ magnets", "$\\beta$-RuCl$_3$ magnets", False),
+                 "unicode greek": ("α-RuCl3 magnets", "$\\alpha$-RuCl$_{3}$ magnets", True),
+                 "braced capital": ("Weyl semimetals", "{W}eyl Semimetals", True),
+                 "cjk": ("拓扑半金属的输运", "拓扑半金属的输运", True)}
+        for name, (work_title, entry_title, cited) in cases.items():
+            with self.subTest(case=name):
+                data = ("@article{entry, title={" + entry_title + "}}").encode()
+                self.assertEqual(find_citing_entry(read_bibliography(data),
+                                                   [_build_work("arxiv:2601.00005v1", title=work_title)])[0], cited)
+
+    def test_text_between_entries_and_quoted_titles_are_read_as_bibtex(self):
+        data = (b"@article{kept, doi={10.5555/kept}}\n% dropped: arXiv:2601.00007, doi 10.5555/dropped\n"
+                b"@article{quoted, title = \"Schr{\\\"o}dinger operators on graphs\"}\n")
+        bibliography = read_bibliography(data)
+        self.assertEqual(find_citing_entry(bibliography, [_build_work("doi:10.5555/dropped")]), (False, None))
+        self.assertEqual(find_citing_entry(bibliography, [_build_work("arxiv:2601.00007v1")]), (False, None))
+        self.assertEqual(find_citing_entry(bibliography, [_build_work(
+            "arxiv:2601.00008v1", title="Schrödinger operators on graphs")]), (True, "quoted"))
+
+    def test_identifier_ends_and_pdf_urls(self):
+        cases = {"doi then parenthesis": (b"@article{a, doi={10.1063/1.365928(99)}}", False),
+                 "doi then underscore": (b"@article{a, doi={10.1063/1.365928_x}}", False),
+                 "doi then colon": (b"@article{a, doi={10.1063/1.365928:x}}", False),
+                 "doi in parentheses": (b"@article{a, note={(doi:10.1063/1.365928).}}", True),
+                 "doi then pdf": (b"@article{a, url={https://x.org/10.1063/1.365928/pdf}}", True)}
+        for name, (data, cited) in cases.items():
+            with self.subTest(case=name):
+                self.assertEqual(find_citing_entry(read_bibliography(data),
+                                                   [_build_work("doi:10.1063/1.365928")])[0], cited)
+        pdf = read_bibliography(b"@misc{a, url={https://arxiv.org/pdf/2601.00001v1.pdf}}")
+        self.assertEqual(find_citing_entry(pdf, [_build_work("arxiv:2601.00001v1")]), (True, "a"))
+
     def test_the_first_citing_entry_in_file_order_is_reported(self):
         bibliography = read_bibliography(b"@article{zeta2020, doi={10.5555/x}}\n"
                                          b"@article{alpha2021, note={see 10.5555/x}}\n")
