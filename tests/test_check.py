@@ -595,6 +595,18 @@ class TestRegistryMarkup(_CheckTestCase):
             self._add_title("Coupling in a Bi <sub>2</sub> Te <sub>3</sub> <span>nanoplate</span>"),
             "Coupling in a Bi$_{2}$ Te$_{3}$ nanoplate")
 
+    def test_mathml_renders_as_latex_with_word_boundaries(self) -> None:
+        mathml = ('<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline">\n'
+                  '  <mml:mrow><mml:msub><mml:mrow><mml:mi>Bi</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn>'
+                  '</mml:mrow></mml:msub><mml:msub><mml:mi>Se</mml:mi><mml:mn>3</mml:mn></mml:msub>'
+                  '<mml:msup><mml:mi>x</mml:mi><mml:mn>2</mml:mn></mml:msup></mml:mrow>\n</mml:math>')
+        self.assertEqual(self._add_title("Coupling in the Insulator" + mathml + "Using Photoemission"),
+                         "Coupling in the Insulator Bi$_{2}$Se$_{3}$x$^{2}$ Using Photoemission")
+
+    def test_malformed_mathml_keeps_its_text_between_word_boundaries(self) -> None:
+        self.assertEqual(self._add_title("Films of<mml:math><mml:msub><mml:mi>Bi</mml:mi></mml:math>Grown"),
+                         "Films of Bi Grown")
+
     def test_titles_match_across_markup_and_latex_forms(self) -> None:
         registry_title = "Transport in Sb<sub>2</sub>Te<sub>3</sub> Thin Films"
 

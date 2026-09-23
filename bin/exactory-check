@@ -313,10 +313,37 @@ _MARKUP_LATEX = {"sub": ("$_{", "}$"), "sup": ("$^{", "}$"),
                  "scp": ("\\textsc{", "}"), "sc": ("\\textsc{", "}")}
 
 
+_MATHML_RE = re.compile(r"<(?:[A-Za-z]+:)?math\b[^>]*>(.*?)</(?:[A-Za-z]+:)?math>", re.DOTALL)
+_MATHML_SCRIPT_MARKERS = {"msub": "_", "msup": "^"}
+
+
+def _render_mathml_element(element) -> str:
+    """Text of a MathML element, with msub and msup as LaTeX scripts."""
+    name = element.tag.rsplit("}", 1)[-1]
+    children = list(element)
+    if name in _MATHML_SCRIPT_MARKERS and len(children) == 2:
+        base, script = (_render_mathml_element(child) for child in children)
+        return f"{base}${_MATHML_SCRIPT_MARKERS[name]}{{{script.replace('$', '')}}}$"
+    return (element.text or "").strip() + "".join(
+        _render_mathml_element(child) + (child.tail or "").strip() for child in children)
+
+
+def _convert_mathml_to_latex(match: re.Match) -> str:
+    """One inline MathML formula as LaTeX, set off by spaces because registries
+    omit them. Markup that does not parse keeps its text."""
+    body = re.sub(r"(</?)[A-Za-z]+:", r"\1", match.group(1))
+    try:
+        rendered = _render_mathml_element(ET.fromstring(f"<math>{body}</math>"))
+    except ET.ParseError:
+        rendered = _MARKUP_TAG_RE.sub("", body)
+    return f" {rendered} "
+
+
 def _convert_markup_to_latex(text: str) -> str:
     """Render registry title markup as LaTeX. Malformed markup keeps its text only."""
     if "<" not in text:
         return text
+    text = _MATHML_RE.sub(_convert_mathml_to_latex, text)
 
     def replace_tag(match: re.Match) -> str:
         wrapper = _MARKUP_LATEX.get(match.group(2).lower().rsplit(":", 1)[-1])
