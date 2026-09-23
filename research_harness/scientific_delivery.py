@@ -257,16 +257,19 @@ class ScientificDelivery:
             terminal = observation["terminal"]
             self.generated[terminal["sha256"]] = _scientific_record(strict_json(artifacts.read(terminal)))
         self._inventory(manifest)
-        for data in list(self.derived.values()):
+        for path, data in list(self.derived.items()):
             # Bytes generated before projection, such as the current-claims
             # file of a blind manuscript delivery, pass the same checks as
             # an exact manuscript file and count toward the output bound.
+            ref = describe_artifact(data, "application/json")
+            if ref["path"] != path:
+                raise ResearchError("artifact_corrupt", "Generated delivery bytes must sit at the path of their content")
             self._check_bytes(data)
             is_json, structured = scientific_json(data, "application/json")
             if is_json:
                 self._public_nested(structured)
                 self.walk(structured)
-            self._count_output(describe_artifact(data, "application/json"), data)
+            self._count_output(ref, data)
 
     def _public_acquisition_original(self, ref):
         from .components import validate_binding

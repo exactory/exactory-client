@@ -2,10 +2,16 @@
 
 import copy
 import json
+from pathlib import Path
+import tempfile
+import unittest
 
 from integration_fixtures import account_fixture_citations
 from source_limited_fixtures import SourceLimitedCase
 from research_harness import publication
+from research_harness.artifacts import ArtifactStore, describe_artifact
+from research_harness.errors import ResearchError
+from research_harness.scientific_delivery import ScientificDelivery
 
 
 class ScopedClaimMarkerTests(SourceLimitedCase):
@@ -88,3 +94,17 @@ class ScopedMarkerDeliveryTests(SourceLimitedCase):
         from research_harness.artifacts import ArtifactStore
         for reference in result["artifacts"]:
             self.assertEqual(ArtifactStore(destination).read(reference), (destination / reference["path"]).read_bytes())
+
+
+class PreGeneratedDeliveryBytesTests(unittest.TestCase):
+    def test_pre_generated_bytes_sit_at_the_path_of_their_content(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        artifacts = ArtifactStore(Path(temporary.name))
+        contract = {"payload": {"scientific_delivery": []}}
+        data = b'[{"id": "claim", "claim": "A current claim."}]\n'
+        ScientificDelivery({}, artifacts, contract, {}, derived={describe_artifact(data, "application/json")["path"]: data})
+        elsewhere = describe_artifact(b"other bytes", "application/json")["path"]
+        with self.assertRaises(ResearchError) as error:
+            ScientificDelivery({}, artifacts, contract, {}, derived={elsewhere: data})
+        self.assertEqual(error.exception.code, "artifact_corrupt")

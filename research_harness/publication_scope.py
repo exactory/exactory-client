@@ -462,7 +462,9 @@ def validate_manuscript_claims(contract, claims, claim_evidence):
 
     A `revised` marker records the earlier wording of an approved claim and a
     `superseded` claim is a withdrawn opening claim that the scope no longer
-    supports, so neither takes part in the comparison with the contract."""
+    supports, so neither takes part in the comparison with the contract.
+    `prepare_publication`, the only caller, has already validated the marker
+    shapes, unique ids and the evidence mapping of every claim."""
     payload = contract["payload"]
     expected = [{"id": c["id"], "claim": c["statement"], "polarity": c["polarity"],
                  "assumptions": c["assumptions"], "limitation_ids": c["limitation_ids"],
