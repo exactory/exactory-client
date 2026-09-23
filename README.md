@@ -35,6 +35,14 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.44.0](docs/releases/0.44.0.md) lets a study continue without a source
+that it cannot obtain, through an audited `defer-source` decision, and publish
+the supported part of an open objective under an explicit source-limited
+contract. `fulltext` reads scanned PDFs with bounded OCR and acquires a
+supplement through an assessed correspondence with its main article. A scoped
+manuscript reaches blind reviewers through a checked scientific delivery. The
+Zenodo disclosure states that the human author is responsible for the content.
+
 Version [0.43.0](docs/releases/0.43.0.md) makes a manuscript account for the
 literature that its study used. The manuscript pin covers every work that the
 study read in full and every work that a selected five-purpose search cites.
