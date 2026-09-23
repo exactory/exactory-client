@@ -9,6 +9,7 @@ import os
 import py_compile
 import tempfile
 import unittest
+import warnings
 from unittest import mock
 from pathlib import Path
 
@@ -19,7 +20,10 @@ _MARKETPLACE_MANIFEST_PATH = (
 
 
 def _compile_python_source(path: Path) -> None:
-    with tempfile.TemporaryDirectory() as scratch_dir:
+    """Compile one source; a compile-time warning, such as an invalid escape
+    sequence, is an error (Python 3.12 reports it as a SyntaxWarning)."""
+    with tempfile.TemporaryDirectory() as scratch_dir, warnings.catch_warnings():
+        warnings.simplefilter("error")
         py_compile.compile(str(path), cfile=os.path.join(scratch_dir, "out.pyc"), doraise=True)
 
 
@@ -117,6 +121,13 @@ class TestExecutableSources(unittest.TestCase):
         for path in bin_files:
             with self.subTest(command=path.name):
                 self.assertTrue(path.read_text().startswith("#!"))
+                _compile_python_source(path)
+
+    def test_every_research_harness_module_compiles_without_warnings(self) -> None:
+        modules = sorted((_PLUGIN_ROOT / "research_harness").glob("*.py"))
+        self.assertTrue(modules)
+        for path in modules:
+            with self.subTest(module=path.name):
                 _compile_python_source(path)
 
     def test_every_hook_script_has_a_shebang_and_compiles(self) -> None:

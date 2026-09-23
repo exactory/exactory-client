@@ -16,8 +16,8 @@ no_query, and network_error. A network failure is never treated as fabrication,
 and a report where nothing was verified does not pass the gate.
 
 lookup also reads the manuscript next to the bibliography: the main LaTeX file
-(--main, else paper.tex, else the only file with \documentclass) and the files
-it includes. An entry that no citation command cites is blocking, and \nocite does
+(--main, else paper.tex, else the only file with \\documentclass) and the files
+it includes. An entry that no citation command cites is blocking, and \\nocite does
 not count as a citation. A sentence that makes a prior-art statement (classical,
 well known, established, previously, has been shown, and similar) without a
 citation is a warning. The report records the SHA-256 of each file read, so the
