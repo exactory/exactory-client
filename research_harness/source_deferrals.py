@@ -164,7 +164,7 @@ def defer_source(store, payload, *, expected_revision, request_id):
             raise ResearchError("source_deferral_inapplicable", "Defer only a current missing full-text requirement")
         if not _has_acquisition_gap(records, evaluation, value["version_id"]):
             raise ResearchError("source_deferral_inapplicable", "Available originals and units require inventory and reading, not source deferral")
-        pending = [o for o in foundation["obligations"] + foundation["deferred_obligations"]
+        pending = [o for o in foundation["obligations"] + foundation.get("deferred_obligations", [])
                    if o.get("version_id") == value["version_id"] and is_source_access_obligation(o)]
         if not pending:
             raise ResearchError("source_deferral_inapplicable", "No current source-access or reading obligation is missing")

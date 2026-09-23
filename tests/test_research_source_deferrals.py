@@ -67,6 +67,17 @@ class SourceDeferralTests(DeferralCase, LiteratureCase):
         self.assertFalse(after["ready"])
         self.assertEqual(len(self.store.snapshot()["records"].get("availability", {})), 0)
 
+    def test_a_study_without_deferrals_keeps_the_foundation_report_of_0_43_0(self):
+        # A manuscript pinned by 0.43.0 binds the digest of a readiness report
+        # that contains this report, so its keys stay those of 0.43.0.
+        self.setup_gap()
+        report = foundation_report(self.store, "research")
+        self.assertEqual(set(report) - {"revision"}, {
+            "ready", "digest", "obligations", "notices", "counts", "population_digest", "frontier_digest",
+            "judgments_digest", "requirements_digest", "stable_digest", "passed", "invalid_references",
+            "inventory", "collections", "cohort", "availability_qualified", "searches", "search_history",
+            "next", "limits"})
+
     def test_missing_supplement_keeps_original_pending_units_and_partial_reading(self):
         _, gap = self.setup_gap()
         self.add_missing_supplement(gap)

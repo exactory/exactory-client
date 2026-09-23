@@ -654,6 +654,8 @@ def _foundation_state(evaluation, profile):
                     "readings": used_readings, "collections": collections, "cohort_digest": cohort_state["digest"], "requirements": full_requirements,
                     "searches": searches, "availability": availability}
     dependencies["search_selection"] = selected_searches
+    # Without deferral records the report keeps its earlier keys and digests,
+    # so a readiness digest pinned before source deferral stays current.
     deferral_dependency = {"source_deferrals": deferrals} if deferrals else {}
     dependencies.update(deferral_dependency)
     dependencies["visual_assets"] = {k: a for k, a in records.get("visual_asset", {}).items() if a["version_id"] in relevant}
@@ -669,7 +671,7 @@ def _foundation_state(evaluation, profile):
               "fulltext_read": sum(x["fulltext_read"] for x in inventory), "abstract_read": sum(x["abstract_read"] for x in inventory)}
     counts.update({"tier_" + str(t): sum(n["tier"] == t for n in graph["nodes"]) for t in (1, 2, 3)})
     return {"ready": not obligations, "digest": digest(dependencies), "obligations": obligations, "notices": notices, "counts": counts,
-            "source_deferrals": deferrals, "deferred_obligations": deferred_obligations,
+            **(dict(deferral_dependency, deferred_obligations=deferred_obligations) if deferrals else {}),
             "population_digest": digest(population), "frontier_digest": frontier_digest(evaluation, profile),
             "judgments_digest": digest(judgments),
             "requirements_digest": digest({"requirements": full_requirements, **deferral_dependency}) if deferrals else digest(full_requirements),

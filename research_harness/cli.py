@@ -279,7 +279,7 @@ def status_report(store, *, counters=False):
                                                     "submit": ["exactory", "submit"] + flags}
     return dict(report, revision=snapshot["revision"], profile=profile, runtime=runtime_provenance(),
                 source_deferrals=assess_deferrals(records, evaluation, profile),
-                deferred_obligations=literature.foundation_state(records, evaluation, profile)["deferred_obligations"],
+                deferred_obligations=literature.foundation_state(records, evaluation, profile).get("deferred_obligations", []),
                 study=study, preparation=preparation, resources=resources.account_report(records, profile),
                 limits=limits_report(records), **diagnostics, **scope_status,
                 round=round_summary(round_report) if round_report else None,
