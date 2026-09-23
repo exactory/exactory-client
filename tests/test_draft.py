@@ -282,9 +282,11 @@ def _write_passing_citation_report(workspace_dir: Path) -> None:
         "blocking": 0,
         "nothing_verified": False,
         "ok": True,
+        # What lookup records for a draft whose manuscript is paper.tex alone, or none.
         "manuscript": {
-            "tex_sha256": {path.relative_to(bib_path.parent).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
-                           for path in sorted(bib_path.parent.rglob("*.tex"))},
+            "main": "paper.tex" if (bib_path.parent / "paper.tex").is_file() else None,
+            "tex_sha256": {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                           for path in [bib_path.parent / "paper.tex"] if path.is_file()},
             "uncited_keys": [], "prior_art_without_citation": [],
         },
     }

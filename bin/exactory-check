@@ -15,12 +15,14 @@ title_mismatch, and author_mismatch. The warning statuses are year_mismatch,
 no_query, and network_error. A network failure is never treated as fabrication,
 and a report where nothing was verified does not pass the gate.
 
-lookup also reads the LaTeX files under the bibliography's directory: an entry
-that no citation command cites is blocking, and a sentence that makes a prior-art
-statement (classical, well known, established, previously, has been shown, ...)
-without a citation is a warning. The report records the SHA-256 of those files,
-so the gate treats a report as stale when the manuscript changes. Python
-standard library only.
+lookup also reads the manuscript next to the bibliography: the main LaTeX file
+(paper.tex, the only file with \documentclass, or --main) and the files it
+includes. An entry that no citation command cites is blocking, and \nocite does
+not count as a citation. A sentence that makes a prior-art statement (classical,
+well known, established, previously, has been shown, and similar) without a
+citation is a warning. The report records the SHA-256 of each file read, so the
+gate treats a report as stale when the manuscript changes. Python standard
+library only.
 """
 
 from __future__ import annotations
@@ -31,6 +33,7 @@ import difflib
 import hashlib
 import json
 import os
+import posixpath
 import re
 import string
 import sys
@@ -51,6 +54,7 @@ _PUBMED_ESUMMARY_API_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esumma
 _DEFAULT_BIB_PATH = "draft/references.bib"
 _DEFAULT_REPORT_PATH = ".exactory/citation-check.json"
 _CACHE_FILE_NAME = "citation-cache.json"
+_CACHE_SCHEMA_VERSION = 2
 
 _TIMEOUT_SECONDS = 30
 _MIN_REQUEST_INTERVAL_SECONDS = 0.6
@@ -303,27 +307,42 @@ def _strip_tex_commands(text: str) -> str:
     return re.sub(r"\\[a-zA-Z]+\s*", " ", text)  # any remaining command: drop it
 
 
-_MARKUP_TAG_RE = re.compile(r"<(/?)([A-Za-z][A-Za-z0-9:]*)(?:\s[^<>]*)?/?>")
-_SPACE_BEFORE_SCRIPT_TAG_RE = re.compile(r"\s+(?=<(?:[A-Za-z]+:)?su[bp][\s>])")
 # JATS and HTML inline markup that Crossref and DataCite put in titles, with the
-# LaTeX that renders it. Any other tag is dropped and its text kept.
-_MARKUP_LATEX = {"sub": ("$_{", "}$"), "sup": ("$^{", "}$"),
-                 "i": ("\\textit{", "}"), "em": ("\\textit{", "}"), "italic": ("\\textit{", "}"),
-                 "b": ("\\textbf{", "}"), "strong": ("\\textbf{", "}"), "bold": ("\\textbf{", "}"),
-                 "scp": ("\\textsc{", "}"), "sc": ("\\textsc{", "}")}
-
-
-_MATHML_RE = re.compile(r"<(?:[A-Za-z]+:)?math\b[^>]*>(.*?)</(?:[A-Za-z]+:)?math>", re.DOTALL)
+# LaTeX that renders it. The other registry and MathML tags are dropped and their
+# text kept. Only these names are markup: any other angle-bracket text is title text.
+_LATEX_WRAPPERS_BY_TAG = {"sub": ("_{", "}"), "sup": ("^{", "}"),
+                          "i": ("\\textit{", "}"), "em": ("\\textit{", "}"), "italic": ("\\textit{", "}"),
+                          "b": ("\\textbf{", "}"), "strong": ("\\textbf{", "}"), "bold": ("\\textbf{", "}"),
+                          "scp": ("\\textsc{", "}"), "sc": ("\\textsc{", "}")}
+_SCRIPT_TAG_NAMES = ("sub", "sup")
+_DROPPED_TAG_NAMES = ("u", "underline", "span", "p", "br", "math", "mrow", "mi", "mn", "mo", "ms", "mtext",
+                      "mspace", "msub", "msup", "msubsup", "mfrac", "msqrt", "mroot", "mstyle", "mover", "munder",
+                      "munderover", "mfenced", "mpadded", "mphantom", "menclose", "mtable", "mtr", "mtd",
+                      "semantics", "annotation")
+_MARKUP_TAG_NAME_PATTERN = "|".join(sorted((*_LATEX_WRAPPERS_BY_TAG, *_DROPPED_TAG_NAMES), key=len, reverse=True))
+_MARKUP_TAG_RE = re.compile(r"<(/?)((?:[A-Za-z]+:)?(?:" + _MARKUP_TAG_NAME_PATTERN + r"))"
+                            r"((?:\s+[A-Za-z_:][-\w:.]*\s*=\s*\"[^\"]*\")*)\s*(/?)>", re.IGNORECASE)
+# A chemical formula's subscript attaches to the element before it ("Bi <sub>2</sub>").
+_SPACE_BEFORE_SUBSCRIPT_TAG_RE = re.compile(r"\s+(?=<(?:[A-Za-z]+:)?sub[\s/>])", re.IGNORECASE)
+_MATHML_RE = re.compile(r"<(?:[A-Za-z]+:)?math\b[^>]*>(.*?)</(?:[A-Za-z]+:)?math>", re.DOTALL | re.IGNORECASE)
 _MATHML_SCRIPT_MARKERS = {"msub": "_", "msup": "^"}
 
 
+def _find_tag_name(match: re.Match) -> str:
+    return match.group(2).lower().rsplit(":", 1)[-1]
+
+
 def _render_mathml_element(element) -> str:
-    """Text of a MathML element, with msub and msup as LaTeX scripts."""
+    """Text of a MathML element, with msub and msup as LaTeX scripts. A script on a
+    base that already carries one is grouped: ${x_{a}}_{b}$."""
     name = element.tag.rsplit("}", 1)[-1]
     children = list(element)
     if name in _MATHML_SCRIPT_MARKERS and len(children) == 2:
         base, script = (_render_mathml_element(child) for child in children)
-        return f"{base}${_MATHML_SCRIPT_MARKERS[name]}{{{script.replace('$', '')}}}$"
+        marker, script = _MATHML_SCRIPT_MARKERS[name], script.replace("$", "")
+        if "$" in base:
+            return f"${{{base.replace('$', '')}}}{marker}{{{script}}}$"
+        return f"{base}${marker}{{{script}}}$"
     return (element.text or "").strip() + "".join(
         _render_mathml_element(child) + (child.tail or "").strip() for child in children)
 
@@ -340,20 +359,32 @@ def _convert_mathml_to_latex(match: re.Match) -> str:
 
 
 def _convert_markup_to_latex(text: str) -> str:
-    """Render registry title markup as LaTeX. Malformed markup keeps its text only."""
+    """Render registry title markup as LaTeX. Sub- and superscripts open one math
+    group at the outermost level. Crossed or unclosed markup keeps its text only."""
     if "<" not in text:
         return text
-    text = _MATHML_RE.sub(_convert_mathml_to_latex, text)
-
-    def replace_tag(match: re.Match) -> str:
-        wrapper = _MARKUP_LATEX.get(match.group(2).lower().rsplit(":", 1)[-1])
-        if wrapper is None:
-            return ""
-        return wrapper[1] if match.group(1) else wrapper[0]
-
-    converted = _MARKUP_TAG_RE.sub(replace_tag, _SPACE_BEFORE_SCRIPT_TAG_RE.sub("", text))
-    if converted.count("{") != converted.count("}") or converted.count("$") % 2:
-        converted = _MARKUP_TAG_RE.sub("", text)
+    text = _SPACE_BEFORE_SUBSCRIPT_TAG_RE.sub("", _MATHML_RE.sub(_convert_mathml_to_latex, text))
+    pieces, open_tags, position = [], [], 0
+    for match in _MARKUP_TAG_RE.finditer(text):
+        pieces.append(text[position:match.start()])
+        position = match.end()
+        name = _find_tag_name(match)
+        wrapper = _LATEX_WRAPPERS_BY_TAG.get(name)
+        if wrapper is None or match.group(4):
+            continue
+        in_math = any(tag in _SCRIPT_TAG_NAMES for tag in open_tags)
+        if not match.group(1):
+            open_tags.append(name)
+            pieces.append(("$" if name in _SCRIPT_TAG_NAMES and not in_math else "") + wrapper[0])
+        elif open_tags and open_tags[-1] == name:
+            open_tags.pop()
+            closes_math = name in _SCRIPT_TAG_NAMES and not any(tag in _SCRIPT_TAG_NAMES for tag in open_tags)
+            pieces.append(wrapper[1] + ("$" if closes_math else ""))
+        else:
+            open_tags.append("crossed")
+            break
+    pieces.append(text[position:])
+    converted = "".join(pieces) if not open_tags else _MARKUP_TAG_RE.sub("", text)
     return re.sub(r"\s+", " ", converted).strip()
 
 
@@ -605,38 +636,56 @@ def _resolve_arxiv_id(arxiv_id: str) -> dict:
 
 
 _PUBLISHED_WORK_TYPES = {"journal-article", "proceedings-article", "book-chapter"}
+# A journal record older than its preprint by more than this is another paper.
+_PUBLISHED_YEAR_TOLERANCE = 1
 
 
-def _find_first_author_family(meta: dict) -> str:
-    name_tokens = _split_name_tokens(meta["authors"][0]) if meta.get("authors") else []
-    return name_tokens[-1] if name_tokens else ""
+def _is_published_version_of(meta: dict, preprint: dict) -> bool:
+    """A journal, proceedings or chapter record, not an arXiv DOI, whose first author
+    and, when both list two or more, second author match the preprint's."""
+    if meta.get("type") not in _PUBLISHED_WORK_TYPES or not meta.get("doi"):
+        return False
+    if meta["doi"].lower().startswith("10.48550/"):
+        return False
+    author_pairs = list(zip(meta.get("authors") or [], preprint.get("authors") or []))[:2]
+    return bool(author_pairs) and all(_names_match(published, posted) for published, posted in author_pairs)
 
 
-def _find_published_version(preprint: dict) -> tuple[str, str]:
-    """(DOI, where it was found) of a preprint's published version, or ("", "").
-    The arXiv record's own DOI field comes first. Otherwise exactly one Crossref
-    journal, proceedings or chapter record must carry the same normalized title
-    and first-author family name; a second candidate or any doubt keeps the preprint."""
-    if preprint.get("published_doi"):
-        return preprint["published_doi"], "the arXiv record"
+def _find_published_version(preprint: dict) -> tuple[dict | None, str]:
+    """(record, how it was found) of a preprint's published version, or (None, why
+    none was chosen). The DOIs that the arXiv record names come first; each must
+    be a published version by the same authors. Otherwise exactly one Crossref
+    record must have the same normalized title, the same authors and a year no
+    earlier than the preprint's. Any doubt keeps the preprint."""
+    findings = []
+    for doi in (preprint.get("published_doi") or "").split():
+        resolution = _resolve_doi(doi)
+        if "meta" in resolution and _is_published_version_of(resolution["meta"], preprint):
+            return resolution["meta"], f"DOI {doi}, named by the arXiv record"
+        findings.append(f"the arXiv record names DOI {doi}, which is not a published version by the"
+                        " same authors" if "meta" in resolution
+                        else f"the arXiv record names DOI {doi}, whose record could not be fetched"
+                             f" ({resolution['detail']})")
     title = _normalize_for_match(preprint.get("title", ""))
-    family = _find_first_author_family(preprint)
-    if not title or not family:
-        return "", ""
+    if not title or not preprint.get("authors"):
+        return None, "; ".join(findings + ["the preprint record has no title or author to search for"])
     query = {"rows": "5", "query.bibliographic": preprint["title"], "query.author": preprint["authors"][0]}
     code, text = _open_url(f"{_CROSSREF_API_URL}?" + urllib.parse.urlencode(query))
-    if code != 200 or not text:
-        return "", ""
     try:
-        items = json.loads(text).get("message", {}).get("items", [])
+        items = json.loads(text).get("message", {}).get("items", []) if code == 200 and text else None
     except ValueError:
-        return "", ""
-    dois = {meta["doi"].lower() for meta in map(_normalize_crossref_work, items)
-            if meta["type"] in _PUBLISHED_WORK_TYPES and meta["doi"]
-            and not meta["doi"].lower().startswith("10.48550/")
-            and _normalize_for_match(meta["title"]) == title
-            and _find_first_author_family(meta) == family}
-    return (dois.pop(), "a Crossref title and first-author match") if len(dois) == 1 else ("", "")
+        items = None
+    if items is None:
+        return None, "; ".join(findings + ["Crossref was not reachable"])
+    earliest_year = (preprint.get("year") or 0) - _PUBLISHED_YEAR_TOLERANCE
+    matches = {meta["doi"].lower(): meta for meta in map(_normalize_crossref_work, items)
+               if _normalize_for_match(meta["title"]) == title and _is_published_version_of(meta, preprint)
+               and (meta.get("year") or 0) >= earliest_year}
+    if len(matches) == 1:
+        meta = next(iter(matches.values()))
+        return meta, f"DOI {meta['doi']}, found by a Crossref title and author match"
+    return None, "; ".join(findings + ["Crossref has several matching records" if matches else
+                                       "Crossref has no record with the same title and authors"])
 
 
 def _normalize_pubmed_summary(summary: dict) -> dict:
@@ -832,11 +881,16 @@ def _build_cache_key(entry: dict) -> str:
 
 
 def _load_cache(cache_path: Path) -> dict:
+    """The cached records, or none for a cache in another schema: before version 2
+    a record could sit under a key other than its entry's primary identity."""
     try:
         cache = json.loads(cache_path.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
-    return cache if isinstance(cache, dict) else {}
+    if not isinstance(cache, dict) or cache.get("version") != _CACHE_SCHEMA_VERSION:
+        return {}
+    records = cache.get("records")
+    return records if isinstance(records, dict) else {}
 
 
 # -------------------------------------------------- rendering (add command)
@@ -937,12 +991,19 @@ def _read_refs_json_entries(path: Path, text: str) -> list[dict]:
 
 # ------------------------------------------------ manuscript checks (lookup)
 
-_TEX_COMMENT_RE = re.compile(r"(?<!\\)%.*")
-# A citation command with its optional arguments and one or more key groups
-# (biblatex \cites{a}{b} takes several).
-_CITATION_COMMAND_RE = re.compile(
-    r"\\(?:[A-Za-z]*cite[A-Za-z]*|nocite)\*?\s*(?:\[[^\]]*\]\s*){0,2}((?:\{[^}]*\}\s*)+)")
-_KEY_GROUP_RE = re.compile(r"\{([^}]*)\}")
+_DEFAULT_MAIN_TEX = "paper.tex"
+# A comment starts at a percent sign after an even number of backslashes (\\% is a
+# line break and a comment, \% is a percent sign).
+_TEX_COMMENT_RE = re.compile(r"(?<!\\)((?:\\\\)*)%.*")
+_URL_ARGUMENT_RE = re.compile(r"\\(?:url|href)\s*\{[^}\n]*\}")
+_DISABLED_BLOCK_RE = re.compile(r"\\iffalse\b.*?\\fi\b|\\begin\{comment\}.*?\\end\{comment\}", re.DOTALL)
+_DOCUMENTCLASS_RE = re.compile(r"\\documentclass\b")
+_INCLUDE_RE = re.compile(r"\\(?:input|include|subfile)\s*\{([^}]+)\}")
+# A citation command. \nocite lists an entry without citing it, so it does not count.
+_CITATION_COMMAND_RE = re.compile(r"\\(?!nocite\b)[A-Za-z]*[Cc]ite[A-Za-z]*\*?")
+# The arguments after a citation command: notes in brackets, parentheses or angle
+# brackets, and one or more key groups (biblatex \cites{a}[p.~5]{b}).
+_CITATION_ARGUMENT_RE = re.compile(r"\s*(?:\[[^\]]*\]|\([^)]*\)|<[^>]*>|\{([^}]*)\})")
 _ABSTRACT_RE = re.compile(r"\\begin\{abstract\}.*?\\end\{abstract\}", re.DOTALL)
 _SENTENCE_END_RE = re.compile(r"[.!?](?=\s)|\n\s*\n")
 _PRIOR_ART_MARKER_RE = re.compile(
@@ -950,13 +1011,88 @@ _PRIOR_ART_MARKER_RE = re.compile(
     r"|earlier (?:work|studies)|(?:has|have) been (?:studied|proposed|reported|shown"
     r"|demonstrated|treated|derived)|(?:is|are) (?:well )?known|not new)\b", re.IGNORECASE)
 _MAX_REPORTED_SENTENCE_CHARS = 300
-_EMPTY_MANUSCRIPT = {"tex_sha256": {}, "uncited_keys": [], "prior_art_without_citation": []}
+_EMPTY_MANUSCRIPT_REPORT = {"main": None, "tex_sha256": {}, "uncited_keys": [], "prior_art_without_citation": []}
 
 
-def _hash_tex_sources(root: Path) -> dict[str, str]:
-    """SHA-256 of every LaTeX file under root, keyed by its POSIX path relative to root."""
-    return {path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in sorted(root.rglob("*.tex")) if path.is_file()}
+class _ManuscriptSelectionError(Exception):
+    """The LaTeX under the bibliography's directory names no single manuscript."""
+
+
+def _strip_tex_noise(raw_text: str) -> str:
+    """LaTeX text without comments, \\iffalse blocks and comment environments, with URL
+    arguments emptied so that a percent sign in a URL is not a comment. Line breaks
+    stay, so line numbers are those of the file."""
+    text = _URL_ARGUMENT_RE.sub(lambda match: "\\url{}", raw_text)
+    text = "\n".join(_TEX_COMMENT_RE.sub(r"\1", line) for line in text.split("\n"))
+    return _DISABLED_BLOCK_RE.sub(lambda block: "\n" * block.group(0).count("\n"), text)
+
+
+def _decode_tex(data: bytes) -> str:
+    return _strip_tex_noise(data.decode("utf-8", errors="replace"))
+
+
+def _read_manuscript_sources(root: Path, main: str | None) -> tuple[str | None, dict[str, bytes]]:
+    """(main file, {path: bytes}) of the manuscript under root: the main file and every
+    file that it includes, keyed by POSIX path relative to root. Each file is read
+    once, so the bytes checked are the bytes hashed. Without a named main file the
+    main file is paper.tex, else the only file with \\documentclass; when no file has
+    one, every LaTeX file is read."""
+    available = {path.relative_to(root).as_posix(): path for path in sorted(root.rglob("*.tex")) if path.is_file()}
+    read_bytes = {}
+
+    def read_source(name: str) -> bytes:
+        if name not in read_bytes:
+            read_bytes[name] = available[name].read_bytes()
+        return read_bytes[name]
+
+    if main is not None:
+        main = posixpath.normpath(main)
+        if main not in available:
+            raise _ManuscriptSelectionError(f"The main LaTeX file {main} is not under {root}.")
+    elif _DEFAULT_MAIN_TEX in available:
+        main = _DEFAULT_MAIN_TEX
+    else:
+        roots = [name for name in available if _DOCUMENTCLASS_RE.search(_decode_tex(read_source(name)))]
+        if len(roots) > 1:
+            raise _ManuscriptSelectionError(
+                f"The LaTeX files under {root} have several root files ({', '.join(roots)})."
+                " Pass --main with the manuscript's main file.")
+        if not roots:
+            return None, {name: read_source(name) for name in available}
+        main = roots[0]
+    selected, pending = {}, [main]
+    while pending:
+        name = pending.pop()
+        if name in selected:
+            continue
+        selected[name] = read_source(name)
+        for target in (match.strip() for match in _INCLUDE_RE.findall(_decode_tex(selected[name]))):
+            included = posixpath.normpath(target if target.endswith(".tex") else target + ".tex")
+            if included in available:
+                pending.append(included)
+    return main, dict(sorted(selected.items()))
+
+
+def _hash_manuscript_sources(sources: dict[str, bytes]) -> dict[str, str]:
+    return {name: hashlib.sha256(data).hexdigest() for name, data in sources.items()}
+
+
+def _summarize_manuscript_sources(root: Path, main: str | None) -> dict:
+    """{main, tex_sha256}: what lookup records about the manuscript and gate recomputes."""
+    main, sources = _read_manuscript_sources(root, main)
+    return {"main": main, "tex_sha256": _hash_manuscript_sources(sources)}
+
+
+def _find_cited_keys(text: str) -> set[str]:
+    """Every key in the key groups of every citation command."""
+    keys = set()
+    for command in _CITATION_COMMAND_RE.finditer(text):
+        argument = _CITATION_ARGUMENT_RE.match(text, command.end())
+        while argument:
+            if argument.group(1) is not None:
+                keys.update(key.strip() for key in argument.group(1).split(",") if key.strip())
+            argument = _CITATION_ARGUMENT_RE.match(text, argument.end())
+    return keys
 
 
 def _find_uncited_prior_art(text: str) -> list[tuple[int, str]]:
@@ -977,30 +1113,25 @@ def _find_uncited_prior_art(text: str) -> list[tuple[int, str]]:
     return findings
 
 
-def _check_manuscript(bib_path: Path, entries: list[dict]) -> dict:
-    """Read the LaTeX files under the bibliography's directory: which entries no
-    citation command cites, which prior-art sentences lack a citation, and the
-    hashes of the files read."""
-    root = bib_path.parent
-    tex_sha256 = _hash_tex_sources(root)
+def _check_manuscript(bib_path: Path, entries: list[dict], main: str | None) -> dict:
+    """Read the manuscript next to the bibliography: which entries no citation
+    command cites, which prior-art sentences lack a citation, and the hash of each
+    file read."""
+    main, sources = _read_manuscript_sources(bib_path.parent, main)
     cited_keys, prior_art = set(), []
-    for relative_path in tex_sha256:
-        raw_text = (root / relative_path).read_bytes().decode("utf-8", errors="replace")
-        text = "\n".join(_TEX_COMMENT_RE.sub("", line) for line in raw_text.split("\n"))
-        for match in _CITATION_COMMAND_RE.finditer(text):
-            cited_keys.update(key.strip() for group in _KEY_GROUP_RE.findall(match.group(1))
-                              for key in group.split(",") if key.strip())
+    for name, data in sources.items():
+        text = _decode_tex(data)
+        cited_keys |= _find_cited_keys(text)
         body = _ABSTRACT_RE.sub(lambda block: "\n" * block.group(0).count("\n"), text)
-        prior_art.extend({"file": relative_path, "line": line, "sentence": sentence}
+        prior_art.extend({"file": name, "line": line, "sentence": sentence}
                          for line, sentence in _find_uncited_prior_art(body))
-    uncited_keys = ([] if not tex_sha256 or "*" in cited_keys else
-                    [entry["key"] for entry in entries if entry.get("key") not in cited_keys])
-    return {"tex_sha256": tex_sha256, "uncited_keys": uncited_keys,
+    uncited_keys = [entry["key"] for entry in entries if entry.get("key") not in cited_keys] if sources else []
+    return {"main": main, "tex_sha256": _hash_manuscript_sources(sources), "uncited_keys": uncited_keys,
             "prior_art_without_citation": prior_art}
 
 
 def _print_lookup_summary(report: dict, out_path: Path) -> None:
-    counts = report["counts"]
+    counts, manuscript = report["counts"], report["manuscript"]
     print(f"Checked {len(report['entries'])} references: {counts['verified']} verified,"
           f" {counts['blocking']} blocking, {counts['warning']} warnings.")
     for entry in report["entries"]:
@@ -1008,10 +1139,15 @@ def _print_lookup_summary(report: dict, out_path: Path) -> None:
             continue
         label = "blocking" if entry["status"] in _BLOCKING_STATUSES else "warning"
         print(f"  [{label}] {entry['status']}: {entry['key']}. {entry['detail']}")
-    for key in report["manuscript"]["uncited_keys"]:
+    if manuscript["tex_sha256"]:
+        print(f"Read the manuscript {manuscript['main'] or 'files'} ({len(manuscript['tex_sha256'])} LaTeX files):"
+              f" {len(manuscript['uncited_keys'])} uncited entries (blocking),"
+              f" {len(manuscript['prior_art_without_citation'])} prior-art sentences without a citation"
+              " (warnings).")
+    for key in manuscript["uncited_keys"]:
         print(f"  [blocking] uncited: {key}. No citation command in the manuscript cites"
               " this entry. Cite it where it supports a statement, or remove it.")
-    for finding in report["manuscript"]["prior_art_without_citation"]:
+    for finding in manuscript["prior_art_without_citation"]:
         print(f"  [warning] prior art without a citation: {finding['file']}:{finding['line']}:"
               f" {finding['sentence']}")
     if report["nothing_verified"]:
@@ -1029,9 +1165,15 @@ def _run_lookup(args: argparse.Namespace) -> None:
         _exit_with_error(f"The file {source_path} does not exist.", 2)
     source_text = source_bytes.decode("utf-8", errors="replace")
     if args.refs_json:
-        entries = _read_refs_json_entries(source_path, source_text)
+        if args.main:
+            _exit_with_error("--main applies only to --bib.", 2)
+        entries, manuscript = _read_refs_json_entries(source_path, source_text), _EMPTY_MANUSCRIPT_REPORT
     else:
         entries = _parse_bib(source_text)
+        try:
+            manuscript = _check_manuscript(source_path, entries, args.main)
+        except _ManuscriptSelectionError as error:
+            _exit_with_error(str(error), 2)
 
     out_path = Path(args.out)
     cache_path = out_path.parent / _CACHE_FILE_NAME
@@ -1057,19 +1199,19 @@ def _run_lookup(args: argparse.Namespace) -> None:
             "detail": result.get("detail", ""),
         })
 
-    manuscript = _EMPTY_MANUSCRIPT if args.refs_json else _check_manuscript(source_path, entries)
+    # counts are per reference, from the registries; the gate's blocking count also
+    # includes the entries that the manuscript never cites.
     verified_count = sum(1 for entry in report_entries if entry["status"] == "verified")
-    blocking_count = (sum(1 for entry in report_entries if entry["status"] in _BLOCKING_STATUSES)
-                      + len(manuscript["uncited_keys"]))
-    warning_count = (sum(1 for entry in report_entries if entry["status"] in _WARNING_STATUSES)
-                     + len(manuscript["prior_art_without_citation"]))
+    registry_blocking_count = sum(1 for entry in report_entries if entry["status"] in _BLOCKING_STATUSES)
+    warning_count = sum(1 for entry in report_entries if entry["status"] in _WARNING_STATUSES)
+    blocking_count = registry_blocking_count + len(manuscript["uncited_keys"])
     nothing_verified = verified_count == 0
     report = {
         "version": 1,
         "bib_sha256": hashlib.sha256(source_bytes).hexdigest(),
         "checked_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "entries": report_entries,
-        "counts": {"verified": verified_count, "blocking": blocking_count,
+        "counts": {"verified": verified_count, "blocking": registry_blocking_count,
                    "warning": warning_count},
         "blocking": blocking_count,
         "nothing_verified": nothing_verified,
@@ -1078,7 +1220,8 @@ def _run_lookup(args: argparse.Namespace) -> None:
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    cache_path.write_text(json.dumps(cache, indent=2) + "\n", encoding="utf-8")
+    cache_path.write_text(json.dumps({"version": _CACHE_SCHEMA_VERSION, "records": cache}, indent=2) + "\n",
+                          encoding="utf-8")
     _print_lookup_summary(report, out_path)
     if not report["ok"]:
         sys.exit(1)
@@ -1095,21 +1238,14 @@ def _resolve_preprint_citation(arxiv_id: str, keep_preprint: bool) -> tuple[dict
         named = preprint.get("published_doi")
         return resolution, (f"The arXiv record names a published version, DOI {named}. The entry"
                             " cites the preprint because of --preprint." if named else "")
-    doi, found_in = _find_published_version(preprint)
-    if not doi:
-        return resolution, (f"No published version of arXiv:{arxiv_id} was found in the arXiv record"
-                            " or in Crossref, so the entry cites the preprint. If the paper has"
+    published, how = _find_published_version(preprint)
+    if published is None:
+        return resolution, (f"The entry cites the preprint arXiv:{arxiv_id}: {how}. If the paper has"
                             " been published, remove this entry and add the published version"
                             " with --doi.")
-    published = _resolve_doi(doi)
-    if "meta" not in published:
-        return resolution, (f"arXiv:{arxiv_id} has a published version, DOI {doi}, but its record"
-                            f" could not be fetched ({published['detail']}), so the entry cites"
-                            " the preprint. Add the published version with --doi when the"
-                            " registry answers.")
-    return published, (f"arXiv:{arxiv_id} has a published version, DOI {doi}, found through"
-                       f" {found_in}. The entry cites the published version. To cite the"
-                       " preprint itself, remove the entry and run the command again with --preprint.")
+    return {"meta": published}, (f"arXiv:{arxiv_id} has a published version, {how}. The entry"
+                                 " cites the published version. To cite the preprint itself, remove"
+                                 " the entry and run the command again with --preprint.")
 
 
 def _run_add(args: argparse.Namespace) -> None:
@@ -1132,23 +1268,29 @@ def _run_add(args: argparse.Namespace) -> None:
     existing_text = (bib_path.read_text(encoding="utf-8", errors="replace")
                      if bib_path.exists() else "")
 
+    # The same work under any key is a duplicate: its DOI, its arXiv id, or the
+    # arXiv id that was requested for its published version.
+    existing_entries = _parse_bib(existing_text)
+    identities = {("doi", (meta.get("doi") or "").lower()), ("arxiv", (meta.get("arxiv") or "").lower())}
+    if args.arxiv_id:
+        identities.add(("arxiv", re.sub(r"v\d+$", "", args.arxiv_id.strip()).lower()))
+    identities.discard(("doi", ""))
+    identities.discard(("arxiv", ""))
+    for existing_entry in existing_entries:
+        existing_identities = {("doi", _extract_doi(existing_entry).lower()),
+                               ("arxiv", _extract_arxiv_id(existing_entry).lower())}
+        if existing_identities & identities:
+            _exit_with_error(f"The reference is already in {bib_path} as {existing_entry['key']}."
+                             " Cite it with that key, or remove that entry first to replace it.")
+
     # Two different papers can share the generated key (same first author, year,
-    # and first title word). Only a matching identifier is a true duplicate;
-    # a different paper gets a letter suffix instead of a refusal.
-    entries_by_key = {entry.get("key", ""): entry for entry in _parse_bib(existing_text)}
+    # and first title word); the later one gets a letter suffix.
+    taken_keys = {entry.get("key", "") for entry in existing_entries}
     base_key = _make_entry_key(meta)
-    meta_doi = (meta.get("doi") or "").lower()
-    meta_arxiv = (meta.get("arxiv") or "").lower()
     for suffix in ("", *string.ascii_lowercase[1:]):
         key = base_key + suffix
-        existing_entry = entries_by_key.get(key)
-        if existing_entry is None:
+        if key not in taken_keys:
             break
-        same_doi = meta_doi and _extract_doi(existing_entry).lower() == meta_doi
-        same_arxiv = meta_arxiv and _extract_arxiv_id(existing_entry).lower() == meta_arxiv
-        if same_doi or same_arxiv:
-            _exit_with_error(f"The reference is already in {bib_path} as {key}."
-                             " Cite it with that key.")
     else:
         _exit_with_error(f"More than {len(string.ascii_lowercase)} entries in {bib_path}"
                          f" share the key {base_key}. Remove the entries that you"
@@ -1208,8 +1350,12 @@ def _run_gate(args: argparse.Namespace) -> None:
         _exit_with_error("The citation report is stale because draft/references.bib"
                          f" changed. Run: {_GATE_LOOKUP_CMD}")
     manuscript = report.get("manuscript")
-    if not isinstance(manuscript, dict) or manuscript.get("tex_sha256") != _hash_tex_sources(
-            references_path.parent):
+    try:
+        current = (_summarize_manuscript_sources(references_path.parent, manuscript.get("main"))
+                   if isinstance(manuscript, dict) else None)
+    except _ManuscriptSelectionError:
+        current = None
+    if current is None or {"main": manuscript.get("main"), "tex_sha256": manuscript.get("tex_sha256")} != current:
         _exit_with_error("The citation report is stale because the manuscript sources in"
                          " draft/ changed, or the report predates the manuscript checks."
                          f" Run: {_GATE_LOOKUP_CMD}")
@@ -1249,6 +1395,10 @@ def _build_parser() -> argparse.ArgumentParser:
                         help="Path of a JSON reference list in the o1_citation_existence"
                              " payload shape (the claim format exactory uses for"
                              " citation-existence checks).")
+    lookup.add_argument("--main",
+                        help="The manuscript's main LaTeX file, relative to the bibliography's"
+                             f" directory (default: {_DEFAULT_MAIN_TEX}, or the only file there with"
+                             " \\documentclass).")
     lookup.add_argument("--out", default=_DEFAULT_REPORT_PATH,
                         help=f"Path of the report file (default: {_DEFAULT_REPORT_PATH}).")
     lookup.set_defaults(handler=_run_lookup)
