@@ -48,6 +48,9 @@ def gate_state(records, artifacts, action, *, profile=None):
         if action == "verification" and profile != "verification":
             return _report([obligation("profile_mismatch", "Verdicts require an independent verification workspace.")])
         return synthesis_state(records, artifacts, profile)
+    if action == "manuscript-readiness":
+        from .publication_scope import assess_manuscript_readiness
+        return assess_manuscript_readiness(records, artifacts)
     if action in {"readiness", "write"}:
         return author_readiness_state(records, artifacts)
     if action == "execution":
@@ -111,6 +114,10 @@ def validate_transition(records, artifacts, previous, proposed):
         "ideate": "execution", "experiment": "readiness", "write": "manuscript",
         "evaluate": "publication", "deposit": "deposited", "submit": "submitted", "complete": "submitted",
     }
+    from .publication_scope import has_publication_scope
+    scoped = has_publication_scope(records)
+    if scoped:
+        completed["experiment"] = "manuscript-readiness"
     require_ready(gate_state(records, artifacts, completed[source]), source + " completion")
     if (source, target) == ("evaluate", "deposit"):
         from .rounds import round_state
@@ -118,6 +125,8 @@ def validate_transition(records, artifacts, previous, proposed):
         require_ready(round_state(records, artifacts), "entering deposit")
     prerequisites = {"ideate": "preparation", "experiment": "execution", "write": "readiness",
                      "evaluate": "manuscript", "deposit": "publication", "submit": "deposited", "complete": "submitted"}
+    if scoped:
+        prerequisites["write"] = "manuscript-readiness"
     if target in prerequisites:
         require_ready(gate_state(records, artifacts, prerequisites[target]), "entering " + target)
     if proposed["status"] == "done" and target != source:

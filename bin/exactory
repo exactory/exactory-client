@@ -164,6 +164,8 @@ def _print_json(payload: dict) -> None:
 
 
 def _run_submit(args: argparse.Namespace) -> None:
+    from research_harness.cli import parse_managed_scope_arguments
+    strict = parse_managed_scope_arguments(args)
     if args.arxiv_id:
         body = {"arxivId": args.arxiv_id}
     elif args.doi:
@@ -188,9 +190,10 @@ def _run_submit(args: argparse.Namespace) -> None:
     # The submission keeps no local copy of the request, so a store that does not
     # open changes nothing here.
     store, submission_checks, _ = select_managed_path(
-        lambda workspace_store: check_submission_preconditions(workspace_store, body))
+        lambda workspace_store: check_submission_preconditions(workspace_store, body), **strict)
     if submission_checks is not None:
-        payload = submit_managed(store, body, _send_request, **command_identity(store, args))
+        payload = submit_managed(store, body, _send_request, scope_contract_id=strict["scope_contract_id"],
+                                 scope_target_digest=strict["scope_target_digest"], **command_identity(store, args))
         status = 201
     else:
         payload, status = _send_request("POST", "/api/v1/verifications", body)
@@ -645,6 +648,8 @@ def _build_parser() -> argparse.ArgumentParser:
                              " more than one, at most"
                              f" {_MAX_DECLARED_CHALLENGES}.")
     submit.set_defaults(handler=_run_submit)
+    from research_harness.cli import add_managed_scope
+    add_managed_scope(submit)
     add_identity(submit, required=False)
 
     status = commands.add_parser("status", allow_abbrev=False,

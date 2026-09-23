@@ -145,10 +145,12 @@ class _Context:
                 raise ResearchError("lineage_cycle", "Development inheritance must follow earlier checkpoints")
             self.assessing.add(identifier)
             try:
-                report = _assess(self, record["payload"])
+                report = _assess(self, record["payload"], historical=True)
                 if report["dependencies"] != record["dependencies"]:
-                    report["obligations"].append(obligation("development_dependencies_stale",
-                        "Reassess the result against current policy, literature, sources and executions.", assessment_id=identifier))
+                    stale = obligation("development_dependencies_stale",
+                        "Reassess the result against current policy, literature, sources and executions.", assessment_id=identifier)
+                    report["obligations"].append(stale)
+                    report["prerequisites"]["validity"].append(stale)
                     report["validated_result"] = False
                     report["complete"] = False
                 report["obligations"] = _unique(report["obligations"])
@@ -171,6 +173,10 @@ class _Evidence:
         if isinstance(value, dict) and value.get("kind") == "source":
             _fields(value, ("kind", "link"))
             linked = context.artifacts.link(value["link"])
+            if any(d["version_id"] == linked["work"]["id"] and d["status"] == "active"
+                   for d in context.foundation.get("source_deferrals", [])):
+                raise ResearchError("source_deferred", "A deferred source cannot supply research or manuscript claim evidence",
+                                    {"version_id": linked["work"]["id"]})
             reading = validate_read_evidence(context.records, context.artifacts, value["link"], depth="fulltext")
             work = linked["work"]
             # Common source validation also checks source-backed metadata and
@@ -282,7 +288,14 @@ def _objective_lineage(context):
     return lineage
 
 
-def _inheritance(context, evidence, value):
+def _record_inheritance_staleness(stale, code, message, **details):
+    """Only historical evaluation collects freshness issues and keeps checking."""
+    if stale is None:
+        raise ResearchError(code, message, details or None)
+    stale.append(obligation(code, message, **details))
+
+
+def _inheritance(context, evidence, value, stale=None):
     dependencies = []
     predecessor = value["predecessor"]
     if predecessor is not None:
@@ -306,8 +319,16 @@ def _inheritance(context, evidence, value):
         if not any(x.get("cycle_id") == checkpoint["cycle_id"] for x in linked) and not _unresolved_plan_sources(context, checkpoint, item):
             raise ResearchError("inheritance_mismatch", "Cite retained execution evidence, or authenticated unresolved plan sources when no output exists and no run is pending")
         assessment = context.assessment(item["assessment_id"]) if item["assessment_id"] is not None else None
-        if item["use"] == "validated_result" and (assessment is None or not assessment["validated_result"]):
-            raise ResearchError("inherited_result_stale", "Reassess inherited evidence before assigning validated-result credit")
+        if assessment is not None and assessment.get("stale_ancestor"):
+            _record_inheritance_staleness(stale, "inherited_result_stale",
+                "Explicitly refresh the stale assessed ancestor without replacing its historical evidence",
+                checkpoint_id=item["checkpoint_id"], assessment_id=item["assessment_id"])
+        if item["use"] == "validated_result":
+            if assessment is None:
+                raise ResearchError("inherited_result_stale", "Reassess inherited evidence before assigning validated-result credit")
+            if not assessment["validated_result"]:
+                _record_inheritance_staleness(stale, "inherited_result_stale",
+                    "Reassess inherited evidence before assigning validated-result credit")
         if item["use"] == "validated_result":
             assessed_results = {digest(e) for e in assessment["payload"]["result"]["evidence"] if e["kind"] == "result"}
             inherited_results = {digest(e) for e in item["evidence"] if e["kind"] == "result"}
@@ -321,6 +342,72 @@ def _inheritance(context, evidence, value):
     if predecessor is not None and predecessor not in inherited:
         raise ResearchError("inheritance_missing", "Explain the predecessor's inherited evidence, assumptions and remaining contribution")
     return dependencies
+
+
+def _build_assessment_plan(context, plan, assessment, stale=None):
+    """Refresh only explicitly bound assessment dependencies, never the plan."""
+    if "inheritance_refresh" not in assessment:
+        return plan["payload"]
+    refresh = assessment["inheritance_refresh"]
+    _fields(refresh, ("plan_digest", "bindings"))
+    bindings = _items(refresh["bindings"], "Explicit inheritance refresh bindings")
+    if refresh["plan_digest"] != plan["digest"] or not bindings:
+        raise ResearchError("inheritance_refresh_mismatch", "Bind the original immutable plan and at least one exact inherited edge")
+    original = plan["payload"]
+    inherited = list(original["inheritance"])
+    predecessor, seen = original["predecessor"], set()
+    for binding in bindings:
+        _fields(binding, ("previous_checkpoint_id", "previous_assessment_id", "checkpoint_id", "assessment_id",
+                          "evidence", "assumptions", "deduction"))
+        for key in ("previous_checkpoint_id", "previous_assessment_id", "checkpoint_id", "assessment_id", "deduction"):
+            _text(binding[key], "Inheritance refresh " + key)
+        matches = [(i, item) for i, item in enumerate(original["inheritance"])
+                   if item["checkpoint_id"] == binding["previous_checkpoint_id"]
+                   and item["assessment_id"] == binding["previous_assessment_id"]]
+        if len(matches) != 1 or binding["previous_checkpoint_id"] in seen:
+            raise ResearchError("inheritance_refresh_mismatch", "Refresh each exact original inherited checkpoint once")
+        index, previous = matches[0]
+        seen.add(binding["previous_checkpoint_id"])
+        old = _get(context.records, "checkpoint", previous["checkpoint_id"], "unknown_checkpoint")
+        current = _get(context.records, "checkpoint", binding["checkpoint_id"], "unknown_checkpoint")
+        context.artifacts.read(old["artifact"])
+        context.artifacts.read(current["artifact"])
+        if (old["assessment_id"] != binding["previous_assessment_id"]
+                or current["assessment_id"] != binding["assessment_id"]
+                or current["cycle_id"] != old["cycle_id"] or current["id"] == old["id"]
+                or current["assessment_id"] == old["assessment_id"]
+                or old["objective"] not in _objective_lineage(context)
+                or current["objective"] not in _objective_lineage(context)):
+            raise ResearchError("inheritance_refresh_mismatch", "Bind a distinct reassessment/checkpoint of the same exact ancestor cycle and objective lineage")
+        if context.records["cycle"][current["cycle_id"]]["assessment_id"] != current["assessment_id"]:
+            _record_inheritance_staleness(stale, "inheritance_refresh_stale",
+                "The explicitly bound replacement must remain the ancestor's current assessment")
+        if binding["evidence"] != previous["evidence"]:
+            raise ResearchError("inheritance_refresh_evidence_changed", "Retain every originally relied-on evidence locator unchanged")
+        current_assessment = context.assessment(current["assessment_id"])
+        current_record = _get(context.records, "cycle_assessment", current["assessment_id"], "unknown_assessment")
+        if (current_assessment["dependencies"] != current_record["dependencies"]
+                or previous["use"] == "validated_result" and not current_assessment["validated_result"]):
+            _record_inheritance_staleness(stale, "inherited_result_stale",
+                "The replacement must be current and retain the original evidence credit")
+        if current["assessment_digest"] != current_assessment["digest"]:
+            _record_inheritance_staleness(stale, "inheritance_refresh_stale",
+                "Checkpoint the replacement's exact current assessment before refreshing inheritance")
+        if previous["use"] != "validated_result":
+            assessed_refs = {digest(item["reference"]) for item in current_assessment["evidence"]}
+            if not {digest(item) for item in binding["evidence"]} <= assessed_refs:
+                raise ResearchError("inheritance_result_mismatch", "Retain the exact failure or unresolved evidence in the current assessment")
+        old_assessment = _get(context.records, "cycle_assessment", old["assessment_id"], "unknown_assessment")
+        _strings(binding["assumptions"], "Refreshed inherited assumptions")
+        required = (set(previous["assumptions"]) | set(old_assessment["payload"]["assumptions"])
+                    | set(current_assessment["payload"]["assumptions"]))
+        if not required <= set(binding["assumptions"]) or not set(binding["assumptions"]) <= set(assessment["assumptions"]):
+            raise ResearchError("inheritance_assumptions_missing", "Retain all original and current inherited assumptions in the binding and the reassessed result")
+        inherited[index] = {"checkpoint_id": current["id"], "assessment_id": current["assessment_id"], "use": previous["use"],
+                            "evidence": binding["evidence"], "assumptions": binding["assumptions"], "deduction": binding["deduction"]}
+        if predecessor == old["id"]:
+            predecessor = current["id"]
+    return dict(original, predecessor=predecessor, inheritance=inherited)
 
 
 def _strategy_key(value):
@@ -737,9 +824,10 @@ def carried_developments(records):
     return sorted(carried, key=lambda item: (item["assessment_id"], item["kind"], item.get("question") or item.get("cycle_id")))
 
 
-def _assess(context, value):
+def _assess(context, value, *, historical=False):
     _fields(value, ("id", "cycle_id", "author", "scope", "execution_ids", "result", "validity_checks", "outcomes", "failures",
-                    "findings", "assumptions", "remaining_obligations", "objective_status", "disposition", "development"))
+                    "findings", "assumptions", "remaining_obligations", "objective_status", "disposition", "development"),
+            ("inheritance_refresh",))
     for key in ("id", "author"):
         _text(value[key], "Assessment " + key)
     plan = _get(context.records, "cycle_plan", value["cycle_id"], "unknown_cycle")
@@ -837,19 +925,26 @@ def _assess(context, value):
         _choice(finding["scientific_status"], ("established", "proposed", "unresolved", "refuted"), "Scientific finding")
         _strings(finding["uncertainties"], "Finding uncertainty", finding["source_support"] != "supported_as_scoped")
         evidence.many(finding["evidence"], "Scoped finding evidence")
-    inherited = _inheritance(context, evidence, plan["payload"])
-    obligations = list(valid_obligations) + list(context.synthesis["obligations"])
+    # Historical staleness never short-circuits later evidence or lineage checks.
+    # New mutations remain strict and require the explicit current binding.
+    stale = [] if historical else None
+    effective_plan = _build_assessment_plan(context, plan, value, stale)
+    inherited = _inheritance(context, evidence, effective_plan, stale)
+    if stale:
+        valid_obligations.extend(stale)
+    workflow = list(context.synthesis["obligations"])
+    objective_progress = []
     remaining = list(dict.fromkeys(value["scope"]["remaining_obligations"] + value["remaining_obligations"]))
     # A refuted hypothesis can produce a valid negative result. Result
     # validity comes from the separate evidence-linked checks, not whether
     # the expected scientific hypothesis survived its distinguishing test.
     unresolved_outcomes = [o["outcome_id"] for o in outcomes if o["status"] == "unresolved"]
     if unresolved_outcomes:
-        obligations.append(obligation("expected_outcome_unresolved", "Resolve the explicitly uncertain planned outcomes before completing this candidate.",
+        workflow.append(obligation("expected_outcome_unresolved", "Resolve the explicitly uncertain planned outcomes before completing this candidate.",
                                       outcomes=unresolved_outcomes))
     unresolved = [f for f in failed if f["status"] == "unresolved"]
     if unresolved:
-        obligations.append(obligation("failure_signal_unresolved", "Resolve the uncertainty about the planned failure conditions.",
+        workflow.append(obligation("failure_signal_unresolved", "Resolve the uncertainty about the planned failure conditions.",
                                       signals=[f["signal_id"] for f in unresolved]))
     for execution in executions:
         origin = execution["payload"]["origin"]
@@ -857,34 +952,43 @@ def _assess(context, value):
             admission = context.records["execution_admission"][origin["admission_id"]]
             units = execution["payload"]["usage"]["units"]
             if units is not None and units > admission["reserved_units"]:
-                obligations.append(obligation("resource_limit_exceeded", "Retain the result and the actual overrun without satisfying the admitted resource contract.",
+                workflow.append(obligation("resource_limit_exceeded", "Retain the result and the actual overrun without satisfying the admitted resource contract.",
                                               admission_id=admission["id"], reserved_units=admission["reserved_units"], used_units=units))
                 remaining.append("Resolve the exceeded resource contract for run " + admission["id"] + ".")
     # A full scope of an ancestor objective is a special case of the widened current one.
     if value["scope"]["kind"] != "full" or plan["payload"]["scope"]["kind"] != "full" or plan["payload"]["objective"] != context.objective:
-        obligations.append(obligation("objective_scope_incomplete", "A special case contributes to the fixed complete objective but cannot close it."))
+        objective_progress.append(obligation("objective_scope_incomplete", "A special case contributes to the fixed complete objective but cannot close it."))
         remaining = list(dict.fromkeys(remaining + plan["payload"]["scope"]["remaining_obligations"]))
         if not remaining:
             remaining.append(context.objective["statement"])
     if value["objective_status"] != "achieved" or value["disposition"] != "complete":
-        obligations.append(obligation("objective_incomplete", "Retain the complete objective until all of its obligations are established."))
+        objective_progress.append(obligation("objective_incomplete", "Retain the complete objective until all of its obligations are established."))
         if not remaining:
             remaining.append(context.objective["statement"])
     if remaining:
-        obligations.append(obligation("remaining_obligations", "Complete the retained objective obligations.", remaining=remaining))
+        objective_progress.append(obligation("remaining_obligations", "Complete the retained objective obligations.", remaining=remaining))
     if not any(x["origin"]["kind"] == "managed" for x in own_results):
-        obligations.append(obligation("prospective_execution_missing", "Imported evidence can motivate development but is not a new prospective test."))
+        workflow.append(obligation("prospective_execution_missing", "Imported evidence can motivate development but is not a new prospective test."))
     for admission in context.records.get("execution_admission", {}).values():
         if admission["cycle_id"] == cycle["id"] and admission["id"] not in context.records.get("execution_outcome", {}):
-            obligations.append(obligation("execution_pending", "Reconcile the admitted run's actual outcome.", admission_id=admission["id"]))
-    obligations.extend(_development(context, evidence, value["development"], value["scope"], cycle["id"]))
+            workflow.append(obligation("execution_pending", "Reconcile the admitted run's actual outcome.", admission_id=admission["id"]))
+    workflow.extend(_development(context, evidence, value["development"], value["scope"], cycle["id"]))
     dependencies = dict(context.dependencies(), plan=plan["digest"], executions=digest(executions),
                         cycle_executions=digest(cycle["execution_ids"]), inheritance=inherited, evidence=digest(evidence.summary()))
-    obligations = _unique(obligations)
-    return {"id": value["id"], "payload": value, "validated_result": not valid_obligations,
+    if "inheritance_refresh" in value:
+        dependencies["inheritance_refresh"] = digest(value["inheritance_refresh"])
+    if stale:
+        dependencies["stale_ancestor"] = _unique(stale)
+    prerequisites = {"validity": _unique(valid_obligations), "workflow": _unique(workflow),
+                     "objective_progress": _unique(objective_progress)}
+    obligations = _unique(valid_obligations + workflow + objective_progress)
+    report = {"id": value["id"], "payload": value, "validated_result": not valid_obligations,
             "complete": not obligations, "obligations": obligations, "remaining_obligations": remaining,
-            "evidence": evidence.summary(), "dependencies": dependencies,
+            "evidence": evidence.summary(), "dependencies": dependencies, "prerequisites": prerequisites,
             "digest": digest({"payload": value, "dependencies": dependencies}), "mechanical_only": True}
+    if stale:
+        report["stale_ancestor"] = dependencies["stale_ancestor"]
+    return report
 
 
 def assess_cycle(store, payload, *, expected_revision, request_id):
@@ -958,6 +1062,9 @@ def _branch_inputs(context):
             "executions": executions, "assessment": context.assessment(cycle["assessment_id"]) if cycle["assessment_id"] is not None else None,
             "admissions": {i: a for i, a in context.records.get("execution_admission", {}).items() if a["cycle_id"] == identifier},
             "checkpoints": {i: c for i, c in context.records.get("checkpoint", {}).items() if c["cycle_id"] == identifier}}
+        if branches[identifier]["assessment"] is not None:
+            branches[identifier]["assessment"] = {k: v for k, v in branches[identifier]["assessment"].items()
+                                                  if k != "prerequisites"}
     return branches
 
 
@@ -1005,22 +1112,22 @@ def _candidate(context):
         return None, [obligation("development_assessment_missing", "Assess actual results before selecting a readiness candidate.")]
     assessment = context.assessment(checkpoint["assessment_id"])
     context.branches = _branch_inputs(context)
-    obligations = list(assessment["obligations"])
+    workflow = []
     cycle = context.records["cycle"][checkpoint["cycle_id"]]
     if cycle["assessment_id"] != checkpoint["assessment_id"] or checkpoint["assessment_digest"] != assessment["digest"]:
-        obligations.append(obligation("candidate_checkpoint_stale", "Checkpoint the currently assessed candidate and its exact evidence."))
+        workflow.append(obligation("candidate_checkpoint_stale", "Checkpoint the currently assessed candidate and its exact evidence."))
     branches = assessment["payload"]["development"]["branches"] if assessment["payload"]["development"] else []
     branch_ids = {b["cycle_id"] for b in branches}
     for identifier in context.records.get("cycle", {}):
         if identifier not in branch_ids:
-            obligations.append(obligation("branch_disposition_missing", "Assess the disposition of each retained branch for this candidate.", cycle_id=identifier))
+            workflow.append(obligation("branch_disposition_missing", "Assess the disposition of each retained branch for this candidate.", cycle_id=identifier))
     for branch in branches:
         assessed_branch = context.branches[branch["cycle_id"]]["assessment"]
         if branch["disposition"] == "resolved" and (assessed_branch is None or not assessed_branch["validated_result"]):
-            obligations.append(obligation("branch_resolution_unverified", "A declared resolved branch needs its actual currently validated result.", cycle_id=branch["cycle_id"]))
+            workflow.append(obligation("branch_resolution_unverified", "A declared resolved branch needs its actual currently validated result.", cycle_id=branch["cycle_id"]))
     for admission in context.records.get("execution_admission", {}).values():
         if admission["id"] not in context.records.get("execution_outcome", {}):
-            obligations.append(obligation("execution_pending", "Reconcile every admitted run before independent readiness review.", admission_id=admission["id"]))
+            workflow.append(obligation("execution_pending", "Reconcile every admitted run before independent readiness review.", admission_id=admission["id"]))
     all_evidence = {digest(e["reference"]): e for e in assessment["evidence"]}
     for branch in context.branches.values():
         all_evidence.update({digest(e["reference"]): e for e in branch["plan_evidence"]})
@@ -1039,7 +1146,9 @@ def _candidate(context):
                  "source_records_digest": digest(context.sources),
                  "authors": cycle_authors(context.records)}
     candidate["digest"] = digest(candidate)
-    return candidate, _unique(obligations)
+    context.prerequisites = dict(assessment["prerequisites"],
+                                workflow=_unique(assessment["prerequisites"]["workflow"] + workflow))
+    return candidate, _unique(assessment["obligations"] + workflow)
 
 
 def _review(context, value, candidate):

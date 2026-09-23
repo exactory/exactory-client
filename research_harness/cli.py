@@ -19,6 +19,8 @@ from .operations import fields
 from .provenance import runtime_provenance
 from .report_views import current_obligations, next_summary, obligations_page, order_obligations, status_summary
 from .storage import Store
+from .source_deferrals import defer_source, resume_source, assess_deferrals
+from .publication_scope import record_publication_scope, select_publication_scope, record_scoped_readiness_review
 from .workspace import find_workspace, strict_json
 
 
@@ -37,6 +39,8 @@ OPERATIONS = {
     "loop-close": lineage.record_loop_closure,
     "require-fulltext": reading.require_fulltext,
     "availability": reading.record_availability,
+    "defer-source": defer_source,
+    "resume-source": resume_source,
     "select-cohort-abstract": cohort_evidence.select_cohort_abstract,
     "sample": sampling.record_sample,
     "standards": synthesis.record_standards,
@@ -49,6 +53,9 @@ OPERATIONS = {
     "assess": development.assess_cycle,
     "checkpoint": development.checkpoint,
     "review": development.record_readiness_review,
+    "publication-scope": record_publication_scope,
+    "select-publication-scope": select_publication_scope,
+    "scoped-review": record_scoped_readiness_review,
     "budget": resources.set_budget,
     "screen-batch": screening.record_screening_batch,
     "screening-checkpoint": screening.record_screening_checkpoint,
@@ -67,7 +74,7 @@ from .verification import bind_verdict
 OPERATIONS.update({"manuscript": prepare_publication, "manuscript-review": record_manuscript_review, "bind-verdict": bind_verdict})
 
 ACQUISITION = ("collect", "resume", "acquire", "expand", "fulltext", "import-response", "import-oai-cohort", "visual")
-GATES = ("cohort", "foundation", "preparation", "readiness", "execution", "verification", "manuscript", "publication", "deposited", "submitted", "round")
+GATES = ("cohort", "foundation", "preparation", "readiness", "manuscript-readiness", "execution", "verification", "manuscript", "publication", "deposited", "submitted", "round")
 
 
 def add_identity(parser, *, required=True):
@@ -86,7 +93,23 @@ def note_managed_record_skipped(error):
     print("Managed record skipped (" + error.code + "): " + error.message + suffix, file=sys.stderr)
 
 
-def select_managed_path(check, start=None):
+def add_managed_scope(parser):
+    parser.add_argument("--managed-only", action="store_true", help="Fail before remote writes unless current managed publication checks pass.")
+    parser.add_argument("--scope-contract-id", help="Exact intended selected source-limited contract.")
+    parser.add_argument("--scope-target-digest", help="Exact intended scientific target SHA-256.")
+
+
+def parse_managed_scope_arguments(args):
+    strict = getattr(args, "managed_only", False)
+    contract, target = getattr(args, "scope_contract_id", None), getattr(args, "scope_target_digest", None)
+    if bool(contract) != bool(target) or (contract is not None and not strict):
+        raise ResearchError("managed_scope_arguments", "Both scope arguments require each other and --managed-only")
+    if target is not None and (len(target) != 64 or any(c not in "0123456789abcdef" for c in target)):
+        raise ResearchError("managed_scope_arguments", "Supply the exact lowercase scientific target SHA-256")
+    return {"managed_only": strict, "scope_contract_id": contract, "scope_target_digest": target}
+
+
+def select_managed_path(check, start=None, *, managed_only=False, scope_contract_id=None, scope_target_digest=None):
     """Return (store, check(store), store_open_error) for the workspace around `start`.
 
     `check` runs every check the managed path performs before its first remote
@@ -97,21 +120,31 @@ def select_managed_path(check, start=None):
     returns (None, None, None) silently. A store file that exists and does not
     open returns its ResearchError as the third value, because a record the
     command keeps elsewhere is then the only copy of it. Every refusal except
-    the silent ones is noted on stderr once, and the command sends the user's
-    request directly."""
+    the silent ones is noted on stderr once, and the ordinary command sends the
+    user's request directly. With managed_only, every refusal propagates and
+    the command never selects the direct path."""
     workspace = find_workspace(start, required=False)
     if workspace is None:
+        if managed_only:
+            raise ResearchError("managed_workspace_required", "Managed-only publication requires an existing research workspace")
         return None, None, None
     try:
         store = current_store(workspace)
     except ResearchError as error:
+        if managed_only:
+            raise
         if error.code == "migration_required":
             return None, None, None
         note_managed_record_skipped(error)
         return None, None, error
     try:
+        if scope_contract_id is not None:
+            from .publication_scope import validate_expected_scope
+            validate_expected_scope(store, scope_contract_id, scope_target_digest)
         return store, check(store), None
     except ResearchError as error:
+        if managed_only:
+            raise
         note_managed_record_skipped(error)
         return store, None, None
 
@@ -190,7 +223,7 @@ def acquisition_command(store, command, payload, identity):
         # durable metadata collector. It does not declare its bibliography read.
         return acquisition.acquire_work(store, **payload, **identity)
     if command == "fulltext":
-        fields(payload, ("identifier", "url"), ("max_requests", "extraction_options"))
+        fields(payload, ("identifier", "url"), ("max_requests", "extraction_options", "component"))
         return acquisition.acquire_fulltext(store, **payload, **identity)
     if command == "visual":
         fields(payload, ("link", "url"), ("max_requests",))
@@ -210,7 +243,9 @@ def status_report(store, *, counters=False):
     profile = config["profile"] if config else "research"
     study = records.get("workspace", {}).get("study")
     action = "verification" if profile == "verification" else "readiness"
-    report = gate_state(records, evaluation, action, profile=profile)
+    from .publication_scope import has_publication_scope, assess_manuscript_readiness
+    scoped_report = assess_manuscript_readiness(records, evaluation) if has_publication_scope(records) else None
+    report = scoped_report if scoped_report is not None and action == "readiness" else gate_state(records, evaluation, action, profile=profile)
     round_report = None
     if config is not None and profile == "research":
         from .rounds import round_state, round_summary
@@ -230,9 +265,23 @@ def status_report(store, *, counters=False):
     upcoming = preparation.get("next") if study and study["stage"] == "cohort" else None
     obligations = current_obligations({"obligations": report["obligations"], "preparation": preparation})
     current_challenge = challenge.find_current_challenge(records) if profile == "research" else None
+    scope_status = {}
+    if scoped_report is not None:
+        scope_status = {key: scoped_report[key] for key in ("manuscript_ready", "manuscript_obligations", "objective_complete",
+                                                           "objective_obligations", "scientific_target_digest", "remaining_obligations")}
+        scope_status["scope_contract_id"] = scoped_report["selected_contract_id"]
+        scope_status["historical_publications"] = list(records.get("publication_receipt", {}).values())
+        scope_status["historical_submissions"] = list(records.get("submission_receipt", {}).values())
+        if scoped_report["contract"] is not None:
+            flags = ["--managed-only", "--scope-contract-id", scoped_report["contract"]["id"],
+                     "--scope-target-digest", scoped_report["scientific_target_digest"]]
+            scope_status["publication_commands"] = {"deposit": ["exactory-draft", "deposit"] + flags,
+                                                    "submit": ["exactory", "submit"] + flags}
     return dict(report, revision=snapshot["revision"], profile=profile, runtime=runtime_provenance(),
+                source_deferrals=assess_deferrals(records, evaluation, profile),
+                deferred_obligations=literature.foundation_state(records, evaluation, profile).get("deferred_obligations", []),
                 study=study, preparation=preparation, resources=resources.account_report(records, profile),
-                limits=limits_report(records), **diagnostics,
+                limits=limits_report(records), **diagnostics, **scope_status,
                 round=round_summary(round_report) if round_report else None,
                 grand_challenge=current_challenge["payload"] if current_challenge else None,
                 next=upcoming or (order_obligations(obligations)[0] if obligations else None),

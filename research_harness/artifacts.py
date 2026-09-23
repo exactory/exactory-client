@@ -106,6 +106,20 @@ def describe_artifact(data: bytes, media_type: str) -> dict:
             "size": len(data), "media_type": media_type}
 
 
+def validate_reference(ref: dict):
+    """Check the complete descriptor before filesystem access or a cache hit."""
+    if not isinstance(ref, dict) or not {"sha256", "path", "size", "media_type"} <= ref.keys():
+        raise ResearchError("invalid_input", "Artifact reference is missing required fields")
+    if not isinstance(ref["sha256"], str) or not _SHA256.fullmatch(ref["sha256"]):
+        raise ResearchError("invalid_input", "Artifact SHA-256 must have 64 lowercase hexadecimal digits")
+    if type(ref["size"]) is not int or ref["size"] < 0:
+        raise ResearchError("invalid_input", "Artifact size must be a nonnegative integer")
+    _media_type(ref["media_type"])
+    _relative_parts(ref["path"])
+    if ref["path"] != _OBJECT_DIRECTORY + "/" + ref["sha256"]:
+        raise ResearchError("unsafe_path", "Artifact path must identify its content-addressed object")
+
+
 def _verify_object(directory: int, reference: dict) -> bytes:
     descriptor = _regular_file(directory, reference["sha256"])
     with os.fdopen(descriptor, "rb") as source:
@@ -153,16 +167,7 @@ class ArtifactStore:
         return reference
 
     def read(self, ref: dict) -> bytes:
-        if not isinstance(ref, dict) or not {"sha256", "path", "size", "media_type"} <= ref.keys():
-            raise ResearchError("invalid_input", "Artifact reference is missing required fields")
-        if not isinstance(ref["sha256"], str) or not _SHA256.fullmatch(ref["sha256"]):
-            raise ResearchError("invalid_input", "Artifact SHA-256 must have 64 lowercase hexadecimal digits")
-        if type(ref["size"]) is not int or ref["size"] < 0:
-            raise ResearchError("invalid_input", "Artifact size must be a nonnegative integer")
-        _media_type(ref["media_type"])
-        _relative_parts(ref["path"])
-        if ref["path"] != _OBJECT_DIRECTORY + "/" + ref["sha256"]:
-            raise ResearchError("unsafe_path", "Artifact path must identify its content-addressed object")
+        validate_reference(ref)
         try:
             with self._workspace.directory(_OBJECT_DIRECTORY) as directory:
                 return _verify_object(directory, ref)

@@ -37,6 +37,7 @@ from urllib.parse import parse_qsl, urlsplit
 from .artifacts import ArtifactStore, _Workspace
 from .cohort_evidence import cohort_report
 from .errors import ResearchError
+from .components import compute_binding_identity, is_component, validate_binding
 from .evaluation import Evaluation
 from .evidence import digest
 from .graph import citation_graph, obligation, selected_bundle, validate_target
@@ -87,6 +88,8 @@ def import_bundle(store, payload, *, expected_revision, request_id):
         capture = fulltext_capture(work, source["id"])
         if value["scope"] not in ("article", "passage") or value["completeness"] not in ("complete", "partial"):
             raise ResearchError("invalid_bundle", "Declare article/passage scope and complete/partial bundle inventory")
+        if is_component(capture):
+            raise ResearchError("invalid_bundle", "A supplement component cannot be an article main source")
         if value["scope"] == "article" and (capture is None or capture["availability"] != "available"
                 or source["capture_method"] != "http" or source["origin_verified"] is not True):
             raise ResearchError("invalid_bundle", "Article bundles require acquired original full text; tool responses remain passages")
@@ -106,6 +109,8 @@ def import_bundle(store, payload, *, expected_revision, request_id):
                 safe_url(unit.get("url"))
                 continue
             context = validate_link(records, artifacts, unit["link"])
+            validate_binding(records, artifacts, value["version_id"], context["capture"],
+                             main_sha256=capture["original"]["sha256"] if capture else source["response"]["sha256"])
             if context["work"]["id"] != value["version_id"]:
                 raise ResearchError("source_mismatch", "A bundle cannot borrow another article or version's units")
             if unit["kind"] in ("figure", "table", "equation") and unit["link"]["locator"]["kind"] not in ("pdf", "html"):
@@ -122,7 +127,10 @@ def import_bundle(store, payload, *, expected_revision, request_id):
         if not isinstance(inventory["links"], list) or not inventory["links"]:
             raise ResearchError("invalid_bundle", "Anchor the article-boundary and required-material inventory in saved sources")
         for link in inventory["links"]:
-            if validate_link(records, artifacts, link)["work"]["id"] != value["version_id"]:
+            context = validate_link(records, artifacts, link)
+            validate_binding(records, artifacts, value["version_id"], context["capture"],
+                             main_sha256=capture["original"]["sha256"] if capture else source["response"]["sha256"])
+            if context["work"]["id"] != value["version_id"]:
                 raise ResearchError("source_mismatch", "The inventory must describe this exact version")
         bibliography = value["bibliography"]
         fields(bibliography, ("complete", "unit_id", "entries"), code="invalid_bibliography")
@@ -289,7 +297,8 @@ def _search_evidence_digest(evaluation, scope, found, cited=()):
         content["abstracts"] = sorted({digest([a["artifact"]["sha256"], a["completeness"]]) for a in work.get("abstracts", [])})
         content["date_assertions"] = sorted({digest(a["values"]) for a in work.get("date_assertions", [])})
         content["fulltexts"] = sorted({digest([c["original"]["sha256"] if c["original"] else None,
-            c["text"]["sha256"] if c["text"] else None, c["availability"], c["includes_abstract"]]) for c in work.get("fulltexts", [])})
+            c["text"]["sha256"] if c["text"] else None, c["availability"], c["includes_abstract"]] + ([compute_binding_identity(c)] if is_component(c) else []))
+            for c in work.get("fulltexts", [])})
         content["references"] = sorted({digest([r["target"], r["kind"], r["raw"]]) for r in graph["references"] if r["version_id"] == version})
         content["aliases"] = {k: sorted({a["work_id"] for a in record["assertions"]}) for k, record in records.get("alias", {}).items()
                               if k in work.get("aliases", []) or any(a["work_id"] == work.get("work_id") for a in record["assertions"])}
@@ -628,6 +637,11 @@ def _foundation_state(evaluation, profile):
     # Deduplicate repeated unit obligations while retaining each occurrence and
     # each independent cohort/version obligation.
     obligations = sorted({digest(o): o for o in obligations}.values(), key=lambda o: (o["code"], o.get("version_id", ""), digest(o)))
+    from .source_deferrals import is_source_access_obligation, assess_deferrals
+    deferrals = assess_deferrals(records, evaluation, profile)
+    active_deferrals = {d["version_id"] for d in deferrals if d["status"] == "active"}
+    deferred_obligations = [o for o in obligations if o.get("version_id") in active_deferrals and is_source_access_obligation(o)]
+    obligations = [o for o in obligations if o not in deferred_obligations]
     families = {records["work"][v]["work_id"] for v in relevant if v in records.get("work", {})}
     aliases = {k: a for k, a in records.get("alias", {}).items() if any(x["work_id"] in families for x in a["assertions"])
                or any(r["target"] == k for r in graph["references"])}
@@ -640,6 +654,10 @@ def _foundation_state(evaluation, profile):
                     "readings": used_readings, "collections": collections, "cohort_digest": cohort_state["digest"], "requirements": full_requirements,
                     "searches": searches, "availability": availability}
     dependencies["search_selection"] = selected_searches
+    # Without deferral records the report keeps its earlier keys and digests,
+    # so a readiness digest pinned before source deferral stays current.
+    deferral_dependency = {"source_deferrals": deferrals} if deferrals else {}
+    dependencies.update(deferral_dependency)
     dependencies["visual_assets"] = {k: a for k, a in records.get("visual_asset", {}).items() if a["version_id"] in relevant}
     dependencies["visual_asset_selection"] = {k: s for k, s in records.get("visual_asset_selection", {}).items()
                                                 if s["asset_id"] in dependencies["visual_assets"]}
@@ -653,11 +671,14 @@ def _foundation_state(evaluation, profile):
               "fulltext_read": sum(x["fulltext_read"] for x in inventory), "abstract_read": sum(x["abstract_read"] for x in inventory)}
     counts.update({"tier_" + str(t): sum(n["tier"] == t for n in graph["nodes"]) for t in (1, 2, 3)})
     return {"ready": not obligations, "digest": digest(dependencies), "obligations": obligations, "notices": notices, "counts": counts,
+            **(dict(deferral_dependency, deferred_obligations=deferred_obligations) if deferrals else {}),
             "population_digest": digest(population), "frontier_digest": frontier_digest(evaluation, profile),
-            "judgments_digest": digest(judgments), "requirements_digest": digest(full_requirements),
+            "judgments_digest": digest(judgments),
+            "requirements_digest": digest({"requirements": full_requirements, **deferral_dependency}) if deferrals else digest(full_requirements),
             "stable_digest": digest({"scope": scope, "requirements": sorted(full_requirements),
                                      "closure": (records.get("loop_closure_selection", {}).get("current") or {}).get("id"),
-                                     "sample": (records.get("cohort_sample_selection", {}).get("current") or {}).get("id")}),
+                                     "sample": (records.get("cohort_sample_selection", {}).get("current") or {}).get("id"),
+                                     **deferral_dependency}),
             "passed": {"graph": not graph["obligations"],
                        "cohort": bool(collections) and not any(o["code"] in ("collection_pending", "cohort_abstract_reading_missing", "sample_missing",
                                                                              "sample_stale", "sample_reading_missing", "placement_missing") for o in obligations),

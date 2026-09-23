@@ -7,6 +7,7 @@ from .evidence import digest
 from .execution import _owner
 from .operations import immutable_record, prepared_mutation
 from .publication import publication_report
+from .publication_scope import build_publication_scope_binding, validate_scope_binding, validate_caller_scope
 from .remote import begin_intent, find_intent, finish_intent, get_intent, remote_step, resolve_step
 from .verification import task_identity, validate_verdict
 
@@ -45,9 +46,13 @@ def check_submission_preconditions(store, body):
 
     Returns the intent binding and the deduplication key of the submission this
     workspace records. Raises ResearchError when the workspace cannot record
-    this submission as it stands; the CLI then sends the request directly."""
+    this submission as it stands. Only the ordinary non-strict CLI may select
+    its established direct path after a refusal."""
     report, publication = validate_submission(store, body)
     binding = {"bundle_digest": report["bundle"]["digest"], "publication": publication, "body": body}
+    scope = build_publication_scope_binding(report["bundle"])
+    if scope is not None:
+        binding["publication_scope"] = scope
     # Equivalent record DOI/URL inputs retain their exact request payloads, but
     # refer to one durable submission for this concrete publication receipt.
     deduplication_key = {"publication_receipt": publication["intent_id"], "record_doi": publication["doi"]}
@@ -58,8 +63,9 @@ def check_submission_preconditions(store, body):
     return binding, deduplication_key
 
 
-def submit_managed(store, body, client, *, expected_revision, request_id):
+def submit_managed(store, body, client, *, expected_revision, request_id, scope_contract_id=None, scope_target_digest=None):
     binding, deduplication_key = check_submission_preconditions(store, body)
+    validate_caller_scope(binding.get("publication_scope"), scope_contract_id, scope_target_digest)
     intent = begin_intent(store, "submit", binding, expected_revision=expected_revision, request_id=request_id,
                           deduplication_key=deduplication_key)
     return continue_submission(store, intent["id"], client)
@@ -73,9 +79,12 @@ def continue_submission(store, identifier, client):
         binding = intent["binding"]
         response = intent["responses"].get("submit", {}).get("response")
         if response is None and intent["pending"] is None:
-            validate_submission(store, binding["body"])
+            report, _ = validate_submission(store, binding["body"])
+            if report["bundle"]["digest"] != binding["bundle_digest"]:
+                raise ResearchError("publication_identifier_mismatch", "The current manuscript differs from the saved submission intent")
+            validate_scope_binding(report["bundle"], binding.get("publication_scope"))
             response = remote_step(store, identifier, "submit", binding["body"],
-                lambda: client("POST", "/api/v1/verifications", binding["body"])[0])
+                lambda: client("POST", "/api/v1/verifications", binding["body"])[0], expected_revision=report["revision"])
         locator = response.get("verificationId") if response else None
         locator = locator or binding["publication"].get("concept_doi") or binding["publication"]["doi"]
         task, status = client("GET", "/api/v1/tasks/" + quote(locator, safe="/"), allow_missing=True)
@@ -95,6 +104,8 @@ def continue_submission(store, identifier, client):
         receipt = {"intent_id": identifier, "bundle_digest": binding["bundle_digest"], "publication": publication,
                    "request_body": binding["body"], "request_response": response, "task": task,
                    "task_identity": identity, "record_doi": publication["doi"], "canonical_doi": task["doi"], "matched": True}
+        if binding.get("publication_scope") is not None:
+            receipt["publication_scope"] = binding["publication_scope"]
         return finish_intent(store, identifier, "submission_receipt", receipt)
 
 

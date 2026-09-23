@@ -77,10 +77,17 @@ def _obligations(values):
 def next_summary(report):
     """Return a navigation hint, never a stage-transition authorization."""
     preparation = report.get("preparation") or {}
-    return {"schema": "research-next-summary-v1", "revision": report["revision"], "ready": report["ready"],
+    result = {"schema": "research-next-summary-v1", "revision": report["revision"], "ready": report["ready"],
             "preparation_ready": preparation.get("ready"), "advisory_only": True, "detail_available": True,
             "next_hint": _hint(report.get("next")),
             "details": "exactory-research obligations --code CODE [--limit N] [--cursor CURSOR]"}
+    if "manuscript_ready" in report:
+        result.update({"manuscript_ready": report["manuscript_ready"], "objective_complete": report["objective_complete"],
+                       "manuscript_obligations": _obligations(report["manuscript_obligations"]),
+                       "objective_obligations": _obligations(report["objective_obligations"]),
+                       "scope_contract_id": _short(report.get("scope_contract_id"), 64),
+                       "scientific_target_digest": report["scientific_target_digest"]})
+    return result
 
 
 def _summarize_grand_challenge(challenge):
@@ -109,6 +116,8 @@ def status_summary(report):
                    "limits": report.get("limits"),
                    "round": report.get("round"), "evaluation": report.get("evaluation"),
                    "grand_challenge": _summarize_grand_challenge(report.get("grand_challenge"))})
+    result["source_deferrals"] = dict(Counter(item["status"] for item in report.get("source_deferrals", [])))
+    result["deferred_obligations"] = _obligations(report.get("deferred_obligations", []))
     return result
 
 

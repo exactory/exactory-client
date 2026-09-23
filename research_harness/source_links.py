@@ -17,6 +17,7 @@ Printed pagination is a retained assertion. Neither valid coordinates nor a
 quoted passage prove comprehension or scientific truth.
 """
 
+import copy
 import hashlib
 import math
 
@@ -69,6 +70,16 @@ def fulltext_capture(work, source_id):
     return next((c for c in work.get("fulltexts", []) if c["source_id"] == source_id), None)
 
 
+def _read_json_value(artifacts, artifact, data, pointer):
+    from .evaluation import Evaluation
+    if isinstance(artifacts, Evaluation):
+        identity = tuple(artifact[key] for key in ("path", "sha256", "size", "media_type"))
+        parsed = artifacts.once(("source_json", identity), lambda: _json(data, require_object=False))
+        # A caller may mutate its selected value, never the shared checked parse.
+        return copy.deepcopy(_pointer(parsed, pointer))
+    return _pointer(_json(data, require_object=False), pointer)
+
+
 def read_locator(artifacts, artifact, locator, *, capture=None):
     data = artifacts.read(artifact)
     if not isinstance(locator, dict):
@@ -102,7 +113,7 @@ def read_locator(artifacts, artifact, locator, *, capture=None):
             return span
         fields(locator, ("kind", "pointer", "value"), code="invalid_locator")
         try:
-            value = _pointer(_json(data, require_object=False), locator["pointer"])
+            value = _read_json_value(artifacts, artifact, data, locator["pointer"])
         except ResearchError as error:
             raise ResearchError("invalid_locator", "The JSON locator does not identify a saved response value") from error
         if _canonical(value) != _canonical(locator["value"], "invalid_locator"):
@@ -158,6 +169,8 @@ def validate_link(records, artifacts, link):
         raise ResearchError("source_mismatch", "A response passage must stay within this work's actual mapped fields or record")
     if capture is not None and capture["availability"] != "available":
         raise ResearchError("source_pending", "An incomplete full-text capture cannot establish a reading")
+    from .components import validate_binding
+    validate_binding(records, artifacts, work["id"], capture)
     value = read_locator(artifacts, link["artifact"], link["locator"], capture=capture)
     visual = None
     if link["locator"]["kind"] == "html":
@@ -224,13 +237,26 @@ def link_identity(link, records):
         locator = {"kind": "html", "anchor": _span_identity(locator["anchor"]),
                    "assets": sorted(({"url": a["url"], "sha256": a["artifact"]["sha256"]} for a in locator.get("assets", [])),
                                     key=lambda a: a["url"])}
-    return {"version_id": link["version_id"], "original_sha256": original_identity(records, link),
-            "sha256": link["artifact"]["sha256"], "locator": locator}
+    identity = {"version_id": link["version_id"], "original_sha256": original_identity(records, link),
+                "sha256": link["artifact"]["sha256"], "locator": locator}
+    from .components import compute_binding_identity, is_component
+    capture = fulltext_capture(exact_work(records, link["version_id"]), link["source_id"])
+    if is_component(capture):
+        identity["component"] = compute_binding_identity(capture)
+    return identity
 
 
 def contains(outer, inner, records):
     if (outer["version_id"] != inner["version_id"] or outer["artifact"]["sha256"] != inner["artifact"]["sha256"]
             or original_identity(records, outer) != original_identity(records, inner)):
+        return False
+    # Identical component bytes can have different assessed parent bindings.
+    # A location inspected under one relationship cannot cover another one.
+    from .components import compute_binding_identity
+    work = exact_work(records, outer["version_id"])
+    outer_capture = fulltext_capture(work, outer["source_id"])
+    inner_capture = fulltext_capture(work, inner["source_id"])
+    if compute_binding_identity(outer_capture) != compute_binding_identity(inner_capture):
         return False
     a, b = outer["locator"], inner["locator"]
     if a["kind"] in TEXT_KINDS and b["kind"] in TEXT_KINDS:

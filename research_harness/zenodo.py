@@ -11,6 +11,7 @@ from .integration import export_workspace
 from .publication import publication_state, validate_upload
 from .remote import begin_intent, discard_step, finish_intent, get_intent, remote_step, resolve_step
 from .rounds import round_state
+from .publication_scope import validate_scope_binding
 
 
 # The paper always lands on a record under this name, whatever the local build
@@ -37,14 +38,16 @@ def build_previewed_document(document):
 
 
 def _current(store, binding):
-    records = store.snapshot()["records"]
+    snapshot = store.snapshot()
+    records = snapshot["records"]
     evaluation = Evaluation(records, ArtifactStore(store.root))
     report = publication_state(records, evaluation)
     if not report["ready"] or report["bundle"]["digest"] != binding["bundle_digest"]:
         raise ResearchError("readiness_required", "The current manuscript and dual reviews must match the saved publication intent",
                             {"obligations": report["obligations"]})
+    validate_scope_binding(report["bundle"], binding.get("publication_scope"))
     require_ready(round_state(records, evaluation), "depositing the final development round")
-    return report["bundle"]
+    return snapshot["revision"]
 
 
 def _deposition(intent):
@@ -137,9 +140,9 @@ def _set_preview(store, identifier, binding, client, record_id):
         return intent["responses"]["preview"]["response"]
     url = build_draft_document_url(binding["base_url"], record_id)
     updated = build_previewed_document(client("GET", url, accept=RDM_JSON_MEDIA_TYPE))
-    _current(store, binding)
+    checked_revision = _current(store, binding)
     return remote_step(store, identifier, "preview", {"deposition_id": record_id, "filename": PAPER_UPLOAD_NAME},
-                       lambda: client("PUT", url, json_body=updated))
+                       lambda: client("PUT", url, json_body=updated), expected_revision=checked_revision)
 
 
 def continue_deposit(store, identifier, client, *, reconcile=False):
@@ -151,7 +154,7 @@ def continue_deposit(store, identifier, client, *, reconcile=False):
         if reconcile:
             intent = reconcile_pending(store, identifier, client)
         binding = intent["binding"]
-        _current(store, binding)
+        checked_revision = _current(store, binding)
         base = binding["base_url"]
         metadata = dict(binding["metadata"], notes="Exactory publication intent " + identifier)
         if binding["new_version"]:
@@ -167,24 +170,25 @@ def continue_deposit(store, identifier, client, *, reconcile=False):
         else:
             def create():
                 return client("POST", base + "/deposit/depositions", json_body={"metadata": metadata})
-        deposition = remote_step(store, identifier, "create", {"metadata": metadata, "new_version": binding["new_version"], "prior": binding["prior"]}, create)
+        deposition = remote_step(store, identifier, "create", {"metadata": metadata, "new_version": binding["new_version"], "prior": binding["prior"]}, create,
+                                 expected_revision=checked_revision)
         bucket = deposition["links"]["bucket"]
         artifacts = ArtifactStore(store.root)
         for item in binding["uploads"]:
-            _current(store, binding)
+            checked_revision = _current(store, binding)
             data = artifacts.read(item["artifact"])
             remote_step(store, identifier, "upload:" + item["name"], item,
-                        lambda item=item, data=data: client("PUT", bucket + "/" + item["name"], file_bytes=data))
-        _current(store, binding)
+                        lambda item=item, data=data: client("PUT", bucket + "/" + item["name"], file_bytes=data), expected_revision=checked_revision)
+        checked_revision = _current(store, binding)
         remote_step(store, identifier, "metadata", {"metadata": metadata},
-                    lambda: client("PUT", base + "/deposit/depositions/" + str(deposition["id"]), json_body={"metadata": metadata}))
+                    lambda: client("PUT", base + "/deposit/depositions/" + str(deposition["id"]), json_body={"metadata": metadata}), expected_revision=checked_revision)
         _current(store, binding)
         _set_preview(store, identifier, binding, client, deposition["id"])
         published = None
         if binding["publish"]:
-            _current(store, binding)
+            checked_revision = _current(store, binding)
             published = remote_step(store, identifier, "publish", {"deposition_id": deposition["id"]},
-                lambda: client("POST", base + "/deposit/depositions/" + str(deposition["id"]) + "/actions/publish"))
+                lambda: client("POST", base + "/deposit/depositions/" + str(deposition["id"]) + "/actions/publish"), expected_revision=checked_revision)
         state = {"environment": binding["environment"], "deposition_id": deposition["id"], "draft_url": deposition.get("links", {}).get("html", "")}
         if published is not None:
             if not published.get("doi") or str(published.get("id")) != str(deposition["id"]):
@@ -193,6 +197,8 @@ def continue_deposit(store, identifier, client, *, reconcile=False):
                          record_url=published.get("links", {}).get("record_html", ""))
         receipt = dict(state, intent_id=identifier, bundle_digest=binding["bundle_digest"], uploads=binding["uploads"],
                        published_response=published, prepared_revision=binding["prepared_revision"])
+        if binding.get("publication_scope") is not None:
+            receipt["publication_scope"] = binding["publication_scope"]
         result = finish_intent(store, identifier, "publication_receipt", receipt, workspace=state)
         export_workspace(store)
         return result
@@ -201,8 +207,8 @@ def continue_deposit(store, identifier, client, *, reconcile=False):
 def validate_deposit(store, pdf, abstract, sources, *, new_version, environment):
     """Every check the managed deposit runs before its first remote write.
 
-    Raises ResearchError when the workspace cannot record this deposit; the
-    CLI then deposits directly."""
+    Raises ResearchError when the workspace cannot record this deposit. The
+    managed-only CLI propagates that refusal before any remote write."""
     report = validate_upload(store, pdf, abstract, sources)
     records = store.snapshot()["records"]
     require_ready(round_state(records, Evaluation(records, ArtifactStore(store.root))),

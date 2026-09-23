@@ -135,12 +135,15 @@ def _request_row(connection: sqlite3.Connection, request_id: str):
         (request_id,)).fetchone()
 
 
-def _validate(connection: sqlite3.Connection, *, replay: bool = True) -> int:
+def _validate(connection: sqlite3.Connection, *, replay: bool = True,
+              records: Optional[dict] = None) -> int:
     """Check the store's structure, and with replay, its complete history.
 
 Construction checks the structure so unsupported, corrupt or hot stores fail
 before use. Every read, write and receipt lookup replays the history, so a
 process validates it once per use and never trusts a cached replay.
+An optional snapshot mapping receives current records only after their checks;
+the caller must discard it if any validation fails.
 """
     metadata = connection.execute("SELECT id, schema_version, revision FROM metadata").fetchall()
     if len(metadata) != 1 or metadata[0]["id"] != 1:
@@ -191,21 +194,21 @@ process validates it once per use and never trusts a cached replay.
     if event_count != revision or connection.execute("SELECT COUNT(*) FROM receipts").fetchone()[0] != revision:
         raise ResearchError("corrupt_state", "Research revision, events, and receipts disagree")
     record_count = 0
-    for row in connection.execute("SELECT kind, key, value, digest FROM records"):
+    for row in connection.execute("SELECT kind, key, value, digest FROM records ORDER BY kind, key"):
         record_count += 1
-        _load(row["value"], dict)
+        value = _load(row["value"], dict)
         if projections.get((row["kind"], row["key"])) != (row["value"], row["digest"]):
             raise ResearchError("corrupt_state", "Research record differs from its committed history")
+        if records is not None:
+            records.setdefault(row["kind"], {})[row["key"]] = value
     if record_count != len(projections):
         raise ResearchError("corrupt_state", "Research records are missing committed values")
     return revision
 
 
 def _snapshot(connection: sqlite3.Connection) -> dict:
-    revision = _validate(connection)
     records = {}
-    for row in connection.execute("SELECT kind, key, value FROM records ORDER BY kind, key"):
-        records.setdefault(row["kind"], {})[row["key"]] = _load(row["value"], dict)
+    revision = _validate(connection, records=records)
     return {"revision": revision, "records": records}
 
 

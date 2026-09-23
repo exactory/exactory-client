@@ -26,6 +26,7 @@ from .predictions import measurement_summary
 from .publication import latest_reviews
 from .resources import account_report
 from .rounds import admissions, assessment_for, closing_round_assessments
+from .source_deferrals import build_source_gap_disclosure
 
 
 _FORBIDDEN_KEYS = ("request_id", "token")
@@ -46,6 +47,10 @@ def readiness_packet(report):
     """The six readiness checks' evidence, without labels, history or author names at any depth."""
     inputs = dict(report["review_inputs"])
     inputs["synthesis"] = {key: value for key, value in inputs["synthesis"].items() if key != "history"}
+    foundation = inputs["synthesis"]["foundation"]
+    if "source_deferrals" in foundation:
+        # Reviewers receive the scientific gap, never the private authorization or logs.
+        inputs["synthesis"]["foundation"] = dict(foundation, source_deferrals=build_source_gap_disclosure(foundation["source_deferrals"]))
     return scrub({"kind": "readiness", "inputs": inputs, "execution_observations": report["execution_observations"]},
                  _FORBIDDEN_KEYS + ("authors",))
 
@@ -85,10 +90,16 @@ def manuscript_packet(records, bundle):
         results[identifier] = {"execution": execution["payload"] if execution else None,
                                "observation": bundle["execution_observations"].get(identifier)}
     standards = bundle["review_inputs"]["synthesis"]["sections"].get("standards", {}).get("payload")
-    return scrub({"kind": "manuscript", "bundle_digest": bundle["digest"], "files": bundle["files"],
-                  "claim_evidence": bundle["claim_evidence"], "evidence": _source_closure(records, versions),
-                  "results": results, "standards": standards,
-                  "digest": digest({"bundle": bundle["digest"], "claims": bundle["claim_evidence"]})})
+    foundation = bundle["review_inputs"]["synthesis"]["foundation"]
+    packet = {"kind": "manuscript", "bundle_digest": bundle["digest"], "files": bundle["files"],
+              "claim_evidence": bundle["claim_evidence"], "evidence": _source_closure(records, versions),
+              "results": results, "standards": standards,
+              "digest": digest({"bundle": bundle["digest"], "claims": bundle["claim_evidence"]})}
+    if "source_deferrals" in foundation:
+        packet["source_gaps"] = build_source_gap_disclosure(foundation["source_deferrals"])
+    if bundle.get("publication_scope") is not None:
+        packet["scientific_scope"] = bundle["publication_scope"]["projection"]
+    return scrub(packet)
 
 
 def round_packet(records, bundle, decision):
@@ -131,3 +142,21 @@ def round_packet(records, bundle, decision):
                 "resources": account_report(records, "research"),
                 "digest": digest({"bundle": bundle["digest"], "decision": decision["digest"]})}
     return scrub(manifest, _FORBIDDEN_KEYS + ("authors", "author"))
+
+
+def find_round_investigation_responses(records, manifest):
+    """Bind post-measurement captures to this nonblind program assessment only.
+
+    A captured query is not a source import or a scientific reading. Its original
+    bytes let the round assessor judge the author's investigation independently.
+    They are created after the scientific scope and manuscript have been pinned.
+    """
+    if manifest.get("kind") != "round":
+        return []
+    analysis = find_analysis(records, manifest.get("manuscript", {}).get("bundle_digest"))
+    if analysis is None:
+        return []
+    payload = scrub(analysis["payload"], _FORBIDDEN_KEYS + ("authors", "author"))
+    if manifest.get("contribution_analysis") != payload:
+        return []
+    return [entry["response"] for entry in payload.get("investigation", [])]
