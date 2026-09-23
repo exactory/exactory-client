@@ -31,7 +31,7 @@ from that design.
 | --- | --- | --- |
 | 1 | A DOI entry is compared with its DOI record even when the cache holds a preprint record under the same title | `test_check.TestCacheIdentity` |
 | 2 | Records are cached only under the primary identity | `test_check.TestCacheIdentity` |
-| 3 | `<sub>`, `<sup>`, `<i>`, `<b>`, `<scp>` render as LaTeX; other tags are dropped; tagged and LaTeX titles match | `test_check.TestRegistryMarkup` |
+| 3 | `<sub>`, `<sup>`, `<i>`, `<b>`, `<scp>` and inline MathML (`msub`, `msup`) render as LaTeX; other tags are dropped; MathML that does not parse keeps its text; tagged and LaTeX titles match | `test_check.TestRegistryMarkup` |
 | 4 | `add --arxiv-id` cites the DOI in the arXiv record, or a unique Crossref title and first-author match; a second match, another first author or no match keeps the preprint; `--preprint` keeps it | `test_check.TestVersionOfRecord` |
 | 5 | An entry that no citation command cites is blocking; commented citations do not count; `\nocite{*}` counts all; bracketed options and starred forms count | `test_check.TestManuscriptChecks` |
 | 6 | Prior-art sentences without a citation are warnings with file and line; the abstract is excluded | `test_check.TestManuscriptChecks` |
@@ -48,6 +48,9 @@ from that design.
   in the arXiv record) resolved to Science and Physical Review B records through
   Crossref; 2112.09662 resolved through the arXiv record; 2512.06307 stayed a
   preprint.
+- MathML titles from Crossref: 10.1103/PhysRevLett.113.157401 and
+  10.1103/PhysRevLett.115.217602 render `Bi$_{2}$Se$_{3}$` and
+  `Cu$_{0.02}$Bi$_{2}$Se$_{3}$` and verify in `lookup`.
 
 ## Full suite
 
