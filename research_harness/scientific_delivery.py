@@ -482,11 +482,15 @@ class ScientificDelivery:
                     extensions = {key: value for key, value in ref.items() if key not in _REF_KEYS}
                     self._check_public_nested(extensions)
                     self.walk(extensions)
-                    try:
-                        decoded = data.decode(json.detect_encoding(data))
-                    except UnicodeError as error:
+                try:
+                    decoded = data.decode(json.detect_encoding(data))
+                except UnicodeError as error:
+                    if descriptor_digest in self.round_responses:
                         raise ResearchError(_PRIVATE, "A round query capture needs inspectable text; binary content needs a typed projection") from error
-                    self._check_bytes(decoded.encode())
+                else:
+                    # Text in another Unicode encoding is checked as UTF-8 too;
+                    # the raw bytes above already passed the byte bound.
+                    self._check_bytes(decoded.encode(), artifact=False)
                 empty_capture = not data and descriptor_digest in self.round_responses
                 is_json, structured = (False, None) if empty_capture else parse_scientific_json(data, ref["media_type"])
                 if is_json:

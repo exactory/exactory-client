@@ -100,3 +100,16 @@ class SniffedTextDeliveryTests(LiteratureCase):
             self.deliver_public_text(text, private)
         self.assertEqual(error.exception.code, "private_mixed_artifact_required")
         self.assertFalse((self.root / "delivery").exists())
+
+    def test_text_in_another_unicode_encoding_is_checked_as_text(self):
+        private = self.artifacts.put(b"Private authorization of this fixture", "text/plain")
+        records = dict(self.store.snapshot()["records"],
+                       source_deferral={"gap": {"authorization": private, "acquisition_evidence": []}})
+        for encoding in ("utf-16", "utf-32"):
+            for text in ("Notes: Private authorization of this fixture", "{Notes: Private authorization of this fixture"):
+                exact = self.artifacts.put(text.encode(encoding), "text/plain")
+                with self.subTest(encoding=encoding, text=text[:7]):
+                    with self.assertRaises(ResearchError) as error:
+                        project_delivery(records, self.artifacts, {"payload": {"scientific_delivery": []}},
+                                         {"file": exact}, manuscript_files=[exact])
+                    self.assertEqual(error.exception.code, "private_mixed_artifact_required")
