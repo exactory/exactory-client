@@ -296,8 +296,37 @@ def _strip_tex_commands(text: str) -> str:
     return re.sub(r"\\[a-zA-Z]+\s*", " ", text)  # any remaining command: drop it
 
 
+_MARKUP_TAG_RE = re.compile(r"<(/?)([A-Za-z][A-Za-z0-9:]*)(?:\s[^<>]*)?/?>")
+_SPACE_BEFORE_SCRIPT_TAG_RE = re.compile(r"\s+(?=<(?:[A-Za-z]+:)?su[bp][\s>])")
+# JATS and HTML inline markup that Crossref and DataCite put in titles, with the
+# LaTeX that renders it. Any other tag is dropped and its text kept.
+_MARKUP_LATEX = {"sub": ("$_{", "}$"), "sup": ("$^{", "}$"),
+                 "i": ("\\textit{", "}"), "em": ("\\textit{", "}"), "italic": ("\\textit{", "}"),
+                 "b": ("\\textbf{", "}"), "strong": ("\\textbf{", "}"), "bold": ("\\textbf{", "}"),
+                 "scp": ("\\textsc{", "}"), "sc": ("\\textsc{", "}")}
+
+
+def _convert_markup_to_latex(text: str) -> str:
+    """Render registry title markup as LaTeX. Malformed markup keeps its text only."""
+    if "<" not in text:
+        return text
+
+    def replace_tag(match: re.Match) -> str:
+        wrapper = _MARKUP_LATEX.get(match.group(2).lower().rsplit(":", 1)[-1])
+        if wrapper is None:
+            return ""
+        return wrapper[1] if match.group(1) else wrapper[0]
+
+    converted = _MARKUP_TAG_RE.sub(replace_tag, _SPACE_BEFORE_SCRIPT_TAG_RE.sub("", text))
+    if converted.count("{") != converted.count("}") or converted.count("$") % 2:
+        converted = _MARKUP_TAG_RE.sub("", text)
+    return re.sub(r"\s+", " ", converted).strip()
+
+
 def _normalize_for_match(text: str) -> str:
-    """Lowercase alphanumerics with single spaces: the comparison alphabet."""
+    """Lowercase alphanumerics with single spaces: the comparison alphabet. Markup
+    tags separate words, so a tagged and a LaTeX title compare equal."""
+    text = _MARKUP_TAG_RE.sub(" ", text or "")
     return re.sub(r"[^a-z0-9]+", " ", _fold_to_ascii(_strip_tex_commands(text)).lower()).strip()
 
 
@@ -398,8 +427,8 @@ def _compare_author_lists(bib_author_field: str,
 
 
 def _normalize_crossref_work(work: dict) -> dict:
-    title = _clean_field_value((work.get("title") or [""])[0])
-    subtitle = _clean_field_value((work.get("subtitle") or [""])[0])
+    title = _convert_markup_to_latex(_clean_field_value((work.get("title") or [""])[0]))
+    subtitle = _convert_markup_to_latex(_clean_field_value((work.get("subtitle") or [""])[0]))
     # Handbook chapters often embed "Chapter NN" in the Crossref title; papers
     # legitimately cite them without it.
     chapterless = re.sub(r"^chapter\s+\d+[:.\s]\s*", "", title, flags=re.IGNORECASE)
@@ -442,7 +471,7 @@ def _resolve_doi_via_crossref(doi: str) -> dict:
 
 
 def _normalize_datacite_record(attributes: dict) -> dict:
-    titles = [t.get("title", "") for t in attributes.get("titles") or [] if t.get("title")]
+    titles = [_convert_markup_to_latex(t["title"]) for t in attributes.get("titles") or [] if t.get("title")]
     authors = []
     for creator in attributes.get("creators") or []:
         full_name = " ".join(
@@ -498,13 +527,15 @@ def _normalize_arxiv_entry(entry_element) -> dict:
     entry_id = entry_element.findtext(f"{_ATOM_TAG_PREFIX}id") or ""
     id_match = re.search(r"abs/(\S+?)(v\d+)?$", entry_id)
     primary_category = entry_element.find(f"{_ARXIV_TAG_PREFIX}primary_category")
+    published_doi = (entry_element.findtext(f"{_ARXIV_TAG_PREFIX}doi") or "").strip()
     return {"source": "arxiv", "title": title, "titles": [title],
             "authors": [author for author in authors if author],
             "year": int(published[:4]) if published[:4].isdigit() else None,
             "doi": "", "container": "", "type": "",
             "arxiv": id_match.group(1) if id_match else "",
             "primary_class": primary_category.get("term")
-            if primary_category is not None else ""}
+            if primary_category is not None else "",
+            "published_doi": published_doi}
 
 
 def _parse_arxiv_feed(atom_xml: str) -> list[dict] | None:
@@ -537,6 +568,41 @@ def _resolve_arxiv_id(arxiv_id: str) -> dict:
     if not entries:
         return {"status": "not_found", "detail": f"arXiv id {arxiv_id} returned no entry"}
     return {"meta": entries[0]}
+
+
+_PUBLISHED_WORK_TYPES = {"journal-article", "proceedings-article", "book-chapter"}
+
+
+def _find_first_author_family(meta: dict) -> str:
+    name_tokens = _split_name_tokens(meta["authors"][0]) if meta.get("authors") else []
+    return name_tokens[-1] if name_tokens else ""
+
+
+def _find_published_version(preprint: dict) -> tuple[str, str]:
+    """(DOI, where it was found) of a preprint's published version, or ("", "").
+    The arXiv record's own DOI field comes first. Otherwise exactly one Crossref
+    journal, proceedings or chapter record must carry the same normalized title
+    and first-author family name; a second candidate or any doubt keeps the preprint."""
+    if preprint.get("published_doi"):
+        return preprint["published_doi"], "the arXiv record"
+    title = _normalize_for_match(preprint.get("title", ""))
+    family = _find_first_author_family(preprint)
+    if not title or not family:
+        return "", ""
+    query = {"rows": "5", "query.bibliographic": preprint["title"], "query.author": preprint["authors"][0]}
+    code, text = _open_url(f"{_CROSSREF_API_URL}?" + urllib.parse.urlencode(query))
+    if code != 200 or not text:
+        return "", ""
+    try:
+        items = json.loads(text).get("message", {}).get("items", [])
+    except ValueError:
+        return "", ""
+    dois = {meta["doi"].lower() for meta in map(_normalize_crossref_work, items)
+            if meta["type"] in _PUBLISHED_WORK_TYPES and meta["doi"]
+            and not meta["doi"].lower().startswith("10.48550/")
+            and _normalize_for_match(meta["title"]) == title
+            and _find_first_author_family(meta) == family}
+    return (dois.pop(), "a Crossref title and first-author match") if len(dois) == 1 else ("", "")
 
 
 def _normalize_pubmed_summary(summary: dict) -> dict:
@@ -715,21 +781,20 @@ def _classify_entry(entry: dict) -> dict:
 # ----------------------------------------------------- the positive cache
 
 
-def _build_cache_keys(entry: dict) -> list:
-    """Identity keys for the positive cache. Only the registry record is cached;
-    the field comparison re-runs locally on every check, so an entry edited to
-    disagree with its cached record is still caught."""
-    keys = []
+def _build_cache_key(entry: dict) -> str:
+    """The positive-cache key: the entry's primary identity, DOI before arXiv id
+    before title, in the order the entry is resolved. A published version is never
+    answered with a record cached for its preprint under the shared title. Only the
+    registry record is cached; the field comparison re-runs locally on every check,
+    so an entry edited to disagree with its cached record is still caught."""
     doi = _extract_doi(entry)
     if doi:
-        keys.append("doi:" + doi.lower())
+        return "doi:" + doi.lower()
     arxiv_id = _extract_arxiv_id(entry)
     if arxiv_id:
-        keys.append("arxiv:" + arxiv_id.lower())
+        return "arxiv:" + arxiv_id.lower()
     normalized_title = _normalize_for_match(entry.get("title", ""))
-    if normalized_title:
-        keys.append("title:" + normalized_title)
-    return keys
+    return "title:" + normalized_title if normalized_title else ""
 
 
 def _load_cache(cache_path: Path) -> dict:
@@ -870,18 +935,15 @@ def _run_lookup(args: argparse.Namespace) -> None:
 
     report_entries = []
     for entry in entries:
-        cache_keys = _build_cache_keys(entry)
-        cached_meta = next(
-            (cache[key] for key in cache_keys if isinstance(cache.get(key), dict)), None
-        )
-        if cached_meta is not None:
+        cache_key = _build_cache_key(entry)
+        cached_meta = cache.get(cache_key) if cache_key else None
+        if isinstance(cached_meta, dict):
             result = _compare_entry_with_meta(entry, cached_meta)
         else:
             result = _classify_entry(entry)
             meta = result.pop("_meta", None)
-            if meta is not None and result["status"] in ("verified", "year_mismatch"):
-                for cache_key in cache_keys:
-                    cache[cache_key] = meta
+            if meta is not None and cache_key and result["status"] in ("verified", "year_mismatch"):
+                cache[cache_key] = meta
         report_entries.append({
             "key": entry.get("key", ""),
             "doi": _extract_doi(entry),
@@ -914,12 +976,44 @@ def _run_lookup(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def _resolve_preprint_citation(arxiv_id: str, keep_preprint: bool) -> tuple[dict, str]:
+    """The registry record to cite for an arXiv id, and a notice that says which
+    version the entry cites and why."""
+    resolution = _resolve_arxiv_id(arxiv_id)
+    if "meta" not in resolution:
+        return resolution, ""
+    preprint = resolution["meta"]
+    if keep_preprint:
+        named = preprint.get("published_doi")
+        return resolution, (f"The arXiv record names a published version, DOI {named}. The entry"
+                            " cites the preprint because of --preprint." if named else "")
+    doi, found_in = _find_published_version(preprint)
+    if not doi:
+        return resolution, (f"No published version of arXiv:{arxiv_id} was found in the arXiv record"
+                            " or in Crossref, so the entry cites the preprint. If the paper has"
+                            " been published, remove this entry and add the published version"
+                            " with --doi.")
+    published = _resolve_doi(doi)
+    if "meta" not in published:
+        return resolution, (f"arXiv:{arxiv_id} has a published version, DOI {doi}, but its record"
+                            f" could not be fetched ({published['detail']}), so the entry cites"
+                            " the preprint. Add the published version with --doi when the"
+                            " registry answers.")
+    return published, (f"arXiv:{arxiv_id} has a published version, DOI {doi}, found through"
+                       f" {found_in}. The entry cites the published version. To cite the"
+                       " preprint itself, remove the entry and run the command again with --preprint.")
+
+
 def _run_add(args: argparse.Namespace) -> None:
+    notice = ""
     if args.doi:
+        if args.preprint:
+            _exit_with_error("--preprint applies only to --arxiv-id.", 2)
         resolution = _resolve_doi(args.doi.strip())
         identifier = f"DOI {args.doi}"
     else:
-        resolution = _resolve_arxiv_id(re.sub(r"v\d+$", "", args.arxiv_id.strip()))
+        resolution, notice = _resolve_preprint_citation(
+            re.sub(r"v\d+$", "", args.arxiv_id.strip()), args.preprint)
         identifier = f"arXiv id {args.arxiv_id}"
     if "meta" not in resolution:
         _exit_with_error(f"The client cannot fetch the record for {identifier}:"
@@ -962,6 +1056,8 @@ def _run_add(args: argparse.Namespace) -> None:
         handle.write(rendered_entry + "\n")
     print(rendered_entry)
     print(f"\nThe entry {key} is now in {bib_path}.")
+    if notice:
+        print(notice)
 
 
 _GATE_LOOKUP_CMD = "exactory-check lookup --bib draft/references.bib"
@@ -1021,7 +1117,11 @@ def _build_parser() -> argparse.ArgumentParser:
                               help="Fetch a registry record and append its BibTeX entry.")
     identifier = add.add_mutually_exclusive_group(required=True)
     identifier.add_argument("--doi", help="A DOI, for example 10.5281/zenodo.21381192.")
-    identifier.add_argument("--arxiv-id", help="An arXiv id, for example 2301.00001.")
+    identifier.add_argument("--arxiv-id", help="An arXiv id, for example 2301.00001. The entry"
+                                                " cites the published version when the arXiv"
+                                                " record or Crossref names one.")
+    add.add_argument("--preprint", action="store_true",
+                     help="With --arxiv-id: cite the preprint even when a published version exists.")
     add.add_argument("--bib", default=_DEFAULT_BIB_PATH,
                      help=f"Path of the references file (default: {_DEFAULT_BIB_PATH}).")
     add.set_defaults(handler=_run_add)
