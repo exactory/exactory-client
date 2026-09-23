@@ -62,8 +62,8 @@ independent work within the user's limits.
   coverage.
 - `exactory-check lookup` writes `.exactory/citation-check.json`. When it
   reports a blocking entry, fix the reference itself and run it again. Never
-  edit the report. The citation gate re-hashes `references.bib` and the LaTeX
-  under `draft/`, so an edit made after the check is caught. The market's
+  edit the report. The citation gate re-hashes `references.bib` and the
+  manuscript files, so an edit made after the check is caught. The market's
   verifiers spot-check bibliographies.
 - `lookup` also reads the manuscript: `draft/paper.tex` and the files that it
   includes (`--main` names another main file). An entry that no citation

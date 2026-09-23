@@ -26,7 +26,8 @@ from that design.
 | T2 manuscript checks | `9e420b6`: `KeyError: 'manuscript'`; an uncited entry did not block; the gate passed after a LaTeX change | `4f7ef06` | `python3 -m unittest tests.test_check` |
 | T3 accounting at the pin | `e2bb414`: `ModuleNotFoundError: research_harness.citations` | `4f7ef06` | `python3 -m unittest discover -s tests -p test_research_citation_accounting.py` |
 | First review (exactory-check, 2 Major, 13 Minor) | `82d1f3e`: 19 failures and 15 errors in `tests.test_check` | `a34a247` | `python3 -m unittest tests.test_check` |
-| Second review (citation evidence, 1 Major, 10 Minor) | `c1a7104`: `ImportError` for `read_bibliography`, `find_citing_entry`, `collect_accountable_works` | see the pull request | `python3 -m unittest discover -s tests -p test_research_citation_accounting.py` |
+| Second review (citation evidence, 1 Major, 10 Minor) | `c1a7104`: `ImportError` for `read_bibliography`, `find_citing_entry`, `collect_accountable_works` | `4aa8001` | `python3 -m unittest discover -s tests -p test_research_citation_accounting.py` |
+| Fix review (2 Major, 10 Minor) | `22549e0`: 11 failures in `tests.test_check`, 11 in `test_research_citation_accounting` | see the pull request | both commands above |
 
 ## Guarantees
 
@@ -37,8 +38,8 @@ from that design.
 | 3 | `<sub>`, `<sup>`, `<i>`, `<b>`, `<scp>` and inline MathML (`msub`, `msup`) render as LaTeX with one math group at the outermost level; crossed tags and MathML that does not parse keep their text | `test_check.TestRegistryMarkup` |
 | 4 | Only registry tag names are markup: a fabricated suffix in angle brackets is a `title_mismatch`, and inequalities stay text | `test_check.TestRegistryMarkup` |
 | 5 | `add --arxiv-id` accepts a published version only as a journal, proceedings or chapter record by the same first and second authors; each DOI in the arXiv record is checked; a Crossref match also needs a year no earlier than the preprint's minus one | `test_check.TestVersionOfRecord` |
-| 6 | `add` names an unreachable Crossref, prints a notice for `--preprint`, and refuses a work that the bibliography holds under any key | `test_check.TestVersionOfRecord` |
-| 7 | The manuscript is `paper.tex`, the only root file or `--main`, and the files it includes; several roots without `--main` exit 2 | `test_check.TestManuscriptChecks` |
+| 6 | `add` names an unreachable Crossref, prints a notice for `--preprint`, and refuses a work whose DOI or arXiv id an entry already has, whatever its key | `test_check.TestVersionOfRecord` |
+| 7 | The main file is `--main`, else `paper.tex`, else the only root file; the manuscript is the main file and the files it includes; several roots without `--main` exit 2 | `test_check.TestManuscriptChecks` |
 | 8 | Every citation form counts (`\cites` with notes, `\cite<...>`, `\Citet`, URLs with `%`); `\nocite`, comments after an even number of backslashes, `\iffalse` blocks and comment environments do not | `test_check.TestManuscriptChecks` |
 | 9 | Prior-art sentences without a citation are warnings with file and line; the abstract is excluded | `test_check.TestManuscriptChecks` |
 | 10 | `counts` stay per reference; the top-level `blocking` count adds the uncited entries | `test_check.TestManuscriptChecks` |
@@ -48,6 +49,10 @@ from that design.
 | 14 | Incomplete and invalid accountings are refused; each refused item names its index and cause | `test_research_citation_accounting.AccountCitationsTests` |
 | 15 | The pin refuses unaccounted works and stores the accounting in the bundle | `test_research_citation_accounting.ManuscriptPinTests` |
 | 16 | The lineage gate reads the same evidence as the accounting | `test_research_publication` (lineage and token tests) |
+| 17 | A published entry that `add --arxiv-id` writes keeps the arXiv id in `eprint`; `--preprint` after the published entry is refused | `test_check.TestVersionOfRecord` |
+| 18 | Isotope prescripts render as `$^{208}$Pb`; `<tt>` renders and `<ovl>` keeps its text; a tag with a title or data attribute is text; a script inside text inside a script opens its own math group | `test_check.TestRegistryMarkup` |
+| 19 | Included files resolve from the main file's directory; `\iffalse` branches up to `\else`, nested conditionals, `\verb`, `\nolinkurl`, bracketed notes with braces and brace-free `\input` are read as TeX reads them | `test_check.TestManuscriptChecks` |
+| 20 | Titles compare after removing accents, naming Greek letters and dropping braces and math markers; a CJK title counts; text between entries and quoted titles with braces are read as BibTeX; DOI continuations are not evidence and PDF URLs are | `test_research_citation_accounting.CitationEvidenceTests` |
 
 ## Real-data checks
 

@@ -313,30 +313,47 @@ def _strip_tex_commands(text: str) -> str:
 _LATEX_WRAPPERS_BY_TAG = {"sub": ("_{", "}"), "sup": ("^{", "}"),
                           "i": ("\\textit{", "}"), "em": ("\\textit{", "}"), "italic": ("\\textit{", "}"),
                           "b": ("\\textbf{", "}"), "strong": ("\\textbf{", "}"), "bold": ("\\textbf{", "}"),
-                          "scp": ("\\textsc{", "}"), "sc": ("\\textsc{", "}")}
+                          "scp": ("\\textsc{", "}"), "sc": ("\\textsc{", "}"), "tt": ("\\texttt{", "}")}
 _SCRIPT_TAG_NAMES = ("sub", "sup")
-_DROPPED_TAG_NAMES = ("u", "underline", "span", "p", "br", "math", "mrow", "mi", "mn", "mo", "ms", "mtext",
-                      "mspace", "msub", "msup", "msubsup", "mfrac", "msqrt", "mroot", "mstyle", "mover", "munder",
-                      "munderover", "mfenced", "mpadded", "mphantom", "menclose", "mtable", "mtr", "mtd",
-                      "semantics", "annotation")
+_DROPPED_TAG_NAMES = ("u", "underline", "ovl", "span", "p", "br", "math", "mrow", "mi", "mn", "mo", "ms", "mtext",
+                      "mspace", "msub", "msup", "msubsup", "mmultiscripts", "mprescripts", "none", "mfrac", "msqrt",
+                      "mroot", "mstyle", "mover", "munder", "munderover", "mfenced", "mpadded", "mphantom",
+                      "menclose", "mtable", "mtr", "mtd", "semantics", "annotation")
+# Attributes that registries put on markup. They carry no title text, so a tag with
+# any other attribute (a title or data attribute) is title text, not markup.
+_MARKUP_ATTRIBUTE_NAMES = ("xmlns", "xml:lang", "display", "mathvariant", "class", "style", "id", "dir", "lang",
+                           "stretchy", "fence", "separator", "form", "accent", "lspace", "rspace")
 _MARKUP_TAG_NAME_PATTERN = "|".join(sorted((*_LATEX_WRAPPERS_BY_TAG, *_DROPPED_TAG_NAMES), key=len, reverse=True))
+_MARKUP_ATTRIBUTE_PATTERN = (r"\s+(?:xmlns:[A-Za-z]+|" + "|".join(_MARKUP_ATTRIBUTE_NAMES)
+                             + r")\s*=\s*(?:\"[^\"]*\"|'[^']*')")
 _MARKUP_TAG_RE = re.compile(r"<(/?)((?:[A-Za-z]+:)?(?:" + _MARKUP_TAG_NAME_PATTERN + r"))"
-                            r"((?:\s+[A-Za-z_:][-\w:.]*\s*=\s*\"[^\"]*\")*)\s*(/?)>", re.IGNORECASE)
+                            r"((?:" + _MARKUP_ATTRIBUTE_PATTERN + r")*)\s*(/?)>", re.IGNORECASE)
 # A chemical formula's subscript attaches to the element before it ("Bi <sub>2</sub>").
 _SPACE_BEFORE_SUBSCRIPT_TAG_RE = re.compile(r"\s+(?=<(?:[A-Za-z]+:)?sub[\s/>])", re.IGNORECASE)
 _MATHML_RE = re.compile(r"<(?:[A-Za-z]+:)?math\b[^>]*>(.*?)</(?:[A-Za-z]+:)?math>", re.DOTALL | re.IGNORECASE)
 _MATHML_SCRIPT_MARKERS = {"msub": "_", "msup": "^"}
 
 
-def _find_tag_name(match: re.Match) -> str:
-    return match.group(2).lower().rsplit(":", 1)[-1]
+def _render_mathml_scripts(scripts: list) -> str:
+    """LaTeX for (subscript, superscript) pairs of rendered MathML; empty parts are omitted."""
+    rendered = "".join((f"_{{{sub}}}" if sub else "") + (f"^{{{sup}}}" if sup else "") for sub, sup in scripts)
+    return f"${rendered}$" if rendered else ""
 
 
 def _render_mathml_element(element) -> str:
-    """Text of a MathML element, with msub and msup as LaTeX scripts. A script on a
-    base that already carries one is grouped: ${x_{a}}_{b}$."""
+    """Text of a MathML element, with msub, msup and mmultiscripts as LaTeX scripts.
+    A script on a base that already carries one is grouped: ${x_{a}}_{b}$."""
     name = element.tag.rsplit("}", 1)[-1]
     children = list(element)
+    if name == "none":
+        return ""
+    if name == "mmultiscripts" and children:
+        rendered = [_render_mathml_element(child).replace("$", "") for child in children]
+        split = next((index for index, child in enumerate(children) if child.tag.endswith("mprescripts")),
+                     len(children))
+        post, pre = rendered[1:split], rendered[split + 1:]
+        return (_render_mathml_scripts(list(zip(pre[::2], pre[1::2]))) + rendered[0]
+                + _render_mathml_scripts(list(zip(post[::2], post[1::2]))))
     if name in _MATHML_SCRIPT_MARKERS and len(children) == 2:
         base, script = (_render_mathml_element(child) for child in children)
         marker, script = _MATHML_SCRIPT_MARKERS[name], script.replace("$", "")
@@ -359,8 +376,10 @@ def _convert_mathml_to_latex(match: re.Match) -> str:
 
 
 def _convert_markup_to_latex(text: str) -> str:
-    """Render registry title markup as LaTeX. Sub- and superscripts open one math
-    group at the outermost level. Crossed or unclosed markup keeps its text only."""
+    """Render registry title markup as LaTeX. A sub- or superscript opens a math
+    group unless the innermost open markup is already a script; a text wrapper
+    inside a script returns to text mode. Crossed or unclosed markup keeps its
+    text only."""
     if "<" not in text:
         return text
     text = _SPACE_BEFORE_SUBSCRIPT_TAG_RE.sub("", _MATHML_RE.sub(_convert_mathml_to_latex, text))
@@ -368,18 +387,19 @@ def _convert_markup_to_latex(text: str) -> str:
     for match in _MARKUP_TAG_RE.finditer(text):
         pieces.append(text[position:match.start()])
         position = match.end()
-        name = _find_tag_name(match)
+        name = match.group(2).lower().rsplit(":", 1)[-1]
         wrapper = _LATEX_WRAPPERS_BY_TAG.get(name)
         if wrapper is None or match.group(4):
             continue
-        in_math = any(tag in _SCRIPT_TAG_NAMES for tag in open_tags)
         if not match.group(1):
+            in_math = bool(open_tags) and open_tags[-1] in _SCRIPT_TAG_NAMES
+            opens_math = name in _SCRIPT_TAG_NAMES and not in_math
             open_tags.append(name)
-            pieces.append(("$" if name in _SCRIPT_TAG_NAMES and not in_math else "") + wrapper[0])
+            pieces.append(("$" if opens_math else "") + wrapper[0])
         elif open_tags and open_tags[-1] == name:
             open_tags.pop()
-            closes_math = name in _SCRIPT_TAG_NAMES and not any(tag in _SCRIPT_TAG_NAMES for tag in open_tags)
-            pieces.append(wrapper[1] + ("$" if closes_math else ""))
+            in_math = bool(open_tags) and open_tags[-1] in _SCRIPT_TAG_NAMES
+            pieces.append(wrapper[1] + ("$" if name in _SCRIPT_TAG_NAMES and not in_math else ""))
         else:
             open_tags.append("crossed")
             break
@@ -389,9 +409,10 @@ def _convert_markup_to_latex(text: str) -> str:
 
 
 def _normalize_for_match(text: str) -> str:
-    """Lowercase alphanumerics with single spaces: the comparison alphabet. Markup
-    tags separate words, so a tagged and a LaTeX title compare equal."""
-    text = _MARKUP_TAG_RE.sub(" ", text or "")
+    """Lowercase alphanumerics with single spaces: the comparison alphabet. MathML
+    is rendered first and markup tags separate words, so a tagged and a LaTeX title
+    compare equal."""
+    text = _MARKUP_TAG_RE.sub(" ", _MATHML_RE.sub(_convert_mathml_to_latex, text or ""))
     return re.sub(r"[^a-z0-9]+", " ", _fold_to_ascii(_strip_tex_commands(text)).lower()).strip()
 
 
@@ -953,6 +974,9 @@ def _render_bib_entry(key: str, meta: dict) -> str:
     if doi:
         fields.append(("doi", doi))
         fields.append(("url", f"https://doi.org/{doi}"))
+    if meta.get("arxiv"):
+        fields.append(("eprint", meta["arxiv"]))
+        fields.append(("archivePrefix", "arXiv"))
     body = ",\n".join(f"  {name}={{{value}}}" for name, value in fields if value)
     return f"@{entry_type}{{{key},\n{body}\n}}"
 
@@ -991,19 +1015,22 @@ def _read_refs_json_entries(path: Path, text: str) -> list[dict]:
 
 # ------------------------------------------------ manuscript checks (lookup)
 
-_DEFAULT_MAIN_TEX = "paper.tex"
+_DEFAULT_MAIN_TEX_NAME = "paper.tex"
 # A comment starts at a percent sign after an even number of backslashes (\\% is a
 # line break and a comment, \% is a percent sign).
 _TEX_COMMENT_RE = re.compile(r"(?<!\\)((?:\\\\)*)%.*")
-_URL_ARGUMENT_RE = re.compile(r"\\(?:url|href)\s*\{[^}\n]*\}")
-_DISABLED_BLOCK_RE = re.compile(r"\\iffalse\b.*?\\fi\b|\\begin\{comment\}.*?\\end\{comment\}", re.DOTALL)
+_URL_ARGUMENT_RE = re.compile(r"\\(?:url|href|nolinkurl)\s*\{[^}\n]*\}")
+_VERBATIM_RE = re.compile(r"\\verb\*?([^A-Za-z\s*])[^\n]*?\1")
+_COMMENT_ENVIRONMENT_RE = re.compile(r"\\begin\{comment\}.*?\\end\{comment\}", re.DOTALL)
+_IFFALSE_RE = re.compile(r"\\iffalse(?![A-Za-z@])")
+_CONDITIONAL_TOKEN_RE = re.compile(r"\\(?:if[A-Za-z@]*|else|fi)(?![A-Za-z@])")
 _DOCUMENTCLASS_RE = re.compile(r"\\documentclass\b")
-_INCLUDE_RE = re.compile(r"\\(?:input|include|subfile)\s*\{([^}]+)\}")
+_INCLUDE_RE = re.compile(r"\\(?:input|include|subfile)(?:\s*\{([^}]+)\}|\s+([^\s{}%\\]+))")
 # A citation command. \nocite lists an entry without citing it, so it does not count.
 _CITATION_COMMAND_RE = re.compile(r"\\(?!nocite\b)[A-Za-z]*[Cc]ite[A-Za-z]*\*?")
 # The arguments after a citation command: notes in brackets, parentheses or angle
 # brackets, and one or more key groups (biblatex \cites{a}[p.~5]{b}).
-_CITATION_ARGUMENT_RE = re.compile(r"\s*(?:\[[^\]]*\]|\([^)]*\)|<[^>]*>|\{([^}]*)\})")
+_CITATION_ARGUMENT_RE = re.compile(r"\s*(?:\[(?:[^\[\]{}]|\{[^{}]*\})*\]|\([^)]*\)|<[^>]*>|\{([^}]*)\})")
 _ABSTRACT_RE = re.compile(r"\\begin\{abstract\}.*?\\end\{abstract\}", re.DOTALL)
 _SENTENCE_END_RE = re.compile(r"[.!?](?=\s)|\n\s*\n")
 _PRIOR_ART_MARKER_RE = re.compile(
@@ -1018,13 +1045,42 @@ class _ManuscriptSelectionError(Exception):
     """The LaTeX under the bibliography's directory names no single manuscript."""
 
 
+def _blank_text(text: str) -> str:
+    return "\n" * text.count("\n")
+
+
+def _blank_iffalse_branches(text: str) -> str:
+    """Text with each \\iffalse branch blanked up to its \\else or matching \\fi.
+    Nested conditionals are counted; an \\else branch stays, because TeX reads it."""
+    pieces, position = [], 0
+    for start in _IFFALSE_RE.finditer(text):
+        if start.start() < position:
+            continue
+        depth, end, resume = 1, len(text), len(text)
+        for token in _CONDITIONAL_TOKEN_RE.finditer(text, start.end()):
+            word = token.group(0)
+            if word == "\\fi":
+                depth -= 1
+            elif word == "\\else" and depth == 1:
+                end, resume = token.start(), token.end()
+                break
+            elif word != "\\else":
+                depth += 1
+            if depth == 0:
+                end = resume = token.end()
+                break
+        pieces.extend((text[position:start.start()], _blank_text(text[start.start():end])))
+        position = resume
+    return "".join(pieces) + text[position:]
+
+
 def _strip_tex_noise(raw_text: str) -> str:
-    """LaTeX text without comments, \\iffalse blocks and comment environments, with URL
-    arguments emptied so that a percent sign in a URL is not a comment. Line breaks
-    stay, so line numbers are those of the file."""
-    text = _URL_ARGUMENT_RE.sub(lambda match: "\\url{}", raw_text)
+    """LaTeX text without comments, \\iffalse branches and comment environments, with
+    verbatim text and URL arguments emptied so that a percent sign in them is not a
+    comment. Line breaks stay, so line numbers are those of the file."""
+    text = _URL_ARGUMENT_RE.sub(lambda match: "\\url{}", _VERBATIM_RE.sub(lambda match: "\\verb||", raw_text))
     text = "\n".join(_TEX_COMMENT_RE.sub(r"\1", line) for line in text.split("\n"))
-    return _DISABLED_BLOCK_RE.sub(lambda block: "\n" * block.group(0).count("\n"), text)
+    return _blank_iffalse_branches(_COMMENT_ENVIRONMENT_RE.sub(lambda block: _blank_text(block.group(0)), text))
 
 
 def _decode_tex(data: bytes) -> str:
@@ -1049,8 +1105,8 @@ def _read_manuscript_sources(root: Path, main: str | None) -> tuple[str | None, 
         main = posixpath.normpath(main)
         if main not in available:
             raise _ManuscriptSelectionError(f"The main LaTeX file {main} is not under {root}.")
-    elif _DEFAULT_MAIN_TEX in available:
-        main = _DEFAULT_MAIN_TEX
+    elif _DEFAULT_MAIN_TEX_NAME in available:
+        main = _DEFAULT_MAIN_TEX_NAME
     else:
         roots = [name for name in available if _DOCUMENTCLASS_RE.search(_decode_tex(read_source(name)))]
         if len(roots) > 1:
@@ -1066,8 +1122,11 @@ def _read_manuscript_sources(root: Path, main: str | None) -> tuple[str | None, 
         if name in selected:
             continue
         selected[name] = read_source(name)
-        for target in (match.strip() for match in _INCLUDE_RE.findall(_decode_tex(selected[name]))):
-            included = posixpath.normpath(target if target.endswith(".tex") else target + ".tex")
+        # TeX resolves an included file from the directory of the main file.
+        for braced, bare in _INCLUDE_RE.findall(_decode_tex(selected[name])):
+            target = (braced or bare).strip()
+            included = posixpath.normpath(posixpath.join(posixpath.dirname(main),
+                                                         target if target.endswith(".tex") else target + ".tex"))
             if included in available:
                 pending.append(included)
     return main, dict(sorted(selected.items()))
@@ -1075,12 +1134,6 @@ def _read_manuscript_sources(root: Path, main: str | None) -> tuple[str | None, 
 
 def _hash_manuscript_sources(sources: dict[str, bytes]) -> dict[str, str]:
     return {name: hashlib.sha256(data).hexdigest() for name, data in sources.items()}
-
-
-def _summarize_manuscript_sources(root: Path, main: str | None) -> dict:
-    """{main, tex_sha256}: what lookup records about the manuscript and gate recomputes."""
-    main, sources = _read_manuscript_sources(root, main)
-    return {"main": main, "tex_sha256": _hash_manuscript_sources(sources)}
 
 
 def _find_cited_keys(text: str) -> set[str]:
@@ -1243,7 +1296,9 @@ def _resolve_preprint_citation(arxiv_id: str, keep_preprint: bool) -> tuple[dict
         return resolution, (f"The entry cites the preprint arXiv:{arxiv_id}: {how}. If the paper has"
                             " been published, remove this entry and add the published version"
                             " with --doi.")
-    return {"meta": published}, (f"arXiv:{arxiv_id} has a published version, {how}. The entry"
+    # The published entry keeps the preprint's identifier, so the work stays
+    # recognizable from its arXiv id in the bibliography and in the research store.
+    return {"meta": dict(published, arxiv=arxiv_id)}, (f"arXiv:{arxiv_id} has a published version, {how}. The entry"
                                  " cites the published version. To cite the preprint itself, remove"
                                  " the entry and run the command again with --preprint.")
 
@@ -1274,6 +1329,7 @@ def _run_add(args: argparse.Namespace) -> None:
     identities = {("doi", (meta.get("doi") or "").lower()), ("arxiv", (meta.get("arxiv") or "").lower())}
     if args.arxiv_id:
         identities.add(("arxiv", re.sub(r"v\d+$", "", args.arxiv_id.strip()).lower()))
+    identities.update(("doi", doi.lower()) for doi in (meta.get("published_doi") or "").split())
     identities.discard(("doi", ""))
     identities.discard(("arxiv", ""))
     for existing_entry in existing_entries:
@@ -1351,11 +1407,12 @@ def _run_gate(args: argparse.Namespace) -> None:
                          f" changed. Run: {_GATE_LOOKUP_CMD}")
     manuscript = report.get("manuscript")
     try:
-        current = (_summarize_manuscript_sources(references_path.parent, manuscript.get("main"))
-                   if isinstance(manuscript, dict) else None)
+        main, sources = (_read_manuscript_sources(references_path.parent, manuscript.get("main"))
+                         if isinstance(manuscript, dict) else (None, None))
     except _ManuscriptSelectionError:
-        current = None
-    if current is None or {"main": manuscript.get("main"), "tex_sha256": manuscript.get("tex_sha256")} != current:
+        sources = None
+    if sources is None or (manuscript.get("main"), manuscript.get("tex_sha256")) != (
+            main, _hash_manuscript_sources(sources)):
         _exit_with_error("The citation report is stale because the manuscript sources in"
                          " draft/ changed, or the report predates the manuscript checks."
                          f" Run: {_GATE_LOOKUP_CMD}")
@@ -1397,7 +1454,7 @@ def _build_parser() -> argparse.ArgumentParser:
                              " citation-existence checks).")
     lookup.add_argument("--main",
                         help="The manuscript's main LaTeX file, relative to the bibliography's"
-                             f" directory (default: {_DEFAULT_MAIN_TEX}, or the only file there with"
+                             f" directory (default: {_DEFAULT_MAIN_TEX_NAME}, or the only file there with"
                              " \\documentclass).")
     lookup.add_argument("--out", default=_DEFAULT_REPORT_PATH,
                         help=f"Path of the report file (default: {_DEFAULT_REPORT_PATH}).")

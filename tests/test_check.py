@@ -432,6 +432,7 @@ class TestGateSubcommand(_CheckTestCase):
 
     def _write_report(self, blocking: int, nothing_verified: bool,
                       bib_sha256: str | None = None) -> None:
+        main, sources = _check._read_manuscript_sources(self.scratch_dir / "draft", None)
         report = {
             "version": 1,
             "bib_sha256": bib_sha256 if bib_sha256 is not None
@@ -442,7 +443,7 @@ class TestGateSubcommand(_CheckTestCase):
             "blocking": blocking,
             "nothing_verified": nothing_verified,
             "ok": blocking == 0 and not nothing_verified,
-            "manuscript": _check._summarize_manuscript_sources(self.scratch_dir / "draft", None),
+            "manuscript": {"main": main, "tex_sha256": _check._hash_manuscript_sources(sources)},
         }
         self.report_path.write_text(json.dumps(report))
 

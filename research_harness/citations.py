@@ -1,12 +1,14 @@
 """Citation evidence in a pinned bibliography, and the manuscript's citation accounting.
 
 A work's evidence is its arXiv family, each DOI of the work or of a provider alias,
-and its title when the title has at least two words. In a BibTeX bibliography an
-entry cites a work when it carries one of the identifiers as a whole identifier
-or when its title field is the work's title; text outside entries is not
-evidence. Another bibliography format cites a work when its text carries an
-identifier, or the title as whole words. The lineage gate and the citation
-accounting read the same evidence.
+and its title when the title has at least two words. Titles compare after
+casefolding, removing accents, naming Greek letters and dropping LaTeX commands,
+braces, math markers, punctuation and spaces. In a BibTeX bibliography an entry
+cites a work when it carries one of the identifiers as a whole identifier or
+when its title field is the work's title; text outside entries is not evidence.
+Another bibliography format cites a work when its text carries an identifier or
+contains the title, so there a shorter title inside a longer one also counts.
+The lineage gate and the citation accounting read the same evidence.
 
 The accounted works are the families of every version with a recorded full-text
 reading and of every work that a selected research search of the five purposes
@@ -17,6 +19,7 @@ decision; it does not judge whether the decision is scientifically right.
 """
 
 import re
+import unicodedata
 
 from .errors import ResearchError
 from .identities import family_id
@@ -24,14 +27,16 @@ from .literature import SEARCH_PURPOSES
 from .operations import fields, text
 
 
-_ENTRY_START_RE = re.compile(r"(?m)^[ \t]*@[ \t]*(\w+)[ \t]*[{(][ \t\r\n]*([^,\s]+)[ \t]*,")
-_TITLE_FIELD_RE = re.compile(r"(?<![a-z])title\s*=\s*([{\"])")
-_TEX_COMMAND_RE = re.compile(r"\\[a-z]+")
-_TITLE_SEPARATOR_RE = re.compile(r"[^0-9a-z]+")
-# An identifier ends where no letter or digit, and no dotted, slashed or hyphenated
-# continuation, follows: 10.1063/1.365928 cites neither 10.1063/1.3659281 nor
-# 10.1063/1.365928.5.
-_IDENTIFIER_END = r"(?![0-9a-z]|[./-][0-9a-z])"
+_ENTRY_START_RE = re.compile(r"(?m)^[ \t]*@[ \t]*(\w+)[ \t]*([{(])[ \t\r\n]*([^,\s]+)[ \t]*,")
+_TITLE_FIELD_RE = re.compile(r"(?<![a-z])title\s*=\s*(?=[{\"])")
+_TEX_ACCENT_RE = re.compile(r"\\(?:[\"'`^~=.]|[vuHckbdrt](?![A-Za-z]))")
+_TEX_COMMAND_RE = re.compile(r"\\([A-Za-z]+)")
+# Scripts without spaces between words: each character is a word of the title.
+_CJK_CHARACTER_RE = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
+# An identifier ends where no letter, digit or underscore, and no punctuated
+# continuation, follows; a PDF suffix may close it. 10.1063/1.365928 cites neither
+# 10.1063/1.3659281, 10.1063/1.365928.5 nor 10.1063/1.365928(99).
+_IDENTIFIER_END_PATTERN = r"(?:\.pdf|/pdf)?(?![0-9a-z_]|[-./:;()][0-9a-z])"
 _INVALID_ERR_CODE = "invalid_citation_accounting"
 
 
@@ -51,59 +56,97 @@ def find_citation_tokens(work):
     return tokens
 
 
+def _name_greek_command(match):
+    """A Greek letter command (\\alpha, \\varepsilon, \\Gamma) as its name; any other command as nothing."""
+    name = match.group(1).casefold()
+    name = name[3:] if name.startswith("var") else name
+    try:
+        unicodedata.lookup("GREEK SMALL LETTER " + name.upper())
+    except KeyError:
+        return " "
+    return " " + name + " "
+
+
 def _normalize_title(value):
-    """The words of a title, casefolded, without LaTeX commands, braces or math markers."""
-    return " ".join(_TITLE_SEPARATOR_RE.sub(" ", _TEX_COMMAND_RE.sub(" ", value.casefold())).split())
+    """The words of a title: casefolded, with accents removed, Greek letters named,
+    and other LaTeX commands, braces, math markers and punctuation dropped."""
+    value = _TEX_COMMAND_RE.sub(_name_greek_command, _TEX_ACCENT_RE.sub("", value))
+    characters = []
+    for character in unicodedata.normalize("NFKD", value.casefold()):
+        name = unicodedata.name(character, "")
+        if unicodedata.combining(character):
+            continue
+        if name.startswith("GREEK") and " LETTER " in name:
+            characters.append(" " + name.rsplit(" ", 1)[-1].casefold() + " ")
+        else:
+            characters.append(character if character.isalnum() else " ")
+    return " ".join("".join(characters).split())
 
 
-def _read_title_field(entry_source):
-    """The raw title field of one casefolded BibTeX entry, or an empty string."""
-    match = _TITLE_FIELD_RE.search(entry_source)
-    if match is None:
-        return ""
-    if match.group(1) == '"':
-        end = entry_source.find('"', match.end())
-        return entry_source[match.end():end if end >= 0 else len(entry_source)]
-    depth, position = 1, match.end()
-    while position < len(entry_source) and depth:
-        depth += {"{": 1, "}": -1}.get(entry_source[position], 0)
-        position += 1
-    return entry_source[match.end():position - 1]
+def _is_title_evidence(title):
+    """Whether a normalized title is specific enough to stand as a citation: two or
+    more words, counting each character of a script without spaces as a word."""
+    return len(_CJK_CHARACTER_RE.findall(title)) + len(_CJK_CHARACTER_RE.sub(" ", title).split()) > 1
+
+
+def _find_group_end(source, opener_index):
+    """The index after the group that opens at opener_index: a brace group, a
+    parenthesized BibTeX entry, or a quoted value, with braces balanced inside."""
+    opener, depth = source[opener_index], 0
+    for position in range(opener_index + 1, len(source)):
+        character = source[position]
+        if character == "{":
+            depth += 1
+        elif character == "}":
+            depth -= 1
+            if opener == "{" and depth < 0:
+                return position + 1
+        elif depth == 0 and character == {"(": ")", '"': '"'}.get(opener):
+            return position + 1
+    return len(source)
 
 
 def read_bibliography(data):
-    """{entries: {key: {text, title}} in file order, text} of a pinned bibliography, with
-    casefolded text and normalized titles. The bibliography is read for citation
-    evidence, not validated: undecodable bytes become replacement characters."""
+    """{entries: {key: {text, title}} in file order, text} of a pinned bibliography.
+    Each entry's text ends at its closing delimiter and is casefolded; its title is
+    normalized. The bibliography is read for citation evidence, not validated:
+    undecodable bytes become replacement characters."""
     source = data.decode("utf-8", errors="replace")
-    starts = list(_ENTRY_START_RE.finditer(source))
     entries = {}
-    for index, start in enumerate(starts):
+    for start in _ENTRY_START_RE.finditer(source):
         if start.group(1).casefold() in ("comment", "string", "preamble"):
             continue
-        end = starts[index + 1].start() if index + 1 < len(starts) else len(source)
-        entry_source = source[start.start():end].casefold()
-        entries[start.group(2)] = {"text": entry_source, "title": _normalize_title(_read_title_field(entry_source))}
+        entry_source = source[start.start():_find_group_end(source, start.start(2))].casefold()
+        title_field = _TITLE_FIELD_RE.search(entry_source)
+        title = ("" if title_field is None else
+                 entry_source[title_field.end() + 1:_find_group_end(entry_source, title_field.end()) - 1])
+        entries[start.group(3)] = {"text": entry_source, "title": _normalize_title(title)}
     return {"entries": entries, "text": source.casefold()}
 
 
-def _carries_identifier(text_value, token):
+def _has_identifier(text_value, token):
     version = "" if token.startswith("10.") else r"(?:v[0-9]+)?"
-    return re.search(r"(?<![0-9a-z])" + re.escape(token) + version + _IDENTIFIER_END, text_value) is not None
+    pattern = r"(?<![0-9a-z])" + re.escape(token) + version + _IDENTIFIER_END_PATTERN
+    return re.search(pattern, text_value) is not None
 
 
 def find_citing_entry(bibliography, works):
-    """(cited, key) for the versions of one work. In a BibTeX bibliography the key is
-    the first citing entry in file order; in another format it is None."""
+    """(cited, key) for the versions of one work. A BibTeX entry cites the work when it
+    carries an identifier or when its title equals the work's title, compared
+    without spaces. The key is the first citing entry in file order. Another format
+    cites the work when its text carries an identifier or contains the title; the
+    key is then None."""
     tokens = {token for work in works for token in find_citation_tokens(work)}
-    titles = {title for title in (_normalize_title(work["title"] or "") for work in works) if len(title.split()) > 1}
+    titles = {title.replace(" ", "") for title in (_normalize_title(work["title"] or "") for work in works)
+              if _is_title_evidence(title)}
     if not bibliography["entries"]:
-        words = " " + _normalize_title(bibliography["text"]) + " "
-        cited = any(_carries_identifier(bibliography["text"], token) for token in tokens) or any(
-            " " + title + " " in words for title in titles)
+        compact_text = _normalize_title(bibliography["text"]).replace(" ", "")
+        cited = any(_has_identifier(bibliography["text"], token) for token in tokens) or any(
+            title in compact_text for title in titles)
         return cited, None
     for key, entry in bibliography["entries"].items():
-        if entry["title"] in titles or any(_carries_identifier(entry["text"], token) for token in tokens):
+        compact_title = entry["title"].replace(" ", "")
+        if compact_title in titles or any(_has_identifier(entry["text"], token) for token in tokens):
             return True, key
     return False, None
 
@@ -179,7 +222,8 @@ def account_citations(records, bibliography_data, items):
             cited.append({"work_id": family, "key": item["cited_as"], "basis": "declared"})
         else:
             raise _build_item_refusal(index, "unknown_key", work_id=family, cited_as=item["cited_as"])
-    missing = [{"work_id": family, "reasons": reasons} for family, reasons in uncovered.items() if family not in accounted]
+    missing = [{"work_id": family, "reasons": reasons}
+               for family, reasons in uncovered.items() if family not in accounted]
     if missing:
         raise ResearchError("citation_accounting_incomplete", "Cite each fully read or search-cited work, or give "
                             "citation_accounting a reason for not citing it", {"works": missing})
