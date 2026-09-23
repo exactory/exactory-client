@@ -7,7 +7,7 @@ description: Evaluate a paper locally without submitting anything - citation int
 Read the [research constitution](../../RESEARCH_CONSTITUTION.md) and the
 [managed research workflow](../../docs/research-workflow.md). For a managed author
 study, inspect `status --summary`, `next --summary`, and current whole research `gate readiness` before
-manuscript assessment. Research readiness review precedes writing; the manuscript
+manuscript assessment. In a study with a selected source-limited contract (`select-publication-scope`), `gate manuscript-readiness` takes the place of `gate readiness` here; `gate readiness` still reports the complete objective. Research readiness review precedes writing; the manuscript
 review below is a separate assessment. An external paper uses the verification
 profile's exact-source preparation and field standards, independent of author
 innovation goals. A local inspection of unmanaged material remains possible, but

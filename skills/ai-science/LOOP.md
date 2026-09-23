@@ -23,7 +23,9 @@ review of the exact manuscript afterward. Scores do not replace either gate.
    return verified findings to the full objective with explicit deductions.
 6. Export the actual assessed candidate for independent readiness review. Retain
    original assessor provenance and assessment, record the review for its exact
-   digest, and run the current whole `gate readiness`.
+   digest, and run the current whole `gate readiness`. In a study with a selected
+   source-limited contract, record `scoped-review` and run
+   `gate manuscript-readiness` instead.
 
 Continue substantive cycles when the evidence or review requires them and
 resources permit. There is no fixed cycle count. A checkpoint or a complete form

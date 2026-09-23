@@ -78,7 +78,10 @@ delivery with `exactory-research export --kind readiness --destination PATH`.
 Provide the independent assessor its actual candidate, plan, sources, results,
 execution observations, and exact digest. Retain the real assessor provenance and
 original assessment. Record `review` for that candidate and run the current whole
-`exactory-research gate readiness`.
+`exactory-research gate readiness`. In a study with a selected source-limited
+contract (`select-publication-scope`), record `scoped-review` and run
+`gate manuscript-readiness` instead; `gate readiness` still reports the complete
+objective.
 
 Address findings with source corrections, appropriate validity checks, or further
 scoped cycles and renewed independent assessment. There is no cycle quota and no
