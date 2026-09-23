@@ -52,8 +52,8 @@ from that design.
   10.1103/PhysRevLett.115.217602 render `Bi$_{2}$Se$_{3}$` and
   `Cu$_{0.02}$Bi$_{2}$Se$_{3}$` and verify in `lookup`.
 - Dry accounting on a real study store (read-only snapshot): 32 accounted
-  works, all read in full; the selected searches cite 17 of them by purpose
-  (a work can count for two purposes). The
+  works, all read in full; the selected five-purpose searches cite 17 of
+  them. The
   bibliography of the deposited paper left 16 works neither cited nor
   explained. After the citation revision, 8 remain. One work counted as cited
   only through an entry that the LaTeX never cites; `lookup` now blocks such
