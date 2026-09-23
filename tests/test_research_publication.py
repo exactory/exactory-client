@@ -190,13 +190,15 @@ class ResearchPublicationTests(DevelopmentCase):
         for identifier in ("arxiv:math.CV/0601001v1", "arxiv:math.CV/0601001"):
             with self.subTest(identifier=identifier):
                 tokens = find_citation_tokens({"id": identifier, "aliases": [], "title": "An authored example"})
-                self.assertEqual(tokens, ["math.cv/0601001", "an authored example"])
+                self.assertEqual(tokens, ["math.cv/0601001"])
                 self.assertNotIn("math.c", tokens)
 
     def test_a_one_word_title_is_not_citation_evidence(self):
-        from research_harness.citations import find_citation_tokens
+        from research_harness.citations import find_citation_tokens, find_citing_entry, read_bibliography
         work = {"id": "arxiv:2601.00001v1", "aliases": ["doi:10.5281/zenodo.1"], "title": "Entropy"}
         self.assertEqual(find_citation_tokens(work), ["2601.00001", "10.5281/zenodo.1"])
+        self.assertEqual(find_citing_entry(read_bibliography(b"@book{entropy, title={Entropy}}\n"), [work]),
+                         (False, None))
 
     def remote_binding(self):
         api = self.publication()
