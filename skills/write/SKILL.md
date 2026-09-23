@@ -51,14 +51,28 @@ independent work within the user's limits.
   the entry cannot carry a hallucinated title, author list, or year.
   Hand-writing or hand-editing an entry is a protocol violation. To fix an
   entry, delete it and run `add` again.
+- Cite the published version of a paper. `add --arxiv-id` renders the
+  published version when the arXiv record or Crossref names one by the same
+  authors, and it prints which version it chose. Use `--preprint` only when the
+  preprint itself is the cited object. When the paper uses a value from one
+  preprint version, name that version where the value is used (for example
+  `arXiv:2209.06135v1`).
 - Every citation is load-bearing: tied in the text to a specific claim, with at
   least a phrase saying how it relates. A bare citation dump is padding, not
   coverage.
 - `exactory-check lookup` writes `.exactory/citation-check.json`. When it
   reports a blocking entry, fix the reference itself and run it again. Never
-  edit the report. The citation gate re-hashes `references.bib`, so a reference
-  edit made after the check is caught. The market's verifiers spot-check
-  bibliographies.
+  edit the report. The citation gate re-hashes `references.bib` and the
+  manuscript files, so an edit made after the check is caught. The market's
+  verifiers spot-check bibliographies.
+- `lookup` also reads the manuscript: `draft/paper.tex` and the files that it
+  includes (`--main` names another main file). An entry that no citation
+  command cites is blocking. `\nocite` does not count. Cite the entry where it
+  supports a statement, or remove it.
+- `lookup` lists each sentence that makes a prior-art statement without a
+  citation (classical, well known, established, previously, has been shown).
+  Cite the work that the sentence refers to, or state the point as this paper's
+  own.
 
 ## Stage 1: Evidence intake
 
@@ -106,6 +120,17 @@ human `research/literature.md` narrative:
 4. adjacent lines a reader expects the paper positioned against;
 5. recent work showing where the field is now.
 
+Each purpose reaches the manuscript as citations:
+
+- direct prior work, in the introduction and wherever a reader can take a
+  result as new;
+- the original source of each named law, model, method, dataset, metric, tool,
+  and baseline, where it is first used;
+- the theoretical background;
+- the adjacent lines, each with a phrase on how this work differs;
+- the current state of the field, and the application context that motivates
+  the question.
+
 Use the installed literature-review workflow. Changed sources or synthesis require
 current preparation and dependent research reassessment before writing continues.
 
@@ -117,9 +142,25 @@ While drafting:
 - Compile to PDF and fix LaTeX errors before the stage report.
 
 Pin the exact PDF, abstract, bibliography, claims, and optional sources with
-`exactory-research manuscript`, including actual claim-to-evidence mappings.
+`exactory-research manuscript`, including actual claim-to-evidence mappings and
+`citation_accounting`. The pin accounts for every work that the study read in
+full and every work that a selected five-purpose search cites. A BibTeX entry
+cites such a work when it carries the work's arXiv family or DOI, or a DOI of a
+stored alias, or has the work's title as its title. Pin once without
+`citation_accounting`: `citation_accounting_incomplete` lists the works that no
+entry cites, each with its reason (`fulltext`, `search:<purpose>`). Give one item
+for each listed work, and for no other work:
+
+- `{"work_id": ..., "cited_as": "<key>"}` when an entry cites the work but the
+  pin cannot see it, for example a published version that the store does not
+  link to the preprint that you read;
+- `{"work_id": ..., "reason": ...}` when the paper does not cite the work,
+  saying why the work does not bear on the paper.
 Stage report: present the compiled draft, evidence scope and limitations, citation
-findings, and where refreshed searches changed the text. The next step is
+findings, and where refreshed searches changed the text. Include a citation map:
+for each of the five purposes, the keys cited; for each named law, model,
+method, and tool, the key of its original source; and the accounted works that
+are not cited, with their reasons. The next step is
 the evaluate-and-improve loop (`/exactory:evaluate` under
 [LOOP.md](../ai-science/LOOP.md)); under the ai-science loop, ai-science
 advances there.

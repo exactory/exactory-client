@@ -4,8 +4,8 @@ import copy
 import json
 
 from development_fixtures import DevelopmentCase
-from integration_fixtures import (build_contribution_analysis, build_prediction, observe_run, observed_candidate,
-                                  record_contribution_analysis, record_measurement)
+from integration_fixtures import (account_fixture_citations, build_contribution_analysis, build_prediction, observe_run,
+                                  observed_candidate, record_contribution_analysis, record_measurement)
 from research_harness import publication, rounds
 from test_research_publication import ResearchPublicationTests
 
@@ -50,7 +50,8 @@ class RoundsCase(DevelopmentCase):
         bundle = self.mutate(publication.prepare_publication, {"id": identifier,
             "files": {"pdf": "draft/paper.pdf", "abstract": "draft/abstract.txt", "bibliography": "draft/references.bib",
                       "claims": "evidence/claims.json", "sources": None},
-            "claim_evidence": [{"claim_id": c["id"], "evidence": evidence} for c in claims]})["result"]
+            "claim_evidence": [{"claim_id": c["id"], "evidence": evidence} for c in claims],
+            "citation_accounting": account_fixture_citations(self)})["result"]
         for number in range(1, reviews + 1):
             self.mutate(publication.record_manuscript_review, self.manuscript_review(bundle, identifier + "-gate-" + str(number)))
         if measure:

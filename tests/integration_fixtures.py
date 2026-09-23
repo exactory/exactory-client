@@ -11,6 +11,23 @@ from research_harness.principles import preparation_policy
 from research_harness.storage import Store
 
 
+def account_fixture_citations(case, bibliography="draft/references.bib"):
+    """A reason for every accounted work that the fixture bibliography does not cite."""
+    from research_harness.citations import account_citations
+    from research_harness.errors import ResearchError
+    path = case.root / bibliography
+    if not path.is_file():
+        return []
+    try:
+        account_citations(case.store.snapshot()["records"], path.read_bytes(), None)
+    except ResearchError as error:
+        if error.code != "citation_accounting_incomplete":
+            raise
+        return [{"work_id": work["work_id"], "reason": "Authored fixture source outside the manuscript's argument."}
+                for work in error.details["works"]]
+    return []
+
+
 def build_review_core(decision="accept"):
     """The fixture's blind review core: every score below 4 names the change that would bring it to 4."""
     return {"summary": "The authored finite result is explicitly scoped.", "strengths": ["All four integers are enumerated."],
@@ -195,7 +212,8 @@ def prepare_manuscript(case, *, pdf="draft/paper.pdf", sources=None, stop=False)
     bundle = case.mutate(publication.prepare_publication, {"id": identifier,
         "files": {"pdf": pdf, "abstract": "draft/abstract.txt", "bibliography": "draft/references.bib",
                   "claims": "evidence/claims.json", "sources": sources},
-        "claim_evidence": [{"claim_id": "bound", "evidence": [case.result_evidence(case.execution_payload)]}]})["result"]
+        "claim_evidence": [{"claim_id": "bound", "evidence": [case.result_evidence(case.execution_payload)]}],
+        "citation_accounting": account_fixture_citations(case)})["result"]
     for number in (1, 2):
         case.mutate(publication.record_manuscript_review,
                     build_manuscript_review(case, bundle, identifier + "-reviewer-" + str(number)))

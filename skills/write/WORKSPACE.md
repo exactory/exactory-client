@@ -93,6 +93,9 @@ inapplicable dimensions require reasons. Distinguish fitted parameters, external
 inputs, derivations, and selection choices. A reproduction command documents how
 to check a claim; it does not show that an execution occurred. The ledger precedes
 the draft, and `manuscript.claim_evidence` binds each claim to actual evidence.
+`manuscript.citation_accounting` records, for each fully read or search-cited
+work that the bibliography does not name, the bibliography key that cites it
+or the reason it is not cited.
 
 ## learnings/iter_NNN.md: the learning ledger
 

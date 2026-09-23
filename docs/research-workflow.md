@@ -420,7 +420,11 @@ claim keeps its conditions and evidence. Add registry-verified citations as used
 neither a citation count nor a page count establishes research quality.
 
 Pin the exact PDF, abstract, bibliography, claim ledger, optional sources, and
-claim-to-evidence mappings with `manuscript`. Export its actual bytes for two
+claim-to-evidence mappings with `manuscript`. The pin also accounts for the
+literature that the study used. Every work with a full-text reading, and every
+work that a selected five-purpose search cites, is cited by the bibliography or
+has a `citation_accounting` item with a bibliography key or a reason
+(`citation_accounting_incomplete` lists the rest). Export its actual bytes for two
 distinct independent blind assessors. Save each unchanged original rubric JSON
 and assessor provenance, then wrap those artifact references with
 `manuscript-review`. The manuscript review is separate from the earlier research
