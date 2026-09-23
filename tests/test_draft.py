@@ -282,6 +282,11 @@ def _write_passing_citation_report(workspace_dir: Path) -> None:
         "blocking": 0,
         "nothing_verified": False,
         "ok": True,
+        "manuscript": {
+            "tex_sha256": {path.relative_to(bib_path.parent).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+                           for path in sorted(bib_path.parent.rglob("*.tex"))},
+            "uncited_keys": [], "prior_art_without_citation": [],
+        },
     }
     (workspace_dir / ".exactory" / "citation-check.json").write_text(
         json.dumps(report, indent=2)

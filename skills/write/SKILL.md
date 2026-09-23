@@ -51,14 +51,25 @@ independent work within the user's limits.
   the entry cannot carry a hallucinated title, author list, or year.
   Hand-writing or hand-editing an entry is a protocol violation. To fix an
   entry, delete it and run `add` again.
+- Cite the published version of a paper. `add --arxiv-id` renders the published
+  version when the arXiv record or a unique Crossref title and first-author
+  match names one, and prints which version it chose; `--preprint` keeps the
+  preprint when the preprint itself is the cited object. When the paper uses a
+  value read from one preprint version, name that version (for example
+  `arXiv:2209.06135v1`) where the value is used.
 - Every citation is load-bearing: tied in the text to a specific claim, with at
   least a phrase saying how it relates. A bare citation dump is padding, not
   coverage.
 - `exactory-check lookup` writes `.exactory/citation-check.json`. When it
   reports a blocking entry, fix the reference itself and run it again. Never
-  edit the report. The citation gate re-hashes `references.bib`, so a reference
-  edit made after the check is caught. The market's verifiers spot-check
-  bibliographies.
+  edit the report. The citation gate re-hashes `references.bib` and the LaTeX
+  under `draft/`, so an edit made after the check is caught. The market's
+  verifiers spot-check bibliographies.
+- `lookup` also reads the LaTeX under `draft/`. An entry that no citation
+  command cites is blocking: cite it where it supports a statement, or remove
+  it. A sentence that makes a prior-art statement (classical, well known,
+  established, previously, has been shown) without a citation is listed as a
+  warning: cite the work it refers to, or state the point as this paper's own.
 
 ## Stage 1: Evidence intake
 
@@ -106,6 +117,13 @@ human `research/literature.md` narrative:
 4. adjacent lines a reader expects the paper positioned against;
 5. recent work showing where the field is now.
 
+Each purpose reaches the manuscript as citations: direct prior work in the
+introduction and wherever a result could read as new; the original source of
+every named law, model, method, dataset, metric, tool, and baseline where it is
+first used; the theoretical background; the adjacent lines, each with a phrase
+on how this work differs; the current state of the field and the application
+context that motivates the question.
+
 Use the installed literature-review workflow. Changed sources or synthesis require
 current preparation and dependent research reassessment before writing continues.
 
@@ -117,9 +135,21 @@ While drafting:
 - Compile to PDF and fix LaTeX errors before the stage report.
 
 Pin the exact PDF, abstract, bibliography, claims, and optional sources with
-`exactory-research manuscript`, including actual claim-to-evidence mappings.
+`exactory-research manuscript`, including actual claim-to-evidence mappings and
+`citation_accounting`. Every work the study read in full, and every work that a
+selected five-purpose search cites, is cited by the pinned bibliography or
+carries a reason. The pin finds a citation by itself when an entry names the
+work's DOI or arXiv family, or a stored alias of it. For a published version
+that the store does not link to the preprint you read, give
+`{"work_id": ..., "cited_as": "<key>"}`; for a work the paper does not cite,
+give `{"work_id": ..., "reason": ...}` saying why it does not bear on the paper.
+`citation_accounting_incomplete` lists every remaining work with the reason it
+is accounted (`fulltext`, `search:<purpose>`).
 Stage report: present the compiled draft, evidence scope and limitations, citation
-findings, and where refreshed searches changed the text. The next step is
+findings, and where refreshed searches changed the text. Include a citation map:
+for each of the five purposes, the keys cited; for each named law, model,
+method, and tool, the key of its original source; and the accounted works that
+are not cited, with their reasons. The next step is
 the evaluate-and-improve loop (`/exactory:evaluate` under
 [LOOP.md](../ai-science/LOOP.md)); under the ai-science loop, ai-science
 advances there.

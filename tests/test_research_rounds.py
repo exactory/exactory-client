@@ -13,6 +13,7 @@ from research_harness.cli import status_report
 from research_harness.cohort_evidence import cohort_report
 from research_harness.errors import ResearchError
 from research_harness.evaluation import Evaluation
+from integration_fixtures import account_fixture_citations
 from rounds_fixtures import RoundsCase
 
 
@@ -742,7 +743,8 @@ class RoundAssessmentTests(RoundsCase):
         (self.root / "evidence/claims.json").write_text('[{"id": "wider", "claim": "Claim wider holds."}]')
         bundle = self.mutate(publication.prepare_publication, {"id": "paper-dropped", "files": {"pdf": "draft/paper.pdf",
             "abstract": "draft/abstract.txt", "bibliography": "draft/references.bib", "claims": "evidence/claims.json", "sources": None},
-            "claim_evidence": [{"claim_id": "wider", "evidence": [self.result_evidence(self.execution_payload)]}]})["result"]
+            "claim_evidence": [{"claim_id": "wider", "evidence": [self.result_evidence(self.execution_payload)]}],
+            "citation_accounting": account_fixture_citations(self)})["result"]
         progress = rounds.derive_progress(self.store.snapshot()["records"], evaluation, admission, bundle)
         self.assertEqual(progress["dropped_claim_ids"], ["bound"])
         without = rounds.derive_progress(self.store.snapshot()["records"], evaluation, admission, None)
@@ -806,7 +808,8 @@ class RoundGateTests(RoundsCase):
         (self.root / "evidence/claims.json").write_text('[{"id": "wider", "claim": "Claim wider holds."}]')
         bundle = self.mutate(publication.prepare_publication, {"id": "paper-dropped", "files": {"pdf": "draft/paper.pdf",
             "abstract": "draft/abstract.txt", "bibliography": "draft/references.bib", "claims": "evidence/claims.json", "sources": None},
-            "claim_evidence": [{"claim_id": "wider", "evidence": [self.result_evidence(self.execution_payload)]}]})["result"]
+            "claim_evidence": [{"claim_id": "wider", "evidence": [self.result_evidence(self.execution_payload)]}],
+            "citation_accounting": account_fixture_citations(self)})["result"]
         report = self.gate()
         self.assertEqual(self.gate_codes(report), ["round_claims_dropped", "round_assessment_missing"])
         self.assertEqual(report["obligations"][0]["claim_ids"], ["bound"])

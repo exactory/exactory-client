@@ -35,6 +35,13 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.43.0](docs/releases/0.43.0.md) makes a manuscript account for the
+literature that its study used. At the manuscript pin, every work that the study
+read in full, and every work that a five-purpose search cites, is cited or has a
+stated reason. `exactory-check add --arxiv-id` cites the published version when
+one exists, and `lookup` blocks bibliography entries that the manuscript never
+cites.
+
 Version 0.42.2 completes [0.42.0](docs/releases/0.42.0.md), which directs every
 research study at the challenges ahead of it. A study records those challenges
 before the objective: the ultimate goal of its field and nearer large goals, each
@@ -257,9 +264,13 @@ explicit legacy adoption, recovery, and native mathematical foundation delivery.
 **`exactory-check`** keeps citations honest. `add` fetches a reference from
 the registry (Crossref, DataCite, or the arXiv API) and writes the BibTeX
 entry itself. As a result, an entry cannot carry a wrong title or author
-list. `lookup` checks every reference against the registries and writes a
-report to `.exactory/citation-check.json`. `gate` checks that report offline
-and exits non-zero when the citation gate does not pass.
+list. `add --arxiv-id` cites the published version when the arXiv record or
+Crossref names one (`--preprint` keeps the preprint). `lookup` checks every
+reference against the registries, blocks entries that the LaTeX under `draft/`
+never cites, lists prior-art sentences without a citation as warnings, and
+writes a report to `.exactory/citation-check.json`. `gate` checks that report
+offline, including that the bibliography and the LaTeX are unchanged, and exits
+non-zero when the citation gate does not pass.
 
 **`exactory-draft`** manages the paper workspace. `init` creates the layout,
 and `deposit` sends the built PDF and sources to Zenodo. The sandbox API and

@@ -2139,6 +2139,16 @@
           }
         ]
       }
+    ],
+    "citation_accounting": [
+      {
+        "work_id": "arxiv:2601.00002",
+        "cited_as": "author2026published"
+      },
+      {
+        "work_id": "arxiv:2601.00003",
+        "reason": "Read to compare enumeration methods; the manuscript does not rely on it."
+      }
     ]
   },
   "manuscript-review": {

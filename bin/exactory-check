@@ -13,13 +13,20 @@ Three commands:
 The good status is verified. The blocking statuses are not_found, unresolved,
 title_mismatch, and author_mismatch. The warning statuses are year_mismatch,
 no_query, and network_error. A network failure is never treated as fabrication,
-and a report where nothing was verified does not pass the gate. Python standard
-library only.
+and a report where nothing was verified does not pass the gate.
+
+lookup also reads the LaTeX files under the bibliography's directory: an entry
+that no citation command cites is blocking, and a sentence that makes a prior-art
+statement (classical, well known, established, previously, has been shown, ...)
+without a citation is a warning. The report records the SHA-256 of those files,
+so the gate treats a report as stale when the manuscript changes. Python
+standard library only.
 """
 
 from __future__ import annotations
 
 import argparse
+import bisect
 import difflib
 import hashlib
 import json
@@ -901,6 +908,70 @@ def _read_refs_json_entries(path: Path, text: str) -> list[dict]:
     return entries
 
 
+# ------------------------------------------------ manuscript checks (lookup)
+
+_TEX_COMMENT_RE = re.compile(r"(?<!\\)%.*")
+# A citation command with its optional arguments and one or more key groups
+# (biblatex \cites{a}{b} takes several).
+_CITATION_COMMAND_RE = re.compile(
+    r"\\(?:[A-Za-z]*cite[A-Za-z]*|nocite)\*?\s*(?:\[[^\]]*\]\s*){0,2}((?:\{[^}]*\}\s*)+)")
+_KEY_GROUP_RE = re.compile(r"\{([^}]*)\}")
+_ABSTRACT_RE = re.compile(r"\\begin\{abstract\}.*?\\end\{abstract\}", re.DOTALL)
+_SENTENCE_END_RE = re.compile(r"[.!?](?=\s)|\n\s*\n")
+_PRIOR_ART_MARKER_RE = re.compile(
+    r"\b(?:classical|well[- ]known|established|previously|prior (?:work|studies)"
+    r"|earlier (?:work|studies)|(?:has|have) been (?:studied|proposed|reported|shown"
+    r"|demonstrated|treated|derived)|(?:is|are) (?:well )?known|not new)\b", re.IGNORECASE)
+_MAX_REPORTED_SENTENCE_CHARS = 300
+_EMPTY_MANUSCRIPT = {"tex_sha256": {}, "uncited_keys": [], "prior_art_without_citation": []}
+
+
+def _hash_tex_sources(root: Path) -> dict[str, str]:
+    """SHA-256 of every LaTeX file under root, keyed by its POSIX path relative to root."""
+    return {path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted(root.rglob("*.tex")) if path.is_file()}
+
+
+def _find_uncited_prior_art(text: str) -> list[tuple[int, str]]:
+    """(line, sentence) of each sentence that makes a prior-art statement and
+    carries no citation command. A heuristic for review, never a block."""
+    boundaries = [match.end() for match in _SENTENCE_END_RE.finditer(text)]
+    findings, reported_starts = [], set()
+    for marker in _PRIOR_ART_MARKER_RE.finditer(text):
+        index = bisect.bisect_right(boundaries, marker.start())
+        start = boundaries[index - 1] if index else 0
+        end = boundaries[index] if index < len(boundaries) else len(text)
+        if start in reported_starts or _CITATION_COMMAND_RE.search(text[start:end]):
+            continue
+        reported_starts.add(start)
+        sentence = " ".join(text[start:end].split())
+        findings.append((text.count("\n", 0, marker.start()) + 1,
+                         sentence[:_MAX_REPORTED_SENTENCE_CHARS]))
+    return findings
+
+
+def _check_manuscript(bib_path: Path, entries: list[dict]) -> dict:
+    """Read the LaTeX files under the bibliography's directory: which entries no
+    citation command cites, which prior-art sentences lack a citation, and the
+    hashes of the files read."""
+    root = bib_path.parent
+    tex_sha256 = _hash_tex_sources(root)
+    cited_keys, prior_art = set(), []
+    for relative_path in tex_sha256:
+        raw_text = (root / relative_path).read_bytes().decode("utf-8", errors="replace")
+        text = "\n".join(_TEX_COMMENT_RE.sub("", line) for line in raw_text.split("\n"))
+        for match in _CITATION_COMMAND_RE.finditer(text):
+            cited_keys.update(key.strip() for group in _KEY_GROUP_RE.findall(match.group(1))
+                              for key in group.split(",") if key.strip())
+        body = _ABSTRACT_RE.sub(lambda block: "\n" * block.group(0).count("\n"), text)
+        prior_art.extend({"file": relative_path, "line": line, "sentence": sentence}
+                         for line, sentence in _find_uncited_prior_art(body))
+    uncited_keys = ([] if not tex_sha256 or "*" in cited_keys else
+                    [entry["key"] for entry in entries if entry.get("key") not in cited_keys])
+    return {"tex_sha256": tex_sha256, "uncited_keys": uncited_keys,
+            "prior_art_without_citation": prior_art}
+
+
 def _print_lookup_summary(report: dict, out_path: Path) -> None:
     counts = report["counts"]
     print(f"Checked {len(report['entries'])} references: {counts['verified']} verified,"
@@ -910,6 +981,12 @@ def _print_lookup_summary(report: dict, out_path: Path) -> None:
             continue
         label = "blocking" if entry["status"] in _BLOCKING_STATUSES else "warning"
         print(f"  [{label}] {entry['status']}: {entry['key']}. {entry['detail']}")
+    for key in report["manuscript"]["uncited_keys"]:
+        print(f"  [blocking] uncited: {key}. No citation command in the manuscript cites"
+              " this entry. Cite it where it supports a statement, or remove it.")
+    for finding in report["manuscript"]["prior_art_without_citation"]:
+        print(f"  [warning] prior art without a citation: {finding['file']}:{finding['line']}:"
+              f" {finding['sentence']}")
     if report["nothing_verified"]:
         print("No reference was verified, so this report does not pass the gate.")
     print(f"The report is in {out_path}.")
@@ -953,9 +1030,12 @@ def _run_lookup(args: argparse.Namespace) -> None:
             "detail": result.get("detail", ""),
         })
 
+    manuscript = _EMPTY_MANUSCRIPT if args.refs_json else _check_manuscript(source_path, entries)
     verified_count = sum(1 for entry in report_entries if entry["status"] == "verified")
-    blocking_count = sum(1 for entry in report_entries if entry["status"] in _BLOCKING_STATUSES)
-    warning_count = sum(1 for entry in report_entries if entry["status"] in _WARNING_STATUSES)
+    blocking_count = (sum(1 for entry in report_entries if entry["status"] in _BLOCKING_STATUSES)
+                      + len(manuscript["uncited_keys"]))
+    warning_count = (sum(1 for entry in report_entries if entry["status"] in _WARNING_STATUSES)
+                     + len(manuscript["prior_art_without_citation"]))
     nothing_verified = verified_count == 0
     report = {
         "version": 1,
@@ -967,6 +1047,7 @@ def _run_lookup(args: argparse.Namespace) -> None:
         "blocking": blocking_count,
         "nothing_verified": nothing_verified,
         "ok": blocking_count == 0 and not nothing_verified,
+        "manuscript": manuscript,
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
@@ -1099,6 +1180,12 @@ def _run_gate(args: argparse.Namespace) -> None:
     if report.get("bib_sha256") != hashlib.sha256(references_path.read_bytes()).hexdigest():
         _exit_with_error("The citation report is stale because draft/references.bib"
                          f" changed. Run: {_GATE_LOOKUP_CMD}")
+    manuscript = report.get("manuscript")
+    if not isinstance(manuscript, dict) or manuscript.get("tex_sha256") != _hash_tex_sources(
+            references_path.parent):
+        _exit_with_error("The citation report is stale because the manuscript sources in"
+                         " draft/ changed, or the report predates the manuscript checks."
+                         f" Run: {_GATE_LOOKUP_CMD}")
     if report.get("blocking") != 0:
         _exit_with_error("The citation report shows blocking references. Correct"
                          f" them. Then run: {_GATE_LOOKUP_CMD}")

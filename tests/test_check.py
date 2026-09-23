@@ -442,6 +442,8 @@ class TestGateSubcommand(_CheckTestCase):
             "blocking": blocking,
             "nothing_verified": nothing_verified,
             "ok": blocking == 0 and not nothing_verified,
+            "manuscript": {"tex_sha256": _check._hash_tex_sources(self.scratch_dir / "draft"),
+                           "uncited_keys": [], "prior_art_without_citation": []},
         }
         self.report_path.write_text(json.dumps(report))
 
@@ -485,6 +487,13 @@ class TestGateSubcommand(_CheckTestCase):
         self.bib_path.write_text(_FIXTURE_BIB_TEXT)
         self._write_report(blocking=1, nothing_verified=False)
         self._gate(1)
+
+    def test_a_report_without_manuscript_checks_is_stale(self) -> None:
+        self._write_passing_state()
+        report = json.loads(self.report_path.read_text())
+        del report["manuscript"]
+        self.report_path.write_text(json.dumps(report))
+        self.assertIn("predates the manuscript checks", self._gate(1))
 
     def test_a_changed_manuscript_source_makes_the_report_stale(self) -> None:
         self.bib_path.write_text(_FIXTURE_BIB_TEXT)
@@ -639,6 +648,8 @@ class TestManuscriptChecks(_CheckTestCase):
         self.assertEqual(report["manuscript"]["uncited_keys"], [])
         self.assertTrue(report["ok"])
         report = self._lookup_tex("\\nocite{*}\n", None)
+        self.assertEqual(report["manuscript"]["uncited_keys"], [])
+        report = self._lookup_tex("See \\cites[p.~2]{example2024deterministic}{instance2023predicting}.\n", None)
         self.assertEqual(report["manuscript"]["uncited_keys"], [])
 
     def test_a_prior_art_sentence_without_a_citation_is_a_warning(self) -> None:

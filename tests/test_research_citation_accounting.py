@@ -7,38 +7,34 @@ from development_fixtures import DevelopmentCase
 from integration_fixtures import observed_candidate
 from research_fixtures import atom, entry
 from research_harness.acquisition import import_response
-from research_harness.citations import account_citations, accountable_works, parse_bibliography
+from research_harness.citations import account_citations, accountable_works, split_bibliography
 from research_harness.errors import ResearchError
 from research_harness.publication import prepare_publication
 
 
-def _fulltext_records(*numbers, aliases=None):
-    records = {"reading": {"reading-%d" % n: {"version_id": "arxiv:2601.%05dv1" % n, "depth": "fulltext"}
-                           for n in numbers}}
-    records["alias"] = {identifier: {"identifier": identifier, "assertions": [
-        {"work_id": work_id, "source_id": "source-1", "locator": None, "relation": "same_work"}]}
-        for identifier, work_id in (aliases or {}).items()}
-    return records
+def _fulltext_records(works):
+    """Full-text readings of each {version_id: (aliases, title)} work, with its work record."""
+    return {"reading": {"reading-" + version_id: {"version_id": version_id, "depth": "fulltext"} for version_id in works},
+            "work": {version_id: {"id": version_id, "aliases": aliases, "title": title}
+                     for version_id, (aliases, title) in works.items()}}
 
 
-class BibliographyParsingTests(unittest.TestCase):
-    def test_doi_arxiv_and_url_fields_name_work_families(self):
-        data = (b"@article{journal, title={A {Nested} title}, doi={10.1103/PhysRevB.105.085410}}\n"
+class BibliographySplitTests(unittest.TestCase):
+    def test_bibtex_entries_are_keyed_and_normalized(self):
+        data = (b"@article{journal, title={A {Nested}  Title}, doi={10.1103/PhysRevB.105.085410}}\n"
                 b"@misc{preprint,\n  eprint={2112.09662v2},\n  archivePrefix={arXiv}\n}\n"
-                b"@misc{linked, url={https://arxiv.org/abs/2402.14112v3}}\n"
-                b"@article{resolver, url = \"https://doi.org/10.1038/S41535-022-00535-6\"}\n"
-                b"@misc{datacite, doi={10.48550/arXiv.2607.02120}}\n"
-                b"@book{plain, title={No identifier}}\n"
                 b"@comment{ignored, doi={10.1/ignored}}\n")
-        self.assertEqual(parse_bibliography(data), {
-            "journal": {"doi:10.1103/physrevb.105.085410"}, "preprint": {"arxiv:2112.09662"},
-            "linked": {"arxiv:2402.14112"}, "resolver": {"doi:10.1038/s41535-022-00535-6"},
-            "datacite": {"arxiv:2607.02120"}, "plain": set()})
+        entries = split_bibliography(data)
+        self.assertEqual(sorted(entries), ["journal", "preprint"])
+        self.assertIn("a {nested} title", entries["journal"])
+        self.assertIn("10.1103/physrevb.105.085410", entries["journal"])
+        self.assertIn("eprint={2112.09662v2}, archiveprefix={arxiv} }", entries["preprint"])
+        self.assertEqual(split_bibliography(b"[1] A. Author, A plain reference list."), {})
 
 
 class AccountableWorkTests(unittest.TestCase):
     def test_full_readings_and_selected_search_citations_carry_their_reasons(self):
-        records = _fulltext_records(1, 2)
+        records = _fulltext_records({"arxiv:2601.00001v1": ([], ""), "arxiv:2601.00002v1": ([], "")})
         records["reading"]["abstract-3"] = {"version_id": "arxiv:2601.00003v1", "depth": "abstract"}
         records["reading"]["reading-1b"] = {"version_id": "arxiv:2601.00001v2", "depth": "fulltext"}
         records["search_selection"] = {"research:direct": {"search_id": "direct-2"},
@@ -50,27 +46,40 @@ class AccountableWorkTests(unittest.TestCase):
             "theory": {"cited_work_ids": ["doi:10.5555/cited"]},
             "verify-direct": {"cited_work_ids": ["arxiv:2601.00008v1"]}}
         self.assertEqual(accountable_works(records), {
-            "arxiv:2601.00001": ["fulltext", "search:direct"],
-            "arxiv:2601.00002": ["fulltext"],
-            "doi:10.5555/cited": ["search:direct", "search:theory"]})
+            "arxiv:2601.00001": {"reasons": ["fulltext", "search:direct"],
+                                 "version_ids": ["arxiv:2601.00001v1", "arxiv:2601.00001v2"]},
+            "arxiv:2601.00002": {"reasons": ["fulltext"], "version_ids": ["arxiv:2601.00002v1"]},
+            "doi:10.5555/cited": {"reasons": ["search:direct", "search:theory"], "version_ids": ["doi:10.5555/cited"]}})
 
 
 class AccountCitationsTests(unittest.TestCase):
     BIBLIOGRAPHY = (b"@misc{one, eprint={2601.00001}, archivePrefix={arXiv}}\n"
-                    b"@article{two, doi={10.5555/two}}\n@article{three, doi={10.5555/three}}\n")
+                    b"@article{two, doi={10.5555/two}}\n"
+                    b"@article{three, title={The Published Title}, doi={10.5555/three}}\n"
+                    b"@article{five, title={Coupled Transport in Thin Films}}\n")
 
     def records(self):
-        return _fulltext_records(1, 2, 3, 4, aliases={"doi:10.5555/two": "arxiv:2601.00002"})
+        return _fulltext_records({"arxiv:2601.00001v1": ([], "One"),
+                                  "arxiv:2601.00002v1": (["doi:10.5555/two"], "One"),
+                                  "arxiv:2601.00003v1": ([], "The preprint title"),
+                                  "arxiv:2601.00004v1": ([], "An unrelated fourth study"),
+                                  "arxiv:2601.00005v1": ([], "Coupled transport in thin films")})
 
-    def test_identifier_alias_declared_and_reason_account_for_every_work(self):
+    def test_bibliography_evidence_declared_keys_and_reasons_account_for_every_work(self):
         result = account_citations(self.records(), self.BIBLIOGRAPHY, [
             {"work_id": "arxiv:2601.00004v1", "reason": "Read only to choose the model class."},
             {"work_id": "arxiv:2601.00003", "cited_as": "three"}])
         self.assertEqual(result, {
-            "cited": [{"work_id": "arxiv:2601.00001", "key": "one", "basis": "identifier"},
-                      {"work_id": "arxiv:2601.00002", "key": "two", "basis": "alias"},
-                      {"work_id": "arxiv:2601.00003", "key": "three", "basis": "declared"}],
+            "cited": [{"work_id": "arxiv:2601.00001", "key": "one", "basis": "bibliography"},
+                      {"work_id": "arxiv:2601.00002", "key": "two", "basis": "bibliography"},
+                      {"work_id": "arxiv:2601.00003", "key": "three", "basis": "declared"},
+                      {"work_id": "arxiv:2601.00005", "key": "five", "basis": "bibliography"}],
             "not_cited": [{"work_id": "arxiv:2601.00004", "reason": "Read only to choose the model class."}]})
+
+    def test_a_non_bibtex_bibliography_cites_without_a_key(self):
+        records = _fulltext_records({"arxiv:2601.00001v1": ([], "One")})
+        result = account_citations(records, b"[1] A. Author, arXiv:2601.00001 (2026).", None)
+        self.assertEqual(result["cited"], [{"work_id": "arxiv:2601.00001", "key": None, "basis": "bibliography"}])
 
     def test_an_unaccounted_work_is_refused_with_its_reasons(self):
         with self.assertRaises(ResearchError) as raised:
@@ -80,13 +89,14 @@ class AccountCitationsTests(unittest.TestCase):
         self.assertEqual(raised.exception.details, {"works": [{"work_id": "arxiv:2601.00004", "reasons": ["fulltext"]}]})
 
     def test_a_manuscript_that_cites_every_work_needs_no_items(self):
-        records = _fulltext_records(1)
+        records = _fulltext_records({"arxiv:2601.00001v1": ([], "One")})
         self.assertEqual(account_citations(records, self.BIBLIOGRAPHY, None)["not_cited"], [])
 
     def test_invalid_items_are_refused(self):
         valid_three = {"work_id": "arxiv:2601.00003", "cited_as": "three"}
         valid_four = {"work_id": "arxiv:2601.00004", "reason": "Model choice only."}
         cases = {"not a list": {"work_id": "arxiv:2601.00004"},
+                 "not an object": [valid_three, valid_four, "arxiv:2601.00099"],
                  "unknown work": [valid_three, valid_four, {"work_id": "arxiv:2601.00099", "reason": "x"}],
                  "already cited": [valid_three, valid_four, {"work_id": "arxiv:2601.00001", "reason": "x"}],
                  "duplicate": [valid_three, valid_four, dict(valid_four)],
@@ -150,8 +160,8 @@ class ManuscriptPinTests(DevelopmentCase):
                    for n in range(3, 7)]
         bundle = self.mutate(prepare_publication, self.payload(reasons))["result"]
         self.assertEqual(bundle["citation_accounting"], {
-            "cited": [{"work_id": "arxiv:2601.00001", "key": "first", "basis": "identifier"},
-                      {"work_id": "arxiv:2601.00002", "key": "second", "basis": "alias"}],
+            "cited": [{"work_id": "arxiv:2601.00001", "key": "first", "basis": "bibliography"},
+                      {"work_id": "arxiv:2601.00002", "key": "second", "basis": "bibliography"}],
             "not_cited": reasons})
         saved = self.store.snapshot()["records"]["publication_bundle"]["paper-1"]
         self.assertEqual(saved["citation_accounting"], bundle["citation_accounting"])

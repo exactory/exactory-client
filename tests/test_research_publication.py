@@ -7,7 +7,8 @@ from pathlib import Path
 from research_harness.errors import ResearchError
 
 from development_fixtures import DevelopmentCase
-from integration_fixtures import approve_publication_stop, build_manuscript_review, build_review_core, observed_candidate
+from integration_fixtures import (account_fixture_citations, approve_publication_stop, build_manuscript_review,
+                                  build_review_core, observed_candidate)
 
 
 PLUGIN = Path(__file__).resolve().parents[1]
@@ -32,7 +33,8 @@ class ResearchPublicationTests(DevelopmentCase):
     def bundle_payload(self):
         return {"id": "paper-1", "files": {"pdf": "draft/paper.pdf", "abstract": "draft/abstract.txt",
             "bibliography": "draft/references.bib", "claims": "evidence/claims.json", "sources": None},
-            "claim_evidence": [{"claim_id": "bound", "evidence": [self.result_evidence(self.execution_payload)]}]}
+            "claim_evidence": [{"claim_id": "bound", "evidence": [self.result_evidence(self.execution_payload)]}],
+            "citation_accounting": account_fixture_citations(self)}
 
     def core(self, decision="accept"):
         return build_review_core(decision)
@@ -184,17 +186,17 @@ class ResearchPublicationTests(DevelopmentCase):
         self.assertEqual([o["version_id"] for o in obligations], [uncited])
 
     def test_an_arxiv_citation_token_keeps_a_subject_class_that_ends_in_v(self):
-        from research_harness.publication import _citation_tokens
+        from research_harness.citations import find_citation_tokens
         for identifier in ("arxiv:math.CV/0601001v1", "arxiv:math.CV/0601001"):
             with self.subTest(identifier=identifier):
-                tokens = _citation_tokens({"id": identifier, "aliases": [], "title": "An authored example"})
+                tokens = find_citation_tokens({"id": identifier, "aliases": [], "title": "An authored example"})
                 self.assertEqual(tokens, ["math.cv/0601001", "an authored example"])
                 self.assertNotIn("math.c", tokens)
 
     def test_a_one_word_title_is_not_citation_evidence(self):
-        from research_harness.publication import _citation_tokens
+        from research_harness.citations import find_citation_tokens
         work = {"id": "arxiv:2601.00001v1", "aliases": ["doi:10.5281/zenodo.1"], "title": "Entropy"}
-        self.assertEqual(_citation_tokens(work), ["2601.00001", "10.5281/zenodo.1"])
+        self.assertEqual(find_citation_tokens(work), ["2601.00001", "10.5281/zenodo.1"])
 
     def remote_binding(self):
         api = self.publication()

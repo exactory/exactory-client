@@ -4,12 +4,12 @@ import hashlib
 from pathlib import Path
 
 from .artifacts import ArtifactStore
+from .citations import account_citations, find_citation_tokens, normalize_bibliography
 from .execution_evidence import author_readiness_state
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
 from .graph import obligation
-from .identities import family_id
 from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .workspace import read_file, strict_json
 
@@ -44,10 +44,13 @@ def _claim_markers(claim):
 
 
 def prepare_publication(store, payload, *, expected_revision, request_id):
-    """Pin {id, files:{pdf,abstract,bibliography,claims,sources}, claim_evidence}."""
+    """Pin {id, files:{pdf,abstract,bibliography,claims,sources}, claim_evidence, citation_accounting?}.
+
+    Every fully read or search-cited work is cited by the bibliography or accounted for
+    (research_harness.citations); the bundle keeps the resulting accounting."""
     def prepare(records, value):
         artifacts = Evaluation(records, ArtifactStore(store.root))
-        fields(value, ("id", "files", "claim_evidence"))
+        fields(value, ("id", "files", "claim_evidence"), ("citation_accounting",))
         text(value["id"], "Publication bundle ID")
         fields(value["files"], tuple(FILE_TYPES))
         # contribution imports this module through predictions, so it is imported here.
@@ -98,7 +101,10 @@ def prepare_publication(store, payload, *, expected_revision, request_id):
                 raise ResearchError("publication_evidence_mismatch", "Every manuscript claim must link actual current candidate evidence")
         if seen != set(claim_ids):
             raise ResearchError("publication_claims_missing", "Map every manuscript claim to evidence")
-        bundle = dict(value, files=saved, candidate=report["candidate"], readiness_digest=digest(report),
+        accounting = account_citations(records, artifacts.read(saved["bibliography"]["artifact"]),
+                                       value.get("citation_accounting"))
+        bundle = dict(value, files=saved, citation_accounting=accounting, candidate=report["candidate"],
+                      readiness_digest=digest(report),
                       readiness_review=records["readiness_review"][records["development_selection"]["review"]["review_id"]],
                       review_inputs=report["review_inputs"], prepared_revision=expected_revision,
                       execution_observations=report["execution_observations"],
@@ -219,26 +225,6 @@ def record_manuscript_review(store, payload, *, expected_revision, request_id):
                              expected_revision=expected_revision, request_id=request_id)
 
 
-def _citation_tokens(work):
-    """The strings whose presence in a bibliography counts as a citation of this work.
-
-    An arXiv identifier contributes its family form, because a bibliography that cites one
-    version cites the work; every versioned spelling contains that form. `family_id` removes
-    only a validated version suffix, so an old-style subject class ending in V survives.
-    A one-word title is too common a string to stand as evidence of a citation."""
-    tokens = []
-    for identifier in [work["id"], *work["aliases"]]:
-        scheme, _, value = identifier.partition(":")
-        if scheme == "arxiv":
-            tokens.append(family_id(identifier).partition(":")[2].casefold())
-        elif scheme == "doi":
-            tokens.append(value.casefold())
-    title = " ".join((work["title"] or "").casefold().split())
-    if len(title.split()) > 1:
-        tokens.append(title)
-    return tokens
-
-
 def lineage_citation_obligations(records, artifacts, bundle):
     """Every lineage and classic entry is cited in the pinned bibliography (lineage-v1).
 
@@ -249,14 +235,13 @@ def lineage_citation_obligations(records, artifacts, bundle):
     from .principles import preparation_policy
     if preparation_policy(records) != LINEAGE:
         return []
-    bibliography_bytes = artifacts.read(bundle["files"]["bibliography"]["artifact"])
-    bibliography = " ".join(bibliography_bytes.decode("utf-8", errors="replace").casefold().split())
+    bibliography = normalize_bibliography(artifacts.read(bundle["files"]["bibliography"]["artifact"]))
     found = []
     for requirement in sorted(records.get("fulltext_requirement", {}).values(), key=lambda r: r["id"]):
         if requirement["profile"] != "research" or requirement["purpose"] not in ("lineage", "classic"):
             continue
         work = records["work"][requirement["version_id"]]
-        if not any(token in bibliography for token in _citation_tokens(work)):
+        if not any(token in bibliography for token in find_citation_tokens(work)):
             found.append(obligation("lineage_citation_missing", "Cite this lineage or classic entry in the manuscript bibliography.",
                                     version_id=requirement["version_id"], title=work["title"]))
     return found

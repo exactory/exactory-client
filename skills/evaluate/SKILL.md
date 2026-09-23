@@ -71,6 +71,10 @@ The report lands in `.exactory/citation-check.json`. Act on the statuses:
   report is a measurement; editing it is fabrication.
 - **Warnings** (`year_mismatch`, `no_query`, `network_error`): judgment calls. A
   network failure is never evidence of fabrication; re-run when the network returns.
+- **Manuscript findings** (inside a workspace, from the LaTeX under `draft/`): an
+  entry under `manuscript.uncited_keys` is blocking; cite it where it supports a
+  statement or remove it. Each `manuscript.prior_art_without_citation` sentence is
+  a warning: cite the work it refers to, or state the point as the paper's own.
 - `nothing_verified: true` means the report proves nothing. It is not a passing
   check: a production deposit prints the failing report as a `Citation report:`
   line and continues, so fix the references before that deposit.
