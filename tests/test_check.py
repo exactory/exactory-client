@@ -502,6 +502,160 @@ class TestGateSubcommand(_CheckTestCase):
         self.assertIn("Citation gate: pass", output)
 
 
+_FIXTURE_DOI_TITLE_KEY = "title:predicting citation impact with cohort percentiles"
+
+
+class TestCacheIdentity(_CheckTestCase):
+    """The cache answers an entry only under the identity it is resolved by."""
+
+    def test_a_doi_entry_ignores_a_preprint_record_cached_under_its_title(self) -> None:
+        # A replaced arXiv entry of the same paper left its record under the title key.
+        cache_path = self.out_path.parent / "citation-cache.json"
+        cache_path.parent.mkdir(parents=True)
+        cache_path.write_text(json.dumps({_FIXTURE_DOI_TITLE_KEY: {
+            "source": "arxiv", "title": "Predicting Citation Impact with Cohort Percentiles",
+            "titles": ["Predicting Citation Impact with Cohort Percentiles"],
+            "authors": ["Instance Carol", "Case Dana"], "year": 2022,
+        }}))
+        _check._open_url = _route_fixture_registry
+        doi_entry = _FIXTURE_BIB_TEXT.split("\n\n")[1]
+        report = self._lookup(["--bib", str(self._write_bib(doi_entry))], None)
+        self.assertEqual(report["entries"][0]["status"], "verified")
+
+    def test_records_are_cached_under_the_primary_identity_only(self) -> None:
+        _check._open_url = _route_fixture_registry
+        self._lookup(["--bib", str(self._write_bib(_FIXTURE_BIB_TEXT))], 1)
+        cache = json.loads((self.out_path.parent / "citation-cache.json").read_text())
+        self.assertEqual(sorted(cache), ["arxiv:2401.01234", "doi:10.1234/exact.5678"])
+
+
+def _crossref_work_text(title: str, doi: str = "10.1234/exact.5678",
+                        work_type: str = "journal-article",
+                        family: str = "Example") -> str:
+    return json.dumps({
+        "title": [title], "author": [{"given": "Alice", "family": family},
+                                     {"given": "Bob", "family": "Sample"}],
+        "issued": {"date-parts": [[2025]]}, "DOI": doi,
+        "container-title": ["Journal of Tests"], "type": work_type,
+        "volume": "7", "issue": "2", "page": "11-19",
+    })
+
+
+class TestRegistryMarkup(_CheckTestCase):
+    """Crossref and DataCite titles carry JATS/HTML inline markup."""
+
+    def _add_title(self, title: str) -> str:
+        def route(url: str, accept: str = "application/json"):
+            if url.startswith("https://api.crossref.org/works/"):
+                return 200, json.dumps({"message": json.loads(_crossref_work_text(title))})
+            raise AssertionError(f"unexpected URL in test: {url}")
+
+        _check._open_url = route
+        bib_path = self.scratch_dir / "draft" / "references.bib"
+        self._run_command(["add", "--bib", str(bib_path), "--doi", "10.1234/exact.5678"], None)
+        title_line = next(line for line in bib_path.read_text().splitlines() if line.startswith("  title={"))
+        return title_line[len("  title={"):-len("},")]
+
+    def test_inline_markup_renders_as_latex(self) -> None:
+        self.assertEqual(
+            self._add_title("Transport in Sb<sub>2</sub>Te<sub>3</sub> films with"
+                            " <i>ab initio</i> <scp>dft</scp> and x<sup>2</sup><b>!</b>"),
+            "Transport in Sb$_{2}$Te$_{3}$ films with \\textit{ab initio} \\textsc{dft}"
+            " and x$^{2}$\\textbf{!}")
+
+    def test_space_before_a_subscript_tag_is_removed_and_unknown_tags_dropped(self) -> None:
+        self.assertEqual(
+            self._add_title("Coupling in a Bi <sub>2</sub> Te <sub>3</sub> <span>nanoplate</span>"),
+            "Coupling in a Bi$_{2}$ Te$_{3}$ nanoplate")
+
+    def test_titles_match_across_markup_and_latex_forms(self) -> None:
+        registry_title = "Transport in Sb<sub>2</sub>Te<sub>3</sub> Thin Films"
+
+        def route(url: str, accept: str = "application/json"):
+            if url.startswith("https://api.crossref.org/works/"):
+                return 200, json.dumps({"message": json.loads(_crossref_work_text(registry_title))})
+            raise AssertionError(f"unexpected URL in test: {url}")
+
+        _check._open_url = route
+        for title in ("Transport in Sb$_2$Te$_3$ Thin Films", registry_title):
+            with self.subTest(title=title):
+                entry = ("@article{example2025transport,\n  title={" + title + "},\n"
+                         "  author={Alice Example and Bob Sample},\n  year={2025},\n"
+                         "  doi={10.1234/exact.5678}\n}\n")
+                self.out_path.parent.joinpath("citation-cache.json").unlink(missing_ok=True)
+                report = self._lookup(["--bib", str(self._write_bib(entry))], None)
+                self.assertEqual(report["entries"][0]["status"], "verified")
+
+
+_ARXIV_TITLE = "Deterministic Citation Verification for Automated Research"
+
+
+def _arxiv_feed(published_doi: str | None) -> str:
+    doi_element = (f'<arxiv:doi xmlns:arxiv="http://arxiv.org/schemas/atom">{published_doi}</arxiv:doi>'
+                   if published_doi else "")
+    return _ARXIV_ENTRY_TEXT.replace("</title>", "</title>" + doi_element)
+
+
+class TestVersionOfRecord(_CheckTestCase):
+    """add --arxiv-id cites the published version when the registries name one."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.bib_path = self.scratch_dir / "draft" / "references.bib"
+
+    def _route(self, published_doi: str | None, search_items: list[dict]):
+        def route(url: str, accept: str = "application/json"):
+            if url.startswith("https://export.arxiv.org/api/query"):
+                return 200, _arxiv_feed(published_doi)
+            if url.startswith("https://api.crossref.org/works?"):
+                return 200, json.dumps({"message": {"items": search_items}})
+            if url.startswith("https://api.crossref.org/works/"):
+                return 200, json.dumps({"message": json.loads(
+                    _crossref_work_text("Deterministic citation verification for automated research"))})
+            raise AssertionError(f"unexpected URL in test: {url}")
+        return route
+
+    def _add(self, argv_tail: list[str]) -> tuple[str, dict]:
+        stdout_text = self._run_command(["add", "--bib", str(self.bib_path), *argv_tail], None)
+        return stdout_text, _check._parse_bib(self.bib_path.read_text())[0]
+
+    def test_the_arxiv_record_doi_selects_the_published_version(self) -> None:
+        _check._open_url = self._route("10.1234/exact.5678", [])
+        stdout_text, entry = self._add(["--arxiv-id", "2401.01234"])
+        self.assertEqual(entry["type"], "article")
+        self.assertEqual(entry["doi"], "10.1234/exact.5678")
+        self.assertIn("published version", stdout_text)
+
+    def test_a_unique_crossref_title_and_first_author_match_selects_the_published_version(self) -> None:
+        item = json.loads(_crossref_work_text(_ARXIV_TITLE))
+        preprint = json.loads(_crossref_work_text(_ARXIV_TITLE, doi="10.9999/preprint.1",
+                                                  work_type="posted-content"))
+        _check._open_url = self._route(None, [preprint, item])
+        stdout_text, entry = self._add(["--arxiv-id", "2401.01234"])
+        self.assertEqual(entry["doi"], "10.1234/exact.5678")
+        self.assertIn("Crossref", stdout_text)
+
+    def test_a_different_first_author_or_an_ambiguous_match_keeps_the_preprint(self) -> None:
+        cases = {"other author": [json.loads(_crossref_work_text(_ARXIV_TITLE, family="Other"))],
+                 "two matches": [json.loads(_crossref_work_text(_ARXIV_TITLE)),
+                                 json.loads(_crossref_work_text(_ARXIV_TITLE, doi="10.1234/exact.9"))],
+                 "none": []}
+        for name, items in cases.items():
+            with self.subTest(case=name):
+                self.bib_path.unlink(missing_ok=True)
+                _check._open_url = self._route(None, items)
+                stdout_text, entry = self._add(["--arxiv-id", "2401.01234"])
+                self.assertEqual(entry["type"], "misc")
+                self.assertEqual(entry["eprint"], "2401.01234")
+                self.assertIn("--doi", stdout_text)
+
+    def test_preprint_flag_keeps_the_arxiv_entry(self) -> None:
+        _check._open_url = self._route("10.1234/exact.5678", [])
+        stdout_text, entry = self._add(["--arxiv-id", "2401.01234", "--preprint"])
+        self.assertEqual(entry["type"], "misc")
+        self.assertIn("10.1234/exact.5678", stdout_text)
+
+
 class TestParserStrictness(unittest.TestCase):
     def test_an_abbreviated_flag_is_rejected(self) -> None:
         with contextlib.redirect_stderr(io.StringIO()):
