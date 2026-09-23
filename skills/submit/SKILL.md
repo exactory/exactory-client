@@ -62,6 +62,13 @@ command prints "The server returned the existing open request for this paper." R
 line to the user. `/exactory:status` reads a request this account opened, so when the
 standing request belongs to another account, point the user at `webUrl` instead.
 
+When this account opened the paper's open verification and submits a later version (a
+newer Zenodo record of the same concept, or an arXiv id with a higher `vN`), the server
+closes that verification as superseded and opens one for the later version. The command
+prints "This submission replaced verification <id>". Report the new `id` and the replaced
+one to the user. The replaced verification keeps its page and verdicts, which judge the
+earlier version.
+
 Two failures need a different next step from the user:
 
 - The command reports that the source has no such record. Ask the user to check the
