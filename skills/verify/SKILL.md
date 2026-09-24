@@ -88,7 +88,11 @@ exactory submit --doi <doi>
 
 Use `--arxiv-id` for a bare arXiv id, and `--url` for a record URL such as
 `https://zenodo.org/records/21381192`. Each of them resolves to the paper's one DOI, so a
-version identifier joins the paper's standing verification instead of opening a second.
+version identifier returns the paper's open verification instead of opening a second.
+Only the account that opened that verification moves it to a later version.
+
+A task read or a verdict on a verification that moved to a later version fails with
+`verification_superseded` and the successor's id. Verify the successor instead.
 
 **Tell the user that you opened the verification, before you read the paper.** A
 verification is part of the public record, and a record you created is not a side effect

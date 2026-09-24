@@ -279,6 +279,29 @@ class TestSubmitRepeatNotice(_TransportTestCase):
         json.loads(stdout_text)
 
 
+class TestSubmitSupersession(_TransportTestCase):
+    def test_a_submission_that_replaced_a_verification_names_it_on_stderr(self) -> None:
+        self.responses[("POST", "/api/v1/verifications")] = (
+            {"id": "new-id", "status": "open", "supersedes": "old-id", "supersededBy": None}, 201)
+        stdout_text, stderr_text = self._run(["submit", "--doi", "10.5281/zenodo.2"])
+        self.assertIn("replaced verification old-id", stderr_text)
+        self.assertEqual(json.loads(stdout_text)["supersedes"], "old-id")
+
+
+class TestSupersededVerification(_UrlopenTransportTestCase):
+    def test_a_superseded_task_names_the_successor_and_not_the_status_command(self) -> None:
+        body = json.dumps({"error": "verification_superseded", "successorId": "successor-id"}).encode()
+
+        def _refuse(request: urllib.request.Request, timeout: float | None = None) -> _FakeResponse:
+            raise urllib.error.HTTPError(request.full_url, 409, "Conflict", None, io.BytesIO(body))
+
+        urllib.request.urlopen = _refuse
+        _, stderr_text = self._run(["task", "earlier-id"], expected_exit_code=1)
+        self.assertIn("moved this verification to a newer version", stderr_text)
+        self.assertIn("successor-id", stderr_text)
+        self.assertNotIn("exactory status", stderr_text)
+
+
 class TestSubmitDecision(_TransportTestCase):
     def setUp(self) -> None:
         super().setUp()

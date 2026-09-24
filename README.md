@@ -35,6 +35,13 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.45.0](docs/releases/0.45.0.md) reports the server's new rule for
+paper versions: when the account that opened a paper's open verification
+submits a later version, the verification moves to that version, and the
+earlier one closes as superseded. `exactory submit` names the replaced
+verification, and a task or verdict on a superseded verification names its
+successor.
+
 Version [0.44.0](docs/releases/0.44.0.md) lets a study continue without a source
 that it cannot obtain, through an audited `defer-source` decision, and publish
 the supported part of an open objective under an explicit source-limited
