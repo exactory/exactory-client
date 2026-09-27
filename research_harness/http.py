@@ -44,6 +44,8 @@ _COMPACT_SECRET_NAMES = {"apikey", "accesskey", "accesskeyid", "accesstoken", "a
                          "bearertoken", "clientsecret", "clientkey", "refreshtoken", "sessiontoken", "subscriptionkey"}
 _SAFE_HEADERS = {"content-type", "content-length", "content-range", "content-encoding", "retry-after", "etag", "last-modified", "date"}
 _RETRY = {408, 429, 500, 502, 503, 504}
+# Largest response body kept in memory; arXiv PDFs with many figures exceed 32 MiB.
+DEFAULT_MAX_RESPONSE_BYTES = 128 * 1024 * 1024
 # Supplement older Python IANA tables. Protocol, translation and deprecated
 # prefixes are conservatively outside the untrusted literature download scope.
 _SPECIAL_NETWORKS = tuple(ipaddress.ip_network(value) for value in (
@@ -238,7 +240,7 @@ class _PinnedConnection(http.client.HTTPSConnection):
 
 class HttpClient:
     def __init__(self, *, transport=None, resolver=None, clock=None, timeout=30,
-                 total_timeout=120, max_bytes=32 * 1024 * 1024, max_redirects=5,
+                 total_timeout=120, max_bytes=DEFAULT_MAX_RESPONSE_BYTES, max_redirects=5,
                  max_retries=2, max_retry_after=60, user_agent=None):
         for number in (timeout, total_timeout, max_retry_after):
             if not isinstance(number, (float, int)) or not math.isfinite(number) or number <= 0:

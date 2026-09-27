@@ -51,7 +51,7 @@ def parse_mapped(data, media_type, mappings):
     except (UnicodeError, ValueError, ResearchError) as error:
         raise ResearchError("invalid_import", "Import response is not valid UTF-8 or JSON") from error
 
-    def value(locator):
+    def read_field(locator):
         if media_type == "application/json":
             return _pointer(document, locator)
         if (not isinstance(locator, dict) or set(locator) != {"start", "end"}
@@ -65,7 +65,7 @@ def parse_mapped(data, media_type, mappings):
     for index, mapping in enumerate(mappings):
         if not isinstance(mapping, dict) or not {"id", "title"} <= set(mapping) or not set(mapping) <= allowed:
             raise ResearchError("invalid_import", "Each mapping must identify id/title and only supported fields")
-        fields = {key: value(locator) for key, locator in mapping.items()}
+        fields = {key: read_field(locator) for key, locator in mapping.items()}
         identifier = fields["id"]
         try:
             identifier = normalize_identifier(identifier)
