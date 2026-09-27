@@ -3,9 +3,9 @@
 configuration/research contains {profile, target, constitution,
 preparation_policy}. Policy bytes are archived in constitution/{sha256};
 research_objective/{id} fixes the full objective independently of branches;
-objective_lineage/{id} records a widening admitted by a round, or a narrowing
-the user authorized with an artifact (relation "narrowed"), with the
-predecessor objective id, so the earlier objective stays retained.
+objective_lineage/{id} records a widening admitted by a round, or a change the
+user authorized with a pinned context file (relation "user_authorized"), with
+the predecessor objective id, so the earlier objective stays retained.
 The preparation policy decides which population members owe structured reading.
 A caller that names none gets the profile's default, lineage-v1 for research and
 sampled-v1 for verification; a configuration without the field is exhaustive-v1.
@@ -15,14 +15,14 @@ dependencies require new current assessments.
 
 import hashlib
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
 from .graph import main_captures, obligation, validate_target
-from .operations import fields, immutable_record, prepared_mutation, profile_name, text
+from .operations import fields, immutable_record, normalized_text, prepared_mutation, profile_name, text
 from .source_links import captured_source, exact_work
 
 
@@ -137,11 +137,13 @@ def _configuration(records):
 def set_target(store, payload, *, expected_revision, request_id):
     """Set {target, reason}, with {authorization} for a changed research objective.
 
-A fixed complete research objective changes only with `authorization`, a checked
-nonempty artifact that holds the user's explicit instruction. The earlier
-objective stays retained as the predecessor of the new one. Verification
-repinning is explicit and leaves mismatching literature scope pending until
-set_roots selects the same target. It preserves earlier events.
+A fixed complete research objective changes only with `authorization`: the id of
+a pinned local artifact under context/ that holds the user's explicit
+instruction and authorized no earlier change. The harness checks the pin and its
+bytes, not who wrote them. The earlier objective stays retained as the
+predecessor of the new one. Verification repinning is explicit and leaves
+mismatching literature scope pending until set_roots selects the same target.
+It preserves earlier events.
 """
     artifacts = ArtifactStore(store.root)
 
@@ -169,13 +171,39 @@ set_roots selects the same target. It preserves earlier events.
 def _narrowing(records, artifacts, current, value):
     """The lineage record of a user-authorized change of the fixed research objective."""
     target = value["target"]
-    if target is None or target["id"] in records.get("research_objective", {}) or target["statement"] == current["statement"]:
+    if (target is None or target["id"] in records.get("research_objective", {})
+            or normalized_text(target["statement"]) == normalized_text(current["statement"])):
         raise ResearchError("objective_locked", "A changed objective needs a new identity and a changed statement")
-    if not Evaluation(records, artifacts).read(value["authorization"]).strip():
-        raise ResearchError("invalid_target", "Record the user's authorization as a nonempty checked artifact")
-    record = {"id": target["id"], "predecessor": current["id"], "relation": "narrowed", "reason": value["reason"],
-              "authorization": value["authorization"], "round_id": None}
+    pinned = records.get("local_artifact", {}).get(value["authorization"]) if isinstance(value["authorization"], str) else None
+    if pinned is None or PurePosixPath(pinned["path"]).parts[0] != "context":
+        raise ResearchError("invalid_target", "Name the pinned context/ file that holds the user's instruction")
+    instruction = Evaluation(records, artifacts).read(pinned["artifact"])
+    if not instruction.strip():
+        raise ResearchError("invalid_target", "The user's instruction file is empty")
+    used = {r["authorization"]["artifact"]["sha256"] for r in records.get("objective_lineage", {}).values() if r.get("relation") == "user_authorized"}
+    if pinned["artifact"]["sha256"] in used:
+        raise ResearchError("objective_locked", "Each objective change needs its own instruction from the user")
+    authorization = {"id": pinned["id"], "path": pinned["path"], "artifact": pinned["artifact"],
+                     "text": instruction.decode("utf-8", "replace")}
+    record = {"id": target["id"], "predecessor": current["id"], "relation": "user_authorized", "reason": value["reason"],
+              "authorization": authorization, "round_id": None}
     return [immutable_record(records, "objective_lineage", target["id"], record)]
+
+
+def objective_changes(records):
+    """The user-authorized changes in the current objective's lineage, oldest first, for reviewers."""
+    objectives = records.get("research_objective", {})
+    current = records.get("configuration", {}).get("research", {}).get("target")
+    changes = []
+    while current is not None:
+        link = records.get("objective_lineage", {}).get(current["id"])
+        if link is None:
+            break
+        if link.get("relation") == "user_authorized":
+            changes.append({"from": objectives[link["predecessor"]], "to": current, "reason": link["reason"],
+                            "authorization": link["authorization"]})
+        current = objectives.get(link["predecessor"])
+    return changes[::-1]
 
 
 def widen_objective(records, target, lineage, round_id):
@@ -195,7 +223,7 @@ def widen_objective(records, target, lineage, round_id):
     _validate_objective(target)
     if config["profile"] != "research" or current is None or lineage["previous_id"] != current["id"]:
         raise ResearchError("objective_locked", "Widen the current complete objective through its recorded predecessor")
-    if target["statement"] == current["statement"] or target["id"] in records.get("research_objective", {}):
+    if normalized_text(target["statement"]) == normalized_text(current["statement"]) or target["id"] in records.get("research_objective", {}):
         raise ResearchError("objective_locked", "A widened objective needs a new identity and a wider statement")
     record = {"id": target["id"], "predecessor": current["id"], "containment": lineage["containment"], "round_id": round_id}
     return [("configuration", "research", dict(config, target=target)),

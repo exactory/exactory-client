@@ -24,6 +24,8 @@ from .evidence import digest
 from .execution_accounting import require_accounted_usage
 from .graph import obligation
 from .operations import fields, immutable_record, prepared_mutation, strings, text, timestamp
+from .operations import normalized_text as _normalized
+from .principles import objective_changes
 from .reading import validate_read_evidence
 from .source_links import captured_source, original_identity, read_locator, validate_link
 from .synthesis import synthesis_state
@@ -76,10 +78,6 @@ def _number(value, name, positive=False, integer=False):
         valid = False
     if not valid:
         raise ResearchError("invalid_development", name + " must be a finite " + ("positive" if positive else "nonnegative") + " number")
-
-
-def _normalized(value):
-    return " ".join(value.casefold().split())
 
 
 def _unique(values):
@@ -955,7 +953,7 @@ def _assess(context, value, *, historical=False):
                 workflow.append(obligation("resource_limit_exceeded", "Retain the result and the actual overrun without satisfying the admitted resource contract.",
                                               admission_id=admission["id"], reserved_units=admission["reserved_units"], used_units=units))
                 remaining.append("Resolve the exceeded resource contract for run " + admission["id"] + ".")
-    # A full scope of an ancestor objective is a special case of the widened current one.
+    # A full scope of an ancestor objective (narrower before a widening, wider before a user-authorized change) is not a full scope of the current one.
     if value["scope"]["kind"] != "full" or plan["payload"]["scope"]["kind"] != "full" or plan["payload"]["objective"] != context.objective:
         objective_progress.append(obligation("objective_scope_incomplete", "A special case contributes to the fixed complete objective but cannot close it."))
         remaining = list(dict.fromkeys(remaining + plan["payload"]["scope"]["remaining_obligations"]))
@@ -1145,6 +1143,9 @@ def _candidate(context):
                  "strategy_accounts_digest": digest(context.records.get("strategy_account", {})),
                  "source_records_digest": digest(context.sources),
                  "authors": cycle_authors(context.records)}
+    changes = objective_changes(context.records)
+    if changes:
+        candidate["objective_changes"] = changes
     candidate["digest"] = digest(candidate)
     context.prerequisites = dict(assessment["prerequisites"],
                                 workflow=_unique(assessment["prerequisites"]["workflow"] + workflow))

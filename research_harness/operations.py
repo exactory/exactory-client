@@ -25,6 +25,11 @@ def text(value, name, *, code="invalid_input"):
     return value
 
 
+def normalized_text(value):
+    """Casefolded text with every run of whitespace collapsed to one space, for comparing statements."""
+    return " ".join(value.casefold().split())
+
+
 def strings(value, name, *, nonempty=False, code="invalid_input"):
     if not isinstance(value, list) or nonempty and not value:
         raise ResearchError(code, name + " must be an array" + (" with at least one entry" if nonempty else ""))

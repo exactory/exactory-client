@@ -1064,6 +1064,7 @@ class DevelopmentTests(DevelopmentCase):
         self.assertEqual(records["configuration"]["research"]["target"], target)
         self.assertEqual(records["research_objective"][self.objective["id"]], self.objective)
         self.assertEqual(records["objective_lineage"][target["id"]]["predecessor"], self.objective["id"])
+        self.assertNotIn("objective_changes", self.candidate())
         # The widened objective changes the configuration digest every synthesis section and every
         # earlier assessment bound, so the synthesis is recorded again and the earlier cycle is
         # assessed again under the current objective before it is inherited.
@@ -1101,9 +1102,11 @@ class DevelopmentTests(DevelopmentCase):
         self.mutate(api.assess_cycle, self.assessment(plan, execution))
         self.save_checkpoint()
         narrow = {"kind": "objective", "id": "square-bound-only", "statement": "For every integer n in [0, 3], n squared is at most 9."}
-        authorization = self.artifacts.put(b"The user: drop the equality clause from the objective.\n", "text/markdown; charset=utf-8")
+        (self.root / "context").mkdir(exist_ok=True)
+        (self.root / "context" / "user.md").write_text("The user: drop the equality clause from the objective.\n", encoding="utf-8")
+        self.mutate(self.api("integration").pin_artifact, {"id": "user-instruction", "path": "context/user.md", "media_type": "text/markdown; charset=utf-8"})
         self.mutate(self.api("principles").set_target,
-                    {"target": narrow, "reason": "The user authorized the narrower objective.", "authorization": authorization})
+                    {"target": narrow, "reason": "The user authorized the narrower objective.", "authorization": "user-instruction"})
         records = self.store.snapshot()["records"]
         self.assertEqual(records["objective_lineage"][narrow["id"]]["predecessor"], self.objective["id"])
         # As after a widening, the synthesis and every earlier assessment are recorded again under the current objective.
@@ -1125,11 +1128,20 @@ class DevelopmentTests(DevelopmentCase):
                                        "evidence": [self.result_evidence(execution)], "assumptions": ["n is an integer in the stated finite range."],
                                        "deduction": "The enumeration up to 3 establishes the bound that the narrowed objective keeps."}])
         successor["literature"]["scope"] = scope
+        # The assessment made under the earlier objective is stale and cannot be inherited.
+        unrefreshed = copy.deepcopy(successor)
+        unrefreshed["predecessor"] = "checkpoint-1"
+        unrefreshed["inheritance"] = [dict(successor["inheritance"][0], checkpoint_id="checkpoint-1", assessment_id="assessment-1")]
+        self.assert_error("inherited_result_stale", lambda: self.mutate(api.plan_cycle, unrefreshed))
         self.mutate(api.plan_cycle, successor)
         self.assertEqual(self.store.snapshot()["records"]["cycle"]["cycle-2"]["status"], "planned")
         stale_plan = self.plan("cycle-3")
         stale_plan.update(question="A plan that still carries the earlier objective.", distinguishing_test="Earlier objective test.")
         self.assert_error("objective_mismatch", lambda: self.mutate(api.plan_cycle, stale_plan))
+        # Reviewers see the change: the readiness candidate carries it with the user's words.
+        changes = self.candidate()["objective_changes"]
+        self.assertEqual([(c["from"]["id"], c["to"]["id"]) for c in changes], [(self.objective["id"], narrow["id"])])
+        self.assertEqual(changes[0]["authorization"]["text"], "The user: drop the equality clause from the objective.\n")
 
     def test_an_unlinked_unchanged_or_malformed_objective_is_refused(self):
         # Containment is the author's recorded assertion, judged by the round reviewer; the harness
@@ -1143,6 +1155,8 @@ class DevelopmentTests(DevelopmentCase):
         self.assert_error("objective_locked", lambda: principles.widen_objective(records, unlinked,
             {"previous_id": "someone-else", "containment": "x"}, "round-2"))
         self.assert_error("objective_locked", lambda: principles.widen_objective(records, dict(self.objective, id="same"), linked, "round-2"))
+        spaced = dict(self.objective, id="spaced", statement=" " + self.objective["statement"].upper() + " ")
+        self.assert_error("objective_locked", lambda: principles.widen_objective(records, spaced, linked, "round-2"))
         reused = {"kind": "objective", "id": self.objective["id"], "statement": "For every integer n in [0, 5], n squared is at most 25."}
         self.assert_error("objective_locked", lambda: principles.widen_objective(records, reused, linked, "round-2"))
         wider = {"kind": "objective", "id": "wider", "statement": "For every integer n in [0, 5], n squared is at most 25."}
