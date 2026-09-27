@@ -35,6 +35,10 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.46.0](docs/releases/0.46.0.md) captures full-text originals up to
+128 MiB (was 32 MiB), so arXiv PDFs with large figures can be read in full, and
+keeps the publication date of every record in a mapped import.
+
 Version [0.45.0](docs/releases/0.45.0.md) reports the server's new rule for
 paper versions: when the account that opened a paper's open verification
 submits a later version, the verification moves to that version, and the
