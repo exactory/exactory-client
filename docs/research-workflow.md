@@ -229,7 +229,11 @@ changes. `gate preparation` owes `grand_challenge_missing` until it exists.
 Set the complete original objective while still in `literature`, written against
 that record. A branch's
 special case, restricted parameter range, or conditional hypothesis belongs in
-its cycle scope and leaves the original objective intact. Develop the following
+its cycle scope and leaves the original objective intact. Only the user can
+change a fixed objective: record their explicit instruction as an artifact and
+pass it as `authorization` to `target`. The earlier objective stays retained as
+the predecessor, and the synthesis and earlier assessments are recorded again
+under the new objective. Develop the following
 source-grounded synthesis before entering `ideate`:
 
 - `standards`: retain the cohort doctrine, applicable field and article type,

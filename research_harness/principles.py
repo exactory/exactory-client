@@ -3,7 +3,8 @@
 configuration/research contains {profile, target, constitution,
 preparation_policy}. Policy bytes are archived in constitution/{sha256};
 research_objective/{id} fixes the full objective independently of branches;
-objective_lineage/{id} records a widening admitted by a round, with the
+objective_lineage/{id} records a widening admitted by a round, or a narrowing
+the user authorized with an artifact (relation "narrowed"), with the
 predecessor objective id, so the earlier objective stays retained.
 The preparation policy decides which population members owe structured reading.
 A caller that names none gets the profile's default, lineage-v1 for research and
@@ -134,28 +135,47 @@ def _configuration(records):
 
 
 def set_target(store, payload, *, expected_revision, request_id):
-    """Set {target, reason}. A fixed complete research objective cannot narrow.
+    """Set {target, reason}, with {authorization} for a changed research objective.
 
-Verification repinning is explicit and leaves mismatching literature scope
-pending until set_roots selects the same target. It preserves earlier events.
+A fixed complete research objective changes only with `authorization`, a checked
+nonempty artifact that holds the user's explicit instruction. The earlier
+objective stays retained as the predecessor of the new one. Verification
+repinning is explicit and leaves mismatching literature scope pending until
+set_roots selects the same target. It preserves earlier events.
 """
     artifacts = ArtifactStore(store.root)
 
     def prepare(records, value):
-        fields(value, ("target", "reason"))
+        fields(value, ("target", "reason"), ("authorization",))
         text(value["reason"], "Target decision reason")
         config = _configuration(records)
-        if config["profile"] == "research" and config["target"] is not None and config["target"] != value["target"]:
+        current = config["target"]
+        changed = config["profile"] == "research" and current is not None and current != value["target"]
+        if changed and "authorization" not in value:
             raise ResearchError("objective_locked", "Keep the complete original objective; record special cases as separate branches")
+        if not changed and "authorization" in value:
+            raise ResearchError("invalid_target", "Authorization applies only to a change of the fixed research objective")
         _validate_target(records, artifacts, config["profile"], value["target"])
         updated = dict(config, target=value["target"])
-        changes = [("configuration", "research", updated)]
+        changes = [("configuration", "research", updated)] + (_narrowing(records, artifacts, current, value) if changed else [])
         if config["profile"] == "research" and value["target"] is not None:
             changes.append(immutable_record(records, "research_objective", value["target"]["id"], value["target"]))
         return changes, updated
 
     return prepared_mutation(store, "research.target", payload, prepare,
                              expected_revision=expected_revision, request_id=request_id)
+
+
+def _narrowing(records, artifacts, current, value):
+    """The lineage record of a user-authorized change of the fixed research objective."""
+    target = value["target"]
+    if target is None or target["id"] in records.get("research_objective", {}) or target["statement"] == current["statement"]:
+        raise ResearchError("objective_locked", "A changed objective needs a new identity and a changed statement")
+    if not Evaluation(records, artifacts).read(value["authorization"]).strip():
+        raise ResearchError("invalid_target", "Record the user's authorization as a nonempty checked artifact")
+    record = {"id": target["id"], "predecessor": current["id"], "relation": "narrowed", "reason": value["reason"],
+              "authorization": value["authorization"], "round_id": None}
+    return [immutable_record(records, "objective_lineage", target["id"], record)]
 
 
 def widen_objective(records, target, lineage, round_id):
