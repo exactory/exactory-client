@@ -38,6 +38,37 @@ class PrinciplesTests(LiteratureCase):
         self.assertEqual(self.store.snapshot()["records"]["research_objective"]["objective-1"], target)
         self.assertTrue(api.configuration_report(self.store, "research")["ready"])
 
+    def test_an_authorized_narrowing_keeps_the_earlier_objective_as_predecessor(self):
+        api = self.api()
+        original = {"kind": "objective", "id": "objective-1", "statement": "Prove the bound for every integer from 5 through 15, and find its extremal cases."}
+        self.mutate(api.initialize_research, {"profile": "research", "target": original, "preparation_policy": "exhaustive-v1"})
+        narrow = {"kind": "objective", "id": "objective-2", "statement": "Prove the bound for every integer from 5 through 15."}
+        authorization = self.artifacts.put(b"The user: narrow the objective to the bound itself.\n", "text/markdown; charset=utf-8")
+        payload = {"target": narrow, "reason": "The user authorized dropping the extremal cases.", "authorization": authorization}
+        self.assert_error("objective_locked", lambda: self.mutate(api.set_target, {"target": narrow, "reason": "No authorization."}))
+        empty = self.artifacts.put(b"  \n", "text/markdown; charset=utf-8")
+        self.assert_error("invalid_target", lambda: self.mutate(api.set_target, dict(payload, authorization=empty)))
+        self.assert_error("objective_locked", lambda: self.mutate(api.set_target, dict(payload, target=dict(narrow, id=original["id"]))))
+        self.assert_error("objective_locked", lambda: self.mutate(api.set_target, dict(payload, target=dict(original, id="objective-3"))))
+        revision = self.store.revision
+        result = api.set_target(self.store, payload, expected_revision=revision, request_id="narrowing")
+        records = self.store.snapshot()["records"]
+        self.assertEqual(records["configuration"]["research"]["target"], narrow)
+        self.assertEqual(records["research_objective"], {"objective-1": original, "objective-2": narrow})
+        self.assertEqual(records["objective_lineage"]["objective-2"],
+                         {"id": "objective-2", "predecessor": "objective-1", "relation": "narrowed", "reason": payload["reason"],
+                          "authorization": authorization, "round_id": None})
+        self.assertEqual(api.set_target(self.store, payload, expected_revision=revision, request_id="narrowing"), result)
+        self.assertTrue(api.configuration_report(self.store, "research")["ready"])
+        self.assert_error("invalid_target", lambda: self.mutate(api.set_target, dict(payload, reason="Authorization on an unchanged target.")))
+
+    def test_authorization_does_not_apply_to_a_first_objective(self):
+        api = self.api()
+        self.mutate(api.initialize_research, {"profile": "research", "target": None, "preparation_policy": "exhaustive-v1"})
+        target = {"kind": "objective", "id": "objective-1", "statement": "Prove the bound for every integer from 5 through 15."}
+        authorization = self.artifacts.put(b"The user: fix this objective.\n", "text/markdown; charset=utf-8")
+        self.assert_error("invalid_target", lambda: self.mutate(api.set_target, {"target": target, "reason": "First.", "authorization": authorization}))
+
     def test_verification_pin_uses_original_bytes_and_scope_agreement(self):
         api = self.api()
         work = self.metadata()

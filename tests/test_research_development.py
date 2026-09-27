@@ -1094,6 +1094,43 @@ class DevelopmentTests(DevelopmentCase):
         stale.update(question="A plan that still carries the old objective.", distinguishing_test="Old objective test.")
         self.assert_error("objective_mismatch", lambda: self.mutate(api.plan_cycle, stale))
 
+    def test_an_authorized_narrowing_keeps_earlier_checkpoints_inheritable(self):
+        api = self.development()
+        self.prepared_study()
+        plan, execution = self.run_cycle()
+        self.mutate(api.assess_cycle, self.assessment(plan, execution))
+        self.save_checkpoint()
+        narrow = {"kind": "objective", "id": "square-bound-only", "statement": "For every integer n in [0, 3], n squared is at most 9."}
+        authorization = self.artifacts.put(b"The user: drop the equality clause from the objective.\n", "text/markdown; charset=utf-8")
+        self.mutate(self.api("principles").set_target,
+                    {"target": narrow, "reason": "The user authorized the narrower objective.", "authorization": authorization})
+        records = self.store.snapshot()["records"]
+        self.assertEqual(records["objective_lineage"][narrow["id"]]["predecessor"], self.objective["id"])
+        # As after a widening, the synthesis and every earlier assessment are recorded again under the current objective.
+        stale = {o["section"] for o in self.api().synthesis_report(self.store, "research")["obligations"]
+                 if o["code"] == "synthesis_dependencies_stale"}
+        self.assertEqual(stale, {"standards", "rationale", "context", "innovation"})
+        self.refresh_synthesis("narrow")
+        reassessed = self.mutate(api.assess_cycle, self.assessment(plan, execution, identifier="assessment-1b"))["result"]
+        self.assertTrue(reassessed["validated_result"])
+        # The earlier cycle carried the earlier objective, so it cannot close the narrowed one by itself.
+        self.assertIn("objective_scope_incomplete", {o["code"] for o in reassessed["obligations"]})
+        checkpoint = self.save_checkpoint(assessment_id="assessment-1b", identifier="checkpoint-1b")
+        successor = self.plan("cycle-2")
+        scope = {"id": narrow["id"], "kind": "full", "statement": narrow["statement"],
+                 "assumptions": ["n is an integer in the stated finite range."], "remaining_obligations": []}
+        successor.update(objective=narrow, scope=scope, hypothesis=narrow["statement"], predecessor=checkpoint["id"],
+                         question="Does the enumeration establish the narrowed bound?", distinguishing_test="Compare every enumerated square with 9.",
+                         inheritance=[{"checkpoint_id": checkpoint["id"], "assessment_id": "assessment-1b", "use": "validated_result",
+                                       "evidence": [self.result_evidence(execution)], "assumptions": ["n is an integer in the stated finite range."],
+                                       "deduction": "The enumeration up to 3 establishes the bound that the narrowed objective keeps."}])
+        successor["literature"]["scope"] = scope
+        self.mutate(api.plan_cycle, successor)
+        self.assertEqual(self.store.snapshot()["records"]["cycle"]["cycle-2"]["status"], "planned")
+        stale_plan = self.plan("cycle-3")
+        stale_plan.update(question="A plan that still carries the earlier objective.", distinguishing_test="Earlier objective test.")
+        self.assert_error("objective_mismatch", lambda: self.mutate(api.plan_cycle, stale_plan))
+
     def test_an_unlinked_unchanged_or_malformed_objective_is_refused(self):
         # Containment is the author's recorded assertion, judged by the round reviewer; the harness
         # refuses an unlinked predecessor, an unchanged statement, a reused objective id, and a
