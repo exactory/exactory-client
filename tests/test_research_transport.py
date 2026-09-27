@@ -139,6 +139,18 @@ class TransportTests(unittest.TestCase):
         http.get("https://export.arxiv.org/api/query?a=2")
         self.assertIn(3.0, clock.sleeps)
 
+    def test_default_bound_accepts_originals_up_to_128_mib(self):
+        # A 47 MB arXiv PDF was refused under the former 32 MiB default.
+        body = b"%PDF-" + b"x" * (40 * 1024 * 1024)
+        http, _, _ = client([(200, {"Content-Type": "application/pdf", "Content-Length": str(len(body))}, body)], max_retries=0)
+        fetched = http.get("https://example.org/paper.pdf", accept=("application/pdf",))
+        self.assertEqual(len(fetched.body), len(body))
+        oversized = str(128 * 1024 * 1024 + 1)
+        http, _, _ = client([(200, {"Content-Type": "application/pdf", "Content-Length": oversized}, b"%PDF-")], max_retries=0)
+        with self.assertRaises(HttpFailure) as error:
+            http.get("https://example.org/paper.pdf", accept=("application/pdf",))
+        self.assertEqual(error.exception.code, "response_too_large")
+
     def test_size_mime_encoding_and_truncation_are_failures(self):
         cases = [({"Content-Length": "100"}, b"x", "response_too_large"),
                  ({}, b"123456", "response_too_large"),

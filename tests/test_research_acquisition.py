@@ -226,6 +226,15 @@ class AcquisitionTests(unittest.TestCase):
         self.assertEqual(result["capture"]["version"], "v2")
         self.assertIsNone(result["capture"]["text"])
 
+    def test_mapped_import_keeps_every_record_publication_date(self):
+        raw = json.dumps({"results": [{"id": f"W{n}", "title": f"Title {n}", "date": f"2026-0{n}-01"} for n in (1, 2, 3)]}).encode()
+        mappings = [{"id": f"/results/{i}/id", "title": f"/results/{i}/title", "publication_date": f"/results/{i}/date"} for i in range(3)]
+        result = import_response(self.store, "web", raw, source_url="https://example.org/search",
+                                 captured_at="2026-09-07T00:00:00Z", request_id="dated-import", expected_revision=0,
+                                 media_type="application/json", mappings=mappings)
+        works = self.store.snapshot()["records"]["work"]
+        self.assertEqual([works[w]["publication_date"] for w in result["work_ids"]], ["2026-01-01", "2026-02-01", "2026-03-01"])
+
     def test_ambiguous_json_and_invalid_mapped_date_are_rejected_before_admission(self):
         cases = [(b'{"id":"W123","id":"W456","title":"A title"}', {"id": "/id", "title": "/title"}),
                  (b'{"id":"W123","title":"A title","date":"yesterday"}', {"id": "/id", "title": "/title", "publication_date": "/date"})]
