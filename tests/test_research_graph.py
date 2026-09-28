@@ -1,6 +1,7 @@
 import copy
 
 from literature_fixtures import LiteratureCase
+from research_harness.evidence import digest
 from research_harness.graph import citation_graph, set_roots
 from research_harness.literature import foundation_report, import_bundle, record_search
 from research_harness.reading import require_fulltext
@@ -77,6 +78,63 @@ class GraphTests(LiteratureCase):
         self.assertEqual(len(graph["references"]), 4)
         self.assertEqual(sum(x["code"] == "reference_unresolved" for x in graph["obligations"]), 1)
         self.assertNotIn(a, [x["version_id"] for x in graph["obligations"] if x["code"] == "bibliography_incomplete"])
+
+    def test_a_rebinding_bundle_retires_the_occurrences_of_the_bundle_it_replaces(self):
+        a = self.metadata(1, references=[{"unstructured": "A registry observation"}])
+        b = self.metadata(2)
+        self.scope([a])
+        registry = set(self.store.snapshot()["records"]["reference_occurrence"])
+        capture = self.capture(a, "A uses B. References: B, a preprint.")
+        first = self.bundle(a, capture, "bundle-1")
+        entry = {"target": None, "kind": "unknown", "reason": "The entry does not establish an identity.",
+                 "link": dict(first["units"][1]["link"], locator=self.span(capture["text"], "B, a preprint"))}
+        first["bibliography"]["entries"] = [entry]
+        self.mutate(import_bundle, first)
+        second = self.bundle(a, capture, "bundle-2")
+        second["bibliography"]["entries"] = [dict(entry, target=b, kind="paper", reason="The entry names the acquired B.")]
+        self.mutate(import_bundle, second)
+        revised = self.capture(a, "A uses B in the revised text. References: B, a revised preprint.")
+        third = self.bundle(a, revised, "bundle-3")
+        third["bibliography"]["entries"] = [{"target": b, "kind": "paper", "reason": "The revised entry names the acquired B.",
+                                             "link": dict(third["units"][1]["link"], locator=self.span(revised["text"], "B, a revised preprint"))}]
+        self.mutate(import_bundle, third)
+        records = self.store.snapshot()["records"]
+        bundles = records["source_bundle"]
+        graph = citation_graph(records, "research")
+        # The second bundle replaced the first for the same original; the third is the bundle of another original.
+        self.assertEqual({r["occurrence_id"] for r in graph["references"]},
+                         set(bundles["bundle-2"]["occurrence_ids"] + bundles["bundle-3"]["occurrence_ids"]) | registry)
+        self.assertNotIn(bundles["bundle-1"]["occurrence_ids"][0], {o.get("reference_id") for o in graph["obligations"]})
+
+    def test_a_study_with_one_bundle_per_version_keeps_its_graph(self):
+        """The expected digest was computed before the graph read only the occurrences of selected bundles."""
+        a, b, c = ["arxiv:2601.%05dv1" % n for n in (1, 2, 3)]
+        self.metadata(1, references=[{"unstructured": "Authored B lemma"}, {"id": c}])
+        self.metadata(2)
+        self.metadata(3)
+        self.scope([a])
+        self.mutate(require_fulltext, {"id": "selected-c", "profile": "research", "version_id": c,
+                                       "purpose": "major_claim", "reason": "The transfer rests on C's mechanism."})
+        observed = next(o for o in self.store.snapshot()["records"]["reference_occurrence"].values() if o["target"] is None)
+        capture = self.capture(a, "The proof uses B and C. References: Authored B lemma; Paper C; laboratory notebook.")
+        bundle = self.bundle(a, capture, "bundle-a")
+        base = bundle["units"][1]["link"]
+        entries = [{"target": b, "kind": "paper", "reason": "The article identifies the acquired B lemma.",
+                    "link": dict(base, locator=self.span(capture["text"], "Authored B lemma"))},
+                   {"target": c, "kind": "paper", "reason": "The entry names the acquired C.",
+                    "link": dict(base, locator=self.span(capture["text"], "Paper C"))},
+                   {"target": None, "kind": "nonpaper", "reason": "The entry names a laboratory notebook.",
+                    "link": dict(base, locator=self.span(capture["text"], "laboratory notebook"))}]
+        bundle["bibliography"]["entries"] = entries
+        bundle["resolutions"] = [dict(entries[0], reference_id=observed["id"])]
+        self.mutate(import_bundle, bundle)
+        capture_c = self.capture(c, "C extends earlier work. References: an unnamed manuscript.")
+        bundle_c = self.bundle(c, capture_c, "bundle-c")
+        bundle_c["bibliography"]["entries"] = [{"target": None, "kind": "unknown", "reason": "The entry names no identifier.",
+                                                "link": dict(bundle_c["units"][1]["link"], locator=self.span(capture_c["text"], "an unnamed manuscript"))}]
+        self.mutate(import_bundle, bundle_c)
+        self.assertEqual(digest(citation_graph(self.store.snapshot()["records"], "research")),
+                         "5327c853eed2e6163dcc878a56617fe8ef3a3ceba564dcbf8dec5edb1193a32b")
 
     def test_shorter_registry_observation_does_not_prove_or_replace_bibliography(self):
         a = self.metadata(references=[{"unstructured": "Observed item " + str(i)} for i in range(6)])
