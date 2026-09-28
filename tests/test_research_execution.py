@@ -442,3 +442,44 @@ class ResearchExecutionTests(DevelopmentCase):
                 self.assert_error("execution_runtime_changed", launch)
         self.assertEqual(self.store.snapshot(), before)
         self.assertNotIn("execution_claim", before["records"])
+
+    def bind_outputs(self, outputs, admission_id="lab-run"):
+        api = importlib.import_module("research_harness.execution")
+        return self.mutate(api.bind_execution, {"admission_id": admission_id, "script": "code/program.py", "backend": "local",
+            "timeout_seconds": 5, "inputs": [], "outputs": outputs, "usage_unit": "execution"})
+
+    def test_output_that_no_locator_can_cite_is_refused_for_result_and_validation_evidence(self):
+        from research_harness.errors import ResearchError
+        plan = self.plan()
+        plan["evidence_requirements"].append({"id": "figures", "kind": "log", "description": "The rendered figures."})
+        json_result = {"id": "result", "requirement_id": "measurements", "path": "results/result.json", "media_type": "application/json"}
+        refused = [
+            [{"id": "rendered-plot", "requirement_id": "measurements", "path": "plots/figure.png", "media_type": "image/png"}],
+            [{"id": "paper-pdf", "requirement_id": "measurements", "path": "plots/figure.pdf", "media_type": "application/pdf"}],
+            [json_result, {"id": "raw-array", "requirement_id": "measurements", "path": "results/values.npy",
+                           "media_type": "application/octet-stream"}],
+            [json_result, {"id": "check-plot", "requirement_id": "checks", "path": "plots/check.png", "media_type": "image/png"}]]
+        # The admission is recorded; its first binding, a PNG as the only result output, is refused.
+        with self.assertRaises(ResearchError) as first:
+            admit_lab(self, plan=plan, body="print('{\"metric\": 7}')\n", outputs=refused[0])
+        self.assertEqual(first.exception.code, "invalid_execution")
+        for outputs in refused:
+            output = outputs[-1]
+            with self.subTest(output=output["id"]):
+                before = self.store.snapshot()
+                with self.assertRaises(ResearchError) as raised:
+                    self.bind_outputs(outputs)
+                self.assertEqual(raised.exception.code, "invalid_execution")
+                self.assertEqual(raised.exception.details, {"output_id": output["id"], "requirement_id": output["requirement_id"],
+                                                            "media_type": output["media_type"]})
+                for named in (output["id"], output["media_type"], "text or JSON", "log requirement"):
+                    self.assertIn(named, raised.exception.message)
+                self.assertEqual(self.store.snapshot(), before)
+        self.assertNotIn("execution_binding", self.store.snapshot()["records"])
+        accepted = [json_result,
+                    {"id": "summary", "requirement_id": "measurements", "path": "results/summary.json", "media_type": "application/ld+json"},
+                    {"id": "checks", "requirement_id": "checks", "path": "results/checks.txt", "media_type": "text/plain; charset=utf-8"},
+                    {"id": "rendered-plot", "requirement_id": "figures", "path": "plots/figure.png", "media_type": "image/png"},
+                    {"id": "paper-pdf", "requirement_id": "figures", "path": "plots/figure.pdf", "media_type": "application/pdf"}]
+        self.bind_outputs(accepted)
+        self.assertEqual(self.store.snapshot()["records"]["execution_binding"]["lab-run"]["outputs"], accepted)
