@@ -28,9 +28,12 @@ def run_worker(directory, config_sha256, token, *, handshake=True):
         json_projection(root, relative + "/ready.json", {"pid": os.getpid(), "token": token, "config_sha256": config_sha256})
         if handshake and sys.stdin.readline().strip() != token:
             return
-        if config["runtime"]["python"] != sys.version.split()[0]:
+        runtime = config["runtime"]
+        if runtime["python"] != sys.version.split()[0]:
             raise ValueError("Worker Python version differs from admission")
-        if config["backend"] == "local" and hashlib.sha256(Path(config["runtime"]["path"]).read_bytes()).hexdigest() != config["runtime"]["sha256"]:
+        # The started path must still resolve to the pinned file, and that file must keep its bytes.
+        if config["backend"] == "local" and (str(Path(runtime["path"]).resolve()) != runtime.get("resolved_path", runtime["path"])
+                                             or hashlib.sha256(Path(runtime["path"]).read_bytes()).hexdigest() != runtime["sha256"]):
             raise ValueError("Worker interpreter differs from admission")
         for item in config["files"]:
             if hashlib.sha256(read_file(root, relative + "/work/" + item["path"])).hexdigest() != item["sha256"]:

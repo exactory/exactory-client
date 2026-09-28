@@ -389,9 +389,10 @@ VENV/bin/python3 "$(command -v exactory-lab)" run code/program.py --admission ru
 When the admitted `argv[0]` is a symbolic link, as the `bin/python3` of a venv
 is, the worker starts that link itself, not the file it resolves to, so the
 program imports the venv's packages. For a regular interpreter file, the binding
-records its resolved path, as earlier releases did. The binding pins the SHA-256
-of the resolved interpreter file; changed interpreter bytes or a changed Python
-version stop the launch with `execution_runtime_changed`.
+records its resolved path, as earlier releases did. The binding pins the resolved
+interpreter file by its path and SHA-256. Changed interpreter bytes, a changed
+Python version, or a link that now resolves to another file stop the launch with
+`execution_runtime_changed`.
 
 Keep failed and timed-out executions and their usage. `reconcile-run` completes
 interrupted observation using the same admission; unknown released work remains

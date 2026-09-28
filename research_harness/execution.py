@@ -68,10 +68,20 @@ def _runtime(command, backend="local"):
     if command["versions"].get("python") != sys.version.split()[0]:
         raise ResearchError("execution_runtime_changed", "Run with the exact admitted Python version")
     resolved = Path(argv[0]).resolve()
-    # The worker starts an admitted link itself: a venv's bin/python3 is a symlink, and only that path gives
-    # the program the venv's site-packages. A regular file keeps the resolved path that earlier releases recorded.
-    return {"path": argv[0] if Path(argv[0]).is_symlink() else str(resolved),
-            "sha256": hashlib.sha256(resolved.read_bytes()).hexdigest(), "python": sys.version.split()[0]}
+    runtime = {"path": str(resolved), "sha256": hashlib.sha256(resolved.read_bytes()).hexdigest(),
+               "python": sys.version.split()[0]}
+    if Path(argv[0]).is_symlink():
+        # The worker starts an admitted link itself: a venv's bin/python3 is a symlink, and only that path gives
+        # the program the venv's site-packages. The file it resolves to stays pinned by its path and bytes.
+        runtime.update(path=argv[0], resolved_path=str(resolved))
+    return runtime
+
+
+def _build_earlier_runtime(runtime):
+    """The record that exactory-client 0.47.0 and earlier wrote for the same interpreter: the resolved file only."""
+    earlier = dict(runtime, path=runtime.get("resolved_path", runtime["path"]))
+    earlier.pop("resolved_path", None)
+    return earlier
 
 
 def _files(store, admission, binding, *, current=True):
@@ -186,10 +196,9 @@ def _claim(store, admission_id, expected_revision, request_id):
         admission = validate_admitted_execution(records, artifacts, admission_id)
         binding = _binding(records, admission_id)
         runtime = _runtime(admission["command"], binding["backend"])
-        # A local binding written by an earlier release pinned the resolved interpreter path; its run keeps that path.
-        earlier = dict(runtime, path=str(Path(runtime["path"]).resolve())) if binding["backend"] == "local" else runtime
-        if binding["runtime"] not in (runtime, earlier):
-            raise ResearchError("execution_runtime_changed", "The admitted interpreter bytes changed")
+        # A binding written by an earlier release names the resolved file as its path; its run keeps that path.
+        if binding["runtime"] not in (runtime, _build_earlier_runtime(runtime)):
+            raise ResearchError("execution_runtime_changed", "The admitted interpreter file or its bytes changed")
         config = _materialize(store, admission, binding, records["cycle_plan"][admission["cycle_id"]]["payload"])
         claim = {"admission_id": admission_id, "binding_digest": binding["digest"], "config": config,
                  "config_artifact": artifacts.put(_canonical(config).encode(), "application/json"),
