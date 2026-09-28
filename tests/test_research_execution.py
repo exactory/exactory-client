@@ -587,6 +587,29 @@ class ResearchExecutionTests(DevelopmentCase):
         # Author readiness recomputes the metric from the recorded config and the sealed bytes.
         _observed(records, self.artifacts, records["execution_outcome"][admission["id"]]["execution_id"])
 
+    def test_launched_run_records_no_metric_that_a_later_python_cannot_read_back(self):
+        from research_harness.execution_evidence import _observed
+        # The program writes an integer of 4301 digits as text, so it runs under any Python.
+        body = ("from pathlib import Path\n"
+                "Path('results/result.json').write_text('{\"values\": [0, 1, 4, 9]}')\n"
+                "Path('results/run_cycle.json').write_text('{\"count\": 1' + '0' * 4300 + '}')\n")
+        admission = admit_lab(self, "code/refine_cycle.py", body=body, outputs=[
+            {"id": "result", "requirement_id": "measurements", "path": "results/result.json", "media_type": "application/json"},
+            {"id": "validation", "requirement_id": "checks", "path": "results/run_cycle.json", "media_type": "application/json"}])
+        api = importlib.import_module("research_harness.execution")
+        limit = sys.get_int_max_str_digits() if hasattr(sys, "get_int_max_str_digits") else None
+        if limit is not None:
+            # Reconcile as Python 3.9.6 does: it reads an integer of any length.
+            self.addCleanup(sys.set_int_max_str_digits, limit)
+            sys.set_int_max_str_digits(0)
+        result = api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision, request_id="long-integer")
+        self.assertEqual((result["ok"], result["is_buggy"], result["metric"]), (False, True, None))
+        if limit is not None:
+            # Read the store as Python 3.11 and later do.
+            sys.set_int_max_str_digits(limit)
+        records = self.store.snapshot()["records"]
+        _observed(records, self.artifacts, records["execution_outcome"][admission["id"]]["execution_id"])
+
 
 class RunMetricTests(unittest.TestCase):
     def test_metric_sources_keep_their_order_and_an_earlier_run_config_keeps_its_metric(self):
@@ -626,3 +649,45 @@ class RunMetricTests(unittest.TestCase):
         # The two earlier sources keep their unbounded metric, so recorded observations validate as before.
         stem = {"work/results/refine_cycle.json": build_validation_json(max_bytes + 1)}
         self.assertEqual(output_metric(config, stem), {"checks": "x" * (max_bytes - 13)})
+
+    def test_each_metric_source_gives_only_json_that_every_supported_python_reads_back(self):
+        from research_harness.execution_outputs import output_metric
+        # Python 3.9.6 reads an integer of any length, and Python 3.11 and later refuse one of more than
+        # 4300 digits. Read as the earlier Python does, so that the metric bound itself must refuse it.
+        if hasattr(sys, "set_int_max_str_digits"):
+            self.addCleanup(sys.set_int_max_str_digits, sys.get_int_max_str_digits())
+            sys.set_int_max_str_digits(0)
+        config = {"script": "code/refine_cycle.py", "metric_output": "work/results/run_cycle.json"}
+        earlier = {"script": "code/refine_cycle.py"}
+        fallback, declared = "work/results/refine_cycle.json", "work/results/run_cycle.json"
+
+        def build_nested_json(levels):
+            # An object and levels - 1 lists inside it: {"metric": [[...[0]...]]}.
+            return b'{"metric": ' + b"[" * (levels - 1) + b"0" + b"]" * (levels - 1) + b"}"
+
+        def build_integer_json(digits):
+            return b'{"metric": ' + b"9" * digits + b"}"
+
+        for dimension, within, beyond in (("nesting", build_nested_json(32), build_nested_json(33)),
+                                          ("integer digits", build_integer_json(4300), build_integer_json(4301))):
+            with self.subTest(dimension=dimension):
+                for path in ("stdout", fallback, declared):
+                    self.assertEqual(output_metric(config, {path: within}), json.loads(within))
+                # A stdout line beyond the bound is skipped, so the earlier metric line stays the metric.
+                self.assertEqual(output_metric(config, {"stdout": b'{"metric": 1}\n' + beyond + b"\n"}), {"metric": 1})
+                # A fallback file beyond the bound gives no metric, so the declared validation output supplies it.
+                self.assertEqual(output_metric(config, {fallback: beyond, declared: b'{"passed": true}'}), {"passed": True})
+                self.assertIsNone(output_metric(config, {declared: beyond}))
+                # A run config of exactory-client 0.47.0 or earlier keeps the unbounded metric it recorded.
+                for path in ("stdout", fallback):
+                    self.assertEqual(output_metric(earlier, {path: beyond}), json.loads(beyond))
+
+    def test_unreadable_fallback_file_gives_no_metric_instead_of_stopping_reconciliation(self):
+        from research_harness.execution_outputs import output_metric
+        fallback, declared = "work/results/refine_cycle.json", "work/results/run_cycle.json"
+        # A program stopped while it wrote its fallback file, or one that wrote a value beyond the bound, which
+        # Python 3.11 and later read as invalid JSON. The declared validation output still supplies the metric.
+        truncated = {fallback: b'{"metric": tr', declared: b'{"passed": true}'}
+        self.assertEqual(output_metric({"script": "code/refine_cycle.py", "metric_output": declared}, truncated), {"passed": True})
+        # A run config of exactory-client 0.47.0 or earlier has no third source; its run reconciles without a metric.
+        self.assertIsNone(output_metric({"script": "code/refine_cycle.py"}, truncated))
