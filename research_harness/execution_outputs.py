@@ -9,9 +9,6 @@ from .errors import ResearchError
 from .workspace import checked_parent, read_file, strict_json
 
 
-# A declared validation output supplies the metric only up to this size: a metric summarizes a run,
-# and a larger output stays evidence instead of a copy in every run summary.
-_METRIC_OUTPUT_MAX_BYTES = 16 * 1024
 # A metric is copied into the run's records, and every supported Python must read it back. Python 3.11
 # and later refuse to parse an integer of more than 4300 digits (sys.int_info.default_max_str_digits),
 # which Python 3.9.6 writes. A scientific delivery walks at most 40 levels, and a round packet holds the
@@ -128,7 +125,7 @@ def output_metric(config, files):
     if result is None and fallback in files:
         result = _read_metric(files[fallback], is_bounded=is_bounded)
     metric_output_path = config.get("metric_output")
-    if result is None and metric_output_path in files and len(files[metric_output_path]) <= _METRIC_OUTPUT_MAX_BYTES:
+    if result is None and metric_output_path in files:
         result = _read_metric(files[metric_output_path], is_bounded=is_bounded)
     return result
 
