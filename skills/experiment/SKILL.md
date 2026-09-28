@@ -39,6 +39,9 @@ VENV/bin/python3 "$(command -v exactory-lab)" run code/program.py --admission ru
 ```
 
 The worker then starts that venv interpreter, so the program has the venv's packages.
+The launch of a binding that exactory-client 0.47.0 or earlier recorded starts the
+resolved file instead. To give the program the venv's packages, admit and bind a
+new run.
 
 Use the current revision and exact bound values, as described in the workflow.
 The worker executes a private copy of pinned inputs and seals the observed output

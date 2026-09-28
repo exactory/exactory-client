@@ -394,6 +394,13 @@ interpreter file by its path and SHA-256. Changed interpreter bytes, a changed
 Python version, or a link that now resolves to another file stop the launch with
 `execution_runtime_changed`.
 
+A binding of a venv interpreter that exactory-client 0.47.0 or earlier recorded
+names the resolved file as its path, and its launch starts that file. Its program
+therefore runs without the venv's packages. `bind-run` with the same payload
+returns that binding. To run the program with the venv's packages, admit and bind
+a new run. `admit` refuses a new admission of the same strategy with
+`execution_pending` until the earlier run has an outcome.
+
 Keep failed and timed-out executions and their usage. `reconcile-run` completes
 interrupted observation using the same admission; unknown released work remains
 pending with its reservation retained. A valid negative finding differs from a
