@@ -710,8 +710,9 @@ class RunMetricTests(unittest.TestCase):
     def test_unreadable_fallback_file_gives_no_metric_instead_of_stopping_reconciliation(self):
         from research_harness.execution_outputs import output_metric
         fallback, declared = "work/results/refine_cycle.json", "work/results/run_cycle.json"
-        # A program stopped while it wrote its fallback file, or one that wrote a value beyond the bound, which
-        # Python 3.11 and later read as invalid JSON. The declared validation output still supplies the metric.
+        # A fallback file that is not finite JSON, as a program stopped while writing it leaves, gives no metric.
+        # Python 3.11 and later read an integer of more than 4300 digits the same way. The declared validation
+        # output still supplies the metric.
         truncated = {fallback: b'{"metric": tr', declared: b'{"passed": true}'}
         self.assertEqual(output_metric({"script": "code/refine_cycle.py", "metric_output": declared}, truncated), {"passed": True})
         # A run config of exactory-client 0.47.0 or earlier has no third source; its run reconciles without a metric.
