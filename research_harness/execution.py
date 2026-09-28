@@ -66,7 +66,9 @@ def _runtime(command, backend="local"):
         raise ResearchError("unsupported_execution", "The lab launcher supports an explicit current Python interpreter and script")
     if command["versions"].get("python") != sys.version.split()[0]:
         raise ResearchError("execution_runtime_changed", "Run with the exact admitted Python version")
-    return {"path": str(Path(sys.executable).resolve()), "sha256": hashlib.sha256(Path(sys.executable).read_bytes()).hexdigest(),
+    # The worker starts the admitted path itself: a venv's bin/python3 is a symlink, and only that
+    # path gives the program the venv's site-packages. The pin is the resolved interpreter's bytes.
+    return {"path": argv[0], "sha256": hashlib.sha256(Path(argv[0]).resolve().read_bytes()).hexdigest(),
             "python": sys.version.split()[0]}
 
 
@@ -171,7 +173,10 @@ def _claim(store, admission_id, expected_revision, request_id):
             raise ResearchError("execution_recovery_required", "This admitted run was already claimed; reconcile it instead of relaunching")
         admission = validate_admitted_execution(records, artifacts, admission_id)
         binding = _binding(records, admission_id)
-        if _runtime(admission["command"], binding["backend"]) != binding["runtime"]:
+        runtime = _runtime(admission["command"], binding["backend"])
+        # A local binding written by an earlier release pinned the resolved interpreter path; its run keeps that path.
+        earlier = dict(runtime, path=str(Path(runtime["path"]).resolve())) if binding["backend"] == "local" else runtime
+        if binding["runtime"] not in (runtime, earlier):
             raise ResearchError("execution_runtime_changed", "The admitted interpreter bytes changed")
         config = _materialize(store, admission, binding)
         claim = {"admission_id": admission_id, "binding_digest": binding["digest"], "config": config,
