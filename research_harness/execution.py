@@ -57,15 +57,15 @@ def _owner(root, admission_id, *, worker=False):
         os.close(descriptor)
 
 
-def _describe_interpreter(interpreter):
-    """The runtime record of the running Python, started as the absolute path `interpreter`."""
-    resolved = Path(interpreter).resolve()
+def _describe_interpreter(interpreter_path):
+    """The runtime record of the running Python, started as the absolute `interpreter_path`."""
+    resolved = Path(interpreter_path).resolve()
     runtime = {"path": str(resolved), "sha256": hashlib.sha256(resolved.read_bytes()).hexdigest(),
                "python": sys.version.split()[0]}
-    if Path(interpreter).is_symlink():
+    if Path(interpreter_path).is_symlink():
         # A worker starts a link itself: a venv's bin/python3 is a symlink, and only that path gives the
         # program the venv's site-packages. The file it resolves to stays pinned by its path and bytes.
-        runtime.update(path=interpreter, resolved_path=str(resolved))
+        runtime.update(path=interpreter_path, resolved_path=str(resolved))
     return runtime
 
 
