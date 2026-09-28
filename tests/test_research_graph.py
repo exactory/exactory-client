@@ -136,6 +136,29 @@ class GraphTests(LiteratureCase):
         self.assertEqual(digest(citation_graph(self.store.snapshot()["records"], "research")),
                          "5327c853eed2e6163dcc878a56617fe8ef3a3ceba564dcbf8dec5edb1193a32b")
 
+    def bundle_with_unknown_entry(self, version, capture, bundle_id, quote):
+        """An article bundle whose one bibliography entry, the quoted text, names no identifier."""
+        bundle = self.bundle(version, capture, bundle_id)
+        bundle["bibliography"]["entries"] = [{"target": None, "kind": "unknown", "reason": "The entry names no identifier.",
+                                              "link": dict(bundle["units"][1]["link"], locator=self.span(capture["text"], quote))}]
+        return bundle
+
+    def test_a_verification_target_reads_the_bundle_of_each_original_whatever_its_pin(self):
+        t = self.metadata(1)
+        first = self.capture(t, "T body one. References: first original entry.")
+        second = self.capture(t, "T body two. References: second original entry.")
+        # The second original's bundle is imported first, so the version's latest bundle belongs to the first original.
+        self.mutate(import_bundle, self.bundle_with_unknown_entry(t, second, "bundle-2", "second original entry"))
+        self.mutate(import_bundle, self.bundle_with_unknown_entry(t, first, "bundle-1", "first original entry"))
+        records = self.store.snapshot()["records"]
+        occurrences = set(records["reference_occurrence"])
+        originals = {c["source_id"]: c["original"]["sha256"] for c in records["work"][t]["fulltexts"]}
+        for source_id in (first["source_id"], None, second["source_id"]):
+            self.scope([t], profile="verification", target={"kind": "work", "id": t, "source_id": source_id, "sha256": originals.get(source_id)})
+            graph = citation_graph(self.store.snapshot()["records"], "verification")
+            self.assertEqual({r["occurrence_id"] for r in graph["references"]}, occurrences, source_id)
+            self.assertEqual({o["reference_id"] for o in graph["obligations"] if o["code"] == "reference_unresolved"}, occurrences, source_id)
+
     def test_shorter_registry_observation_does_not_prove_or_replace_bibliography(self):
         a = self.metadata(references=[{"unstructured": "Observed item " + str(i)} for i in range(6)])
         self.metadata(references=[{"unstructured": "Observed item " + str(i)} for i in range(5)])
