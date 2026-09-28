@@ -389,7 +389,8 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assertTrue(result["ok"], result["stderr_tail"])
         self.assertEqual(result["metric"], {"metric": 11})
         runtime = self.store.snapshot()["records"]["execution_binding"][admission["id"]]["runtime"]
-        self.assertEqual(runtime, {"path": str(interpreter), "python": sys.version.split()[0],
+        self.assertEqual(runtime, {"path": str(interpreter), "resolved_path": str(interpreter.resolve()),
+                                   "python": sys.version.split()[0],
                                    "sha256": hashlib.sha256(interpreter.resolve().read_bytes()).hexdigest()})
 
     def test_real_interpreter_file_keeps_the_runtime_record_of_earlier_releases(self):
@@ -419,22 +420,85 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assertTrue(result["ok"], result["stderr_tail"])
         self.assertEqual(result["metric"], {"metric": 3})
 
-    def test_binding_that_pinned_the_resolved_interpreter_path_still_launches(self):
+    def admit_as_earlier_release(self, body):
+        """Admit a link to this interpreter, bound as exactory-client 0.47.0 did: the resolved file is the path."""
         api = importlib.import_module("research_harness.execution")
         link = Path(self.temporary.name) / "bin/python3"
         link.parent.mkdir()
         link.symlink_to(Path(sys.executable).resolve())
-        current_runtime = api._runtime
+        earlier = {"path": str(Path(sys.executable).resolve()), "python": sys.version.split()[0],
+                   "sha256": hashlib.sha256(Path(sys.executable).read_bytes()).hexdigest()}
+        with mock.patch.object(api, "_runtime", return_value=earlier):
+            return admit_lab(self, interpreter=str(link), body=body)
 
-        def earlier_runtime(command, backend="local"):
-            # Earlier releases recorded the resolved interpreter path for a symlinked argv[0].
-            return dict(current_runtime(command, backend), path=str(Path(sys.executable).resolve()))
-
-        with mock.patch.object(api, "_runtime", side_effect=earlier_runtime):
-            admission = admit_lab(self, interpreter=str(link), body="print('{\"metric\": 5}')\n")
+    def test_binding_that_pinned_the_resolved_interpreter_path_still_launches(self):
+        admission = self.admit_as_earlier_release("print('{\"metric\": 5}')\n")
+        api = importlib.import_module("research_harness.execution")
         result = api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision, request_id="earlier-binding")
         self.assertTrue(result["ok"], result["stderr_tail"])
         self.assertEqual(result["metric"], {"metric": 5})
+
+    def admit_linked_interpreter(self):
+        """Admit a link to one of two byte-identical interpreter files of separate installations.
+
+        Both files are shell scripts that write a marker when they start, so a test sees whether an
+        interpreter behind the link ever ran. Returns the admission, the link, the other file and the marker."""
+        temporary = Path(self.temporary.name)
+        marker = temporary / "interpreter-started"
+        data = ("#!/bin/sh\necho started > '" + str(marker) + "'\n").encode()
+        installations = []
+        for name in ("admitted", "other"):
+            path = temporary / name / "bin/python3"
+            path.parent.mkdir(parents=True)
+            path.write_bytes(data)
+            path.chmod(0o755)
+            installations.append(path)
+        link = temporary / "venv/bin/python3"
+        link.parent.mkdir(parents=True)
+        link.symlink_to(installations[0])
+        with mock.patch.object(sys, "executable", str(link)):
+            admission = admit_lab(self, interpreter=str(link), body="raise RuntimeError('must never launch')\n")
+        return admission, link, installations[1], marker
+
+    def claim_under(self, link):
+        """Claim as a command line started by the link would; the worker still starts under this interpreter."""
+        api = importlib.import_module("research_harness.execution")
+        claim = api._claim
+
+        def claim_through_link(*args):
+            with mock.patch.object(sys, "executable", str(link)):
+                return claim(*args)
+
+        return mock.patch.object(api, "_claim", side_effect=claim_through_link)
+
+    def test_link_retargeted_to_an_identical_file_of_another_installation_stops_the_claim(self):
+        api = importlib.import_module("research_harness.execution")
+        admission, link, other, marker = self.admit_linked_interpreter()
+        link.unlink()
+        link.symlink_to(other)
+        before = self.store.snapshot()
+        with self.claim_under(link):
+            self.assert_error("execution_runtime_changed", lambda: api.launch_execution(self.store, admission["id"],
+                expected_revision=self.store.revision, request_id="retargeted-link"))
+        self.assertEqual(self.store.snapshot(), before)
+        self.assertFalse(marker.exists())
+
+    def test_link_retargeted_after_the_claim_never_starts_the_other_installation(self):
+        api = importlib.import_module("research_harness.execution")
+        admission, link, other, marker = self.admit_linked_interpreter()
+        prelaunch = api._prelaunch
+
+        def retarget_then_prelaunch(*args):
+            # The worker waits for its token and checks the interpreter only after this step.
+            link.unlink()
+            link.symlink_to(other)
+            return prelaunch(*args)
+
+        with self.claim_under(link), mock.patch.object(api, "_prelaunch", side_effect=retarget_then_prelaunch):
+            self.assert_error("execution_recovery_required", lambda: api.launch_execution(self.store, admission["id"],
+                expected_revision=self.store.revision, request_id="retargeted-after-claim"))
+        self.assertFalse(marker.exists())
+        self.assertFalse((self.root / api._directory(admission["id"]) / "terminal.json").exists())
 
     def test_changed_bytes_or_version_behind_a_linked_interpreter_stop_the_claim(self):
         api = importlib.import_module("research_harness.execution")
