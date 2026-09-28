@@ -27,6 +27,19 @@ exactory-lab run code/program.py --admission run-001 --backend local --timeout 3
   --expected-revision 42 --request-id launch-cycle-001
 ```
 
+The admitted `argv[0]` must resolve to the Python that runs `bind-run` and
+`exactory-lab run`. For a venv interpreter, start both with it, where `VENV` is the
+venv directory:
+
+```sh
+VENV/bin/python3 "$(command -v exactory-research)" bind-run --file run-binding.json \
+  --expected-revision 41 --request-id bind-cycle-001
+VENV/bin/python3 "$(command -v exactory-lab)" run code/program.py --admission run-001 \
+  --backend local --timeout 30 --expected-revision 42 --request-id launch-cycle-001
+```
+
+The worker then starts that admitted path, so the program has the venv's packages.
+
 Use the current revision and exact bound values, as described in the workflow.
 The worker executes a private copy of pinned inputs and seals the observed output
 inventory. Metrics may be printed as JSON or written to the bound fallback path,

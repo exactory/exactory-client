@@ -373,6 +373,24 @@ test; if unavailable, plan and admit a scientifically adequate local test or
 record the unmet resource condition. An existing admission cannot be silently
 rerouted.
 
+`bind-run` and `exactory-lab run` check the admitted interpreter against the
+Python that runs them: the admitted `argv[0]` must resolve to the same file, and
+the admitted Python version must equal that Python's version. Both commands start
+with the `python3` found on `PATH`; when that is another interpreter, they fail
+with `unsupported_execution`. For an admission whose `argv[0]` is a venv
+interpreter, start both commands with that interpreter, where `VENV` is the venv
+directory:
+
+```sh
+VENV/bin/python3 "$(command -v exactory-research)" bind-run --file run-binding.json --expected-revision REVISION --request-id bind-cycle-001
+VENV/bin/python3 "$(command -v exactory-lab)" run code/program.py --admission run-001 --backend local --timeout 30 --expected-revision REVISION --request-id launch-cycle-001
+```
+
+The worker then starts the admitted `argv[0]` itself, not the file it resolves to,
+so the program imports the venv's packages. The binding pins the SHA-256 of the
+resolved interpreter file; changed interpreter bytes or a changed Python version
+stop the launch with `execution_runtime_changed`.
+
 Keep failed and timed-out executions and their usage. `reconcile-run` completes
 interrupted observation using the same admission; unknown released work remains
 pending with its reservation retained. A valid negative finding differs from a
