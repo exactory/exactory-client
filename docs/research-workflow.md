@@ -386,10 +386,12 @@ VENV/bin/python3 "$(command -v exactory-research)" bind-run --file run-binding.j
 VENV/bin/python3 "$(command -v exactory-lab)" run code/program.py --admission run-001 --backend local --timeout 30 --expected-revision REVISION --request-id launch-cycle-001
 ```
 
-The worker then starts the admitted `argv[0]` itself, not the file it resolves to,
-so the program imports the venv's packages. The binding pins the SHA-256 of the
-resolved interpreter file; changed interpreter bytes or a changed Python version
-stop the launch with `execution_runtime_changed`.
+When the admitted `argv[0]` is a symbolic link, as the `bin/python3` of a venv
+is, the worker starts that link itself, not the file it resolves to, so the
+program imports the venv's packages. For a regular interpreter file, the binding
+records its resolved path, as earlier releases did. The binding pins the SHA-256
+of the resolved interpreter file; changed interpreter bytes or a changed Python
+version stop the launch with `execution_runtime_changed`.
 
 Keep failed and timed-out executions and their usage. `reconcile-run` completes
 interrupted observation using the same admission; unknown released work remains

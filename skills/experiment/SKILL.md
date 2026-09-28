@@ -38,7 +38,7 @@ VENV/bin/python3 "$(command -v exactory-lab)" run code/program.py --admission ru
   --backend local --timeout 30 --expected-revision 42 --request-id launch-cycle-001
 ```
 
-The worker then starts that admitted path, so the program has the venv's packages.
+The worker then starts that venv interpreter, so the program has the venv's packages.
 
 Use the current revision and exact bound values, as described in the workflow.
 The worker executes a private copy of pinned inputs and seals the observed output

@@ -67,10 +67,11 @@ def _runtime(command, backend="local"):
         raise ResearchError("unsupported_execution", "The lab launcher supports an explicit current Python interpreter and script")
     if command["versions"].get("python") != sys.version.split()[0]:
         raise ResearchError("execution_runtime_changed", "Run with the exact admitted Python version")
-    # The worker starts the admitted path itself: a venv's bin/python3 is a symlink, and only that
-    # path gives the program the venv's site-packages. The pin is the resolved interpreter's bytes.
-    return {"path": argv[0], "sha256": hashlib.sha256(Path(argv[0]).resolve().read_bytes()).hexdigest(),
-            "python": sys.version.split()[0]}
+    resolved = Path(argv[0]).resolve()
+    # The worker starts an admitted link itself: a venv's bin/python3 is a symlink, and only that path gives
+    # the program the venv's site-packages. A regular file keeps the resolved path that earlier releases recorded.
+    return {"path": argv[0] if Path(argv[0]).is_symlink() else str(resolved),
+            "sha256": hashlib.sha256(resolved.read_bytes()).hexdigest(), "python": sys.version.split()[0]}
 
 
 def _files(store, admission, binding, *, current=True):
