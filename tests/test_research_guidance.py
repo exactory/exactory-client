@@ -90,6 +90,15 @@ class ResearchGuidanceTests(unittest.TestCase):
         # An admission of a venv interpreter binds and launches under that interpreter.
         self.assertLessEqual({("exactory-research", "bind-run"), ("exactory-lab", "run")}, interpreted)
 
+    def test_guidance_states_that_an_earlier_release_binding_starts_the_resolved_interpreter(self):
+        documents = {name: " ".join((PLUGIN / name).read_text().split())
+                     for name in ("docs/research-workflow.md", "docs/research-cli.md", "skills/experiment/SKILL.md")}
+        # A venv binding that 0.47.0 recorded names the resolved file, so its program runs without the venv's packages.
+        for name, text in documents.items():
+            with self.subTest(document=name):
+                self.assertIn("exactory-client 0.47.0 or earlier", text)
+        self.assertIn("To run the program with the venv's packages, admit and bind a new run.", documents["docs/research-workflow.md"])
+
     def test_release_manifests_and_notes_describe_the_same_final_version(self):
         for relative in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
             self.assertEqual(json.loads((PLUGIN / relative).read_text())["version"], "0.47.0")
