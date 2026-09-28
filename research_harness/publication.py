@@ -9,7 +9,7 @@ from .execution_evidence import author_readiness_state
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
-from .graph import obligation
+from .graph import find_active_requirements, obligation
 from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .workspace import read_file, strict_json
 
@@ -258,7 +258,7 @@ def lineage_citation_obligations(records, artifacts, bundle):
     found = []
     from .source_deferrals import assess_deferrals
     deferred = {d["version_id"] for d in assess_deferrals(records, artifacts) if d["status"] == "active"}
-    for requirement in sorted(records.get("fulltext_requirement", {}).values(), key=lambda r: r["id"]):
+    for requirement in sorted(find_active_requirements(records).values(), key=lambda r: r["id"]):
         if requirement["profile"] != "research" or requirement["purpose"] not in ("lineage", "classic"):
             continue
         if requirement["purpose"] == "classic" and requirement["version_id"] in deferred:

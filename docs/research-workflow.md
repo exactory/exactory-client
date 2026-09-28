@@ -158,7 +158,10 @@ reference with `require-fulltext` for a major claim, novelty judgment, innovatio
 transfer, or validity decision. A selected reference is Tier 2 wherever it appears:
 read in full with its complete bibliography, and its own references become Tier 3.
 Few papers are read in full; every reference of those papers is still inventoried
-and read at abstract depth. Preserve all occurrences and exact versions.
+and read at abstract depth. Preserve all occurrences and exact versions. A work
+that a search judgment cites is required in full in the same way while that
+judgment is the selected search of its purpose; recording a new search for the
+purpose retires the requirements of the works it no longer cites.
 
 Under `lineage-v1` and `sampled-v1` the Tier 3 abstract obligation is removed.
 The bibliography of a full-read paper is still inventoried for identity, and it

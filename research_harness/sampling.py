@@ -6,7 +6,7 @@ import random
 
 from .errors import ResearchError
 from .evidence import digest
-from .graph import obligation
+from .graph import find_active_requirements, obligation
 from .operations import fields, immutable_record, prepared_mutation, text
 from .principles import preparation_policy
 
@@ -20,7 +20,7 @@ POSITIONS = ("above", "below", "unplaced")
 
 def core_requirements(records):
     """Fulltext requirements with purpose core under the verification profile."""
-    return sorted((r for r in records.get("fulltext_requirement", {}).values()
+    return sorted((r for r in find_active_requirements(records).values()
                    if r["profile"] == "verification" and r["purpose"] == "core"), key=lambda r: r["id"])
 
 

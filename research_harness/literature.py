@@ -14,7 +14,10 @@ scope, found_work_ids, verdict, cited_work_ids, impact, gaps, dispositions,
 resolved?}. Responses contain {source_id, query, query_locator?, results_pointer?}.
 Every found work carries one disposition (relevant, contradictory,
 potentially_relevant, out_of_scope, duplicate, unresolved) with a reason; cited
-works are relevant or contradictory. A new search for a purpose carries forward
+works are relevant or contradictory. Each cited work is a critical full-text
+requirement while its judgment is the selected one of its profile and purpose;
+the requirements of a replaced judgment stop counting
+(graph.find_active_requirements). A new search for a purpose carries forward
 every contradictory or unresolved work of the selected search, or names it under
 resolved with a reason. A judgment stays current while its scope, the content of
 the works it rests on (roots, required full texts, found and cited works) and the
@@ -40,7 +43,7 @@ from .errors import ResearchError
 from .components import compute_binding_identity, is_component, validate_binding
 from .evaluation import Evaluation
 from .evidence import digest
-from .graph import citation_graph, obligation, selected_bundle, validate_target
+from .graph import citation_graph, find_active_requirements, format_search_requirement_id, obligation, selected_bundle, validate_target
 from .http import safe_url
 from .imports import _pointer
 from .operations import fields, immutable_record, iso_date, prepared_mutation, profile_name, strings, text, timestamp
@@ -256,7 +259,7 @@ families of required full texts. The works other purposes found enter a section 
 judgments digest, so recording one purpose does not stale the others."""
     records = evaluation.records
     rows = {(node["work_id"], str(node["tier"])) for node in _graph(evaluation, profile)["nodes"]}
-    for requirement in records.get("fulltext_requirement", {}).values():
+    for requirement in find_active_requirements(records).values():
         work = records.get("work", {}).get(requirement["version_id"])
         if requirement["profile"] == profile and work:
             rows.add((work["work_id"], "requirement"))
@@ -273,7 +276,7 @@ def _relevant_versions(records, scope, found, cited):
     for version in list(scope.get("roots", [])) + list(found) + list(cited):
         work = records.get("work", {}).get(version)
         families.add(work["work_id"] if work else version)
-    for requirement in records.get("fulltext_requirement", {}).values():
+    for requirement in find_active_requirements(records).values():
         work = records.get("work", {}).get(requirement["version_id"])
         if requirement["profile"] == scope["profile"] and work:
             families.add(work["work_id"])
@@ -338,6 +341,18 @@ def _dispositions(records, value):
     return judged
 
 
+def _drop_retiring_requirements(records, value):
+    """The records a new judgment is assessed against. Once it is selected, the requirements of the
+    judgment it replaces stop counting; it creates its own for the works it cites again."""
+    selection = records.get("search_selection", {}).get(value["profile"] + ":" + value["purpose"])
+    previous = records.get("literature_search", {}).get(selection["search_id"]) if selection else None
+    if previous is None or previous["id"] == value["id"]:
+        return records
+    retiring = {format_search_requirement_id(previous["id"], version) for version in previous["cited_work_ids"]
+                if version not in value["cited_work_ids"]}
+    return dict(records, fulltext_requirement={k: r for k, r in records.get("fulltext_requirement", {}).items() if k not in retiring})
+
+
 def _items_list(value, name):
     if not isinstance(value, list):
         raise ResearchError("invalid_search", name + " must be an array")
@@ -390,13 +405,14 @@ def record_search(store, payload, *, expected_revision, request_id):
         if current_scope is None:
             raise ResearchError("roots_missing", "Define the literature scope before recording a dependent search")
         _dispositions(records, value)
+        judged = Evaluation.of(_drop_retiring_requirements(records, value), evaluation)
         record = dict(value, scope_digest=digest(current_scope), pending=pending, page_groups=page_groups,
-                      evidence_digest=_search_evidence_digest(evaluation, current_scope, found, value["cited_work_ids"]),
-                      frontier_digest=frontier_digest(evaluation, value["profile"]))
+                      evidence_digest=_search_evidence_digest(judged, current_scope, found, value["cited_work_ids"]),
+                      frontier_digest=frontier_digest(judged, value["profile"]))
         changes = [immutable_record(records, "literature_search", value["id"], record)]
         changes.append(("search_selection", value["profile"] + ":" + value["purpose"], {"search_id": value["id"]}))
         for version in value["cited_work_ids"]:
-            identifier = "search:" + digest([value["id"], version])
+            identifier = format_search_requirement_id(value["id"], version)
             requirement = {"id": identifier, "profile": value["profile"], "version_id": version, "purpose": "novelty",
                            "reason": "Source cited in search judgment " + value["id"] + ": " + value["impact"], "critical": True}
             if current_scope.get("historical_cutoff") and value["purpose"] != "recent":
@@ -492,7 +508,7 @@ def _foundation_state(evaluation, profile):
             requirements[version] = "fulltext" if node["tier"] <= 2 else "abstract"
             reasons.setdefault(version, []).append("tier_" + str(node["tier"]))
     critical = {target["id"]} if target else set()
-    full_requirements = {k: r for k, r in records.get("fulltext_requirement", {}).items() if r["profile"] == profile}
+    full_requirements = {k: r for k, r in find_active_requirements(records).items() if r["profile"] == profile}
     for requirement in full_requirements.values():
         version = requirement["version_id"]
         requirements[version] = "fulltext"
