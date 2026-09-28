@@ -23,6 +23,7 @@ from .errors import ResearchError
 from .evidence import digest
 from .execution_outputs import log_bytes, output_metric, output_path, read_sealed_outputs, seal_outputs
 from .operations import fields, immutable_record, prepared_mutation, text
+from .scientific_json import is_json_media_type
 from .storage import _canonical
 from .workspace import checked_parent, json_projection, read_file, strict_json, write_projection
 
@@ -108,7 +109,7 @@ def bind_execution(store, payload, *, expected_revision, request_id):
         if len(set(paths)) != len(paths) or [v["artifact"] for v in value["inputs"]] != admission["command"]["inputs"]:
             raise ResearchError("execution_identity_mismatch", "Bind each admitted input in order to one distinct relative path")
         plan = records["cycle_plan"][admission["cycle_id"]]["payload"]
-        requirements = {item["id"] for item in plan["evidence_requirements"]}
+        requirements = {item["id"]: item["kind"] for item in plan["evidence_requirements"]}
         output_ids = set()
         output_paths = set()
         for output in value["outputs"]:
@@ -122,6 +123,12 @@ def bind_execution(store, payload, *, expected_revision, request_id):
             output_ids.add(output["id"])
             output_paths.add(output["path"])
             artifacts.put(b"", output["media_type"])
+            # An assessment cites result and validation evidence through a locator into the output's text or JSON.
+            if (requirements[output["requirement_id"]] in ("result", "validation")
+                    and not (output["media_type"].lower().startswith("text/") or is_json_media_type(output["media_type"]))):
+                raise ResearchError("invalid_execution", "Result and validation evidence needs a text or JSON output, but output "
+                                    + output["id"] + " is " + output["media_type"] + "; bind figures and other binary files to a log requirement",
+                                    {"output_id": output["id"], "requirement_id": output["requirement_id"], "media_type": output["media_type"]})
         if value["usage_unit"] not in ("execution", "wall_seconds") or plan["resource_limits"]["unit"] != value["usage_unit"]:
             raise ResearchError("unsupported_usage", "Actual lab accounting supports planned execution or wall_seconds units")
         record = dict(value, admission_digest=admission["digest"], runtime=runtime)

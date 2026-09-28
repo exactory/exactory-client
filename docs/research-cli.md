@@ -340,7 +340,7 @@ pending capture. Main-source promotion raises `invalid_bundle` or
 
 ## Actual execution
 
-`bind-run.script`, input paths, and ordinary output paths are relative to `experiment/`. Outputs `stdout` and `stderr` select the captured streams. Each declared output has `{id, requirement_id, path, media_type}`; output IDs and paths must be unique, and a result cannot overwrite an input. The admitted argv begins with a Python executable and the exact declared script. Local execution pins the resolved interpreter's bytes and declared Python version. Other imported command histories are preserved without claiming this launcher observed them.
+`bind-run.script`, input paths, and ordinary output paths are relative to `experiment/`. Outputs `stdout` and `stderr` select the captured streams. Each declared output has `{id, requirement_id, path, media_type}`; output IDs and paths must be unique, and a result cannot overwrite an input. An assessment cites `result` and `validation` evidence through a locator into the output's text or JSON, so `bind-run` refuses an output bound to either kind unless its media type is `text/*`, `application/json` or a `+json` type; bind figures and other binary files to a `log` requirement. The admitted argv begins with a Python executable and the exact declared script. Local execution pins the resolved interpreter's bytes and declared Python version. Other imported command histories are preserved without claiming this launcher observed them.
 
 ```sh
 exactory-lab run code/program.py --admission run-1 --backend local --timeout 30 \

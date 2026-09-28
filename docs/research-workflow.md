@@ -340,10 +340,14 @@ remaining obligations in `idea/idea.md` and the managed records.
 
 Write a prospective `cycle` with its exact scope, predecessor/checkpoint,
 inheritance or reopening reason, distinguishing test, expected outcomes, failure
-signals, evidence requirements, and resource limits. Pin actual program and input
-bytes with `artifact`. Use the returned plan digest and artifact references in
-`admit`; bind the exact backend, interpreter/version, seed or null-seed reason,
-timeout, input paths, and declared output/usage contract before a launch.
+signals, evidence requirements, and resource limits. Plan `result` and
+`validation` requirements for text or JSON outputs that an assessment can cite,
+and declare figures and other binary files under a `log` requirement; `bind-run`
+refuses an output bound to `result` or `validation` whose media type is not text
+or JSON. Pin actual program and input bytes with `artifact`. Use the returned plan
+digest and artifact references in `admit`; bind the exact backend,
+interpreter/version, seed or null-seed reason, timeout, input paths, and declared
+output/usage contract before a launch.
 
 Use the CLI's [successor payload fields](research-cli.md#planning-a-successor)
 for the populated `predecessor`, `inheritance`, and `reopening` objects. Retain
