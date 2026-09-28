@@ -49,7 +49,7 @@ from .providers import _json
 from . import resources
 from . import screening
 from .reading import bundle_digest, current_readings, fulltext_coverage, registry_abstract_present, required_unit_obligations
-from .search_pages import enumerate_pages, native_page
+from .search_pages import QUERY_PARAMETER_NAMES, enumerate_pages, native_page
 from .source_links import captured_source, complete_original, contains, covers_text, exact_work, fulltext_capture, original_identity, read_locator, validate_link
 
 
@@ -211,8 +211,7 @@ def _search_response(records, artifacts, response, scope):
         if read_locator(artifacts, source["response"], response["query_locator"]) != response["query"]:
             raise ResearchError("invalid_search", "The recorded query must equal its original response value")
     else:
-        names = {"arxiv": {"search_query"}, "openalex": {"search"}, "crossref": {"query", "query.bibliographic", "query.author"}}
-        names = names.get(source["provider"], {"q", "query", "search", "search_query"})
+        names = QUERY_PARAMETER_NAMES.get(source["provider"], {"q", "query", "search", "search_query"})
         actual = [value for key, value in parse_qsl(urlsplit(source["url"]).query) if key in names]
         if response["query"] not in actual:
             raise ResearchError("invalid_search", "Bind the exact search-query parameter or a saved response query value; URL path fragments are insufficient")

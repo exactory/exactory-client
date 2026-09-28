@@ -14,6 +14,13 @@ from .evidence import digest
 from .providers import Arxiv, Crossref, OpenAlex
 
 
+# The URL parameters whose value is a native registry's captured query. An OpenAlex
+# filter such as cites:W123 is a query, so a citing-works capture binds it directly.
+QUERY_PARAMETER_NAMES = {"arxiv": frozenset({"search_query"}),
+                         "crossref": frozenset({"query", "query.bibliographic", "query.author"}),
+                         "openalex": frozenset({"search", "filter"})}
+
+
 def _number(parameters, key, default, minimum, maximum=None):
     value = parameters.get(key, str(default))
     if not value.isascii() or not value.isdigit() or len(value) > 8:
@@ -35,9 +42,7 @@ def native_page(source, data, query, scope):
     parameters = dict(pairs)
     if len(parameters) != len(pairs):
         raise ResearchError("invalid_search", "Captured query parameters cannot have ambiguous repeated values")
-    query_keys = {"arxiv": {"search_query"}, "crossref": {"query", "query.bibliographic", "query.author"},
-                  "openalex": {"search"}}[provider]
-    if not any(k in query_keys and v == query for k, v in pairs):
+    if not any(k in QUERY_PARAMETER_NAMES[provider] and v == query for k, v in pairs):
         raise ResearchError("invalid_search", "The native page must retain its actual captured query parameter")
     size_key, default, maximum = {"arxiv": ("max_results", 10, 2000), "crossref": ("rows", 20, 1000),
                                  "openalex": ("per_page", 25, 100)}[provider]

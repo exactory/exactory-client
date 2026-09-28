@@ -298,8 +298,9 @@ exactory-research require-fulltext --file lineage-parent.json --expected-revisio
 ```
 
 A citing-papers capture is an OpenAlex query with the filter `cites:<parent id>`.
-Save its original response with `import-response` and record it as a `recent`
-search response.
+Save its original response with `import-response` (provider `openalex`) and
+record it as a `recent` search response whose query is the filter value,
+`cites:<parent id>`.
 
 A purpose is covered when its question has an answer grounded in at least one
 read paper judged `relevant` or `contradictory`, or when two distinct captured
