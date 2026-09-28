@@ -96,6 +96,14 @@ def output_metric(config, files):
     fallback = "work/results/" + Path(config["script"]).stem + ".json"
     if result is None and fallback in files:
         result = strict_json(files[fallback])
+    # A run config recorded before metric_output existed names no third source.
+    declared = config.get("metric_output")
+    if result is None and declared in files:
+        try:
+            result = strict_json(files[declared])
+        except ResearchError:
+            # Unreadable validation JSON supplies no metric; the run's outcome is still reconciled.
+            pass
     return result
 
 

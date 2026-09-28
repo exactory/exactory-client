@@ -148,7 +148,7 @@ def _binding(records, admission_id):
     return value
 
 
-def _materialize(store, admission, binding):
+def _materialize(store, admission, binding, plan):
     directory = _directory(admission["id"])
     pairs = _files(store, admission, binding)
     for relative, artifact in pairs:
@@ -163,11 +163,15 @@ def _materialize(store, admission, binding):
             for arg in admission["command"]["argv"]]
     argv[1] = str(store.root / directory / "work" / binding["script"])
     argv[0] = binding["runtime"]["path"]
+    kinds = {item["id"]: item["kind"] for item in plan["evidence_requirements"]}
     config = {"admission_id": admission["id"], "binding_digest": binding["digest"], "argv": argv,
               "script": binding["script"], "files": [{"path": p, "sha256": a["sha256"]} for p, a in pairs],
               "timeout_seconds": binding["timeout_seconds"], "seed": admission["command"]["seed"],
               "runtime": binding["runtime"], "backend": binding["backend"],
-              "outputs": binding["outputs"]}
+              "outputs": binding["outputs"],
+              # The metric's last source: the first declared JSON output of a validation requirement.
+              "metric_output": next((output_path(item["path"]) for item in binding["outputs"]
+                                     if kinds[item["requirement_id"]] == "validation" and is_json_media_type(item["media_type"])), None)}
     if binding["backend"] == "colab":
         config["transport"] = binding["transport"]
     return config
@@ -185,7 +189,7 @@ def _claim(store, admission_id, expected_revision, request_id):
         earlier = dict(runtime, path=str(Path(runtime["path"]).resolve())) if binding["backend"] == "local" else runtime
         if binding["runtime"] not in (runtime, earlier):
             raise ResearchError("execution_runtime_changed", "The admitted interpreter bytes changed")
-        config = _materialize(store, admission, binding)
+        config = _materialize(store, admission, binding, records["cycle_plan"][admission["cycle_id"]]["payload"])
         claim = {"admission_id": admission_id, "binding_digest": binding["digest"], "config": config,
                  "config_artifact": artifacts.put(_canonical(config).encode(), "application/json"),
                  "request_id": request_id, "claimed_revision": expected_revision + 1, "token": uuid.uuid4().hex}
