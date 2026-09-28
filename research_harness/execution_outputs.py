@@ -102,10 +102,10 @@ def output_metric(config, files):
     if result is None and fallback in files:
         result = strict_json(files[fallback])
     # A run config recorded before metric_output existed names no third source.
-    declared = config.get("metric_output")
-    if result is None and declared in files and len(files[declared]) <= _METRIC_OUTPUT_MAX_BYTES:
+    metric_output_path = config.get("metric_output")
+    if result is None and metric_output_path in files and len(files[metric_output_path]) <= _METRIC_OUTPUT_MAX_BYTES:
         try:
-            result = strict_json(files[declared])
+            result = strict_json(files[metric_output_path])
         except ResearchError:
             # Unreadable validation JSON supplies no metric; the run's outcome is still reconciled.
             pass

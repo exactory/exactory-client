@@ -59,13 +59,13 @@ def _owner(root, admission_id, *, worker=False):
 
 def _describe_interpreter(interpreter_path):
     """The runtime record of the running Python, started as the absolute `interpreter_path`."""
-    resolved = Path(interpreter_path).resolve()
-    runtime = {"path": str(resolved), "sha256": hashlib.sha256(resolved.read_bytes()).hexdigest(),
+    resolved_file = Path(interpreter_path).resolve()
+    runtime = {"path": str(resolved_file), "sha256": hashlib.sha256(resolved_file.read_bytes()).hexdigest(),
                "python": sys.version.split()[0]}
     if Path(interpreter_path).is_symlink():
         # A worker starts a link itself: a venv's bin/python3 is a symlink, and only that path gives the
         # program the venv's site-packages. The file it resolves to stays pinned by its path and bytes.
-        runtime.update(path=interpreter_path, resolved_path=str(resolved))
+        runtime.update(path=interpreter_path, resolved_path=str(resolved_file))
     return runtime
 
 
@@ -84,9 +84,9 @@ def _runtime(command, backend="local"):
 
 def _build_earlier_runtime(runtime):
     """The record that exactory-client 0.47.0 and earlier wrote for the same interpreter: the resolved file only."""
-    earlier = dict(runtime, path=runtime.get("resolved_path", runtime["path"]))
-    earlier.pop("resolved_path", None)
-    return earlier
+    earlier_runtime = dict(runtime, path=runtime.get("resolved_path", runtime["path"]))
+    earlier_runtime.pop("resolved_path", None)
+    return earlier_runtime
 
 
 def _files(store, admission, binding, *, current=True):
@@ -112,10 +112,10 @@ def bind_execution(store, payload, *, expected_revision, request_id):
         if type(timeout) not in (int, float) or not math.isfinite(timeout) or timeout <= 0:
             raise ResearchError("invalid_execution", "A finite positive timeout is required")
         runtime = _runtime(admission["command"], value["backend"])
-        bound = records.get("execution_binding", {}).get(admission["id"])
-        if bound is not None and bound["runtime"] == _build_earlier_runtime(runtime):
+        recorded_binding = records.get("execution_binding", {}).get(admission["id"])
+        if recorded_binding is not None and recorded_binding["runtime"] == _build_earlier_runtime(runtime):
             # The same binding sent again keeps the record that an earlier release wrote for this interpreter.
-            runtime = bound["runtime"]
+            runtime = recorded_binding["runtime"]
         expected_script = str(store.root / "experiment" / value["script"])
         if Path(admission["command"]["argv"][1]).resolve() != Path(expected_script).resolve():
             raise ResearchError("execution_identity_mismatch", "The admitted argv must name the exact declared script")
@@ -129,14 +129,14 @@ def bind_execution(store, payload, *, expected_revision, request_id):
         if len(set(paths)) != len(paths) or [v["artifact"] for v in value["inputs"]] != admission["command"]["inputs"]:
             raise ResearchError("execution_identity_mismatch", "Bind each admitted input in order to one distinct relative path")
         plan = records["cycle_plan"][admission["cycle_id"]]["payload"]
-        requirements = {item["id"]: item["kind"] for item in plan["evidence_requirements"]}
+        requirement_kinds = {item["id"]: item["kind"] for item in plan["evidence_requirements"]}
         output_ids = set()
         output_paths = set()
         for output in value["outputs"]:
             fields(output, ("id", "requirement_id", "path", "media_type"))
             text(output["id"], "Output ID")
             _relative_parts(output["path"])
-            if output["id"] in output_ids or output["path"] in output_paths or output["requirement_id"] not in requirements:
+            if output["id"] in output_ids or output["path"] in output_paths or output["requirement_id"] not in requirement_kinds:
                 raise ResearchError("invalid_execution", "Each unique output must name a planned evidence requirement")
             if output["path"] in paths:
                 raise ResearchError("invalid_execution", "An output cannot replace a frozen input")
@@ -144,7 +144,7 @@ def bind_execution(store, payload, *, expected_revision, request_id):
             output_paths.add(output["path"])
             artifacts.put(b"", output["media_type"])
             # An assessment cites result and validation evidence through a locator into the output's text or JSON.
-            if (requirements[output["requirement_id"]] in ("result", "validation")
+            if (requirement_kinds[output["requirement_id"]] in ("result", "validation")
                     and not (output["media_type"].lower().startswith("text/") or is_json_media_type(output["media_type"]))):
                 raise ResearchError("invalid_execution", "Result and validation evidence needs a text or JSON output, but output "
                                     + output["id"] + " is " + output["media_type"] + "; bind figures and other binary files to a log requirement",
@@ -183,7 +183,7 @@ def _materialize(store, admission, binding, plan):
             for arg in admission["command"]["argv"]]
     argv[1] = str(store.root / directory / "work" / binding["script"])
     argv[0] = binding["runtime"]["path"]
-    kinds = {item["id"]: item["kind"] for item in plan["evidence_requirements"]}
+    requirement_kinds = {item["id"]: item["kind"] for item in plan["evidence_requirements"]}
     config = {"admission_id": admission["id"], "binding_digest": binding["digest"], "argv": argv,
               "script": binding["script"], "files": [{"path": p, "sha256": a["sha256"]} for p, a in pairs],
               "timeout_seconds": binding["timeout_seconds"], "seed": admission["command"]["seed"],
@@ -191,7 +191,7 @@ def _materialize(store, admission, binding, plan):
               "outputs": binding["outputs"],
               # The metric's last source: the first declared JSON output of a validation requirement.
               "metric_output": next((output_path(item["path"]) for item in binding["outputs"]
-                                     if kinds[item["requirement_id"]] == "validation" and is_json_media_type(item["media_type"])), None)}
+                                     if requirement_kinds[item["requirement_id"]] == "validation" and is_json_media_type(item["media_type"])), None)}
     if binding["backend"] == "colab":
         config["transport"] = binding["transport"]
     return config

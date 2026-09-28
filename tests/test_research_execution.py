@@ -606,17 +606,19 @@ class RunMetricTests(unittest.TestCase):
     def test_declared_validation_output_supplies_the_metric_only_up_to_sixteen_kibibytes(self):
         from research_harness.execution_outputs import output_metric
         config = {"script": "code/refine_cycle.py", "metric_output": "work/results/run_cycle.json"}
-        bound = 16 * 1024
+        max_bytes = 16 * 1024
 
-        def validation(size):
+        def build_validation_json(size):
             # A JSON object of exactly `size` bytes: {"checks": "xx...x"}.
             return b'{"checks": "' + b"x" * (size - 14) + b'"}'
 
-        self.assertEqual(len(validation(bound)), bound)
-        self.assertEqual(output_metric(config, {"work/results/run_cycle.json": validation(bound)}), {"checks": "x" * (bound - 14)})
+        self.assertEqual(len(build_validation_json(max_bytes)), max_bytes)
+        self.assertEqual(output_metric(config, {"work/results/run_cycle.json": build_validation_json(max_bytes)}),
+                         {"checks": "x" * (max_bytes - 14)})
         # A larger validation output stays evidence; the run summary does not copy it.
-        larger = [output_metric(config, {"work/results/run_cycle.json": validation(size)}) for size in (bound + 1, 2528649)]
-        self.assertEqual(larger, [None, None])
+        larger_metrics = [output_metric(config, {"work/results/run_cycle.json": build_validation_json(size)})
+                          for size in (max_bytes + 1, 2528649)]
+        self.assertEqual(larger_metrics, [None, None])
         # The two earlier sources keep their unbounded metric, so recorded observations validate as before.
-        stem = {"work/results/refine_cycle.json": validation(bound + 1)}
-        self.assertEqual(output_metric(config, stem), {"checks": "x" * (bound - 13)})
+        stem = {"work/results/refine_cycle.json": build_validation_json(max_bytes + 1)}
+        self.assertEqual(output_metric(config, stem), {"checks": "x" * (max_bytes - 13)})
