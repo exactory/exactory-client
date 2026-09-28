@@ -307,8 +307,9 @@ record it as a `recent` search response whose query is the filter value,
 
 A purpose is covered when its question has an answer grounded in at least one
 read paper judged `relevant` or `contradictory`, or when two distinct captured
-queries for that purpose returned no relevant hit. The record of each purpose
-states which. For each uncovered purpose, a new query is captured and up to 20
+queries for that purpose returned no relevant hit. Queries bound to one captured
+request count as one query. The record of each purpose states which. For each
+uncovered purpose, a new query is captured and up to 20
 more abstracts are read. The loop stops when every purpose is covered, when a
 round adds no `relevant` or `contradictory` paper to any uncovered purpose, or
 when the study has registered 100 abstract readings in the loop. At the limit,
