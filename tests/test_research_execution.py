@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import unittest
 from unittest import mock
 
 from development_fixtures import DevelopmentCase, PROGRAM
@@ -483,3 +484,42 @@ class ResearchExecutionTests(DevelopmentCase):
                     {"id": "paper-pdf", "requirement_id": "figures", "path": "plots/figure.pdf", "media_type": "application/pdf"}]
         self.bind_outputs(accepted)
         self.assertEqual(self.store.snapshot()["records"]["execution_binding"]["lab-run"]["outputs"], accepted)
+
+    def test_declared_json_validation_output_supplies_the_metric_of_a_differently_named_program(self):
+        from research_harness.execution_evidence import _observed
+        body = ("import json\nfrom pathlib import Path\nvalues = [n * n for n in range(4)]\n"
+                "Path('results/result.json').write_text(json.dumps({'values': values}))\n"
+                "Path('results/notes.txt').write_text('Every square is at most 9.')\n"
+                "Path('results/run_cycle.json').write_text(json.dumps({'passed': max(values) == 9, 'maximum': max(values)}))\n")
+        # The first JSON output of a validation requirement follows a JSON result output and a text validation output.
+        admission = admit_lab(self, "code/refine_cycle.py", body=body, outputs=[
+            {"id": "result", "requirement_id": "measurements", "path": "results/result.json", "media_type": "application/json"},
+            {"id": "notes", "requirement_id": "checks", "path": "results/notes.txt", "media_type": "text/plain"},
+            {"id": "validation", "requirement_id": "checks", "path": "results/run_cycle.json", "media_type": "application/json"}])
+        api = importlib.import_module("research_harness.execution")
+        result = api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision, request_id="refine")
+        self.assertEqual((result["ok"], result["is_buggy"], result["metric"]), (True, False, {"passed": True, "maximum": 9}))
+        records = self.store.snapshot()["records"]
+        self.assertEqual(records["execution_claim"][admission["id"]]["config"]["metric_output"], "work/results/run_cycle.json")
+        # Author readiness recomputes the metric from the recorded config and the sealed bytes.
+        _observed(records, self.artifacts, records["execution_outcome"][admission["id"]]["execution_id"])
+
+
+class RunMetricTests(unittest.TestCase):
+    def test_metric_sources_keep_their_order_and_an_earlier_run_config_keeps_its_metric(self):
+        from research_harness.execution_outputs import output_metric
+        config = {"script": "code/refine_cycle.py", "metric_output": "work/results/run_cycle.json"}
+        declared = {"work/results/run_cycle.json": b'{"passed": true}'}
+        stem = {"work/results/refine_cycle.json": b'{"metric": 2}'}
+        stdout = {"stdout": b'started\n{"metric": 1}\n'}
+        self.assertEqual(output_metric(config, declared), {"passed": True})
+        self.assertEqual(output_metric(config, {**declared, **stem}), {"metric": 2})
+        self.assertEqual(output_metric(config, {**declared, **stem, **stdout}), {"metric": 1})
+        self.assertIsNone(output_metric(dict(config, metric_output=None), declared))
+        # A declared output that is not finite JSON supplies no metric, so its run still reconciles.
+        for data in (b'{"passed": tr', b'{"ratio": NaN}'):
+            self.assertIsNone(output_metric(config, {"work/results/run_cycle.json": data}))
+        # A run config recorded before metric_output existed yields the metric it yielded before.
+        earlier = {"script": "code/refine_cycle.py"}
+        self.assertIsNone(output_metric(earlier, declared))
+        self.assertEqual(output_metric(earlier, {**declared, **stem}), {"metric": 2})
