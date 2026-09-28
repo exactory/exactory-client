@@ -107,6 +107,10 @@ def bind_execution(store, payload, *, expected_revision, request_id):
         if type(timeout) not in (int, float) or not math.isfinite(timeout) or timeout <= 0:
             raise ResearchError("invalid_execution", "A finite positive timeout is required")
         runtime = _runtime(admission["command"], value["backend"])
+        bound = records.get("execution_binding", {}).get(admission["id"])
+        if bound is not None and bound["runtime"] == _build_earlier_runtime(runtime):
+            # The same binding sent again keeps the record that an earlier release wrote for this interpreter.
+            runtime = bound["runtime"]
         expected_script = str(store.root / "experiment" / value["script"])
         if Path(admission["command"]["argv"][1]).resolve() != Path(expected_script).resolve():
             raise ResearchError("execution_identity_mismatch", "The admitted argv must name the exact declared script")

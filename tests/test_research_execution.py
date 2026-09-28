@@ -447,6 +447,8 @@ class ResearchExecutionTests(DevelopmentCase):
         # A retry with a new request ID, as exactory-client 0.47.0 accepted it.
         self.assertEqual(self.mutate(api.bind_execution, payload)["result"], bindings[admission["id"]])
         self.assertEqual(self.store.snapshot()["records"]["execution_binding"], bindings)
+        self.assert_error("record_conflict", lambda: self.mutate(api.bind_execution, dict(payload, timeout_seconds=6)))
+        self.assertEqual(self.store.snapshot()["records"]["execution_binding"], bindings)
 
     def admit_linked_interpreter(self):
         """Admit a link to one of two byte-identical interpreter files of separate installations.
