@@ -3,6 +3,7 @@
 import copy
 import json
 from pathlib import Path
+import subprocess
 import sys
 
 from development_fixtures import DevelopmentCase
@@ -255,6 +256,20 @@ def approve_publication_stop(case, bundle):
             {"kind": kind, "status": "passed", "reason": "The fixture supports the final finite result.", "evidence": evidence}
             for kind in ("stop", "demand")],
         "limitations": ["Synthetic fixture evidence."]})["result"]
+
+
+def make_venv(case):
+    """An ordinary venv of this interpreter, whose bin/python3 is a symlink, with one module only its site-packages holds."""
+    venv = Path(case.temporary.name) / "venv"
+    subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(venv)], check=True, capture_output=True)
+    interpreter = venv / "bin/python3"
+    case.assertTrue(interpreter.is_symlink())
+    purelib = subprocess.run([str(interpreter), "-c", "import sysconfig; print(sysconfig.get_paths()['purelib'])"],
+                             check=True, capture_output=True, text=True).stdout.strip()
+    (Path(purelib) / "venv_only_probe.py").write_text("VALUE = 11\n")
+    base = subprocess.run([str(interpreter.resolve()), "-c", "import venv_only_probe"], capture_output=True)
+    case.assertNotEqual(base.returncode, 0, "The base interpreter must not see the venv's site-packages")
+    return interpreter
 
 
 def admit_lab(case, script="code/program.py", *, body=None, run_id="lab-run", backend="local", timeout=5, seed=None,

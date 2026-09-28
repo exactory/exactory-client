@@ -12,7 +12,7 @@ import unittest
 from unittest import mock
 
 from development_fixtures import DevelopmentCase, PROGRAM
-from integration_fixtures import admit_lab
+from integration_fixtures import admit_lab, make_venv
 
 
 PLUGIN = Path(__file__).resolve().parents[1]
@@ -367,21 +367,8 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assert_error("execution_recovery_required", lambda: api.launch_execution(self.store, admission["id"],
             expected_revision=self.store.revision, request_id="second-launch"))
 
-    def make_venv(self):
-        """An ordinary venv of this interpreter, whose bin/python3 is a symlink, with one module only its site-packages holds."""
-        venv = Path(self.temporary.name) / "venv"
-        subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(venv)], check=True, capture_output=True)
-        interpreter = venv / "bin/python3"
-        self.assertTrue(interpreter.is_symlink())
-        purelib = subprocess.run([str(interpreter), "-c", "import sysconfig; print(sysconfig.get_paths()['purelib'])"],
-                                 check=True, capture_output=True, text=True).stdout.strip()
-        (Path(purelib) / "venv_only_probe.py").write_text("VALUE = 11\n")
-        base = subprocess.run([str(interpreter.resolve()), "-c", "import venv_only_probe"], capture_output=True)
-        self.assertNotEqual(base.returncode, 0, "The base interpreter must not see the venv's site-packages")
-        return interpreter
-
     def test_symlinked_venv_interpreter_runs_the_program_with_its_own_site_packages(self):
-        interpreter = self.make_venv()
+        interpreter = make_venv(self)
         admission = admit_lab(self, interpreter=str(interpreter),
                               body="import json\nimport venv_only_probe\nprint(json.dumps({'metric': venv_only_probe.VALUE}))\n")
         api = importlib.import_module("research_harness.execution")
