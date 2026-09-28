@@ -6,7 +6,7 @@ import json
 from development_fixtures import DevelopmentCase
 from literature_fixtures import LiteratureCase
 from research_harness.cli import OPERATIONS, status_report
-from research_harness.literature import foundation_report, import_bundle
+from research_harness.literature import foundation_report, import_bundle, record_search
 from research_harness.reading import record_reading, require_fulltext
 from research_harness.report_views import status_summary
 
@@ -232,6 +232,22 @@ class SourceDeferralTests(DeferralCase, LiteratureCase):
                                "reason": "Another unavailable proof appendix.", "url": "https://example.org/appendix"})
         self.mutate(import_bundle, later)
         self.assertEqual(foundation_report(self.store, "research")["source_deferrals"][-1]["status"], "stale")
+
+    def test_a_replaced_search_judgment_stales_the_deferral_of_a_work_only_it_cited(self):
+        root, gap = self.metadata(), self.metadata(2)
+        self.scope([root])
+        judgment = self.capture_search("direct", [gap])
+        judgment["cited_work_ids"] = [gap]
+        self.mutate(record_search, judgment)
+        self.defer(gap)
+        self.assertEqual(foundation_report(self.store, "research")["source_deferrals"][0]["status"], "active")
+        # The successor returns no work, so only the retired requirement changes the deferral's binding.
+        successor = self.capture_search("direct")
+        successor["id"] = "direct-2"
+        self.mutate(record_search, successor)
+        report = foundation_report(self.store, "research")
+        self.assertEqual(report["source_deferrals"][0]["status"], "stale")
+        self.assertFalse([o for o in report["obligations"] + report["deferred_obligations"] if o.get("version_id") == gap])
 
     def test_resume_restores_obligations_and_receipts_replay_without_reselection(self):
         _, gap = self.setup_gap()
