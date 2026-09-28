@@ -343,13 +343,17 @@ def _dispositions(records, value):
 
 def _drop_retiring_requirements(records, value):
     """The records a new judgment is assessed against. Once it is selected, the requirements of the
-    judgment it replaces stop counting; it creates its own for the works it cites again."""
+    judgment it replaces stop counting, and it creates its own for the works it cites. The frontier and
+    the evidence digest see a requirement only through its work family, so a replaced requirement stays
+    in view when the new judgment cites a version of the same family."""
     selection = records.get("search_selection", {}).get(value["profile"] + ":" + value["purpose"])
     previous = records.get("literature_search", {}).get(selection["search_id"]) if selection else None
     if previous is None or previous["id"] == value["id"]:
         return records
+    works = records["work"]
+    cited = {works[version]["work_id"] for version in value["cited_work_ids"]}
     retiring = {format_search_requirement_id(previous["id"], version) for version in previous["cited_work_ids"]
-                if version not in value["cited_work_ids"]}
+                if works[version]["work_id"] not in cited}
     return dict(records, fulltext_requirement={k: r for k, r in records.get("fulltext_requirement", {}).items() if k not in retiring})
 
 
