@@ -38,6 +38,69 @@ class PrinciplesTests(LiteratureCase):
         self.assertEqual(self.store.snapshot()["records"]["research_objective"]["objective-1"], target)
         self.assertTrue(api.configuration_report(self.store, "research")["ready"])
 
+    def instruction(self, identifier, text, folder="context"):
+        path = self.root / folder / (identifier + ".md")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        integration = importlib.import_module("research_harness.integration")
+        self.mutate(integration.pin_artifact, {"id": identifier, "path": folder + "/" + identifier + ".md", "media_type": "text/markdown; charset=utf-8"})
+        return identifier
+
+    def test_an_authorized_narrowing_keeps_the_earlier_objective_as_predecessor(self):
+        api = self.api()
+        original = {"kind": "objective", "id": "objective-1", "statement": "Prove the bound for every integer from 5 through 15, and find its extremal cases."}
+        self.mutate(api.initialize_research, {"profile": "research", "target": original, "preparation_policy": "exhaustive-v1"})
+        narrow = {"kind": "objective", "id": "objective-2", "statement": "Prove the bound for every integer from 5 through 15."}
+        words = "The user: narrow the objective to the bound itself.\n"
+        payload = {"target": narrow, "reason": "The user authorized dropping the extremal cases.", "authorization": self.instruction("user-1", words)}
+        self.assert_error("objective_locked", lambda: self.mutate(api.set_target, {"target": narrow, "reason": "No authorization."}))
+        self.assert_error("invalid_target", lambda: self.mutate(api.set_target, dict(payload, authorization=self.instruction("empty", "  \n"))))
+        self.assert_error("invalid_target", lambda: self.mutate(api.set_target, dict(payload, authorization=self.instruction("elsewhere", words, "notes"))))
+        self.assert_error("invalid_target", lambda: self.mutate(api.set_target, dict(payload, authorization="never-pinned")))
+        self.assert_error("objective_locked", lambda: self.mutate(api.set_target, dict(payload, target=dict(narrow, id=original["id"]))))
+        self.assert_error("objective_locked", lambda: self.mutate(api.set_target, dict(payload, target=dict(original, id="objective-3"))))
+        spaced = dict(original, id="objective-3", statement="  Prove the bound for every integer from 5 through 15,  and find its extremal cases. ")
+        self.assert_error("objective_locked", lambda: self.mutate(api.set_target, dict(payload, target=spaced)))
+        self.assert_error("objective_locked", lambda: self.mutate(api.set_target, dict(payload, target=None)))
+        revision = self.store.revision
+        result = api.set_target(self.store, payload, expected_revision=revision, request_id="narrowing")
+        records = self.store.snapshot()["records"]
+        self.assertEqual(records["configuration"]["research"]["target"], narrow)
+        self.assertEqual(records["research_objective"], {"objective-1": original, "objective-2": narrow})
+        pinned = records["local_artifact"]["user-1"]
+        self.assertEqual(records["objective_lineage"]["objective-2"],
+                         {"id": "objective-2", "predecessor": "objective-1", "relation": "user_authorized", "reason": payload["reason"],
+                          "authorization": {"id": "user-1", "path": "context/user-1.md", "artifact": pinned["artifact"], "text": words},
+                          "round_id": None})
+        self.assertEqual(api.set_target(self.store, payload, expected_revision=revision, request_id="narrowing"), result)
+        self.assertTrue(api.configuration_report(self.store, "research")["ready"])
+        self.assert_error("invalid_target", lambda: self.mutate(api.set_target, dict(payload, reason="Authorization on an unchanged target.")))
+        # One instruction authorizes one change; a further change needs the user's new instruction.
+        narrower = {"kind": "objective", "id": "objective-4", "statement": "Prove the bound for every integer from 5 through 10."}
+        self.assert_error("objective_locked", lambda: self.mutate(api.set_target, dict(payload, target=narrower)))
+        again = self.instruction("user-1-copy", words)
+        self.assert_error("objective_locked", lambda: self.mutate(api.set_target, dict(payload, target=narrower, authorization=again)))
+        second = self.instruction("user-2", "The user: keep only 5 through 10.\n")
+        self.mutate(api.set_target, {"target": narrower, "reason": "The user narrowed the range.", "authorization": second})
+        changes = api.objective_changes(self.store.snapshot()["records"])
+        self.assertEqual([(c["from"]["id"], c["to"]["id"]) for c in changes], [("objective-1", "objective-2"), ("objective-2", "objective-4")])
+
+    def test_authorization_applies_only_to_a_changed_research_objective(self):
+        api = self.api()
+        self.mutate(api.initialize_research, {"profile": "research", "target": None, "preparation_policy": "exhaustive-v1"})
+        target = {"kind": "objective", "id": "objective-1", "statement": "Prove the bound for every integer from 5 through 15."}
+        authorization = self.instruction("user-1", "The user: fix this objective.\n")
+        self.assert_error("invalid_target", lambda: self.mutate(api.set_target, {"target": target, "reason": "First.", "authorization": authorization}))
+        self.assertEqual(api.objective_changes(self.store.snapshot()["records"]), [])
+
+    def test_authorization_does_not_apply_to_a_verification_pin(self):
+        api = self.api()
+        work = self.metadata()
+        target = {"kind": "work", "id": work, "source_id": None, "sha256": None}
+        self.mutate(api.initialize_research, {"profile": "verification", "target": target, "preparation_policy": "exhaustive-v1"})
+        authorization = self.instruction("user-1", "The user: repin.\n")
+        self.assert_error("invalid_target", lambda: self.mutate(api.set_target, {"target": target, "reason": "Repin.", "authorization": authorization}))
+
     def test_verification_pin_uses_original_bytes_and_scope_agreement(self):
         api = self.api()
         work = self.metadata()

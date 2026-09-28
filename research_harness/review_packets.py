@@ -23,6 +23,7 @@ from .challenge import find_current_challenge
 from .contribution import find_analysis
 from .evidence import digest
 from .predictions import measurement_summary
+from .principles import objective_changes
 from .publication import latest_reviews
 from .resources import account_report
 from .rounds import admissions, assessment_for, closing_round_assessments
@@ -141,6 +142,9 @@ def round_packet(records, bundle, decision):
                 "analysis_grand_challenge": records["grand_challenge"][analyzed_against["id"]]["payload"] if replaced else None,
                 "resources": account_report(records, "research"),
                 "digest": digest({"bundle": bundle["digest"], "decision": decision["digest"]})}
+    changes = objective_changes(records)
+    if changes:
+        manifest["objective_changes"] = changes
     return scrub(manifest, _FORBIDDEN_KEYS + ("authors", "author"))
 
 
