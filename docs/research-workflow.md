@@ -392,7 +392,10 @@ program imports the venv's packages. For a regular interpreter file, the binding
 records its resolved path, as earlier releases did. The binding pins the resolved
 interpreter file by its path and SHA-256. Changed interpreter bytes, a changed
 Python version, or a link that now resolves to another file stop the launch with
-`execution_runtime_changed`.
+`execution_runtime_changed` before the launcher claims the run. If the
+interpreter changes after the claim, the worker refuses to start the program,
+and the launch returns `execution_recovery_required`. Record that run with
+`reconcile-run`, giving `resolution: "interrupted"` and a reason.
 
 A binding of a venv interpreter that exactory-client 0.47.0 or earlier recorded
 names the resolved file as its path, and its launch starts that file. Its program
