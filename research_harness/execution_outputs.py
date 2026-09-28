@@ -9,6 +9,11 @@ from .errors import ResearchError
 from .workspace import checked_parent, read_file, strict_json
 
 
+# A declared validation output supplies the metric only up to this size: a metric summarizes a run,
+# and a larger output stays evidence instead of a copy in every run summary.
+_METRIC_OUTPUT_MAX_BYTES = 16 * 1024
+
+
 def output_path(path):
     return path if path in ("stdout", "stderr") else "work/" + path
 
@@ -98,7 +103,7 @@ def output_metric(config, files):
         result = strict_json(files[fallback])
     # A run config recorded before metric_output existed names no third source.
     declared = config.get("metric_output")
-    if result is None and declared in files:
+    if result is None and declared in files and len(files[declared]) <= _METRIC_OUTPUT_MAX_BYTES:
         try:
             result = strict_json(files[declared])
         except ResearchError:
