@@ -159,6 +159,41 @@ class GraphTests(LiteratureCase):
             self.assertEqual({r["occurrence_id"] for r in graph["references"]}, occurrences, source_id)
             self.assertEqual({o["reference_id"] for o in graph["obligations"] if o["code"] == "reference_unresolved"}, occurrences, source_id)
 
+    def passage(self, version, bundle_id):
+        """A partial passage bundle on the version's saved tool response; its one bibliography entry names no identifier."""
+        records = self.store.snapshot()["records"]
+        source_id = next(s for s in records["work"][version]["source_ids"] if records["source"][s]["provider"] == "mcp")
+
+        def link(pointer, value):
+            return {"version_id": version, "source_id": source_id, "artifact": records["source"][source_id]["response"],
+                    "locator": {"kind": "json", "pointer": pointer, "value": value}}
+
+        body, bibliography = link("/title", "Authored references"), link("/references/0/unstructured", "A tool-reported reference")
+        return {"id": bundle_id, "version_id": version, "source_id": source_id, "scope": "passage", "completeness": "partial",
+                "units": [{"id": "passage", "kind": "text", "required": True, "link": body},
+                          {"id": "bibliography", "kind": "bibliography", "required": True, "link": bibliography}],
+                "inventory": {"text": "A passage of the article in a saved tool response.", "links": [body]},
+                "bibliography": {"complete": False, "unit_id": "bibliography",
+                                 "entries": [{"target": None, "kind": "unknown", "reason": "The tool entry names no identifier.",
+                                              "link": bibliography}]},
+                "resolutions": []}
+
+    def test_a_passage_bundle_keeps_its_occurrences_beside_an_article_bundle_in_either_import_order(self):
+        roots = [self.metadata(n, references=[{"unstructured": "A tool-reported reference"}]) for n in (1, 2, 3)]
+        passage_first, article_first, passage_only = roots
+        captures = {version: self.capture(version, "The article body. References: an article reference.") for version in roots}
+        # Each version has an available original; the last one has only a passage bundle.
+        for bundle in (self.passage(passage_first, "passage-1"),
+                       self.bundle_with_unknown_entry(passage_first, captures[passage_first], "article-1", "an article reference"),
+                       self.bundle_with_unknown_entry(article_first, captures[article_first], "article-2", "an article reference"),
+                       self.passage(article_first, "passage-2"),
+                       self.passage(passage_only, "passage-3")):
+            self.mutate(import_bundle, bundle)
+        self.scope(roots)
+        records = self.store.snapshot()["records"]
+        graph = citation_graph(records, "research")
+        self.assertEqual({r["occurrence_id"] for r in graph["references"]}, set(records["reference_occurrence"]))
+
     def test_shorter_registry_observation_does_not_prove_or_replace_bibliography(self):
         a = self.metadata(references=[{"unstructured": "Observed item " + str(i)} for i in range(6)])
         self.metadata(references=[{"unstructured": "Observed item " + str(i)} for i in range(5)])
