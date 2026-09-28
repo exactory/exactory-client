@@ -425,15 +425,36 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assertTrue(result["ok"], result["stderr_tail"])
         self.assertEqual(result["metric"], {"metric": 5})
 
+    def build_bind_run_payload(self, admission_id):
+        """The bind-run payload of the recorded binding, as a retry with a new request ID sends it again."""
+        binding = self.store.snapshot()["records"]["execution_binding"][admission_id]
+        return {key: binding[key] for key in ("admission_id", "script", "backend", "timeout_seconds", "inputs", "outputs", "usage_unit")}
+
     def test_identical_bind_run_again_returns_the_binding_of_an_earlier_release(self):
         admission = self.admit_as_earlier_release("print('{\"metric\": 5}')\n")
         api = importlib.import_module("research_harness.execution")
         bindings = self.store.snapshot()["records"]["execution_binding"]
-        payload = {key: bindings[admission["id"]][key]
-                   for key in ("admission_id", "script", "backend", "timeout_seconds", "inputs", "outputs", "usage_unit")}
+        payload = self.build_bind_run_payload(admission["id"])
         # A retry with a new request ID, as exactory-client 0.47.0 accepted it.
         self.assertEqual(self.mutate(api.bind_execution, payload)["result"], bindings[admission["id"]])
         self.assertEqual(self.store.snapshot()["records"]["execution_binding"], bindings)
+        self.assert_error("record_conflict", lambda: self.mutate(api.bind_execution, dict(payload, timeout_seconds=6)))
+        self.assertEqual(self.store.snapshot()["records"]["execution_binding"], bindings)
+
+    def test_identical_bind_run_again_returns_an_earlier_release_binding_of_a_figure_as_result_evidence(self):
+        api = importlib.import_module("research_harness.execution")
+        outputs = [{"id": "result", "requirement_id": "measurements", "path": "results/result.json", "media_type": "application/json"},
+                   {"id": "plot", "requirement_id": "measurements", "path": "plots/figure.png", "media_type": "image/png"}]
+        # exactory-client 0.47.0 bound an output of any media type to a result requirement.
+        with mock.patch.object(api, "is_json_media_type", return_value=True):
+            admission = admit_lab(self, body="print('{\"metric\": 7}')\n", outputs=outputs)
+        bindings = self.store.snapshot()["records"]["execution_binding"]
+        self.assertEqual(bindings[admission["id"]]["outputs"], outputs)
+        payload = self.build_bind_run_payload(admission["id"])
+        # A retry with a new request ID returns the recorded binding, as exactory-client 0.47.0 did.
+        self.assertEqual(self.mutate(api.bind_execution, payload)["result"], bindings[admission["id"]])
+        self.assertEqual(self.store.snapshot()["records"]["execution_binding"], bindings)
+        # The binding is immutable, so a changed payload is still refused.
         self.assert_error("record_conflict", lambda: self.mutate(api.bind_execution, dict(payload, timeout_seconds=6)))
         self.assertEqual(self.store.snapshot()["records"]["execution_binding"], bindings)
 
