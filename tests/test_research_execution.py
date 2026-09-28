@@ -496,8 +496,12 @@ class ResearchExecutionTests(DevelopmentCase):
         with self.claim_under(link), mock.patch.object(api, "_prelaunch", side_effect=retarget_then_prelaunch):
             self.assert_error("execution_recovery_required", lambda: api.launch_execution(self.store, admission["id"],
                 expected_revision=self.store.revision, request_id="retargeted-after-claim"))
+        directory = self.root / api._directory(admission["id"])
+        # The retarget happened, and the worker itself refused the file behind the link.
+        self.assertEqual(link.resolve(), other.resolve())
+        self.assertIn(b"Worker interpreter differs from admission", (directory / "launcher.log").read_bytes())
         self.assertFalse(marker.exists())
-        self.assertFalse((self.root / api._directory(admission["id"]) / "terminal.json").exists())
+        self.assertFalse((directory / "terminal.json").exists())
 
     def test_changed_bytes_or_version_behind_a_linked_interpreter_stop_the_claim(self):
         api = importlib.import_module("research_harness.execution")
