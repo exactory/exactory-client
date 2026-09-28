@@ -439,6 +439,22 @@ class SearchDispositionTests(LiteratureCase):
                                        "purpose": "validity", "reason": "The validity decision rests on this source."})
         self.assertIn(dropped, {x["version_id"] for x in self.store_obligations() if x["code"] == "fulltext_reading_missing"})
 
+    def test_a_successor_that_cites_another_version_of_a_replaced_citation_is_current(self):
+        a = self.metadata()
+        self.scope([a])
+        earlier, later = "arxiv:2602.00011v1", "arxiv:2602.00011v2"
+        first = self.search("direct", [earlier])
+        first["cited_work_ids"] = [earlier]
+        self.mutate(record_search, first)
+        second = self.search("direct", [later])
+        second["id"], second["cited_work_ids"] = "direct-2", [later]
+        self.mutate(record_search, second)
+        report = foundation_report(self.store, "research")
+        depths = {x["version_id"]: x["required_depth"] for x in report["inventory"]}
+        self.assertEqual((depths[earlier], depths[later]), (None, "fulltext"))
+        # The family is required before and after the replacement, so the successor's frontier is current.
+        self.assertFalse({"search_evidence_stale", "search_frontier_stale"} & {x["code"] for x in report["obligations"]})
+
     def test_recording_another_purpose_does_not_stale_a_selected_search(self):
         a = self.metadata()
         self.scope([a])
