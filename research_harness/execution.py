@@ -57,6 +57,18 @@ def _owner(root, admission_id, *, worker=False):
         os.close(descriptor)
 
 
+def _describe_interpreter(interpreter):
+    """The runtime record of the running Python, started as the absolute path `interpreter`."""
+    resolved = Path(interpreter).resolve()
+    runtime = {"path": str(resolved), "sha256": hashlib.sha256(resolved.read_bytes()).hexdigest(),
+               "python": sys.version.split()[0]}
+    if Path(interpreter).is_symlink():
+        # A worker starts a link itself: a venv's bin/python3 is a symlink, and only that path gives the
+        # program the venv's site-packages. The file it resolves to stays pinned by its path and bytes.
+        runtime.update(path=interpreter, resolved_path=str(resolved))
+    return runtime
+
+
 def _runtime(command, backend="local"):
     argv = command["argv"]
     if backend == "colab":
@@ -67,14 +79,7 @@ def _runtime(command, backend="local"):
         raise ResearchError("unsupported_execution", "The lab launcher supports an explicit current Python interpreter and script")
     if command["versions"].get("python") != sys.version.split()[0]:
         raise ResearchError("execution_runtime_changed", "Run with the exact admitted Python version")
-    resolved = Path(argv[0]).resolve()
-    runtime = {"path": str(resolved), "sha256": hashlib.sha256(resolved.read_bytes()).hexdigest(),
-               "python": sys.version.split()[0]}
-    if Path(argv[0]).is_symlink():
-        # The worker starts an admitted link itself: a venv's bin/python3 is a symlink, and only that path gives
-        # the program the venv's site-packages. The file it resolves to stays pinned by its path and bytes.
-        runtime.update(path=argv[0], resolved_path=str(resolved))
-    return runtime
+    return _describe_interpreter(argv[0])
 
 
 def _build_earlier_runtime(runtime):

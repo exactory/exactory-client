@@ -189,8 +189,8 @@ def collect_colab(store, claim):
 
 
 def _runner_runtime():
-    path = Path(sys.executable).resolve()
-    return {"path": str(path), "python": sys.version.split()[0], "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+    from .execution import _describe_interpreter
+    return _describe_interpreter(sys.executable)
 
 
 def _execute_job(root, job, worker):
