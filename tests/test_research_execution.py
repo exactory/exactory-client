@@ -403,6 +403,22 @@ class ResearchExecutionTests(DevelopmentCase):
         result = api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision, request_id="real-file")
         self.assertTrue(result["ok"], result["stderr_tail"])
 
+    def test_real_interpreter_file_named_through_a_linked_directory_keeps_the_record_of_earlier_releases(self):
+        interpreter = Path(sys.executable).resolve()
+        linked = Path(self.temporary.name) / "linked-bin"
+        linked.symlink_to(interpreter.parent, target_is_directory=True)
+        admitted = linked / interpreter.name
+        self.assertFalse(admitted.is_symlink())
+        admission = admit_lab(self, interpreter=str(admitted), body="print('{\"metric\": 3}')\n")
+        runtime = self.store.snapshot()["records"]["execution_binding"][admission["id"]]["runtime"]
+        # Earlier releases recorded the resolved file of every admitted interpreter.
+        self.assertEqual(runtime, {"path": str(interpreter), "python": sys.version.split()[0],
+                                   "sha256": hashlib.sha256(interpreter.read_bytes()).hexdigest()})
+        api = importlib.import_module("research_harness.execution")
+        result = api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision, request_id="linked-directory")
+        self.assertTrue(result["ok"], result["stderr_tail"])
+        self.assertEqual(result["metric"], {"metric": 3})
+
     def test_binding_that_pinned_the_resolved_interpreter_path_still_launches(self):
         api = importlib.import_module("research_harness.execution")
         link = Path(self.temporary.name) / "bin/python3"
