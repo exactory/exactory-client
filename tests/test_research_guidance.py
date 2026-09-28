@@ -64,11 +64,16 @@ class ResearchGuidanceTests(unittest.TestCase):
         parsers = {"exactory-research": build_parser(), "exactory-lab": bin_parser("exactory-lab"),
                    "exactory-cohort": bin_parser("exactory-cohort"), "exactory-draft": bin_parser("exactory-draft")}
         observed = set()
+        interpreted = set()
         for block in re.findall(r"```sh\n(.*?)```", workflow.read_text(), re.S):
             for line in block.replace("\\\n", " ").splitlines():
                 arguments = shlex.split(line, comments=True)
                 if not arguments:
                     continue
+                # A command started by a named interpreter: INTERPRETER "$(command -v COMMAND)" ARGUMENTS.
+                started = re.fullmatch(r"\$\(command -v (\S+)\)", arguments[1]) if len(arguments) > 1 else None
+                if started:
+                    arguments = [started.group(1)] + arguments[2:]
                 self.assertIn(arguments[0], parsers, line)
                 if ">" in arguments:
                     arguments = arguments[:arguments.index(">")]
@@ -76,10 +81,14 @@ class ResearchGuidanceTests(unittest.TestCase):
                 with self.subTest(command=line):
                     parsed = parsers[arguments[0]].parse_args(arguments[1:])
                     observed.add((arguments[0], parsed.command))
+                    if started:
+                        interpreted.add((arguments[0], parsed.command))
         required = {("exactory-research", command) for command in
                     ("target", "read", "search", "cycle", "admit", "bind-run", "assess", "checkpoint", "review", "gate")}
         required.update({("exactory-lab", "init"), ("exactory-lab", "run"), ("exactory-cohort", "freeze")})
         self.assertLessEqual(required, observed)
+        # An admission of a venv interpreter binds and launches under that interpreter.
+        self.assertLessEqual({("exactory-research", "bind-run"), ("exactory-lab", "run")}, interpreted)
 
     def test_release_manifests_and_notes_describe_the_same_final_version(self):
         for relative in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
