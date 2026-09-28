@@ -438,6 +438,16 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assertTrue(result["ok"], result["stderr_tail"])
         self.assertEqual(result["metric"], {"metric": 5})
 
+    def test_identical_bind_run_again_returns_the_binding_of_an_earlier_release(self):
+        admission = self.admit_as_earlier_release("print('{\"metric\": 5}')\n")
+        api = importlib.import_module("research_harness.execution")
+        bindings = self.store.snapshot()["records"]["execution_binding"]
+        payload = {key: bindings[admission["id"]][key]
+                   for key in ("admission_id", "script", "backend", "timeout_seconds", "inputs", "outputs", "usage_unit")}
+        # A retry with a new request ID, as exactory-client 0.47.0 accepted it.
+        self.assertEqual(self.mutate(api.bind_execution, payload)["result"], bindings[admission["id"]])
+        self.assertEqual(self.store.snapshot()["records"]["execution_binding"], bindings)
+
     def admit_linked_interpreter(self):
         """Admit a link to one of two byte-identical interpreter files of separate installations.
 
