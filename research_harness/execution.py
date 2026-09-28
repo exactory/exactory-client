@@ -144,7 +144,8 @@ def bind_execution(store, payload, *, expected_revision, request_id):
             output_paths.add(output["path"])
             artifacts.put(b"", output["media_type"])
             # An assessment cites result and validation evidence through a locator into the output's text or JSON.
-            if (requirement_kinds[output["requirement_id"]] in ("result", "validation")
+            # The rule applies to a new binding only: a recorded one is immutable, and the same payload returns it.
+            if (recorded_binding is None and requirement_kinds[output["requirement_id"]] in ("result", "validation")
                     and not (output["media_type"].lower().startswith("text/") or is_json_media_type(output["media_type"]))):
                 raise ResearchError("invalid_execution", "Result and validation evidence needs a text or JSON output, but output "
                                     + output["id"] + " is " + output["media_type"] + "; bind figures and other binary files to a log requirement",
