@@ -135,6 +135,34 @@ class LoopTests(LineageCase):
                                     "reason": "The study returns to the legacy preparation policy."})
         self.assert_error("policy_inapplicable", lambda: self.mutate(lineage.record_loop_closure, {"id": "legacy", "purposes": closure}))
 
+    def test_queries_bound_to_one_captured_request_count_once(self):
+        root = self.metadata(1)
+        self.scope([root])
+
+        def judge(purpose, provider, url, data, queries):
+            """Record a nothing-new judgment that binds every query to one captured native request."""
+            self.sequence += 1
+            source = import_response(self.store, provider, json.dumps(data).encode(), source_url=url, captured_at="2026-09-07T12:00:00Z",
+                                     expected_revision=self.store.revision, request_id="native-" + str(self.sequence))["source_ids"][0]
+            self.mutate(record_search, {"id": purpose + "-native", "profile": "research", "purpose": purpose, "queries": queries,
+                                        "responses": [{"source_id": source, "query": query} for query in queries],
+                                        "captured_at": "2026-09-07T12:00:00Z", "scope": "The works one native request returned.",
+                                        "found_work_ids": [], "verdict": "nothing-new", "cited_work_ids": [], "dispositions": [],
+                                        "impact": "The request returned no work.", "gaps": []})
+
+        judge("recent", "openalex", "https://api.openalex.org/works?search=dram%20erasure&filter=cites:W123",
+              {"meta": {"count": 0, "next_cursor": None}, "results": []}, ["cites:W123", "dram erasure"])
+        judge("theory", "crossref", "https://api.crossref.org/works?query=dram%20erasure&query.author=Smith",
+              {"message": {"total-results": 0, "items": []}}, ["Smith", "dram erasure"])
+        # The pages of one query are one query too.
+        self.mutate(record_search, self.judgment("direct", [("direct paged", []), ("direct paged", [])]))
+        purposes = lineage.loop_state(self.store.snapshot()["records"], "research")["purposes"]
+        self.assertEqual({p: (purposes[p]["queries"], purposes[p]["covered"]) for p in ("recent", "theory", "direct")},
+                         {"recent": (1, False), "theory": (1, False), "direct": (1, False)})
+        self.mutate(record_search, self.search("recent", [], query="recent second"))
+        purposes = lineage.loop_state(self.store.snapshot()["records"], "research")["purposes"]
+        self.assertEqual((purposes["recent"]["queries"], purposes["recent"]["covered"]), (2, True))
+
 
 class OutsideReadingTests(LineageCase):
     def test_a_full_reading_of_a_source_the_study_does_not_hold_leaves_the_foundation_unchanged(self):
