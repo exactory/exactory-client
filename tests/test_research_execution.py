@@ -1,5 +1,6 @@
 """Real pinned launches, one-time claims, timeout and interrupted-owner recovery."""
 
+import hashlib
 import importlib
 import json
 from pathlib import Path
@@ -364,3 +365,80 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assertEqual(len(self.store.snapshot()["records"]["execution"]), 1)
         self.assert_error("execution_recovery_required", lambda: api.launch_execution(self.store, admission["id"],
             expected_revision=self.store.revision, request_id="second-launch"))
+
+    def make_venv(self):
+        """An ordinary venv of this interpreter, whose bin/python3 is a symlink, with one module only its site-packages holds."""
+        venv = Path(self.temporary.name) / "venv"
+        subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(venv)], check=True, capture_output=True)
+        interpreter = venv / "bin/python3"
+        self.assertTrue(interpreter.is_symlink())
+        purelib = subprocess.run([str(interpreter), "-c", "import sysconfig; print(sysconfig.get_paths()['purelib'])"],
+                                 check=True, capture_output=True, text=True).stdout.strip()
+        (Path(purelib) / "venv_only_probe.py").write_text("VALUE = 11\n")
+        base = subprocess.run([str(interpreter.resolve()), "-c", "import venv_only_probe"], capture_output=True)
+        self.assertNotEqual(base.returncode, 0, "The base interpreter must not see the venv's site-packages")
+        return interpreter
+
+    def test_symlinked_venv_interpreter_runs_the_program_with_its_own_site_packages(self):
+        interpreter = self.make_venv()
+        admission = admit_lab(self, interpreter=str(interpreter),
+                              body="import json\nimport venv_only_probe\nprint(json.dumps({'metric': venv_only_probe.VALUE}))\n")
+        api = importlib.import_module("research_harness.execution")
+        result = api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision, request_id="venv-run")
+        self.assertTrue(result["ok"], result["stderr_tail"])
+        self.assertEqual(result["metric"], {"metric": 11})
+        runtime = self.store.snapshot()["records"]["execution_binding"][admission["id"]]["runtime"]
+        self.assertEqual(runtime, {"path": str(interpreter), "python": sys.version.split()[0],
+                                   "sha256": hashlib.sha256(interpreter.resolve().read_bytes()).hexdigest()})
+
+    def test_real_interpreter_file_keeps_the_runtime_record_of_earlier_releases(self):
+        interpreter = Path(sys.executable).resolve()
+        admission = admit_lab(self, interpreter=str(interpreter), body="print('{\"metric\": 7}')\n")
+        runtime = self.store.snapshot()["records"]["execution_binding"][admission["id"]]["runtime"]
+        # The record that earlier releases wrote for every admitted interpreter.
+        self.assertEqual(runtime, {"path": str(Path(sys.executable).resolve()), "python": sys.version.split()[0],
+                                   "sha256": hashlib.sha256(Path(sys.executable).read_bytes()).hexdigest()})
+        api = importlib.import_module("research_harness.execution")
+        result = api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision, request_id="real-file")
+        self.assertTrue(result["ok"], result["stderr_tail"])
+
+    def test_binding_that_pinned_the_resolved_interpreter_path_still_launches(self):
+        api = importlib.import_module("research_harness.execution")
+        link = Path(self.temporary.name) / "bin/python3"
+        link.parent.mkdir()
+        link.symlink_to(Path(sys.executable).resolve())
+        current_runtime = api._runtime
+
+        def earlier_runtime(command, backend="local"):
+            # Earlier releases recorded the resolved interpreter path for a symlinked argv[0].
+            return dict(current_runtime(command, backend), path=str(Path(sys.executable).resolve()))
+
+        with mock.patch.object(api, "_runtime", side_effect=earlier_runtime):
+            admission = admit_lab(self, interpreter=str(link), body="print('{\"metric\": 5}')\n")
+        result = api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision, request_id="earlier-binding")
+        self.assertTrue(result["ok"], result["stderr_tail"])
+        self.assertEqual(result["metric"], {"metric": 5})
+
+    def test_changed_bytes_or_version_behind_a_linked_interpreter_stop_the_claim(self):
+        api = importlib.import_module("research_harness.execution")
+        base = Path(self.temporary.name) / "base/python3"
+        link = Path(self.temporary.name) / "venv/bin/python3"
+        for path in (base, link):
+            path.parent.mkdir(parents=True)
+        base.write_bytes(b"admitted interpreter bytes")
+        link.symlink_to(base)
+        # The command line runs under the linked interpreter; the claim is refused before any process starts.
+        with mock.patch.object(sys, "executable", str(link)):
+            admission = admit_lab(self, interpreter=str(link), body="raise RuntimeError('must never launch')\n")
+            before = self.store.snapshot()
+
+            def launch():
+                api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision, request_id="changed-runtime")
+
+            base.write_bytes(b"replaced interpreter bytes")
+            self.assert_error("execution_runtime_changed", launch)
+            base.write_bytes(b"admitted interpreter bytes")
+            with mock.patch.object(sys, "version", "3.0.0 (another release)"):
+                self.assert_error("execution_runtime_changed", launch)
+        self.assertEqual(self.store.snapshot(), before)
+        self.assertNotIn("execution_claim", before["records"])
