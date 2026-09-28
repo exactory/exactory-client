@@ -630,25 +630,21 @@ class RunMetricTests(unittest.TestCase):
         self.assertIsNone(output_metric(earlier, declared))
         self.assertEqual(output_metric(earlier, {**declared, **stem}), {"metric": 2})
 
-    def test_declared_validation_output_supplies_the_metric_only_up_to_sixteen_kibibytes(self):
+    def test_declared_validation_output_of_any_size_supplies_the_metric(self):
         from research_harness.execution_outputs import output_metric
         config = {"script": "code/refine_cycle.py", "metric_output": "work/results/run_cycle.json"}
-        max_bytes = 16 * 1024
 
         def build_validation_json(size):
             # A JSON object of exactly `size` bytes: {"checks": "xx...x"}.
             return b'{"checks": "' + b"x" * (size - 14) + b'"}'
 
-        self.assertEqual(len(build_validation_json(max_bytes)), max_bytes)
-        self.assertEqual(output_metric(config, {"work/results/run_cycle.json": build_validation_json(max_bytes)}),
-                         {"checks": "x" * (max_bytes - 14)})
-        # A larger validation output stays evidence; the run summary does not copy it.
-        larger_metrics = [output_metric(config, {"work/results/run_cycle.json": build_validation_json(size)})
-                          for size in (max_bytes + 1, 2528649)]
-        self.assertEqual(larger_metrics, [None, None])
-        # The two earlier sources keep their unbounded metric, so recorded observations validate as before.
-        stem = {"work/results/refine_cycle.json": build_validation_json(max_bytes + 1)}
-        self.assertEqual(output_metric(config, stem), {"checks": "x" * (max_bytes - 13)})
+        # The declared validation output has no size bound, as the fallback file and a stdout line have none.
+        for size in (16 * 1024 + 1, 575793):
+            data = build_validation_json(size)
+            self.assertEqual(len(data), size)
+            for path in ("work/results/refine_cycle.json", "work/results/run_cycle.json"):
+                with self.subTest(size=size, path=path):
+                    self.assertEqual(output_metric(config, {path: data}), {"checks": "x" * (size - 14)})
 
     def test_each_metric_source_gives_only_json_that_every_supported_python_reads_back(self):
         from research_harness.execution_outputs import output_metric
