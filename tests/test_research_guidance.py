@@ -99,6 +99,16 @@ class ResearchGuidanceTests(unittest.TestCase):
                 self.assertIn("exactory-client 0.47.0 or earlier", text)
         self.assertIn("To run the program with the venv's packages, admit and bind a new run.", documents["docs/research-workflow.md"])
 
+    def test_guidance_names_the_outcome_of_an_interpreter_change_after_the_claim(self):
+        documents = {name: " ".join((PLUGIN / name).read_text().split())
+                     for name in ("docs/research-workflow.md", "docs/research-cli.md")}
+        # Only the worker sees a change after the claim, so the launch cannot report execution_runtime_changed.
+        for name, text in documents.items():
+            with self.subTest(document=name):
+                self.assertIn("If the interpreter changes after the claim, the worker refuses to start the program, "
+                              "and the launch returns `execution_recovery_required`.", text)
+                self.assertIn("Record that run with `reconcile-run`, giving `resolution: \"interrupted\"` and a reason.", text)
+
     def test_release_manifests_and_notes_describe_the_same_final_version(self):
         for relative in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
             self.assertEqual(json.loads((PLUGIN / relative).read_text())["version"], "0.47.0")

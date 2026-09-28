@@ -523,6 +523,14 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assertIn(b"Worker interpreter differs from admission", (directory / "launcher.log").read_bytes())
         self.assertFalse(marker.exists())
         self.assertFalse((directory / "terminal.json").exists())
+        # The documented recovery records the claimed run as interrupted, so it no longer stays pending.
+        result = api.reconcile_execution(self.store, {"admission_id": admission["id"], "resolution": "interrupted",
+            "reason": "The worker refused an interpreter that changed after the claim."},
+            expected_revision=self.store.revision, request_id="recover-retargeted")
+        self.assertFalse(result["ok"])
+        records = self.store.snapshot()["records"]
+        execution_id = records["execution_outcome"][admission["id"]]["execution_id"]
+        self.assertEqual(records["execution"][execution_id]["payload"]["status"], "interrupted")
 
     def test_changed_bytes_or_version_behind_a_linked_interpreter_stop_the_claim(self):
         api = importlib.import_module("research_harness.execution")
