@@ -2,7 +2,7 @@ import copy
 
 from literature_fixtures import LiteratureCase
 from research_harness.graph import citation_graph, set_roots
-from research_harness.literature import foundation_report, import_bundle
+from research_harness.literature import foundation_report, import_bundle, record_search
 from research_harness.reading import require_fulltext
 
 
@@ -37,6 +37,25 @@ class GraphTests(LiteratureCase):
         item = next(x for x in report["inventory"] if x["version_id"] == e)
         self.assertEqual(item["tier"], 2)
         self.assertEqual(item["required_depth"], "fulltext")
+
+    def test_a_replaced_search_judgment_stops_selecting_the_references_only_it_cited(self):
+        a, b, c = ["arxiv:2601.%05dv1" % n for n in (1, 2, 3)]
+        self.metadata(1, references=[{"id": b}, {"id": c}])
+        self.metadata(2)
+        self.metadata(3)
+        self.scope([a])
+
+        def tiers():
+            return {node["work_id"]: node["tier"] for node in citation_graph(self.store.snapshot()["records"], "research")["nodes"]}
+
+        first = self.capture_search("direct", [b, c])
+        first["cited_work_ids"] = [b, c]
+        self.mutate(record_search, first)
+        self.assertEqual(tiers(), {a[:-2]: 1, b[:-2]: 2, c[:-2]: 2})
+        second = self.capture_search("direct", [b, c])
+        second["id"], second["cited_work_ids"] = "direct-2", [b]
+        self.mutate(record_search, second)
+        self.assertEqual(tiers(), {a[:-2]: 1, b[:-2]: 2, c[:-2]: 3})
 
     def test_article_bibliography_expansion_preserves_repeated_unresolved_and_nonpaper(self):
         a, b = self.metadata(), self.metadata(2)
