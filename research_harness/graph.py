@@ -5,10 +5,10 @@ historical_cutoff?}. Verification target is {kind: work, id, source_id, sha256};
 an incomplete pin may be prepared but cannot complete the foundation. Scope
 changes replace literature_scope/{profile}; Store events preserve prior scopes.
 
-Graph traversal includes, for every Tier 1/2 captured version, each registry
-occurrence and the occurrences of its selected bundles: the version's selected
-bundle and the bundle selected for each distinct available original. A bundle
-that a later bundle of the same original replaced contributes no occurrence. A root
+Graph traversal includes every registry occurrence of a Tier 1/2 captured version
+and, for each original body among its bundles (an acquired original, or the saved
+response of a passage), the occurrences of the bundle selected for that body. A
+bundle that a later bundle of the same body replaced contributes no occurrence. A root
 (Tier 1) is read in full with its complete bibliography. Its references are Tier 3
 (abstract) unless an active full-text requirement of this profile selects them
 (require-fulltext, or a work cited by the selected search judgment of a purpose);
@@ -130,14 +130,6 @@ def main_captures(records, work, target=None):
     return list(captures.values())
 
 
-def _select_bundles_per_original(records, version, target):
-    """Each distinct available original of the version with the bundle selected for it; without an
-    available original, the bundle selected for the target pin."""
-    captures = main_captures(records, records["work"][version], target)
-    return [(capture, selected_bundle(records, version, {"id": version, "sha256": capture["original"]["sha256"]} if capture else target))
-            for capture in captures or [None]]
-
-
 def citation_graph(records, profile):
     profile_name(profile)
     scope = records.get("literature_scope", {}).get(profile)
@@ -157,9 +149,14 @@ def citation_graph(records, profile):
             continue
         versions.setdefault(work["work_id"], set()).add(identifier)
         tiers[work["work_id"]] = 1
+    # A registry observation has no bundle and is always read. Of the bundles of one original body, only the
+    # selected one is read, so an occurrence of a bundle that a later one replaced carries no obligation.
+    read_bundle_ids = {selected_bundle(records, b["version_id"], {"id": b["version_id"], "sha256": b["original_sha256"]})["id"]
+                       for b in records.get("source_bundle", {}).values()}
     by_source = {}
     for occurrence in records.get("reference_occurrence", {}).values():
-        by_source.setdefault(occurrence["source_work_id"], []).append(occurrence)
+        if "bundle_id" not in occurrence or occurrence["bundle_id"] in read_bundle_ids:
+            by_source.setdefault(occurrence["source_work_id"], []).append(occurrence)
     processed = {}
     while True:
         pending = [(family, version) for family in sorted(versions) if tiers[family] <= 2
@@ -169,13 +166,7 @@ def citation_graph(records, profile):
         for family, version in pending:
             tier = tiers[family]
             processed[version] = tier
-            # A registry observation has no bundle and is always read; a bundle occurrence is read only
-            # while its bundle is selected, so an occurrence of a replaced bundle carries no obligation.
-            selected = [bundle for _, bundle in _select_bundles_per_original(records, version, scope.get("target"))]
-            read_bundle_ids = {bundle["id"] for bundle in selected + [selected_bundle(records, version)] if bundle is not None}
             for occurrence in sorted(by_source.get(version, []), key=lambda x: x["id"]):
-                if "bundle_id" in occurrence and occurrence["bundle_id"] not in read_bundle_ids:
-                    continue
                 resolution = records.get("reference_resolution", {}).get(occurrence["id"], {})
                 kind, target = resolution.get("kind", occurrence["kind"]), resolution.get("target", occurrence["target"])
                 row = {"occurrence_id": occurrence["id"], "version_id": version, "source_id": occurrence["source_id"],
@@ -201,7 +192,10 @@ def citation_graph(records, profile):
                         row["status"] = error.code
                 references[occurrence["id"]] = row
     for version in sorted(processed):
-        for capture, bundle in _select_bundles_per_original(records, version, scope.get("target")):
+        captures = main_captures(records, records["work"][version], scope.get("target"))
+        for capture in captures or [None]:
+            pin = {"id": version, "sha256": capture["original"]["sha256"]} if capture else scope.get("target")
+            bundle = selected_bundle(records, version, pin)
             if bundle is None or bundle["scope"] != "article" or not bundle.get("bibliography", {}).get("complete"):
                 obligations.append(obligation("bibliography_incomplete", "Import an evidence-linked complete article bibliography; registry counts are insufficient.",
                                               version_id=version, source_id=capture["source_id"] if capture else None))
