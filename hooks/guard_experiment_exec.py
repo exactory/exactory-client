@@ -46,14 +46,19 @@ _SHELL_INTERPRETER_RE = re.compile(
     r"""(?:sh|bash|zsh|csh|tcsh|ksh|dash|fish|eval|source|\.|\$\{?(?:SHELL|BASH)\}?)"""
     r"""(?![^\s;&|()`"'<>])""",
     re.IGNORECASE)
-# A shell word: quoted text, a simple expansion or plain text.
-_SHELL_WORD = r"(?:" + _QUOTED_TEXT + r"""|\$\([^()]*\)|\$\{[^}]*\}|`[^`]*`|[^\s;&|<>()'"`\\])+"""
+# A shell word: quoted text, an expansion or plain text. A command
+# substitution or an arithmetic expansion can hold one level of parentheses,
+# as in $(dirname "$(pwd)") and $((0)).
+_SHELL_WORD = (r"(?:" + _QUOTED_TEXT + r"|\$\((?:[^()]|\([^()]*\))*\)|\$\{[^{}]*\}|`[^`]*`"
+               r"""|[^\s;&|<>()'"`\\])+""")
 # The target of an output redirection, with an optional descriptor number or
 # &, and the file arguments of tee. Quoted text is read as well, because
-# bash -c "echo x > path" writes through a redirection inside quotes.
+# bash -c "echo x > path" writes through a redirection inside quotes. A word
+# that stops at "(" holds a substitution nested more deeply than _SHELL_WORD
+# reads, so the rest of its line counts as the target.
 _STATE_WRITE_TARGET_RE = re.compile(
-    r"(?:[0-9]*|&)(?:>>|>\||>&|<>|>)[ \t]*(?P<target>" + _SHELL_WORD + r")"
-    r"|\btee\b(?P<files>(?:[ \t]+" + _SHELL_WORD + r")*)",
+    r"(?:[0-9]*|&)(?:>>|>\||>&|<>|>)[ \t]*(?P<target>" + _SHELL_WORD + r"(?:\([^\n]*)?)"
+    r"|\btee\b(?P<files>(?:[ \t]+" + _SHELL_WORD + r")*(?:\([^\n]*)?)",
     re.IGNORECASE)
 
 # (compiled pattern, reason). First match denies. IGNORECASE throughout.
