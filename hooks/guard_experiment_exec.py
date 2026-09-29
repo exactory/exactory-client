@@ -70,15 +70,20 @@ _WORD_TEXT = r"[^\s;&|(){}`!<>]*"
 # The shells of macOS and common Linux systems, which run the text that they
 # read as commands.
 _SHELL_NAMES = "sh|ash|bash|rbash|dash|zsh|ksh|mksh|csh|tcsh|fish"
+# An action of find that runs the words after it as a command.
+_FIND_EXEC_ACTION = r"-(?:exec|execdir|ok|okdir)[ \t]+"
 # The start of a command word: the text start, a line break, one of
 # ; & | ( ) { ` ! or an -exec action of find, then any keywords, variable
 # assignments, options, numbers, expansions and commands that run the word
-# after them, such as env, watch, xargs and bash -c.
+# after them, such as env, watch, xargs and bash -c. An option is never an
+# -exec action, which starts a command itself, so the scan from one command
+# start ends before the next and stays linear.
 _COMMAND_POSITION = (
-    r"(?:^|(?<=[\n;&|(){`!])|(?<![^\s])-(?:exec|execdir|ok|okdir)[ \t]+)[ \t]*"
+    r"(?:^|(?<=[\n;&|(){`!])|(?<![^\s])" + _FIND_EXEC_ACTION + r")[ \t]*"
     r"(?:(?:if|then|elif|else|do|while|until|time|builtin|caffeinate|command|env|eval|exec|ionice|nice|nohup"
     r"|setsid|stdbuf|strace|taskset|timeout|unbuffer|watch|xargs|" + _SHELL_NAMES +
-    r"|[A-Za-z_][A-Za-z0-9_]*=" + _WORD_TEXT + r"|[-0-9$]" + _WORD_TEXT + r")[ \t]+)*")
+    r"|[A-Za-z_][A-Za-z0-9_]*=" + _WORD_TEXT + r"|(?!" + _FIND_EXEC_ACTION + r")[-0-9$]" + _WORD_TEXT
+    + r")[ \t]+)*")
 # Text outside the heredoc bodies, read without its quotes and escapes, through
 # which the shell can run the text of a body as commands. Anywhere in the
 # command: a shell, ssh, eval, source, trap, xargs, $SHELL, $BASH or $0, with or
