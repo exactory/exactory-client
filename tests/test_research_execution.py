@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -366,6 +367,58 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assertEqual(len(self.store.snapshot()["records"]["execution"]), 1)
         self.assert_error("execution_recovery_required", lambda: api.launch_execution(self.store, admission["id"],
             expected_revision=self.store.revision, request_id="second-launch"))
+
+    def start_worker_after(self, command):
+        """Start the launcher's worker through a shell script that runs `command` and then execs the worker's argv.
+
+        The patch replaces subprocess.Popen, which a local launch calls only to start its worker."""
+        wrapper = Path(self.temporary.name) / "start-worker"
+        wrapper.write_text('#!/bin/sh\n' + command + '\nexec "$@"\n')
+        wrapper.chmod(0o755)
+        popen = subprocess.Popen
+
+        def start_through_wrapper(argv, **options):
+            return popen([str(wrapper)] + argv, **options)
+
+        return mock.patch.object(subprocess, "Popen", side_effect=start_through_wrapper)
+
+    def test_worker_that_starts_within_the_run_timeout_completes_its_run(self):
+        admission = admit_lab(self, body="print('{\"metric\": 7}')\n", timeout=30)
+        api = importlib.import_module("research_harness.execution")
+        started = time.monotonic()
+        # A loaded machine starts the worker slowly: it writes ready.json only after the 5 seconds that 0.48.0 waited.
+        with self.start_worker_after("sleep 7"):
+            result = api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                          request_id="slow-worker-start")
+        self.assertGreaterEqual(time.monotonic() - started, 7)
+        self.assertTrue(result["ok"], result["stderr_tail"])
+        self.assertEqual(result["metric"], {"metric": 7})
+
+    def test_worker_that_exits_before_it_is_ready_leaves_the_claimed_run_to_reconcile(self):
+        from research_harness.errors import ResearchError
+        admission = admit_lab(self, body="raise RuntimeError('must never launch')\n", timeout=60)
+        api = importlib.import_module("research_harness.execution")
+        started = time.monotonic()
+        # The script exits before it starts the worker, so ready.json is never written.
+        with self.start_worker_after("exit 3"), self.assertRaises(ResearchError) as raised:
+            api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                 request_id="worker-exits")
+        # The wait ends when the worker exits, long before the run's timeout.
+        self.assertLess(time.monotonic() - started, 60)
+        self.assertEqual((raised.exception.code, raised.exception.message),
+                         ("execution_recovery_required", "The launcher outcome is unknown; reconcile the claimed identity"))
+        records = self.store.snapshot()["records"]
+        self.assertIn(admission["id"], records["execution_claim"])
+        self.assertNotIn("execution_outcome", records)
+
+    def test_run_timeout_under_five_seconds_keeps_the_five_second_wait_for_the_worker(self):
+        admission = admit_lab(self, body="import time\ntime.sleep(30)\n", timeout=0.15)
+        api = importlib.import_module("research_harness.execution")
+        # The worker starts later than the whole run may take, and within the 5 seconds that 0.48.0 waited.
+        with self.start_worker_after("sleep 1"):
+            result = api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                          request_id="short-run")
+        self.assertTrue(result["timed_out"])
 
     def test_symlinked_venv_interpreter_runs_the_program_with_its_own_site_packages(self):
         interpreter = make_venv(self)
