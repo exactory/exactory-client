@@ -463,6 +463,24 @@ insufficient. Findings that require new evidence lead to a scoped successor cycl
 and renewed review. A narrower verified result is reported with its contribution
 to the original objective and the obligations it leaves open.
 
+The readiness gate passes only for a candidate that establishes the complete
+objective. A candidate with a partial scope reports `objective_scope_incomplete`,
+and a candidate with an open objective reports `objective_incomplete`; both
+report their `remaining_obligations`. The source-limited publication contract
+maps each remaining obligation to an active source deferral, so it does not
+cover remaining computational work. A partial computational result reaches the
+managed `write`, `evaluate` and `deposit` stages after the user authorizes the
+narrower objective. Pass the user's saved instruction to `target` as
+`authorization`, as [the literature stage](#literature-build-the-source-network-and-the-full-objective)
+describes. Then record the synthesis and the assessments again under the new
+objective, and pass readiness for a candidate that establishes it. Without that
+authorization, the study can publish only on the direct paths:
+`exactory-draft deposit` and `exactory submit` run on the user's instruction,
+each prints `Managed record skipped (readiness_required)`, and the study stays
+at the `experiment` stage. When the study has finished there, park it with
+`exactory-lab state set --waiting <reason>`, so that the autopilot Stop hook
+lets the session end.
+
 ## Manuscript assessment and publication
 
 Draft from the reviewed evidence and field standards. Keep source support,
