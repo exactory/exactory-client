@@ -61,17 +61,22 @@ def loop_state(records, profile="research"):
         # Each captured request counts as one query. A native registry request is known by its provider,
         # endpoint and parameters other than paging, so its pages and repeated captures count once whatever
         # query parameter a judgment binds, and two requests that share a query value count apart. A web or
-        # MCP capture is known only by its saved response and the query bound to it. Each group holds the
-        # keys of one captured request.
-        requests = []
+        # MCP capture is known only by its saved response and the query bound to it, so it adds no query when
+        # a native request of the purpose was bound to the same value: the harness cannot tell it from another
+        # capture of that request. Each group holds the keys of one captured request.
+        requests, natively_bound = [], set()
         for response in (r for s in own for r in s["responses"]):
             identity = compute_request_identity(records["source"][response["source_id"]])
-            keys = ({("request", digest(identity))} if identity is not None
-                    else {("source", response["source_id"]), ("query", response["query"])})
+            if identity is not None:
+                keys = {("request", digest(identity))}
+                natively_bound.add(("query", response["query"]))
+            else:
+                keys = {("source", response["source_id"]), ("query", response["query"])}
             overlapping = [group for group in requests if group & keys]
             requests = [group for group in requests if not group & keys] + [keys.union(*overlapping)]
-        empty = len(requests) >= 2 and not any(d["disposition"] in COVERING for s in own for d in s.get("dispositions", []))
-        purposes[purpose] = {"readings": len(hits), "relevant": len(relevant), "queries": len(requests),
+        captured = [group for group in requests if not group & natively_bound]
+        empty = len(captured) >= 2 and not any(d["disposition"] in COVERING for s in own for d in s.get("dispositions", []))
+        purposes[purpose] = {"readings": len(hits), "relevant": len(relevant), "queries": len(captured),
                              "queries_tried": sorted(queries), "covered": bool(relevant) or empty}
     return {"readings": len(readings), "limit": LOOP_LIMIT, "purposes": purposes,
             "digest": digest([sorted(r["id"] for r in readings), sorted(s["id"] for s in searches)])}
