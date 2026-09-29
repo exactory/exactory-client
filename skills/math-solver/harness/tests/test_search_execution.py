@@ -1,11 +1,13 @@
 """Metered entry reservations and real bounded process execution."""
 
+import contextlib
 import json
 import sys
 import os
 from pathlib import Path
 import subprocess
 import time
+from unittest.mock import patch
 
 from search_controller.errors import SearchError
 from tests.support import WorkspaceTest, make_move
@@ -100,6 +102,75 @@ class SearchExecutionTests(WorkspaceTest):
         self.assertEqual(run["status"], "terminal")
         self.assertEqual(run["termination"], "timeout")
         self.assertEqual(run["charged_units"], 1)
+
+    @contextlib.contextmanager
+    def start_launcher_after(self, command):
+        """Start the run's launcher through a shell script that runs `command` and then execs the launcher's argv.
+
+        The patch replaces subprocess.Popen and changes only the call that starts the launcher."""
+        wrapper = Path(self._tmp.name) / "start-launcher"
+        wrapper.write_text('#!/bin/sh\n' + command + '\nexec "$@"\n')
+        wrapper.chmod(0o755)
+        popen = subprocess.Popen
+        launchers = []
+
+        def start_through_wrapper(argv, **options):
+            if "--launcher" not in argv:
+                return popen(argv, **options)
+            launchers.append(popen([str(wrapper)] + argv, **options))
+            return launchers[-1]
+
+        try:
+            with patch.object(subprocess, "Popen", side_effect=start_through_wrapper):
+                yield
+        finally:
+            # A launcher that outlives its test stops before tearDown removes the workspace.
+            for launcher in launchers:
+                launcher.kill()
+                launcher.wait()
+
+    def test_launcher_that_starts_after_the_run_timeout_runs_its_command(self):
+        step = self.workspace / "deterministic" / "job"
+        step.mkdir()
+        (step / "job.py").write_text("print('late launcher')\n")
+        invoke(self.controller, "begin", begin_spec())
+        # A loaded machine starts the launcher slowly: it becomes ready after the run's timeout of 10 seconds and after
+        # the 5 seconds that earlier releases waited, and within the 10 seconds that the wait adds to the run's timeout.
+        with self.start_launcher_after("sleep 11"):
+            invoke(self.controller, "run", command_spec(self.workspace, [sys.executable, "job.py"], 10))
+        run = self.controller.status()["runs"]["run-000001"]
+        self.assertEqual((run["status"], run["termination"]), ("terminal", "exit"))
+        result = self.controller.store.get_blob(run["result_digest"])
+        self.assertEqual(self.controller.store.get_artifact(result["commands"][0]["stdout_digest"]), b"late launcher\n")
+
+    def test_launcher_that_exits_before_it_is_ready_leaves_its_run_to_recovery(self):
+        step = self.workspace / "deterministic" / "job"
+        step.mkdir()
+        (step / "job.py").write_text("print('never runs')\n")
+        invoke(self.controller, "begin", begin_spec())
+        started = time.monotonic()
+        # The script exits before it starts the launcher, so ready.json is never written.
+        with self.start_launcher_after("exit 3"), self.assertRaises(SearchError) as caught:
+            invoke(self.controller, "run", command_spec(self.workspace, [sys.executable, "job.py"], 60))
+        # The wait ends when the launcher exits, long before the run's timeout.
+        self.assertLess(time.monotonic() - started, 60)
+        self.assertEqual((caught.exception.code, caught.exception.message),
+                         ("recovery_required", "Launcher did not establish its identity"))
+        self.assertEqual(self.controller.status()["runs"]["run-000001"]["started_units"], 0)
+
+    def test_launcher_that_stays_alive_and_not_ready_ends_the_wait_at_its_bound(self):
+        step = self.workspace / "deterministic" / "job"
+        step.mkdir()
+        (step / "job.py").write_text("print('never runs')\n")
+        invoke(self.controller, "begin", begin_spec())
+        started = time.monotonic()
+        # The launcher process stays alive for 60 seconds and never writes ready.json.
+        with self.start_launcher_after("exec sleep 60"), self.assertRaises(SearchError) as caught:
+            invoke(self.controller, "run", command_spec(self.workspace, [sys.executable, "job.py"], 1))
+        # The wait ends at the run's timeout plus 10 seconds, and the exit waits after it end while the launcher lives.
+        self.assertLess(time.monotonic() - started, 60)
+        self.assertEqual(caught.exception.code, "recovery_required")
+        self.assertEqual(self.controller.status()["runs"]["run-000001"]["started_units"], 0)
 
     def test_command_that_changes_its_frozen_input_cannot_verify(self):
         step = self.workspace / "deterministic" / "job"
