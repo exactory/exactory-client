@@ -478,6 +478,14 @@ class TestContinueAutopilot(unittest.TestCase):
         self.assertEqual(decision["decision"], "block")
         self.assertEqual(self.read_counter(), 1)
 
+    def test_the_block_names_how_a_study_on_the_direct_publication_paths_ends(self) -> None:
+        self.write_state()
+        reason = json.loads(self._run_stop().stdout)["reason"]
+        self.assertIn("set the study to stage 'complete' when the work is done", reason)
+        self.assertIn("When the study finished on the direct publication paths (its deposit and"
+                      " submission printed \"Managed record skipped\"), end it by parking it with"
+                      " `exactory-lab state set --waiting <reason>`.", reason)
+
     def test_autopilot_off_allows_the_stop(self) -> None:
         self.write_state(autopilot=False)
         self.assertEqual(self._run_stop().stdout, "")
