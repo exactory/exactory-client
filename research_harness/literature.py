@@ -76,8 +76,10 @@ def _reference(value, records, artifacts, version_id, bibliography_unit):
         raise ResearchError("invalid_bibliography", "Each occurrence must be anchored within this version's bibliography unit")
     if value["target"] is not None:
         from .identities import normalize_identifier
-        if normalize_identifier(value["target"]) != value["target"]:
-            raise ResearchError("invalid_bibliography", "Use a canonical reference target identifier")
+        canonical = normalize_identifier(value["target"])
+        if canonical != value["target"]:
+            raise ResearchError("invalid_bibliography", "Use a canonical reference target identifier",
+                                {"target": value["target"], "canonical": canonical})
     if value["kind"] == "paper" and value["target"] is None:
         raise ResearchError("invalid_bibliography", "An identified paper reference needs its exact identifier or family")
 
