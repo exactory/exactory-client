@@ -39,6 +39,12 @@ def _is_decodable(decoded):
     return True
 
 
+def is_json_media_type(media_type):
+    """Whether a declared media type is application/json or a +json type, with or without parameters."""
+    essence = media_type.split(";", 1)[0].strip().lower()
+    return essence == "application/json" or essence.endswith("+json")
+
+
 def parse_scientific_json(data, media_type=""):
     """Return (recognized, value), using the encodings accepted by strict_json.
 
@@ -48,8 +54,7 @@ def parse_scientific_json(data, media_type=""):
     the privacy checks. Bytes that no JSON decoder reads are text."""
     if not isinstance(data, bytes) or len(data) > 64 * 1024 * 1024:
         raise ResearchError("invalid_scientific_delivery", "Scientific JSON bytes must fit the individual 64 MiB artifact bound")
-    mime = media_type.split(";", 1)[0].strip().lower()
-    declared = mime == "application/json" or mime.endswith("+json")
+    declared = is_json_media_type(media_type)
     try:
         # The JSON decoder reads bytes with the same encoding and error handler.
         decoded = data.decode(json.detect_encoding(data), "surrogatepass")

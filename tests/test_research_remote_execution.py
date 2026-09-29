@@ -1,12 +1,14 @@
 """Real shared-folder launches and conservative recovery of unknown outcomes."""
 
+import hashlib
 import os
+import sys
 import threading
 import time
 from unittest import mock
 
 from development_fixtures import DevelopmentCase
-from integration_fixtures import admit_lab
+from integration_fixtures import admit_lab, make_venv
 from research_harness import execution, remote_execution
 
 
@@ -54,6 +56,24 @@ class RemoteExecutionTests(DevelopmentCase):
         self.assertEqual(len(list((self.sync / "jobs").iterdir())), 1)
         self.assertFalse(remote_execution.serve_scan_once(self.sync))
         self.assertFalse(execution.execution_status(self.store, admission["id"])["scientific_validation"])
+
+    def test_runner_started_from_a_venv_link_runs_the_program_with_the_venv_packages(self):
+        interpreter = make_venv(self)
+        admission = admit_lab(self, backend="colab", timeout=5,
+            body="import json\nimport venv_only_probe\nprint(json.dumps({'metric': venv_only_probe.VALUE}))\n")
+        # The runner runs as VENV/bin/python3 "$(command -v exactory-lab)" colab-serve would.
+        with mock.patch.object(sys, "executable", str(interpreter)):
+            thread, errors = self.runner()
+            result = execution.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                                request_id="venv-runner")
+            thread.join(10)
+        self.assertEqual(errors, [])
+        self.assertTrue(result["ok"], result["stderr_tail"])
+        self.assertEqual(result["metric"], {"metric": 11})
+        worker = self.store.snapshot()["records"]["execution_remote_release"][admission["id"]]["worker"]
+        self.assertEqual(worker["runtime"], {"path": str(interpreter), "resolved_path": str(interpreter.resolve()),
+                                             "python": sys.version.split()[0],
+                                             "sha256": hashlib.sha256(interpreter.resolve().read_bytes()).hexdigest()})
 
     def test_no_runner_stays_pending_and_reconciliation_reuses_the_only_job(self):
         admission = admit_lab(self, backend="colab", timeout=0.1, body="print('{\"metric\": 3}')\n")

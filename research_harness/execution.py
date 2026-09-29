@@ -23,6 +23,7 @@ from .errors import ResearchError
 from .evidence import digest
 from .execution_outputs import log_bytes, output_metric, output_path, read_sealed_outputs, seal_outputs
 from .operations import fields, immutable_record, prepared_mutation, text
+from .scientific_json import is_json_media_type
 from .storage import _canonical
 from .workspace import checked_parent, json_projection, read_file, strict_json, write_projection
 
@@ -56,6 +57,18 @@ def _owner(root, admission_id, *, worker=False):
         os.close(descriptor)
 
 
+def _describe_interpreter(interpreter_path):
+    """The runtime record of the running Python, started as the absolute `interpreter_path`."""
+    resolved_file = Path(interpreter_path).resolve()
+    runtime = {"path": str(resolved_file), "sha256": hashlib.sha256(resolved_file.read_bytes()).hexdigest(),
+               "python": sys.version.split()[0]}
+    if Path(interpreter_path).is_symlink():
+        # A worker starts a link itself: a venv's bin/python3 is a symlink, and only that path gives the
+        # program the venv's site-packages. The file it resolves to stays pinned by its path and bytes.
+        runtime.update(path=interpreter_path, resolved_path=str(resolved_file))
+    return runtime
+
+
 def _runtime(command, backend="local"):
     argv = command["argv"]
     if backend == "colab":
@@ -66,8 +79,14 @@ def _runtime(command, backend="local"):
         raise ResearchError("unsupported_execution", "The lab launcher supports an explicit current Python interpreter and script")
     if command["versions"].get("python") != sys.version.split()[0]:
         raise ResearchError("execution_runtime_changed", "Run with the exact admitted Python version")
-    return {"path": str(Path(sys.executable).resolve()), "sha256": hashlib.sha256(Path(sys.executable).read_bytes()).hexdigest(),
-            "python": sys.version.split()[0]}
+    return _describe_interpreter(argv[0])
+
+
+def _build_earlier_runtime(runtime):
+    """The record that exactory-client 0.47.0 and earlier wrote for the same interpreter: the resolved file only."""
+    earlier_runtime = dict(runtime, path=runtime.get("resolved_path", runtime["path"]))
+    earlier_runtime.pop("resolved_path", None)
+    return earlier_runtime
 
 
 def _files(store, admission, binding, *, current=True):
@@ -93,6 +112,10 @@ def bind_execution(store, payload, *, expected_revision, request_id):
         if type(timeout) not in (int, float) or not math.isfinite(timeout) or timeout <= 0:
             raise ResearchError("invalid_execution", "A finite positive timeout is required")
         runtime = _runtime(admission["command"], value["backend"])
+        recorded_binding = records.get("execution_binding", {}).get(admission["id"])
+        if recorded_binding is not None and recorded_binding["runtime"] == _build_earlier_runtime(runtime):
+            # The same binding sent again keeps the record that an earlier release wrote for this interpreter.
+            runtime = recorded_binding["runtime"]
         expected_script = str(store.root / "experiment" / value["script"])
         if Path(admission["command"]["argv"][1]).resolve() != Path(expected_script).resolve():
             raise ResearchError("execution_identity_mismatch", "The admitted argv must name the exact declared script")
@@ -106,20 +129,27 @@ def bind_execution(store, payload, *, expected_revision, request_id):
         if len(set(paths)) != len(paths) or [v["artifact"] for v in value["inputs"]] != admission["command"]["inputs"]:
             raise ResearchError("execution_identity_mismatch", "Bind each admitted input in order to one distinct relative path")
         plan = records["cycle_plan"][admission["cycle_id"]]["payload"]
-        requirements = {item["id"] for item in plan["evidence_requirements"]}
+        requirement_kinds = {item["id"]: item["kind"] for item in plan["evidence_requirements"]}
         output_ids = set()
         output_paths = set()
         for output in value["outputs"]:
             fields(output, ("id", "requirement_id", "path", "media_type"))
             text(output["id"], "Output ID")
             _relative_parts(output["path"])
-            if output["id"] in output_ids or output["path"] in output_paths or output["requirement_id"] not in requirements:
+            if output["id"] in output_ids or output["path"] in output_paths or output["requirement_id"] not in requirement_kinds:
                 raise ResearchError("invalid_execution", "Each unique output must name a planned evidence requirement")
             if output["path"] in paths:
                 raise ResearchError("invalid_execution", "An output cannot replace a frozen input")
             output_ids.add(output["id"])
             output_paths.add(output["path"])
             artifacts.put(b"", output["media_type"])
+            # An assessment cites result and validation evidence through a locator into the output's text or JSON.
+            # The rule applies to a new binding only: a recorded one is immutable, and the same payload returns it.
+            if (recorded_binding is None and requirement_kinds[output["requirement_id"]] in ("result", "validation")
+                    and not (output["media_type"].lower().startswith("text/") or is_json_media_type(output["media_type"]))):
+                raise ResearchError("invalid_execution", "Result and validation evidence needs a text or JSON output, but output "
+                                    + output["id"] + " is " + output["media_type"] + "; bind figures and other binary files to a log requirement",
+                                    {"output_id": output["id"], "requirement_id": output["requirement_id"], "media_type": output["media_type"]})
         if value["usage_unit"] not in ("execution", "wall_seconds") or plan["resource_limits"]["unit"] != value["usage_unit"]:
             raise ResearchError("unsupported_usage", "Actual lab accounting supports planned execution or wall_seconds units")
         record = dict(value, admission_digest=admission["digest"], runtime=runtime)
@@ -139,7 +169,7 @@ def _binding(records, admission_id):
     return value
 
 
-def _materialize(store, admission, binding):
+def _materialize(store, admission, binding, plan):
     directory = _directory(admission["id"])
     pairs = _files(store, admission, binding)
     for relative, artifact in pairs:
@@ -154,11 +184,15 @@ def _materialize(store, admission, binding):
             for arg in admission["command"]["argv"]]
     argv[1] = str(store.root / directory / "work" / binding["script"])
     argv[0] = binding["runtime"]["path"]
+    requirement_kinds = {item["id"]: item["kind"] for item in plan["evidence_requirements"]}
     config = {"admission_id": admission["id"], "binding_digest": binding["digest"], "argv": argv,
               "script": binding["script"], "files": [{"path": p, "sha256": a["sha256"]} for p, a in pairs],
               "timeout_seconds": binding["timeout_seconds"], "seed": admission["command"]["seed"],
               "runtime": binding["runtime"], "backend": binding["backend"],
-              "outputs": binding["outputs"]}
+              "outputs": binding["outputs"],
+              # The metric's last source: the first declared JSON output of a validation requirement.
+              "metric_output": next((output_path(item["path"]) for item in binding["outputs"]
+                                     if requirement_kinds[item["requirement_id"]] == "validation" and is_json_media_type(item["media_type"])), None)}
     if binding["backend"] == "colab":
         config["transport"] = binding["transport"]
     return config
@@ -171,9 +205,11 @@ def _claim(store, admission_id, expected_revision, request_id):
             raise ResearchError("execution_recovery_required", "This admitted run was already claimed; reconcile it instead of relaunching")
         admission = validate_admitted_execution(records, artifacts, admission_id)
         binding = _binding(records, admission_id)
-        if _runtime(admission["command"], binding["backend"]) != binding["runtime"]:
-            raise ResearchError("execution_runtime_changed", "The admitted interpreter bytes changed")
-        config = _materialize(store, admission, binding)
+        runtime = _runtime(admission["command"], binding["backend"])
+        # A binding written by an earlier release names the resolved file as its path; its run keeps that path.
+        if binding["runtime"] not in (runtime, _build_earlier_runtime(runtime)):
+            raise ResearchError("execution_runtime_changed", "The admitted interpreter file or its bytes changed")
+        config = _materialize(store, admission, binding, records["cycle_plan"][admission["cycle_id"]]["payload"])
         claim = {"admission_id": admission_id, "binding_digest": binding["digest"], "config": config,
                  "config_artifact": artifacts.put(_canonical(config).encode(), "application/json"),
                  "request_id": request_id, "claimed_revision": expected_revision + 1, "token": uuid.uuid4().hex}

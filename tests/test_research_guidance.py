@@ -64,11 +64,16 @@ class ResearchGuidanceTests(unittest.TestCase):
         parsers = {"exactory-research": build_parser(), "exactory-lab": bin_parser("exactory-lab"),
                    "exactory-cohort": bin_parser("exactory-cohort"), "exactory-draft": bin_parser("exactory-draft")}
         observed = set()
+        interpreted = set()
         for block in re.findall(r"```sh\n(.*?)```", workflow.read_text(), re.S):
             for line in block.replace("\\\n", " ").splitlines():
                 arguments = shlex.split(line, comments=True)
                 if not arguments:
                     continue
+                # A command started by a named interpreter: INTERPRETER "$(command -v COMMAND)" ARGUMENTS.
+                started = re.fullmatch(r"\$\(command -v (\S+)\)", arguments[1]) if len(arguments) > 1 else None
+                if started:
+                    arguments = [started.group(1)] + arguments[2:]
                 self.assertIn(arguments[0], parsers, line)
                 if ">" in arguments:
                     arguments = arguments[:arguments.index(">")]
@@ -76,15 +81,38 @@ class ResearchGuidanceTests(unittest.TestCase):
                 with self.subTest(command=line):
                     parsed = parsers[arguments[0]].parse_args(arguments[1:])
                     observed.add((arguments[0], parsed.command))
+                    if started:
+                        interpreted.add((arguments[0], parsed.command))
         required = {("exactory-research", command) for command in
                     ("target", "read", "search", "cycle", "admit", "bind-run", "assess", "checkpoint", "review", "gate")}
         required.update({("exactory-lab", "init"), ("exactory-lab", "run"), ("exactory-cohort", "freeze")})
         self.assertLessEqual(required, observed)
+        # An admission of a venv interpreter binds and launches under that interpreter.
+        self.assertLessEqual({("exactory-research", "bind-run"), ("exactory-lab", "run")}, interpreted)
+
+    def test_guidance_states_that_an_earlier_release_binding_starts_the_resolved_interpreter(self):
+        documents = {name: " ".join((PLUGIN / name).read_text().split())
+                     for name in ("docs/research-workflow.md", "docs/research-cli.md", "skills/experiment/SKILL.md")}
+        # A venv binding that 0.47.0 recorded names the resolved file, so its program runs without the venv's packages.
+        for name, text in documents.items():
+            with self.subTest(document=name):
+                self.assertIn("exactory-client 0.47.0 or earlier", text)
+        self.assertIn("To run the program with the venv's packages, admit and bind a new run.", documents["docs/research-workflow.md"])
+
+    def test_guidance_names_the_outcome_of_an_interpreter_change_after_the_claim(self):
+        documents = {name: " ".join((PLUGIN / name).read_text().split())
+                     for name in ("docs/research-workflow.md", "docs/research-cli.md")}
+        # Only the worker sees a change after the claim, so the launch cannot report execution_runtime_changed.
+        for name, text in documents.items():
+            with self.subTest(document=name):
+                self.assertIn("If the interpreter changes after the claim, the worker refuses to start the program, "
+                              "and the launch returns `execution_recovery_required`.", text)
+                self.assertIn("Record that run with `reconcile-run`, giving `resolution: \"interrupted\"` and a reason.", text)
 
     def test_release_manifests_and_notes_describe_the_same_final_version(self):
         for relative in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
-            self.assertEqual(json.loads((PLUGIN / relative).read_text())["version"], "0.47.0")
-        self.assertTrue((PLUGIN / "docs/releases/0.47.0.md").is_file())
+            self.assertEqual(json.loads((PLUGIN / relative).read_text())["version"], "0.48.0")
+        self.assertTrue((PLUGIN / "docs/releases/0.48.0.md").is_file())
 
     def test_staged_plugin_runs_common_and_native_entrypoints_without_repository_cwd(self):
         from research_harness.cli import ACQUISITION, OPERATIONS

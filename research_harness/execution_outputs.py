@@ -9,6 +9,14 @@ from .errors import ResearchError
 from .workspace import checked_parent, read_file, strict_json
 
 
+# A metric is copied into the run's records, which every supported Python must read back. Python 3.9.6
+# writes an integer of any length, but Python 3.11 and later refuse to parse one of more than 4300 digits
+# (sys.int_info.default_max_str_digits). A scientific delivery walks at most 40 levels, and a round packet
+# holds the metric 7 levels deep.
+_METRIC_MAX_DEPTH = 32
+_METRIC_MAX_INTEGER = 10 ** 4300 - 1
+
+
 def output_path(path):
     return path if path in ("stdout", "stderr") else "work/" + path
 
@@ -84,18 +92,41 @@ def log_bytes(files):
     return b"----- STDOUT -----\n" + files.get("stdout", b"") + b"\n----- STDERR -----\n" + files.get("stderr", b"")
 
 
+def _read_metric(data, *, is_bounded):
+    """The JSON of one metric source, or None when it is not finite JSON or, if bounded, exceeds the metric bound."""
+    try:
+        value = strict_json(data)
+    except ResearchError:
+        return None
+    if not is_bounded:
+        return value
+    pending = [(value, 1)]
+    while pending:
+        item, depth = pending.pop()
+        if isinstance(item, (dict, list)):
+            if depth > _METRIC_MAX_DEPTH:
+                return None
+            pending.extend((child, depth + 1) for child in (item.values() if isinstance(item, dict) else item))
+        elif type(item) is int and abs(item) > _METRIC_MAX_INTEGER:
+            return None
+    return value
+
+
 def output_metric(config, files):
+    # A run config recorded before metric_output existed names no third source and keeps the unbounded
+    # metric of its release, so its recorded observation still validates.
+    is_bounded = "metric_output" in config
     result = None
     for line in files.get("stdout", b"").decode("utf-8", "replace").splitlines():
-        try:
-            value = strict_json(line)
-        except ResearchError:
-            continue
+        value = _read_metric(line, is_bounded=is_bounded)
         if isinstance(value, dict) and "metric" in value:
             result = value
     fallback = "work/results/" + Path(config["script"]).stem + ".json"
     if result is None and fallback in files:
-        result = strict_json(files[fallback])
+        result = _read_metric(files[fallback], is_bounded=is_bounded)
+    metric_output_path = config.get("metric_output")
+    if result is None and metric_output_path in files:
+        result = _read_metric(files[metric_output_path], is_bounded=is_bounded)
     return result
 
 
