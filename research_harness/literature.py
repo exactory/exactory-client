@@ -341,20 +341,30 @@ def _dispositions(records, value):
     return judged
 
 
-def _drop_retiring_requirements(records, value):
+def _build_judged_records(records, value):
     """The records a new judgment is assessed against. Once it is selected, the requirements of the
-    judgment it replaces stop counting, and it creates its own for the works it cites. The frontier and
-    the evidence digest see a requirement only through its work family, so a replaced requirement stays
-    in view when the new judgment cites a version of the same family."""
+    judgment it replaces stop counting, and it creates its own for the works it cites. The graph, the
+    frontier and the evidence digest see a requirement only through its work family, so each family the
+    new judgment cites keeps in view every requirement record of its profile that covered it, including
+    the records of replaced judgments. The judgment is then stale for itself only when it cites a family
+    that no requirement record covered before, as when every requirement counted. The view lists the
+    requirements that count and names no search selection, so none of them is retired again."""
     selection = records.get("search_selection", {}).get(value["profile"] + ":" + value["purpose"])
     previous = records.get("literature_search", {}).get(selection["search_id"]) if selection else None
-    if previous is None or previous["id"] == value["id"]:
-        return records
-    works = records["work"]
+    retiring = set()
+    if previous is not None and previous["id"] != value["id"]:
+        retiring = {format_search_requirement_id(previous["id"], version) for version in previous["cited_work_ids"]}
+    works = records.get("work", {})
     cited = {works[version]["work_id"] for version in value["cited_work_ids"]}
-    retiring = {format_search_requirement_id(previous["id"], version) for version in previous["cited_work_ids"]
-                if works[version]["work_id"] not in cited}
-    return dict(records, fulltext_requirement={k: r for k, r in records.get("fulltext_requirement", {}).items() if k not in retiring})
+    counted = find_active_requirements(records)
+    judged = {key: requirement for key, requirement in records.get("fulltext_requirement", {}).items()
+              if (key in counted and key not in retiring)
+              or (requirement["profile"] == value["profile"] and works.get(requirement["version_id"], {}).get("work_id") in cited)}
+    # When the view keeps exactly the requirements that count, the judgment is assessed on the records
+    # themselves, with the caller's evaluation.
+    if judged == counted:
+        return records
+    return dict(records, fulltext_requirement=judged, search_selection={})
 
 
 def _items_list(value, name):
@@ -409,7 +419,7 @@ def record_search(store, payload, *, expected_revision, request_id):
         if current_scope is None:
             raise ResearchError("roots_missing", "Define the literature scope before recording a dependent search")
         _dispositions(records, value)
-        judged = Evaluation.of(_drop_retiring_requirements(records, value), evaluation)
+        judged = Evaluation.of(_build_judged_records(records, value), evaluation)
         record = dict(value, scope_digest=digest(current_scope), pending=pending, page_groups=page_groups,
                       evidence_digest=_search_evidence_digest(judged, current_scope, found, value["cited_work_ids"]),
                       frontier_digest=frontier_digest(judged, value["profile"]))
