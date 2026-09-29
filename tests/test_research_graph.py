@@ -1,6 +1,7 @@
 import copy
 
 from literature_fixtures import LiteratureCase
+from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 from research_harness.graph import citation_graph, set_roots
 from research_harness.literature import foundation_report, import_bundle, record_search
@@ -57,6 +58,23 @@ class GraphTests(LiteratureCase):
         second["id"], second["cited_work_ids"] = "direct-2", [b]
         self.mutate(record_search, second)
         self.assertEqual(tiers(), {a[:-2]: 1, b[:-2]: 2, c[:-2]: 3})
+
+    def test_a_target_whose_archive_lost_its_hyphen_is_refused_with_its_canonical_form(self):
+        a = self.metadata()
+        capture = self.capture(a, "A extends an old result. References: arXiv:astroph/0410063.")
+        bundle = self.bundle(a, capture)
+        bundle["bibliography"]["entries"] = [{"target": "arxiv:astroph/0410063", "kind": "paper",
+            "link": dict(bundle["units"][1]["link"], locator=self.span(capture["text"], "arXiv:astroph/0410063")),
+            "reason": "The entry prints an old arXiv identifier whose archive lost its hyphen."}]
+        before = self.store.snapshot()
+        with self.assertRaises(ResearchError) as raised:
+            self.mutate(import_bundle, bundle)
+        self.assertEqual(raised.exception.code, "invalid_bibliography")
+        self.assertEqual(raised.exception.details, {"target": "arxiv:astroph/0410063", "canonical": "arxiv:astro-ph/0410063"})
+        self.assertEqual(self.store.snapshot(), before)
+        bundle["bibliography"]["entries"][0]["target"] = "arxiv:astro-ph/0410063"
+        occurrence_id = self.mutate(import_bundle, bundle)["result"]["occurrence_ids"][0]
+        self.assertEqual(self.store.snapshot()["records"]["reference_occurrence"][occurrence_id]["target"], "arxiv:astro-ph/0410063")
 
     def test_article_bibliography_expansion_preserves_repeated_unresolved_and_nonpaper(self):
         a, b = self.metadata(), self.metadata(2)
