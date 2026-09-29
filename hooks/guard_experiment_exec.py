@@ -18,12 +18,12 @@ denied command, so the rules skip it. The shell expands a body whose delimiter
 is not quoted, so such a body stays checked when it holds a command
 substitution. Every body stays checked when the text outside the bodies,
 read without its quotes and escapes, names a program that runs text as
-commands anywhere in the command (a shell, eval, source, ssh, xargs, a script
-run by its path, or an expansion run as a command, such as $0), or when the
-scanner cannot read the heredocs as the shell does: a delimiter that is not a
-plain word, a missing terminator, a line of a body with an unquoted delimiter
-that ends in a backslash and joins the next line, or a parameter expansion or
-arithmetic that it cannot read.
+commands anywhere in the command (a shell, eval, source, ssh, xargs, the dot
+command, a script run by its path, or an expansion run as a command, such as
+$0), or when the scanner cannot read the heredocs as the shell does: a
+delimiter that is not a plain word, a missing terminator, a line of a body
+with an unquoted delimiter that ends in a backslash and joins the next line,
+or a parameter expansion or arithmetic that it cannot read.
 """
 
 from __future__ import annotations
@@ -59,23 +59,25 @@ _QUOTING_RE = re.compile(r"""\\\n|['"\\]""")
 # The text of a word up to a space or an operator. It holds no character after
 # which a command starts, so each scan from a command start stays linear.
 _WORD_TEXT = r"[^\s;&|(){}`!<>]*"
-# The start of a command word: the text start, a line break or one of
-# ; & | ( ) { ` !, then any keywords, variable assignments, options, numbers
-# and commands that run the word after them.
+# The start of a command word: the text start, a line break, one of
+# ; & | ( ) { ` ! or an -exec action of find, then any keywords, variable
+# assignments, options, numbers, expansions and commands that run the word
+# after them, such as env, watch, xargs and bash -c.
 _COMMAND_POSITION = (
-    r"(?:^|(?<=[\n;&|(){`!]))[ \t]*"
-    r"(?:(?:if|then|elif|else|do|while|until|time|command|builtin|env|exec|nice|nohup|stdbuf|timeout|xargs"
-    r"|[A-Za-z_][A-Za-z0-9_]*=" + _WORD_TEXT + r"|[-0-9]" + _WORD_TEXT + r")[ \t]+)*")
+    r"(?:^|(?<=[\n;&|(){`!])|(?<![^\s])-(?:exec|execdir|ok|okdir)[ \t]+)[ \t]*"
+    r"(?:(?:if|then|elif|else|do|while|until|time|builtin|caffeinate|command|env|eval|exec|ionice|nice|nohup"
+    r"|setsid|stdbuf|strace|taskset|timeout|unbuffer|watch|xargs|sh|bash|zsh|csh|tcsh|ksh|dash|fish"
+    r"|[A-Za-z_][A-Za-z0-9_]*=" + _WORD_TEXT + r"|[-0-9$]" + _WORD_TEXT + r")[ \t]+)*")
 # A word that runs text as commands, in a command read without its quotes and
 # escapes: a shell with or without its directory, ssh, eval, source, xargs,
-# ".", $SHELL, $BASH or $0 anywhere; or, at the start of a command, a path,
+# $SHELL, $BASH or $0 anywhere; or, at the start of a command, ".", a path,
 # which runs a script such as one that a heredoc wrote, or an expansion, whose
 # value can name a shell.
 _RUNS_TEXT_RE = re.compile(
     r"(?<![^\s;&|()`])(?:[^\s;&|()`<>]*/)?"
-    r"(?:sh|bash|zsh|csh|tcsh|ksh|dash|fish|ssh|eval|source|xargs|\.|\$\{?(?:SHELL|BASH|0)\}?)"
+    r"(?:sh|bash|zsh|csh|tcsh|ksh|dash|fish|ssh|eval|source|xargs|\$\{?(?:SHELL|BASH|0)\}?)"
     r"(?![^\s;&|()`<>])"
-    r"|" + _COMMAND_POSITION + r"(?:\$|[^\s;&|(){}`!<>=]*/)",
+    r"|" + _COMMAND_POSITION + r"(?:\.[ \t]|\$|[^\s;&|(){}`!<>=]*/)",
     re.IGNORECASE)
 # A shell word: quoted text, an expansion or plain text. A command
 # substitution or an arithmetic expansion can hold one level of parentheses,
@@ -83,13 +85,18 @@ _RUNS_TEXT_RE = re.compile(
 _SHELL_WORD = (r"(?:" + _QUOTED_TEXT + r"|\$\((?:[^()]|\([^()]*\))*\)|\$\{[^{}]*\}|`[^`]*`"
                r"""|[^\s;&|<>()'"`\\])+""")
 # The target of an output redirection, with an optional descriptor number or
-# &, and the file arguments of tee. Quoted text is read as well, because
-# bash -c "echo x > path" writes through a redirection inside quotes. A word
-# that stops at "(" holds a substitution nested more deeply than _SHELL_WORD
-# reads, so the rest of its line counts as the target.
-_STATE_WRITE_TARGET_RE = re.compile(
-    r"(?:[0-9]*|&)(?:>>|>\||>&|<>|>)[ \t]*(?P<target>" + _SHELL_WORD + r"(?:\([^\n]*)?)"
-    r"|\btee\b(?P<files>(?:[ \t]+" + _SHELL_WORD + r")*(?:\([^\n]*)?)",
+# &. Quoted text is read as well, because bash -c "echo x > path" writes
+# through a redirection inside quotes. A target that stops at "(" holds a
+# substitution nested more deeply than _SHELL_WORD reads, so the rest of its
+# line counts as the target.
+_REDIRECTION_TARGET_RE = re.compile(
+    r"(?:[0-9]*|&)(?:>>|>\||>&|<>|>)[ \t]*(?P<target>" + _SHELL_WORD + r"(?:\([^\n]*)?)")
+# The file arguments of tee, with or without its directory, as a command word
+# in a command read without its quotes and escapes, so "tee" and
+# bash -c "tee path" count and grep tee path does not. The same rule for "("
+# applies as for a redirection target.
+_TEE_FILES_RE = re.compile(
+    _COMMAND_POSITION + r"(?:" + _WORD_TEXT + r"/)?tee\b(?P<files>(?:[ \t]+" + _SHELL_WORD + r")*(?:\([^\n]*)?)",
     re.IGNORECASE)
 
 # (compiled pattern, reason). First match denies. IGNORECASE throughout.
@@ -196,8 +203,9 @@ def _writes_workspace_state(command: str) -> bool:
     hooks own every file there, and a list of names goes stale each time the
     workspace gains a state file.
     """
-    return any(".exactory/" in (match.group("target") or match.group("files")).lower()
-               for match in _STATE_WRITE_TARGET_RE.finditer(command))
+    return (any(".exactory/" in match.group("target").lower() for match in _REDIRECTION_TARGET_RE.finditer(command))
+            or any(".exactory/" in match.group("files").lower()
+                   for match in _TEE_FILES_RE.finditer(_QUOTING_RE.sub("", command))))
 
 
 def main() -> None:
