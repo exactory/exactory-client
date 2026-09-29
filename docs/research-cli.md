@@ -178,8 +178,10 @@ still reports `fulltext_read: false`. Identity, unresolved references, historica
 validity, contradiction handling, budgets, actual execution and independent
 review remain ordinary obligations.
 
-The decision binds the source captures, required units, readings and current
-requirements. A change makes it `stale` and restores ordinary blocking obligations.
+The decision binds the source captures, required units, readings and the
+version's requirement records: every record while any of them counts, and none
+once none counts. A change makes it `stale` and restores ordinary blocking
+obligations.
 Record a new decision with a new ID to reassess the gap. `resume-source` restores
 the ordinary obligations explicitly. `status` retains active, stale, superseded
 and resumed decisions, and `status --summary` counts them and deferred obligations.

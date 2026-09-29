@@ -90,9 +90,15 @@ def _build_binding(records, evaluation, version):
     for bundle in bundles.values():
         source_ids.add(bundle["source_id"])
         source_ids.update(u["link"]["source_id"] for u in bundle["units"] if u["link"])
+    # A decision binds every requirement record of its version while any of them counts, as bindings did
+    # before the requirements of a replaced search judgment stopped counting; a decision recorded then keeps
+    # its binding while a requirement of its version counts. Once none counts, the decision binds none.
+    requirements = {i: r for i, r in records.get("fulltext_requirement", {}).items()
+                    if r["profile"] == "research" and r["version_id"] == version}
+    if not requirements.keys() & find_active_requirements(records).keys():
+        requirements = {}
     return {"work": work, "ineligible": _is_ineligible(records, version),
-            "requirements": {i: r for i, r in find_active_requirements(records).items()
-                             if r["profile"] == "research" and r["version_id"] == version},
+            "requirements": requirements,
             "tier": next((n["tier"] for n in graph["nodes"] if version in n["version_ids"]), None),
             "historical_cutoff": records.get("literature_scope", {}).get("research", {}).get("historical_cutoff"),
             "sources": {i: records.get("source", {}).get(i) for i in sorted(source_ids)},
