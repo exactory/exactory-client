@@ -84,13 +84,17 @@ _RUNS_TEXT_RE = re.compile(
 # as in $(dirname "$(pwd)") and $((0)).
 _SHELL_WORD = (r"(?:" + _QUOTED_TEXT + r"|\$\((?:[^()]|\([^()]*\))*\)|\$\{[^{}]*\}|`[^`]*`"
                r"""|[^\s;&|<>()'"`\\])+""")
-# The target of an output redirection, with an optional descriptor number or
-# &. Quoted text is read as well, because bash -c "echo x > path" writes
-# through a redirection inside quotes. A target that stops at "(" holds a
-# substitution nested more deeply than _SHELL_WORD reads, so the rest of its
-# line counts as the target.
+# An output redirection operator, which writes its target: > or >>, with & for
+# stderr as well (&>, >&, &>> and >>&) and with the clobber mark | or, in zsh,
+# !; and <>, which opens its target for reading and writing. A descriptor
+# number before the operator does not change the target.
+_OUTPUT_REDIRECTION = r"(?:&>>?|>>?&?)[|!]?|<>"
+# The target of an output redirection. Quoted text is read as well, because
+# bash -c "echo x > path" writes through a redirection inside quotes. A target
+# that stops at "(" holds a substitution nested more deeply than _SHELL_WORD
+# reads, so the rest of its line counts as the target.
 _REDIRECTION_TARGET_RE = re.compile(
-    r"(?:[0-9]*|&)(?:>>|>\||>&|<>|>)[ \t]*(?P<target>" + _SHELL_WORD + r"(?:\([^\n]*)?)")
+    r"(?:" + _OUTPUT_REDIRECTION + r")[ \t]*(?P<target>" + _SHELL_WORD + r"(?:\([^\n]*)?)")
 # The file arguments of tee, with or without its directory, as a command word
 # in a command read without its quotes and escapes, so "tee" and
 # bash -c "tee path" count and grep tee path does not. The same rule for "("
