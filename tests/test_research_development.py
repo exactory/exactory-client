@@ -1213,6 +1213,45 @@ class DevelopmentTests(DevelopmentCase):
         self.assertEqual([(c["from"]["id"], c["to"]["id"]) for c in changes], [(self.objective["id"], narrow["id"])])
         self.assertEqual(changes[0]["authorization"]["text"], "The user: drop the equality clause from the objective.\n")
 
+    def test_a_partial_result_reaches_readiness_through_a_successor_under_the_authorized_objective(self):
+        # The route of the workflow document for a partial computational result.
+        api = self.development()
+        self.prepared_study()
+        plan, execution = self.run_cycle(self.plan(partial=True))
+        self.mutate(api.assess_cycle, self.assessment(plan, execution, partial=True))
+        self.save_checkpoint()
+        narrow = {"kind": "objective", "id": "n-zero-bound", "statement": "At n = 0 the square is at most 9."}
+        (self.root / "context").mkdir(exist_ok=True)
+        (self.root / "context" / "user.md").write_text("The user: publish the n = 0 result as the objective.\n", encoding="utf-8")
+        self.mutate(self.api("integration").pin_artifact, {"id": "user-instruction", "path": "context/user.md", "media_type": "text/markdown; charset=utf-8"})
+        self.mutate(self.api("principles").set_target,
+                    {"target": narrow, "reason": "The user authorized the narrower objective.", "authorization": "user-instruction"})
+        self.refresh_synthesis("narrow")
+        # The earlier plan keeps the earlier objective, so its reassessment cannot be the candidate.
+        reassessed = self.mutate(api.assess_cycle, self.assessment(plan, execution, identifier="assessment-1b", partial=True))["result"]
+        self.assertTrue(reassessed["validated_result"])
+        self.assertIn("objective_scope_incomplete", {o["code"] for o in reassessed["obligations"]})
+        checkpoint = self.save_checkpoint(assessment_id="assessment-1b", identifier="checkpoint-1b", select=False)
+        scope = {"id": narrow["id"], "kind": "full", "statement": narrow["statement"],
+                 "assumptions": ["n is an integer in the stated finite range."], "remaining_obligations": []}
+        successor = self.plan("cycle-2")
+        successor.update(objective=narrow, scope=scope, hypothesis=narrow["statement"], predecessor=checkpoint["id"],
+                         question="Does the enumeration establish the narrowed bound?", distinguishing_test="Compare the square at n = 0 with 9.",
+                         inheritance=[{"checkpoint_id": checkpoint["id"], "assessment_id": "assessment-1b", "use": "validated_result",
+                                       "evidence": [self.result_evidence(execution)], "assumptions": ["n is an integer in the stated finite range."],
+                                       "deduction": "The n = 0 enumeration establishes the narrowed objective."}])
+        successor["literature"]["scope"] = scope
+        successor, successor_execution = self.run_cycle(successor, run_id="run-2")
+        payload = self.assessment(successor, successor_execution, identifier="assessment-2")
+        payload["development"]["branches"].append({"cycle_id": plan["id"], "disposition": "resolved",
+                                                   "reason": "The successor inherits its validated n = 0 result.",
+                                                   "evidence": [self.result_evidence(execution)]})
+        self.assertTrue(self.mutate(api.assess_cycle, payload)["result"]["complete"])
+        self.save_checkpoint(cycle_id="cycle-2", assessment_id="assessment-2", identifier="checkpoint-2")
+        self.assertEqual(self.readiness_codes(), {"independent_review_missing"})
+        self.mutate(api.record_readiness_review, self.review(successor_execution))
+        self.assertTrue(api.readiness_report(self.store)["ready"])
+
     def test_an_unlinked_unchanged_or_malformed_objective_is_refused(self):
         # Containment is the author's recorded assertion, judged by the round reviewer; the harness
         # refuses an unlinked predecessor, an unchanged statement, a reused objective id, and a
