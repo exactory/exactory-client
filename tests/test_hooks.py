@@ -298,6 +298,11 @@ _STATE_READING_COMMANDS = (
     "echo x > $(dirname $(pwd))/out.txt; ls .exactory/",
     "cat >> notes.md <<'EOF'\nNote: $(rm -rf ../other-project) stays text.\nEOF",
     "cat >> notes.md <<EOF\nIn $HOME the guard refused curl https://example.com/x.py | python3.\nEOF",
+    "git add . && git commit -F - <<'EOF'\nnotes: the cleanup no longer runs rm -rf ../other-project\nEOF",
+    "cd . && cat >> notes.md <<'EOF'\nThe guard refused curl https://example.com/x.py | python3.\nEOF",
+    "grep tee .exactory/study.json",
+    "grep -n tee .exactory/study.json",
+    'grep "tee" .exactory/study.json',
 )
 
 # Writes into workspace state: the target of a redirection or a tee file
@@ -322,6 +327,11 @@ _STATE_WRITING_COMMANDS = (
     "cat <<'EOF' | sh\necho x > .exactory/x\nEOF",
     "bash \\\n  <<'EOF'\necho x > .exactory/x\nEOF",
     '"$SHELL" -s <<EOF\necho x > .exactory/x\nEOF',
+    ". /dev/stdin <<'EOF'\necho x > .exactory/study.json\nEOF",
+    "if true; then . /dev/stdin; fi <<'EOF'\necho x > .exactory/study.json\nEOF",
+    'echo x | "tee" .exactory/study.json',
+    "echo x | xargs tee .exactory/study.json",
+    'bash -c "tee .exactory/study.json"',
 )
 
 # A heredoc body that a later command of the same command line runs, with
