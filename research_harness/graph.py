@@ -55,10 +55,10 @@ def find_active_requirements(records):
 def find_bound_requirements(records):
     """The full-text requirements that a binding or a digest holds: {id: requirement}.
 
-    Every record of a version is held while any record of that version, in the same profile, counts, as
-    every record counted before a replaced judgment's requirements stopped counting. A binding therefore
-    changes when a record is added or a version stops being required, and not when a record stops counting
-    while another record of its version still counts."""
+    It holds every record of a version while any record of that version, in the same profile, counts. For
+    such a version these are the records that bindings held before a replaced judgment's requirements
+    stopped counting. A binding therefore changes when a record is added or a version stops being required,
+    and not when a record stops counting while another record of its version still counts."""
     counted = {(r["profile"], r["version_id"]) for r in find_active_requirements(records).values()}
     return {key: value for key, value in records.get("fulltext_requirement", {}).items()
             if (value["profile"], value["version_id"]) in counted}
