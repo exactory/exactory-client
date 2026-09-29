@@ -19,6 +19,30 @@ from .providers import Arxiv, Crossref, OpenAlex
 QUERY_PARAMETER_NAMES = {"arxiv": frozenset({"search_query"}),
                          "crossref": frozenset({"query", "query.bibliographic", "query.author"}),
                          "openalex": frozenset({"search", "filter"})}
+# The URL parameters that page through the results of one native request.
+PAGINATION_PARAMETER_NAMES = {"arxiv": frozenset({"start", "max_results"}),
+                              "crossref": frozenset({"offset", "rows", "cursor"}),
+                              "openalex": frozenset({"page", "per_page", "cursor"})}
+
+
+def _parse_parameters(source):
+    """The query parameters of a native capture's URL, with OpenAlex's per-page spelled per_page."""
+    pairs = parse_qsl(urlsplit(source["url"]).query, keep_blank_values=True)
+    if source["provider"] == "openalex":
+        pairs = [("per_page" if k == "per-page" else k, v) for k, v in pairs]
+    return pairs
+
+
+def compute_request_identity(source):
+    """The request a native registry capture answers: its provider, endpoint and every parameter except the
+    paging ones, so the pages of one request and repeated captures of it share one identity. None for a web
+    or MCP capture, whose request the harness does not parse."""
+    paging_names = PAGINATION_PARAMETER_NAMES.get(source["provider"])
+    if paging_names is None:
+        return None
+    url = urlsplit(source["url"])
+    return {"provider": source["provider"], "endpoint": urlunsplit((url.scheme, url.netloc, url.path, "", "")),
+            "parameters": sorted((k, v) for k, v in _parse_parameters(source) if k not in paging_names)}
 
 
 def _number(parameters, key, default, minimum, maximum=None):
@@ -33,12 +57,7 @@ def _number(parameters, key, default, minimum, maximum=None):
 
 def native_page(source, data, query, scope):
     provider = source["provider"]
-    url = urlsplit(source["url"])
-    pairs = parse_qsl(url.query, keep_blank_values=True)
-    if provider == "openalex":
-        pairs = [("per_page" if k == "per-page" else k, v) for k, v in pairs]
-    controls = {"arxiv": {"start", "max_results"}, "crossref": {"offset", "rows", "cursor"},
-                "openalex": {"page", "per_page", "cursor"}}[provider]
+    pairs = _parse_parameters(source)
     parameters = dict(pairs)
     if len(parameters) != len(pairs):
         raise ResearchError("invalid_search", "Captured query parameters cannot have ambiguous repeated values")
@@ -60,11 +79,9 @@ def native_page(source, data, query, scope):
         pending.append({"code": "search_page_metadata_mismatch", "source_id": source["id"]})
     if any(k in parameters for k in ("sample", "group_by", "group-by")):
         pending.append({"code": "search_pagination_unsupported", "source_id": source["id"]})
-    fixed = sorted((k, v) for k, v in pairs if k not in controls)
     # Cursor continuations must retain every parameter, including page size.
-    group = {"provider": provider, "endpoint": urlunsplit((url.scheme, url.netloc, url.path, "", "")),
-             "parameters": fixed, "query": query, "scope": scope, "mode": mode,
-             "cursor_page_size": size if mode == "cursor" else None}
+    group = dict(compute_request_identity(source), query=query, scope=scope, mode=mode,
+                 cursor_page_size=size if mode == "cursor" else None)
     return {"group": group, "source_id": source["id"], "sha256": source["response"]["sha256"],
             "position": cursor if mode == "cursor" else offset, "size": size, "total": page.total,
             "count": page.returned_count, "next_cursor": page.next_cursor,

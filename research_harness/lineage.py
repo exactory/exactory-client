@@ -11,6 +11,7 @@ from .literature import SEARCH_PURPOSES  # literature imports lineage inside fun
 from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .principles import preparation_policy
 from .reading import selected_abstract  # reading imports lineage inside functions only, so this stays acyclic.
+from .search_pages import compute_request_identity
 
 LINEAGE = "lineage-v1"
 LOOP_LIMIT = 100
@@ -46,7 +47,7 @@ def candidate_families(records):
 
 
 def loop_state(records, profile="research"):
-    """Per purpose: loop readings, covering readings, the number of distinct captured queries and the query
+    """Per purpose: loop readings, covering readings, the number of distinct captured requests and the query
     strings tried, and whether the purpose is covered."""
     readings = loop_readings(records)
     searches = [s for s in records.get("literature_search", {}).values()
@@ -57,16 +58,20 @@ def loop_state(records, profile="research"):
         relevant = [r for r in hits if r["batch"]["loop"]["disposition"] in COVERING]
         own = [s for s in searches if s["purpose"] == purpose]
         queries = {q for s in own for q in s["queries"]}
-        # Queries bound to one captured response are one captured query: a request with two query
-        # parameters counts once, and so do the pages of one query. Each group is the set of source
-        # ids of one captured query.
-        captured = []
-        for query in queries:
-            sources = {r["source_id"] for s in own for r in s["responses"] if r["query"] == query}
-            overlapping = [group for group in captured if group & sources]
-            captured = [group for group in captured if not group & sources] + [sources.union(*overlapping)]
-        empty = len(captured) >= 2 and not any(d["disposition"] in COVERING for s in own for d in s.get("dispositions", []))
-        purposes[purpose] = {"readings": len(hits), "relevant": len(relevant), "queries": len(captured),
+        # Each captured request counts as one query. A native registry request is known by its provider,
+        # endpoint and parameters other than paging, so its pages and repeated captures count once whatever
+        # query parameter a judgment binds, and two requests that share a query value count apart. A web or
+        # MCP capture is known only by its saved response and the query bound to it. Each group holds the
+        # keys of one captured request.
+        requests = []
+        for response in (r for s in own for r in s["responses"]):
+            identity = compute_request_identity(records["source"][response["source_id"]])
+            keys = ({("request", digest(identity))} if identity is not None
+                    else {("source", response["source_id"]), ("query", response["query"])})
+            overlapping = [group for group in requests if group & keys]
+            requests = [group for group in requests if not group & keys] + [keys.union(*overlapping)]
+        empty = len(requests) >= 2 and not any(d["disposition"] in COVERING for s in own for d in s.get("dispositions", []))
+        purposes[purpose] = {"readings": len(hits), "relevant": len(relevant), "queries": len(requests),
                              "queries_tried": sorted(queries), "covered": bool(relevant) or empty}
     return {"readings": len(readings), "limit": LOOP_LIMIT, "purposes": purposes,
             "digest": digest([sorted(r["id"] for r in readings), sorted(s["id"] for s in searches)])}
