@@ -452,6 +452,49 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assertIn(admission["id"], records["execution_claim"])
         self.assertNotIn("execution_outcome", records)
 
+    def test_worker_that_ends_after_the_wait_for_its_run_gives_the_run_outcome(self):
+        admission = admit_lab(self, body="print('{\"metric\": 7}')\n")
+        api = importlib.import_module("research_harness.execution")
+        wait = subprocess.Popen.wait
+
+        def expire_the_wait_for_the_run(worker, timeout):
+            # Only the wait for the run is longer than the 6-second exit wait. It expires at once, as when hashing
+            # large outputs takes longer than its bound, and the worker then ends within the exit wait.
+            if timeout > 6:
+                raise subprocess.TimeoutExpired(worker.args, timeout)
+            return wait(worker)
+
+        with mock.patch.object(subprocess.Popen, "wait", autospec=True, side_effect=expire_the_wait_for_the_run):
+            result = api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                          request_id="late-worker-end")
+        self.assertTrue(result["ok"], result["stderr_tail"])
+        self.assertEqual(result["metric"], {"metric": 7})
+
+    def test_worker_still_live_after_the_wait_for_its_run_leaves_the_outcome_to_reconcile(self):
+        from research_harness.errors import ResearchError
+        admission = admit_lab(self, body="import time\ntime.sleep(5)\nprint('{\"metric\": 7}')\n", timeout=30)
+        api = importlib.import_module("research_harness.execution")
+        workers = []
+
+        def expire_each_wait(worker, timeout):
+            # The wait for the run and the exit wait both expire while the program still sleeps.
+            workers.append(worker)
+            raise subprocess.TimeoutExpired(worker.args, timeout)
+
+        with mock.patch.object(subprocess.Popen, "wait", autospec=True, side_effect=expire_each_wait), \
+                self.assertRaises(ResearchError) as raised:
+            api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                 request_id="live-worker")
+        self.assertEqual((raised.exception.code, raised.exception.message),
+                         ("execution_recovery_required", "The worker is still live or its outcome is unknown"))
+        self.assertNotIn("execution_outcome", self.store.snapshot()["records"])
+        # Once the worker ends, reconciliation records the outcome of its run.
+        workers[0].wait()
+        result = api.reconcile_execution(self.store, {"admission_id": admission["id"]},
+                                         expected_revision=self.store.revision, request_id="reconcile-live-worker")
+        self.assertTrue(result["ok"], result["stderr_tail"])
+        self.assertEqual(result["metric"], {"metric": 7})
+
     def test_run_timeout_shorter_than_the_worker_start_still_gives_an_observed_run(self):
         admission = admit_lab(self, body="import time\ntime.sleep(30)\n", timeout=0.15)
         api = importlib.import_module("research_harness.execution")
