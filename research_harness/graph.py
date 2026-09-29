@@ -52,6 +52,18 @@ def find_active_requirements(records):
     return {key: value for key, value in records.get("fulltext_requirement", {}).items() if key not in retired}
 
 
+def find_bound_requirements(records):
+    """The full-text requirements that a binding or a digest holds: {id: requirement}.
+
+    Every record of a version is held while any record of that version, in the same profile, counts, as
+    every record counted before a replaced judgment's requirements stopped counting. A binding therefore
+    changes when a record is added or a version stops being required, and not when a record stops counting
+    while another record of its version still counts."""
+    counted = {(r["profile"], r["version_id"]) for r in find_active_requirements(records).values()}
+    return {key: value for key, value in records.get("fulltext_requirement", {}).items()
+            if (value["profile"], value["version_id"]) in counted}
+
+
 def validate_target(records, target, roots):
     fields(target, ("kind", "id", "source_id", "sha256"), code="invalid_target")
     if target["kind"] != "work" or target["id"] not in roots:

@@ -9,7 +9,7 @@ from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
-from .graph import citation_graph, find_active_requirements, main_captures, selected_bundle
+from .graph import citation_graph, find_bound_requirements, main_captures, selected_bundle
 from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .reading import required_unit_obligations
 from .source_links import exact_work
@@ -90,15 +90,9 @@ def _build_binding(records, evaluation, version):
     for bundle in bundles.values():
         source_ids.add(bundle["source_id"])
         source_ids.update(u["link"]["source_id"] for u in bundle["units"] if u["link"])
-    # A decision binds every requirement record of its version while any of them counts, as bindings did
-    # before the requirements of a replaced search judgment stopped counting; a decision recorded then keeps
-    # its binding while a requirement of its version counts. Once none counts, the decision binds none.
-    requirements = {i: r for i, r in records.get("fulltext_requirement", {}).items()
-                    if r["profile"] == "research" and r["version_id"] == version}
-    if not requirements.keys() & find_active_requirements(records).keys():
-        requirements = {}
     return {"work": work, "ineligible": _is_ineligible(records, version),
-            "requirements": requirements,
+            "requirements": {i: r for i, r in find_bound_requirements(records).items()
+                             if r["profile"] == "research" and r["version_id"] == version},
             "tier": next((n["tier"] for n in graph["nodes"] if version in n["version_ids"]), None),
             "historical_cutoff": records.get("literature_scope", {}).get("research", {}).get("historical_cutoff"),
             "sources": {i: records.get("source", {}).get(i) for i in sorted(source_ids)},

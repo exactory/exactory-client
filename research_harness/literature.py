@@ -43,7 +43,8 @@ from .errors import ResearchError
 from .components import compute_binding_identity, is_component, validate_binding
 from .evaluation import Evaluation
 from .evidence import digest
-from .graph import citation_graph, find_active_requirements, format_search_requirement_id, obligation, selected_bundle, validate_target
+from .graph import (citation_graph, find_active_requirements, find_bound_requirements, format_search_requirement_id, obligation,
+                    selected_bundle, validate_target)
 from .http import safe_url
 from .imports import _pointer
 from .operations import fields, immutable_record, iso_date, prepared_mutation, profile_name, strings, text, timestamp
@@ -523,6 +524,8 @@ def _foundation_state(evaluation, profile):
             reasons.setdefault(version, []).append("tier_" + str(node["tier"]))
     critical = {target["id"]} if target else set()
     full_requirements = {k: r for k, r in find_active_requirements(records).items() if r["profile"] == profile}
+    # The digests hold every record of a required version (graph.find_bound_requirements).
+    bound_requirements = {k: r for k, r in find_bound_requirements(records).items() if r["profile"] == profile}
     for requirement in full_requirements.values():
         version = requirement["version_id"]
         requirements[version] = "fulltext"
@@ -680,7 +683,7 @@ def _foundation_state(evaluation, profile):
     dependencies = {"scope": scope, "target": records.get("configuration", {}).get("research", {}).get("target") if profile == "verification" else None,
                     "works": {v: records["work"][v] for v in sorted(relevant) if v in records.get("work", {})}, "aliases": aliases,
                     "sources": {s: records["source"][s] for s in sorted(source_ids)}, "graph": graph, "bundles": bundles,
-                    "readings": used_readings, "collections": collections, "cohort_digest": cohort_state["digest"], "requirements": full_requirements,
+                    "readings": used_readings, "collections": collections, "cohort_digest": cohort_state["digest"], "requirements": bound_requirements,
                     "searches": searches, "availability": availability}
     dependencies["search_selection"] = selected_searches
     # Without deferral records the report keeps its earlier keys and digests,
@@ -703,8 +706,8 @@ def _foundation_state(evaluation, profile):
             **(dict(deferral_dependency, deferred_obligations=deferred_obligations) if deferrals else {}),
             "population_digest": digest(population), "frontier_digest": frontier_digest(evaluation, profile),
             "judgments_digest": digest(judgments),
-            "requirements_digest": digest({"requirements": full_requirements, **deferral_dependency}) if deferrals else digest(full_requirements),
-            "stable_digest": digest({"scope": scope, "requirements": sorted(full_requirements),
+            "requirements_digest": digest({"requirements": bound_requirements, **deferral_dependency}) if deferrals else digest(bound_requirements),
+            "stable_digest": digest({"scope": scope, "requirements": sorted(bound_requirements),
                                      "closure": (records.get("loop_closure_selection", {}).get("current") or {}).get("id"),
                                      "sample": (records.get("cohort_sample_selection", {}).get("current") or {}).get("id"),
                                      **deferral_dependency}),
