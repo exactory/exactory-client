@@ -1,4 +1,5 @@
 import copy
+from functools import partial
 from unittest.mock import patch
 
 from development_fixtures import DevelopmentCase
@@ -625,6 +626,60 @@ class DevelopmentTests(DevelopmentCase):
         result = self.mutate(api.assess_cycle, payload)["result"]
         self.assertFalse(result["validated_result"])
         self.assertFalse(result["complete"])
+
+    def test_a_passed_check_without_completed_validation_evidence_is_refused_before_recording(self):
+        api = self.development()
+        self.prepared_study()
+        plan, execution = self.run_cycle()
+        payload = self.assessment(plan, execution)
+        payload["validity_checks"][0]["evidence"] = [self.result_evidence(execution)]
+        before = self.store.snapshot()
+        with self.assertRaises(ResearchError) as raised:
+            self.mutate(api.assess_cycle, payload)
+        self.assertEqual(raised.exception.code, "validity_evidence_missing")
+        self.assertEqual(raised.exception.details, {"check_id": "exhaustive"})
+        self.assertIn("completed validation output", raised.exception.message)
+        self.assertIn("unresolved", raised.exception.message)
+        self.assertEqual(self.store.snapshot(), before)
+
+    def test_a_passed_check_citing_an_incomplete_validation_run_is_refused_before_recording(self):
+        api = self.development()
+        _, _, payload = self.additional_validation("partial", checked=True)
+        before = self.store.snapshot()
+        with self.assertRaises(ResearchError) as raised:
+            self.mutate(api.assess_cycle, payload)
+        self.assertEqual(raised.exception.code, "validity_evidence_missing")
+        self.assertEqual(raised.exception.details, {"check_id": "sensitivity"})
+        self.assertEqual(self.store.snapshot(), before)
+
+    def test_an_unresolved_or_failed_check_without_validation_evidence_is_recorded_with_its_obligation(self):
+        api = self.development()
+        self.prepared_study()
+        plan, execution = self.run_cycle()
+        for status in ("unresolved", "failed"):
+            with self.subTest(status=status):
+                payload = self.assessment(plan, execution, status + "-check")
+                payload["validity_checks"][0].update(status=status, evidence=[self.result_evidence(execution)])
+                assessed = self.mutate(api.assess_cycle, payload)["result"]
+                self.assertFalse(assessed["validated_result"])
+                self.assertEqual([o["check_id"] for o in assessed["obligations"] if o["code"] == "validity_unresolved"], ["exhaustive"])
+                self.assertIn(payload["id"], self.store.snapshot()["records"]["cycle_assessment"])
+
+    def test_a_stored_passed_check_without_validation_evidence_keeps_its_obligation(self):
+        api = self.development()
+        self.prepared_study()
+        plan, execution = self.run_cycle()
+        payload = self.assessment(plan, execution)
+        payload["validity_checks"][0]["evidence"] = [self.result_evidence(execution)]
+        # Earlier releases recorded such a check with its obligation. For a cycle
+        # without inheritance, the historical evaluation builds the same report
+        # as their writer, so it stands in for that writer here.
+        with patch.object(api, "_assess", partial(api._assess, historical=True)):
+            recorded = self.mutate(api.assess_cycle, payload)["result"]
+        self.assertFalse(recorded["validated_result"])
+        self.save_checkpoint()
+        self.assertEqual(api.readiness_report(self.store)["candidate"]["assessment_id"], payload["id"])
+        self.assertIn("validity_unresolved", self.readiness_codes())
 
     def test_failure_assessment_binds_the_planned_target_estimand(self):
         api = self.development()
