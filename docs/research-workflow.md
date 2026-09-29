@@ -470,11 +470,30 @@ report their `remaining_obligations`. The source-limited publication contract
 maps each remaining obligation to an active source deferral, so it does not
 cover remaining computational work. A partial computational result reaches the
 managed `write`, `evaluate` and `deposit` stages after the user authorizes the
-narrower objective. Pass the user's saved instruction to `target` as
-`authorization`, as [the literature stage](#literature-build-the-source-network-and-the-full-objective)
-describes. Then record the synthesis and the assessments again under the new
-objective, and pass readiness for a candidate that establishes it. Without that
-authorization, the study can publish only on the direct paths:
+narrower objective. The plan of an earlier cycle keeps the earlier objective. An
+assessment of that cycle therefore reports `objective_scope_incomplete`, and
+readiness does not pass with it as the candidate. A successor cycle under the
+new objective establishes that objective:
+
+1. Pass the user's saved instruction to `target` as `authorization`, as
+   [the literature stage](#literature-build-the-source-network-and-the-full-objective)
+   describes.
+2. Record the synthesis again under the new objective.
+3. Assess the earlier cycle again. Save a checkpoint of that assessment. For a
+   cycle that inherits from other cycles, refresh its ancestors first, as
+   [refreshing inherited assessment dependencies](research-cli.md#refreshing-inherited-assessment-dependencies)
+   describes.
+4. Plan a successor cycle under the new objective, with a `full` scope of that
+   objective. Its `predecessor` is that checkpoint, and its `inheritance` uses
+   the validated result of the checkpoint.
+5. Run the successor as a managed run with `admit`, `bind-run` and
+   `exactory-lab run`.
+6. Assess the successor with a disposition of every retained cycle in
+   `development.branches`. Save its checkpoint with `select_for_readiness: true`.
+7. Record the independent review of that candidate, as described above. Then
+   run `gate readiness`.
+
+Without that authorization, the study can publish only on the direct paths:
 `exactory-draft deposit` and `exactory submit` run on the user's instruction,
 each prints `Managed record skipped (readiness_required)`, and the study stays
 at the `experiment` stage. When the study has finished there, park it with

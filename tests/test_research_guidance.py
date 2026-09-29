@@ -115,8 +115,8 @@ class ResearchGuidanceTests(unittest.TestCase):
         self.assertIn("A partial computational result reaches the managed `write`, `evaluate` and `deposit` stages "
                       "after the user authorizes the narrower objective.", workflow)
         # An earlier cycle keeps its planned objective, so a successor cycle under the new one establishes it.
-        self.assertIn("The plan of an earlier cycle keeps the earlier objective, so an assessment of that cycle reports "
-                      "`objective_scope_incomplete` and cannot be the readiness candidate.", workflow)
+        self.assertIn("The plan of an earlier cycle keeps the earlier objective. An assessment of that cycle therefore reports "
+                      "`objective_scope_incomplete`, and readiness does not pass with it as the candidate.", workflow)
         self.assertIn("Plan a successor cycle under the new objective, with a `full` scope of that objective. "
                       "Its `predecessor` is that checkpoint, and its `inheritance` uses the validated result of the checkpoint.", workflow)
         self.assertIn("Run the successor as a managed run", workflow)
