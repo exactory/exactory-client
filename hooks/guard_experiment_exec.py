@@ -17,10 +17,13 @@ A heredoc body is data when nothing runs it, for example a note that quotes a
 denied command, so the rules skip it. The shell expands a body whose delimiter
 is not quoted, so such a body stays checked when it holds a command
 substitution. Every body stays checked when the text outside the bodies,
-anywhere in the command, names a program that runs text as commands (a shell,
-eval, source, ssh, xargs, or a script run by its path), or when the scanner
-cannot find where a body ends: a missing terminator, or a line of a body with
-an unquoted delimiter that ends in a backslash and joins the next line.
+read without its quotes and escapes, names a program that runs text as
+commands anywhere in the command (a shell, eval, source, ssh, xargs, a script
+run by its path, or an expansion run as a command, such as $0), or when the
+scanner cannot read the heredocs as the shell does: a delimiter that is not a
+plain word, a missing terminator, a line of a body with an unquoted delimiter
+that ends in a backslash and joins the next line, or a parameter expansion or
+arithmetic that it cannot read.
 """
 
 from __future__ import annotations
@@ -34,17 +37,25 @@ _STUDY_STATE_PATH = Path(".exactory") / "study.json"
 
 # Quoted text or an escaped character, in which shell operators are literal.
 _QUOTED_TEXT = r"""\$'(?:\\.|[^'\\])*'|'[^']*'|"(?:\\.|[^"\\])*"|\\."""
-# Quoted text, an escaped line break, arithmetic and a comment, in which "<<"
-# opens no heredoc; then a heredoc operator with its delimiter word, and an
-# unquoted line break.
+# Quoted text, an escaped line break, arithmetic, a parameter expansion and a
+# comment, in which "<<" opens no heredoc; the start of such a construct that
+# this pattern cannot read; then a heredoc operator with its delimiter word,
+# and an unquoted line break.
 _HEREDOC_SCAN_RE = re.compile(
-    _QUOTED_TEXT + r"""|\(\((?:[^()]|\([^()]*\))*\)\)|(?<![^\s;&|()])#[^\n]*"""
+    _QUOTED_TEXT + r"""|\(\((?:[^()]|\([^()]*\))*\)\)|\$\{[^{}]*\}|\$\[[^\[\]]*\]|(?<![^\s;&|()])#[^\n]*"""
+    r"""|(?P<unreadable>\(\(|\$\{|\$\[)"""
     r"""|(?<!<)<<(?!<)(?P<strip_tabs>-?)[ \t]*"""
-    r"""(?P<word>(?:'[^'\n]*'|"[^"\n]*"|\\[^\n]|[^\s;&|<>()'"\\])+)"""
+    r"""(?P<word>(?:'[^'\n]*'|"[^"\n]*"|\\.|[^\s;&|<>()'"\\])+)"""
     r"""|(?P<line_break>\n)""",
     re.DOTALL)
+# A delimiter word that the scanner reads as the shell does: a plain word, bare
+# or quoted as a whole. The shell expands the body of a bare delimiter.
+_PLAIN_DELIMITER_RE = re.compile(r"""(?P<bare>[\w-]+)|'(?P<single>[\w-]+)'|"(?P<double>[\w-]+)"|\\(?P<escaped>[\w-]+)""",
+                                 re.ASCII)
 # An expansion that runs a command in a heredoc body with an unquoted delimiter.
 _COMMAND_SUBSTITUTION_RE = re.compile(r"`|\$\(")
+# Quotes, escapes and escaped line breaks, which the shell removes from words.
+_QUOTING_RE = re.compile(r"""\\\n|['"\\]""")
 # The text of a word up to a space or an operator. It holds no character after
 # which a command starts, so each scan from a command start stays linear.
 _WORD_TEXT = r"[^\s;&|(){}`!<>]*"
@@ -55,14 +66,16 @@ _COMMAND_POSITION = (
     r"(?:^|(?<=[\n;&|(){`!]))[ \t]*"
     r"(?:(?:if|then|elif|else|do|while|until|time|command|builtin|env|exec|nice|nohup|stdbuf|timeout|xargs"
     r"|[A-Za-z_][A-Za-z0-9_]*=" + _WORD_TEXT + r"|[-0-9]" + _WORD_TEXT + r")[ \t]+)*")
-# A word that runs text as commands: a shell with or without its directory,
-# $SHELL or $BASH, ssh, eval, source, xargs or "."; or a path at the start of
-# a command, which runs a script such as one that a heredoc wrote.
+# A word that runs text as commands, in a command read without its quotes and
+# escapes: a shell with or without its directory, ssh, eval, source, xargs,
+# ".", $SHELL, $BASH or $0 anywhere; or, at the start of a command, a path,
+# which runs a script such as one that a heredoc wrote, or an expansion, whose
+# value can name a shell.
 _RUNS_TEXT_RE = re.compile(
-    r"""(?<![^\s;&|()`"'])(?:[^\s;&|()`"'<>]*/)?"""
-    r"""(?:sh|bash|zsh|csh|tcsh|ksh|dash|fish|ssh|eval|source|xargs|\.|\$\{?(?:SHELL|BASH)\}?)"""
-    r"""(?![^\s;&|()`"'<>])"""
-    r"|" + _COMMAND_POSITION + r"[^\s;&|(){}`!<>=]*/",
+    r"(?<![^\s;&|()`])(?:[^\s;&|()`<>]*/)?"
+    r"(?:sh|bash|zsh|csh|tcsh|ksh|dash|fish|ssh|eval|source|xargs|\.|\$\{?(?:SHELL|BASH|0)\}?)"
+    r"(?![^\s;&|()`<>])"
+    r"|" + _COMMAND_POSITION + r"(?:\$|[^\s;&|(){}`!<>=]*/)",
     re.IGNORECASE)
 # A shell word: quoted text, an expansion or plain text. A command
 # substitution or an arithmetic expansion can hold one level of parentheses,
@@ -133,9 +146,9 @@ def _remove_data_heredoc_bodies(command: str) -> str:
     """Remove the data heredoc bodies when nothing in the command runs text as commands.
 
     The command stays unchanged, so every body stays checked, when its text
-    outside the data bodies names such a program or when the end of a body is
-    uncertain. A body with an unquoted delimiter that holds a command
-    substitution is not data.
+    outside the data bodies names such a program or when the scanner cannot
+    read the heredocs as the shell does. A body with an unquoted delimiter that
+    holds a command substitution is not data.
     """
     kept, delimiters = [], []
     copied_to = position = 0
@@ -144,11 +157,15 @@ def _remove_data_heredoc_bodies(command: str) -> str:
         if token is None:
             break
         position = token.end()
+        if token.group("unreadable") is not None:
+            return command
         if token.group("word") is not None:
-            word = token.group("word")
+            delimiter = _PLAIN_DELIMITER_RE.fullmatch(token.group("word"))
+            if delimiter is None:
+                return command
             leading_tabs = "\t*" if token.group("strip_tabs") else ""
-            pattern = "^" + leading_tabs + re.escape(re.sub(r"""['"\\]""", "", word)) + "$"
-            delimiters.append((pattern, re.search(r"""['"\\]""", word) is not None))
+            pattern = "^" + leading_tabs + re.escape(delimiter.group(delimiter.lastgroup)) + "$"
+            delimiters.append((pattern, delimiter.lastgroup != "bare"))
             continue
         if token.group("line_break") is None:
             continue
@@ -169,7 +186,7 @@ def _remove_data_heredoc_bodies(command: str) -> str:
     if not kept:
         return command
     outside = "".join(kept) + command[copied_to:]
-    return command if _RUNS_TEXT_RE.search(outside) else outside
+    return command if _RUNS_TEXT_RE.search(_QUOTING_RE.sub("", outside)) else outside
 
 
 def _writes_workspace_state(command: str) -> bool:
