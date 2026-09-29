@@ -95,12 +95,21 @@ _OUTPUT_REDIRECTION = r"(?:&>>?|>>?&?)[|!]?|<>"
 # reads, so the rest of its line counts as the target.
 _REDIRECTION_TARGET_RE = re.compile(
     r"(?:" + _OUTPUT_REDIRECTION + r")[ \t]*(?P<target>" + _SHELL_WORD + r"(?:\([^\n]*)?)")
-# The file arguments of tee, with or without its directory, as a command word
-# in a command read without its quotes and escapes, so "tee" and
-# bash -c "tee path" count and grep tee path does not. The same rule for "("
-# applies as for a redirection target.
-_TEE_FILES_RE = re.compile(
-    _COMMAND_POSITION + r"(?:" + _WORD_TEXT + r"/)?tee\b(?P<files>(?:[ \t]+" + _SHELL_WORD + r")*(?:\([^\n]*)?)",
+# A redirection with its word, or a process substitution, which can hold one
+# level of parentheses. Neither is a file argument of tee: the state-write
+# check reads an output redirection target by itself, and a process
+# substitution passes tee a pipe.
+_REDIRECTION_OR_PROCESS_SUBSTITUTION = (r"(?:" + _OUTPUT_REDIRECTION + r"|<<<|<<-?|<&?)[ \t]*" + _SHELL_WORD
+                                        + r"|[<>]\((?:[^()]|\([^()]*\))*\)")
+_REDIRECTION_OR_PROCESS_SUBSTITUTION_RE = re.compile(_REDIRECTION_OR_PROCESS_SUBSTITUTION)
+# The operands of tee up to the end of its command: its words, redirections and
+# process substitutions in any order. tee counts with or without its directory,
+# as a command word in a command read without its quotes and escapes, so "tee"
+# and bash -c "tee path" count and grep tee path does not. The same rule for
+# "(" applies as for a redirection target.
+_TEE_OPERANDS_RE = re.compile(
+    _COMMAND_POSITION + r"(?:" + _WORD_TEXT + r"/)?tee\b(?P<operands>(?:[ \t]*(?:"
+    + _REDIRECTION_OR_PROCESS_SUBSTITUTION + r")|[ \t]+" + _SHELL_WORD + r")*(?:[ \t]*[<>]?\([^\n]*)?)",
     re.IGNORECASE)
 
 # (compiled pattern, reason). First match denies. IGNORECASE throughout.
@@ -206,12 +215,13 @@ def _writes_workspace_state(command: str) -> bool:
     The whole directory counts, not a list of the files in it: the CLI and the
     hooks own every file there, and a list of names goes stale each time the
     workspace gains a state file. Paths are compared without their quotes and
-    escapes, as the shell opens them.
+    escapes, as the shell opens them. The file arguments of tee are its
+    operands other than redirections and process substitutions.
     """
     return (any(".exactory/" in _QUOTING_RE.sub("", match.group("target")).lower()
                 for match in _REDIRECTION_TARGET_RE.finditer(command))
-            or any(".exactory/" in match.group("files").lower()
-                   for match in _TEE_FILES_RE.finditer(_QUOTING_RE.sub("", command))))
+            or any(".exactory/" in _REDIRECTION_OR_PROCESS_SUBSTITUTION_RE.sub(" ", match.group("operands")).lower()
+                   for match in _TEE_OPERANDS_RE.finditer(_QUOTING_RE.sub("", command))))
 
 
 def main() -> None:
