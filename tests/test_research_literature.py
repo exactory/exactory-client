@@ -455,6 +455,27 @@ class SearchDispositionTests(LiteratureCase):
         # The family is required before and after the replacement, so the successor's frontier is current.
         self.assertFalse({"search_evidence_stale", "search_frontier_stale"} & {x["code"] for x in report["obligations"]})
 
+    def test_a_judgment_that_cites_a_family_only_a_replaced_judgment_cited_is_current(self):
+        a = self.metadata()
+        self.scope([a])
+        again, elsewhere = "arxiv:2602.00012v1", "arxiv:2602.00013v1"
+
+        def record(identifier, purpose, cited):
+            """Record a judgment that finds both works and return the staleness codes of that judgment."""
+            search = self.search(purpose, [again, elsewhere])
+            search["id"], search["cited_work_ids"] = identifier, cited
+            self.mutate(record_search, search)
+            report = foundation_report(self.store, "research")
+            return {x["code"] for x in report["obligations"] + report["notices"] if x.get("search_id") == identifier}
+
+        record("direct", "direct", [again, elsewhere])
+        # direct-2 cites neither work, so only the requirements of the replaced judgment direct cover their families.
+        self.assertEqual(record("direct-2", "direct", []), set())
+        # Before a judgment could retire requirements, every requirement counted, so a later judgment that cites
+        # one of the families again, of the same purpose or of another, was current when it was recorded.
+        self.assertEqual(record("direct-3", "direct", [again]), set())
+        self.assertEqual(record("theory", "theory", [elsewhere]), set())
+
     def test_recording_another_purpose_does_not_stale_a_selected_search(self):
         a = self.metadata()
         self.scope([a])
