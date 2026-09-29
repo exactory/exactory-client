@@ -14,10 +14,13 @@ would escape or damage the machine regardless of cwd. A block means redesign
 the experiment, never route around the guard.
 
 A heredoc body is data when nothing runs it, for example a note that quotes a
-denied command, so the rules skip it. Every body stays checked when the text
-outside the bodies, anywhere in the command, names a program that runs text as
-commands (a shell, eval, source, ssh, xargs, or a script run by its path), or
-when a terminator is missing.
+denied command, so the rules skip it. The shell expands a body whose delimiter
+is not quoted, so such a body stays checked when it holds a command
+substitution. Every body stays checked when the text outside the bodies,
+anywhere in the command, names a program that runs text as commands (a shell,
+eval, source, ssh, xargs, or a script run by its path), or when the scanner
+cannot find where a body ends: a missing terminator, or a line of a body with
+an unquoted delimiter that ends in a backslash and joins the next line.
 """
 
 from __future__ import annotations
@@ -40,6 +43,8 @@ _HEREDOC_SCAN_RE = re.compile(
     r"""(?P<word>(?:'[^'\n]*'|"[^"\n]*"|\\[^\n]|[^\s;&|<>()'"\\])+)"""
     r"""|(?P<line_break>\n)""",
     re.DOTALL)
+# An expansion that runs a command in a heredoc body with an unquoted delimiter.
+_COMMAND_SUBSTITUTION_RE = re.compile(r"`|\$\(")
 # The text of a word up to a space or an operator. It holds no character after
 # which a command starts, so each scan from a command start stays linear.
 _WORD_TEXT = r"[^\s;&|(){}`!<>]*"
@@ -125,12 +130,14 @@ def _is_inside_study_workspace(start_dir: Path) -> bool:
 
 
 def _remove_data_heredoc_bodies(command: str) -> str:
-    """Remove the heredoc bodies when nothing in the command runs text as commands.
+    """Remove the data heredoc bodies when nothing in the command runs text as commands.
 
     The command stays unchanged, so every body stays checked, when its text
-    outside the bodies names such a program or when a terminator is missing.
+    outside the data bodies names such a program or when the end of a body is
+    uncertain. A body with an unquoted delimiter that holds a command
+    substitution is not data.
     """
-    kept, delimiter_patterns = [], []
+    kept, delimiters = [], []
     copied_to = position = 0
     while True:
         token = _HEREDOC_SCAN_RE.search(command, position)
@@ -138,19 +145,27 @@ def _remove_data_heredoc_bodies(command: str) -> str:
             break
         position = token.end()
         if token.group("word") is not None:
-            delimiter = re.sub(r"""['"\\]""", "", token.group("word"))
+            word = token.group("word")
             leading_tabs = "\t*" if token.group("strip_tabs") else ""
-            delimiter_patterns.append("^" + leading_tabs + re.escape(delimiter) + "$")
+            pattern = "^" + leading_tabs + re.escape(re.sub(r"""['"\\]""", "", word)) + "$"
+            delimiters.append((pattern, re.search(r"""['"\\]""", word) is not None))
             continue
         if token.group("line_break") is None:
             continue
-        for pattern in delimiter_patterns:
+        for pattern, is_quoted in delimiters:
             terminator = re.compile(pattern, re.MULTILINE).search(command, position)
             if terminator is None:
                 return command
-            kept.append(command[copied_to:position])
-            copied_to = position = terminator.end() + 1
-        delimiter_patterns = []
+            body = command[position:terminator.start()]
+            # The shell expands this body and joins a line that ends in a
+            # backslash to the next one, which can hide the real terminator.
+            if not is_quoted and "\\\n" in body:
+                return command
+            if is_quoted or not _COMMAND_SUBSTITUTION_RE.search(body):
+                kept.append(command[copied_to:position])
+                copied_to = terminator.end() + 1
+            position = terminator.end() + 1
+        delimiters = []
     if not kept:
         return command
     outside = "".join(kept) + command[copied_to:]
