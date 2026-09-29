@@ -6,6 +6,7 @@ import json
 from development_fixtures import DevelopmentCase
 from literature_fixtures import LiteratureCase
 from research_harness.cli import OPERATIONS, status_report
+from research_harness.graph import format_search_requirement_id
 from research_harness.literature import foundation_report, import_bundle, record_search
 from research_harness.reading import record_reading, require_fulltext
 from research_harness.report_views import status_summary
@@ -248,6 +249,29 @@ class SourceDeferralTests(DeferralCase, LiteratureCase):
         report = foundation_report(self.store, "research")
         self.assertEqual(report["source_deferrals"][0]["status"], "stale")
         self.assertFalse([o for o in report["obligations"] + report["deferred_obligations"] if o.get("version_id") == gap])
+
+    def test_a_deferral_keeps_the_binding_of_0_47_0_while_its_version_stays_required(self):
+        # A replaced judgment and the selected one both cite the deferred version, so it stays a required full
+        # text. 0.47.0 bound every requirement record of the version and recorded the digest below; a deferral
+        # it recorded stays active only while the binding of the same records is unchanged.
+        root, gap = self.metadata(), self.metadata(2)
+        self.scope([root])
+        for identifier in ("adjacent-1", "adjacent-2"):
+            judgment = self.capture_search("adjacent", [gap])
+            judgment["id"], judgment["cited_work_ids"] = identifier, [gap]
+            self.mutate(record_search, judgment)
+        self.capture(gap, status=404)
+        self.defer(gap)
+        deferral = foundation_report(self.store, "research")["source_deferrals"][0]
+        self.assertEqual(sorted(deferral["dependencies"]["requirements"]),
+                         sorted(format_search_requirement_id(search, gap) for search in ("adjacent-1", "adjacent-2")))
+        self.assertEqual((deferral["status"], deferral["dependency_digest"]),
+                         ("active", "829c4b805ae0e0abb97c905806f518ed60930426562adb3968956333c02659bb"))
+        # Once no judgment cites the version, none of its requirements count and the decision is stale.
+        successor = self.capture_search("adjacent")
+        successor["id"] = "adjacent-3"
+        self.mutate(record_search, successor)
+        self.assertEqual(foundation_report(self.store, "research")["source_deferrals"][0]["status"], "stale")
 
     def test_resume_restores_obligations_and_receipts_replay_without_reselection(self):
         _, gap = self.setup_gap()
