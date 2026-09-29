@@ -378,7 +378,11 @@ class ResearchExecutionTests(DevelopmentCase):
         popen = subprocess.Popen
 
         def start_through_wrapper(argv, **options):
-            return popen([str(wrapper)] + argv, **options)
+            worker = popen([str(wrapper)] + argv, **options)
+            # A worker that outlives its test stops with it.
+            self.addCleanup(worker.wait)
+            self.addCleanup(worker.kill)
+            return worker
 
         return mock.patch.object(subprocess, "Popen", side_effect=start_through_wrapper)
 
@@ -429,6 +433,24 @@ class ResearchExecutionTests(DevelopmentCase):
         records = self.store.snapshot()["records"]
         execution_id = records["execution_outcome"][admission["id"]]["execution_id"]
         self.assertEqual(records["execution"][execution_id]["payload"]["status"], "interrupted")
+
+    def test_worker_that_stays_alive_and_not_ready_ends_the_wait_at_its_bound(self):
+        from research_harness.errors import ResearchError
+        admission = admit_lab(self, body="raise RuntimeError('must never launch')\n", timeout=0.15)
+        api = importlib.import_module("research_harness.execution")
+        started = time.monotonic()
+        # The worker process stays alive for 60 seconds and never writes ready.json.
+        with self.start_worker_after("exec sleep 60"), self.assertRaises(ResearchError) as raised:
+            api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                 request_id="worker-never-ready")
+        # The wait ends at the run's timeout plus 10 seconds, and the exit wait after it at 6 seconds more, both while
+        # the worker is alive.
+        self.assertLess(time.monotonic() - started, 60)
+        self.assertEqual((raised.exception.code, raised.exception.message),
+                         ("execution_recovery_required", "The worker is still live or its outcome is unknown"))
+        records = self.store.snapshot()["records"]
+        self.assertIn(admission["id"], records["execution_claim"])
+        self.assertNotIn("execution_outcome", records)
 
     def test_run_timeout_shorter_than_the_worker_start_still_gives_an_observed_run(self):
         admission = admit_lab(self, body="import time\ntime.sleep(30)\n", timeout=0.15)
