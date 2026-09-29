@@ -13,10 +13,11 @@ refuses scripts outside `experiment/`; this hook stops the shell commands that
 would escape or damage the machine regardless of cwd. A block means redesign
 the experiment, never route around the guard.
 
-A heredoc body is data when no shell reads it, for example a note that quotes
-a denied command, so the rules skip it. A body stays checked when the command
-line that opens it names a shell interpreter (bash <<EOF, cat <<EOF | sh) or
-when its terminator is missing.
+A heredoc body is data when nothing runs it, for example a note that quotes a
+denied command, so the rules skip it. Every body stays checked when the text
+outside the bodies, anywhere in the command, names a program that runs text as
+commands (a shell, eval, source, ssh, xargs, or a script run by its path), or
+when a terminator is missing.
 """
 
 from __future__ import annotations
@@ -39,12 +40,24 @@ _HEREDOC_SCAN_RE = re.compile(
     r"""(?P<word>(?:'[^'\n]*'|"[^"\n]*"|\\[^\n]|[^\s;&|<>()'"\\])+)"""
     r"""|(?P<line_break>\n)""",
     re.DOTALL)
-# A command word that reads a heredoc body as shell commands: a shell, with or
-# without its directory, $SHELL or $BASH, or eval, source and ".".
-_SHELL_INTERPRETER_RE = re.compile(
+# The text of a word up to a space or an operator. It holds no character after
+# which a command starts, so each scan from a command start stays linear.
+_WORD_TEXT = r"[^\s;&|(){}`!<>]*"
+# The start of a command word: the text start, a line break or one of
+# ; & | ( ) { ` !, then any keywords, variable assignments, options, numbers
+# and commands that run the word after them.
+_COMMAND_POSITION = (
+    r"(?:^|(?<=[\n;&|(){`!]))[ \t]*"
+    r"(?:(?:if|then|elif|else|do|while|until|time|command|builtin|env|exec|nice|nohup|stdbuf|timeout|xargs"
+    r"|[A-Za-z_][A-Za-z0-9_]*=" + _WORD_TEXT + r"|[-0-9]" + _WORD_TEXT + r")[ \t]+)*")
+# A word that runs text as commands: a shell with or without its directory,
+# $SHELL or $BASH, ssh, eval, source, xargs or "."; or a path at the start of
+# a command, which runs a script such as one that a heredoc wrote.
+_RUNS_TEXT_RE = re.compile(
     r"""(?<![^\s;&|()`"'])(?:[^\s;&|()`"'<>]*/)?"""
-    r"""(?:sh|bash|zsh|csh|tcsh|ksh|dash|fish|eval|source|\.|\$\{?(?:SHELL|BASH)\}?)"""
-    r"""(?![^\s;&|()`"'<>])""",
+    r"""(?:sh|bash|zsh|csh|tcsh|ksh|dash|fish|ssh|eval|source|xargs|\.|\$\{?(?:SHELL|BASH)\}?)"""
+    r"""(?![^\s;&|()`"'<>])"""
+    r"|" + _COMMAND_POSITION + r"[^\s;&|(){}`!<>=]*/",
     re.IGNORECASE)
 # A shell word: quoted text, an expansion or plain text. A command
 # substitution or an arithmetic expansion can hold one level of parentheses,
@@ -112,16 +125,17 @@ def _is_inside_study_workspace(start_dir: Path) -> bool:
 
 
 def _remove_data_heredoc_bodies(command: str) -> str:
-    """Remove the heredoc bodies of each command line that names no shell interpreter.
+    """Remove the heredoc bodies when nothing in the command runs text as commands.
 
-    A missing terminator returns the command unchanged, so every line stays checked.
+    The command stays unchanged, so every body stays checked, when its text
+    outside the bodies names such a program or when a terminator is missing.
     """
     kept, delimiter_patterns = [], []
-    copied_to = line_start = position = 0
+    copied_to = position = 0
     while True:
         token = _HEREDOC_SCAN_RE.search(command, position)
         if token is None:
-            return "".join(kept) + command[copied_to:]
+            break
         position = token.end()
         if token.group("word") is not None:
             delimiter = re.sub(r"""['"\\]""", "", token.group("word"))
@@ -130,19 +144,17 @@ def _remove_data_heredoc_bodies(command: str) -> str:
             continue
         if token.group("line_break") is None:
             continue
-        line, line_start = command[line_start:token.start()], position
-        if not delimiter_patterns:
-            continue
-        body_end = position
         for pattern in delimiter_patterns:
-            terminator = re.compile(pattern, re.MULTILINE).search(command, body_end)
+            terminator = re.compile(pattern, re.MULTILINE).search(command, position)
             if terminator is None:
                 return command
-            body_end = terminator.end() + 1
-        delimiter_patterns = []
-        if not _SHELL_INTERPRETER_RE.search(line):
             kept.append(command[copied_to:position])
-            copied_to = position = line_start = body_end
+            copied_to = position = terminator.end() + 1
+        delimiter_patterns = []
+    if not kept:
+        return command
+    outside = "".join(kept) + command[copied_to:]
+    return command if _RUNS_TEXT_RE.search(outside) else outside
 
 
 def _writes_workspace_state(command: str) -> bool:
