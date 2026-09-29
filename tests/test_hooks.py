@@ -307,8 +307,9 @@ _STATE_READING_COMMANDS = (
 
 # Writes into workspace state: the target of a redirection or a tee file
 # argument, including a target computed by a nested command substitution or an
-# arithmetic expansion, the line that opens a heredoc, and a heredoc body that
-# a shell reads.
+# arithmetic expansion, the line that opens a heredoc, a heredoc body that a
+# shell reads, and the zsh redirections that write their target whatever the
+# CLOBBER option (>!, >>! and the forms with & or with | after &).
 _STATE_WRITING_COMMANDS = (
     "echo x > $(dirname $(pwd))/study/.exactory/study.json",
     'echo x > $(dirname "$(pwd)")/study/.exactory/study.json',
@@ -335,6 +336,15 @@ _STATE_WRITING_COMMANDS = (
     'echo x > ".exactory"/study.json',
     'echo x > .exac""tory/study.json',
     "echo x >> .exactory\\/decisions.jsonl",
+    "echo x >! .exactory/study.json",
+    "echo x >>! .exactory/decisions.jsonl",
+    "echo x 2>! .exactory/errors.log",
+    "echo x &>! .exactory/study.json",
+    "echo x >&! .exactory/study.json",
+    "echo x >&| .exactory/study.json",
+    "echo x &>>! .exactory/decisions.jsonl",
+    "echo x >>&! .exactory/decisions.jsonl",
+    "echo x >>&| .exactory/decisions.jsonl",
 )
 
 # A heredoc body that a later command of the same command line runs, with
