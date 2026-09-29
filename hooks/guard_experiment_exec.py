@@ -17,13 +17,21 @@ A heredoc body is data when nothing runs it, for example a note that quotes a
 denied command, so the rules skip it. The shell expands a body whose delimiter
 is not quoted, so such a body stays checked when it holds a command
 substitution. Every body stays checked when the text outside the bodies,
-read without its quotes and escapes, names a program that runs text as
-commands anywhere in the command (a shell, eval, source, ssh, xargs, the dot
-command, a script run by its path, or an expansion run as a command, such as
-$0), or when the scanner cannot read the heredocs as the shell does: a
+read without its quotes and escapes, can run the text of a body as commands:
+it names a program that runs text (anywhere, a shell, also when an expansion
+spells its name, eval, source, trap, ssh or xargs; at the start of a command,
+the dot command, make, at, batch, a script run by its path, or an expansion
+run as a command, such as $0), it stores text in a variable that a later
+expansion can run (read, mapfile or readarray), or it holds a command or
+process substitution or backquotes, which can capture a body or make the shell
+start or end a body elsewhere than the scanner reads. Every body also stays
+checked when the scanner cannot read the heredocs as the shell does: a
 delimiter that is not a plain word, a missing terminator, a line of a body
 with an unquoted delimiter that ends in a backslash and joins the next line,
-or a parameter expansion or arithmetic that it cannot read.
+or a parameter expansion or arithmetic that it cannot read. A body that
+another interpreter reads, such as python3, is data for this hook, although
+that interpreter can start a shell; so is a script that a heredoc writes for
+a later command line, which the hook judges by that command's own text.
 """
 
 from __future__ import annotations
@@ -59,6 +67,9 @@ _QUOTING_RE = re.compile(r"""\\\n|['"\\]""")
 # The text of a word up to a space or an operator. It holds no character after
 # which a command starts, so each scan from a command start stays linear.
 _WORD_TEXT = r"[^\s;&|(){}`!<>]*"
+# The shells of macOS and common Linux systems, which run the text that they
+# read as commands.
+_SHELL_NAMES = "sh|ash|bash|rbash|dash|zsh|ksh|mksh|csh|tcsh|fish"
 # The start of a command word: the text start, a line break, one of
 # ; & | ( ) { ` ! or an -exec action of find, then any keywords, variable
 # assignments, options, numbers, expansions and commands that run the word
@@ -66,18 +77,28 @@ _WORD_TEXT = r"[^\s;&|(){}`!<>]*"
 _COMMAND_POSITION = (
     r"(?:^|(?<=[\n;&|(){`!])|(?<![^\s])-(?:exec|execdir|ok|okdir)[ \t]+)[ \t]*"
     r"(?:(?:if|then|elif|else|do|while|until|time|builtin|caffeinate|command|env|eval|exec|ionice|nice|nohup"
-    r"|setsid|stdbuf|strace|taskset|timeout|unbuffer|watch|xargs|sh|bash|zsh|csh|tcsh|ksh|dash|fish"
+    r"|setsid|stdbuf|strace|taskset|timeout|unbuffer|watch|xargs|" + _SHELL_NAMES +
     r"|[A-Za-z_][A-Za-z0-9_]*=" + _WORD_TEXT + r"|[-0-9$]" + _WORD_TEXT + r")[ \t]+)*")
-# A word that runs text as commands, in a command read without its quotes and
-# escapes: a shell with or without its directory, ssh, eval, source, xargs,
-# $SHELL, $BASH or $0 anywhere; or, at the start of a command, ".", a path,
-# which runs a script such as one that a heredoc wrote, or an expansion, whose
-# value can name a shell.
-_RUNS_TEXT_RE = re.compile(
-    r"(?<![^\s;&|()`])(?:[^\s;&|()`<>]*/)?"
-    r"(?:sh|bash|zsh|csh|tcsh|ksh|dash|fish|ssh|eval|source|xargs|\$\{?(?:SHELL|BASH|0)\}?)"
-    r"(?![^\s;&|()`<>])"
-    r"|" + _COMMAND_POSITION + r"(?:\.[ \t]|\$|[^\s;&|(){}`!<>=]*/)",
+# Text outside the heredoc bodies, read without its quotes and escapes, through
+# which the shell can run the text of a body as commands. Anywhere in the
+# command: a shell, ssh, eval, source, trap, xargs, $SHELL, $BASH or $0, with or
+# without a directory, also as zsh (=bash) or brace expansion ({bash,}) spells
+# it; or a command or process substitution or backquotes, which can capture a
+# body as a value that a later expansion runs, or span lines, so that the shell
+# starts or ends a body elsewhere than the scanner reads. At the start of a
+# command: ".", make, at and batch, which run their input as shell command
+# lines; read, mapfile and readarray, which store text in a variable that eval,
+# trap or bash arithmetic can later run; a path, which runs a script such as one
+# that a heredoc wrote; or a word that holds an expansion, whose value can name
+# a shell. The directory before a name holds no character after which a name
+# can start, so each scan from such a start stays linear.
+_RUNS_BODY_TEXT_RE = re.compile(
+    r"(?<![^\s;&|()`{,=])(?:[^\s;&|()`<>{,=]*/)?"
+    r"(?:" + _SHELL_NAMES + r"|ssh|eval|source|trap|xargs|\$\{?(?:SHELL|BASH|0)\}?)"
+    r"(?![^\s;&|()`<>,}])"
+    r"|`|[$<>=]\("
+    r"|" + _COMMAND_POSITION + r"(?:\.[ \t]|(?:make|at|batch|read|mapfile|readarray)(?![^\s;&|()`<>])"
+    r"|[^\s;&|(){}`!<>=]*[$/])",
     re.IGNORECASE)
 # A shell word: quoted text, an expansion or plain text. A command
 # substitution or an arithmetic expansion can hold one level of parentheses,
@@ -163,12 +184,12 @@ def _is_inside_study_workspace(start_dir: Path) -> bool:
 
 
 def _remove_data_heredoc_bodies(command: str) -> str:
-    """Remove the data heredoc bodies when nothing in the command runs text as commands.
+    """Remove the data heredoc bodies when nothing in the command can run their text as commands.
 
     The command stays unchanged, so every body stays checked, when its text
-    outside the data bodies names such a program or when the scanner cannot
-    read the heredocs as the shell does. A body with an unquoted delimiter that
-    holds a command substitution is not data.
+    outside the data bodies can run the text of a body or when the scanner
+    cannot read the heredocs as the shell does. A body with an unquoted
+    delimiter that holds a command substitution is not data.
     """
     kept, delimiters = [], []
     copied_to = position = 0
@@ -206,7 +227,7 @@ def _remove_data_heredoc_bodies(command: str) -> str:
     if not kept:
         return command
     outside = "".join(kept) + command[copied_to:]
-    return command if _RUNS_TEXT_RE.search(_QUOTING_RE.sub("", outside)) else outside
+    return command if _RUNS_BODY_TEXT_RE.search(_QUOTING_RE.sub("", outside)) else outside
 
 
 def _writes_workspace_state(command: str) -> bool:

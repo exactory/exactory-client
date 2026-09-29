@@ -308,7 +308,8 @@ _STATE_READING_COMMANDS = (
     "tee copy.txt <<< .exactory/study.json",
     "tee >(grep stage > stages.txt) < .exactory/study.json > /dev/null",
     "python3 - <<'EOF'\nprint('the cleanup no longer runs rm -rf ../other-project')\nEOF",
-    "cat >> notes.md <<'EOF'\nThe guard refused rm -rf ../other-project.\nEOF\necho make sure to read at least one note",
+    "cat >> notes.md <<'EOF'\nThe guard refused rm -rf ../other-project.\nEOF\n"
+    "echo make sure to read at least one note",
 )
 
 # Writes into workspace state: the target of a redirection or a tee file
