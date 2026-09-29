@@ -202,6 +202,31 @@ class LiteratureTests(LiteratureCase):
                                    "frontier_digest": "78bc24748a0de14d1067afc603a8808e0ae4a8701db07de43c7304816c147033",
                                    "graph": "00dc7b2a9f1fef533e38b2ae7ffbaac071f6f5514a4f31c3f3b259ee9d25e4cc"})
 
+    def test_a_study_whose_replacements_cite_the_same_works_again_keeps_its_results_of_0_47_0(self):
+        """The expected digests were computed by 0.47.0, for which a replaced judgment's requirements still counted.
+        direct-2 and theory-2 cite the works of the judgments they replace again, so every work stays required."""
+        a = self.metadata(1, references=[{"id": "arxiv:2601.00002v1"}])
+        b, c = self.metadata(2), self.metadata(3)
+        self.scope([a])
+        bundle = self.bundle(a, self.capture(a, "A extends B. References: B."))
+        self.mutate(import_bundle, bundle)
+        self.mutate(record_reading, self.full_note(bundle))
+        self.mutate(require_fulltext, {"id": "major", "profile": "research", "version_id": c,
+                                       "purpose": "major_claim", "reason": "The main claim rests on C."})
+        for identifier, purpose, cited in (("direct", "direct", [b]), ("direct-2", "direct", [b]),
+                                           ("theory", "theory", [b, c]), ("theory-2", "theory", [b, c])):
+            search = self.search(purpose, [b, c])
+            search["id"], search["cited_work_ids"] = identifier, cited
+            self.mutate(record_search, search)
+        report = foundation_report(self.store, "research")
+        results = {name: report[name] for name in ("digest", "requirements_digest", "stable_digest", "frontier_digest")}
+        results["graph"] = digest(citation_graph(self.store.snapshot()["records"], "research"))
+        self.assertEqual(results, {"digest": "7190a612d1648f4db3f23556e2d89477d99cdbe75249104dc55abd28394568a9",
+                                   "requirements_digest": "7483c10e93eb429414c59718b8ddbface63031ac17d89ac95c3dfd844838be1c",
+                                   "stable_digest": "fa8dc371f4d6a5b68a1448529eb80a5c3c325d81f0792db172becb49f67d993f",
+                                   "frontier_digest": "ee1f3b6412947c75e91131d4a6a41c14ff6f12f93f77a34413d72f94332f8105",
+                                   "graph": "914cc22d3e42e805276605b8b58edf6c04a7fe424562a55b8bd18b703787ad16"})
+
     def test_tool_passage_is_scoped_to_its_article_and_cannot_repair_failed_origin(self):
         a, b = self.metadata(), self.metadata(2)
         failed = self.capture(a, status=403)
