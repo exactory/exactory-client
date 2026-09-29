@@ -283,8 +283,9 @@ _BENIGN_COMMANDS = (
 )
 
 # Reads of workspace state beside a redirection or a tee elsewhere in the same
-# command line, a tee that reads workspace state as its input, and a note whose
-# heredoc body quotes commands that the guard denies; no shell reads that body.
+# command line, a tee that reads workspace state as its input, and a note or a
+# python3 program whose heredoc body quotes commands that the guard denies, also
+# beside the words make, read and at as arguments; no shell reads that body.
 _STATE_READING_COMMANDS = (
     "cat .exactory/authorship.json 2>/dev/null",
     "cat .exactory/authorship.json 2>/dev/null && python3 -m json.tool .exactory/study.json",
@@ -306,6 +307,8 @@ _STATE_READING_COMMANDS = (
     "tee copy.json < .exactory/study.json",
     "tee copy.txt <<< .exactory/study.json",
     "tee >(grep stage > stages.txt) < .exactory/study.json > /dev/null",
+    "python3 - <<'EOF'\nprint('the cleanup no longer runs rm -rf ../other-project')\nEOF",
+    "cat >> notes.md <<'EOF'\nThe guard refused rm -rf ../other-project.\nEOF\necho make sure to read at least one note",
 )
 
 # Writes into workspace state: the target of a redirection or a tee file
@@ -357,13 +360,20 @@ _STATE_WRITING_COMMANDS = (
     "echo x | tee < in.txt .exactory/study.json",
     "echo x | tee >(cat) .exactory/study.json",
     "echo x | tee >(cat $(echo $(echo /dev/null))) .exactory/study.json",
+    "rbash <<'EOF'\necho x > .exactory/study.json\nEOF",
+    "ash <<'EOF'\necho x > .exactory/study.json\nEOF",
+    "mksh <<'EOF'\necho x > .exactory/study.json\nEOF",
+    'ash -c "tee .exactory/study.json"',
 )
 
 # A heredoc body that a later command of the same command line runs, with
 # the reason that the guard gives: a pipeline continued after the body, a
-# piped group or subshell, a loop that evaluates each line, a captured body
-# that eval runs, a script written from the body and then run, a remote
-# shell, and a command line that xargs builds from the body.
+# piped group or subshell, a loop that evaluates each line, a body that a
+# command substitution captures or read stores and that eval, trap or bash
+# arithmetic runs, a script written from the body and then run or sourced by
+# trap, a remote shell, a command line that xargs builds from the body, recipe
+# lines that make runs, lines that awk pipes to sh, and jobs that at and batch
+# run.
 _BODIES_RUN_BY_A_LATER_COMMAND = (
     ("cat <<'EOF' |\nrm -rf ../other-project\nEOF\nsh", "recursive force-delete"),
     ("cat <<'EOF' |\necho x > .exactory/study.json\nEOF\nbash", "workspace state file"),
@@ -375,6 +385,15 @@ _BODIES_RUN_BY_A_LATER_COMMAND = (
     ("cat > run.sh <<'EOF'\nrm -rf ../other-project\nEOF\nchmod +x run.sh && ./run.sh", "recursive force-delete"),
     ("ssh host <<'EOF'\nrm -rf ../other-project\nEOF", "recursive force-delete"),
     ("cat <<'EOF' | xargs rm\n-rf\n../other-project\nEOF", "recursive force-delete"),
+    ("x=$(cat <<'EOF'\nrm -rf ../other-project\nEOF\n)\ntrap \"$x\" EXIT", "recursive force-delete"),
+    ("cat > f.sh <<'EOF'\nrm -rf ../other-project\nEOF\ntrap '. ./f.sh' EXIT", "recursive force-delete"),
+    ("read -r -d '' x <<'EOF'\nrm -rf ../other-project\nEOF\ntrap \"$x\" EXIT", "recursive force-delete"),
+    ("read -r x <<'EOF'\na[$(rm -rf ../other-project)]\nEOF\n(( x ))", "recursive force-delete"),
+    ("x=$(cat <<'EOF'\na[$(rm -rf ../other-project)]\nEOF\n)\necho $((x))", "recursive force-delete"),
+    ("make -f - <<'EOF'\nall:\n\trm -rf ../other-project\nEOF", "recursive force-delete"),
+    ("awk '{print | \"sh\"}' <<'EOF'\nrm -rf ../other-project\nEOF", "recursive force-delete"),
+    ("at now <<'EOF'\nrm -rf ../other-project\nEOF", "recursive force-delete"),
+    ("batch <<'EOF'\nrm -rf ../other-project\nEOF", "recursive force-delete"),
 )
 
 # A heredoc body with an unquoted delimiter, which the shell expands, with
@@ -395,7 +414,10 @@ _EXPANDED_BODIES = (
 # the reason that the guard gives: delimiters that the shell ends elsewhere
 # ($'EOF' ends at EOF, a backslash in quotes is literal, an escaped line break
 # joins the word), "<<" inside a parameter expansion or arithmetic, where it
-# opens no heredoc, and a shell named through quotes, escapes or a variable.
+# opens no heredoc, a shell named through quotes, escapes, a variable, zsh's
+# =name or a brace expansion, a command or process substitution that spans
+# lines after the operator, so that the body starts after it, and a terminator
+# that bash accepts before ")" inside a command substitution.
 _MISREAD_HEREDOCS = (
     ("cat <<$'EOF'\ndata\nEOF\nrm -rf ../other-project\n$EOF", "recursive force-delete"),
     ("cat <<$'EOF'\ndata\nEOF\necho x > .exactory/study.json\n$EOF", "workspace state file"),
@@ -409,14 +431,25 @@ _MISREAD_HEREDOCS = (
     ("$'\\x62ash' <<'EOF'\nrm -rf ../other-project\nEOF", "recursive force-delete"),
     ("$0 <<'EOF'\nrm -rf ../other-project\nEOF", "recursive force-delete"),
     ("s=bash; $s <<'EOF'\nrm -rf ../other-project\nEOF", "recursive force-delete"),
+    ("=bash <<'EOF'\nrm -rf ../other-project\nEOF", "recursive force-delete"),
+    ("{bash,} <<'EOF'\nrm -rf ../other-project\nEOF", "recursive force-delete"),
+    ("ba${x}sh <<'EOF'\nrm -rf ../other-project\nEOF", "recursive force-delete"),
+    ("cat <<'EOF' $(\nrm -rf ../other-project\n)\nEOF", "recursive force-delete"),
+    ("cat <<'EOF' `\nrm -rf ../other-project\n`\nEOF", "recursive force-delete"),
+    ("cat <<'EOF' <(\nrm -rf ../other-project\n)\nEOF", "recursive force-delete"),
+    ("cat <<'EOF' =(\nrm -rf ../other-project\n)\nEOF", "recursive force-delete"),
+    ("x=$(cat <<'EOF'\ndata\nEOF)\nrm -rf ../other-project\nEOF", "recursive force-delete"),
 )
 
 # Text that looks like a heredoc to a line scanner but is shell code: a
-# quoted or commented operator, an arithmetic shift, the text after a
-# terminator, and a body without its terminator.
+# quoted or commented operator, also quoted in a command substitution inside
+# double quotes or commented inside backquotes, an arithmetic shift, the text
+# after a terminator, and a body without its terminator.
 _COMMANDS_AROUND_HEREDOC_TEXT = (
     'echo "<<EOF"\nrm -rf ../other-project\nEOF',
     "# see <<EOF\nrm -rf ../other-project\nEOF",
+    'echo "$(echo "x <<EOF " )"\nrm -rf ../other-project\nEOF',
+    "echo `#<<EOF `\nrm -rf ../other-project\nEOF",
     "echo $((1<<EOF))\nrm -rf ../other-project\nEOF",
     "cat >> notes.md <<'EOF'\ntext\nEOF\nrm -rf ../other-project",
     "cat >> notes.md <<'EOF'\nrm -rf ../other-project",
