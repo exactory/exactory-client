@@ -386,11 +386,12 @@ class ResearchExecutionTests(DevelopmentCase):
         admission = admit_lab(self, body="print('{\"metric\": 7}')\n", timeout=30)
         api = importlib.import_module("research_harness.execution")
         started = time.monotonic()
-        # A loaded machine starts the worker slowly: it writes ready.json only after the 5 seconds that 0.48.0 waited.
-        with self.start_worker_after("sleep 7"):
+        # A loaded machine starts the worker slowly: it writes ready.json after the 10 seconds that the wait adds to
+        # the run's timeout, so only a wait that grows with that timeout sees it.
+        with self.start_worker_after("sleep 12"):
             result = api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
                                           request_id="slow-worker-start")
-        self.assertGreaterEqual(time.monotonic() - started, 7)
+        self.assertGreaterEqual(time.monotonic() - started, 12)
         self.assertTrue(result["ok"], result["stderr_tail"])
         self.assertEqual(result["metric"], {"metric": 7})
 
@@ -429,10 +430,10 @@ class ResearchExecutionTests(DevelopmentCase):
         execution_id = records["execution_outcome"][admission["id"]]["execution_id"]
         self.assertEqual(records["execution"][execution_id]["payload"]["status"], "interrupted")
 
-    def test_run_timeout_under_five_seconds_keeps_the_five_second_wait_for_the_worker(self):
+    def test_run_timeout_shorter_than_the_worker_start_still_gives_an_observed_run(self):
         admission = admit_lab(self, body="import time\ntime.sleep(30)\n", timeout=0.15)
         api = importlib.import_module("research_harness.execution")
-        # The worker starts later than the whole run may take, and within the 5 seconds that 0.48.0 waited.
+        # The worker starts later than the whole run may take, and within the 10 seconds that the wait adds to it.
         with self.start_worker_after("sleep 1"):
             result = api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
                                           request_id="short-run")
