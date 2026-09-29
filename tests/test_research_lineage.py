@@ -199,6 +199,42 @@ class LoopTests(LineageCase):
         self.assertEqual({p: (purposes[p]["queries"], purposes[p]["covered"]) for p in ("theory", "adjacent", "recent")},
                          {"theory": (2, True), "adjacent": (2, True), "recent": (1, False)})
 
+    def test_a_tool_capture_adds_no_query_to_a_native_request_bound_to_the_same_value(self):
+        root = self.metadata(1)
+        self.scope([root])
+        empty = json.dumps({"meta": {"count": 0, "next_cursor": None}, "results": []}).encode()
+
+        def judge(identifier, purpose, response):
+            """Record a nothing-new judgment that binds one captured response."""
+            self.mutate(record_search, {"id": identifier, "profile": "research", "purpose": purpose, "queries": [response["query"]],
+                                        "responses": [response], "captured_at": "2026-09-07T12:00:00Z",
+                                        "scope": "The works the saved request returned.", "found_work_ids": [],
+                                        "verdict": "nothing-new", "cited_work_ids": [], "dispositions": [],
+                                        "impact": "The request returned no work.", "gaps": []})
+
+        # One OpenAlex request is imported natively and imported again as web, and both captures bind its search.
+        url = "https://api.openalex.org/works?search=dram%20erasure"
+        native = import_response(self.store, "openalex", empty, source_url=url, captured_at="2026-09-07T12:00:00Z",
+                                 expected_revision=self.store.revision, request_id="native-theory")["source_ids"][0]
+        again = import_response(self.store, "web", empty, source_url=url, captured_at="2026-09-07T12:00:00Z",
+                                media_type="application/json", mappings=[],
+                                expected_revision=self.store.revision, request_id="web-theory")["source_ids"][0]
+        judge("theory-native", "theory", {"source_id": native, "query": "dram erasure"})
+        judge("theory-web", "theory", {"source_id": again, "query": "dram erasure", "results_pointer": "/results"})
+        # The harness cannot tell an MCP capture of the value a native request was bound to from a capture of that request.
+        other = import_response(self.store, "openalex", empty, source_url="https://api.openalex.org/works?search=landauer%20bound",
+                                captured_at="2026-09-07T12:00:00Z", expected_revision=self.store.revision,
+                                request_id="native-adjacent")["source_ids"][0]
+        judge("adjacent-native", "adjacent", {"source_id": other, "query": "landauer bound"})
+        self.mutate(record_search, self.search("adjacent", [], query="landauer bound"))
+        purposes = lineage.loop_state(self.store.snapshot()["records"], "research")["purposes"]
+        self.assertEqual({p: (purposes[p]["queries"], purposes[p]["covered"]) for p in ("theory", "adjacent")},
+                         {"theory": (1, False), "adjacent": (1, False)})
+        # A tool capture of a value that no native request was bound to counts as a query of its own.
+        self.mutate(record_search, self.search("adjacent", [], query="landauer limit"))
+        purposes = lineage.loop_state(self.store.snapshot()["records"], "research")["purposes"]
+        self.assertEqual((purposes["adjacent"]["queries"], purposes["adjacent"]["covered"]), (2, True))
+
 
 class OutsideReadingTests(LineageCase):
     def test_a_full_reading_of_a_source_the_study_does_not_hold_leaves_the_foundation_unchanged(self):
