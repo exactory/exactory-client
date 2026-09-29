@@ -35,13 +35,14 @@ _NO_IDENTIFIER_BIB_TEXT = """@misc{ghost2020,
 """
 
 
-def _run_hook(script_path: Path, payload: dict) -> subprocess.CompletedProcess:
+def _run_hook(script_path: Path, payload: dict, timeout_seconds: float | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(
         [sys.executable, str(script_path)],
         input=json.dumps(payload),
         text=True,
         capture_output=True,
         check=True,
+        timeout=timeout_seconds,
     )
 
 
@@ -457,6 +458,16 @@ _COMMANDS_AROUND_HEREDOC_TEXT = (
 )
 
 
+# Commands padded with thousands of -exec or -ok actions of find, each of which
+# starts a command, before a state write or a heredoc body that bash runs, with
+# the reason that the guard gives.
+_COMMANDS_PADDED_WITH_FIND_ACTIONS = (
+    ("find . " + "-exec " * 8000 + "; echo x | tee .exactory/study.json", "workspace state file"),
+    ("cat > f.sh <<'EOF'\nrm -rf ../other-project\nEOF\nfind . " + "-ok " * 8000 + "; bash f.sh",
+     "recursive force-delete"),
+)
+
+
 class TestGuardExperimentExec(unittest.TestCase):
     def setUp(self) -> None:
         scratch = tempfile.TemporaryDirectory()
@@ -534,6 +545,24 @@ class TestGuardExperimentExec(unittest.TestCase):
                 decision = json.loads(completed.stdout)["hookSpecificOutput"]
                 self.assertEqual(decision["permissionDecision"], "deny")
                 self.assertIn("recursive force-delete", decision["permissionDecisionReason"])
+
+    def test_a_long_command_is_decided_within_the_registered_timeout(self) -> None:
+        # A PreToolUse hook that reaches its timeout does not block the tool
+        # call (https://code.claude.com/docs/en/hooks), so a slow decision
+        # would let the command run unguarded.
+        manifest = json.loads((_PLUGIN_ROOT / "hooks" / "hooks.json").read_text())
+        timeout_seconds = next(hook["timeout"] for group in manifest["hooks"]["PreToolUse"]
+                               for hook in group["hooks"] if "guard_experiment_exec.py" in hook["command"])
+        for command, reason in _COMMANDS_PADDED_WITH_FIND_ACTIONS:
+            with self.subTest(command=command[:60]):
+                completed = _run_hook(_GUARD_SCRIPT_PATH, {
+                    "tool_name": "Bash",
+                    "tool_input": {"command": command},
+                    "cwd": str(self.workspace),
+                }, timeout_seconds)
+                decision = json.loads(completed.stdout)["hookSpecificOutput"]
+                self.assertEqual(decision["permissionDecision"], "deny")
+                self.assertIn(reason, decision["permissionDecisionReason"])
 
     def test_the_guard_is_scoped_to_study_workspaces(self) -> None:
         completed = self._run_guard(_GUARDED_COMMANDS[0], self.outside_dir)
