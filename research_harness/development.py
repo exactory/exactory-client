@@ -890,6 +890,12 @@ def _assess(context, value, *, historical=False):
         _choice(check["status"], ("passed", "failed", "unresolved"), "Validity outcome")
         checked = evidence.many(check["evidence"], "Validity check evidence")
         if check["status"] != "passed" or not any(x.get("requirement_kind") == "validation" and x.get("status") == "completed" for x in checked):
+            # A new assessment is refused before it is recorded, so its author
+            # sees the unsupported check. A stored assessment keeps the obligation.
+            if check["status"] == "passed" and not historical:
+                raise ResearchError("validity_evidence_missing", "A passed validity check needs completed evidence of a planned validation "
+                                    "requirement; cite the completed validation output or record the check as unresolved",
+                                    {"check_id": check["id"]})
             valid_obligations.append(obligation("validity_unresolved", "Resolve the actual validity check with planned validation evidence.", check_id=check["id"]))
         else:
             for validation in checked:

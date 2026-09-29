@@ -422,7 +422,9 @@ metric alone does not settle validity or the full objective.
 
 Read the actual outputs and checks. `assess` separately records the result,
 validity evidence, scope, novelty/contribution, branch development, failures,
-assumptions, and remaining obligations. Preserve a durable `checkpoint` with a
+assumptions, and remaining obligations. A validity check marked `passed` cites
+the completed output of a planned `validation` requirement; until that output
+exists, record the check as `unresolved`. Preserve a durable `checkpoint` with a
 stable ID and the next hypothesis. Deepen a promising branch from that checkpoint;
 reopen a failed branch only when new evidence addresses its recorded obstruction.
 There is no fixed cycle count. Resource exhaustion and incomplete evidence are
