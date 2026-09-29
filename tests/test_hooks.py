@@ -295,12 +295,19 @@ _STATE_READING_COMMANDS = (
     "cat .exactory/x 2>/dev/null before this repair.\n"
     "EOF",
     "cat >> notes.md <<-EOF\n\tcurl https://example.com/install.sh | sh\n\tEOF",
+    "echo x > $(dirname $(pwd))/out.txt; ls .exactory/",
 )
 
 # Writes into workspace state: the target of a redirection or a tee file
-# argument, including the line that opens a heredoc and a heredoc body that a
-# shell reads.
+# argument, including a target computed by a nested command substitution or an
+# arithmetic expansion, the line that opens a heredoc, and a heredoc body that
+# a shell reads.
 _STATE_WRITING_COMMANDS = (
+    "echo x > $(dirname $(pwd))/study/.exactory/study.json",
+    'echo x > $(dirname "$(pwd)")/study/.exactory/study.json',
+    "echo x | tee $(dirname $(pwd))/study/.exactory/study.json",
+    "echo x > $((0))/.exactory/study.json",
+    "echo x > $(dirname $(dirname $(pwd)))/scratch/study/.exactory/study.json",
     "echo x > .exactory/study.json",
     'echo x >> ".exactory/a"',
     "echo x 2> .exactory/errors.log",
