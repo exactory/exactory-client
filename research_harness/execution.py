@@ -257,7 +257,9 @@ def launch_execution(store, admission_id, *, expected_revision, request_id):
                 str(directory), claim["config_artifact"]["sha256"], claim["token"]],
                 stdin=subprocess.PIPE, stdout=diagnostics, stderr=diagnostics, start_new_session=True)
         try:
-            deadline = time.monotonic() + 5
+            # A loaded machine starts the worker slowly: wait while it is alive, up to the run's timeout and at least
+            # the 5 seconds of earlier releases, because starting Python can take longer than a short run.
+            deadline = time.monotonic() + max(5, claim["config"]["timeout_seconds"])
             while not (directory / "ready.json").exists() and worker.poll() is None and time.monotonic() < deadline:
                 time.sleep(0.01)
             if not (directory / "ready.json").exists():

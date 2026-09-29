@@ -410,6 +410,13 @@ class ResearchExecutionTests(DevelopmentCase):
         records = self.store.snapshot()["records"]
         self.assertIn(admission["id"], records["execution_claim"])
         self.assertNotIn("execution_outcome", records)
+        # The documented recovery records the claimed run as interrupted.
+        result = api.reconcile_execution(self.store, {"admission_id": admission["id"], "resolution": "interrupted",
+            "reason": "The worker exited before it was ready."}, expected_revision=self.store.revision, request_id="recover-exited")
+        self.assertFalse(result["ok"])
+        records = self.store.snapshot()["records"]
+        execution_id = records["execution_outcome"][admission["id"]]["execution_id"]
+        self.assertEqual(records["execution"][execution_id]["payload"]["status"], "interrupted")
 
     def test_run_timeout_under_five_seconds_keeps_the_five_second_wait_for_the_worker(self):
         admission = admit_lab(self, body="import time\ntime.sleep(30)\n", timeout=0.15)
