@@ -637,9 +637,24 @@ class DevelopmentTests(DevelopmentCase):
         with self.assertRaises(ResearchError) as raised:
             self.mutate(api.assess_cycle, payload)
         self.assertEqual(raised.exception.code, "validity_evidence_missing")
-        self.assertEqual(raised.exception.details, {"check_id": "exhaustive"})
+        self.assertEqual(raised.exception.details, {"check_ids": ["exhaustive"]})
         self.assertIn("completed validation output", raised.exception.message)
         self.assertIn("unresolved", raised.exception.message)
+        self.assertEqual(self.store.snapshot(), before)
+
+    def test_one_refusal_names_every_passed_check_without_completed_validation_evidence(self):
+        api = self.development()
+        self.prepared_study()
+        plan, execution = self.run_cycle()
+        payload = self.assessment(plan, execution)
+        supported = payload["validity_checks"][0]
+        unsupported = dict(supported, evidence=[self.result_evidence(execution)])
+        payload["validity_checks"] = [dict(unsupported, id="extremum"), supported, dict(unsupported, id="range")]
+        before = self.store.snapshot()
+        with self.assertRaises(ResearchError) as raised:
+            self.mutate(api.assess_cycle, payload)
+        self.assertEqual(raised.exception.code, "validity_evidence_missing")
+        self.assertEqual(raised.exception.details, {"check_ids": ["extremum", "range"]})
         self.assertEqual(self.store.snapshot(), before)
 
     def test_a_passed_check_citing_an_incomplete_validation_run_is_refused_before_recording(self):
@@ -649,7 +664,7 @@ class DevelopmentTests(DevelopmentCase):
         with self.assertRaises(ResearchError) as raised:
             self.mutate(api.assess_cycle, payload)
         self.assertEqual(raised.exception.code, "validity_evidence_missing")
-        self.assertEqual(raised.exception.details, {"check_id": "sensitivity"})
+        self.assertEqual(raised.exception.details, {"check_ids": ["sensitivity"]})
         self.assertEqual(self.store.snapshot(), before)
 
     def test_an_unresolved_or_failed_check_without_validation_evidence_is_recorded_with_its_obligation(self):
