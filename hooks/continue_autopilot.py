@@ -4,8 +4,10 @@
 Exactory AI Science runs end to end by default. When the session tries to stop
 while the study workspace is on autopilot, this hook blocks the stop and tells
 the agent to continue the loop, unless the run is finished or parked at a wait
-(the context grace phase, or a production deposit or submission awaiting
-approval). A per-study counter caps the run so a stuck loop pauses on its own.
+(the context grace phase, a production deposit or submission awaiting
+approval, or a study that finished on the direct publication paths without
+reaching the complete stage). A per-study counter caps the run so a stuck loop
+pauses on its own.
 """
 
 from __future__ import annotations
@@ -82,7 +84,10 @@ def main() -> None:
         f" (status={state.get('status')}): continue the Exactory AI Science"
         " loop. Park with `exactory-lab state set --waiting <reason>` when"
         " input is genuinely needed, and set the study to stage 'complete'"
-        " when the work is done."
+        " when the work is done. When the study finished on the direct"
+        " publication paths (its deposit and submission printed \"Managed"
+        " record skipped\"), end it by parking it with"
+        " `exactory-lab state set --waiting <reason>`."
     )
 
 
