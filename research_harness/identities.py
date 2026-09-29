@@ -1,7 +1,9 @@
 """Explicit work families, version identities and evidence-backed alias lookup.
 
 normalize_identifier accepts DOI, arXiv (including old archive IDs), OpenAlex,
-and explicit url:HTTPS identifiers. family_id removes ONLY an arXiv version.
+and explicit url:HTTPS identifiers. An old archive name that lost its hyphen in
+text extraction (astroph/0410063) takes the hyphen back (astro-ph/0410063).
+family_id removes ONLY an arXiv version.
 work records are keyed by exact id; work_family/{work_id} lists version_ids.
 alias/{identifier} contains assertions [{work_id, source_id, locator, relation}].
 Aliases are provider assertions of `same_work`, never interchangeable versions.
@@ -17,7 +19,14 @@ from .errors import ResearchError
 from .http import safe_url
 
 
-_ARXIV = re.compile(r"(?P<base>(?:[0-9]{2}(?:0[1-9]|1[0-2])\.[0-9]{4,5}|[a-z-]+(?:\.[A-Z]{2})?/[0-9]{2}(?:0[1-9]|1[0-2])[0-9]{3}))(?P<version>v[1-9][0-9]*)?\Z")
+_ARXIV = re.compile(r"(?P<base>(?:[0-9]{2}(?:0[1-9]|1[0-2])\.[0-9]{4,5}|(?P<archive>[a-z-]+)(?:\.[A-Z]{2})?/[0-9]{2}(?:0[1-9]|1[0-2])[0-9]{3}))(?P<version>v[1-9][0-9]*)?\Z")
+# The hyphenated archives that arXiv's taxonomy definitions list as begun before
+# the identifier scheme changed in April 2007, keyed by the name without hyphen.
+_ARCHIVE_BY_HYPHENLESS_NAME = {archive.replace("-", ""): archive for archive in (
+    "acc-phys", "adap-org", "alg-geom", "ao-sci", "astro-ph", "atom-ph", "bayes-an", "chao-dyn", "chem-ph",
+    "cmp-lg", "comp-gas", "cond-mat", "dg-ga", "funct-an", "gr-qc", "hep-ex", "hep-lat", "hep-ph", "hep-th",
+    "math-ph", "mtrl-th", "nucl-ex", "nucl-th", "patt-sol", "plasm-ph", "q-alg", "q-bio", "quant-ph",
+    "solv-int", "supr-con")}
 # Registered legacy SICI suffixes contain angle brackets. Request builders
 # encode the opaque identifier as URL data; its syntax is not HTML validation.
 _DOI = re.compile(r"10\.[0-9]{4,9}/[^\s\x00-\x1f]+\Z", re.I)
@@ -45,7 +54,11 @@ def normalize_identifier(value):
             raise ResearchError("invalid_identifier", "Identifier URL is not a supported registry")
     if value.lower().startswith("arxiv:"):
         value = value[6:]
-    if _ARXIV.fullmatch(value):
+    match = _ARXIV.fullmatch(value)
+    if match:
+        archive = match.group("archive")
+        if archive in _ARCHIVE_BY_HYPHENLESS_NAME:
+            value = _ARCHIVE_BY_HYPHENLESS_NAME[archive] + value[len(archive):]
         return "arxiv:" + value
     if value.lower().startswith("doi:"):
         value = value[4:]
