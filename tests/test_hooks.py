@@ -283,8 +283,8 @@ _BENIGN_COMMANDS = (
 )
 
 # Reads of workspace state beside a redirection or a tee elsewhere in the same
-# command line, and a note whose heredoc body quotes commands that the guard
-# denies; no shell reads that body.
+# command line, a tee that reads workspace state as its input, and a note whose
+# heredoc body quotes commands that the guard denies; no shell reads that body.
 _STATE_READING_COMMANDS = (
     "cat .exactory/authorship.json 2>/dev/null",
     "cat .exactory/authorship.json 2>/dev/null && python3 -m json.tool .exactory/study.json",
@@ -303,13 +303,17 @@ _STATE_READING_COMMANDS = (
     "grep tee .exactory/study.json",
     "grep -n tee .exactory/study.json",
     'grep "tee" .exactory/study.json',
+    "tee copy.json < .exactory/study.json",
+    "tee copy.txt <<< .exactory/study.json",
+    "tee >(grep stage > stages.txt) < .exactory/study.json > /dev/null",
 )
 
 # Writes into workspace state: the target of a redirection or a tee file
 # argument, including a target computed by a nested command substitution or an
-# arithmetic expansion, the line that opens a heredoc, a heredoc body that a
-# shell reads, and the zsh redirections that write their target whatever the
-# CLOBBER option (>!, >>! and the forms with & or with | after &).
+# arithmetic expansion and a tee file argument after a redirection or a process
+# substitution, the line that opens a heredoc, a heredoc body that a shell
+# reads, and the zsh redirections that write their target whatever the CLOBBER
+# option (>!, >>! and the forms with & or with | after &).
 _STATE_WRITING_COMMANDS = (
     "echo x > $(dirname $(pwd))/study/.exactory/study.json",
     'echo x > $(dirname "$(pwd)")/study/.exactory/study.json',
@@ -345,6 +349,14 @@ _STATE_WRITING_COMMANDS = (
     "echo x &>>! .exactory/decisions.jsonl",
     "echo x >>&! .exactory/decisions.jsonl",
     "echo x >>&| .exactory/decisions.jsonl",
+    "echo x | tee >/dev/null .exactory/study.json",
+    "echo x | tee 2>/dev/null .exactory/study.json",
+    "echo x | tee -a >/dev/null .exactory/decisions.jsonl",
+    "echo x | tee >! /dev/null .exactory/study.json",
+    "echo x | tee 1>&2 .exactory/study.json",
+    "echo x | tee < in.txt .exactory/study.json",
+    "echo x | tee >(cat) .exactory/study.json",
+    "echo x | tee >(cat $(echo $(echo /dev/null))) .exactory/study.json",
 )
 
 # A heredoc body that a later command of the same command line runs, with
