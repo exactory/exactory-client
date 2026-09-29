@@ -163,6 +163,42 @@ class LoopTests(LineageCase):
         purposes = lineage.loop_state(self.store.snapshot()["records"], "research")["purposes"]
         self.assertEqual((purposes["recent"]["queries"], purposes["recent"]["covered"]), (2, True))
 
+    def test_a_native_request_counts_once_and_distinct_requests_count_apart(self):
+        root = self.metadata(1)
+        self.scope([root])
+
+        def capture(provider, url):
+            """Import an empty native response captured from url and return its source id."""
+            data = {"message": {"total-results": 0, "items": []}} if provider == "crossref" else {"meta": {"count": 0, "next_cursor": None}, "results": []}
+            self.sequence += 1
+            return import_response(self.store, provider, json.dumps(data).encode(), source_url=url, captured_at="2026-09-07T12:00:00Z",
+                                   expected_revision=self.store.revision, request_id="native-" + str(self.sequence))["source_ids"][0]
+
+        def judge(purpose, bindings):
+            """Record a nothing-new judgment that binds each (source id, query) pair."""
+            self.mutate(record_search, {"id": purpose + "-requests", "profile": "research", "purpose": purpose,
+                                        "queries": sorted({query for _, query in bindings}),
+                                        "responses": [{"source_id": source, "query": query} for source, query in bindings],
+                                        "captured_at": "2026-09-07T12:00:00Z", "scope": "The works the saved requests returned.",
+                                        "found_work_ids": [], "verdict": "nothing-new", "cited_work_ids": [], "dispositions": [],
+                                        "impact": "The requests returned no work.", "gaps": []})
+
+        # Two Crossref requests share their bibliographic query and name different authors.
+        smith = capture("crossref", "https://api.crossref.org/works?query=dram%20erasure&query.author=Smith")
+        jones = capture("crossref", "https://api.crossref.org/works?query=dram%20erasure&query.author=Jones")
+        judge("theory", [(smith, "dram erasure"), (smith, "Smith"), (jones, "dram erasure"), (jones, "Jones")])
+        # Two OpenAlex requests share their search and differ in a filter.
+        broad = capture("openalex", "https://api.openalex.org/works?search=landauer%20bound")
+        narrow = capture("openalex", "https://api.openalex.org/works?search=landauer%20bound&filter=from_publication_date:2025-01-01")
+        judge("adjacent", [(broad, "landauer bound"), (narrow, "landauer bound")])
+        # One OpenAlex request is captured twice, and each capture binds a different query parameter.
+        url = "https://api.openalex.org/works?search=dram%20erasure&filter=cites:W9"
+        first, second = capture("openalex", url), capture("openalex", url)
+        judge("recent", [(first, "dram erasure"), (second, "cites:W9")])
+        purposes = lineage.loop_state(self.store.snapshot()["records"], "research")["purposes"]
+        self.assertEqual({p: (purposes[p]["queries"], purposes[p]["covered"]) for p in ("theory", "adjacent", "recent")},
+                         {"theory": (2, True), "adjacent": (2, True), "recent": (1, False)})
+
 
 class OutsideReadingTests(LineageCase):
     def test_a_full_reading_of_a_source_the_study_does_not_hold_leaves_the_foundation_unchanged(self):
