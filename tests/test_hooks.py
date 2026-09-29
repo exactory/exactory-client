@@ -322,6 +322,24 @@ _STATE_WRITING_COMMANDS = (
     '"$SHELL" -s <<EOF\necho x > .exactory/x\nEOF',
 )
 
+# A heredoc body that a later command of the same command line runs, with
+# the reason that the guard gives: a pipeline continued after the body, a
+# piped group or subshell, a loop that evaluates each line, a captured body
+# that eval runs, a script written from the body and then run, a remote
+# shell, and a command line that xargs builds from the body.
+_BODIES_RUN_BY_A_LATER_COMMAND = (
+    ("cat <<'EOF' |\nrm -rf ../other-project\nEOF\nsh", "recursive force-delete"),
+    ("cat <<'EOF' |\necho x > .exactory/study.json\nEOF\nbash", "workspace state file"),
+    ("{ cat <<'EOF'\nrm -rf ../other-project\nEOF\n} | bash", "recursive force-delete"),
+    ("( cat <<'EOF'\necho x > .exactory/study.json\nEOF\n) | sh", "workspace state file"),
+    ("while read -r l; do\n  eval \"$l\"\ndone <<'EOF'\nrm -rf ../other-project\nEOF", "recursive force-delete"),
+    ("x=$(cat <<'EOF'\nrm -rf ../other-project\nEOF\n)\neval \"$x\"", "recursive force-delete"),
+    ("cat > run.sh <<'EOF'\nrm -rf ../other-project\nEOF\nbash run.sh", "recursive force-delete"),
+    ("cat > run.sh <<'EOF'\nrm -rf ../other-project\nEOF\nchmod +x run.sh && ./run.sh", "recursive force-delete"),
+    ("ssh host <<'EOF'\nrm -rf ../other-project\nEOF", "recursive force-delete"),
+    ("cat <<'EOF' | xargs rm\n-rf\n../other-project\nEOF", "recursive force-delete"),
+)
+
 # Text that looks like a heredoc to a line scanner but is shell code: a
 # quoted or commented operator, an arithmetic shift, the text after a
 # terminator, and a body without its terminator.
@@ -354,6 +372,13 @@ class TestGuardExperimentExec(unittest.TestCase):
             "cwd": str(cwd),
         })
 
+    def _assert_denied(self, command: str, reason: str) -> None:
+        completed = self._run_guard(command, self.workspace)
+        self.assertNotEqual(completed.stdout, "", "the guard allowed the command")
+        decision = json.loads(completed.stdout)["hookSpecificOutput"]
+        self.assertEqual(decision["permissionDecision"], "deny")
+        self.assertIn(reason, decision["permissionDecisionReason"])
+
     def test_dangerous_commands_are_denied_inside_a_study_workspace(self) -> None:
         for command in _GUARDED_COMMANDS:
             with self.subTest(command=command):
@@ -381,6 +406,11 @@ class TestGuardExperimentExec(unittest.TestCase):
                 decision = json.loads(completed.stdout)["hookSpecificOutput"]
                 self.assertEqual(decision["permissionDecision"], "deny")
                 self.assertIn("workspace state file", decision["permissionDecisionReason"])
+
+    def test_a_heredoc_body_that_a_later_command_runs_is_still_checked(self) -> None:
+        for command, reason in _BODIES_RUN_BY_A_LATER_COMMAND:
+            with self.subTest(command=command):
+                self._assert_denied(command, reason)
 
     def test_shell_code_around_heredoc_text_is_still_checked(self) -> None:
         for command in _COMMANDS_AROUND_HEREDOC_TEXT:
