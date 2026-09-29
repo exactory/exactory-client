@@ -109,6 +109,14 @@ class ResearchGuidanceTests(unittest.TestCase):
                               "and the launch returns `execution_recovery_required`.", text)
                 self.assertIn("Record that run with `reconcile-run`, giving `resolution: \"interrupted\"` and a reason.", text)
 
+    def test_workflow_states_how_a_partial_computational_result_is_published(self):
+        workflow = " ".join((PLUGIN / "docs/research-workflow.md").read_text().split())
+        # Readiness needs the complete objective, and the source-limited contract covers only source deferrals.
+        self.assertIn("A partial computational result reaches the managed `write`, `evaluate` and `deposit` stages "
+                      "after the user authorizes the narrower objective.", workflow)
+        self.assertIn("Without that authorization, the study can publish only on the direct paths:", workflow)
+        self.assertIn("When the study has finished there, park it with `exactory-lab state set --waiting <reason>`", workflow)
+
     def test_release_manifests_and_notes_describe_the_same_final_version(self):
         for relative in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
             self.assertEqual(json.loads((PLUGIN / relative).read_text())["version"], "0.47.0")
