@@ -312,6 +312,7 @@ _STATE_WRITING_COMMANDS = (
     "bash <<'EOF'\necho x > .exactory/x\nEOF",
     "cat <<'EOF' | sh\necho x > .exactory/x\nEOF",
     "bash \\\n  <<'EOF'\necho x > .exactory/x\nEOF",
+    '"$SHELL" -s <<EOF\necho x > .exactory/x\nEOF',
 )
 
 # Text that looks like a heredoc to a line scanner but is shell code: a

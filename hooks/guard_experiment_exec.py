@@ -12,6 +12,11 @@ through an absolute path. `exactory-lab run` confines the working directory and
 refuses scripts outside `experiment/`; this hook stops the shell commands that
 would escape or damage the machine regardless of cwd. A block means redesign
 the experiment, never route around the guard.
+
+A heredoc body is data when no shell reads it, for example a note that quotes
+a denied command, so the rules skip it. A body stays checked when the command
+line that opens it names a shell interpreter (bash <<EOF, cat <<EOF | sh) or
+when its terminator is missing.
 """
 
 from __future__ import annotations
@@ -22,6 +27,34 @@ import sys
 from pathlib import Path
 
 _STUDY_STATE_PATH = Path(".exactory") / "study.json"
+
+# Quoted text or an escaped character, in which shell operators are literal.
+_QUOTED_TEXT = r"""\$'(?:\\.|[^'\\])*'|'[^']*'|"(?:\\.|[^"\\])*"|\\."""
+# Quoted text, an escaped line break, arithmetic and a comment, in which "<<"
+# opens no heredoc; then a heredoc operator with its delimiter word, and an
+# unquoted line break.
+_HEREDOC_SCAN_RE = re.compile(
+    _QUOTED_TEXT + r"""|\(\((?:[^()]|\([^()]*\))*\)\)|(?<![^\s;&|()])#[^\n]*"""
+    r"""|(?<!<)<<(?!<)(?P<strip_tabs>-?)[ \t]*"""
+    r"""(?P<word>(?:'[^'\n]*'|"[^"\n]*"|\\[^\n]|[^\s;&|<>()'"\\])+)"""
+    r"""|(?P<line_break>\n)""",
+    re.DOTALL)
+# A command word that reads a heredoc body as shell commands: a shell, with or
+# without its directory, $SHELL or $BASH, or eval, source and ".".
+_SHELL_INTERPRETER_RE = re.compile(
+    r"""(?<![^\s;&|()`"'])(?:[^\s;&|()`"'<>]*/)?"""
+    r"""(?:sh|bash|zsh|csh|tcsh|ksh|dash|fish|eval|source|\.|\$\{?(?:SHELL|BASH)\}?)"""
+    r"""(?![^\s;&|()`"'<>])""",
+    re.IGNORECASE)
+# A shell word: quoted text, a simple expansion or plain text.
+_SHELL_WORD = r"(?:" + _QUOTED_TEXT + r"""|\$\([^()]*\)|\$\{[^}]*\}|`[^`]*`|[^\s;&|<>()'"`\\])+"""
+# The target of an output redirection, with an optional descriptor number or
+# &, and the file arguments of tee. Quoted text is read as well, because
+# bash -c "echo x > path" writes through a redirection inside quotes.
+_STATE_WRITE_TARGET_RE = re.compile(
+    r"(?:[0-9]*|&)(?:>>|>\||>&|<>|>)[ \t]*(?P<target>" + _SHELL_WORD + r")"
+    r"|\btee\b(?P<files>(?:[ \t]+" + _SHELL_WORD + r")*)",
+    re.IGNORECASE)
 
 # (compiled pattern, reason). First match denies. IGNORECASE throughout.
 _DENY_RULES = [
@@ -45,11 +78,6 @@ _DENY_RULES = [
     (r"\bkillall\b|\bpkill\s+-9\b|\bkill\s+-9\s+-1\b", "broad process kill"),
     (r"\.claude/(settings(\.local)?\.json|hooks/)",
      "modifying Claude Code config or hooks"),
-    # The whole .exactory directory, not a list of the files in it: the CLI
-    # and the hooks own every file there, and a list of names goes stale each
-    # time the workspace gains a state file.
-    (r"(>|>>|\btee\b)[^\n]*\.exactory/",
-     "writing a workspace state file through the shell"),
     (r"\bchmod\s+-R?\s*0?777\b", "world-writable chmod 777"),
 ]
 _COMPILED_DENY_RULES = [(re.compile(pattern, re.IGNORECASE), reason)
@@ -78,6 +106,51 @@ def _is_inside_study_workspace(start_dir: Path) -> bool:
     return False
 
 
+def _remove_data_heredoc_bodies(command: str) -> str:
+    """Remove the heredoc bodies of each command line that names no shell interpreter.
+
+    A missing terminator returns the command unchanged, so every line stays checked.
+    """
+    kept, delimiter_patterns = [], []
+    copied_to = line_start = position = 0
+    while True:
+        token = _HEREDOC_SCAN_RE.search(command, position)
+        if token is None:
+            return "".join(kept) + command[copied_to:]
+        position = token.end()
+        if token.group("word") is not None:
+            delimiter = re.sub(r"""['"\\]""", "", token.group("word"))
+            leading_tabs = "\t*" if token.group("strip_tabs") else ""
+            delimiter_patterns.append("^" + leading_tabs + re.escape(delimiter) + "$")
+            continue
+        if token.group("line_break") is None:
+            continue
+        line, line_start = command[line_start:token.start()], position
+        if not delimiter_patterns:
+            continue
+        body_end = position
+        for pattern in delimiter_patterns:
+            terminator = re.compile(pattern, re.MULTILINE).search(command, body_end)
+            if terminator is None:
+                return command
+            body_end = terminator.end() + 1
+        delimiter_patterns = []
+        if not _SHELL_INTERPRETER_RE.search(line):
+            kept.append(command[copied_to:position])
+            copied_to = position = line_start = body_end
+
+
+def _writes_workspace_state(command: str) -> bool:
+    """Whether a redirection target or a tee file argument lies under .exactory/.
+
+    The whole directory counts, not a list of the files in it: the CLI and the
+    hooks own every file there, and a list of names goes stale each time the
+    workspace gains a state file.
+    """
+    return any(".exactory/" in (match.group("target") or match.group("files")).lower()
+               for match in _STATE_WRITE_TARGET_RE.finditer(command))
+
+
 def main() -> None:
     payload = json.load(sys.stdin)
     if payload.get("tool_name") != "Bash":
@@ -87,9 +160,12 @@ def main() -> None:
         sys.exit(0)
     if not _is_inside_study_workspace(Path(payload.get("cwd") or ".").resolve()):
         sys.exit(0)
+    command = _remove_data_heredoc_bodies(command)
     for pattern, reason in _COMPILED_DENY_RULES:
         if pattern.search(command):
             _deny(reason)
+    if _writes_workspace_state(command):
+        _deny("writing a workspace state file through the shell")
     sys.exit(0)
 
 
