@@ -201,9 +201,11 @@ def _writes_workspace_state(command: str) -> bool:
 
     The whole directory counts, not a list of the files in it: the CLI and the
     hooks own every file there, and a list of names goes stale each time the
-    workspace gains a state file.
+    workspace gains a state file. Paths are compared without their quotes and
+    escapes, as the shell opens them.
     """
-    return (any(".exactory/" in match.group("target").lower() for match in _REDIRECTION_TARGET_RE.finditer(command))
+    return (any(".exactory/" in _QUOTING_RE.sub("", match.group("target")).lower()
+                for match in _REDIRECTION_TARGET_RE.finditer(command))
             or any(".exactory/" in match.group("files").lower()
                    for match in _TEE_FILES_RE.finditer(_QUOTING_RE.sub("", command))))
 
