@@ -356,6 +356,26 @@ _EXPANDED_BODIES = (
     ("cat >> notes.md <<EOF\nx\\\nEOF\ncat >> notes.md <<'Y'\nEOF\nrm -rf ../other-project\nY", "recursive force-delete"),
 )
 
+# Forms in which a scanner reads a heredoc differently from the shell, with
+# the reason that the guard gives: delimiters that the shell ends elsewhere
+# ($'EOF' ends at EOF, a backslash in quotes is literal, an escaped line break
+# joins the word), "<<" inside a parameter expansion or arithmetic, where it
+# opens no heredoc, and a shell named through quotes, escapes or a variable.
+_MISREAD_HEREDOCS = (
+    ("cat <<$'EOF'\ndata\nEOF\nrm -rf ../other-project\n$EOF", "recursive force-delete"),
+    ("cat <<$'EOF'\ndata\nEOF\necho x > .exactory/study.json\n$EOF", "workspace state file"),
+    ("cat <<'E\\OF'\ndata\nE\\OF\nrm -rf ../other-project\nEOF", "recursive force-delete"),
+    ("cat <<EO\\\nF\ndata\nEOF\nrm -rf ../other-project\nEO", "recursive force-delete"),
+    ("echo ${x:-<<EOF }\nrm -rf ../other-project\nEOF", "recursive force-delete"),
+    ("echo $[1<<EOF ]\nrm -rf ../other-project\nEOF", "recursive force-delete"),
+    ("echo $(( ((1)) + (1<<EOF) ))\nrm -rf ../other-project\nEOF", "recursive force-delete"),
+    ("b\\ash <<'EOF'\necho x > .exactory/study.json\nEOF", "workspace state file"),
+    ("\"b\"ash <<'EOF'\nrm -rf ../other-project\nEOF", "recursive force-delete"),
+    ("$'\\x62ash' <<'EOF'\nrm -rf ../other-project\nEOF", "recursive force-delete"),
+    ("$0 <<'EOF'\nrm -rf ../other-project\nEOF", "recursive force-delete"),
+    ("s=bash; $s <<'EOF'\nrm -rf ../other-project\nEOF", "recursive force-delete"),
+)
+
 # Text that looks like a heredoc to a line scanner but is shell code: a
 # quoted or commented operator, an arithmetic shift, the text after a
 # terminator, and a body without its terminator.
@@ -430,6 +450,11 @@ class TestGuardExperimentExec(unittest.TestCase):
 
     def test_an_expanded_heredoc_body_that_runs_a_command_is_still_checked(self) -> None:
         for command, reason in _EXPANDED_BODIES:
+            with self.subTest(command=command):
+                self._assert_denied(command, reason)
+
+    def test_a_heredoc_that_the_shell_reads_differently_is_still_checked(self) -> None:
+        for command, reason in _MISREAD_HEREDOCS:
             with self.subTest(command=command):
                 self._assert_denied(command, reason)
 
