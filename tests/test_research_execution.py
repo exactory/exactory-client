@@ -394,6 +394,17 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assertTrue(result["ok"], result["stderr_tail"])
         self.assertEqual(result["metric"], {"metric": 7})
 
+    def test_worker_that_starts_after_a_run_timeout_of_five_seconds_completes_its_run(self):
+        # 5 seconds is the default run timeout of admit_lab, which most launches of the suite bind.
+        admission = admit_lab(self, body="print('{\"metric\": 7}')\n", timeout=5)
+        api = importlib.import_module("research_harness.execution")
+        # The worker starts later than the run's timeout. The timeout counts from the program's start.
+        with self.start_worker_after("sleep 7"):
+            result = api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                          request_id="slow-worker-start-short-run")
+        self.assertTrue(result["ok"], result["stderr_tail"])
+        self.assertEqual(result["metric"], {"metric": 7})
+
     def test_worker_that_exits_before_it_is_ready_leaves_the_claimed_run_to_reconcile(self):
         from research_harness.errors import ResearchError
         admission = admit_lab(self, body="raise RuntimeError('must never launch')\n", timeout=60)
