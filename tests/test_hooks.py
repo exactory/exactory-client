@@ -332,6 +332,9 @@ _STATE_WRITING_COMMANDS = (
     'echo x | "tee" .exactory/study.json',
     "echo x | xargs tee .exactory/study.json",
     'bash -c "tee .exactory/study.json"',
+    'echo x > ".exactory"/study.json',
+    'echo x > .exac""tory/study.json',
+    "echo x >> .exactory\\/decisions.jsonl",
 )
 
 # A heredoc body that a later command of the same command line runs, with
