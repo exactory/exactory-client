@@ -543,6 +543,16 @@ class ResearchExecutionTests(DevelopmentCase):
                                           request_id="short-run")
         self.assertTrue(result["timed_out"])
 
+    def test_run_timeout_of_thirty_days_completes_its_run(self):
+        # bind-run accepts any finite positive timeout, and the launch waits for the run's timeout plus 10 seconds.
+        # Thirty days is longer than the 2**31 - 1 milliseconds (about 24.86 days) that a select.poll timeout holds.
+        admission = admit_lab(self, body="print('{\"metric\": 7}')\n", timeout=2592000)
+        api = importlib.import_module("research_harness.execution")
+        result = api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                      request_id="thirty-day-run")
+        self.assertTrue(result["ok"], result["stderr_tail"])
+        self.assertEqual(result["metric"], {"metric": 7})
+
     def test_symlinked_venv_interpreter_runs_the_program_with_its_own_site_packages(self):
         interpreter = make_venv(self)
         admission = admit_lab(self, interpreter=str(interpreter),
