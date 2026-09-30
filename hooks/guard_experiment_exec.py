@@ -44,13 +44,13 @@ from pathlib import Path
 _STUDY_STATE_PATH = Path(".exactory") / "study.json"
 
 # Quoted text or an escaped character, in which shell operators are literal.
-_QUOTED_TEXT = r"""\$'(?:\\.|[^'\\])*'|'[^']*'|"(?:\\.|[^"\\])*"|\\."""
+_QUOTED_TEXT_PATTERN = r"""\$'(?:\\.|[^'\\])*'|'[^']*'|"(?:\\.|[^"\\])*"|\\."""
 # Quoted text, an escaped line break, arithmetic, a parameter expansion and a
 # comment, in which "<<" opens no heredoc; the start of such a construct that
 # this pattern cannot read; then a heredoc operator with its delimiter word,
 # and an unquoted line break.
 _HEREDOC_SCAN_RE = re.compile(
-    _QUOTED_TEXT + r"""|\(\((?:[^()]|\([^()]*\))*\)\)|\$\{[^{}]*\}|\$\[[^\[\]]*\]|(?<![^\s;&|()])#[^\n]*"""
+    _QUOTED_TEXT_PATTERN + r"""|\(\((?:[^()]|\([^()]*\))*\)\)|\$\{[^{}]*\}|\$\[[^\[\]]*\]|(?<![^\s;&|()])#[^\n]*"""
     r"""|(?P<unreadable>\(\(|\$\{|\$\[)"""
     r"""|(?<!<)<<(?!<)(?P<strip_tabs>-?)[ \t]*"""
     r"""(?P<word>(?:'[^'\n]*'|"[^"\n]*"|\\.|[^\s;&|<>()'"\\])+)"""
@@ -66,24 +66,24 @@ _COMMAND_SUBSTITUTION_RE = re.compile(r"`|\$\(")
 _QUOTING_RE = re.compile(r"""\\\n|['"\\]""")
 # The text of a word up to a space or an operator. It holds no character after
 # which a command starts, so each scan from a command start stays linear.
-_WORD_TEXT = r"[^\s;&|(){}`!<>]*"
+_WORD_TEXT_PATTERN = r"[^\s;&|(){}`!<>]*"
 # The shells of macOS and common Linux systems, which run the text that they
 # read as commands.
-_SHELL_NAMES = "sh|ash|bash|rbash|dash|zsh|ksh|mksh|csh|tcsh|fish"
+_SHELL_NAME_PATTERN = "sh|ash|bash|rbash|dash|zsh|ksh|mksh|csh|tcsh|fish"
 # An action of find that runs the words after it as a command.
-_FIND_EXEC_ACTION = r"-(?:exec|execdir|ok|okdir)[ \t]+"
+_FIND_EXEC_ACTION_PATTERN = r"-(?:exec|execdir|ok|okdir)[ \t]+"
 # The start of a command word: the text start, a line break, one of
 # ; & | ( ) { ` ! or an -exec action of find, then any keywords, variable
 # assignments, options, numbers, expansions and commands that run the word
 # after them, such as env, watch, xargs and bash -c. An option is never an
 # -exec action, which starts a command itself, so the scan from one command
 # start ends before the next and stays linear.
-_COMMAND_POSITION = (
-    r"(?:^|(?<=[\n;&|(){`!])|(?<![^\s])" + _FIND_EXEC_ACTION + r")[ \t]*"
+_COMMAND_POSITION_PATTERN = (
+    r"(?:^|(?<=[\n;&|(){`!])|(?<![^\s])" + _FIND_EXEC_ACTION_PATTERN + r")[ \t]*"
     r"(?:(?:if|then|elif|else|do|while|until|time|builtin|caffeinate|command|env|eval|exec|ionice|nice|nohup"
-    r"|setsid|stdbuf|strace|taskset|timeout|unbuffer|watch|xargs|" + _SHELL_NAMES +
-    r"|[A-Za-z_][A-Za-z0-9_]*=" + _WORD_TEXT + r"|(?!" + _FIND_EXEC_ACTION + r")[-0-9$]" + _WORD_TEXT
-    + r")[ \t]+)*")
+    r"|setsid|stdbuf|strace|taskset|timeout|unbuffer|watch|xargs|" + _SHELL_NAME_PATTERN +
+    r"|[A-Za-z_][A-Za-z0-9_]*=" + _WORD_TEXT_PATTERN + r"|(?!" + _FIND_EXEC_ACTION_PATTERN + r")[-0-9$]"
+    + _WORD_TEXT_PATTERN + r")[ \t]+)*")
 # Text outside the heredoc bodies, read without its quotes and escapes, through
 # which the shell can run the text of a body as commands. Anywhere in the
 # command: a shell, ssh, eval, source, trap, xargs, $SHELL, $BASH or $0, with or
@@ -99,43 +99,44 @@ _COMMAND_POSITION = (
 # can start, so each scan from such a start stays linear.
 _RUNS_BODY_TEXT_RE = re.compile(
     r"(?<![^\s;&|()`{,=])(?:[^\s;&|()`<>{,=]*/)?"
-    r"(?:" + _SHELL_NAMES + r"|ssh|eval|source|trap|xargs|\$\{?(?:SHELL|BASH|0)\}?)"
+    r"(?:" + _SHELL_NAME_PATTERN + r"|ssh|eval|source|trap|xargs|\$\{?(?:SHELL|BASH|0)\}?)"
     r"(?![^\s;&|()`<>,}])"
     r"|`|[$<>=]\("
-    r"|" + _COMMAND_POSITION + r"(?:\.[ \t]|(?:make|at|batch|read|mapfile|readarray)(?![^\s;&|()`<>])"
+    r"|" + _COMMAND_POSITION_PATTERN + r"(?:\.[ \t]|(?:make|at|batch|read|mapfile|readarray)(?![^\s;&|()`<>])"
     r"|[^\s;&|(){}`!<>=]*[$/])",
     re.IGNORECASE)
 # A shell word: quoted text, an expansion or plain text. A command
 # substitution or an arithmetic expansion can hold one level of parentheses,
 # as in $(dirname "$(pwd)") and $((0)).
-_SHELL_WORD = (r"(?:" + _QUOTED_TEXT + r"|\$\((?:[^()]|\([^()]*\))*\)|\$\{[^{}]*\}|`[^`]*`"
-               r"""|[^\s;&|<>()'"`\\])+""")
+_SHELL_WORD_PATTERN = (r"(?:" + _QUOTED_TEXT_PATTERN + r"|\$\((?:[^()]|\([^()]*\))*\)|\$\{[^{}]*\}|`[^`]*`"
+                       r"""|[^\s;&|<>()'"`\\])+""")
 # An output redirection operator, which writes its target: > or >>, with & for
 # stderr as well (&>, >&, &>> and >>&) and with the clobber mark | or, in zsh,
 # !; and <>, which opens its target for reading and writing. A descriptor
 # number before the operator does not change the target.
-_OUTPUT_REDIRECTION = r"(?:&>>?|>>?&?)[|!]?|<>"
+_OUTPUT_REDIRECTION_PATTERN = r"(?:&>>?|>>?&?)[|!]?|<>"
 # The target of an output redirection. Quoted text is read as well, because
 # bash -c "echo x > path" writes through a redirection inside quotes. A target
-# that stops at "(" holds a substitution nested more deeply than _SHELL_WORD
-# reads, so the rest of its line counts as the target.
+# that stops at "(" holds a substitution nested more deeply than
+# _SHELL_WORD_PATTERN reads, so the rest of its line counts as the target.
 _REDIRECTION_TARGET_RE = re.compile(
-    r"(?:" + _OUTPUT_REDIRECTION + r")[ \t]*(?P<target>" + _SHELL_WORD + r"(?:\([^\n]*)?)")
+    r"(?:" + _OUTPUT_REDIRECTION_PATTERN + r")[ \t]*(?P<target>" + _SHELL_WORD_PATTERN + r"(?:\([^\n]*)?)")
 # A redirection with its word, or a process substitution, which can hold one
 # level of parentheses. Neither is a file argument of tee: the state-write
 # check reads an output redirection target by itself, and a process
 # substitution passes tee a pipe.
-_REDIRECTION_OR_PROCESS_SUBSTITUTION = (r"(?:" + _OUTPUT_REDIRECTION + r"|<<<|<<-?|<&?)[ \t]*" + _SHELL_WORD
-                                        + r"|[<>]\((?:[^()]|\([^()]*\))*\)")
-_REDIRECTION_OR_PROCESS_SUBSTITUTION_RE = re.compile(_REDIRECTION_OR_PROCESS_SUBSTITUTION)
+_REDIRECTION_OR_PROCESS_SUBSTITUTION_PATTERN = (
+    r"(?:" + _OUTPUT_REDIRECTION_PATTERN + r"|<<<|<<-?|<&?)[ \t]*" + _SHELL_WORD_PATTERN
+    + r"|[<>]\((?:[^()]|\([^()]*\))*\)")
+_REDIRECTION_OR_PROCESS_SUBSTITUTION_RE = re.compile(_REDIRECTION_OR_PROCESS_SUBSTITUTION_PATTERN)
 # The operands of tee up to the end of its command: its words, redirections and
 # process substitutions in any order. tee counts with or without its directory,
 # as a command word in a command read without its quotes and escapes, so "tee"
 # and bash -c "tee path" count and grep tee path does not. The same rule for
 # "(" applies as for a redirection target.
 _TEE_OPERANDS_RE = re.compile(
-    _COMMAND_POSITION + r"(?:" + _WORD_TEXT + r"/)?tee\b(?P<operands>(?:[ \t]*(?:"
-    + _REDIRECTION_OR_PROCESS_SUBSTITUTION + r")|[ \t]+" + _SHELL_WORD + r")*(?:[ \t]*[<>]?\([^\n]*)?)",
+    _COMMAND_POSITION_PATTERN + r"(?:" + _WORD_TEXT_PATTERN + r"/)?tee\b(?P<operands>(?:[ \t]*(?:"
+    + _REDIRECTION_OR_PROCESS_SUBSTITUTION_PATTERN + r")|[ \t]+" + _SHELL_WORD_PATTERN + r")*(?:[ \t]*[<>]?\([^\n]*)?)",
     re.IGNORECASE)
 
 # (compiled pattern, reason). First match denies. IGNORECASE throughout.
@@ -209,8 +210,8 @@ def _remove_data_heredoc_bodies(command: str) -> str:
             delimiter = _PLAIN_DELIMITER_RE.fullmatch(token.group("word"))
             if delimiter is None:
                 return command
-            leading_tabs = "\t*" if token.group("strip_tabs") else ""
-            pattern = "^" + leading_tabs + re.escape(delimiter.group(delimiter.lastgroup)) + "$"
+            leading_tabs_pattern = "\t*" if token.group("strip_tabs") else ""
+            pattern = "^" + leading_tabs_pattern + re.escape(delimiter.group(delimiter.lastgroup)) + "$"
             delimiters.append((pattern, delimiter.lastgroup != "bare"))
             continue
         if token.group("line_break") is None:
@@ -235,7 +236,7 @@ def _remove_data_heredoc_bodies(command: str) -> str:
     return command if _RUNS_BODY_TEXT_RE.search(_QUOTING_RE.sub("", outside)) else outside
 
 
-def _writes_workspace_state(command: str) -> bool:
+def _has_workspace_state_write(command: str) -> bool:
     """Whether a redirection target or a tee file argument lies under .exactory/.
 
     The whole directory counts, not a list of the files in it: the CLI and the
@@ -263,7 +264,7 @@ def main() -> None:
     for pattern, reason in _COMPILED_DENY_RULES:
         if pattern.search(command):
             _deny(reason)
-    if _writes_workspace_state(command):
+    if _has_workspace_state_write(command):
         _deny("writing a workspace state file through the shell")
     sys.exit(0)
 
