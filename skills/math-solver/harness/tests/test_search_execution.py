@@ -221,6 +221,35 @@ class SearchExecutionTests(WorkspaceTest):
         result = self.controller.store.get_blob(run["result_digest"])
         self.assertEqual(self.controller.store.get_artifact(result["commands"][0]["stdout_digest"]), b"ended after the launch\n")
 
+    def test_launcher_still_live_after_its_launch_is_refused_leaves_its_run_to_reconcile(self):
+        step = self.workspace / "deterministic" / "job"
+        step.mkdir()
+        (step / "job.py").write_text("print('never runs')\n")
+        invoke(self.controller, "begin", begin_spec())
+        wait = subprocess.Popen.wait
+        expired_waits = []
+
+        def expire_the_first_wait(launcher, timeout=None):
+            # The refused launch closes the launcher's input and waits 5 seconds for it to end. The launcher is still in
+            # its delayed start when that wait expires, and it ends within the exit wait that follows.
+            if not expired_waits:
+                expired_waits.append(timeout)
+                raise subprocess.TimeoutExpired(launcher.args, timeout)
+            return wait(launcher)
+
+        # The launcher starts after the readiness wait of the run's timeout plus 10 seconds, so the launch is refused.
+        with patch.object(subprocess.Popen, "wait", autospec=True, side_effect=expire_the_first_wait), \
+                self.start_launcher_after("sleep 13"), self.assertRaises(SearchError) as caught:
+            invoke(self.controller, "run", command_spec(self.workspace, [sys.executable, "job.py"], 1))
+        self.assertEqual((caught.exception.code, caught.exception.message),
+                         ("recovery_required", "The launcher is still live. Run search reconcile after the launcher ends."))
+        run = self.controller.status()["runs"]["run-000001"]
+        self.assertEqual((run["status"], run["started_units"]), ("reserved", 0))
+        # The launcher read the end of its input and recorded that it started no command, and reconciliation records that.
+        invoke(self.controller, "reconcile", {}, None)
+        run = self.controller.status()["runs"]["run-000001"]
+        self.assertEqual((run["status"], run["termination"], run["charged_units"]), ("terminal", "never_started", 0))
+
     def test_command_that_changes_its_frozen_input_cannot_verify(self):
         step = self.workspace / "deterministic" / "job"
         step.mkdir()
