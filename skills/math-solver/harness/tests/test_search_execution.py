@@ -172,6 +172,54 @@ class SearchExecutionTests(WorkspaceTest):
         self.assertEqual(caught.exception.code, "recovery_required")
         self.assertEqual(self.controller.status()["runs"]["run-000001"]["started_units"], 0)
 
+    def test_launcher_that_ends_after_the_wait_for_its_run_gives_the_run_outcome(self):
+        step = self.workspace / "deterministic" / "job"
+        step.mkdir()
+        (step / "job.py").write_text("print('ended after the wait')\n")
+        invoke(self.controller, "begin", begin_spec())
+        wait = subprocess.Popen.wait
+
+        def expire_the_wait_for_the_run(launcher, timeout):
+            # Only the wait for the run is longer than the 5-second exit wait. It expires at once, as when the launcher's
+            # checks after its commands take longer than the 10 seconds that the wait adds, and the launcher then ends
+            # within the exit wait.
+            if timeout > 5:
+                raise subprocess.TimeoutExpired(launcher.args, timeout)
+            return wait(launcher)
+
+        with patch.object(subprocess.Popen, "wait", autospec=True, side_effect=expire_the_wait_for_the_run):
+            invoke(self.controller, "run", command_spec(self.workspace, [sys.executable, "job.py"]))
+        run = self.controller.status()["runs"]["run-000001"]
+        self.assertEqual((run["status"], run["termination"]), ("terminal", "exit"))
+        result = self.controller.store.get_blob(run["result_digest"])
+        self.assertEqual(self.controller.store.get_artifact(result["commands"][0]["stdout_digest"]), b"ended after the wait\n")
+
+    def test_launcher_still_live_after_the_wait_for_its_run_leaves_the_outcome_to_reconcile(self):
+        step = self.workspace / "deterministic" / "job"
+        step.mkdir()
+        (step / "job.py").write_text("import time\ntime.sleep(5)\nprint('ended after the launch')\n")
+        invoke(self.controller, "begin", begin_spec())
+        launchers = []
+
+        def expire_each_wait(launcher, timeout):
+            # The wait for the run and the exit wait both expire while the command still sleeps.
+            launchers.append(launcher)
+            raise subprocess.TimeoutExpired(launcher.args, timeout)
+
+        with patch.object(subprocess.Popen, "wait", autospec=True, side_effect=expire_each_wait), \
+                self.assertRaises(SearchError) as caught:
+            invoke(self.controller, "run", command_spec(self.workspace, [sys.executable, "job.py"], 30))
+        self.assertEqual((caught.exception.code, caught.exception.message),
+                         ("recovery_required", "The launcher is still live. Run search reconcile after the launcher ends."))
+        self.assertEqual(self.controller.status()["runs"]["run-000001"]["status"], "launched")
+        # Once the launcher ends, reconciliation records the outcome of its run.
+        launchers[0].wait()
+        invoke(self.controller, "reconcile", {}, None)
+        run = self.controller.status()["runs"]["run-000001"]
+        self.assertEqual((run["status"], run["termination"]), ("terminal", "exit"))
+        result = self.controller.store.get_blob(run["result_digest"])
+        self.assertEqual(self.controller.store.get_artifact(result["commands"][0]["stdout_digest"]), b"ended after the launch\n")
+
     def test_command_that_changes_its_frozen_input_cannot_verify(self):
         step = self.workspace / "deterministic" / "job"
         step.mkdir()
