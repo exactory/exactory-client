@@ -288,26 +288,27 @@ def launch(controller, run):
         # The run directory existed before this launch and can hold another launcher's records, so the launch writes
         # no record into it.
         raise
-    except OSError as error:
+    except OSError as start_error:
         # No launcher process exists, so no command ran. The launch writes the terminal record that a launcher writes
-        # when it receives no token, and reconciliation records the run as never started, without a charge.
-        details = {"reason": str(error)}
+        # when it receives no token, and reconciliation records the run as never started, without a charge. The details
+        # name every error that stopped the launch by its step.
         try:
             atomic_record(Path(run["snapshot_root"]).parent / "terminal.json", {"token": run["token"], "commands": [],
                           "started_units": 0, "termination": "never_started", "outputs": []})
-        except OSError:
+        except OSError as record_error:
             raise SearchError("recovery_required", "The launcher did not start, so no command ran. The run stays reserved "
                               "because it could not be recorded as never started. After you remove the cause given in the "
                               "details, search reconcile records it as indeterminate and charges its reserved unit.",
-                              details) from error
+                              {"start_error": str(start_error), "record_error": str(record_error)}) from start_error
         try:
             reconcile_runs(controller)
-        except OSError:
+        except OSError as reconcile_error:
             raise SearchError("recovery_required", "The launcher did not start, so no command ran. Remove the cause given "
                               "in the details, then run search reconcile to finish recording the run as never started.",
-                              details) from error
+                              {"start_error": str(start_error), "reconcile_error": str(reconcile_error)}) from start_error
         raise SearchError("recovery_required", "The launcher did not start, so no command ran. The run is recorded as "
-                          "never started. Remove the cause given in the details, then run search next.", details) from error
+                          "never started. Remove the cause given in the details, then run search next.",
+                          {"start_error": str(start_error)}) from start_error
     refusal = None
     released = False
     try:
