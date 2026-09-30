@@ -109,6 +109,18 @@ class ResearchGuidanceTests(unittest.TestCase):
                               "and the launch returns `execution_recovery_required`.", text)
                 self.assertIn("Record that run with `reconcile-run`, giving `resolution: \"interrupted\"` and a reason.", text)
 
+    def test_guidance_states_that_reconcile_run_cannot_record_a_run_of_an_earlier_release_beyond_the_store_bounds(self):
+        workflow, reference = (" ".join((PLUGIN / name).read_text().split())
+                               for name in ("docs/research-workflow.md", "docs/research-cli.md"))
+        # A limit of H13 that the user accepted on 2026-09-30: the store refuses the observation of such a run, so
+        # reconcile-run does not complete it, and its strategy admits no further run.
+        self.assertIn("The exception is a run that exactory-client 0.47.0 or earlier claimed whose metric makes the "
+                      "observation exceed the store bounds.", workflow)
+        self.assertIn("For such a run, `reconcile-run` fails with `invalid_input`, the run has an outcome but no "
+                      "observation, and its strategy admits no further run.", workflow)
+        self.assertIn("`reconcile-run` of such a run without an observation, when the metric nests more than 98 levels.",
+                      reference)
+
     def test_workflow_states_how_a_partial_computational_result_is_published(self):
         workflow = " ".join((PLUGIN / "docs/research-workflow.md").read_text().split())
         # Readiness needs the complete objective, and the source-limited contract covers only source deferrals.
