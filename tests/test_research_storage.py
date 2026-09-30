@@ -19,11 +19,11 @@ from research_harness.errors import ResearchError
 from research_harness.storage import Store
 
 
-def build_nested_value(levels):
-    """An object and levels - 1 lists inside it, {"value": [[...[0]...]]}: levels containers in all."""
+def build_nested_value(levels, container=list):
+    """An object and levels - 1 lists or tuples inside it, {"value": [[...[0]...]]}: levels containers in all."""
     value = 0
     for _ in range(levels - 1):
-        value = [value]
+        value = container((value,))
     return {"value": value}
 
 
@@ -826,7 +826,9 @@ print(json.dumps(Store(Path(sys.argv[1])).snapshot()))
                 return result
             return store.mutate("add", payload or {}, apply, expected_revision=store.revision, request_id=request_id)
 
-        beyond = {"integer": ({"value": 10 ** 4300}, {"value": -(10 ** 4300)}), "nesting": (build_nested_value(101),)}
+        # A caller or a callback can build a JSON array as a tuple, and the store writes it as a list.
+        beyond = {"integer": ({"value": 10 ** 4300}, {"value": -(10 ** 4300)}),
+                  "nesting": (build_nested_value(101), build_nested_value(101, tuple))}
         for dimension, values in beyond.items():
             for index, value in enumerate(values):
                 for place in ("payload", "record", "result"):
