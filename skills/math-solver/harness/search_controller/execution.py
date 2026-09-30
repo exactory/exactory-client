@@ -283,6 +283,12 @@ def launch(controller, run):
     directory = materialize(controller, run)
     process = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--launcher", str(directory)],
         stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    def wait_for_launcher_end():
+        # A launcher that is still live after 5 seconds keeps its run for a later search reconcile.
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired as error:
+            raise SearchError("recovery_required", "The launcher is still live. Run search reconcile after the launcher ends.") from error
     released = False
     try:
         # A loaded machine starts the launcher slowly. While the launcher is alive, the launch waits for it to become
@@ -339,17 +345,14 @@ def launch(controller, run):
             # Closing its input records a definite unstarted result, which can be
             # reconciled without guessing whether a workload ran or charging it.
             process.stdin.close()
-            process.wait(timeout=5)
+            wait_for_launcher_end()
             reconcile_runs(controller)
         raise
     finally:
         if process.stdin is not None and not process.stdin.closed:
             process.stdin.close()
         if process.poll() is None:
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired as error:
-                raise SearchError("recovery_required", "The launcher is still live. Run search reconcile after the launcher ends.") from error
+            wait_for_launcher_end()
     reconcile_runs(controller)
 
 
