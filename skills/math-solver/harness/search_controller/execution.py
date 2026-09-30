@@ -327,7 +327,12 @@ def launch(controller, run):
                 process.stdin.flush()
                 released = True
         process.stdin.close()
-        process.wait(timeout=launcher_wait_seconds)
+        try:
+            process.wait(timeout=launcher_wait_seconds)
+        except subprocess.TimeoutExpired:
+            # The exit wait below gives the launcher 5 more seconds. A launcher that ends in them is reconciled, and a
+            # launcher that is still live is reported.
+            pass
     except SearchError:
         if not released:
             # The owned launcher has not received authority to execute a producer.
@@ -344,7 +349,7 @@ def launch(controller, run):
             try:
                 process.wait(timeout=5)
             except subprocess.TimeoutExpired as error:
-                raise SearchError("recovery_required", "The launcher remains live after prelaunch refusal; retain the reserved run and reconcile") from error
+                raise SearchError("recovery_required", "The launcher is still live. Run search reconcile after the launcher ends.") from error
     reconcile_runs(controller)
 
 

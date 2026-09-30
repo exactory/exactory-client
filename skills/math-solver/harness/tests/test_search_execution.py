@@ -187,8 +187,9 @@ class SearchExecutionTests(WorkspaceTest):
                 raise subprocess.TimeoutExpired(launcher.args, timeout)
             return wait(launcher)
 
+        # The run's timeout is long enough for a loaded machine to start the command. The command ends at once.
         with patch.object(subprocess.Popen, "wait", autospec=True, side_effect=expire_the_wait_for_the_run):
-            invoke(self.controller, "run", command_spec(self.workspace, [sys.executable, "job.py"]))
+            invoke(self.controller, "run", command_spec(self.workspace, [sys.executable, "job.py"], 30))
         run = self.controller.status()["runs"]["run-000001"]
         self.assertEqual((run["status"], run["termination"]), ("terminal", "exit"))
         result = self.controller.store.get_blob(run["result_digest"])
