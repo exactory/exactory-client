@@ -190,7 +190,7 @@ def discover(payload, paths=None):
                 raise ManagedError("Malformed discovery registry; recover registration")
             applicable = parent == cwd or explicit_registration or any(
                 isinstance(item, dict) and isinstance(item.get("path"), str)
-                and any(contains(Path(item["path"]), path) for path in [cwd, *paths])
+                and any(is_same_or_ancestor(Path(item["path"]), path) for path in [cwd, *paths])
                 for item in value["roots"])
             if not applicable:
                 continue
@@ -221,7 +221,7 @@ def discover(payload, paths=None):
     return {"roots": roots, "registries": registries, "bindings": bindings, "direct": direct}
 
 
-def contains(root, path):
+def is_same_or_ancestor(root, path):
     return path == root or root in path.parents
 
 
@@ -313,14 +313,14 @@ def guard(payload):
     found = discover(payload, paths)
     cwd = Path(payload.get("cwd") or ".").resolve()
     raw = payload.get("tool_input")
-    relevant = {root for root in found["roots"] if any(contains(root, path) for path in paths)}
+    relevant = {root for root in found["roots"] if any(is_same_or_ancestor(root, path) for path in paths)}
     visible = json.dumps(raw)
     visible_roots = {root for root in found["roots"] if str(root) in visible
                      or os.path.relpath(root, cwd) + "/" in visible}
     if tool in {"Read", "Glob", "Grep", "WebSearch", "WebFetch"}:
         return None
     if tool not in _FILE_NAMES | {"Bash"}:
-        if visible_roots or any(contains(root, cwd) for root in found["roots"]):
+        if visible_roots or any(is_same_or_ancestor(root, cwd) for root in found["roots"]):
             return "Unsupported managed payload; use a direct apply_patch or exec_command so its targets can be checked"
         return None
     writing = tool in {"Write", "Edit", "Delete"}
@@ -346,11 +346,11 @@ def guard(payload):
             return "Unsupported managed shell operation; use a direct supported command or controller search run"
     if writing:
         for path in paths:
-            if any(path in {pointer, pointer.with_suffix(".lock")} or contains(path, pointer)
+            if any(path in {pointer, pointer.with_suffix(".lock")} or is_same_or_ancestor(path, pointer)
                    for pointer in found["registries"]):
                 return "Discovery pointers and locks are owned by search init/focus/resume; use the controller command"
             for root in relevant:
-                if not contains(root, path):
+                if not is_same_or_ancestor(root, path):
                     continue
                 relative = path.relative_to(root).as_posix()
                 if (relative == "." or relative == ".search" or relative.startswith(".search/")

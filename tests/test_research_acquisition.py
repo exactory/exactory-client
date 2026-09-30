@@ -48,6 +48,13 @@ class AcquisitionTests(unittest.TestCase):
         self.assertEqual(error.exception.code, "ambiguous_alias")
         self.assertEqual(len(records["alias"]["doi:10.1234/conflict"]["assertions"]), 2)
 
+    def test_expansion_of_an_archive_name_that_lost_its_hyphen_acquires_the_hyphenated_version(self):
+        http, wire, _ = client([xml_response(atom([entry("astro-ph/0410063v1", category="astro-ph")], total=1))])
+        result = acquire_work(self.store, "arxiv:astroph/0410063", request_id="expand-astroph", expected_revision=0, http=http)
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual(result["work_ids"], ["arxiv:astro-ph/0410063v1"])
+        self.assertTrue(wire.requests[0][0].endswith("?id_list=astro-ph%2F0410063"))
+
     def test_requested_version_mismatch_does_not_accept_the_wrong_work(self):
         http, _, _ = client([xml_response(atom([entry("2601.00001v2")], total=1))])
         result = acquire_work(self.store, "2601.00001v1", request_id="wrong-version", expected_revision=0, http=http)

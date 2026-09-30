@@ -109,10 +109,25 @@ class ResearchGuidanceTests(unittest.TestCase):
                               "and the launch returns `execution_recovery_required`.", text)
                 self.assertIn("Record that run with `reconcile-run`, giving `resolution: \"interrupted\"` and a reason.", text)
 
+    def test_workflow_states_how_a_partial_computational_result_is_published(self):
+        workflow = " ".join((PLUGIN / "docs/research-workflow.md").read_text().split())
+        # Readiness needs the complete objective, and the source-limited contract covers only source deferrals.
+        self.assertIn("A partial computational result reaches the managed `write`, `evaluate` and `deposit` stages "
+                      "after the user authorizes the narrower objective.", workflow)
+        # An earlier cycle keeps its planned objective, so a successor cycle under the new one establishes it.
+        self.assertIn("The plan of an earlier cycle keeps the earlier objective. An assessment of that cycle therefore reports "
+                      "`objective_scope_incomplete`, and readiness does not pass with it as the candidate.", workflow)
+        self.assertIn("Plan a successor cycle under the new objective, with a `full` scope of that objective. "
+                      "Its `predecessor` is that checkpoint, and its `inheritance` uses the validated result of the checkpoint.", workflow)
+        self.assertIn("Run the successor as a managed run", workflow)
+        self.assertIn("Assess the successor with a disposition of every retained cycle in `development.branches`.", workflow)
+        self.assertIn("Without that authorization, the study can publish only on the direct paths:", workflow)
+        self.assertIn("When the study has finished there, park it with `exactory-lab state set --waiting <reason>`", workflow)
+
     def test_release_manifests_and_notes_describe_the_same_final_version(self):
         for relative in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
-            self.assertEqual(json.loads((PLUGIN / relative).read_text())["version"], "0.48.0")
-        self.assertTrue((PLUGIN / "docs/releases/0.48.0.md").is_file())
+            self.assertEqual(json.loads((PLUGIN / relative).read_text())["version"], "0.49.0")
+        self.assertTrue((PLUGIN / "docs/releases/0.49.0.md").is_file())
 
     def test_staged_plugin_runs_common_and_native_entrypoints_without_repository_cwd(self):
         from research_harness.cli import ACQUISITION, OPERATIONS

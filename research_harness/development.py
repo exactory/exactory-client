@@ -878,6 +878,7 @@ def _assess(context, value, *, historical=False):
     if not checks:
         valid_obligations.append(obligation("validity_check_missing", "Process completion alone does not verify a scientific result."))
     seen = set()
+    unsupported_check_ids = []
     validated_outputs = set()
     validated_requirements = set()
     for check in checks:
@@ -890,6 +891,8 @@ def _assess(context, value, *, historical=False):
         _choice(check["status"], ("passed", "failed", "unresolved"), "Validity outcome")
         checked = evidence.many(check["evidence"], "Validity check evidence")
         if check["status"] != "passed" or not any(x.get("requirement_kind") == "validation" and x.get("status") == "completed" for x in checked):
+            if check["status"] == "passed":
+                unsupported_check_ids.append(check["id"])
             valid_obligations.append(obligation("validity_unresolved", "Resolve the actual validity check with planned validation evidence.", check_id=check["id"]))
         else:
             for validation in checked:
@@ -905,6 +908,12 @@ def _assess(context, value, *, historical=False):
                         bound = True
                 if bound and validation["cycle_id"] == cycle["id"]:
                     validated_requirements.add(validation["requirement_id"])
+    # A new assessment is refused before it is recorded, so its author sees every
+    # unsupported check at once. A stored assessment keeps the obligations.
+    if unsupported_check_ids and not historical:
+        raise ResearchError("validity_evidence_missing", "Each passed validity check needs completed evidence of a planned validation "
+                            "requirement. For each check in check_ids, cite the completed validation output or record the check as unresolved",
+                            {"check_ids": unsupported_check_ids})
     if checks and {digest(x["reference"]) for x in own_results} - validated_outputs:
         valid_obligations.append(obligation("validity_evidence_unbound", "Use validation from the result's own run or a checker with these exact result bytes as admitted inputs."))
     required_validations = {r["id"] for r in plan["payload"]["evidence_requirements"] if r["kind"] == "validation"}

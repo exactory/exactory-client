@@ -252,12 +252,21 @@ def launch_execution(store, admission_id, *, expected_revision, request_id):
             return launch_colab(store, claim)
         directory = store.root / _directory(admission_id)
         json_projection(store.root, _directory(admission_id) + "/config.json", claim["config"])
-        with (directory / "launcher.log").open("wb") as diagnostics:
-            worker = subprocess.Popen([sys.executable, str(Path(__file__).with_name("launcher.py")),
-                str(directory), claim["config_artifact"]["sha256"], claim["token"]],
-                stdin=subprocess.PIPE, stdout=diagnostics, stderr=diagnostics, start_new_session=True)
         try:
-            deadline = time.monotonic() + 5
+            with (directory / "launcher.log").open("wb") as diagnostics:
+                worker = subprocess.Popen([sys.executable, str(Path(__file__).with_name("launcher.py")),
+                    str(directory), claim["config_artifact"]["sha256"], claim["token"]],
+                    stdin=subprocess.PIPE, bufsize=0, stdout=diagnostics, stderr=diagnostics, start_new_session=True)
+        except OSError as error:
+            # At a limit on processes or open files, no worker holds the claimed token, so the program never runs.
+            raise ResearchError("execution_recovery_required", "The worker process did not start. Use exactory-research "
+                                "reconcile-run to record the claimed run as interrupted, with a reason.",
+                                {"errno": error.errno}) from error
+        try:
+            # A loaded machine starts the worker slowly. While the worker is alive, the launch waits for it to become
+            # ready as long as it waits below for the run to end: the run's timeout plus 10 seconds.
+            worker_wait_seconds = claim["config"]["timeout_seconds"] + 10
+            deadline = time.monotonic() + worker_wait_seconds
             while not (directory / "ready.json").exists() and worker.poll() is None and time.monotonic() < deadline:
                 time.sleep(0.01)
             if not (directory / "ready.json").exists():
@@ -266,10 +275,22 @@ def launch_execution(store, admission_id, *, expected_revision, request_id):
             if ready != {"pid": worker.pid, "token": claim["token"], "config_sha256": claim["config_artifact"]["sha256"]}:
                 raise ResearchError("execution_identity_mismatch", "The launcher did not establish the claimed identity")
             _prelaunch(store, admission_id, claim)
-            worker.stdin.write((claim["token"] + "\n").encode())
-            worker.stdin.flush()
+            try:
+                # The worker's input is unbuffered (bufsize=0), so this one write sends the token and leaves nothing for
+                # the close to flush.
+                worker.stdin.write((claim["token"] + "\n").encode())
+            except BrokenPipeError:
+                # A worker that ended before it read its token never ran the program, and reconciliation reports that.
+                pass
             worker.stdin.close()
-            worker.wait(timeout=claim["config"]["timeout_seconds"] + 10)
+            try:
+                # Popen.wait accepts a timeout of any length. Popen.communicate does not: with a timeout it waits in
+                # poll(), which refuses more than 2**31 - 1 milliseconds (about 24.86 days).
+                worker.wait(timeout=worker_wait_seconds)
+            except subprocess.TimeoutExpired:
+                # The exit wait below gives the worker 6 more seconds. A worker that ends in them is reconciled, and a
+                # worker that is still live is reported.
+                pass
         finally:
             if not worker.stdin.closed:
                 worker.stdin.close()

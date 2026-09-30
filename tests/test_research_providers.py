@@ -5,7 +5,7 @@ import unittest
 from urllib.parse import parse_qs, urlsplit
 
 from research_harness.errors import ResearchError
-from research_harness.identities import normalize_identifier
+from research_harness.identities import family_id, normalize_identifier, version_of
 from research_harness.providers import Arxiv, OpenAlex, Crossref
 from research_fixtures import atom, entry, openalex, crossref
 
@@ -46,6 +46,32 @@ class ProviderTests(unittest.TestCase):
         for invalid in ("An ambiguous title", "2600.00001", "2601.00001v0", "10.1234/", "https://other.org/W123"):
             with self.assertRaises(ResearchError):
                 normalize_identifier(invalid)
+
+    def test_old_archive_names_that_lost_their_hyphen_take_it_back(self):
+        # arXiv's taxonomy definitions list these hyphenated archives among
+        # those that began before the identifier scheme changed in April 2007.
+        archives = ("acc-phys", "adap-org", "alg-geom", "ao-sci", "astro-ph", "atom-ph", "bayes-an", "chao-dyn",
+                    "chem-ph", "cmp-lg", "comp-gas", "cond-mat", "dg-ga", "funct-an", "gr-qc", "hep-ex", "hep-lat",
+                    "hep-ph", "hep-th", "math-ph", "mtrl-th", "nucl-ex", "nucl-th", "patt-sol", "plasm-ph", "q-alg",
+                    "q-bio", "quant-ph", "solv-int", "supr-con")
+        for archive in archives:
+            with self.subTest(archive=archive):
+                self.assertEqual(normalize_identifier(archive.replace("-", "") + "/0410063"), "arxiv:" + archive + "/0410063")
+                self.assertEqual(normalize_identifier(archive + "/0410063"), "arxiv:" + archive + "/0410063")
+        for value, expected in [("arxiv:astroph/0410063", "arxiv:astro-ph/0410063"),
+                                ("condmat/0101001v2", "arxiv:cond-mat/0101001v2"),
+                                ("arXiv:qbio.PE/0401001v1", "arxiv:q-bio.PE/0401001v1"),
+                                ("https://arxiv.org/abs/hepth/9901001v3", "arxiv:hep-th/9901001v3")]:
+            with self.subTest(value=value):
+                self.assertEqual(normalize_identifier(value), expected)
+        self.assertEqual(family_id("arxiv:astroph/0410063v2"), "arxiv:astro-ph/0410063")
+        self.assertEqual(version_of("condmat/0101001v2"), "v2")
+
+    def test_archive_names_without_a_hyphen_stay_as_written(self):
+        for value in ("math/0309136", "math.GT/0309136v2", "cs/0101001", "cs.CL/0101001v1", "physics/9801025v1",
+                      "nlin/0001001"):
+            with self.subTest(value=value):
+                self.assertEqual(normalize_identifier(value), "arxiv:" + value)
 
     def test_arxiv_original_short_abstract_category_and_dates(self):
         raw = atom([entry("physics/9801025v1", abstract="In memory of an experimental pioneer.",

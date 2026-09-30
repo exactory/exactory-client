@@ -414,7 +414,9 @@ metric alone does not settle validity or the full objective.
 
 Read the actual outputs and checks. `assess` separately records the result,
 validity evidence, scope, novelty/contribution, branch development, failures,
-assumptions, and remaining obligations. Preserve a durable `checkpoint` with a
+assumptions, and remaining obligations. A validity check marked `passed` cites
+the completed output of a planned `validation` requirement; until that output
+exists, record the check as `unresolved`. Preserve a durable `checkpoint` with a
 stable ID and the next hypothesis. Deepen a promising branch from that checkpoint;
 reopen a failed branch only when new evidence addresses its recorded obstruction.
 There is no fixed cycle count. Resource exhaustion and incomplete evidence are
@@ -452,6 +454,43 @@ per-review `ready` value, earlier receipt, or plan for later manuscript review i
 insufficient. Findings that require new evidence lead to a scoped successor cycle
 and renewed review. A narrower verified result is reported with its contribution
 to the original objective and the obligations it leaves open.
+
+The readiness gate passes only for a candidate that establishes the complete
+objective. A candidate with a partial scope reports `objective_scope_incomplete`,
+and a candidate with an open objective reports `objective_incomplete`; both
+report their `remaining_obligations`. The source-limited publication contract
+maps each remaining obligation to an active source deferral, so it does not
+cover remaining computational work. A partial computational result reaches the
+managed `write`, `evaluate` and `deposit` stages after the user authorizes the
+narrower objective. The plan of an earlier cycle keeps the earlier objective. An
+assessment of that cycle therefore reports `objective_scope_incomplete`, and
+readiness does not pass with it as the candidate. A successor cycle under the
+new objective establishes that objective:
+
+1. Pass the user's saved instruction to `target` as `authorization`, as
+   [the literature stage](#literature-build-the-source-network-and-the-full-objective)
+   describes.
+2. Record the synthesis again under the new objective.
+3. Assess the earlier cycle again. Save a checkpoint of that assessment. For a
+   cycle that inherits from other cycles, refresh its ancestors first, as
+   [refreshing inherited assessment dependencies](research-cli.md#refreshing-inherited-assessment-dependencies)
+   describes.
+4. Plan a successor cycle under the new objective, with a `full` scope of that
+   objective. Its `predecessor` is that checkpoint, and its `inheritance` uses
+   the validated result of the checkpoint.
+5. Run the successor as a managed run with `admit`, `bind-run` and
+   `exactory-lab run`.
+6. Assess the successor with a disposition of every retained cycle in
+   `development.branches`. Save its checkpoint with `select_for_readiness: true`.
+7. Record the independent review of that candidate, as described above. Then
+   run `gate readiness`.
+
+Without that authorization, the study can publish only on the direct paths:
+`exactory-draft deposit` and `exactory submit` run on the user's instruction,
+each prints `Managed record skipped (readiness_required)`, and the study stays
+at the `experiment` stage. When the study has finished there, park it with
+`exactory-lab state set --waiting <reason>`, so that the autopilot Stop hook
+lets the session end.
 
 ## Manuscript assessment and publication
 

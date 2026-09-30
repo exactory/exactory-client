@@ -1,15 +1,22 @@
 """Metered entry reservations and real bounded process execution."""
 
+import contextlib
+import errno
 import json
 import sys
 import os
 from pathlib import Path
 import subprocess
 import time
+from unittest.mock import patch
 
 from search_controller.errors import SearchError
 from tests.support import WorkspaceTest, make_move
 from tests.search_execution_support import admit_workspace, begin_spec, invoke, command_spec, review_native_inputs
+
+
+NEVER_STARTED_RUN_RECORDED_ERR_MSG = ("The launcher did not start, so no command ran. The run is recorded as never "
+                                      "started. Remove the cause given in the details, then run search next.")
 
 
 class SearchExecutionTests(WorkspaceTest):
@@ -100,6 +107,389 @@ class SearchExecutionTests(WorkspaceTest):
         self.assertEqual(run["status"], "terminal")
         self.assertEqual(run["termination"], "timeout")
         self.assertEqual(run["charged_units"], 1)
+
+    @contextlib.contextmanager
+    def start_launcher_after(self, command):
+        """Start the run's launcher through a shell script that runs `command` and then execs the launcher's argv.
+
+        The patch replaces subprocess.Popen and changes only the call that starts the launcher. It yields the list of the
+        launchers it started."""
+        wrapper = Path(self._tmp.name) / "start-launcher"
+        wrapper.write_text('#!/bin/sh\n' + command + '\nexec "$@"\n')
+        wrapper.chmod(0o755)
+        popen = subprocess.Popen
+        launchers = []
+
+        def start_through_wrapper(argv, **options):
+            if "--launcher" not in argv:
+                return popen(argv, **options)
+            launchers.append(popen([str(wrapper)] + argv, **options))
+            return launchers[-1]
+
+        try:
+            with patch.object(subprocess, "Popen", side_effect=start_through_wrapper):
+                yield launchers
+        finally:
+            # A launcher that outlives its test stops before tearDown removes the workspace.
+            for launcher in launchers:
+                launcher.kill()
+                launcher.wait()
+
+    def test_launcher_that_starts_after_the_run_timeout_runs_its_command(self):
+        step = self.workspace / "deterministic" / "job"
+        step.mkdir()
+        (step / "job.py").write_text("print('late launcher')\n")
+        invoke(self.controller, "begin", begin_spec())
+        # A loaded machine starts the launcher slowly: it becomes ready after the run's timeout of 10 seconds and after
+        # the 5 seconds that earlier releases waited, and within the 10 seconds that the wait adds to the run's timeout.
+        with self.start_launcher_after("sleep 11"):
+            invoke(self.controller, "run", command_spec(self.workspace, [sys.executable, "job.py"], 10))
+        run = self.controller.status()["runs"]["run-000001"]
+        self.assertEqual((run["status"], run["termination"]), ("terminal", "exit"))
+        result = self.controller.store.get_blob(run["result_digest"])
+        self.assertEqual(self.controller.store.get_artifact(result["commands"][0]["stdout_digest"]), b"late launcher\n")
+
+    def test_launcher_that_exits_before_it_is_ready_leaves_its_run_to_recovery(self):
+        step = self.workspace / "deterministic" / "job"
+        step.mkdir()
+        (step / "job.py").write_text("print('never runs')\n")
+        invoke(self.controller, "begin", begin_spec())
+        start_time = time.monotonic()
+        # The script exits before it starts the launcher, so ready.json is never written.
+        with self.start_launcher_after("exit 3"), self.assertRaises(SearchError) as caught:
+            invoke(self.controller, "run", command_spec(self.workspace, [sys.executable, "job.py"], 60))
+        # The wait ends when the launcher exits, long before the run's timeout.
+        self.assertLess(time.monotonic() - start_time, 60)
+        self.assertEqual((caught.exception.code, caught.exception.message),
+                         ("recovery_required", "Launcher did not establish its identity"))
+        self.assertEqual(self.controller.status()["runs"]["run-000001"]["started_units"], 0)
+
+    def test_launcher_that_stays_alive_and_not_ready_ends_the_wait_at_its_bound(self):
+        step = self.workspace / "deterministic" / "job"
+        step.mkdir()
+        (step / "job.py").write_text("print('never runs')\n")
+        invoke(self.controller, "begin", begin_spec())
+        start_time = time.monotonic()
+        # The launcher process stays alive for 60 seconds and never writes ready.json.
+        with self.start_launcher_after("exec sleep 60"), self.assertRaises(SearchError) as caught:
+            invoke(self.controller, "run", command_spec(self.workspace, [sys.executable, "job.py"], 1))
+        # The wait ends at the run's timeout plus 10 seconds, and the exit waits after it end while the launcher lives.
+        self.assertLess(time.monotonic() - start_time, 60)
+        self.assertEqual(caught.exception.code, "recovery_required")
+        self.assertEqual(self.controller.status()["runs"]["run-000001"]["started_units"], 0)
+
+    def test_launcher_that_ends_after_the_wait_for_its_run_gives_the_run_outcome(self):
+        step = self.workspace / "deterministic" / "job"
+        step.mkdir()
+        (step / "job.py").write_text("print('ended after the wait')\n")
+        invoke(self.controller, "begin", begin_spec())
+        wait = subprocess.Popen.wait
+
+        def expire_the_wait_for_the_run(launcher, timeout):
+            # Only the wait for the run is longer than the 5-second exit wait. It expires at once, as when the launcher's
+            # checks after its commands take longer than the 10 seconds that the wait adds, and the launcher then ends
+            # within the exit wait.
+            if timeout > 5:
+                raise subprocess.TimeoutExpired(launcher.args, timeout)
+            return wait(launcher)
+
+        # The run's timeout is long enough for a loaded machine to start the command. The command ends at once.
+        with patch.object(subprocess.Popen, "wait", autospec=True, side_effect=expire_the_wait_for_the_run):
+            invoke(self.controller, "run", command_spec(self.workspace, [sys.executable, "job.py"], 30))
+        run = self.controller.status()["runs"]["run-000001"]
+        self.assertEqual((run["status"], run["termination"]), ("terminal", "exit"))
+        result = self.controller.store.get_blob(run["result_digest"])
+        self.assertEqual(self.controller.store.get_artifact(result["commands"][0]["stdout_digest"]), b"ended after the wait\n")
+
+    def test_launcher_still_live_after_the_wait_for_its_run_leaves_the_outcome_to_reconcile(self):
+        step = self.workspace / "deterministic" / "job"
+        step.mkdir()
+        (step / "job.py").write_text("import time\ntime.sleep(5)\nprint('ended after the launch')\n")
+        invoke(self.controller, "begin", begin_spec())
+        launchers = []
+
+        def expire_each_wait(launcher, timeout):
+            # The wait for the run and the exit wait both expire while the command still sleeps.
+            launchers.append(launcher)
+            raise subprocess.TimeoutExpired(launcher.args, timeout)
+
+        with patch.object(subprocess.Popen, "wait", autospec=True, side_effect=expire_each_wait), \
+                self.assertRaises(SearchError) as caught:
+            invoke(self.controller, "run", command_spec(self.workspace, [sys.executable, "job.py"], 30))
+        self.assertEqual((caught.exception.code, caught.exception.message),
+                         ("recovery_required", "The launcher is still live. Run search reconcile after the launcher ends."))
+        self.assertEqual(self.controller.status()["runs"]["run-000001"]["status"], "launched")
+        # Once the launcher ends, reconciliation records the outcome of its run.
+        launchers[0].wait()
+        invoke(self.controller, "reconcile", {}, None)
+        run = self.controller.status()["runs"]["run-000001"]
+        self.assertEqual((run["status"], run["termination"]), ("terminal", "exit"))
+        result = self.controller.store.get_blob(run["result_digest"])
+        self.assertEqual(self.controller.store.get_artifact(result["commands"][0]["stdout_digest"]), b"ended after the launch\n")
+
+    def test_launcher_still_live_after_its_launch_is_refused_leaves_its_run_to_reconcile(self):
+        step = self.workspace / "deterministic" / "job"
+        step.mkdir()
+        (step / "job.py").write_text("print('never runs')\n")
+        invoke(self.controller, "begin", begin_spec())
+        wait = subprocess.Popen.wait
+        wait_timeouts = []
+
+        def expire_the_first_wait(launcher, timeout=None):
+            # The refused launch closes the launcher's input and waits 5 seconds for it to end. The launcher is still in
+            # its delayed start when that wait expires. A later wait waits for its real end.
+            wait_timeouts.append(timeout)
+            if len(wait_timeouts) == 1:
+                raise subprocess.TimeoutExpired(launcher.args, timeout)
+            return wait(launcher)
+
+        # The launcher starts after the readiness wait of the run's timeout plus 10 seconds, so the launch is refused.
+        with patch.object(subprocess.Popen, "wait", autospec=True, side_effect=expire_the_first_wait), \
+                self.start_launcher_after("sleep 13") as launchers:
+            with self.assertRaises(SearchError) as caught:
+                invoke(self.controller, "run", command_spec(self.workspace, [sys.executable, "job.py"], 1))
+            # The launch waits once for the launcher to end and reports what that wait observed.
+            self.assertEqual(wait_timeouts, [5])
+            launchers[0].wait()
+        self.assertEqual((caught.exception.code, caught.exception.message),
+                         ("recovery_required", "The launcher is still live. Run search reconcile after the launcher ends."))
+        run = self.controller.status()["runs"]["run-000001"]
+        self.assertEqual((run["status"], run["started_units"]), ("reserved", 0))
+        # The launcher read the end of its input and recorded that it started no command, and reconciliation records that.
+        invoke(self.controller, "reconcile", {}, None)
+        run = self.controller.status()["runs"]["run-000001"]
+        self.assertEqual((run["status"], run["termination"], run["charged_units"]), ("terminal", "never_started", 0))
+
+    def test_launcher_still_live_after_its_launch_is_refused_names_the_refusal(self):
+        step = self.workspace / "deterministic" / "job"
+        step.mkdir()
+        (step / "job.py").write_text("print('never runs')\n")
+        invoke(self.controller, "begin", begin_spec())
+        wait = subprocess.Popen.wait
+        wait_timeouts = []
+
+        def expire_the_first_wait(launcher, timeout=None):
+            # The exit wait after the refusal expires while the launcher still runs. A later wait waits for its real end.
+            wait_timeouts.append(timeout)
+            if len(wait_timeouts) == 1:
+                raise subprocess.TimeoutExpired(launcher.args, timeout)
+            return wait(launcher)
+
+        # The script runs the launcher as its child, so the launcher's process ID is not the one that the launch started,
+        # and the launch refuses it with "Unexpected launcher identity".
+        with patch.object(subprocess.Popen, "wait", autospec=True, side_effect=expire_the_first_wait), \
+                self.start_launcher_after('"$@"; exit $?') as launchers:
+            with self.assertRaises(SearchError) as caught:
+                invoke(self.controller, "run", command_spec(self.workspace, [sys.executable, "job.py"], 30))
+            launchers[0].wait()
+        self.assertEqual((caught.exception.code, caught.exception.message, caught.exception.details),
+                         ("recovery_required", "The launcher is still live. Run search reconcile after the launcher ends.",
+                          {"refusal": {"code": "recovery_conflict", "message": "Unexpected launcher identity", "details": None}}))
+        self.assertEqual(self.controller.status()["runs"]["run-000001"]["status"], "reserved")
+        # The launcher read the end of its input and recorded that it started no command, and reconciliation records that.
+        invoke(self.controller, "reconcile", {}, None)
+        run = self.controller.status()["runs"]["run-000001"]
+        self.assertEqual((run["status"], run["termination"], run["charged_units"]), ("terminal", "never_started", 0))
+
+    def test_launcher_still_live_after_its_launch_is_refused_names_the_details_of_the_refusal(self):
+        spec = self.begin_a_move_for_a_job()
+        wait = subprocess.Popen.wait
+        wait_timeouts = []
+
+        def expire_the_first_wait(launcher, timeout=None):
+            # The exit wait after the refusal expires while the process still runs. A later wait waits for its real end.
+            wait_timeouts.append(timeout)
+            if len(wait_timeouts) == 1:
+                raise subprocess.TimeoutExpired(launcher.args, timeout)
+            return wait(launcher)
+
+        # The script writes a ready record that is not JSON into the run directory, its fourth argument, and stays alive
+        # without starting the launcher. The launch refuses the record, and the refusal's details give the JSON error.
+        with patch.object(subprocess.Popen, "wait", autospec=True, side_effect=expire_the_first_wait), \
+                self.start_launcher_after('printf x > "$4/ready.json"; exec sleep 60'), \
+                self.assertRaises(SearchError) as caught:
+            invoke(self.controller, "run", spec)
+        with self.assertRaises(json.JSONDecodeError) as decode_caught:
+            json.loads("x")
+        self.assertEqual((caught.exception.code, caught.exception.details),
+                         ("recovery_required", {"refusal": {"code": "recovery_conflict", "message": "stored JSON is malformed",
+                                                            "details": {"reason": str(decode_caught.exception)}}}))
+
+    def test_refused_launch_whose_reconciliation_fails_keeps_the_refusal_in_the_traceback(self):
+        from search_controller import execution
+        spec = self.begin_a_move_for_a_job()
+        wait = subprocess.Popen.wait
+        disk_full_error = OSError(errno.ENOSPC, "No space left on device")
+
+        def wait_for_the_real_end(launcher, timeout=None):
+            # The launcher ends within the exit wait after the refusal, whatever the load of the machine.
+            return wait(launcher)
+
+        # The script runs the launcher as its child, so the launch refuses it with "Unexpected launcher identity".
+        with patch.object(subprocess.Popen, "wait", autospec=True, side_effect=wait_for_the_real_end), \
+                self.start_launcher_after('"$@"; exit $?'), \
+                patch.object(execution, "reconcile_runs", side_effect=disk_full_error), \
+                self.assertRaises(OSError) as caught:
+            invoke(self.controller, "run", spec)
+        # The traceback of the failed reconciliation shows the refusal that it followed.
+        self.assertIs(caught.exception, disk_full_error)
+        refusal_error = caught.exception.__context__
+        self.assertIsInstance(refusal_error, SearchError)
+        self.assertEqual((refusal_error.code, refusal_error.message), ("recovery_conflict", "Unexpected launcher identity"))
+
+    def test_unexpected_error_in_the_launch_still_ends_the_launcher(self):
+        from search_controller import integration
+        spec = self.begin_a_move_for_a_job()
+        popen = subprocess.Popen
+        original = integration.internal_operation
+        launchers = []
+
+        def start_and_keep(argv, **options):
+            # In the test process, the run calls subprocess.Popen only to start its launcher.
+            launchers.append(popen(argv, **options))
+            return launchers[-1]
+
+        def fail_the_launch_record(controller, command, request_id, build):
+            if command == "execution-launch":
+                raise RuntimeError("An error that is not a SearchError, before the launch record")
+            return original(controller, command, request_id, build)
+
+        with patch.object(subprocess, "Popen", side_effect=start_and_keep), \
+                patch.object(integration, "internal_operation", side_effect=fail_the_launch_record), \
+                self.assertRaises(RuntimeError):
+            invoke(self.controller, "run", spec)
+        # The launch closed the launcher's input and waited for it, so the launcher recorded that it started no command.
+        self.assertIsNotNone(launchers[0].poll())
+        terminal_path = self.attack_root / ".search" / "runs" / "run-000001" / "terminal.json"
+        self.assertEqual(json.loads(terminal_path.read_text())["termination"], "never_started")
+
+    def begin_a_move_for_a_job(self):
+        step = self.workspace / "deterministic" / "job"
+        step.mkdir()
+        (step / "job.py").write_text("print('never runs')\n")
+        invoke(self.controller, "begin", begin_spec())
+        return command_spec(self.workspace, [sys.executable, "job.py"])
+
+    def test_launcher_that_cannot_start_records_its_run_as_never_started(self):
+        spec = self.begin_a_move_for_a_job()
+        # At the limit of the user's processes, fork fails with EAGAIN. The run calls subprocess.Popen only for its launcher.
+        fork_error = BlockingIOError(errno.EAGAIN, "Resource temporarily unavailable")
+        with patch.object(subprocess, "Popen", side_effect=fork_error), self.assertRaises(SearchError) as caught:
+            invoke(self.controller, "run", spec)
+        self.assertEqual((caught.exception.code, caught.exception.message, caught.exception.details),
+                         ("recovery_required", NEVER_STARTED_RUN_RECORDED_ERR_MSG, {"start_error": str(fork_error)}))
+        run = self.controller.status()["runs"]["run-000001"]
+        self.assertEqual((run["status"], run["termination"], run["started_units"], run["charged_units"]),
+                         ("terminal", "never_started", 0, 0))
+
+    def test_run_directory_that_cannot_be_written_records_its_run_as_never_started(self):
+        spec = self.begin_a_move_for_a_job()
+        write_bytes = Path.write_bytes
+        # A full disk refuses the copies of the run's inputs with ENOSPC, and the launcher never starts.
+        disk_full_error = OSError(errno.ENOSPC, "No space left on device")
+
+        def refuse_run_input_copies(path, data):
+            if "/.search/runs/" in str(path):
+                raise disk_full_error
+            return write_bytes(path, data)
+
+        with patch.object(Path, "write_bytes", autospec=True, side_effect=refuse_run_input_copies), \
+                self.assertRaises(SearchError) as caught:
+            invoke(self.controller, "run", spec)
+        self.assertEqual((caught.exception.code, caught.exception.message, caught.exception.details),
+                         ("recovery_required", NEVER_STARTED_RUN_RECORDED_ERR_MSG, {"start_error": str(disk_full_error)}))
+        run = self.controller.status()["runs"]["run-000001"]
+        self.assertEqual((run["status"], run["termination"], run["started_units"], run["charged_units"]),
+                         ("terminal", "never_started", 0, 0))
+
+    def test_run_that_cannot_be_recorded_as_never_started_stays_reserved(self):
+        spec = self.begin_a_move_for_a_job()
+        path_open = Path.open
+        # A full disk refuses every file written in the run's directory, the record of the never started run included.
+        disk_full_error = OSError(errno.ENOSPC, "No space left on device")
+
+        def refuse_run_directory_writes(path, mode="r", *args, **kwargs):
+            if "/.search/runs/" in str(path) and set(mode) & set("wxa"):
+                raise disk_full_error
+            return path_open(path, mode, *args, **kwargs)
+
+        with patch.object(Path, "open", autospec=True, side_effect=refuse_run_directory_writes), \
+                self.assertRaises(SearchError) as caught:
+            invoke(self.controller, "run", spec)
+        self.assertEqual((caught.exception.code, caught.exception.message, caught.exception.details),
+                         ("recovery_required", "The launcher did not start, so no command ran. The run stays reserved because "
+                          "writing its never-started record failed. Remove the causes given in the details, then run search "
+                          "reconcile. It records the run as never started if that record exists, and otherwise as indeterminate "
+                          "with its reserved units charged.",
+                          {"start_error": str(disk_full_error), "record_error": str(disk_full_error)}))
+        self.assertEqual(self.controller.status()["runs"]["run-000001"]["status"], "reserved")
+        # As the message states, reconciliation cannot tell that no command ran.
+        invoke(self.controller, "reconcile", {}, None)
+        run = self.controller.status()["runs"]["run-000001"]
+        self.assertEqual((run["status"], run["termination"], run["charged_units"]), ("indeterminate", "indeterminate", 1))
+
+    def test_run_whose_record_cannot_be_reconciled_is_left_to_search_reconcile(self):
+        from search_controller import execution
+        spec = self.begin_a_move_for_a_job()
+        fork_error = BlockingIOError(errno.EAGAIN, "Resource temporarily unavailable")
+        disk_full_error = OSError(errno.ENOSPC, "No space left on device")
+        # The record of the never started run is written, and then the disk fills before reconciliation records it.
+        with patch.object(subprocess, "Popen", side_effect=fork_error), \
+                patch.object(execution, "reconcile_runs", side_effect=disk_full_error), \
+                self.assertRaises(SearchError) as caught:
+            invoke(self.controller, "run", spec)
+        self.assertEqual((caught.exception.code, caught.exception.message, caught.exception.details),
+                         ("recovery_required", "The launcher did not start, so no command ran, and the reconciliation of its "
+                          "never-started run did not complete. Remove the causes given in the details, then run search reconcile.",
+                          {"start_error": str(fork_error), "reconcile_error": str(disk_full_error)}))
+        self.assertEqual(self.controller.status()["runs"]["run-000001"]["status"], "reserved")
+        invoke(self.controller, "reconcile", {}, None)
+        run = self.controller.status()["runs"]["run-000001"]
+        self.assertEqual((run["status"], run["termination"], run["charged_units"]), ("terminal", "never_started", 0))
+
+    def test_run_directory_that_already_exists_gets_no_record_from_the_launch(self):
+        spec = self.begin_a_move_for_a_job()
+        # A run directory that existed before the launch, as after a restored store reuses a run ID, can hold another
+        # launcher's records. The launch leaves it unchanged.
+        directory = self.attack_root / ".search" / "runs" / "run-000001"
+        directory.mkdir(parents=True)
+        with self.assertRaises(FileExistsError):
+            invoke(self.controller, "run", spec)
+        self.assertEqual(list(directory.iterdir()), [])
+        self.assertEqual(self.controller.status()["runs"]["run-000001"]["status"], "reserved")
+
+    def test_launcher_that_ends_before_its_token_records_its_run_as_indeterminate(self):
+        from search_controller import integration
+        step = self.workspace / "deterministic" / "job"
+        step.mkdir()
+        marker = self.attack_root / "command-ran"
+        (step / "job.py").write_text("from pathlib import Path\nPath(" + repr(str(marker)) + ").touch()\n")
+        invoke(self.controller, "begin", begin_spec())
+        popen = subprocess.Popen
+        original = integration.internal_operation
+        launchers = []
+
+        def start_and_keep(argv, **options):
+            # In the test process, the run calls subprocess.Popen only to start its launcher.
+            launchers.append(popen(argv, **options))
+            return launchers[-1]
+
+        def end_the_launcher_then_record(controller, command, request_id, build):
+            if command == "execution-launch":
+                # The launcher is ready and waits for its token when it ends, as when it is killed.
+                launchers[0].kill()
+                launchers[0].wait()
+            return original(controller, command, request_id, build)
+
+        with patch.object(subprocess, "Popen", side_effect=start_and_keep), \
+                patch.object(integration, "internal_operation", side_effect=end_the_launcher_then_record):
+            invoke(self.controller, "run", command_spec(self.workspace, [sys.executable, "job.py"], 30))
+        # As for any launcher that ended without its terminal record, reconciliation cannot tell whether a command
+        # started, so the run is indeterminate and keeps its reserved unit charged.
+        run = self.controller.status()["runs"]["run-000001"]
+        self.assertEqual((run["status"], run["termination"], run["started_units"], run["charged_units"]),
+                         ("indeterminate", "indeterminate", 0, 1))
+        self.assertFalse(marker.exists())
 
     def test_command_that_changes_its_frozen_input_cannot_verify(self):
         step = self.workspace / "deterministic" / "job"

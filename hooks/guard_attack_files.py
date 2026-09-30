@@ -1,15 +1,29 @@
 #!/usr/bin/env python3
 """PreToolUse gate: the files the math-solver harness writes are written by it alone.
 
-An attack workspace is `attack/<slug>/`, laid out by `exactory-math init`. Seven
+An attack workspace is `attack/<slug>/`, laid out by `exactory-math init`. Eight
 of its files are the record the harness and the hooks write themselves:
-`journal.jsonl` (`journal add`), `openings.json` (`plan`), `tasks.json`
-(`task`), `activity.jsonl` (the activity hook), `deterministic/<step>/result.json`
-(`verify`), `units/<n>/check-unit.json` (`check-unit`), and `units/FINISHED.json`
-(`finish`). This hook denies a Write or an Edit to any of them, and a Bash
-command that writes to one through a redirect, `tee`, `cp`, `mv`, `rm`,
-`truncate`, `dd`, or `sed -i`. Reading them is untouched. Any other file, any
-other tool, and any internal error are silent: exit 0, no output.
+`journal.jsonl` (`journal add`), `openings.json` (`plan`),
+`parent.json` (`init --from`), `tasks.json` (`task`), `activity.jsonl`
+(the activity hook), `deterministic/<step>/result.json` (`verify`),
+`units/<n>/check-unit.json` (`check-unit`), and `units/FINISHED.json`
+(`finish`).
+
+The hook first runs `math_search.guard`. In a managed search tree (a workspace
+whose parent holds `.search/tree.json`), that check denies a write to anything
+the search controller owns, the payload of another tool that names the tree,
+and any operation whose check fails with an error. The hook then denies a Write
+or an Edit to any of the eight files. It also denies a Bash command that writes,
+that is, one that holds a word that begins with `>`, or `tee`, `cp`, `mv`,
+`rm`, `truncate` or `dd`, or `sed` with `-i`, when one of its words, with a
+leading `>` removed, is a path that contains a `/` and resolves, from the
+payload's working directory, to one of the eight files. The check reads words,
+not write targets: it denies a writing command that only reads one of the
+files, and it misses a file named without a `/`, a write after a `cd`, a
+redirection whose word does not begin with `>` (such as `2>`, `&>` or
+`x>file`), `>|file` without a space, and `dd of=`. A command that does not
+write is untouched. Any other file, any other tool, and any error of the hook's
+own checks are silent: exit 0, no output.
 """
 
 from __future__ import annotations
@@ -21,7 +35,10 @@ import sys
 from pathlib import Path
 from math_search import guard, normalize, workspace_for
 
-# The path within the workspace, and the harness command that writes it.
+# Each pair holds a compiled pattern of a path within the workspace and the
+# instruction that the denial of a write to that path gives: the harness
+# command that writes the file, or, for a file that a hook writes, the hook
+# that writes it.
 _OWNED_FILES = (
     (re.compile(r"^journal\.jsonl$"), "exactory-math journal add <slug> --json '<move>'"),
     (re.compile(r"^openings\.json$"), "exactory-math plan <slug>"),
@@ -54,20 +71,20 @@ def _resolve(raw: str, cwd: Path) -> Path:
 
 
 def _find_workspace(path: Path) -> Path | None:
-    """The attack workspace holding `path`: an ancestor under a directory named
-    `attack` that carries the `problem.json` `init` wrote."""
+    """The attack workspace holding `path`: an ancestor that carries the `problem.json` `init` wrote, inside a
+    directory named `attack` or inside a managed search tree (a parent that holds `.search/tree.json`)."""
     return workspace_for(path)
 
 
 def _find_owner(path: Path) -> tuple[str, str] | None:
-    """(the path within the workspace, the command that writes it), or None when the solver owns the file."""
+    """(the path within the workspace, the instruction that its denial gives), or None when the solver owns the file."""
     workspace = _find_workspace(path)
     if workspace is None:
         return None
     relative = path.relative_to(workspace).as_posix()
-    for pattern, command in _OWNED_FILES:
-        if pattern.match(relative):
-            return relative, command.replace("<slug>", workspace.name)
+    for path_re, instruction in _OWNED_FILES:
+        if path_re.match(relative):
+            return relative, instruction.replace("<slug>", workspace.name)
     return None
 
 
@@ -111,10 +128,10 @@ def main() -> None:
         owner = None
     if owner is None:
         sys.exit(0)
-    relative, command = owner
+    relative, instruction = owner
     _deny(
         f"[math-solver] {relative} is written by the harness only, which validates"
-        f" what it puts there. Run the command instead of editing the file:\n  {command}"
+        f" what it puts there. Run the command instead of editing the file:\n  {instruction}"
     )
 
 

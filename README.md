@@ -35,6 +35,14 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.49.0](docs/releases/0.49.0.md) waits for a slow local worker or
+math-solver launcher as long as for its run. In the cases it repairs, a launch
+whose worker or launcher ends early or cannot start records the run's outcome
+or ends with an error that names the recovery, instead of a Python traceback.
+The experiment guard denies a write by its target, so reads of workspace state
+pass, and `assess` refuses a passed validity check without validation
+evidence.
+
 Version [0.48.0](docs/releases/0.48.0.md) starts a program admitted with a
 venv's `bin/python3` through that link, so it keeps the venv's packages. It
 refuses, before a run, a figure or other binary output bound to `result` or
@@ -365,11 +373,19 @@ harness command writes its file the moment it accepts, and five hooks hold
 the workspace to the flow and carry it across sessions. Outside an attack
 workspace they do nothing.
 
-- **Harness files.** A Write, an Edit, or a shell write to a file the harness
-  or a hook writes (`journal.jsonl`, `openings.json`, `tasks.json`,
+- **Harness files.** A Write or an Edit to a file that the harness or a hook
+  writes (`journal.jsonl`, `openings.json`, `parent.json`, `tasks.json`,
   `activity.jsonl`, a step's `result.json`, a unit's `check-unit.json`,
-  `units/FINISHED.json`) is denied, and the denial names the command that
-  writes it.
+  `units/FINISHED.json`) is denied. A shell command that writes (a word that
+  begins with `>`, or `tee`, `cp`, `mv`, `rm`, `truncate`, `dd` or `sed -i`) is
+  denied when one of its words names such a file by a path that contains a `/`,
+  resolved from the command's working directory. This check reads words, not
+  write targets: it also denies a writing command that only reads such a file,
+  and it misses a bare file name, a write after a `cd`, `2>`, `&>`, `>|file`
+  without a space, and `dd of=`. In an `attack/<slug>` workspace, the denial names the command that
+  writes the file, or, for `activity.jsonl`, the hook that writes it. In a
+  managed search tree (a workspace whose parent holds `.search/tree.json`), the
+  managed guard denies these writes first, with its own message.
 - **Unit flow.** A write under `units/<n>/` is denied until `stall` wrote the
   inventory, and a `draft.md` or `evaluation.md` is denied until `check-unit`
   stamped the unit as it stands.
