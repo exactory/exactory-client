@@ -280,9 +280,34 @@ def process_observations(state):
 
 def launch(controller, run):
     from .integration import internal_operation
-    directory = materialize(controller, run)
-    process = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--launcher", str(directory)],
-        stdin=subprocess.PIPE, bufsize=0, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    try:
+        directory = materialize(controller, run)
+        process = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--launcher", str(directory)],
+            stdin=subprocess.PIPE, bufsize=0, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    except FileExistsError:
+        # The run directory existed before this launch and can hold another launcher's records, so the launch writes
+        # no record into it.
+        raise
+    except OSError as error:
+        # No launcher process exists, so no command ran. The launch writes the terminal record that a launcher writes
+        # when it receives no token, and reconciliation records the run as never started, without a charge.
+        details = {"reason": str(error)}
+        try:
+            atomic_record(Path(run["snapshot_root"]).parent / "terminal.json", {"token": run["token"], "commands": [],
+                          "started_units": 0, "termination": "never_started", "outputs": []})
+        except OSError:
+            raise SearchError("recovery_required", "The launcher did not start, so no command ran. The run stays reserved "
+                              "because it could not be recorded as never started. After you remove the cause given in the "
+                              "details, search reconcile records it as indeterminate and charges its reserved unit.",
+                              details) from error
+        try:
+            reconcile_runs(controller)
+        except OSError:
+            raise SearchError("recovery_required", "The launcher did not start, so no command ran. Remove the cause given "
+                              "in the details, then run search reconcile to finish recording the run as never started.",
+                              details) from error
+        raise SearchError("recovery_required", "The launcher did not start, so no command ran. The run is recorded as "
+                          "never started. Remove the cause given in the details, then run search next.", details) from error
     refusal = None
     released = False
     try:

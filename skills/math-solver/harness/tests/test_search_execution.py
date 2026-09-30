@@ -372,6 +372,17 @@ class SearchExecutionTests(WorkspaceTest):
         run = self.controller.status()["runs"]["run-000001"]
         self.assertEqual((run["status"], run["termination"], run["charged_units"]), ("terminal", "never_started", 0))
 
+    def test_run_directory_that_already_exists_gets_no_record_from_the_launch(self):
+        spec = self.begin_a_move_for_a_job()
+        # A run directory that existed before the launch, as after a restored store reuses a run ID, can hold another
+        # launcher's records. The launch leaves it unchanged.
+        directory = self.attack_root / ".search" / "runs" / "run-000001"
+        directory.mkdir(parents=True)
+        with self.assertRaises(FileExistsError):
+            invoke(self.controller, "run", spec)
+        self.assertEqual(list(directory.iterdir()), [])
+        self.assertEqual(self.controller.status()["runs"]["run-000001"]["status"], "reserved")
+
     def test_launcher_that_ends_before_its_token_records_its_run_as_indeterminate(self):
         from search_controller import integration
         step = self.workspace / "deterministic" / "job"
