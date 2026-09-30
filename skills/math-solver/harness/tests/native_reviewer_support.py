@@ -76,6 +76,10 @@ def attest_spec(controller, spec):
     import_inputs(controller.root, inputs, content)
     subjects = list(objects(spec))
     review_inputs = list(inputs)
+    if {"proposal_digest", "computation", "review"} <= spec.keys():
+        for node in state["nodes"].values():
+            subjects.append({"node_id": node["id"], "proposal_digest": spec["proposal_digest"],
+                             "computation": spec["computation"]})
     for mapping in spec.get("mappings", []):
         from search_controller.adoption import snapshot_workspace
         snapshot = snapshot_workspace(controller.root, mapping["attack_slug"], mapping["snapshot_paths"], content)

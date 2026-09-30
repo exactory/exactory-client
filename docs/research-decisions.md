@@ -84,6 +84,23 @@ identity, verification status and evidence; a prior finding is input knowledge,
 not a discovery made again by this study. Record a reason and reopening condition
 for an unselected lead.
 
+Each `next_test.prerequisites` entry is an object identifying the necessary
+preparatory work, its completion condition and the transition into the deciding
+test. Use an empty array when no prerequisite is needed. For example:
+
+```json
+{
+  "description": "Calibrate the control measurement.",
+  "end_condition": "The known control is reproduced within the stated tolerance.",
+  "exit_condition": "Run the discriminator after the calibration check passes."
+}
+```
+
+A malformed candidate object produces a structured error with its JSON pointer,
+expected type, received type and missing or unexpected fields. A path such as
+`/candidates/0/next_test/prerequisites/0` identifies the entry to correct; an
+invalid submission records no dossier or selection change.
+
 Two assessors first receive the bar packet: the original intent, field question,
 authorized resources and verified prior context, including held-source identities
 and reading status. Withhold the proposed objective, candidate consequences,

@@ -14,10 +14,19 @@ from .provenance import runtime_provenance
 from .storage import _canonical, _text
 
 
-def fields(value, required, optional=(), *, code="invalid_input"):
+def fields(value, required, optional=(), *, code="invalid_input", path=None):
     if not isinstance(value, dict) or not set(required) <= value.keys() or not value.keys() <= set(required) | set(optional):
+        details = None
+        if path is not None:
+            received = set(value) if isinstance(value, dict) else set()
+            types = {dict: "object", list: "array", str: "string", type(None): "null",
+                     bool: "boolean", int: "number", float: "number"}
+            details = {"path": path, "expected_type": "object",
+                       "received_type": types.get(type(value), type(value).__name__),
+                       "missing_fields": sorted(set(required) - received),
+                       "unexpected_fields": sorted(received - set(required) - set(optional))}
         raise ResearchError(code, "Expected fields: " + ", ".join(sorted(required)) +
-                            ("; optional: " + ", ".join(sorted(optional)) if optional else ""))
+                            ("; optional: " + ", ".join(sorted(optional)) if optional else ""), details)
 
 
 def text(value, name, *, code="invalid_input"):

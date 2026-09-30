@@ -235,47 +235,49 @@ def source_delta(records, dossier):
     return sorted(identifier for identifier in set(current) | set(previous) if current.get(identifier) != previous.get(identifier))
 
 
-def _candidate(records, artifacts, value):
+def _candidate(records, artifacts, value, *, path):
     fields(value, ("id", "question", "target", "scope", "relation", "method", "outcomes", "prior_result", "addition",
-                   "transfer", "adequacy", "assumptions", "resources", "next_test", "evidence"), code="invalid_strategy")
+                   "transfer", "adequacy", "assumptions", "resources", "next_test", "evidence"), code="invalid_strategy", path=path)
     for key in ("id", "question", "target", "scope", "method", "prior_result", "addition"):
         text(value[key], "Candidate " + key, code="invalid_strategy")
     choice(value["relation"], ("full", "partial", "shared_objective"), "Candidate relation")
-    fields(value["outcomes"], ("positive", "negative", "inconclusive"), code="invalid_strategy")
+    fields(value["outcomes"], ("positive", "negative", "inconclusive"), code="invalid_strategy", path=path + "/outcomes")
     for key, consequence in value["outcomes"].items():
         text(consequence, key + " outcome consequence", code="invalid_strategy")
     transfer = value["transfer"]
-    fields(transfer, ("kind", "target_inference", "plan", "evidence"), code="invalid_strategy")
+    fields(transfer, ("kind", "target_inference", "plan", "evidence"), code="invalid_strategy", path=path + "/transfer")
     choice(transfer["kind"], TRANSFER_KINDS, "Transfer relation")
     text(transfer["target_inference"], "Target inference", code="invalid_strategy")
     if transfer["plan"] is not None:
         text(transfer["plan"], "Transfer plan", code="invalid_strategy")
     evidence(records, artifacts, transfer["evidence"], required=False)
-    fields(value["adequacy"], ("distinguishes", "limits", "evidence"), code="invalid_strategy")
+    fields(value["adequacy"], ("distinguishes", "limits", "evidence"), code="invalid_strategy", path=path + "/adequacy")
     strings(value["adequacy"]["distinguishes"], "Decisive alternatives", nonempty=True)
     strings(value["adequacy"]["limits"], "Method adequacy limits")
     evidence(records, artifacts, value["adequacy"]["evidence"])
     assumption_ids = set()
-    for assumption in items(value["assumptions"], "Deciding assumptions"):
-        fields(assumption, ("id", "statement", "check", "scope_boundary"), code="invalid_strategy")
+    for index, assumption in enumerate(items(value["assumptions"], "Deciding assumptions")):
+        fields(assumption, ("id", "statement", "check", "scope_boundary"), code="invalid_strategy",
+               path=path + f"/assumptions/{index}")
         for key in assumption:
             text(assumption[key], "Assumption " + key, code="invalid_strategy")
         if assumption["id"] in assumption_ids:
             raise ResearchError("invalid_strategy", "Assumption identities must be unique")
         assumption_ids.add(assumption["id"])
-    fields(value["resources"], ("estimates", "available"), code="invalid_strategy")
+    fields(value["resources"], ("estimates", "available"), code="invalid_strategy", path=path + "/resources")
     strings(value["resources"]["available"], "Available resources")
-    for estimate in items(value["resources"]["estimates"], "Resource estimates", nonempty=True):
-        fields(estimate, ("unit", "amount", "uncertainty"), code="invalid_strategy")
+    for index, estimate in enumerate(items(value["resources"]["estimates"], "Resource estimates", nonempty=True)):
+        fields(estimate, ("unit", "amount", "uncertainty"), code="invalid_strategy", path=path + f"/resources/estimates/{index}")
         text(estimate["unit"], "Estimated resource unit")
         text(estimate["uncertainty"], "Resource estimate uncertainty")
         number(estimate["amount"], "Estimated resource amount", nullable=True)
     test = value["next_test"]
-    fields(test, ("question", "method", "success", "failure", "prerequisites"), code="invalid_strategy")
+    fields(test, ("question", "method", "success", "failure", "prerequisites"), code="invalid_strategy", path=path + "/next_test")
     for key in ("question", "method", "success", "failure"):
         text(test[key], "Deciding test " + key)
-    for prerequisite in items(test["prerequisites"], "Deciding-test prerequisites"):
-        fields(prerequisite, ("description", "end_condition", "exit_condition"), code="invalid_strategy")
+    for index, prerequisite in enumerate(items(test["prerequisites"], "Deciding-test prerequisites")):
+        fields(prerequisite, ("description", "end_condition", "exit_condition"), code="invalid_strategy",
+               path=path + f"/next_test/prerequisites/{index}")
         for key in prerequisite:
             text(prerequisite[key], "Prerequisite " + key)
     evidence(records, artifacts, value["evidence"])
@@ -292,6 +294,12 @@ def _evidence_identities(value, records):
             if value["record_kind"] == "local_artifact":
                 saved = get_record(records, "local_artifact", value["id"])
                 return _evidence_identities(saved["artifact"], records)
+            if value["record_kind"] == "research_work_item":
+                saved = get_record(records, "research_work_item", value["id"])
+                scientific = {key: item for key, item in saved["payload"].items()
+                              if key not in ("id", "previous", "evidence")}
+                scientific["evidence"] = sorted(_evidence_identities(saved["payload"]["evidence"], records))
+                return {"record:research_work_item:" + digest(scientific)}
             return {digest(value)}
         return set().union(*(_evidence_identities(item, records) for item in value.values()))
     if isinstance(value, list):
@@ -316,6 +324,24 @@ def _reconsidered_consequence(value, records):
     else:
         consequence["transfer"] = transfer
     return consequence
+
+
+def _known_evidence_identities(records, lineage):
+    known = set()
+    for ancestor in lineage.values():
+        payload = ancestor["payload"]
+        known.update(_evidence_identities(payload, records))
+        for identifier in payload.get("work_items", []):
+            saved = get_record(records, "research_work_item", identifier)
+            known.update(_evidence_identities({"kind": "record", "record_kind": "research_work_item",
+                                              "id": identifier, "digest": digest(saved)}, records))
+        for dependency in payload.get("dependencies", []):
+            known.update(_evidence_identities({"kind": "record", "record_kind": dependency["kind"],
+                                              "id": dependency["id"], "digest": dependency["digest"]}, records))
+    for review in records.get("value_review", {}).values():
+        if review["dossier_id"] in lineage:
+            known.update(_evidence_identities(review["payload"], records))
+    return known
 
 
 def validate_material_change(records, artifacts, value, previous, current):
@@ -355,19 +381,13 @@ def validate_material_change(records, artifacts, value, previous, current):
     if value["kind"] == "reconsideration":
         if current["reconsideration"] is None:
             raise ResearchError("strategy_material_change_unsubstantiated", "A reconsideration must retain its original decision, alternatives and unmet consequence")
-        known = set().union(*(_evidence_identities(ancestor["payload"], records) for ancestor in lineage.values()))
-        for review in records.get("value_review", {}).values():
-            if review["dossier_id"] in lineage:
-                known.update(_evidence_identities(review["payload"], records))
+        known = _known_evidence_identities(records, lineage)
         consequence = _reconsidered_consequence(current, records)
         if (consequence is not None and not _evidence_identities(value["evidence"], records) - known
                 and any(_reconsidered_consequence(ancestor["payload"], records) == consequence for ancestor in lineage.values())):
             raise ResearchError("strategy_material_change_unsubstantiated", "Reconsider a distinct candidate consequence or new scientific grounds; unchanged grounds reuse the recorded findings")
     if value["kind"] in ("new_evidence", "new_deduction", "new_comparison"):
-        known = set().union(*(_evidence_identities(ancestor["payload"], records) for ancestor in lineage.values()))
-        for review in records.get("value_review", {}).values():
-            if review["dossier_id"] in lineage:
-                known.update(_evidence_identities(review["payload"], records))
+        known = _known_evidence_identities(records, lineage)
         if not _evidence_identities(value["evidence"], records) - known:
             raise ResearchError("strategy_material_change_unsubstantiated", "A new scientific input needs exact new evidence; changed wording cannot reset the decision")
     dispositions = items(value["prior_objections"], "Prior-objection continuity")
@@ -476,8 +496,8 @@ def record_strategy(store, payload, *, expected_revision, request_id):
             raise ResearchError("invalid_strategy", "An early research decision does not require a manuscript bundle")
         candidates = items(value["candidates"], "Comparative candidate slate", nonempty=True)
         identifiers, signatures = set(), set()
-        for candidate in candidates:
-            _candidate(records, artifacts, candidate)
+        for candidate_index, candidate in enumerate(candidates):
+            _candidate(records, artifacts, candidate, path=f"/candidates/{candidate_index}")
             signature = tuple(normalized_text(candidate[key]) for key in ("question", "target", "scope", "method"))
             if candidate["id"] in identifiers or signature in signatures:
                 raise ResearchError("strategy_alternative_duplicate", "Candidate alternatives must differ in scientific claim or method")

@@ -3980,7 +3980,13 @@
           "method": "Discriminator",
           "success": "Distinct response",
           "failure": "Indistinguishable response",
-          "prerequisites": []
+          "prerequisites": [
+            {
+              "description": "Calibrate the control measurement.",
+              "end_condition": "The known control is reproduced within the stated tolerance.",
+              "exit_condition": "Run the discriminator after the calibration check passes."
+            }
+          ]
         },
         "evidence": [
           {

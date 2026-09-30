@@ -20,10 +20,9 @@ def pin_research(root, candidate, inputs, *, original=None):
     if original is None:
         original = Controller(root).status()["contract"]
     objective = {"kind": "objective", "id": "native-complete-objective", "statement": original["original_claim"]["statement"]}
-    if not (root / ".exactory/research.sqlite3").exists():
+    store = Store(root, create=True)
+    if "research" not in store.snapshot()["records"].get("configuration", {}):
         store = prepare_research(root, objective).store
-    else:
-        store = Store(root)
     delivery = export_native(store, root, root / "research/native-inputs" / uuid.uuid4().hex)
     candidate.update(schema_version=3, computation=candidate.get("computation"), foundation=delivery["foundation"])
     inputs.extend(delivery["inputs"])

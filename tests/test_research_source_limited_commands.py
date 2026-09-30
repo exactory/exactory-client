@@ -96,9 +96,7 @@ class SourceLimitedLifecycleTests(SourceLimitedCase):
     def prepare_publication(self):
         from integration_fixtures import approve_publication_stop, build_manuscript_review
         from research_harness.publication import record_manuscript_review
-        self.prepare_source_limited()
-        self.contract = self.record_scope()
-        self.accept_scope()
+        self.prepare_delivery()
         self.bundle = self.scoped_manuscript()
         for actor in ("manuscript-reviewer-one", "manuscript-reviewer-two"):
             self.mutate(record_manuscript_review, build_manuscript_review(self, self.bundle, actor))
@@ -231,6 +229,7 @@ class SourceLimitedLifecycleTests(SourceLimitedCase):
         def change_target(store, contract_id, target_digest):
             original(store, contract_id, target_digest)
             payload = self.scope_payload("other-target")
+            payload["scientific_delivery"] = self.contract["payload"]["scientific_delivery"]
             payload["supported_claims"][0]["statement"] = "The finite test reports values 0, 1, 4, and 9."
             self.record_scope(payload)
             self.mutate(self.scope_api().record_scoped_readiness_review, self.scope_review("other-review", assessor="other-reviewer"))

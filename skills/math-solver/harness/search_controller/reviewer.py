@@ -308,6 +308,7 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
         if subject is not None:
             s.require(supplied["subject"] == subject, "The exact native subject changed", "review_packet_mismatch")
         if supplied["kind"] == "proposal":
+            s.validate_proposal(supplied["subject"])
             s.require(normalized_text(supplied["subject"]["author"]["actor_id"])
                       != normalized_text(value["reviewer"]["actor_id"]),
                       "The native proposal author cannot supply its independent review", "review_not_independent")
