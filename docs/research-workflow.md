@@ -414,15 +414,16 @@ a new run. `admit` refuses a new admission of the same strategy with
 
 Keep failed and timed-out executions and their usage. `reconcile-run` completes
 interrupted observation using the same admission; unknown released work remains
-pending with its reservation retained. The exception is a run that
+pending with its reservation retained. One exception is a run that
 exactory-client 0.47.0 or earlier claimed whose metric makes the observation
 exceed the store bounds. For such a run, `reconcile-run` fails with
 `invalid_input`, the run has an outcome but no observation, and its strategy
 admits no further run. A retry of `exactory-lab run` with its original request
 ID fails in the same way. [Actual execution](research-cli.md#actual-execution)
-in the CLI reference gives the bounds. A valid negative finding differs from a
-broken implementation, missing output, or unknown execution. An exit code or
-metric alone does not settle validity or the full objective.
+in the CLI reference gives the bounds and a second exception for the seed of a
+run. A valid negative finding differs from a broken implementation, missing
+output, or unknown execution. An exit code or metric alone does not settle
+validity or the full objective.
 
 ## Develop and review the research before writing
 

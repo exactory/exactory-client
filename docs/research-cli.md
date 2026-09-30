@@ -62,6 +62,8 @@ JSON must be UTF-8, an object of the documented shape, and contain neither dupli
 
 The store writes only JSON that every supported Python reads back. The payload, each record that a mutation writes, and its result must hold no integer of more than 4300 digits and must nest at most 100 levels. A mutation outside these bounds fails with `invalid_input` and does not change the revision. The CLI parses the payload file before the store checks it, and a file that the interpreter cannot parse fails with `invalid_json`. For example, an interpreter that limits integer string conversion (`sys.get_int_max_str_digits()`, 4300 digits by default) cannot parse a longer integer. Reads and retries of committed requests do not check these bounds, so a store that an earlier release wrote stays as readable as before.
 
+An earlier release did not check these bounds, so a store that it wrote can hold a value outside them. A new record or result that copies such a value is outside the bounds too, and the store refuses it. [Actual execution](#actual-execution) gives the cases for the seed and the metric of a run.
+
 Some commands write to the store in more than one step. If the store refuses a later step, the earlier steps stay, so the revision changes although the command fails. For example, `reconcile-run` and `exactory-lab run` record the outcome of a run before its observation.
 
 The recurring types are:
@@ -362,6 +364,8 @@ The metric bound does not apply to a run that exactory-client 0.47.0 or earlier 
 - `manuscript`, when the candidate's evidence includes a result of such a run whose metric nests more than 95 levels. The bundle holds the metric five levels deep.
 
 An interpreter without a limit on integer string conversion reads a metric integer of any length. There, an integer of more than 4300 digits makes each of these operations fail the same way. A line or file that the interpreter cannot read, because of its limit on integer string conversion or its recursion limit, gives no metric.
+
+Under an interpreter without a limit on integer string conversion, such as Python 3.9.6, an earlier release accepted a seed of more than 4300 digits. The claim, the outcome and the observation of a run hold its seed. As a result, `exactory-lab run` cannot claim such a run, and `reconcile-run` cannot record one that an earlier release claimed without an outcome. Both fail with `invalid_input`, and the strategy of the run admits no further run (`execution_pending`). A new `reconcile-run` request for such a run that an earlier release observed also fails with `invalid_input`.
 
 For a local run, the launcher starts a worker process after the claim and waits until the worker reports that it is ready. The wait continues while the worker process is alive, for at most the binding's `timeout_seconds` plus 10 seconds. If the worker exits before it is ready, or is not ready in that time, the launch returns `execution_recovery_required` and the program does not run. Record that run with `reconcile-run`, giving `resolution: "interrupted"` and a reason. After the launcher releases its token to a ready worker, it waits for the worker to end for at most the binding's `timeout_seconds` plus 16 seconds. If the worker is still running then, the launch returns `execution_recovery_required` and the worker continues. After the worker ends, `reconcile-run` without a resolution records the run's outcome.
 
