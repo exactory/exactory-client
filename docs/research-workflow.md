@@ -418,8 +418,9 @@ pending with its reservation retained. The exception is a run that
 exactory-client 0.47.0 or earlier claimed whose metric makes the observation
 exceed the store bounds. For such a run, `reconcile-run` fails with
 `invalid_input`, the run has an outcome but no observation, and its strategy
-admits no further run. [Actual execution](research-cli.md#actual-execution) in
-the CLI reference gives the bounds. A valid negative finding differs from a
+admits no further run. A retry of `exactory-lab run` with its original request
+ID fails in the same way. [Actual execution](research-cli.md#actual-execution)
+in the CLI reference gives the bounds. A valid negative finding differs from a
 broken implementation, missing output, or unknown execution. An exit code or
 metric alone does not settle validity or the full objective.
 

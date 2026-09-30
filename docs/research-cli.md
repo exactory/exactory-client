@@ -62,6 +62,8 @@ JSON must be UTF-8, an object of the documented shape, and contain neither dupli
 
 The store writes only JSON that every supported Python reads back. The payload, each record that a mutation writes, and its result must hold no integer of more than 4300 digits and must nest at most 100 levels. A mutation outside these bounds fails with `invalid_input` and does not change the revision. The CLI parses the payload file before the store checks it, and a file that the interpreter cannot parse fails with `invalid_json`. For example, an interpreter that limits integer string conversion (`sys.get_int_max_str_digits()`, 4300 digits by default) cannot parse a longer integer. Reads and retries of committed requests do not check these bounds, so a store that an earlier release wrote stays as readable as before.
 
+Some commands write to the store in more than one step. If the store refuses a later step, the earlier steps stay, so the revision changes although the command fails. For example, `reconcile-run` and `exactory-lab run` record the outcome of a run before its observation.
+
 The recurring types are:
 
 | Type | Exact shape and interpretation |
@@ -355,7 +357,7 @@ Backend, timeout, and seed must match the binding and admission. A null seed nee
 
 The metric bound does not apply to a run that exactory-client 0.47.0 or earlier claimed, so a metric that such a run recorded stays valid. The store bounds in "Inputs and receipts" still apply to each new record and result that holds such a metric. If the interpreter reads the metric, these operations fail with `invalid_input`:
 
-- `reconcile-run` of such a run without an observation, when the metric nests more than 98 levels. The observation holds the metric two levels deep. After the error, the run has an outcome but no observation, so its strategy admits no further run (`execution_usage_reconciliation_required`).
+- `reconcile-run` of such a run without an observation, when the metric nests more than 98 levels. The observation holds the metric two levels deep. A retry of `exactory-lab run` with the original request ID reconciles the run and fails in the same way. The first attempt of either kind records the outcome of the run and changes the revision before it fails. Later attempts change nothing. After the error, the run has an outcome but no observation, so its strategy admits no further run (`execution_usage_reconciliation_required`).
 - A new `reconcile-run` request for such a run that an earlier release observed, when the metric nests more than 99 levels. The result of the request holds the metric one level deep.
 - `manuscript`, when the candidate's evidence includes a result of such a run whose metric nests more than 95 levels. The bundle holds the metric five levels deep.
 
