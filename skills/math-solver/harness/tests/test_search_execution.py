@@ -107,7 +107,8 @@ class SearchExecutionTests(WorkspaceTest):
     def start_launcher_after(self, command):
         """Start the run's launcher through a shell script that runs `command` and then execs the launcher's argv.
 
-        The patch replaces subprocess.Popen and changes only the call that starts the launcher."""
+        The patch replaces subprocess.Popen and changes only the call that starts the launcher. It yields the list of the
+        launchers it started."""
         wrapper = Path(self._tmp.name) / "start-launcher"
         wrapper.write_text('#!/bin/sh\n' + command + '\nexec "$@"\n')
         wrapper.chmod(0o755)
@@ -122,7 +123,7 @@ class SearchExecutionTests(WorkspaceTest):
 
         try:
             with patch.object(subprocess, "Popen", side_effect=start_through_wrapper):
-                yield
+                yield launchers
         finally:
             # A launcher that outlives its test stops before tearDown removes the workspace.
             for launcher in launchers:
@@ -227,20 +228,24 @@ class SearchExecutionTests(WorkspaceTest):
         (step / "job.py").write_text("print('never runs')\n")
         invoke(self.controller, "begin", begin_spec())
         wait = subprocess.Popen.wait
-        expired_waits = []
+        waits = []
 
         def expire_the_first_wait(launcher, timeout=None):
             # The refused launch closes the launcher's input and waits 5 seconds for it to end. The launcher is still in
-            # its delayed start when that wait expires, and it ends within the exit wait that follows.
-            if not expired_waits:
-                expired_waits.append(timeout)
+            # its delayed start when that wait expires. A later wait waits for its real end.
+            waits.append(timeout)
+            if len(waits) == 1:
                 raise subprocess.TimeoutExpired(launcher.args, timeout)
             return wait(launcher)
 
         # The launcher starts after the readiness wait of the run's timeout plus 10 seconds, so the launch is refused.
         with patch.object(subprocess.Popen, "wait", autospec=True, side_effect=expire_the_first_wait), \
-                self.start_launcher_after("sleep 13"), self.assertRaises(SearchError) as caught:
-            invoke(self.controller, "run", command_spec(self.workspace, [sys.executable, "job.py"], 1))
+                self.start_launcher_after("sleep 13") as launchers:
+            with self.assertRaises(SearchError) as caught:
+                invoke(self.controller, "run", command_spec(self.workspace, [sys.executable, "job.py"], 1))
+            # The launch waits once for the launcher to end and reports what that wait observed.
+            self.assertEqual(waits, [5])
+            launchers[0].wait()
         self.assertEqual((caught.exception.code, caught.exception.message),
                          ("recovery_required", "The launcher is still live. Run search reconcile after the launcher ends."))
         run = self.controller.status()["runs"]["run-000001"]
