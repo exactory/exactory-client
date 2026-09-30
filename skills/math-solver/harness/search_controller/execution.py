@@ -282,7 +282,7 @@ def launch(controller, run):
     from .integration import internal_operation
     directory = materialize(controller, run)
     process = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--launcher", str(directory)],
-        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        stdin=subprocess.PIPE, bufsize=0, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     def wait_for_launcher_end():
         # A launcher that is still live after 5 seconds keeps its run for a later search reconcile.
         try:
@@ -329,9 +329,15 @@ def launch(controller, run):
                     move = state["service"]["moves"][run["reservation_id"]]
                     require_producer_context(state, run, move)
                     audit_research_plans(controller, state, move)
-                process.stdin.write((run["token"] + "\n").encode())
-                process.stdin.flush()
-                released = True
+                try:
+                    # The launcher's input is unbuffered (bufsize=0): this one write sends the token, and neither the flush
+                    # nor the close has anything left to send.
+                    process.stdin.write((run["token"] + "\n").encode())
+                    process.stdin.flush()
+                    released = True
+                except BrokenPipeError:
+                    # A launcher that ended before it read its token ran no command, and reconciliation records its run.
+                    pass
         process.stdin.close()
         try:
             process.wait(timeout=launcher_wait_seconds)
