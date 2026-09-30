@@ -199,7 +199,10 @@ def _remove_data_heredoc_bodies(command: str) -> str:
     cannot read the heredocs as the shell does. A body with an unquoted
     delimiter that holds a command substitution is not data.
     """
-    kept, delimiters = [], []
+    # Each pair in pending_heredocs holds the regular-expression source string
+    # of the terminator line of a heredoc whose body starts after the next
+    # unquoted line break, and whether the heredoc's delimiter is quoted.
+    kept, pending_heredocs = [], []
     copied_to = position = 0
     while True:
         token = _HEREDOC_SCAN_RE.search(command, position)
@@ -214,11 +217,11 @@ def _remove_data_heredoc_bodies(command: str) -> str:
                 return command
             leading_tabs_pattern = "\t*" if token.group("strip_tabs") else ""
             terminator_pattern = "^" + leading_tabs_pattern + re.escape(delimiter.group(delimiter.lastgroup)) + "$"
-            delimiters.append((terminator_pattern, delimiter.lastgroup != "bare"))
+            pending_heredocs.append((terminator_pattern, delimiter.lastgroup != "bare"))
             continue
         if token.group("line_break") is None:
             continue
-        for terminator_pattern, is_quoted in delimiters:
+        for terminator_pattern, is_quoted in pending_heredocs:
             terminator = re.compile(terminator_pattern, re.MULTILINE).search(command, position)
             if terminator is None:
                 return command
@@ -231,7 +234,7 @@ def _remove_data_heredoc_bodies(command: str) -> str:
                 kept.append(command[copied_to:position])
                 copied_to = terminator.end() + 1
             position = terminator.end() + 1
-        delimiters = []
+        pending_heredocs = []
     if not kept:
         return command
     outside = "".join(kept) + command[copied_to:]
