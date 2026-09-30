@@ -246,6 +246,34 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assertNotIn("historically-admitted", before["records"]["execution_claim"])
         self.assertFalse((self.root / api._directory("historically-admitted") / "terminal.json").exists())
 
+    def test_retained_terminal_whose_duration_is_beyond_the_float_range_blocks_new_admission(self):
+        # A retained terminal whose duration is an integer beyond the float range (about 1.8e308) has no valid measured
+        # duration. math.isfinite raises OverflowError for it, which escaped as a traceback. Only an outcome recorded
+        # with null usage, as the former producer recorded a failed run, reaches this check with such a terminal.
+        admission = admit_lab(self, body="raise SystemExit(7)\n", usage_unit="wall_seconds", reserved_units=0.01, max_units=1)
+        api = importlib.import_module("research_harness.execution")
+        with mock.patch.object(api, "reconcile_execution", side_effect=OSError("The launcher exited after the run")):
+            with self.assertRaisesRegex(OSError, "The launcher exited after the run"):
+                api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                     request_id="duration-beyond-floats")
+        terminal = self.root / api._directory(admission["id"]) / "terminal.json"
+        terminal.write_text(json.dumps(dict(json.loads(terminal.read_bytes()), duration_s=10 ** 309)))
+        record_execution = api.record_execution
+
+        def record_null_usage(store, payload, **identity):
+            payload["usage"]["units"] = None
+            return record_execution(store, payload, **identity)
+
+        with mock.patch.object(api, "record_execution", side_effect=record_null_usage):
+            api.reconcile_execution(self.store, {"admission_id": admission["id"]}, expected_revision=self.store.revision,
+                                    request_id="reconcile")
+        following = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
+        following["id"] = "following-run"
+        before = self.store.snapshot()
+        self.assert_error("execution_usage_reconciliation_required",
+                          lambda: self.mutate(self.development().admit_execution, following))
+        self.assertEqual(self.store.snapshot(), before)
+
     def test_accounted_wall_outcome_recovers_observation_before_new_permission(self):
         admission = admit_lab(self, body="print('{\"metric\": 7}')\n", usage_unit="wall_seconds",
                               reserved_units=0.01, max_units=1)
@@ -562,6 +590,22 @@ class ResearchExecutionTests(DevelopmentCase):
                                       request_id="thirty-day-run")
         self.assertTrue(result["ok"], result["stderr_tail"])
         self.assertEqual(result["metric"], {"metric": 7})
+
+    def test_bind_run_refuses_an_integer_timeout_beyond_the_float_range(self):
+        # The launcher counts a run's timeout on a float clock. math.isfinite raises OverflowError for an integer beyond
+        # the float range (about 1.8e308), which exactory-research printed as a traceback instead of a JSON error.
+        from research_harness.errors import ResearchError
+        with self.assertRaises(ResearchError) as refused:
+            admit_lab(self, body="print('{\"metric\": 7}')\n", timeout=10 ** 309)
+        self.assertEqual((refused.exception.code, refused.exception.message),
+                         ("invalid_execution", "A finite positive timeout is required"))
+        self.assertNotIn("execution_binding", self.store.snapshot()["records"])
+        # The largest integer that a float holds is still a finite timeout.
+        api = importlib.import_module("research_harness.execution")
+        payload = {"admission_id": "lab-run", "script": "code/program.py", "backend": "local",
+                   "timeout_seconds": int(sys.float_info.max), "inputs": [], "usage_unit": "execution",
+                   "outputs": [{"id": "result", "requirement_id": "measurements", "path": "stdout", "media_type": "text/plain"}]}
+        self.assertEqual(self.mutate(api.bind_execution, payload)["result"]["timeout_seconds"], int(sys.float_info.max))
 
     def test_symlinked_venv_interpreter_runs_the_program_with_its_own_site_packages(self):
         interpreter = make_venv(self)
