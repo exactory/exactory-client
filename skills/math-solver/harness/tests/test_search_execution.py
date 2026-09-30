@@ -1,6 +1,7 @@
 """Metered entry reservations and real bounded process execution."""
 
 import contextlib
+import errno
 import json
 import sys
 import os
@@ -12,6 +13,10 @@ from unittest.mock import patch
 from search_controller.errors import SearchError
 from tests.support import WorkspaceTest, make_move
 from tests.search_execution_support import admit_workspace, begin_spec, invoke, command_spec, review_native_inputs
+
+
+NEVER_STARTED_RUN_RECORDED_ERR_MSG = ("The launcher did not start, so no command ran. The run is recorded as never "
+                                      "started. Remove the cause given in the details, then run search next.")
 
 
 class SearchExecutionTests(WorkspaceTest):
@@ -282,6 +287,87 @@ class SearchExecutionTests(WorkspaceTest):
                           {"refusal": {"code": "recovery_conflict", "message": "Unexpected launcher identity"}}))
         self.assertEqual(self.controller.status()["runs"]["run-000001"]["status"], "reserved")
         # The launcher read the end of its input and recorded that it started no command, and reconciliation records that.
+        invoke(self.controller, "reconcile", {}, None)
+        run = self.controller.status()["runs"]["run-000001"]
+        self.assertEqual((run["status"], run["termination"], run["charged_units"]), ("terminal", "never_started", 0))
+
+    def begin_a_move_for_a_job(self):
+        step = self.workspace / "deterministic" / "job"
+        step.mkdir()
+        (step / "job.py").write_text("print('never runs')\n")
+        invoke(self.controller, "begin", begin_spec())
+        return command_spec(self.workspace, [sys.executable, "job.py"])
+
+    def test_launcher_that_cannot_start_records_its_run_as_never_started(self):
+        spec = self.begin_a_move_for_a_job()
+        # At the limit of the user's processes, fork fails with EAGAIN. The run calls subprocess.Popen only for its launcher.
+        fork_failure = BlockingIOError(errno.EAGAIN, "Resource temporarily unavailable")
+        with patch.object(subprocess, "Popen", side_effect=fork_failure), self.assertRaises(SearchError) as caught:
+            invoke(self.controller, "run", spec)
+        self.assertEqual((caught.exception.code, caught.exception.message, caught.exception.details),
+                         ("recovery_required", NEVER_STARTED_RUN_RECORDED_ERR_MSG, {"reason": str(fork_failure)}))
+        run = self.controller.status()["runs"]["run-000001"]
+        self.assertEqual((run["status"], run["termination"], run["started_units"], run["charged_units"]),
+                         ("terminal", "never_started", 0, 0))
+
+    def test_run_directory_that_cannot_be_written_records_its_run_as_never_started(self):
+        spec = self.begin_a_move_for_a_job()
+        write_bytes = Path.write_bytes
+        # A full disk refuses the copies of the run's inputs with ENOSPC, and the launcher never starts.
+        disk_full = OSError(errno.ENOSPC, "No space left on device")
+
+        def refuse_run_input_copies(path, data):
+            if "/.search/runs/" in str(path):
+                raise disk_full
+            return write_bytes(path, data)
+
+        with patch.object(Path, "write_bytes", autospec=True, side_effect=refuse_run_input_copies), \
+                self.assertRaises(SearchError) as caught:
+            invoke(self.controller, "run", spec)
+        self.assertEqual((caught.exception.code, caught.exception.message, caught.exception.details),
+                         ("recovery_required", NEVER_STARTED_RUN_RECORDED_ERR_MSG, {"reason": str(disk_full)}))
+        run = self.controller.status()["runs"]["run-000001"]
+        self.assertEqual((run["status"], run["termination"], run["started_units"], run["charged_units"]),
+                         ("terminal", "never_started", 0, 0))
+
+    def test_run_that_cannot_be_recorded_as_never_started_stays_reserved(self):
+        spec = self.begin_a_move_for_a_job()
+        path_open = Path.open
+        # A full disk refuses every file written in the run's directory, the record of the never started run included.
+        disk_full = OSError(errno.ENOSPC, "No space left on device")
+
+        def refuse_run_directory_writes(path, mode="r", *args, **kwargs):
+            if "/.search/runs/" in str(path) and set(mode) & set("wxa"):
+                raise disk_full
+            return path_open(path, mode, *args, **kwargs)
+
+        with patch.object(Path, "open", autospec=True, side_effect=refuse_run_directory_writes), \
+                self.assertRaises(SearchError) as caught:
+            invoke(self.controller, "run", spec)
+        self.assertEqual((caught.exception.code, caught.exception.message, caught.exception.details),
+                         ("recovery_required", "The launcher did not start, so no command ran. The run stays reserved because "
+                          "it could not be recorded as never started. After you remove the cause given in the details, search "
+                          "reconcile records it as indeterminate and charges its reserved unit.", {"reason": str(disk_full)}))
+        self.assertEqual(self.controller.status()["runs"]["run-000001"]["status"], "reserved")
+        # As the message states, reconciliation cannot tell that no command ran.
+        invoke(self.controller, "reconcile", {}, None)
+        run = self.controller.status()["runs"]["run-000001"]
+        self.assertEqual((run["status"], run["termination"], run["charged_units"]), ("indeterminate", "indeterminate", 1))
+
+    def test_run_whose_record_cannot_be_reconciled_is_left_to_search_reconcile(self):
+        from search_controller import execution
+        spec = self.begin_a_move_for_a_job()
+        fork_failure = BlockingIOError(errno.EAGAIN, "Resource temporarily unavailable")
+        # The record of the never started run is written, and then the disk fills before reconciliation records it.
+        with patch.object(subprocess, "Popen", side_effect=fork_failure), \
+                patch.object(execution, "reconcile_runs", side_effect=OSError(errno.ENOSPC, "No space left on device")), \
+                self.assertRaises(SearchError) as caught:
+            invoke(self.controller, "run", spec)
+        self.assertEqual((caught.exception.code, caught.exception.message, caught.exception.details),
+                         ("recovery_required", "The launcher did not start, so no command ran. Remove the cause given in the "
+                          "details, then run search reconcile to finish recording the run as never started.",
+                          {"reason": str(fork_failure)}))
+        self.assertEqual(self.controller.status()["runs"]["run-000001"]["status"], "reserved")
         invoke(self.controller, "reconcile", {}, None)
         run = self.controller.status()["runs"]["run-000001"]
         self.assertEqual((run["status"], run["termination"], run["charged_units"]), ("terminal", "never_started", 0))
