@@ -6,15 +6,14 @@ from pathlib import Path
 
 from .artifacts import _regular_file
 from .errors import ResearchError
+from .storage import _MAX_STORED_INTEGER
 from .workspace import checked_parent, read_file, strict_json
 
 
-# A metric is copied into the run's records, which every supported Python must read back. Python 3.9.6
-# writes an integer of any length, but Python 3.11 and later refuse to parse one of more than 4300 digits
-# (sys.int_info.default_max_str_digits). A scientific delivery walks at most 40 levels, and a round packet
-# holds the metric 7 levels deep.
+# A metric is copied into the run's records, which every supported Python must read back, so it holds no
+# integer that the store refuses. A scientific delivery walks at most 40 levels, and a round packet holds
+# the metric 7 levels deep.
 _METRIC_MAX_DEPTH = 32
-_METRIC_MAX_INTEGER = 10 ** 4300 - 1
 
 
 def output_path(path):
@@ -107,7 +106,7 @@ def _read_metric(data, *, is_bounded):
             if depth > _METRIC_MAX_DEPTH:
                 return None
             pending.extend((child, depth + 1) for child in (item.values() if isinstance(item, dict) else item))
-        elif type(item) is int and abs(item) > _METRIC_MAX_INTEGER:
+        elif type(item) is int and abs(item) > _MAX_STORED_INTEGER:
             return None
     return value
 

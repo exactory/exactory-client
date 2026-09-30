@@ -32,6 +32,15 @@ _SCHEMA_VERSION = 1
 _BUSY_TIMEOUT_SECONDS = 1.0
 _DATABASE = "research.sqlite3"
 _MAX_REVISION = (1 << 63) - 1
+# Every supported Python (3.9 to 3.14) must read back what the store writes. Only writes check these bounds,
+# so a store that an earlier release wrote reads as before. Python 3.9.6 converts an integer of any length,
+# and Python 3.11 and later refuse to parse one of more than 4300 digits (sys.int_info.default_max_str_digits).
+# The default recursion limit of 1000 frames bounds the nesting that a read handles. Measured on 2026-09-30 at
+# the top level of a script under Python 3.9.6, 3.11.11, 3.12.8 and 3.13.8: _load reads back 990 to 993 levels,
+# Store.snapshot a record value of 982 to 985 levels, and Store.guarded_snapshot, whose copy.deepcopy takes
+# two frames for each level, a record value of 492 levels. The depth bound keeps a wide margin below 492.
+_MAX_STORED_INTEGER = 10 ** 4300 - 1
+_MAX_STORED_DEPTH = 100
 _PUBLICATION_NAME = re.compile(r"\.research-[0-9a-f]{32}\.sqlite3\Z")
 _WORKSPACE_LOCKS = weakref.WeakValueDictionary()
 _LOCK_REGISTRY_GUARD = threading.Lock()
@@ -83,6 +92,21 @@ def _json_types(value):
             _json_types(item)
         return
     raise ValueError("Value is not representable in JSON")
+
+
+def _check_stored_bounds(value):
+    """Refuse a value to store that some supported Python cannot read back."""
+    pending = [(value, 1)]
+    while pending:
+        item, depth = pending.pop()
+        if isinstance(item, (dict, list, tuple)):
+            if depth > _MAX_STORED_DEPTH:
+                raise ResearchError("invalid_input", "JSON to store must nest at most " + str(_MAX_STORED_DEPTH)
+                                    + " levels so that every supported Python reads it back")
+            pending.extend((child, depth + 1) for child in (item.values() if isinstance(item, dict) else item))
+        elif type(item) is int and abs(item) > _MAX_STORED_INTEGER:
+            raise ResearchError("invalid_input", "JSON to store must hold no integer of more than 4300 digits "
+                                "so that every supported Python reads it back")
 
 
 def _canonical(value, code: str = "invalid_input") -> str:
@@ -255,6 +279,7 @@ class Transaction:
         _text(key, "Record key")
         if not isinstance(value, dict):
             raise ResearchError("invalid_input", "Record value must be a JSON object")
+        _check_stored_bounds(value)
         encoded = _canonical(value)
         self._connection.execute("INSERT OR REPLACE INTO records (kind, key, value, digest) VALUES (?, ?, ?, ?)",
                                  (kind, key, encoded, _digest(encoded)))
@@ -485,13 +510,18 @@ class Store:
             if revision != expected_revision:
                 raise ResearchError("stale_revision", "Research state changed; read the current revision before a new mutation",
                                     {"expected_revision": expected_revision, "revision": revision})
+            # A committed request returns above without this check, so a retry of a request that an earlier
+            # release stored beyond the bounds still gets its original receipt.
+            _check_stored_bounds(payload)
             transaction = Transaction(connection)
             try:
-                result = _canonical(apply(transaction))
+                result = apply(transaction)
+                _check_stored_bounds(result)
+                encoded_result = _canonical(result)
             finally:
                 transaction._active = False
             next_revision = revision + 1
-            response = {"revision": next_revision, "request_id": request_id, "result": json.loads(result)}
+            response = {"revision": next_revision, "request_id": request_id, "result": json.loads(encoded_result)}
             event = {"revision": next_revision, "request_id": request_id, "operation": operation,
                      "payload": json.loads(encoded_payload), "changes": transaction._changes,
                      "result": response["result"]}
@@ -499,7 +529,7 @@ class Store:
                 "INSERT INTO events (revision, request_id, operation, payload, changes, result, digest) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (next_revision, request_id, operation, encoded_payload, _canonical(transaction._changes),
-                 result, _digest(_canonical(event))))
+                 encoded_result, _digest(_canonical(event))))
             encoded_response = _canonical(response)
             connection.execute("INSERT INTO receipts (request_id, revision, response, digest) VALUES (?, ?, ?, ?)",
                                (request_id, next_revision, encoded_response, _digest(encoded_response)))
