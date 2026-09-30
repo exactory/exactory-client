@@ -35,6 +35,13 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.49.0](docs/releases/0.49.0.md) waits for a slow local worker or
+math-solver launcher as long as for its run, and ends each launch failure it
+repairs with an error that names the recovery instead of a traceback. The
+experiment guard denies a write by its target, so reads of workspace state
+pass, and `assess` refuses a passed validity check without validation
+evidence.
+
 Version [0.48.0](docs/releases/0.48.0.md) starts a program admitted with a
 venv's `bin/python3` through that link, so it keeps the venv's packages. It
 refuses, before a run, a figure or other binary output bound to `result` or
