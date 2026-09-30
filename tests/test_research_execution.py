@@ -1,5 +1,6 @@
 """Real pinned launches, one-time claims, timeout and interrupted-owner recovery."""
 
+import errno
 import hashlib
 import importlib
 import json
@@ -533,6 +534,53 @@ class ResearchExecutionTests(DevelopmentCase):
         records = self.store.snapshot()["records"]
         execution_id = records["execution_outcome"][admission["id"]]["execution_id"]
         self.assertEqual(records["execution"][execution_id]["payload"]["status"], "interrupted")
+
+    def assert_unstarted_worker_leaves_the_claimed_run_to_reconcile(self, api, admission, refusal, error_number):
+        """The launch that ended with `refusal` keeps its claim without an outcome, and reconcile-run records it."""
+        self.assertEqual(refusal.as_dict(), {"code": "execution_recovery_required", "message":
+            "The worker process did not start. Use exactory-research reconcile-run to record the claimed run as "
+            "interrupted, with a reason.", "details": {"errno": error_number}})
+        records = self.store.snapshot()["records"]
+        self.assertIn(admission["id"], records["execution_claim"])
+        self.assertNotIn("execution_outcome", records)
+        # The documented recovery records the claimed run as interrupted.
+        result = api.reconcile_execution(self.store, {"admission_id": admission["id"], "resolution": "interrupted",
+            "reason": "The worker process did not start."}, expected_revision=self.store.revision,
+            request_id="recover-unstarted-worker")
+        self.assertFalse(result["ok"])
+        records = self.store.snapshot()["records"]
+        execution_id = records["execution_outcome"][admission["id"]]["execution_id"]
+        self.assertEqual(records["execution"][execution_id]["payload"]["status"], "interrupted")
+
+    def test_worker_that_cannot_start_leaves_the_claimed_run_to_reconcile(self):
+        from research_harness.errors import ResearchError
+        admission = admit_lab(self, body="raise RuntimeError('must never launch')\n")
+        api = importlib.import_module("research_harness.execution")
+        # At the limit of the user's processes, fork fails with EAGAIN.
+        fork_failure = BlockingIOError(errno.EAGAIN, "Resource temporarily unavailable")
+        with mock.patch.object(subprocess, "Popen", side_effect=fork_failure), \
+                self.assertRaises(ResearchError) as raised:
+            api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                 request_id="worker-cannot-start")
+        self.assert_unstarted_worker_leaves_the_claimed_run_to_reconcile(api, admission, raised.exception, errno.EAGAIN)
+
+    def test_worker_log_that_cannot_open_leaves_the_claimed_run_to_reconcile(self):
+        from research_harness.errors import ResearchError
+        admission = admit_lab(self, body="raise RuntimeError('must never launch')\n")
+        api = importlib.import_module("research_harness.execution")
+        path_open = Path.open
+
+        def refuse_the_worker_log(path, *args, **kwargs):
+            # At the limit of the process's open files, open fails with EMFILE.
+            if path.name == "launcher.log":
+                raise OSError(errno.EMFILE, "Too many open files")
+            return path_open(path, *args, **kwargs)
+
+        with mock.patch.object(Path, "open", autospec=True, side_effect=refuse_the_worker_log), \
+                self.assertRaises(ResearchError) as raised:
+            api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                 request_id="worker-log-cannot-open")
+        self.assert_unstarted_worker_leaves_the_claimed_run_to_reconcile(api, admission, raised.exception, errno.EMFILE)
 
     def test_run_timeout_shorter_than_the_worker_start_still_gives_an_observed_run(self):
         admission = admit_lab(self, body="import time\ntime.sleep(30)\n", timeout=0.15)
