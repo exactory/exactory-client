@@ -359,10 +359,11 @@ harness command writes its file the moment it accepts, and five hooks hold
 the workspace to the flow and carry it across sessions. Outside an attack
 workspace they do nothing.
 
-- **Harness files.** A Write, an Edit, or a shell write to a file the harness
-  or a hook writes (`journal.jsonl`, `openings.json`, `tasks.json`,
-  `activity.jsonl`, a step's `result.json`, a unit's `check-unit.json`,
-  `units/FINISHED.json`) is denied, and the denial names the command that
+- **Harness files.** A Write, an Edit, or a shell write to a file that the
+  harness or a hook writes (`journal.jsonl`, `openings.json`, `parent.json`,
+  `tasks.json`, `activity.jsonl`, a step's `result.json`, a unit's
+  `check-unit.json`, `units/FINISHED.json`) is denied. The denial names the
+  command that writes the file, or, for `activity.jsonl`, the hook that
   writes it.
 - **Unit flow.** A write under `units/<n>/` is denied until `stall` wrote the
   inventory, and a `draft.md` or `evaluation.md` is denied until `check-unit`
