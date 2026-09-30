@@ -21,7 +21,8 @@ import sys
 from pathlib import Path
 from math_search import guard, normalize, workspace_for
 
-# The path within the workspace, and the harness command that writes it.
+# Each pair holds a compiled pattern of a path within the workspace and the
+# harness command that writes the file at that path.
 _OWNED_FILES = (
     (re.compile(r"^journal\.jsonl$"), "exactory-math journal add <slug> --json '<move>'"),
     (re.compile(r"^openings\.json$"), "exactory-math plan <slug>"),
@@ -65,8 +66,8 @@ def _find_owner(path: Path) -> tuple[str, str] | None:
     if workspace is None:
         return None
     relative = path.relative_to(workspace).as_posix()
-    for pattern, command in _OWNED_FILES:
-        if pattern.match(relative):
+    for path_re, command in _OWNED_FILES:
+        if path_re.match(relative):
             return relative, command.replace("<slug>", workspace.name)
     return None
 

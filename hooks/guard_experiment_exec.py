@@ -139,7 +139,9 @@ _TEE_OPERANDS_RE = re.compile(
     + _REDIRECTION_OR_PROCESS_SUBSTITUTION_PATTERN + r")|[ \t]+" + _SHELL_WORD_PATTERN + r")*(?:[ \t]*[<>]?\([^\n]*)?)",
     re.IGNORECASE)
 
-# (compiled pattern, reason). First match denies. IGNORECASE throughout.
+# Each pair holds a regular-expression source string and the reason that a
+# denial states. _COMPILED_DENY_RULES compiles each source string with
+# IGNORECASE, and the first rule that matches the command denies it.
 _DENY_RULES = [
     (r"\bsudo\b|\bdoas\b|\bsu\s+-", "privilege escalation is not allowed in experiments"),
     (r":\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:", "fork bomb"),
@@ -163,8 +165,8 @@ _DENY_RULES = [
      "modifying Claude Code config or hooks"),
     (r"\bchmod\s+-R?\s*0?777\b", "world-writable chmod 777"),
 ]
-_COMPILED_DENY_RULES = [(re.compile(pattern, re.IGNORECASE), reason)
-                        for pattern, reason in _DENY_RULES]
+_COMPILED_DENY_RULES = [(re.compile(rule_pattern, re.IGNORECASE), reason)
+                        for rule_pattern, reason in _DENY_RULES]
 
 
 def _deny(reason: str) -> None:
@@ -211,13 +213,13 @@ def _remove_data_heredoc_bodies(command: str) -> str:
             if delimiter is None:
                 return command
             leading_tabs_pattern = "\t*" if token.group("strip_tabs") else ""
-            pattern = "^" + leading_tabs_pattern + re.escape(delimiter.group(delimiter.lastgroup)) + "$"
-            delimiters.append((pattern, delimiter.lastgroup != "bare"))
+            terminator_pattern = "^" + leading_tabs_pattern + re.escape(delimiter.group(delimiter.lastgroup)) + "$"
+            delimiters.append((terminator_pattern, delimiter.lastgroup != "bare"))
             continue
         if token.group("line_break") is None:
             continue
-        for pattern, is_quoted in delimiters:
-            terminator = re.compile(pattern, re.MULTILINE).search(command, position)
+        for terminator_pattern, is_quoted in delimiters:
+            terminator = re.compile(terminator_pattern, re.MULTILINE).search(command, position)
             if terminator is None:
                 return command
             body = command[position:terminator.start()]
@@ -261,8 +263,8 @@ def main() -> None:
     if not _is_inside_study_workspace(Path(payload.get("cwd") or ".").resolve()):
         sys.exit(0)
     command = _remove_data_heredoc_bodies(command)
-    for pattern, reason in _COMPILED_DENY_RULES:
-        if pattern.search(command):
+    for rule_re, reason in _COMPILED_DENY_RULES:
+        if rule_re.search(command):
             _deny(reason)
     if _has_workspace_state_write(command):
         _deny("writing a workspace state file through the shell")
