@@ -346,8 +346,9 @@ class SearchExecutionTests(WorkspaceTest):
             invoke(self.controller, "run", spec)
         self.assertEqual((caught.exception.code, caught.exception.message, caught.exception.details),
                          ("recovery_required", "The launcher did not start, so no command ran. The run stays reserved because "
-                          "it could not be recorded as never started. After you remove the cause given in the details, search "
-                          "reconcile records it as indeterminate and charges its reserved unit.",
+                          "writing its never-started record failed. Remove the causes given in the details, then run search "
+                          "reconcile. It records the run as never started if that record exists, and otherwise as indeterminate "
+                          "with its reserved units charged.",
                           {"start_error": str(disk_full_error), "record_error": str(disk_full_error)}))
         self.assertEqual(self.controller.status()["runs"]["run-000001"]["status"], "reserved")
         # As the message states, reconciliation cannot tell that no command ran.
@@ -366,8 +367,8 @@ class SearchExecutionTests(WorkspaceTest):
                 self.assertRaises(SearchError) as caught:
             invoke(self.controller, "run", spec)
         self.assertEqual((caught.exception.code, caught.exception.message, caught.exception.details),
-                         ("recovery_required", "The launcher did not start, so no command ran. Remove the cause given in the "
-                          "details, then run search reconcile to finish recording the run as never started.",
+                         ("recovery_required", "The launcher did not start, so no command ran, and the reconciliation of its "
+                          "never-started run did not complete. Remove the causes given in the details, then run search reconcile.",
                           {"start_error": str(fork_error), "reconcile_error": str(disk_full_error)}))
         self.assertEqual(self.controller.status()["runs"]["run-000001"]["status"], "reserved")
         invoke(self.controller, "reconcile", {}, None)
