@@ -35,6 +35,12 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.48.0](docs/releases/0.48.0.md) starts a program admitted with a
+venv's `bin/python3` through that link, so it keeps the venv's packages. It
+refuses, before a run, a figure or other binary output bound to `result` or
+`validation` evidence, and it can take a run's metric from the declared JSON
+validation output.
+
 Version [0.47.0](docs/releases/0.47.0.md) lets the user change the fixed
 objective of a research study. `target` accepts the change only with a pinned
 `context/` file that holds the user's instruction; the earlier objective stays
