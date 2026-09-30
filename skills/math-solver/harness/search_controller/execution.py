@@ -319,9 +319,10 @@ def launch(controller, run):
         try:
             process.wait(timeout=5)
         except subprocess.TimeoutExpired as error:
+            details = None if refusal_error is None else {"refusal": {
+                "code": refusal_error.code, "message": refusal_error.message, "details": refusal_error.details}}
             raise SearchError("recovery_required", "The launcher is still live. Run search reconcile after the launcher ends.",
-                              None if refusal_error is None else {"refusal": {"code": refusal_error.code,
-                              "message": refusal_error.message, "details": refusal_error.details}}) from error
+                              details) from error
     is_token_released = False
     try:
         # A loaded machine starts the launcher slowly. While the launcher is alive, the launch waits for it to become
