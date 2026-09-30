@@ -320,8 +320,8 @@ def launch(controller, run):
             process.wait(timeout=5)
         except subprocess.TimeoutExpired as error:
             raise SearchError("recovery_required", "The launcher is still live. Run search reconcile after the launcher ends.",
-                              None if refusal_error is None else
-                              {"refusal": {"code": refusal_error.code, "message": refusal_error.message}}) from error
+                              None if refusal_error is None else {"refusal": {"code": refusal_error.code,
+                              "message": refusal_error.message, "details": refusal_error.details}}) from error
     released = False
     try:
         # A loaded machine starts the launcher slowly. While the launcher is alive, the launch waits for it to become
