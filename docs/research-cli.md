@@ -37,6 +37,86 @@ an optional `--decision-id`. `strategy-packet --dossier-id ID --role ROLE
 uses `--context-file`. `review-route-assess --route-id ID` reports the current
 route test. These reports do not mutate the workspace.
 
+An initial `bar` assignment can supply `context.source_links`, using the exact
+source Link shape in `example read`. These links select previously inspected
+passages with `text`, `span` or `json` locators for the assessor's initial context.
+Request visual originals through `source_requests`; receipt is not proof of
+visual inspection. The complete held-source inventory
+is bound separately and available through paged requests; metadata alone does
+not establish source delivery or reading. Replace every placeholder in
+`example review-assignment` with an actual saved source and locator.
+
+A `bar`, `slate` or `result` response can include `source_requests` for an `inventory_page`, an
+`inventory_query`, or an exact `source`. The [reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement)
+gives the request fields and unresolved-source rules. Read and retain the observed
+output artifact returned by `review-run`, then continue its pending request with
+a new assignment with the same role, dossier, route and reviewer:
+
+```json
+{
+  "id": "assignment-bar-a-source-1",
+  "route_id": "review-route-1",
+  "dossier_id": "dossier-1",
+  "role": "bar",
+  "reviewer_id": "reviewer-a",
+  "author_id": "author",
+  "context": {"prior_assignment_id": "assignment-bar-a"}
+}
+```
+
+Invoke the new assignment with `review-run`. The harness supplies the requested
+native evidence and preserves that assessor's own history. Keep all ancestor
+source gaps and charge the continuation to the same allowance. A request response
+remains unresolved and cannot be recorded with `value-review`; a final phase
+assessment cannot use this interface to obtain a replacement answer.
+
+After recorded context contamination, first record every actual observed final
+assessment in the inherited history with `value-review`, retaining the exact
+response, adverse findings and assignment. If repair returns
+`review_context_repair_history_unrecorded`, record the identified final before
+retrying at the current revision. This preserves scientific history without
+granting current independent approval. Corrupt or malformed raw outputs remain
+explicit unresolved evidence. Pending source-request turns need no final record;
+all their actual requests must remain pending through repair.
+
+Repair and probe the actual context route, then create a strategic
+`review-assignment` using this context, with actual saved IDs and the exact event
+evidence:
+
+```json
+{
+  "context_repair": {
+    "assignment_id": "affected-assignment",
+    "event_ids": ["recorded-exposure"],
+    "probe_id": "verified-probe-after-repair",
+    "reason": "The actual context route was repaired and tested.",
+    "evidence": [{
+      "path": "research/sources/objects/REPLACE_WITH_ACTUAL_DIGEST",
+      "sha256": "REPLACE_WITH_ACTUAL_DIGEST",
+      "size": 123,
+      "media_type": "text/plain"
+    }]
+  }
+}
+```
+
+This retains the original reviewer slot, scientific findings and objections.
+Previously delivered figures and PDFs return as actual attachments, and supplied
+excerpts retain their original bounds.
+Run its new assignment normally, then record the unchanged observed response,
+including the required `reassessment` findings described in the
+[repair contract](research-decisions.md#reviewer-delivery-and-disagreement).
+Later exposure may invalidate its current approval while its exact original
+prospective provenance still permits historical recording. Bind a successor
+repair to all current events before using the finding as independent approval.
+
+An ordinary third assignment cannot replace a completed adverse review. A
+replacement for a failed initial assignment inherits its native fixed slot;
+replacing a failed repair still requires explicit repair. Superseded assignments
+cannot be retried or used for current approval. A decision requires two distinct
+logical slots and reviewers; recording or repairing a final does not authorize
+resampling it.
+
 A managed `target` adds optional `decision_id` and `source_impact` to its existing
 payload. A managed `cycle` identifies `decision_id` and `candidate_id`; its actual
 test and resource limits must fit the approved tranche. Admission charges that

@@ -66,6 +66,14 @@ authority. The prospective `strategy` uses a proposed-content binding before a
 native target exists. The independently assessed bar and slate decision precede
 exact target commitment; current preparation and cycle admission still follow.
 
+Inspect the observed output artifact from each `bar`, `slate` or `result`
+`review-run` for `source_requests` before recording a final `value-review` or
+support finding. Follow the [reviewer delivery contract](../../docs/research-decisions.md#reviewer-delivery-and-disagreement)
+for native continuations in the same reviewer slot. Acquire unavailable exact
+sources through the ordinary source pipeline; retain pending or unaffordable
+requests and actual costs. The inventory grants no reading credit. Do not release
+the slate until both final independent bars are recorded.
+
 Run `exactory-lab keys` and announce which credential-dependent stages are
 available without exposing values. Acquisition, analysis, and local writing can
 use public sources without market credentials. Their completion still depends

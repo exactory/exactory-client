@@ -33,6 +33,14 @@ approach-adequacy findings under the verified reviewer protocol. Author advocacy
 does not establish the bar. A strategic approval neither completes preparation
 nor admits execution.
 
+After each bar or slate `review-run`, inspect the observed output artifact for
+`source_requests`. Use the
+[native source-request continuation](../../docs/research-decisions.md#reviewer-delivery-and-disagreement)
+in the same reviewer slot and supply unavailable exact sources through ordinary
+acquisition. Inventory entries are metadata, not source reading. Keep unresolved
+and unaffordable requests with their costs; do not record a request response as
+a final `value-review` or release the slate before both final bars exist.
+
 Inspect verification findings, failed checks, reviewer findings and unexpected
 observations for research leads. Preserve each lead's original identity, source,
 verification status and relation to the question; do not claim inherited knowledge

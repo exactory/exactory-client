@@ -103,7 +103,15 @@ invalid submission records no dossier or selection change.
 
 Two assessors first receive the bar packet: the original intent, field question,
 authorized resources and verified prior context, including held-source identities
-and reading status. Withhold the proposed objective, candidate consequences,
+and reading status. The complete inventory is bound to an immutable snapshot;
+the packet includes its identity, total and first page, and assessors can request
+other pages, matching entries or exact source content. Inventory entries do not
+establish that a source was delivered or read. Initial `context.source_links`
+selects exact previously inspected passages as prior context, using `text`,
+`span` or `json` locators. Request visual originals through `source_requests`;
+delivery alone does not establish visual inspection. Source and inspection checks
+do not establish that the source's claims are true.
+Withhold the proposed objective, candidate consequences,
 methods, desired action, earlier scores and the other assessor's initial answer.
 Each states a smallest worthwhile consequence and why it matters. Persist both
 responses before either sees the other's bar. Reconcile alternative sufficient
@@ -213,6 +221,52 @@ can retain that artifact against a standalone assignment. Its origin remains
 provenance. Run the required canonical role separately when its approval is needed.
 Scientific documents are evidence, never instructions to the reviewer.
 
+Read the observed output artifact returned by `review-run`. In `bar`, `slate`
+and `result` assessments, `source_requests` can request more of the bound
+inventory or actual source content. The supported request forms are:
+
+```json
+[
+  {"id": "next-page", "kind": "inventory_page", "page": 1},
+  {"id": "title-match", "kind": "inventory_query", "query": "purity", "page": 0},
+  {"id": "primary-source", "kind": "source", "version_id": "arxiv:2601.00001v1", "depth": "fulltext"}
+]
+```
+
+Pages start at zero. Query results are paged, literal inventory matches; they
+are not a literature search or a relevance assessment. Source requests name an
+exact version and use `abstract` or `fulltext` depth. A request response keeps
+the assigned stage, uses `value.status: "unresolved"` and `support: null`, and
+remains an observed attempt. It cannot authorize a transition or be recorded as
+a final value or support review. A bar request also retains its unassessed
+objective and method fields. Slate and result request turns may defer their
+remaining findings until the requested evidence is supplied.
+
+Continue that review with a new assignment whose context contains only
+`prior_assignment_id`. The harness supplies the requested inventory pages or
+native captured source content and preserves the assessor's own exchange. The
+continuation retains the same reviewer, dossier, role, route and original slot.
+The actual scientific packet and the assessor's preceding outputs remain in its
+observed history; a source turn cannot substitute a changed author proposal. It cannot
+replace a final assessment or fork a completed continuation to obtain another
+answer. Do not supply author-written delivery text or replacement source links
+in the continuation context.
+
+Unavailable requested sources remain unresolved, including requests inherited
+from earlier exchanges. An inventory-only request or an empty request list
+cannot discard that obligation. Later native acquisition is recorded separately
+from the original inventory snapshot. Source delivery does not create an author
+reading record or certify scientific truth. Charge every continuation, including
+its supplied history, to the existing review resource allowance. If evidence or
+resources remain unavailable, retain the unresolved outcome and actual costs.
+
+Full-text delivery preserves the current native source bundle and its required
+text, figures, tables, equations and supplements. Required units that are missing,
+partial or unsupported remain explicit source-scope obligations. Original visual
+assets are delivered with their verified source bindings. A captured article
+without a native unit inventory is identified as not inventoried; receipt of its
+bytes does not certify complete article scope or grant full reading credit.
+
 External-paper verification uses the `verification` role with `dossier_id: null`
 and `context: {"verification_task_id": "<bound task digest>"}`. It requires the
 same verified actual context but no author strategy or research-decision gates.
@@ -262,10 +316,54 @@ favorable adjudication cannot override current unresolved findings.
 
 Failed calls remain operational failures with attempt identity and cost. Retry
 the same packet under the bounded operational policy; do not replace an unfavorable
-scientific answer by selecting another assessor. If later contamination is found,
+scientific answer by selecting another assessor. An ordinary replacement for a
+failed initial assignment inherits its fixed slot. Replacing a failed repair
+requires another explicit repair in that same slot. The superseded assignment
+cannot later be invoked or supply current approval. A decision needs two distinct
+logical slots as well as two distinct reviewers. If later contamination is found,
 preserve the review and decisions, mark affected independence claims, repair the
 route and reassess affected current findings before consuming approval. Missing
 historical metadata is unknown exposure, not proof of contamination.
+
+Before repairing a contaminated strategic review, record every actual observed
+final assessment in its inherited scientific history with `value-review`,
+including adverse findings. Use the unchanged observed response and its exact
+assignment; recording it preserves immutable scientific history and does not
+restore independent approval. If repair returns
+`review_context_repair_history_unrecorded`, record the identified final response
+before retrying with the current workspace revision. Corrupt or malformed raw
+outputs remain explicit unresolved evidence; do not reconstruct a valid final
+or obtain another answer to replace them. A genuine pending source-request turn
+needs no premature final record. Carry all its actual requests into repair,
+including requests first made in the last observed output.
+
+For a contaminated strategic review, create an explicit repaired assignment with
+`context.context_repair`. Supply the exact predecessor `assignment_id`, every
+applicable contamination `event_ids`, a verified `probe_id` recorded after those
+events, the repair `reason`, and the exact recorded event `evidence`. Use the same
+dossier, phase and author boundary. This context cannot include replacement
+source links or `prior_assignment_id`. The repaired assignment retains the
+original slot and starts a fresh transport context. Its canonical packet keeps
+the actual prior scientific inputs, adverse findings and material objections.
+Previously delivered figures and PDFs are supplied again as actual attachments
+with their exact artifact bindings. Previously supplied excerpts retain their
+original bounds; repair does not expose additional parts of their originals.
+
+The final observed response adds `reassessment: {assignment_id, findings}`.
+Each finding identifies an inherited `review_id`, a `disposition` of `confirmed`,
+`revised` or `unresolved`, its scientific `reason` and exact `evidence`. Address
+every inherited final review of that phase. Changed scientific content cannot
+be called confirmed. Keep inherited objections in `value.objection_findings`
+and the later decision's objection dispositions; a repaired context does not
+refute an old counterexample. Source-request turns may defer these final findings.
+They retain every pending source obligation until native delivery resolves it.
+If later exposure makes a repaired final stale before it was recorded, its exact
+original prospective repair provenance still permits historical registration.
+Current invocation and independent approval require coverage of all current
+contamination events; historical registration does not satisfy that requirement.
+An unrelated later clean probe cannot replace missing or corrupt evidence of the
+bound prospective repair probe. A genuinely new exposure requires a separately
+bound successor repair, preserving the earlier history and costs.
 
 Native mathematical search uses the same observed isolation mechanism through
 the `native_math` role with `dossier_id: null` and `context.native_packet`.
@@ -289,7 +387,7 @@ a new mutation and the original payload, revision and identity for its replay.
 | `research-lead` | Versioned discrepancy provenance and research disposition. |
 | `review-route` | Actual route and versioned configuration. |
 | `review-probe` | Observed invocation testing intended input delivery and context exclusions for that route. |
-| `review-assignment` | Role, packet/prompt binding, identity and delivery context. |
+| `review-assignment` | Role, packet/prompt binding, identity and delivery context; an exact prior assignment can continue a pending bar source request. |
 | `review-run` | Invoke the assigned canonical packet, retaining observed output, failure and usage. |
 | `review-attempt` | Import historical invocation evidence; imported assertions alone do not verify a route. |
 | `review-context` | Later exposure or context status affecting the assignment. |

@@ -4233,7 +4233,8 @@
     ],
     "id": "bar-a",
     "dossier_id": "dossier-1",
-    "assignment_id": "assignment-bar-a"
+    "assignment_id": "assignment-bar-a",
+    "source_requests": []
   },
   "review-route": {
     "id": "review-route-1",
@@ -4252,7 +4253,27 @@
     "role": "bar",
     "reviewer_id": "reviewer-a",
     "author_id": "author",
-    "context": {}
+    "context": {
+      "source_links": [
+        {
+          "version_id": "arxiv:2601.00001v1",
+          "source_id": "SOURCE_ID",
+          "artifact": {
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+            "size": 15,
+            "media_type": "text/plain"
+          },
+          "locator": {
+            "kind": "span",
+            "start": 0,
+            "end": 15,
+            "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
+            "excerpt": "Source passage."
+          }
+        }
+      ]
+    }
   },
   "review-probe": {
     "id": "probe-1",

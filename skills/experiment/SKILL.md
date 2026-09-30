@@ -121,6 +121,14 @@ outputs and exact assignment/evidence bindings. The canonical support and value
 findings derive compatible readiness; do not add a separate full readiness-review
 loop. Blind manuscript measurement later evaluates the paper separately.
 
+Inspect each result `review-run` output artifact for `source_requests` before
+recording final support or value findings. Apply the same rule to bar or slate
+reviews when a changed intent requires them. Follow the [native continuation contract](../../docs/research-decisions.md#reviewer-delivery-and-disagreement)
+in the same reviewer slot. Acquire unavailable exact sources through the ordinary
+pipeline and retain pending or unaffordable requests as unresolved. A request
+response is not a final `value-review`; both final bars must exist before the
+slate is released. Reuse unaffected existing bars when the intent is unchanged.
+
 Record the evidence-bound `research-decision` and run
 `research-decision-assess --boundary write` with the current readiness gate.
 `develop_manuscript` needs both supported claims and a worthwhile realized

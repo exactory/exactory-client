@@ -144,7 +144,11 @@ proposed-content dossier comparing objective and first approach, credible
 alternatives and available discrepancy leads. Two assessors first receive the
 original aim, resources and verified field context, including held-source identities
 and reading status, without the proposed objective, method, author recommendation
-or prior scores. Persist their independent worthwhile-consequence bars before
+or prior scores. Resolve observed bar `source_requests` through the
+[native continuation contract](../../docs/research-decisions.md#reviewer-delivery-and-disagreement),
+retaining unavailable or unaffordable requests as unresolved. Source inventory
+metadata does not grant reading credit. Persist both final independent
+worthwhile-consequence bars before
 reconciliation and slate delivery. Assess objective adequacy and approach adequacy
 separately. A fixed user problem stays fixed; compare methods within its scope.
 

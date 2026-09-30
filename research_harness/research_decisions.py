@@ -58,7 +58,7 @@ def _validate_checks(records, artifacts, values, expected):
         raise ResearchError("invalid_value_review", "Address all phase-required independent assurances", {"required": list(expected)})
 
 
-def _validate_value(records, artifacts, value, stage, dossier):
+def _validate_value(records, artifacts, value, stage, dossier, historical=()):
     fields(value, ("status", "consequence", "bar_ids", "objective_adequacy", "method_adequacy", "reason", "evidence",
                    "work_items", "assurances", "objection_findings"), code="invalid_value_review")
     strategy.choice(value["status"], ("sufficient", "insufficient", "unresolved"), "Scientific consequence", "invalid_value_review")
@@ -107,6 +107,7 @@ def _validate_value(records, artifacts, value, stage, dossier):
         prior_ids.add(finding["id"])
     material = dossier["payload"]["material_change"]
     expected_ids = set() if stage == "bar" or material is None else {item["id"] for item in material["prior_objections"]}
+    expected_ids.update(objection["id"] for review in historical for objection in review["payload"]["objections"])
     if prior_ids != expected_ids:
         raise ResearchError("review_objection_history_incomplete", "Assess each recorded predecessor objection")
 
@@ -115,14 +116,15 @@ def record_value_review(store, payload, *, expected_revision, request_id):
     artifacts = ArtifactStore(store.root)
 
     def prepare(records, value):
-        fields(value, ("id", "dossier_id", "assignment_id", "stage", "support", "value", "objections", "limitations"), code="invalid_value_review")
+        fields(value, ("id", "dossier_id", "assignment_id", "stage", "support", "value", "objections", "limitations"), ("source_requests", "reassessment"), code="invalid_value_review")
         old = strategy.existing_record(records, "value_review", value)
         if old is not None:
             return [], old
         dossier = strategy.get_record(records, "strategy_dossier", value["dossier_id"])
         intent = strategy.get_record(records, "research_intent", dossier["payload"]["intent_id"])
         strategy.choice(value["stage"], ("bar", "slate", "result"), "Review phase", "invalid_value_review")
-        from .review_protocol import assignment_state
+        from .review_protocol import assignment_state, validate_assignment_inventories
+        validate_assignment_inventories(records, artifacts, value["assignment_id"])
         assignment = assignment_state(records, artifacts, value["assignment_id"])
         if assignment.get("output") is None:
             raise ResearchError("review_output_pending", "Preserve failed attempts; a missing output is neither approval nor a negative scientific result")
@@ -130,15 +132,34 @@ def record_value_review(store, payload, *, expected_revision, request_id):
             raise ResearchError("value_review_assignment_mismatch", "The review must concern the assigned dossier and role")
         if assignment["output"] != _response(value):
             raise ResearchError("value_review_output_mismatch", "Record the exact observed independent output without author substitutions")
+        if value["stage"] in ("bar", "slate", "result"):
+            from .bar_sources import pending
+            saved_assignment = records["review_assignment"][value["assignment_id"]]
+            packet = json.loads(artifacts.read(saved_assignment["packet"]))
+            if pending(packet, assignment["output"]):
+                raise ResearchError("review_sources_pending", "Retain the observed request turn; resolve its source deliveries before recording a final phase assessment")
+        from . import review_context_repair
+        saved_assignment = records["review_assignment"][value["assignment_id"]]
+        review_context_repair.validate_repair_origin(records, artifacts, saved_assignment)
+        review_context_repair.validate_reassessment(records, artifacts, saved_assignment, assignment["output"])
+        inherited = review_context_repair.reassessment_reviews(records, saved_assignment)
+        historical = list(inherited)
+        if value["stage"] != "bar":
+            for previous_dossier in records.get("strategy_dossier", {}).values():
+                if previous_dossier["payload"]["intent_id"] == dossier["payload"]["intent_id"]:
+                    historical.extend(review_context_repair.historical_reviews(records, previous_dossier["id"], "bar"))
+            historical.extend(review_context_repair.historical_reviews(records, value["dossier_id"], value["stage"]))
+        inherited_ids = {review["id"] for review in inherited}
         reviewer = normalized_text(assignment["reviewer_id"])
         if reviewer in {normalized_text(author) for author in intent["payload"]["authors"]}:
             raise ResearchError("review_not_independent", "The author cannot supply the independent assessment")
         if any(saved["assignment_id"] == value["assignment_id"] for saved in records.get("value_review", {}).values()):
             raise ResearchError("value_review_duplicate", "One observed output supplies one immutable review record")
         if any(saved["dossier_id"] == value["dossier_id"] and saved["payload"]["stage"] == value["stage"]
-               and normalized_text(saved["reviewer_id"]) == reviewer for saved in records.get("value_review", {}).values()):
+               and normalized_text(saved["reviewer_id"]) == reviewer and saved["id"] not in inherited_ids
+               for saved in records.get("value_review", {}).values()):
             raise ResearchError("value_review_duplicate", "A reviewer cannot replace its initial finding by another sample")
-        _validate_value(records, artifacts, value["value"], value["stage"], dossier)
+        _validate_value(records, artifacts, value["value"], value["stage"], dossier, historical)
         strings(value["limitations"], "Independent assessment limitations", nonempty=True)
         objection_ids = set()
         for objection in strategy.items(value["objections"], "Material objections"):
@@ -199,6 +220,10 @@ def _pair(records, identifiers, dossier, stage):
     reviews = [strategy.get_record(records, "value_review", identifier) for identifier in identifiers]
     if len({normalized_text(review["reviewer_id"]) for review in reviews}) != 2:
         raise ResearchError("research_review_pair_required", "A single reviewer cannot supply both independent findings")
+    from .review_context_repair import slot_id
+    assignments = [strategy.get_record(records, "review_assignment", review["assignment_id"]) for review in reviews]
+    if len({slot_id(records, assignment) for assignment in assignments}) != 2:
+        raise ResearchError("research_review_pair_required", "The two independent findings must occupy different original review slots")
     for review in reviews:
         reviewed_dossier = strategy.get_record(records, "strategy_dossier", review["dossier_id"])
         if review["payload"]["stage"] != stage:

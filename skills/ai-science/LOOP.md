@@ -69,6 +69,13 @@ using excluded synthetic tokens and an allowed-input positive control. Keep
 author-history isolation, prior-assessment isolation and identity masking separate.
 An unverified or contaminated assignment cannot supply independent approval.
 
+Inspect observed `bar`, `slate` and `result` outputs for `source_requests` before
+recording final value or support reviews. Follow the [native continuation contract](../../docs/research-decisions.md#reviewer-delivery-and-disagreement)
+in the same reviewer slot, using ordinary acquisition for unavailable exact
+sources. Preserve pending requests and unaffordable continuations as unresolved,
+with actual costs; inventory access does not establish reading. Release the slate
+only after both final independent bars have been recorded.
+
 Every material objection receives disposition. A contested objection goes to a
 fresh adjudicator with the original objection, both assessments and relevant
 evidence in the canonical packet. It decides upheld, not upheld or unresolved

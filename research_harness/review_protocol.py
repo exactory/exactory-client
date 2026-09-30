@@ -7,6 +7,7 @@ independence without rewriting the original assessment.
 """
 
 import base64
+import copy
 import json
 import uuid
 
@@ -16,6 +17,9 @@ from .evidence import digest
 from .graph import obligation
 from .operations import fields, immutable_record, normalized_text, prepared_mutation, text
 from . import review_transport as transport
+from . import bar_sources
+from . import review_context_repair as context_repair
+from . import review_supplied_evidence as supplied_evidence
 
 ROLES = ('bar', 'slate', 'result', 'adjudicator', 'manuscript', 'standalone', 'verification', 'native_math')
 PROTOCOL = 'exactory-independent-review-v1'
@@ -200,7 +204,7 @@ def _project_scoped_result(records, artifacts, packet, report):
     return packet
 
 
-def canonical_prompt(role):
+def canonical_prompt(role, *, legacy=False, repair=False):
     if role not in ROLES:
         raise ResearchError('invalid_review_role', 'Unknown reviewer role')
     if role == 'native_math':
@@ -212,8 +216,23 @@ def canonical_prompt(role):
         prompt += _RESPONSE.replace('ROLE', role)
     elif role == 'manuscript':
         prompt += _MANUSCRIPT_RESPONSE
-    return {'template_id': PROTOCOL + '/' + role, 'template_hash': digest(prompt),
-            'rendered_prompt_hash': digest(prompt), 'parameters': {'role': role}, 'text': prompt}
+    version = PROTOCOL
+    if role in bar_sources.ROLES and not legacy:
+        prompt += bar_sources.PROMPT
+        version = bar_sources.PROTOCOL
+    elif role == 'adjudicator' and not legacy:
+        prompt += supplied_evidence.PROMPT
+        version = supplied_evidence.PROTOCOL
+    parameters = {'role': role}
+    suffix = ''
+    if repair:
+        if role not in bar_sources.ROLES or legacy:
+            raise ResearchError('invalid_review_context', 'Context reassessment uses a current strategic review phase')
+        prompt += context_repair.PROMPT + ' Source-request turns need no final reassessment; final output must include it. For a final bar reassessment, objection_findings must cover every inherited material objection despite the ordinary empty-bar default.'
+        parameters['context_repair'] = True
+        suffix = '/context-repair'
+    return {'template_id': version + '/' + role + suffix, 'template_hash': digest(prompt),
+            'rendered_prompt_hash': digest(prompt), 'parameters': parameters, 'text': prompt}
 
 
 def _bars(records, artifacts, intent_id):
@@ -234,9 +253,27 @@ def _bars(records, artifacts, intent_id):
 def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
     """Build the role allowlist; caller-authored prompts and narrative substitutes are rejected."""
     canonical_prompt(role)
-    fields(context, (), ('artifact_refs', 'bundle', 'objection_id', 'review_ids', 'correction', 'prior_assignment_id', 'verification_task_id', 'native_packet'))
+    fields(context, (), ('artifact_refs', 'bundle', 'objection_id', 'review_ids', 'correction', 'prior_assignment_id', 'source_links', 'context_repair', 'verification_task_id', 'native_packet'))
     packet = {'protocol': PROTOCOL, 'role': role, 'reviewer_id': reviewer_id, 'dossier_id': dossier_id}
     projected = False
+    if role in bar_sources.ROLES:
+        fields(context, (), ('source_links', 'prior_assignment_id') if role == 'bar' else ('prior_assignment_id',), code='invalid_review_context')
+        packet['protocol'] = bar_sources.PROTOCOL
+        if 'prior_assignment_id' in context:
+            fields(context, ('prior_assignment_id',), code='invalid_review_context')
+            prior, state = _source_parent(records, artifacts, context['prior_assignment_id'], dossier_id, reviewer_id, role)
+            previous = _read_json(artifacts, prior['packet'])
+            packet.update(bar_sources.continuation(records, artifacts, previous, state['output']))
+            packet['continuation'] = {'assignment_id': prior['id'], 'packet_digest': prior['packet_digest'],
+                                      'scientific_context': 'The exact prior scientific packet and output remain in this session history.'}
+            # These fixed bindings are consumed by final native support recording.
+            # Scientific dossier content remains once in the immutable actual history.
+            for key in ('intent', 'support_contract', 'assessor', 'context_repair'):
+                if key in previous:
+                    packet[key] = previous[key]
+            packet['evidence'] = _evidence(artifacts, packet)
+            packet['digest'] = digest(packet)
+            return packet
     if role == 'native_math':
         fields(context, ('native_packet',))
         if dossier_id is not None:
@@ -298,13 +335,18 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
         provenance = intent_record.get('instruction_provenance')
         if provenance:
             packet['intent']['instruction'] = {k: provenance[k] for k in ('artifact', 'text') if k in provenance}
-        packet['held_sources'] = [{'id': w['id'], 'title': w.get('title'),
-            'reading_status': sorted({r.get('depth', 'unknown') for r in records.get('reading', {}).values()
-                                      if r.get('version_id') == w['id']})}
-            for _, w in sorted(records.get('work', {}).items())]
+        if role in ('slate', 'result'):
+            packet['source_inventory'] = bar_sources.inventory(records, artifacts)
+            packet.update(source_deliveries=[], pending_source_requests=[])
+        elif role == 'adjudicator':
+            packet['held_sources'] = [{'id': work['id'], 'title': work.get('title'),
+                'reading_status': sorted({reading.get('depth', 'unknown') for reading in records.get('reading', {}).values()
+                                          if reading.get('version_id') == work['id']})}
+                for _, work in sorted(records.get('work', {}).items())]
         if role == 'bar':
-            packet['prior_context'] = [{'id': w['id'], 'abstract': w.get('abstract')}
-                                       for _, w in sorted(records.get('work', {}).items())]
+            packet.update(source_inventory=bar_sources.inventory(records, artifacts),
+                prior_context=bar_sources.prior_context(records, artifacts, context.get('source_links', [])),
+                source_deliveries=[], pending_source_requests=[])
         elif role in ('slate', 'result'):
             bars = _bars(records, artifacts, value['intent_id'])
             if len({state['reviewer_id'] for _, state in bars}) < 2:
@@ -315,6 +357,13 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
             packet['bar_ids'] = [r['id'] for r, _ in bars]
             packet['own_bars'] = [_payload(r) for r, _ in own]
             packet['bars'] = [_payload(r) for r, _ in bars]
+            historical_bars = []
+            for previous_dossier in records.get('strategy_dossier', {}).values():
+                if _payload(previous_dossier).get('intent_id') == value['intent_id']:
+                    historical_bars.extend(context_repair.historical_reviews(records, previous_dossier['id'], 'bar'))
+            packet['historical_bars'] = [{'review': _payload(r), 'independence': 'no_longer_qualified'} for r in historical_bars]
+            packet['historical_reviews'] = [{'review': _payload(r), 'independence': 'no_longer_qualified'}
+                for r in context_repair.historical_reviews(records, dossier_id, role)]
             packet['dossier'] = {key: value[key] for key in ('objective', 'candidates', 'claims', 'comparators',
                 'dependencies', 'work_items', 'leads', 'failures', 'continuity', 'tranche', 'bundle_digest',
                 'no_branch', 'single_candidate', 'material_change', 'reconsideration') if key in value}
@@ -353,6 +402,7 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                     'relationship': 'Assigned independent reviewer',
                     'independence_basis': 'The harness verifies the actual route, canonical packet, invocation, and context events.'}
         elif role == 'adjudicator':
+            packet['protocol'] = supplied_evidence.PROTOCOL
             ids = context.get('review_ids', [])
             if len(ids) != 2 or len(set(ids)) != 2:
                 raise ResearchError('review_packet_incomplete', 'Adjudication requires both exact original review IDs')
@@ -372,14 +422,8 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                     raise ResearchError('invalid_review_correction', 'Corrections concern a supplied claim or required omission')
                 for key in ('claim', 'reason'):
                     text(correction[key], 'Correction ' + key)
-                supplied = set()
-                for review in reviews:
-                    original = _get(records, 'review_assignment', review['assignment_id'])
-                    original_packet = _read_json(artifacts, original['packet'])
-                    supplied.update(ref['sha256'] for ref in _refs(original_packet))
-                evidence = list(_refs(correction['evidence']))
-                if not evidence or any(ref['sha256'] not in supplied for ref in evidence):
-                    raise ResearchError('invalid_review_correction', 'Correction evidence must have been supplied in the original packet')
+                supplied, mappings = supplied_evidence.supplied_context(records, artifacts, [r['assignment_id'] for r in reviews])
+                supplied_evidence.validate_correction(records, artifacts, correction['evidence'], supplied, mappings)
                 prior_id = correction['prior_adjudication_id']
                 if prior_id is not None:
                     prior = _get(records, 'review_adjudication', prior_id)
@@ -388,8 +432,9 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                     text(correction['new_error_explanation'], 'Why the new error was not resolved previously')
                 elif correction['new_error_explanation'] is not None:
                     raise ResearchError('invalid_review_correction', 'A follow-up correction identifies its prior adjudication')
-            packet.update(objection=objections[0], assessments=reviews, assignment_policy=POLICY,
-                          correction=correction)
+            supplied, mappings = supplied_evidence.supplied_context(records, artifacts, [r['assignment_id'] for r in reviews])
+            packet.update(objection=_reference_templates(objections[0]), assessments=_reference_templates(reviews), assignment_policy=POLICY,
+                          correction=_reference_templates(correction), original_evidence=list(supplied.values()), supplied_source_mappings=mappings)
     packet['evidence'] = _evidence(artifacts, packet, transitive=projected)
     packet['digest'] = digest(packet)
     return packet
@@ -508,6 +553,85 @@ def route_state(records, artifacts, route_id):
                                   'The packet can identify published work; no model-family independence is claimed.']}
 
 
+def _prompt_matches(assignment):
+    repair = assignment.get('reassessment_required') is True
+    candidates = [canonical_prompt(assignment['role'], repair=repair)]
+    if not repair and assignment['role'] in bar_sources.ROLES + ('adjudicator',):
+        candidates.append(canonical_prompt(assignment['role'], legacy=True))
+    return assignment['prompt'] in candidates
+
+
+def _repair_packet(records, artifacts, value, repair):
+    packet = copy.deepcopy(repair['packet'])
+    packet.pop('evidence', None)
+    packet.pop('digest', None)
+    packet.update(protocol=bar_sources.PROTOCOL, reviewer_id=value['reviewer_id'])
+    packet['pending_source_requests'] = bar_sources.pending(
+        repair['packet'], repair['scientific_history'][-1]['observed_output'])
+    packet['context_repair'] = {'assignment_id': repair['predecessor']['id'], 'slot_id': repair['slot_id'],
+        'event_ids': repair['event_ids'], 'probe_id': repair['probe_id'],
+        'historical_review_ids': [review['id'] for review in repair['historical_reviews']]}
+    packet['scientific_history'] = _reference_templates(repair['scientific_history'])
+    packet['historical_reviews'] = _reference_templates(repair['historical_reviews'])
+    supplied = {digest(entry['artifact']): entry['artifact']
+                for turn in repair['scientific_history'] for entry in turn['packet'].get('evidence', [])}
+    packet['previously_supplied_evidence'] = [supplied[key] for key in sorted(supplied)]
+    if value['role'] == 'result':
+        provenance = {'protocol': bar_sources.PROTOCOL, 'role': value['role'], 'reviewer_id': value['reviewer_id'],
+                      'dossier_id': value['dossier_id'], 'context_repair': packet['context_repair']}
+        packet['assessor'] = {'id': value['reviewer_id'], 'kind': 'agent', 'provenance': _put_json(artifacts, provenance),
+            'relationship': 'Assigned independent context reassessor',
+            'independence_basis': 'The harness verifies the new actual route, canonical packet, invocation and exact contamination-repair provenance.'}
+    packet['evidence'] = _evidence(artifacts, packet)
+    packet['digest'] = digest(packet)
+    return packet
+
+
+def _source_parent(records, artifacts, identifier, dossier_id, reviewer_id, role):
+    text(identifier, 'Prior assignment ID', code='invalid_review_context')
+    prior = _get(records, 'review_assignment', identifier)
+    if (prior['role'] != role or prior['role'] not in bar_sources.ROLES or prior['dossier_id'] != dossier_id
+            or normalized_text(prior['reviewer_id']) != normalized_text(reviewer_id)):
+        raise ResearchError('review_source_continuation_mismatch', 'Continue the exact same phase, reviewer and dossier')
+    state = assignment_state(records, artifacts, identifier)
+    if not state['ready']:
+        raise ResearchError('review_source_continuation_unverified', 'Source requests require an observed uncontaminated parent response')
+    previous = _read_json(artifacts, prior['packet'])
+    if not isinstance(state['output'], dict) or state['output'].get('stage') != role:
+        raise ResearchError('review_source_continuation_mismatch', 'Source requests must come from the exact assigned phase')
+    if (any(r['assignment_id'] == identifier for r in records.get('value_review', {}).values())
+            or not bar_sources.pending(previous, state['output'])):
+        raise ResearchError('review_resampling_forbidden', 'A final phase assessment cannot be continued or sampled again')
+    if 'source_inventory' not in previous:
+        raise ResearchError('review_source_continuation_mismatch', 'A legacy packet has no immutable source-request inventory')
+    return prior, state
+
+
+def _initial_slot(records, value):
+    slots = {}
+    for prior in records.get('review_assignment', {}).values():
+        if prior['dossier_id'] == value['dossier_id'] and prior['role'] == value['role']:
+            slots.setdefault(context_repair.slot_id(records, prior), []).append(prior)
+    replaceable = []
+    for identifier, members in slots.items():
+        failed_only = True
+        for prior in members:
+            attempts = [a for a in records.get('review_attempt', {}).values() if a['assignment_id'] == prior['id']]
+            pending = any(a['assignment_id'] == prior['id'] and a['id'] not in records.get('review_attempt', {})
+                          for a in records.get('review_invocation', {}).values())
+            if pending or not attempts or any(a['status'] not in ('failed', 'incomplete') for a in attempts):
+                failed_only = False
+        if failed_only:
+            replaceable.append((min(p['recorded_revision'] for p in members), identifier))
+        elif any(normalized_text(prior['reviewer_id']) == normalized_text(value['reviewer_id']) for prior in members):
+            raise ResearchError('review_resampling_forbidden', 'Retain the assigned or completed initial reviewer; correct a recorded error instead')
+    if replaceable:
+        return min(replaceable)[1]
+    if len(slots) >= 2:
+        raise ResearchError('review_slots_fixed', 'The two independent initial review slots are already assigned')
+    return value['id']
+
+
 def record_assignment(store, payload, *, expected_revision, request_id):
     artifacts = ArtifactStore(store.root)
     def prepare(records, value):
@@ -522,22 +646,21 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             intent = _payload(_get(records, 'research_intent', d['intent_id']))
             if normalized_text(value['reviewer_id']) in {normalized_text(a) for a in intent.get('authors', [])}:
                 raise ResearchError('review_not_independent', 'An intent author cannot provide an independent assessment')
-        if value['role'] in ('bar', 'slate', 'result'):
-            occupied = []
-            for prior in records.get('review_assignment', {}).values():
-                if prior['dossier_id'] != value['dossier_id'] or prior['role'] != value['role']:
-                    continue
-                attempts = [a for a in records.get('review_attempt', {}).values() if a['assignment_id'] == prior['id']]
-                prior_state = assignment_state(records, artifacts, prior['id'])
-                replaceable = bool(attempts) and (all(a['status'] in ('failed', 'incomplete') for a in attempts)
-                                                or prior_state['context_status'] != 'verified_for_route')
-                if not replaceable:
-                    occupied.append(normalized_text(prior['reviewer_id']))
-                    if normalized_text(prior['reviewer_id']) == normalized_text(value['reviewer_id']):
-                        raise ResearchError('review_resampling_forbidden', 'Retain the assigned or completed initial reviewer; correct a recorded error instead')
-            if len(set(occupied)) >= 2:
-                raise ResearchError('review_slots_fixed', 'The two independent initial review slots are already assigned')
-        packet = build_packet(records, artifacts, value['dossier_id'], value['role'], value['reviewer_id'], **value['context'])
+        repair = context_repair.prepare_repair(records, artifacts, value) if value['role'] in bar_sources.ROLES else None
+        parent = None
+        if value['role'] in bar_sources.ROLES and 'prior_assignment_id' in value['context']:
+            parent, _ = _source_parent(records, artifacts, value['context']['prior_assignment_id'], value['dossier_id'], value['reviewer_id'], value['role'])
+            if parent['route_id'] != value['route_id'] or normalized_text(parent['author_id']) != normalized_text(value['author_id']):
+                raise ResearchError('review_source_continuation_mismatch', 'Continue the exact same route and author boundary')
+            if any(prior.get('context', {}).get('prior_assignment_id') == parent['id']
+                   for prior in records.get('review_assignment', {}).values()):
+                raise ResearchError('review_source_continuation_fork', 'Continue the latest source turn without forking the reviewer session')
+        slot_identifier = None
+        if value['role'] in bar_sources.ROLES:
+            slot_identifier = (context_repair.slot_id(records, parent) if parent is not None else
+                               repair['slot_id'] if repair is not None else _initial_slot(records, value))
+        packet = (_repair_packet(records, artifacts, value, repair) if repair is not None else
+                  build_packet(records, artifacts, value['dossier_id'], value['role'], value['reviewer_id'], **value['context']))
         if value['role'] == 'native_math':
             from .native_review import require_assignment_identity
             require_assignment_identity(packet['native'], value)
@@ -557,22 +680,35 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 contaminated = previous_state['context_status'] == 'contaminated'
                 if not failed and not contaminated and not (correction and correction['prior_adjudication_id']):
                     raise ResearchError('review_adjudicator_fixed', 'Retain the selected adjudicator; replacement needs a recorded error or failed invocation')
-        prompt = canonical_prompt(value['role'])
+        reassessment_required = 'context_repair' in packet
+        prompt = canonical_prompt(value['role'], repair=reassessment_required)
         history = []
         session_id = value['id']
-        if value['role'] == 'slate':
+        history_assignment_id = None
+        if parent is not None:
+            state = assignment_state(records, artifacts, parent['id'])
+            attempt = _get(records, 'review_attempt', state['attempt_id'])
+            history = _read_json(artifacts, attempt['request'])['input'] + [
+                {'role': 'assistant', 'content': json.dumps(state['output'], sort_keys=True)}]
+            session_id = parent['session_id']
+            history_assignment_id = parent['id']
+        elif value['role'] == 'slate' and repair is None:
             own = packet['own_bars'][-1]
             prior = _get(records, 'review_assignment', own['assignment_id'])
             prior_state = assignment_state(records, artifacts, prior['id'])
             prior_packet = _read_json(artifacts, prior['packet'])
-            prior_request = transport.request_body(route, prior['prompt']['text'], prior_packet)
+            prior_request = transport.request_body(route, prior['prompt']['text'], prior_packet, prior.get('history', ()))
             history = prior_request['input'] + [{'role': 'assistant', 'content': json.dumps(prior_state['output'], sort_keys=True)}]
-            session_id = prior['id']
+            session_id = prior['session_id']
+            history_assignment_id = prior['id']
         record = dict(value, packet=_put_json(artifacts, packet), packet_digest=packet['digest'],
                       prompt=prompt, prompt_hash=prompt['rendered_prompt_hash'], route_digest=digest(route),
                       context_state=route_state(records, artifacts, value['route_id']), assignment_policy=POLICY,
-                      history=history, session_id=session_id,
+                      history=history, session_id=session_id, history_assignment_id=history_assignment_id,
+                      reassessment_required=reassessment_required,
                       recorded_revision=expected_revision + 1)
+        if slot_identifier is not None:
+            record['slot_id'] = slot_identifier
         return [immutable_record(records, 'review_assignment', value['id'], record)], record
     return prepared_mutation(store, 'review.assignment', payload, prepare, expected_revision=expected_revision, request_id=request_id)
 
@@ -593,6 +729,12 @@ def record_attempt(store, payload, *, expected_revision, request_id):
     return prepared_mutation(store, 'review.attempt', payload, prepare, expected_revision=expected_revision, request_id=request_id)
 
 
+def validate_assignment_inventories(records, artifacts, assignment_id):
+    for packet in supplied_evidence.lineage_packets(records, artifacts, [assignment_id]):
+        if 'source_inventory' in packet:
+            bar_sources.validate_inventory(artifacts, packet['source_inventory'])
+
+
 def invoke_assignment(store, payload, *, expected_revision, request_id, credential=None):
     artifacts = ArtifactStore(store.root)
     def start(records, value):
@@ -602,6 +744,7 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
                      if a['assignment_id'] == value['assignment_id'] and a['status'] == 'completed']
         if completed:
             raise ResearchError('review_resampling_forbidden', 'A completed review cannot be replaced by another sampled output')
+        context_repair.require_current_slot(records, assignment)
         pending = [a for a in records.get('review_invocation', {}).values()
                    if a['assignment_id'] == value['assignment_id'] and a['id'] not in records.get('review_attempt', {})]
         if pending:
@@ -609,9 +752,14 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         route = _get(records, 'review_route', assignment['route_id'])
         if digest(route) != assignment['route_digest']:
             raise ResearchError('review_route_changed', 'Reassign after a route change')
-        if assignment['prompt'] != canonical_prompt(assignment['role']):
+        if not _prompt_matches(assignment):
             raise ResearchError('review_prompt_mismatch', 'Invoke the recorded canonical reviewer prompt')
         packet = _read_json(artifacts, assignment['packet'])
+        validate_assignment_inventories(records, artifacts, assignment['id'])
+        context_repair.validate_repair_binding(records, artifacts, assignment)
+        history_parent = assignment.get('history_assignment_id')
+        if history_parent is not None and not assignment_state(records, artifacts, history_parent)['ready']:
+            raise ResearchError('review_source_continuation_unverified', 'The exact earlier scientific history must remain verified before dispatch')
         request = transport.request_body(route, assignment['prompt']['text'], packet, assignment.get('history', ()))
         invocation = dict(value, request=_put_json(artifacts, request), route_id=assignment['route_id'],
                           route_digest=digest(route), packet_digest=assignment['packet_digest'],
@@ -647,10 +795,20 @@ def assignment_state(records, artifacts, assignment_id):
             state['author_history_isolation'] = 'contaminated'
         state['prior_assessment_isolation'] = 'contaminated'
     route = records.get('review_route', {}).get(assignment['route_id'])
-    if route is None or digest(route) != assignment['route_digest'] or assignment['prompt'] != canonical_prompt(assignment['role']):
+    if route is None or digest(route) != assignment['route_digest'] or not _prompt_matches(assignment):
         state['context_status'] = 'unverified' if not events else 'contaminated'
     if state['context_status'] != 'verified_for_route':
         state['obligations'].append(obligation('review_context_' + state['context_status'], 'Independent approval requires this actual tested route and uncontaminated context.', assignment_id=assignment_id))
+    try:
+        context_repair.validate_repair_binding(records, artifacts, assignment)
+    except ResearchError as error:
+        state['obligations'].append(obligation(error.code, str(error)))
+        if error.code == 'review_context_repair_stale':
+            state['context_status'] = 'contaminated'
+    try:
+        validate_assignment_inventories(records, artifacts, assignment_id)
+    except (ResearchError, ValueError, TypeError, KeyError) as error:
+        state['obligations'].append(obligation('review_inventory_mismatch', 'The complete supplied inventory must remain readable and exact.', reason=str(error)))
     attempts = sorted((a for a in records.get('review_attempt', {}).values() if a['assignment_id'] == assignment_id),
                       key=lambda a: a['recorded_revision'])
     completed = [a for a in attempts if a['status'] == 'completed']
@@ -676,6 +834,23 @@ def assignment_state(records, artifacts, assignment_id):
             state['obligations'].append(obligation('review_output_unavailable', 'Verify the exact packet, request, and output artifact bytes.'))
     else:
         state['obligations'].append(obligation('review_output_pending', 'A complete observed reviewer response is required.'))
+    if assignment['role'] in bar_sources.ROLES:
+        state.update(source_request_status='not_assessed', source_requests=[], pending_source_requests=[], source_request_obligations=[])
+        if state['output'] is not None:
+            try:
+                packet = _read_json(artifacts, assignment['packet'])
+                state['source_requests'] = bar_sources.requests(state['output'])
+                state['pending_source_requests'] = bar_sources.pending(packet, state['output'])
+                state['source_request_status'] = 'pending' if state['pending_source_requests'] else 'settled'
+            except (ResearchError, ValueError, TypeError, KeyError) as error:
+                state['source_request_status'] = 'invalid'
+                state['source_request_obligations'].append(obligation('invalid_review_source_request', str(error)))
+    history_parent = assignment.get('history_assignment_id') or assignment.get('context', {}).get('prior_assignment_id')
+    if history_parent is not None and assignment['role'] in bar_sources.ROLES:
+        parent_state = assignment_state(records, artifacts, history_parent)
+        if not parent_state['ready']:
+            state['context_status'] = 'contaminated' if parent_state['context_status'] == 'contaminated' else 'unverified'
+            state['obligations'].append(obligation('review_source_parent_unverified', 'The complete scientific and source-request history must remain independently verified.'))
     state['ready'] = not state['obligations']
     return state
 

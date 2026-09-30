@@ -233,17 +233,26 @@ class ReviewProtocolTests(LiteratureCase):
 
     def bar_reviews(self):
         self.dossier(); self.route(); self.run_probe()
-        evidence=self.records()['work']['source']['abstract']
+        from research_harness.reading import record_reading
+        source = self.metadata(1, abstract=self.artifacts.read(self.records()['work']['source']['abstract']).decode())
+        self.mutate(record_reading, self.abstract_note(source))
+        capture = self.records()['work'][source]['abstracts'][0]
+        evidence = capture['artifact']
+        source_link = self.link(source, capture['source_id'], evidence)
         for reviewer in ('first','second'):
-            self.assign('bar','bar-'+reviewer,reviewer)
+            self.mutate(self.protocol().record_assignment, {'id': 'bar-' + reviewer, 'route_id': 'route',
+                'dossier_id': 'dossier', 'role': 'bar', 'reviewer_id': reviewer, 'author_id': 'author',
+                'context': {'source_links': [source_link]}})
             response={'stage':'bar','support':None,'value':{'consequence':reviewer+' PRIVATE_BAR'},
                       'objections':[{'id':'objection-'+reviewer,'claim':'A supplied inference is unsupported',
                           'reason':'The exact cited bound is weaker','evidence':[evidence],
                           'resolution_condition':'Check the stated quantifier'}], 'limitations':[]}
             self.invoke(response,'bar-attempt-'+reviewer,'bar-'+reviewer)
-            self.seed('value_review','review-'+reviewer,{'id':'review-'+reviewer,'payload':dict(response,
+            self.seed('value_review','review-'+reviewer,{'id':'review-'+reviewer,
+                'dossier_id': 'dossier', 'assignment_id': 'bar-' + reviewer, 'reviewer_id': reviewer,
+                'payload':dict(response,
                 id='review-'+reviewer,dossier_id='dossier',assignment_id='bar-'+reviewer)})
-        return evidence
+        return source_link
 
     def test_slate_replays_only_own_canonical_bar_exchange_after_both_are_saved(self):
         p=self.protocol(); self.bar_reviews(); self.assign('slate','slate-first','first')
