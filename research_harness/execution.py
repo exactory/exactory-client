@@ -9,7 +9,6 @@ reconciled, retaining every reservation.
 from contextlib import contextmanager
 import fcntl
 import hashlib
-import math
 import os
 from pathlib import Path
 import subprocess
@@ -22,7 +21,7 @@ from .development import record_execution, validate_admitted_execution
 from .errors import ResearchError
 from .evidence import digest
 from .execution_outputs import log_bytes, output_metric, output_path, read_sealed_outputs, seal_outputs
-from .operations import fields, immutable_record, prepared_mutation, text
+from .operations import fields, immutable_record, is_finite_number, prepared_mutation, text
 from .scientific_json import is_json_media_type
 from .storage import _canonical
 from .workspace import checked_parent, json_projection, read_file, strict_json, write_projection
@@ -109,7 +108,7 @@ def bind_execution(store, payload, *, expected_revision, request_id):
         if value["backend"] not in ("local", "colab"):
             raise ResearchError("invalid_execution", "Backend must be local or colab")
         timeout = value["timeout_seconds"]
-        if type(timeout) not in (int, float) or not math.isfinite(timeout) or timeout <= 0:
+        if not is_finite_number(timeout) or timeout <= 0:
             raise ResearchError("invalid_execution", "A finite positive timeout is required")
         runtime = _runtime(admission["command"], value["backend"])
         recorded_binding = records.get("execution_binding", {}).get(admission["id"])

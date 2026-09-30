@@ -19,12 +19,11 @@ quoted passage prove comprehension or scientific truth.
 
 import copy
 import hashlib
-import math
 
 from .errors import ResearchError
 from .identities import normalize_identifier, version_of
 from .imports import _pointer
-from .operations import fields, text
+from .operations import fields, is_finite_number, text
 from .providers import _json
 from .storage import _canonical
 
@@ -135,7 +134,7 @@ def read_locator(artifacts, artifact, locator, *, capture=None):
         region = locator["region"]
         if (type(locator["page_index"]) is not int or not 0 <= locator["page_index"] < len(pages)
                 or not isinstance(region, list) or len(region) != 4
-                or any(type(n) not in (int, float) or not math.isfinite(n) for n in region)
+                or not all(is_finite_number(n) for n in region)
                 or not 0 <= region[0] < region[0] + region[2] <= 1
                 or not 0 <= region[1] < region[1] + region[3] <= 1):
             raise ResearchError("invalid_locator", "PDF page and region must be within the saved document")

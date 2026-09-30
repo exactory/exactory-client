@@ -15,7 +15,6 @@ the native math controller's budgets, reservations or recovery authority.
 """
 
 import json
-import math
 
 from .artifacts import ArtifactStore
 from .errors import ResearchError
@@ -23,7 +22,7 @@ from .evaluation import Evaluation
 from .evidence import digest
 from .execution_accounting import require_accounted_usage
 from .graph import obligation
-from .operations import fields, immutable_record, prepared_mutation, strings, text, timestamp
+from .operations import fields, immutable_record, is_finite_number, prepared_mutation, strings, text, timestamp
 from .operations import normalized_text as _normalized
 from .principles import objective_changes
 from .reading import validate_read_evidence
@@ -71,12 +70,7 @@ def _choice(value, choices, name):
 
 
 def _number(value, name, positive=False, integer=False):
-    try:
-        valid = (type(value) in ((int,) if integer else (int, float)) and math.isfinite(value)
-                 and value >= 0 and (not positive or value > 0))
-    except OverflowError:
-        valid = False
-    if not valid:
+    if not (is_finite_number(value) and (type(value) is int or not integer) and value >= 0 and (not positive or value > 0)):
         raise ResearchError("invalid_development", name + " must be a finite " + ("positive" if positive else "nonnegative") + " number")
 
 
