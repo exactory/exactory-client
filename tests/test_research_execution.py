@@ -495,6 +495,45 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assertTrue(result["ok"], result["stderr_tail"])
         self.assertEqual(result["metric"], {"metric": 7})
 
+    def test_worker_that_ends_before_its_token_leaves_the_claimed_run_to_reconcile(self):
+        from research_harness.errors import ResearchError
+        admission = admit_lab(self, body="raise RuntimeError('must never launch')\n")
+        api = importlib.import_module("research_harness.execution")
+        popen = subprocess.Popen
+        prelaunch = api._prelaunch
+        workers = []
+
+        def start_and_keep(argv, **options):
+            # A local launch calls subprocess.Popen only to start its worker.
+            workers.append(popen(argv, **options))
+            return workers[-1]
+
+        def end_the_worker_then_prelaunch(*args):
+            # The worker is ready and waits for its token when it ends, as when it is killed.
+            workers[0].kill()
+            workers[0].wait()
+            return prelaunch(*args)
+
+        with mock.patch.object(subprocess, "Popen", side_effect=start_and_keep), \
+                mock.patch.object(api, "_prelaunch", side_effect=end_the_worker_then_prelaunch), \
+                self.assertRaises(ResearchError) as raised:
+            api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                 request_id="worker-ends-before-token")
+        self.assertEqual((raised.exception.code, raised.exception.message), ("execution_recovery_required",
+            "No terminal outcome is available; preserve the claim and reconcile. A dead local owner may be recorded "
+            "interrupted with a reason."))
+        records = self.store.snapshot()["records"]
+        self.assertIn(admission["id"], records["execution_claim"])
+        self.assertNotIn("execution_outcome", records)
+        # The documented recovery records the claimed run as interrupted.
+        result = api.reconcile_execution(self.store, {"admission_id": admission["id"], "resolution": "interrupted",
+            "reason": "The worker ended before it received its token."}, expected_revision=self.store.revision,
+            request_id="recover-ended-before-token")
+        self.assertFalse(result["ok"])
+        records = self.store.snapshot()["records"]
+        execution_id = records["execution_outcome"][admission["id"]]["execution_id"]
+        self.assertEqual(records["execution"][execution_id]["payload"]["status"], "interrupted")
+
     def test_run_timeout_shorter_than_the_worker_start_still_gives_an_observed_run(self):
         admission = admit_lab(self, body="import time\ntime.sleep(30)\n", timeout=0.15)
         api = importlib.import_module("research_harness.execution")
