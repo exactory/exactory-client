@@ -255,7 +255,7 @@ def launch_execution(store, admission_id, *, expected_revision, request_id):
         with (directory / "launcher.log").open("wb") as diagnostics:
             worker = subprocess.Popen([sys.executable, str(Path(__file__).with_name("launcher.py")),
                 str(directory), claim["config_artifact"]["sha256"], claim["token"]],
-                stdin=subprocess.PIPE, stdout=diagnostics, stderr=diagnostics, start_new_session=True)
+                stdin=subprocess.PIPE, bufsize=0, stdout=diagnostics, stderr=diagnostics, start_new_session=True)
         try:
             # A loaded machine starts the worker slowly. While the worker is alive, the launch waits for it to become
             # ready as long as it waits below for the run to end: the run's timeout plus 10 seconds.
@@ -270,9 +270,17 @@ def launch_execution(store, admission_id, *, expected_revision, request_id):
                 raise ResearchError("execution_identity_mismatch", "The launcher did not establish the claimed identity")
             _prelaunch(store, admission_id, claim)
             try:
-                # communicate sends the token, closes the worker's input and waits for the run to end. A worker that
-                # ended before it read its token never ran the program, and reconciliation reports that.
-                worker.communicate((claim["token"] + "\n").encode(), timeout=worker_wait_seconds)
+                # The worker's input is unbuffered (bufsize=0), so this one write sends the token and leaves nothing for
+                # the close to flush.
+                worker.stdin.write((claim["token"] + "\n").encode())
+            except BrokenPipeError:
+                # A worker that ended before it read its token never ran the program, and reconciliation reports that.
+                pass
+            worker.stdin.close()
+            try:
+                # Popen.wait accepts a timeout of any length. Popen.communicate does not: with a timeout it waits in
+                # poll(), which refuses more than 2**31 - 1 milliseconds (about 24.86 days).
+                worker.wait(timeout=worker_wait_seconds)
             except subprocess.TimeoutExpired:
                 # The exit wait below gives the worker 6 more seconds. A worker that ends in them is reconciled, and a
                 # worker that is still live is reported.
