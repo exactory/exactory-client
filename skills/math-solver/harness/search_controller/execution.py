@@ -311,7 +311,17 @@ def launch(controller, run):
         raise SearchError("recovery_required", "The launcher did not start, so no command ran. The run is recorded as "
                           "never started. Remove the cause given in the details, then run search next.",
                           {"start_error": str(start_error)}) from start_error
-    refusal = None
+    def require_launcher_end(refusal_error):
+        # Every path of the launch calls this once. A launcher that has not received its token reads the end of its
+        # input and records a definite unstarted result. A launcher that is still live after 5 seconds keeps its run
+        # for a later search reconcile, and the details name the refusal that ended the launch, if any.
+        process.stdin.close()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired as error:
+            raise SearchError("recovery_required", "The launcher is still live. Run search reconcile after the launcher ends.",
+                              None if refusal_error is None else
+                              {"refusal": {"code": refusal_error.code, "message": refusal_error.message}}) from error
     released = False
     try:
         # A loaded machine starts the launcher slowly. While the launcher is alive, the launch waits for it to become
@@ -368,25 +378,19 @@ def launch(controller, run):
             # The exit wait below gives the launcher 5 more seconds. A launcher that ends in them is reconciled, and a
             # launcher that is still live is reported.
             pass
-    except SearchError as error:
-        refusal = error
-    finally:
-        # A launcher that has not received its token reads the end of its input and records a definite unstarted
-        # result. The launch then waits once for the launcher to end.
-        process.stdin.close()
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired as error:
-            # A launcher that is still live keeps its run for a later search reconcile. The details name the refusal
-            # that ended the launch, if any.
-            raise SearchError("recovery_required", "The launcher is still live. Run search reconcile after the launcher ends.",
-                              None if refusal is None else {"refusal": {"code": refusal.code, "message": refusal.message}}) from error
-    if refusal is not None:
+    except SearchError as refusal_error:
+        # The launch waits for the launcher and reconciles while it handles the refusal, so an error from either step
+        # shows the refusal as its context.
+        require_launcher_end(refusal_error)
         if not released:
-            # The launcher ended without authority to execute a producer, so its run is reconciled without guessing
-            # whether a workload ran or charging it.
+            # The launcher ended without its token, so no producer ran. Reconciliation records the run as never started
+            # when the launcher wrote that record, and otherwise as indeterminate with its reserved units charged.
             reconcile_runs(controller)
-        raise refusal
+        raise
+    except BaseException:
+        require_launcher_end(None)
+        raise
+    require_launcher_end(None)
     reconcile_runs(controller)
 
 

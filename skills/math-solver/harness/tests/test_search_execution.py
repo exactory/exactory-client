@@ -313,6 +313,32 @@ class SearchExecutionTests(WorkspaceTest):
         self.assertIsInstance(refusal_error, SearchError)
         self.assertEqual((refusal_error.code, refusal_error.message), ("recovery_conflict", "Unexpected launcher identity"))
 
+    def test_unexpected_error_in_the_launch_still_ends_the_launcher(self):
+        from search_controller import integration
+        spec = self.begin_a_move_for_a_job()
+        popen = subprocess.Popen
+        original = integration.internal_operation
+        launchers = []
+
+        def start_and_keep(argv, **options):
+            # In the test process, the run calls subprocess.Popen only to start its launcher.
+            launchers.append(popen(argv, **options))
+            return launchers[-1]
+
+        def fail_the_launch_record(controller, command, request_id, build):
+            if command == "execution-launch":
+                raise RuntimeError("An error that is not a SearchError, before the launch record")
+            return original(controller, command, request_id, build)
+
+        with patch.object(subprocess, "Popen", side_effect=start_and_keep), \
+                patch.object(integration, "internal_operation", side_effect=fail_the_launch_record), \
+                self.assertRaises(RuntimeError):
+            invoke(self.controller, "run", spec)
+        # The launch closed the launcher's input and waited for it, so the launcher recorded that it started no command.
+        self.assertIsNotNone(launchers[0].poll())
+        terminal = self.attack_root / ".search" / "runs" / "run-000001" / "terminal.json"
+        self.assertEqual(json.loads(terminal.read_text())["termination"], "never_started")
+
     def begin_a_move_for_a_job(self):
         step = self.workspace / "deterministic" / "job"
         step.mkdir()
