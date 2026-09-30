@@ -269,11 +269,10 @@ def launch_execution(store, admission_id, *, expected_revision, request_id):
             if ready != {"pid": worker.pid, "token": claim["token"], "config_sha256": claim["config_artifact"]["sha256"]}:
                 raise ResearchError("execution_identity_mismatch", "The launcher did not establish the claimed identity")
             _prelaunch(store, admission_id, claim)
-            worker.stdin.write((claim["token"] + "\n").encode())
-            worker.stdin.flush()
-            worker.stdin.close()
             try:
-                worker.wait(timeout=worker_wait_seconds)
+                # communicate sends the token, closes the worker's input and waits for the run to end. A worker that
+                # ended before it read its token never ran the program, and reconciliation reports that.
+                worker.communicate((claim["token"] + "\n").encode(), timeout=worker_wait_seconds)
             except subprocess.TimeoutExpired:
                 # The exit wait below gives the worker 6 more seconds. A worker that ends in them is reconciled, and a
                 # worker that is still live is reported.
