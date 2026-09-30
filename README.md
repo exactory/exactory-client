@@ -365,12 +365,16 @@ harness command writes its file the moment it accepts, and five hooks hold
 the workspace to the flow and carry it across sessions. Outside an attack
 workspace they do nothing.
 
-- **Harness files.** A Write, an Edit, or a shell write to a file that the
-  harness or a hook writes (`journal.jsonl`, `openings.json`, `parent.json`,
-  `tasks.json`, `activity.jsonl`, a step's `result.json`, a unit's
-  `check-unit.json`, `units/FINISHED.json`) is denied. The denial names the
-  command that writes the file, or, for `activity.jsonl`, the hook that
-  writes it.
+- **Harness files.** A Write or an Edit to a file that the harness or a hook
+  writes (`journal.jsonl`, `openings.json`, `parent.json`, `tasks.json`,
+  `activity.jsonl`, a step's `result.json`, a unit's `check-unit.json`,
+  `units/FINISHED.json`) is denied. So is a shell write through a redirect,
+  `tee`, `cp`, `mv`, `rm`, `truncate`, `dd` or `sed -i` whose target names the
+  file by a path that contains a `/`, resolved from the command's working
+  directory. In an `attack/<slug>` workspace, the denial names the command
+  that writes the file, or, for `activity.jsonl`, the hook that writes it. In
+  a managed search tree (a workspace whose parent holds `.search/tree.json`),
+  the managed guard denies these writes first, with its own message.
 - **Unit flow.** A write under `units/<n>/` is denied until `stall` wrote the
   inventory, and a `draft.md` or `evaluation.md` is denied until `check-unit`
   stamped the unit as it stands.

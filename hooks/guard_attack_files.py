@@ -7,10 +7,18 @@ of its files are the record the harness and the hooks write themselves:
 `parent.json` (`init --from`), `tasks.json` (`task`), `activity.jsonl`
 (the activity hook), `deterministic/<step>/result.json` (`verify`),
 `units/<n>/check-unit.json` (`check-unit`), and `units/FINISHED.json`
-(`finish`). This hook denies a Write or an Edit to any of them, and a Bash
-command that writes to one through a redirect, `tee`, `cp`, `mv`, `rm`,
-`truncate`, `dd`, or `sed -i`. Reading them is untouched. Any other file, any
-other tool, and any internal error are silent: exit 0, no output.
+(`finish`).
+
+The hook first runs `math_search.guard`. In a managed search tree (a workspace
+whose parent holds `.search/tree.json`), that check denies a write to anything
+the search controller owns, the payload of another tool that names the tree,
+and any operation whose check fails with an error. The hook then denies a Write
+or an Edit to any of the eight files, and a Bash command that writes to one
+through a redirect, `tee`, `cp`, `mv`, `rm`, `truncate`, `dd`, or `sed -i`
+when the target names the file by a path that contains a `/`, resolved against
+the payload's working directory. Reading them is untouched. Any other file, any
+other tool, and any error of the hook's own checks are silent: exit 0, no
+output.
 """
 
 from __future__ import annotations
@@ -58,8 +66,8 @@ def _resolve(raw: str, cwd: Path) -> Path:
 
 
 def _find_workspace(path: Path) -> Path | None:
-    """The attack workspace holding `path`: an ancestor under a directory named
-    `attack` that carries the `problem.json` `init` wrote."""
+    """The attack workspace holding `path`: an ancestor that carries the `problem.json` `init` wrote, inside a
+    directory named `attack` or inside a managed search tree (a parent that holds `.search/tree.json`)."""
     return workspace_for(path)
 
 
