@@ -95,14 +95,15 @@ def _json_types(value):
     raise ValueError("Value is not representable in JSON")
 
 
-def _check_stored_bounds(value):
-    """Refuse a value to store that some supported Python cannot read back."""
+def _check_stored_bounds(value, max_depth=_MAX_STORED_DEPTH):
+    """Refuse a value to store that nests deeper than max_depth levels or holds an integer that some supported
+    Python cannot read back. The top container is level 1."""
     pending = [(value, 1)]
     while pending:
         item, depth = pending.pop()
         if isinstance(item, (dict, list, tuple)):
-            if depth > _MAX_STORED_DEPTH:
-                raise ResearchError("invalid_input", "JSON to store must nest at most " + str(_MAX_STORED_DEPTH)
+            if depth > max_depth:
+                raise ResearchError("invalid_input", "JSON to store must nest at most " + str(max_depth)
                                     + " levels so that every supported Python reads it back")
             pending.extend((child, depth + 1) for child in (item.values() if isinstance(item, dict) else item))
         elif type(item) is int and abs(item) > _MAX_STORED_INTEGER:
