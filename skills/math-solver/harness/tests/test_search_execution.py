@@ -291,6 +291,28 @@ class SearchExecutionTests(WorkspaceTest):
         run = self.controller.status()["runs"]["run-000001"]
         self.assertEqual((run["status"], run["termination"], run["charged_units"]), ("terminal", "never_started", 0))
 
+    def test_refused_launch_whose_reconciliation_fails_keeps_the_refusal_in_the_traceback(self):
+        from search_controller import execution
+        spec = self.begin_a_move_for_a_job()
+        wait = subprocess.Popen.wait
+        disk_full_error = OSError(errno.ENOSPC, "No space left on device")
+
+        def wait_for_the_real_end(launcher, timeout=None):
+            # The launcher ends within the exit wait after the refusal, whatever the load of the machine.
+            return wait(launcher)
+
+        # The script runs the launcher as its child, so the launch refuses it with "Unexpected launcher identity".
+        with patch.object(subprocess.Popen, "wait", autospec=True, side_effect=wait_for_the_real_end), \
+                self.start_launcher_after('"$@"; exit $?'), \
+                patch.object(execution, "reconcile_runs", side_effect=disk_full_error), \
+                self.assertRaises(OSError) as caught:
+            invoke(self.controller, "run", spec)
+        # The traceback of the failed reconciliation shows the refusal that it followed.
+        self.assertIs(caught.exception, disk_full_error)
+        refusal_error = caught.exception.__context__
+        self.assertIsInstance(refusal_error, SearchError)
+        self.assertEqual((refusal_error.code, refusal_error.message), ("recovery_conflict", "Unexpected launcher identity"))
+
     def begin_a_move_for_a_job(self):
         step = self.workspace / "deterministic" / "job"
         step.mkdir()
