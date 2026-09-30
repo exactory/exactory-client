@@ -250,6 +250,39 @@ class SearchExecutionTests(WorkspaceTest):
         run = self.controller.status()["runs"]["run-000001"]
         self.assertEqual((run["status"], run["termination"], run["charged_units"]), ("terminal", "never_started", 0))
 
+    def test_launcher_that_ends_before_its_token_records_its_run_as_indeterminate(self):
+        from search_controller import integration
+        step = self.workspace / "deterministic" / "job"
+        step.mkdir()
+        marker = self.attack_root / "command-ran"
+        (step / "job.py").write_text("from pathlib import Path\nPath(" + repr(str(marker)) + ").touch()\n")
+        invoke(self.controller, "begin", begin_spec())
+        popen = subprocess.Popen
+        record = integration.internal_operation
+        launchers = []
+
+        def start_and_keep(argv, **options):
+            # In the test process, the run calls subprocess.Popen only to start its launcher.
+            launchers.append(popen(argv, **options))
+            return launchers[-1]
+
+        def end_the_launcher_then_record(controller, command, request_id, build):
+            if command == "execution-launch":
+                # The launcher is ready and waits for its token when it ends, as when it is killed.
+                launchers[0].kill()
+                launchers[0].wait()
+            return record(controller, command, request_id, build)
+
+        with patch.object(subprocess, "Popen", side_effect=start_and_keep), \
+                patch.object(integration, "internal_operation", side_effect=end_the_launcher_then_record):
+            invoke(self.controller, "run", command_spec(self.workspace, [sys.executable, "job.py"], 30))
+        # As for any launcher that ended without its terminal record, reconciliation cannot tell whether a command
+        # started, so the run is indeterminate and keeps its reserved unit charged.
+        run = self.controller.status()["runs"]["run-000001"]
+        self.assertEqual((run["status"], run["termination"], run["started_units"], run["charged_units"]),
+                         ("indeterminate", "indeterminate", 0, 1))
+        self.assertFalse(marker.exists())
+
     def test_command_that_changes_its_frozen_input_cannot_verify(self):
         step = self.workspace / "deterministic" / "job"
         step.mkdir()
