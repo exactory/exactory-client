@@ -39,7 +39,8 @@ _MAX_REVISION = (1 << 63) - 1
 # the top level of a script under Python 3.9.6, 3.11.11, 3.12.8 and 3.13.8: _load reads back 990 to 993 levels,
 # Store.snapshot a record value of 982 to 985 levels, and Store.guarded_snapshot, whose copy.deepcopy takes
 # two frames for each level, a record value of 492 levels. The depth bound keeps a wide margin below 492.
-_MAX_STORED_INTEGER = 10 ** 4300 - 1
+_MAX_STORED_INTEGER_DIGITS = 4300
+_MAX_STORED_INTEGER = 10 ** _MAX_STORED_INTEGER_DIGITS - 1
 _MAX_STORED_DEPTH = 100
 _PUBLICATION_NAME = re.compile(r"\.research-[0-9a-f]{32}\.sqlite3\Z")
 _WORKSPACE_LOCKS = weakref.WeakValueDictionary()
@@ -105,8 +106,8 @@ def _check_stored_bounds(value):
                                     + " levels so that every supported Python reads it back")
             pending.extend((child, depth + 1) for child in (item.values() if isinstance(item, dict) else item))
         elif type(item) is int and abs(item) > _MAX_STORED_INTEGER:
-            raise ResearchError("invalid_input", "JSON to store must hold no integer of more than 4300 digits "
-                                "so that every supported Python reads it back")
+            raise ResearchError("invalid_input", "JSON to store must hold no integer of more than "
+                                + str(_MAX_STORED_INTEGER_DIGITS) + " digits so that every supported Python reads it back")
 
 
 def _canonical(value, code: str = "invalid_input") -> str:
