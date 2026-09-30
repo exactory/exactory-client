@@ -284,12 +284,36 @@ class SearchExecutionTests(WorkspaceTest):
             launchers[0].wait()
         self.assertEqual((caught.exception.code, caught.exception.message, caught.exception.details),
                          ("recovery_required", "The launcher is still live. Run search reconcile after the launcher ends.",
-                          {"refusal": {"code": "recovery_conflict", "message": "Unexpected launcher identity"}}))
+                          {"refusal": {"code": "recovery_conflict", "message": "Unexpected launcher identity", "details": None}}))
         self.assertEqual(self.controller.status()["runs"]["run-000001"]["status"], "reserved")
         # The launcher read the end of its input and recorded that it started no command, and reconciliation records that.
         invoke(self.controller, "reconcile", {}, None)
         run = self.controller.status()["runs"]["run-000001"]
         self.assertEqual((run["status"], run["termination"], run["charged_units"]), ("terminal", "never_started", 0))
+
+    def test_launcher_still_live_after_its_launch_is_refused_names_the_details_of_the_refusal(self):
+        spec = self.begin_a_move_for_a_job()
+        wait = subprocess.Popen.wait
+        wait_timeouts = []
+
+        def expire_the_first_wait(launcher, timeout=None):
+            # The exit wait after the refusal expires while the process still runs. A later wait waits for its real end.
+            wait_timeouts.append(timeout)
+            if len(wait_timeouts) == 1:
+                raise subprocess.TimeoutExpired(launcher.args, timeout)
+            return wait(launcher)
+
+        # The script writes a ready record that is not JSON into the run directory, its fourth argument, and stays alive
+        # without starting the launcher. The launch refuses the record, and the refusal's details give the JSON error.
+        with patch.object(subprocess.Popen, "wait", autospec=True, side_effect=expire_the_first_wait), \
+                self.start_launcher_after('printf x > "$4/ready.json"; exec sleep 60'), \
+                self.assertRaises(SearchError) as caught:
+            invoke(self.controller, "run", spec)
+        with self.assertRaises(json.JSONDecodeError) as malformed:
+            json.loads("x")
+        self.assertEqual((caught.exception.code, caught.exception.details),
+                         ("recovery_required", {"refusal": {"code": "recovery_conflict", "message": "stored JSON is malformed",
+                                                            "details": {"reason": str(malformed.exception)}}}))
 
     def test_refused_launch_whose_reconciliation_fails_keeps_the_refusal_in_the_traceback(self):
         from search_controller import execution
