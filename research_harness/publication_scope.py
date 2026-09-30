@@ -387,16 +387,28 @@ def _validate_scoped_review(context, value, candidate, contract, candidate_diges
         raise ResearchError("review_evidence_incomplete", "Independently assess every scientific check and candidate evidence reference")
 
 
+def prepare_combined_scoped_support(records, artifacts, payload, *, revision, request_id):
+    """Prepare scoped support and its pure report for one combined review commit."""
+    context, candidate, contract, exact, _, _ = _load_scope_snapshot(records, Evaluation.of(records, artifacts))
+    _validate_scoped_review(context, payload, candidate, contract, exact)
+    artifact = context.artifacts.put(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode(), "application/json")
+    saved = {"id": payload["id"], "payload": payload, "artifact": artifact, "candidate": candidate,
+             "scientific_target_digest": contract["scientific_target_digest"],
+             "scientific_projection": contract["scientific_projection"], "reviewed_revision": revision}
+    changes = [immutable_record(records, "scoped_readiness_review", payload["id"], saved),
+               ("scoped_review_selection", contract["id"], {"id": payload["id"]})]
+    prospective = dict(records)
+    for kind, key, value in changes:
+        prospective[kind] = dict(prospective.get(kind, {}), **{key: value})
+    report = assess_manuscript_readiness(prospective, artifacts)
+    return changes, report
+
+
 def record_scoped_readiness_review(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
-        context, candidate, contract, exact, _, _ = _load_scope_snapshot(records, Evaluation(records, ArtifactStore(store.root)))
-        _validate_scoped_review(context, value, candidate, contract, exact)
-        artifact = context.artifacts.put(json.dumps(value, sort_keys=True, ensure_ascii=False).encode(), "application/json")
-        saved = {"id": value["id"], "payload": value, "artifact": artifact, "candidate": candidate,
-                 "scientific_target_digest": contract["scientific_target_digest"],
-                 "scientific_projection": contract["scientific_projection"], "reviewed_revision": expected_revision + 1}
-        return [immutable_record(records, "scoped_readiness_review", value["id"], saved),
-                ("scoped_review_selection", contract["id"], {"id": value["id"]})], saved
+        changes, _ = prepare_combined_scoped_support(records, ArtifactStore(store.root), value,
+                                                    revision=expected_revision + 1, request_id=request_id)
+        return changes, changes[0][2]
     return prepared_mutation(store, "publication.scoped_review", payload, prepare,
                              expected_revision=expected_revision, request_id=request_id)
 

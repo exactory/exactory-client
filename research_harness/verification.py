@@ -89,6 +89,46 @@ def _body(artifacts, reference):
     return body
 
 
+def review_packet(records, artifacts, task_digest):
+    """Exact external-paper evidence without prior verdicts or strategic gates."""
+    from .review_packets import _source_closure, scrub
+    from .sampling import SAMPLED, current_sample, prediction
+    task = records.get("verification_task", {}).get(task_digest)
+    if task is None:
+        raise ResearchError("verification_task_required", "Bind the exact verification task before review assignment")
+    report, target, identity = _preparation(records, artifacts, task["task"])
+    versions = {reading["version_id"] for reading in records.get("reading", {}).values()}
+    versions.add(target["id"])
+    packet = {"kind": "verification", "task_digest": task_digest, "target": target,
+                  "task_identity": identity, "preparation_digest": report["digest"],
+                  "sources": _source_closure(records, versions),
+                  "standards": report.get("sections", {}).get("standards"),
+                  "prediction_cohort": [record["definition"] for record in records.get("collection", {}).values()]}
+    if preparation_policy(records) == SAMPLED:
+        packet["sampling_context"] = {"sample": current_sample(records), "prediction": prediction(records)}
+    return scrub(packet)
+
+
+def require_verdict_assignment(records, artifacts, value, body):
+    from .review_protocol import assignment_state
+    from .operations import normalized_text
+    assessment = value["assessment"]
+    identifier = assessment.get("assignment_id")
+    if identifier is None:
+        raise ResearchError("review_assignment_missing", "An independent verdict needs its observed exact-paper assignment")
+    state = assignment_state(records, artifacts, identifier)
+    if not state["ready"]:
+        raise ResearchError("review_context_unverified", "The current verifier context does not establish independence", {"obligations": state["obligations"]})
+    assignment = records["review_assignment"][identifier]
+    packet = strict_json(artifacts.read(assignment["packet"]))
+    if (state["role"] != "verification" or packet.get("paper", {}).get("task_digest") != value["task_digest"]
+            or normalized_text(state["reviewer_id"]) != normalized_text(assessment["assessor"])):
+        raise ResearchError("verification_target_mismatch", "Use the observed verifier and exact task evidence")
+    if state["output"] != {"verdict": body, "checks": assessment["checks"]}:
+        raise ResearchError("review_output_mismatch", "Bind the observed verifier's unchanged body and separate scientific checks")
+    return state
+
+
 def bind_verdict(store, payload, *, expected_revision, request_id):
     """Bind {id, task_digest, body:ArtifactRef, assessment} without changing the wire schema."""
     def prepare(records, value):
@@ -128,7 +168,7 @@ def bind_verdict(store, payload, *, expected_revision, request_id):
             if mismatch_msg is not None:
                 raise ResearchError("prediction_mismatch", mismatch_msg, {"sample": sample_prediction, "claimed": claimed})
         assessment = value["assessment"]
-        fields(assessment, ("assessor", "provenance", "independence_basis", "blind", "checks"))
+        fields(assessment, ("assessor", "provenance", "independence_basis", "blind", "checks"), ("assignment_id",))
         text(assessment["assessor"], "Verifier identity")
         text(assessment["independence_basis"], "Independent verification basis")
         artifacts.read(assessment["provenance"])
@@ -152,6 +192,7 @@ def bind_verdict(store, payload, *, expected_revision, request_id):
             raise ResearchError("invalid_verdict_assessment", "Keep validity independent of novelty and impact prediction")
         if not any(link["version_id"] == target["id"] for c in assessment["checks"] if c["dimension"] == "soundness" for link in c["evidence"]):
             raise ResearchError("invalid_verdict_assessment", "The soundness reasoning must inspect the exact target itself")
+        require_verdict_assignment(records, artifacts, value, body)
         record = dict(value, target=target, task_identity=identity, verification_id=task["task"]["verificationId"],
                       preparation_digest=report["digest"], evidence=evidence, sample_prediction=sample_prediction,
                       reviewed_revision=expected_revision)
@@ -180,5 +221,6 @@ def validate_verdict(store, task, body):
     for check in saved["assessment"]["checks"]:
         for link in check["evidence"]:
             validate_read_evidence(records, artifacts, link, depth="fulltext", target=target)
+    require_verdict_assignment(records, artifacts, saved, body)
     return {"ready": True, "revision": snapshot["revision"], "assessment": saved, "body": body, "task": task,
             "preparation_digest": report["digest"]}

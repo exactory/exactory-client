@@ -598,8 +598,7 @@
       "contract_id": "supported-manuscript-1",
       "scientific_target_digest": "<scientific target digest from manuscript-readiness>"
     }
-  }
-,
+  },
   "init": {
     "profile": "research",
     "target": null,
@@ -2773,7 +2772,8 @@
       "size": 15,
       "media_type": "application/json"
     },
-    "blind": true
+    "blind": true,
+    "assignment_id": "assignment-manuscript-a"
   },
   "round": {
     "id": "round-decision-1",
@@ -3438,7 +3438,8 @@
     },
     "reasons": [
       "The claim is sound and narrow; papers of this cohort with one established bound sit in the upper quarter."
-    ]
+    ],
+    "assignment_id": "assignment-manuscript-a"
   },
   "contribution-analysis": {
     "id": "contribution-analysis-1",
@@ -3632,7 +3633,8 @@
             }
           ]
         }
-      ]
+      ],
+      "assignment_id": "VERIFICATION_ASSIGNMENT_ID"
     }
   },
   "read-batch": {
@@ -3843,5 +3845,459 @@
     "version_id": "arxiv:2601.00002v1",
     "deferral_id": "defer-classic-1",
     "reason": "Resume acquisition and the ordinary reading requirements."
+  },
+  "intent": {
+    "id": "intent-1",
+    "previous": null,
+    "task_kind": "open_research",
+    "instruction": "instruction",
+    "recorded_at": "2026-09-30T18:00:00Z",
+    "full_objective": "Distinguish the two mechanisms over the complete target range.",
+    "branch": {
+      "statement": "Distinguish the mechanisms on the first target.",
+      "relation": "partial",
+      "remaining_obligations": [
+        "Other targets remain unresolved."
+      ]
+    },
+    "objective": {
+      "kind": "proposed",
+      "id": "proposal-1",
+      "statement": "Resolve the first discriminator.",
+      "scope": {
+        "targets": [
+          "first"
+        ]
+      },
+      "instruction": "instruction"
+    },
+    "user_standard": "unspecified",
+    "deliverables": [
+      "Supported result report"
+    ],
+    "publication": {
+      "instruction": "instruction",
+      "endpoint": "submit",
+      "required": true,
+      "quality_condition": null
+    },
+    "resources": [
+      {
+        "kind": "compute",
+        "limit": null,
+        "unit": "seconds",
+        "authorization": null
+      }
+    ],
+    "scope_changes": [],
+    "authors": [
+      "author"
+    ]
+  },
+  "strategy": {
+    "id": "dossier-1",
+    "previous": null,
+    "intent_id": "intent-1",
+    "phase": "prospective",
+    "objective": {
+      "kind": "proposed",
+      "id": "proposal-1",
+      "statement": "Resolve the first discriminator.",
+      "scope": {
+        "targets": [
+          "first"
+        ]
+      },
+      "instruction": "instruction"
+    },
+    "candidates": [
+      {
+        "id": "candidate-a",
+        "question": "Which mechanism survives the deciding observation?",
+        "target": "first target",
+        "scope": "the first target only",
+        "relation": "partial",
+        "method": "Discriminator",
+        "outcomes": {
+          "positive": "Separate mechanism A",
+          "negative": "Exclude mechanism A",
+          "inconclusive": "Keep both explanations open"
+        },
+        "prior_result": "The held comparator has no discriminator.",
+        "addition": "A deciding observation.",
+        "transfer": {
+          "kind": "direct",
+          "target_inference": "The exact first target is tested.",
+          "plan": "Observe both mechanisms on the same target.",
+          "evidence": [
+            {
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "size": 64,
+              "path": "research/sources/objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "media_type": "text/plain"
+            }
+          ]
+        },
+        "adequacy": {
+          "distinguishes": [
+            "mechanism A",
+            "mechanism B"
+          ],
+          "limits": [
+            "first target"
+          ],
+          "evidence": [
+            {
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "size": 64,
+              "path": "research/sources/objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "media_type": "text/plain"
+            }
+          ]
+        },
+        "assumptions": [
+          {
+            "id": "assumption-1",
+            "statement": "The measurement identifies the response.",
+            "check": "Measure the known control.",
+            "scope_boundary": "Only calibrated inputs."
+          }
+        ],
+        "resources": {
+          "estimates": [
+            {
+              "unit": "seconds",
+              "amount": 10,
+              "uncertainty": "Approximately ten seconds."
+            }
+          ],
+          "available": [
+            "Local CPU"
+          ]
+        },
+        "next_test": {
+          "question": "Does the control separate mechanisms?",
+          "method": "Discriminator",
+          "success": "Distinct response",
+          "failure": "Indistinguishable response",
+          "prerequisites": []
+        },
+        "evidence": [
+          {
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "size": 64,
+            "path": "research/sources/objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "media_type": "text/plain"
+          }
+        ]
+      },
+      {
+        "id": "candidate-b",
+        "question": "Which mechanism survives the deciding observation?",
+        "target": "first target",
+        "scope": "the first target only",
+        "relation": "partial",
+        "method": "Alternative estimator",
+        "outcomes": {
+          "positive": "Separate mechanism A",
+          "negative": "Exclude mechanism A",
+          "inconclusive": "Keep both explanations open"
+        },
+        "prior_result": "The held comparator has no discriminator.",
+        "addition": "A deciding observation.",
+        "transfer": {
+          "kind": "direct",
+          "target_inference": "The exact first target is tested.",
+          "plan": "Observe both mechanisms on the same target.",
+          "evidence": [
+            {
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "size": 64,
+              "path": "research/sources/objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "media_type": "text/plain"
+            }
+          ]
+        },
+        "adequacy": {
+          "distinguishes": [
+            "mechanism A",
+            "mechanism B"
+          ],
+          "limits": [
+            "first target"
+          ],
+          "evidence": [
+            {
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "size": 64,
+              "path": "research/sources/objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "media_type": "text/plain"
+            }
+          ]
+        },
+        "assumptions": [
+          {
+            "id": "assumption-1",
+            "statement": "The measurement identifies the response.",
+            "check": "Measure the known control.",
+            "scope_boundary": "Only calibrated inputs."
+          }
+        ],
+        "resources": {
+          "estimates": [
+            {
+              "unit": "seconds",
+              "amount": 10,
+              "uncertainty": "Approximately ten seconds."
+            }
+          ],
+          "available": [
+            "Local CPU"
+          ]
+        },
+        "next_test": {
+          "question": "Does the control separate mechanisms?",
+          "method": "Alternative estimator",
+          "success": "Distinct response",
+          "failure": "Indistinguishable response",
+          "prerequisites": []
+        },
+        "evidence": [
+          {
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "size": 64,
+            "path": "research/sources/objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "media_type": "text/plain"
+          }
+        ]
+      }
+    ],
+    "selected_candidate": "candidate-a",
+    "no_branch": "Do not spend resources if no method distinguishes the targets.",
+    "single_candidate": null,
+    "claims": [],
+    "comparators": [],
+    "dependencies": [],
+    "work_items": [],
+    "leads": [],
+    "failures": [],
+    "continuity": [],
+    "material_change": null,
+    "reconsideration": null,
+    "tranche": {
+      "id": "tranche-1",
+      "question": "Does the proposed discriminator work?",
+      "method": "Discriminator",
+      "limit": {
+        "unit": "seconds",
+        "amount": 10
+      },
+      "end_condition": "Control assessed",
+      "failure_signal": "Responses cannot be separated",
+      "expected_evidence": "Exact observed controls",
+      "predecessor": null,
+      "previous_outcome": null
+    },
+    "recommendation": {
+      "action": "investigate",
+      "reason": "The deciding control is available."
+    },
+    "bundle_digest": null
+  },
+  "work-item": {
+    "id": "work-1",
+    "previous": null,
+    "item_id": "discriminator",
+    "intent_id": "intent-1",
+    "requests": [
+      {
+        "origin": "review",
+        "request_id": "request-a",
+        "reviewer": "reviewer-a",
+        "statement": "Test the deciding discriminator."
+      }
+    ],
+    "classification": "consequence_critical",
+    "execution_state": "planned",
+    "claim_ids": [
+      "claim-a"
+    ],
+    "disposition": "active",
+    "reason": "Needed to distinguish mechanisms.",
+    "evidence": [],
+    "resource_implications": "Uses the bounded first tranche.",
+    "reopen_trigger": null,
+    "cycle_ids": []
+  },
+  "research-lead": {
+    "id": "lead-1",
+    "intent_id": "intent-1",
+    "origin": "prior_verification",
+    "origin_id": "verification-objection-1",
+    "discrepancy": "The stated inference does not follow when the control is fixed.",
+    "contradicts": "The source universal claim.",
+    "verification_status": "verified_in_origin",
+    "input_knowledge": true,
+    "evidence": [
+      {
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "size": 64,
+        "path": "research/sources/objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "media_type": "text/plain"
+      }
+    ],
+    "possible_consequence": "Identify the valid scope or an exact counterexample.",
+    "next_check": "Reproduce the deciding source calculation with the stated control.",
+    "disposition": "candidate",
+    "reason": "The supplied original finding gives a discriminating test.",
+    "reopen_trigger": null
+  },
+  "research-decision": {
+    "id": "decision-1",
+    "dossier_id": "dossier-1",
+    "phase": "prospective",
+    "action": "investigate",
+    "artifact_disposition": "none",
+    "goal_status": "open",
+    "review_ids": [
+      "slate-a",
+      "slate-b"
+    ],
+    "bar_review_ids": [
+      "bar-a",
+      "bar-b"
+    ],
+    "objections": [],
+    "work_items": [],
+    "source_impact": {
+      "sources": [],
+      "aspects": {
+        "nearest_work": "unchanged",
+        "scope": "unchanged",
+        "transfer": "unchanged",
+        "bar": "unchanged"
+      }
+    },
+    "reason": "The first bounded test can resolve the critical assumption.",
+    "remaining_objective": [
+      "Other targets remain unresolved."
+    ],
+    "next_action": "Run the bounded deciding control.",
+    "goal_evidence": [],
+    "support_candidate_digest": null
+  },
+  "source-impact": {
+    "id": "source-impact-1",
+    "decision_id": "decision-1",
+    "source_impact": {
+      "sources": [],
+      "aspects": {
+        "nearest_work": "unchanged",
+        "scope": "unchanged",
+        "transfer": "unchanged",
+        "bar": "unchanged"
+      }
+    }
+  },
+  "value-review": {
+    "stage": "bar",
+    "support": null,
+    "value": {
+      "status": "sufficient",
+      "consequence": "Resolve the deciding inference at its stated scope.",
+      "bar_ids": [],
+      "objective_adequacy": "not_assessed",
+      "method_adequacy": "not_assessed",
+      "reason": "The exact target inference is scientifically consequential.",
+      "evidence": [
+        {
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "size": 64,
+          "path": "research/sources/objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "media_type": "text/plain"
+        }
+      ],
+      "work_items": [],
+      "objection_findings": [],
+      "assurances": []
+    },
+    "objections": [],
+    "limitations": [
+      "Synthetic scientific judgments test software contracts only."
+    ],
+    "id": "bar-a",
+    "dossier_id": "dossier-1",
+    "assignment_id": "assignment-bar-a"
+  },
+  "review-route": {
+    "id": "review-route-1",
+    "adapter": "openai_responses_v1",
+    "model": "<explicit supported model>",
+    "endpoint": "https://api.openai.com/v1/responses",
+    "configuration": {
+      "max_output_tokens": 8000,
+      "timeout_seconds": 300
+    }
+  },
+  "review-assignment": {
+    "id": "assignment-bar-a",
+    "route_id": "review-route-1",
+    "dossier_id": "dossier-1",
+    "role": "bar",
+    "reviewer_id": "reviewer-a",
+    "author_id": "author",
+    "context": {}
+  },
+  "review-probe": {
+    "id": "probe-1",
+    "route_id": "review-route-1"
+  },
+  "review-run": {
+    "id": "attempt-bar-a",
+    "assignment_id": "assignment-bar-a"
+  },
+  "review-attempt": {
+    "id": "imported-attempt-1",
+    "assignment_id": "assignment-bar-a",
+    "status": "failed",
+    "output": null,
+    "reason": "The external call failed; this imported record establishes no independence.",
+    "usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd": null,
+      "wall_seconds": null
+    }
+  },
+  "review-context": {
+    "id": "context-event-1",
+    "assignment_id": "assignment-bar-a",
+    "kind": "contamination",
+    "source": "prior_assessments",
+    "reason": "An earlier assessment reached this context after assignment.",
+    "evidence": [
+      {
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "size": 64,
+        "path": "research/sources/objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "media_type": "text/plain"
+      }
+    ]
+  },
+  "review-adjudication": {
+    "id": "adjudication-1",
+    "assignment_id": "assignment-adjudicator-1",
+    "objection_id": "objection-1",
+    "disposition": "unresolved",
+    "reason": "The original packet does not resolve the conflicting inference.",
+    "evidence": [
+      {
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "size": 64,
+        "path": "research/sources/objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "media_type": "text/plain"
+      }
+    ],
+    "correction_admissible": null
   }
 }

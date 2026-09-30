@@ -48,6 +48,11 @@ class Controller:
 
     def command(self, name, spec, expected_revision, request_id, target=None, *, workspace_root=None, hook_session=None):
         s.require(isinstance(spec, dict), "Command spec must be an object")
+        if name == "review-packet":
+            s.require(target is None and workspace_root is None and hook_session is None,
+                      "Native review packet export has no mutation routing")
+            from .reviewer import export_packet
+            return export_packet(self, spec)
         if name in {"status", "next", "strategy-context"}:
             s.require(set(spec) <= {"session_id", "focus_request_id", "objective_id", "contract_digest"}, "Unknown read-only validation field")
             state = self.status()
@@ -86,7 +91,10 @@ class Controller:
         built = []
         def build(document, content):
             built.append(True)
-            return self._build(name, spec, target, identity, document, content, routing, hook_session, operation_locks)
+            candidate = self._build(name, spec, target, identity, document, content, routing, hook_session, operation_locks)
+            from .reviewer import validate_submitted
+            validate_submitted(self, replay(document), spec, candidate, content, operation_locks)
+            return candidate
         def check_recovery_commit():
             from .rank_recovery import audit_commit
             audit_commit(self, spec)
@@ -262,6 +270,9 @@ class Controller:
                         content.put_blob(verification[key])
                     imported = next(v for v in state["service"]["imports"].values() if v["subject"]["attack_slug"] == mapping["attack_slug"])
                     allowance = dict(verification, import_id=imported["id"])
+                    content.put_blob({"import_id": imported["id"], "snapshot_digest": mapping["snapshot_digest"],
+                        "claim_digest": s.digest(verification["proposal"]["claim"]),
+                        "proposal_digest": s.digest(verification["proposal"]), "limits": verification["proposal"]["limits"]})
                     existing = any(s.digest(verification["proposal"]) == s.digest(v["proposal"]) for v in state["service"]["adoption_allowances"])
                     if existing:
                         previous_versions = {v["snapshot_digest"] for v in state["service"]["adoption_allowances"]
@@ -310,6 +321,8 @@ class Controller:
             for review in state["reviews"].values():
                 if review["proposal_id"] == target:
                     s.require(content.get_blob(review["digest"]) == review["record"], "Review changed", "digest_mismatch")
+            from .reviewer import admission_reviews
+            admission_reviews(self.root, state, content, target)
             effect = self._workspace_effect(state, proposal, content)
             if effect is not None:
                 effects.append(effect)

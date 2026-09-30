@@ -342,6 +342,11 @@ def launch(controller, run):
             inputs = content.get_blob(run["input_digest"])
             s.require(inputs.get("foundation") == effective_foundation(state, node),
                       "The launch must use the foundation reviewed for this reserved run", "research_foundation_stale")
+            if run["kind"] != "command":
+                from .reviewer import require_review
+                spec = content.get_blob(run["spec_digest"])
+                require_review(controller.root, state, content, spec["input_review"],
+                    subject=verification_entry_subject(node, spec), common_guard=common_guard)
         def prelaunch(state, content):
             audit_launch(state, content)
             if run["kind"] == "command":

@@ -17,6 +17,7 @@ if str(HARNESS) not in sys.path:
 from search_controller.service import Controller
 
 FIXTURES = runpy.run_path(str(HARNESS / "tests/search_fixtures.py"))
+observe_native_review = runpy.run_path(str(HARNESS / "tests/native_reviewer_support.py"))["observe_review"]
 
 
 def managed_objective(root, host="claude", session="session", workspace=None):
@@ -37,7 +38,8 @@ def managed_objective(root, host="claude", session="session", workspace=None):
     from integration_fixtures import pin_native_research
     pin_native_research(root, proposal, inputs, controller.status()["contract"])
     controller.command("propose", {"proposal": proposal, "inputs": inputs}, 1, "propose")
-    controller.command("review", {"proposal_id": "proposal-000001", "review": FIXTURES["review"](proposal), "inputs": []}, 2, "review")
+    observed = observe_native_review(controller, FIXTURES["review"](proposal), proposal)
+    controller.command("review", {"proposal_id": "proposal-000001", "review": observed, "inputs": []}, 2, "review")
     controller.command("admit", {}, 3, "admit", "proposal-000001")
     focus_objective(controller, host, session, workspace=workspace)
     return controller

@@ -1,17 +1,22 @@
 ---
-description: Evaluate a paper locally without submitting anything - citation integrity, a blind quality review, and the verdict you expect the market to reach. Use when the user says to evaluate my draft, self-check my paper, or check my citations.
+description: Use when the user asks to evaluate a draft, self-check a paper, check its citations, or review a manuscript locally without submission.
 ---
 
 # Evaluate a paper locally
 
 Read the [research constitution](../../RESEARCH_CONSTITUTION.md) and the
-[managed research workflow](../../docs/research-workflow.md). For a managed author
+[managed research workflow](../../docs/research-workflow.md) and the
+[reviewer delivery protocol](../../docs/research-decisions.md). For a managed author
 study, inspect `status --summary`, `next --summary`, and current whole research `gate readiness` before
-manuscript assessment. In a study with a selected source-limited contract (`select-publication-scope`), `gate manuscript-readiness` takes the place of `gate readiness` here; `gate readiness` still reports the complete objective. Research readiness review precedes writing; the manuscript
+manuscript assessment. In a study with a selected source-limited contract (`select-publication-scope`), `gate manuscript-readiness` takes the place of `gate readiness` here; `gate readiness` still reports the complete objective. Combined research support/consequence assessment precedes writing; the manuscript
 review below is a separate assessment. An external paper uses the verification
 profile's exact-source preparation and field standards, independent of author
 innovation goals. A local inspection of unmanaged material remains possible, but
 supplies no managed readiness credit without explicit adoption and current checks.
+Standalone evaluation requires no research intent, strategy dossier, consequence
+bar or author-research decision. Independence and blindness still require verified
+reviewer delivery and context. Do not add author-study gates merely because the
+paper uses the common evidence store.
 
 A local self-check on any draft or published paper: citation integrity, a blind
 quality review, and the verdict you expect the market's verifiers to reach. It runs best inside a draft workspace
@@ -129,6 +134,23 @@ those current claims. Keep the complete ledger and its markers in the study for
 the round gate. The round assessor receives that original ledger. A score anchored
 on "it has improved" is not a measurement.
 
+Use a harness-generated packet and canonical role prompt with a recorded
+assignment on a verified actual route/version. Bind the exact prompt, packet,
+invocation, unchanged output and reviewer identity. For standalone work, use the
+standalone role with its actual artifact references and no strategic dossier.
+Test automatic startup instructions, memory indexes, hooks, configuration and
+permitted tools; record author-history isolation, prior-assessment isolation and
+identity masking separately. The probe must demonstrate intended evidence access
+as well as exclusion of synthetic forbidden context.
+
+A new session, directory or host and a clean packet do not establish isolation.
+If an automatic memory index or later tool read exposes prior scores, retain the
+response and record contamination even when the answer never repeats them.
+Invalidate the affected current independence claim, repair and verify the actual
+route, and reassess dependent current findings before consuming approval. Missing
+historical metadata is unknown exposure, not proof that every old review was
+contaminated. Never infer successful exclusion from an absent canary alone.
+
 **Spot-check claim support on the load-bearing citations.** Step 1 proved each
 reference exists and carries the metadata the registry states. It did not prove the
 sentence citing it is fair. Take the references the main claims rest on, open them,
@@ -172,7 +194,9 @@ incomplete group reports counts and null medians. Publication reviewers without
 predictions remain outside this measurement. A bundle takes three predicting
 assessors: a second prediction by one assessor and a prediction by a fourth are
 refused, so a complete measurement stays complete. Record each review before its
-prediction. If one reviewer is missing, relaunch that reviewer alone. When an
+prediction. If a reviewer invocation fails, retain the attempt and usage and retry
+that assignment under the bounded operational policy. A completed unfavorable
+review is not an invocation failure. When an
 assessor that already predicted cannot supply its review, pin the same files
 again and measure that bundle. Preserve the original review and prediction
 files. A group made ambiguous by records from before this rule stays an invalid
@@ -180,17 +204,20 @@ measurement in the measurement history.
 
 **Before deposit, run the dual-reviewer gate.** If the `santa-method` skill is
 installed, use it; the essential protocol is stated here in full either way. Launch
-two independent reviewer sub-agents in parallel with no shared context beyond the
-artifact and RUBRIC.md; neither sees the other's output or knows another reviewer
+two independent assignments on a verified route with no shared context beyond the
+artifact and canonical rubric; neither sees the other's output or knows another reviewer
 exists. Each returns the core JSON. The gate passes only when both decisions
-are `accept`; one reviewer catching a problem means the problem is real. On any
-reject, merge both reviewers' weaknesses, fix the paper, and re-run the gate with
-fresh reviewers, because a reviewer that remembers the previous round is anchored.
+are `accept`. Preserve each rejection and its evidence. Resolve a real defect in
+the paper or evidence; a contested material objection uses focused independent
+adjudication. A demonstrable misreading or required omission follows the recorded
+correction-admissibility protocol, not a replacement favorable review. Reassess
+changed evidence through new verified assignments while preserving every original
+finding. No majority or new reviewer erases an unresolved counterexample.
 Every gate review still gets its own `review_NNN.json` and history line.
 
 For managed publication, pin the exact current `manuscript` and export its actual
 bytes with `exactory-research export --kind manuscript --destination PATH`.
-Deliver that bundle and prescribed evidence to each assessor. Save their unchanged
+Deliver that bundle and prescribed evidence through the canonical assignments. Save their unchanged
 original rubric JSON and real provenance with `artifact`, wrap each in
 `manuscript-review` for the exact bundle digest, then run the current whole
 `exactory-research gate publication`. A pair of local accept labels or a historical
@@ -217,8 +244,10 @@ and never see the study's Grand Challenge record.
 1. Read the three reviews' `changes_for_maximum.contribution` items, the study's
    current Grand Challenge record (`status` reports it), and the paper's current
    claims.
-2. Investigate briefly: run one to three queries about the frontier of those
-   challenges and who is working on them. Save each original response in the
+2. State the scientific question raised by those findings. Reuse current verified
+   investigation evidence when it still answers that question, naming its original
+   record and why it remains applicable. Search when a changed question, new
+   finding or source gap requires it. Save each new original response in the
    workspace and pin it with `exactory-research artifact`. Do not import these
    responses and do not record them as a `search`: an import changes the record
    of every held work a response returns, and the measured bundle is then no
@@ -227,16 +256,26 @@ and never see the study's Grand Challenge record.
    hold yet, read in full now. A work the study already holds without a full
    reading (a reference, a cohort member, a search hit) waits for the next
    round's literature stage, because reading it changes the preparation.
-3. Record `contribution-analysis` for the bundle: the investigation (each
-   query, its pinned response, and what it shows), the position against the
+3. Record `contribution-analysis` for the bundle: the investigation or justified
+   reused findings, the position against the
    record's criteria, one disposition for every reviewer contribution change
-   (`adopted` into a step, or `rejected` with a reason), and at least one step.
+   (`adopted` into a step, or `rejected` with a reason), and supported next steps or
+   an evidenced reason why none remains.
    Each step names the criteria it advances, its direction, whether it fits this
    round's objective (`this_round`) or needs a new round (`next_round`), the
    current claims it builds on, and the community that gains, with evidence. A
-   step follows from established results, with no gap in the argument. Each
-   analysis has its own investigation: a query with a response that an earlier
-   analysis already used is refused.
+   step states how established evidence supports it and any proposed inference
+   still to be tested. Preserve work-item links to every original reviewer request.
+   Adoption is distinct from execution status. `next_round` does not discharge a
+   validity or consequence-critical gap, and an infeasibility claim needs an actual
+   obstruction, credible resource/access evidence or a failed bounded probe.
+
+Extend the same dossier and canonical decision with the exact measured bundle,
+complete measurement, demand dispositions and work-item execution. A new critical
+gap becomes a current decision obligation before further development or publication
+planning. Compare optional improvements by scientific value and opportunity cost;
+`changes_for_maximum` is a request for assessment, not an automatic mandate. Keep
+the original objective explicit if the supported consequence has shrunk.
 
 `exactory-research example contribution-analysis` shows the complete payload.
 The next bundle is pinned and the round is decided only after this record;
@@ -260,18 +299,23 @@ between them and this file tells you how well you judge your own work.
 
 ### 4. The round review
 
-In a managed study, `exactory-research export --kind round --destination PATH`
-writes the packet for the round assessor. The assessor is a fresh subagent that is
-not a cycle author, or a human. Deliver the whole directory and this section. The
-round review is not blind: the packet carries the manuscript, its reviews and
+In a managed study, round commands adapt the same canonical post-measurement
+decision. `continue` consumes an approved investigate or pivot decision with its
+next tranche; `stop` distinguishes branch closure, manuscript development and
+authorized limited delivery. `round-review` records or displays that assessment;
+do not commission a second independent approval of the same scientific choice.
+`round-assess` preserves the factual outcome against the admitted round goal.
+
+`exactory-research export --kind round --destination PATH` preserves the round's
+evidence view. This assessment is not blind: the packet carries the manuscript, its reviews and
 predictions with their medians, the decision under review, every earlier
 round's goal, assessment and decision, the study's current Grand Challenge record,
 the bundle's contribution analysis with the captured responses of its
 investigation, and the record that analysis named its criteria against when
 another record has replaced it.
 
-The assessor answers each check of the decision's kind once. A `continue` decision
-has seven checks and a `stop` decision has two:
+The canonical assessment retains these substantive assurances. A `continue`
+decision has seven checks and a `stop` decision has two:
 
 - `impact` (continue): Does the goal name something concrete the field could do
   after the round that it cannot do with the current paper, and is that named with
@@ -297,25 +341,12 @@ has seven checks and a `stop` decision has two:
 - `stop` (stop): Were the candidates and carried items judged fairly against the
   paper's evidence and reviews?
 
-The assessor returns three things:
-
-- `verdict`: `approved`, `not_approved` or `unresolved`.
-- `checks`: one entry per check, each `{kind, status, reason, evidence}`. `status`
-  is `passed`, `failed` or `unresolved`. `evidence` has at least one item.
-- `limitations`: a nonempty array of strings.
-
-Each evidence item is one of three kinds:
-
-- `{"kind": "source", "link": Link}` for a source read in full;
-- `{"kind": "result", "execution_id", "output_id", "artifact", "locator"}` for an
-  actual execution output;
-- `{"kind": "review", "review_id"}` naming a review in the packet's `reviews`.
-
-The author then saves the assessor's unchanged output and provenance with
-`artifact`. The author adds `id`, `round_id` (the packet's `decision.payload.id`),
-`round_digest` (the packet's `decision.digest`) and the `assessor` block, and
-records the result with `round-review`. `exactory-research example round-review`
-shows the complete payload.
+Use actual source readings, sealed results and review findings to support these
+checks. Preserve contrary evidence and dispositions of all carried work items.
+The adapter must bind the current canonical decision and exact round evidence;
+`exactory-research example round` and `example round-review` show the current
+payloads. Historical round assessments remain readable. Their presence does not
+fabricate a canonical approval for a new commitment.
 
 ## What not to do
 

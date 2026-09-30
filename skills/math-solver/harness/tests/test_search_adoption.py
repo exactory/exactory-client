@@ -208,6 +208,7 @@ class AdoptionTests(SearchCLIWorkspace, unittest.TestCase):
                    "claim_digest": digest(claim()), "proposal_digest": digest(verification["proposal"]),
                    "limits": verification["proposal"]["limits"]}
         verification["allowance_review"]["subject_digest"] = digest(subject)
+        verification["allowance_review"]["reviewer"] = provenance("allowance-reviewer")
         copied["mappings"][0]["verification"] = verification
         self.search("adopt", copied, revision=2)
         state = self.search("status")
@@ -253,6 +254,7 @@ class AdoptionTests(SearchCLIWorkspace, unittest.TestCase):
                    "claim_digest": digest(claim()), "proposal_digest": digest(verification["proposal"]),
                    "limits": verification["proposal"]["limits"]}
         verification["allowance_review"]["subject_digest"] = digest(subject)
+        verification["allowance_review"]["reviewer"] = provenance("allowance-reviewer")
         amended["mappings"][0]["verification"] = verification
         self.search("adopt", amended, revision=2, request="repair-once")
         state = self.search("status")

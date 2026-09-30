@@ -69,6 +69,49 @@ class NativeReviewBoundaryTests(WorkspaceTest):
         self.assertEqual(len(state["runs"]), 2)
         self.assertEqual(state["proof_status"], "open")
 
+    def contaminate(self, value):
+        from research_harness import review_protocol
+        from research_harness.artifacts import ArtifactStore
+        from research_harness.storage import Store
+        from tests.native_reviewer_support import mutate
+        store = Store(self.attack_root)
+        mutate(store, review_protocol.record_context_event, {"id": "verification-context-exposure",
+            "assignment_id": value["reviewer"]["attestation_id"].split(":", 1)[1],
+            "kind": "contamination", "source": "author_history", "reason": "The verification reviewer received author context.",
+            "evidence": [ArtifactStore(store.root).put(b"Retained verification context finding.", "text/plain")]})
+
+    def test_observed_input_review_contamination_refuses_actual_execution(self):
+        value = review_native_inputs(self.controller, self.slug, "check")
+        self.contaminate(value)
+        status, _, error = self.verify()
+        self.assertEqual(status, 1)
+        self.assertIn("review_context_unverified", error)
+        self.assertFalse(self.marker.exists())
+        self.assertEqual(self.controller.status()["runs"], {})
+
+    def test_current_verification_audit_rechecks_observed_policy_context(self):
+        from search_controller.evidence import audit_verification
+        from tests.search_fixtures import provenance
+        from tests.native_reviewer_support import observe_review
+        review_native_inputs(self.controller, self.slug, "check")
+        self.assertEqual(self.verify()[0], 0)
+        state = self.controller.status()
+        run = state["runs"]["run-000001"]
+        frozen = self.controller.store.get_blob(run["input_digest"])
+        value = {"subject_digest": run["result_digest"], "claim_digest": frozen["claim_digest"],
+            "reviewer": provenance("verification-policy-reviewer"), "decision": "approve",
+            "findings": {key: "Reviewed the exact native result and evidence" for key in
+                         ["statement", "assumptions", "scope", "dependencies", "policy"]}}
+        value = observe_review(self.controller, value, self.controller.store.get_blob(run["result_digest"]))
+        manifest = dict(frozen, kind="certificate", verification={"run_id": run["id"],
+            "result_digest": run["result_digest"], "policy_review": value,
+            "requested_declaration": None, "requested_type_digest": None})
+        audit_verification(state, manifest, self.controller.store, root=self.attack_root)
+        self.contaminate(value)
+        with self.assertRaises(SearchError) as caught:
+            audit_verification(state, manifest, self.controller.store, root=self.attack_root)
+        self.assertEqual(caught.exception.code, "review_context_unverified")
+
     def test_result_recovery_preserves_intervening_user_edits(self):
         from search_controller import execution
         review_native_inputs(self.controller, self.slug, "check")

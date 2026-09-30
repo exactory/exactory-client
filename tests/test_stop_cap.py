@@ -73,13 +73,14 @@ class TestStopCap(unittest.TestCase):
         summary = self.run_stop(host, "continue_attack.py", False)
         self.assertEqual(summary["decision"], "block")
         self.assertIn("safety cap", summary["reason"])
-        from test_math_search_hooks import FIXTURES
+        from test_math_search_hooks import FIXTURES, observe_native_review
         state = controller.status()
         alternative = json.loads(json.dumps(state["proposals"]["proposal-000001"]["record"]))
         alternative.update(attack_slug="alternative", relationship="alternative", equivalent_node_ids=["node-000001"])
         alternative["budget"].update(mode="inherit", account_id="account-000001")
         controller.command("propose", {"proposal": alternative, "inputs": []}, state["revision"], "alternative")
-        controller.command("review", {"proposal_id": "proposal-000002", "review": FIXTURES["review"](alternative), "inputs": []},
+        observed = observe_native_review(controller, FIXTURES["review"](alternative), alternative)
+        controller.command("review", {"proposal_id": "proposal-000002", "review": observed, "inputs": []},
                            state["revision"] + 1, "alternative-review")
         controller.command("admit", {}, state["revision"] + 2, "alternative-admit", "proposal-000002")
         controller.command("replan", {"route_orders": [], "progress_acceptance_ids": [],

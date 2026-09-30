@@ -32,15 +32,22 @@ Use the path of this installed copy. Do not assume a fixed cache location.
 
 Use `exactory-research status --summary` and `next --summary` on resume, and the
 `obligations` page for one code at a time. Cohort collection, actual
-reading, and the installed literature-review stage precede ideation. The complete
-objective and current synthesis precede prospective cycle admission and exact run
-binding. Independent research readiness review of the actual candidate precedes
-writing; two blind reviews of the exact manuscript are a separate publication
-requirement. At `evaluate`, decide on the exact manuscript bundle with `round`
-(`continue` or `stop`) and record an independent assessor's `round-review`. An
-approved `continue` is opened with `round-admit` before the study returns to
-`literature`; the study's `deposit` stage closes on the receipt that
-`exactory-draft deposit` records when `gate round` and the publication gate pass.
+reading, and literature preparation still precede execution. In managed author
+research, follow the [scientific decision lifecycle](../docs/research-decisions.md):
+record intent and a proposed-content dossier, obtain two independent bars before
+the slate, and assess both objective and approach before target commitment.
+Commit exact approved content with its source/preparation delta. Investigations
+use bounded question/resource tranches and the existing prospective cycle
+admission and exact run binding.
+
+Before writing, each of two assessors evaluates support and realized consequence
+in one response. The same canonical decision governs new commitments, manuscript
+development, justified limited delivery and post-measurement rounds. Old `round`,
+`round-review` and `round-admit` commands adapt it without a second strategic
+approval. Blind reviews of the exact manuscript remain separate. Preserve actual
+publication authority and the full objective's remaining obligations; an
+unconditional named endpoint does not require another permission question because
+the scientific bar is unmet. Explicit quality conditions remain binding.
 Use the actual payloads from `exactory-research example OPERATION`
 and the [CLI reference](../docs/research-cli.md). Preserve failed branches,
 checkpoints, source changes, uncommitted user work, and all resource costs.
@@ -80,14 +87,25 @@ unreported wrappers and internal solver calls remain outside that boundary.
 | Run a shell command | Use the shell tool available in this session, with the command path set above |
 | Write or edit a file | Use `apply_patch`; the Codex hooks check each file in the patch |
 | Ask the user | Use the session's question tool or a direct question |
-| Independent reviewers | Use separate agents with fresh contexts and only the prescribed review material |
+| Independent reviewers | Use canonical assignments on an actually verified route/version with only the permitted context and evidence |
 | Reader or screener agents | Use one agent per `batches` file; each returns one notes file and one coordinator records it with `read-batch` or `screen-batch` |
 
-When a workflow requires independent reviewers, confirm that the session has
-agent tools. If those tools are unavailable, report that requirement before
-the review stage. Do not substitute a self-review for an independent review.
-When `spawn_agent` supports `fork_turns`, set `fork_turns: "none"` for those
-reviewers and supply only the prescribed review material.
+Before an independent review, check the configured delivery route and actual
+context evidence. `fork_turns: "none"` avoids intentional conversation forking
+where supported, but does not by itself exclude automatic memory, project
+instructions, hooks or later tool access. A fresh agent or a clean packet alone
+cannot be marked isolated. Use canonical prompts, exact packet hashes, actual
+invocation provenance, excluded synthetic-token tests and an allowed-input
+positive control for the specific route/version. Only a verified assignment
+supplies independent approval; preserve unverified, failed and contaminated
+returns and repair affected current findings before relying on them.
+
+Use a different model family when configured and authorized, recording a
+common-family limitation otherwise. An unavailable route is an operational
+dependency, not a negative scientific rating or permission to self-review.
+Continue authorized independent work while repairing it. Native math,
+standalone evaluation and verification retain their own decision prerequisites;
+shared reviewer-context requirements apply wherever independence is claimed.
 
 ## Enable the checks
 

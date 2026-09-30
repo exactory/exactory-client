@@ -43,4 +43,6 @@ def amendment_spec(controller, node_id, foundation, inputs, reason="Adopt comple
               "reviewer": provenance("foundation-reviewer"), "decision": "approve",
               "findings": {key: "The exact native claim, source bytes and current preparation were independently assessed."
                            for key in ("statement", "assumptions", "scope", "dependencies", "policy")}}
+    from tests.native_reviewer_support import observe_review
+    review = observe_review(controller, review, subject, inputs=inputs)
     return {"subject": subject, "review": review, "inputs": inputs}

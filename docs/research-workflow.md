@@ -8,6 +8,14 @@ connects the shared skills to the actual commands in the
 `exactory-research example OPERATION`. Examples need actual acquired evidence,
 source locations, identities, hashes, and assessments before use.
 
+Managed author studies and drafts also follow the
+[scientific decision lifecycle](research-decisions.md): independent bar and
+candidate assessment before an author-chosen objective is committed, then one
+combined support/value assessment at each result commitment. Native mathematical
+search, standalone evaluation and external verification keep their own decision
+contracts. A shared preparation profile alone does not add the author gates.
+Verified reviewer context is required wherever independence or blindness is claimed.
+
 Run commands from the study directory with the installed plugin's `bin/` on PATH
 for each shell call. Keep payload files and human notes inside the workspace.
 Every `REVISION` below means the current revision from `status`, read before that
@@ -17,8 +25,8 @@ receipt preserves history and does not authorize a later action.
 
 ## Initiate and resume
 
-Create an author study once. The initial target is pending so that literature can
-establish the complete objective before ideation.
+Create an author study once. Keep the initial target pending while literature
+informs the prospective comparison of the objective and first approach.
 
 ```sh
 exactory-lab init --dir study --slug study --expected-revision 0 --request-id initialize-study
@@ -54,6 +62,20 @@ Use `adopt` explicitly for legacy work; use `recover` only when the Store report
 that native rollback recovery is required. A crash does not initialize a new
 study or reset an account. The original initialization request can repair an
 interrupted layout without overwriting later state or user material.
+
+Record a versioned `intent` with the original instruction, complete objective,
+task kind, quality standard or `unspecified`, resources, artifact/publication
+authority and current branch relationship. Use a proposed-content binding until
+the native objective exists. Existing instructions through a named endpoint remain
+effective; distinguish a limited authorized delivery from scientific success.
+Only an actual explicit quality condition makes that condition a publication
+prerequisite. Unknown resource limits are not zero or an invented whole-run cap.
+
+Constitution version 6 changes the policy hash. Use the existing explicit
+`constitution` revalidation flow for a new substantial commitment, preserving old policy and
+completed historical states. Old strategic decisions remain `legacy_unassessed`.
+An admitted active cycle may finish and retain its evidence; migration does not
+rerun all old cycles or fabricate prospective assessments from hindsight.
 
 ## Cohort: enumerate the population and read its abstracts
 
@@ -215,7 +237,6 @@ exactory-research search --file theory-search.json --expected-revision REVISION 
 exactory-research search --file adjacent-search.json --expected-revision REVISION --request-id search-adjacent-001
 exactory-research search --file recent-search.json --expected-revision REVISION --request-id search-recent-001
 exactory-research grand-challenge --file grand-challenge.json --expected-revision REVISION --request-id record-grand-challenge-001
-exactory-research target --file complete-objective.json --expected-revision REVISION --request-id fix-complete-objective
 ```
 
 Before the objective, investigate the challenges ahead of the research and record
@@ -226,8 +247,27 @@ input. The record is not a synthesis section: it stays current for the whole
 study, and a new record with a reason replaces it only when the direction
 changes. `gate preparation` owes `grand_challenge_missing` until it exists.
 
-Set the complete original objective while still in `literature`, written against
-that record. A branch's
+Before `target` in managed author research, prepare the prospective `strategy`
+dossier from the user's intent, available prior work, candidates and discrepancy
+leads. Follow the [bar-before-slate delivery](research-decisions.md#before-target-commitment)
+with two independent assessors on verified routes. Compare the proposed objective
+and approach against the independently recorded worthwhile consequences. A fixed
+user problem stays fixed; compare methods within its scope. This strategic approval
+does not declare preparation complete or authorize an experiment.
+
+At commitment, `target` consumes the approved exact statement/scope and records
+its native objective link. Record the source/preparation delta since approval,
+including newly relevant unbound sources. Material or unresolved impact requires
+affected findings to refresh first; an unrelated metadata change does not require
+a complete new review. The first result assessment checks that declaration.
+
+```sh
+exactory-research research-decision-assess --boundary target
+exactory-research target --file complete-objective.json --expected-revision REVISION --request-id fix-complete-objective
+```
+
+Set the complete objective while still in `literature`, written against that
+record and the prospective decision. A branch's
 special case, restricted parameter range, or conditional hypothesis belongs in
 its cycle scope and leaves the original objective intact. A fixed objective
 changes only on the user's explicit instruction: save the user's own words in
@@ -333,10 +373,21 @@ purposes under `limits.loop`, and the candidate count under
 
 ## Ideate and experiment: plan before launching
 
-Choose a falsifiable hypothesis within the complete objective. Compare candidate
-strategies using the actual novelty search, field advance criteria, available
-compute, and remaining resources. Preserve the complete objective and explicit
-remaining obligations in `idea/idea.md` and the managed records.
+Choose a falsifiable hypothesis within the complete objective and the current
+canonical decision. Reuse the strategy dossier to compare credible alternatives,
+not pursuing the branch, and evidence-based discrepancy leads. Preserve original
+verification status and do not count input findings as new discoveries. Record
+the supported consequence, nearest prior result, assumptions, method adequacy,
+transfer plan where a proxy serves a wider target, and resources. Use the earliest
+affordable test that can change the commitment. A baseline prerequisite needs a
+bounded exit into that deciding test.
+
+An approved investigation names a question, authorized resource tranche, expected
+evidence and end/failure conditions. Link its cycles to that decision. Resolution,
+a failure signal or tranche exhaustion requires a new decision assessing what
+the tranche actually established. A new cycle or tranche ID cannot reset resources
+or erase the old question. Preserve full-objective obligations in `idea/idea.md`
+and the managed records.
 
 Write a prospective `cycle` with its exact scope, predecessor/checkpoint,
 inheritance or reopening reason, distinguishing test, expected outcomes, failure
@@ -356,6 +407,7 @@ deduction, and the strategy's original failures, charges, and limits.
 
 ```sh
 exactory-research cycle --file cycle.json --expected-revision REVISION --request-id plan-cycle-001
+exactory-research research-decision-assess --boundary cycle
 exactory-research artifact --file program-artifact.json --expected-revision REVISION --request-id pin-program-001
 exactory-research admit --file admission.json --expected-revision REVISION --request-id admit-cycle-001
 exactory-research bind-run --file run-binding.json --expected-revision REVISION --request-id bind-cycle-001
@@ -433,64 +485,71 @@ exactory-research checkpoint --file checkpoint.json --expected-revision REVISION
 exactory-research export --kind readiness --destination reviews/research-candidate-001
 ```
 
-Deliver the entire fresh export directory to an independent assessor, including
-`inputs.json`, its candidate and plan digests, actual source/output bytes, and
-execution observations. The assessor evaluates the exact candidate's validity,
-scope, novelty, contribution, development, and branch obligations. Retain the
-original assessment and actual assessor provenance, then record `review` for that
-candidate. An author cannot invent an independent review or treat identity
-declarations as authenticated scientific judgment.
+In managed author research, add the candidate's result memo and evidence to the
+same strategy dossier. Include claims, failures, nearest-work comparisons,
+committed consequences and unresolved work items. Deliver a canonical combined
+result packet to two assessors using verified context routes. Each assesses
+validity, scope, novelty, contribution-statement support, development and branches
+before judging realized consequence in the same response. Retain original outputs
+and actual invocation provenance. The validated support and value sections become
+separate immutable findings; compatible readiness derives from them. Do not run a
+second full readiness review after those combined responses.
+
+Use the [decision reference](research-decisions.md) for canonical delivery,
+objections, adjudication and exact command roles. A reviewer needs intended
+source/result access and verified exclusion of author history and prior scores.
+A clean export or fresh-agent label alone does not establish independence.
 
 ```sh
-exactory-research artifact --file assessor-provenance.json --expected-revision REVISION --request-id pin-research-assessor-001
-exactory-research review --file readiness-review.json --expected-revision REVISION --request-id review-research-candidate-001
+exactory-research value-review --file result-review-a.json --expected-revision REVISION --request-id value-review-a
+exactory-research value-review --file result-review-b.json --expected-revision REVISION --request-id value-review-b
+exactory-research research-decision --file result-decision.json --expected-revision REVISION --request-id decide-result-001
+exactory-research research-decision-assess --boundary write
 exactory-research gate readiness
-exactory-lab decide --stage experiment --decision "Draft the reviewed result" --why "The current whole research readiness gate passes for the selected candidate."
-exactory-lab state set --stage write --status pending
 ```
 
-Enter writing only after this current whole readiness gate passes. A checkpoint,
-per-review `ready` value, earlier receipt, or plan for later manuscript review is
-insufficient. Findings that require new evidence lead to a scoped successor cycle
-and renewed review. A narrower verified result is reported with its contribution
-to the original objective and the obligations it leaves open.
+The payloads reference actual assignment outputs and exact evidence bindings;
+nonempty fields are not scientific approval. Use the applicable selected-scope
+readiness view when the study has a source-limited contract. The full-objective
+view continues to report that objective's remaining obligations.
 
-The readiness gate passes only for a candidate that establishes the complete
-objective. A candidate with a partial scope reports `objective_scope_incomplete`,
-and a candidate with an open objective reports `objective_incomplete`; both
-report their `remaining_obligations`. The source-limited publication contract
-maps each remaining obligation to an active source deferral, so it does not
-cover remaining computational work. A partial computational result reaches the
-managed `write`, `evaluate` and `deposit` stages after the user authorizes the
-narrower objective. The plan of an earlier cycle keeps the earlier objective. An
-assessment of that cycle therefore reports `objective_scope_incomplete`, and
-readiness does not pass with it as the candidate. A successor cycle under the
-new objective establishes that objective:
+Manuscript development requires both current support for retained claims and an
+independently sufficient realized consequence. Missing support, an unresolved
+material objection or a critical inference gap prevents promotion even when a
+score is high. A true partial result may instead justify more investigation, a
+pivot, branch closure with a result/failure report, or a delivery covered by the
+user's instruction. Branch closure never requires manufacturing a manuscript and
+never completes an unresolved full objective.
 
-1. Pass the user's saved instruction to `target` as `authorization`, as
-   [the literature stage](#literature-build-the-source-network-and-the-full-objective)
-   describes.
-2. Record the synthesis again under the new objective.
-3. Assess the earlier cycle again. Save a checkpoint of that assessment. For a
-   cycle that inherits from other cycles, refresh its ancestors first, as
-   [refreshing inherited assessment dependencies](research-cli.md#refreshing-inherited-assessment-dependencies)
-   describes.
-4. Plan a successor cycle under the new objective, with a `full` scope of that
-   objective. Its `predecessor` is that checkpoint, and its `inheritance` uses
-   the validated result of the checkpoint.
-5. Run the successor as a managed run with `admit`, `bind-run` and
-   `exactory-lab run`.
-6. Assess the successor with a disposition of every retained cycle in
-   `development.branches`. Save its checkpoint with `select_for_readiness: true`.
-7. Record the independent review of that candidate, as described above. Then
-   run `gate readiness`.
+Track reviewer requests and scientific alternatives with stable work items.
+Adopted, rejected or deferred are dispositions; unattempted, planned, attempted,
+validated, failed and blocked are execution states. A `next_round` label does not
+resolve a consequence-critical gap. Validity obligations require evidence or
+withdrawal of the retained claim. Deferral records its evidence, resource reason,
+reopening trigger and consequence for the current result; feasible but not chosen
+is distinct from infeasible.
 
-Without that authorization, the study can publish only on the direct paths:
-`exactory-draft deposit` and `exactory submit` run on the user's instruction,
-each prints `Managed record skipped (readiness_required)`, and the study stays
-at the `experiment` stage. When the study has finished there, park it with
-`exactory-lab state set --waiting <reason>`, so that the autopilot Stop hook
-lets the session end.
+If the realized consequence shrinks, explicitly reassess whether this result
+would justify starting the study without credit for sunk effort. Compare the
+original slate, later leads and assessor alternatives with their actual status.
+Preserve the original critical obligation even when the narrower result is worth
+developing. A method pivot inherits claims and failures honestly; every relevant
+old obstruction needs an explanation, and complete claim groups may share one
+reasoned disposition.
+
+An unconditional user instruction through writing, deposit or submission can
+support `deliver_requested` with current validity and honest limits. Do not
+require a second permission question or relabel open research as a specified
+narrow task. An explicit quality condition remains binding and a new scope choice
+outside existing authority needs the actual choice. Author-selected narrowing
+alone cannot create that authority. Preserve the full objective and all remaining
+scientific obligations after a limited delivery.
+
+For an actual authorized objective change, retain the original user instruction
+and use the native `target` authorization and lineage flow. Refresh affected
+synthesis and dependent assessments; do not rewrite an earlier objective or pretend
+old evidence was collected under the new scope. Neither a policy migration nor a
+limited delivery requires all old cycles to be executed again.
 
 ## Manuscript assessment and publication
 
@@ -509,7 +568,10 @@ has a `citation_accounting` item with a bibliography key or a reason
 distinct independent blind assessors. Save each unchanged original rubric JSON
 and assessor provenance, then wrap those artifact references with
 `manuscript-review`. The manuscript review is separate from the earlier research
-readiness assessment.
+support/value assessment. Use the shared canonical reviewer assignment and a
+verified route for manuscript reviews too; clean exported files alone do not
+exclude automatic memory, startup context or later tool exposure. Preserve
+contaminated returns without giving them independent approval credit.
 
 ```sh
 exactory-research manuscript --file manuscript.json --expected-revision REVISION --request-id pin-manuscript-001
@@ -519,10 +581,12 @@ exactory-research manuscript-review --file manuscript-review-b.json --expected-r
 exactory-research gate publication
 ```
 
-Publication uses the current exact bundle, two applicable accepting reviews, and
-the existing citation/remote receipt checks. Changes invalidate affected current
-decisions and require reassessment. `exactory-draft deposit` and `exactory submit`
-run on the user's instruction. The deposit records the study's publication
+Managed publication uses the current exact bundle, two applicable accepting
+reviews, current decision requirements and existing citation/remote receipt checks.
+Changes invalidate affected current findings and require reassessment.
+`exactory-draft deposit` and `exactory submit` run on the user's instruction.
+Distinguish quality-conditioned publication from an unconditional named endpoint
+and supported limited delivery. The deposit records the study's publication
 receipt when the publication and round gates pass; the submit records the
 submission receipt when that publication receipt names this exact bundle and the
 submit names its record. Otherwise they create the record or request directly,
@@ -550,86 +614,65 @@ Publication-only reviewers remain outside the measurement.
 
 ### After each measurement: the contribution analysis
 
-Every blind review names, for each of soundness, presentation and contribution
-below 4, the changes that would bring it to 4. After the three measurement
-reviews of a bundle, investigate briefly: run one to three queries about the
-frontier of the study's challenges and who is working on it, save each original
-response in the workspace, and pin it with `artifact`. Do not import these
-responses and do not record them as a `search`: an import changes the record of
-every held work a response returns, and the measured bundle is then no longer
-current. Then record the contribution analysis: the captured investigation with
-what each response shows, where the paper stands against the current Grand
-Challenge record, a disposition of every reviewer contribution change, and the
-steps toward the challenges with the community each serves. As evidence, cite
-sources the study has already read in full, results, reviews of this bundle, or a
-source the study does not hold yet, read in full now. A work the study already
-holds without a full reading (a reference, a cohort member, a search hit) waits
-for the next round's literature stage, because reading it changes the
-preparation. A `this_round` step becomes the next cycle's hypothesis; a
-`next_round` step waits for the round gate. The next bundle and the round
-decision need the analysis. The command block below records it after the
-predictions and before `gate round`.
+Retain the contribution analysis and every original reviewer request. Link
+reviewer changes, cycle alternatives and proposed steps to stable work items.
+Their adopted/rejected/deferred dispositions never substitute for execution
+status. Classify validity, consequence-critical and optional work independently;
+record evidence, resource implications and a reopening trigger for a deferral.
 
-Decide on the exact bundle with `round`: `continue` with one pursued candidate
-and a goal the current paper does not meet, or `stop`. Either decision disposes
-of every carried development of the closing round in `carried`. Deliver the
-decision with `export --kind round` to an independent assessor who is not a
-cycle author; the evaluate skill's section "The round review" gives the assessor
-its questions and the fields it returns. Record its judgment with
-`round-review`. An approved `continue` is opened with `round-admit`. Keep the
-`round-admit` output: while the round runs, no other report shows the admitted
-goal and its success criterion and stop condition ids. Log the decision and
-return to `literature`.
+Inspect where the measured result stands against the Grand Challenge and nearest
+work. Name any scientific question requiring a source refresh and preserve its
+actual query/response and reading evidence. Reuse verified sources and findings
+that still answer the question; another analysis alone is not a reason to repeat
+a search. Newly decisive evidence receives current preparation and impact
+assessment even when that invalidates an old approval. Do not hide an unread or
+contradictory source merely to keep the measured state unchanged.
+
+Update the dossier with the exact bundle, completed measurement, all demands and
+any new critical inference gaps. Compare next actions through the same independent
+support/value decision. A step may inherit a result, failed route, tested assumption
+or shared objective. Explain relevant prior obstructions and preserve complete
+claim dispositions; do not fabricate a positive claim deduction to permit a pivot.
 
 ```sh
-exactory-research example manuscript-prediction > prediction.json
 exactory-research manuscript-prediction --file prediction.json --expected-revision REVISION --request-id predict-001
-exactory-research artifact --file investigation-artifact.json --expected-revision REVISION --request-id pin-investigation-001
-exactory-research example contribution-analysis > contribution-analysis.json
 exactory-research contribution-analysis --file contribution-analysis.json --expected-revision REVISION --request-id analyze-contribution-001
+exactory-research research-decision --file post-measurement-decision.json --expected-revision REVISION --request-id decide-measurement-001
+exactory-research research-decision-assess --boundary round
 exactory-research gate round
-exactory-research example round > round-decision.json
-exactory-research round --file round-decision.json --expected-revision REVISION --request-id round-decide-001
-exactory-research export --kind round --destination reviews/round-001
-exactory-research round-review --file round-review.json --expected-revision REVISION --request-id round-review-001
-exactory-research round-admit --file round-admit.json --expected-revision REVISION --request-id round-admit-001
-exactory-lab decide --stage evaluate --decision "Open round 2" --why "The approved goal names the contribution the paper lacks."
-exactory-lab state set --stage literature --status pending
 ```
 
-Inside the round, the literature stage records the four consequence purposes
-(`downstream`, `next_step`, `exemplars`, `changes`) and one `exemplar` full-text
-requirement read in full. The earlier cycles are assessed again under the current
-preparation, and the round's candidate assessment lists every retained cycle of
-every round in `development.branches` before the readiness review. The manuscript
-keeps every claim id of the round's opening bundle: a claim is revised or
-superseded, never dropped. When the round's manuscript is pinned and measured,
-assess the round against its goal: `round-assessment.json` judges each success
-criterion and stop condition id of the saved goal exactly once (`invalid_round`
-otherwise). Then decide again.
+These commands consume actual completed review, work-item and dossier records;
+use `example` and the CLI reference for the adapter payloads. Old `round`,
+`round-review` and `round-admit` commands use the same canonical decision and
+assessment, not a second strategic approval loop. Continue projects an approved
+investigate/pivot action with a next tranche. Stop separately records whether
+research on the branch ends, the result is ready for manuscript preparation, or
+an authorized limited delivery applies. Ending a round alone authorizes neither
+publication nor full-objective completion.
 
-```sh
-exactory-research contribution-analysis --file contribution-analysis-2.json --expected-revision REVISION --request-id analyze-contribution-002
-exactory-research round-assess --file round-assessment.json --expected-revision REVISION --request-id round-assess-002
-exactory-research gate round
-exactory-research round --file round-decision-2.json --expected-revision REVISION --request-id round-decide-002
-```
+Preserve all seven old continue assurances: scientific consequence, real demand,
+prior-work risk, adequacy and resources, material distinctness, evidence/failure
+inheritance, and a justified relationship to the full objective and Grand
+Challenge. The stop/demand assurances remain fair closure, remaining worthwhile
+work, and evidence-based alternative/resource comparison. In particular, reject
+an infeasibility claim contradicted by an available adequate test.
 
-The loop ends only with an approved `stop`, which opens `deposit` when the
-publication gate passes. A goal withdrawn in literature (`scooped` in
-`next_step`, `contradicted` in `changes`) or an observed stop condition ends work
-on that goal, and the next `round` decision proposes a distinct goal or stops.
-When the two most recent rounds were both unsuccessful, `continue` is refused in
-their directions unless it reopens one of them (`round_direction_exhausted`). A
-recorded `development` budget at its limit refuses `continue`
-(`resource_budget_exhausted`) until the user raises it with a reason. An
-unavailable round assessor leaves `round_review_missing` pending, and the study
-parks.
+Within a round, refresh the downstream/next-step/exemplar/change questions where
+new evidence or scope requires it and retain applicable preparation requirements.
+Use the stored goal and its success/failure conditions to guide cycles. Keep old
+claim identities and explicit revised or withdrawn scope; complete groups may
+share a common reason when every member is enumerated. `round-assess` records
+what the promised goal actually achieved, including failure. Reuse that factual
+assessment in the next canonical decision.
 
-```sh
-exactory-lab decide --stage evaluate --decision "Stop after round 2" --why "Every recorded candidate was rejected or deferred on its evidence."
-exactory-lab state set --stage deposit --status pending
-```
+A failed result, failure signal or exhausted tranche requires a new justified
+choice. The same unresolved direction cannot be renewed merely under another ID.
+Honor actual resource limits and retain unknown costs as unknown; a local tranche
+limit does not authorize abandoning a continuously requested full objective.
+An unavailable independent reviewer remains a specific operational dependency.
+Preserve attempts and costs, repair the route, and continue independent research
+that does not consume the missing approval.
 
 ## Verification and native mathematics
 
@@ -642,6 +685,16 @@ except `sampled-v1` also requires the five search purposes.
 Keep historical prior art tied to the version that existed at the target's date.
 Current work can explain a result without becoming earlier prior art. Author
 innovation goals and contribution targets are not verification prerequisites.
+
+After binding the task-only server response, use a probed actual reviewer route
+and a `review-assignment` with role `verification`, `dossier_id: null`, and
+`context.verification_task_id` equal to the bound task digest. `review-run`
+returns `{verdict, checks}` for that exact paper and its prepared evidence.
+Keep soundness, novelty and impact separate. `bind-verdict` requires
+`assessment.assignment_id`, the same actual assessor and the unchanged returned
+body and checks. Fresh context labels and manually imported reviewer text do not
+establish verified independence. The [decision reference](research-decisions.md)
+specifies route controls; it adds no author strategic gates to verification.
 
 Under `sampled-v1` the verifier's population work is the sample. Draw it, read
 every sampled abstract completely with a placement judgment, and read at most
@@ -692,6 +745,12 @@ Follow the [math skill](../skills/math-solver/SKILL.md) and
 [native CLI contract](research-cli.md#native-math-preparation); common readiness
 never replaces mathematical acceptance. Historical replay remains available,
 while fresh work needs a current reviewed foundation and applicable amendments.
+
+The native preparation path retains its independent `review` record:
+
+```sh
+exactory-research review --file native-review.json --expected-revision REVISION --request-id native-review-001
+```
 
 ## Pending work and continuation
 

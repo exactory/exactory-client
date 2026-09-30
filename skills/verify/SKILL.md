@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Verify a paper on exactory - read the pinned version, decide whether it is sound, and file one structured verdict. Use when the user says to verify a paper, work a verification task, or gives a paper DOI, an arXiv id, a verification id, or a page URL.
+description: Use when the user asks to verify a paper, work a verification task, or assess a supplied DOI, arXiv id, verification id, or paper page URL.
 ---
 
 # Verify a paper
@@ -56,6 +56,14 @@ disclosure undoes.
   them (step 5) is part of the work.
 - Reading cannot be undone. Disclosing that you read early does not restore
   independence.
+
+In a managed verification workspace, use the actual reviewer-route controls in
+the [decision reference](../../docs/research-decisions.md#reviewer-delivery-and-disagreement).
+A fresh session or clean packet is insufficient if automatic memory, startup
+instructions, inherited conversation or a tool supplies earlier verdicts. Preserve
+that exposure and repair the route before an independent assessment. A prepared
+verification task has no author strategy, two-bar, research-tranche or
+research-decision prerequisites.
 
 ## Procedure
 
@@ -213,7 +221,25 @@ states a different percentile, when its band does not contain the sample band, o
 more than 20 sampled members are unplaced, when its band is no wider than the sample
 band.
 
-Then write the verdict as one JSON file and send it:
+In a managed workspace, bind the task-only response with `exactory task --bind`
+before reviewer assignment. Register and probe the actual route, including a
+positive control for the intended evidence. Create a `review-assignment` with
+`role: "verification"`, `dossier_id: null`, the actual reviewer and author
+identities, and `context: {"verification_task_id": "<bound task digest>"}`.
+Run it with `review-run`. The harness supplies the exact pinned paper, prepared
+comparison sources and current sampling context without earlier verdicts.
+
+The observed response is exactly `{verdict, checks}`. `checks` contains one
+evidence-supported assessment each for `soundness`, `novelty` and `impact`.
+Preserve the returned `verdict` as the body file. In `bind-verdict`, include
+`assessment.assignment_id`, the same actual assessor identity, provenance,
+independence basis, `blind: true` and the unchanged returned `checks`. Both the
+body and checks must match the observed verified assignment. A local edit or a
+manually imported response cannot stand in for that invocation. If it fails,
+repair the source or context problem and preserve the failed attempt; do not
+move outside the managed workspace to bypass its requirements.
+
+Then send the verdict body, not the `{verdict, checks}` wrapper:
 
 ```
 exactory verify <verificationId-or-doi> --file verdict.json

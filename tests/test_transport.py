@@ -505,18 +505,21 @@ class TestVerify(_TransportTestCase):
     def _bind_the_verdict_in_a_verification_workspace(self) -> None:
         """Pin the task and bind an evidence-linked assessment of verdict.json, as the managed path requires."""
         from integration_fixtures import prepare_verification
+        from reviewer_fixtures import verdict_assignment
         from research_harness.verification import bind_verdict, record_task
 
         case = prepare_verification(self.scratch_dir)
         _write_verdict_file(self.scratch_dir / "verdict.json")
         pinned = case.mutate(record_task, {"task": self._task()})["result"]
-        case.mutate(bind_verdict, {"id": "transport-verdict", "task_digest": pinned["digest"],
+        payload = {"id": "transport-verdict", "task_digest": pinned["digest"],
             "body": case.artifacts.put((self.scratch_dir / "verdict.json").read_bytes(), "application/json"),
             "assessment": {"assessor": "transport-independent-verifier",
                 "provenance": case.artifacts.put(b"Authored independent verification context.", "text/plain"),
                 "independence_basis": "Separate context read the exact source and no other verdicts.", "blind": True,
                 "checks": [{"dimension": dimension, "reason": "The exact scoped source supports this separate judgment.",
-                            "evidence": [case.linked]} for dimension in ("soundness", "novelty", "impact")]}})
+                            "evidence": [case.linked]} for dimension in ("soundness", "novelty", "impact")]}}
+        payload["assessment"]["assignment_id"] = verdict_assignment(case, payload)
+        case.mutate(bind_verdict, payload)
         self.responses[("GET", f"/api/v1/tasks/{_VERIFICATION_ID}")] = (self._task(), 200)
         self.responses[("POST", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts")] = (
             {"id": "22222222-2222-4222-8222-222222222222"}, 201)

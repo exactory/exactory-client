@@ -50,9 +50,11 @@ def gate_state(records, artifacts, action, *, profile=None):
         return synthesis_state(records, artifacts, profile)
     if action == "manuscript-readiness":
         from .publication_scope import assess_manuscript_readiness
-        return assess_manuscript_readiness(records, artifacts)
+        from .decision_integration import with_decision
+        return with_decision(assess_manuscript_readiness(records, artifacts), records, artifacts, "write")
     if action in {"readiness", "write"}:
-        return author_readiness_state(records, artifacts)
+        from .decision_integration import with_decision
+        return with_decision(author_readiness_state(records, artifacts), records, artifacts, "write")
     if action == "execution":
         preparation = synthesis_state(records, artifacts, profile)
         pending = [a for key, a in records.get("execution_admission", {}).items()

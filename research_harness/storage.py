@@ -24,7 +24,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
-from .artifacts import _Workspace, _regular_file
+from .artifacts import _Workspace, _filesystem_error, _regular_file
 from .errors import ResearchError
 
 
@@ -369,6 +369,7 @@ class Store:
 
     @contextmanager
     def _connection(self, *, writable: bool = False):
+        caller_failure = None
         try:
             with self._workspace.directory(".exactory") as directory:
                 with self._locked(directory):
@@ -380,7 +381,11 @@ class Store:
                         self._check_files(directory)
                         connection.execute("BEGIN IMMEDIATE" if writable else "BEGIN")
                         try:
-                            yield connection
+                            try:
+                                yield connection
+                            except BaseException as error:
+                                caller_failure = error
+                                raise
                             connection.commit()
                         except BaseException:
                             connection.rollback()
@@ -389,7 +394,13 @@ class Store:
                         if connection is not None:
                             connection.close()
         except FileNotFoundError as error:
+            if error is caller_failure:
+                raise
             raise ResearchError("store_missing", "Research store does not exist; initialize or adopt the workspace") from error
+        except OSError as error:
+            if error is caller_failure:
+                raise
+            raise _filesystem_error(error) from error
         except sqlite3.Error as error:
             raise _sql_error(error, readonly=not writable) from error
 
@@ -435,6 +446,8 @@ class Store:
             os.fsync(directory)
         except sqlite3.Error as error:
             raise _sql_error(error) from error
+        except OSError as error:
+            raise _filesystem_error(error) from error
 
     @property
     def revision(self) -> int:

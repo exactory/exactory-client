@@ -187,7 +187,7 @@ def audit_admission(root, state, proposal, content, foundation=None, *, executio
     _, target = validate_proposal_context(state, proposal, None)
     if proposal.get("computation") is not None:
         from .computation_io import audit_computation
-        audit_computation(root, state, proposal, proposal["computation"], content)
+        audit_computation(root, state, proposal, proposal["computation"], content, common_guard=common_guard)
     # A renewal proposal names its historical predecessor, not the account
     # allocated by admission. Work audits must use the node's current segment.
     account = (resolve_proposal_account(state, proposal, target)
@@ -203,10 +203,10 @@ def audit_admission(root, state, proposal, content, foundation=None, *, executio
     manifests = list(proposal["inherited_evidence"])
     for identity in checkpoint_ids:
         checkpoint = reference(state["checkpoints"], identity, "admission checkpoint")
-        audit_checkpoint(root, state, checkpoint, content, verify=False)
+        audit_checkpoint(root, state, checkpoint, content, verify=False, common_guard=common_guard)
         manifests.extend(checkpoint["evidence_digests"])
     for digest in proposal["inherited_evidence"]:
-        audit_manifest(root, state, digest, content, verify=False)
+        audit_manifest(root, state, digest, content, verify=False, common_guard=common_guard)
     pending = [identity for identity, accepted in state["acceptances"].items()
                if accepted["status"] == "accepted" and accepted["checkpoint_id"] in checkpoint_ids]
     checked = set()
@@ -223,13 +223,15 @@ def audit_admission(root, state, proposal, content, foundation=None, *, executio
         s.require(accepted is not None and accepted["status"] == "accepted", "Inherited acceptance is unavailable", "audit_failed")
         s.require(content.get_blob(s.digest(accepted["review"])) == accepted["review"], "Pinned review differs", "digest_mismatch")
         checkpoint = reference(state["checkpoints"], accepted["checkpoint_id"], "accepted checkpoint")
-        audit_checkpoint(root, state, checkpoint, content)
+        audit_checkpoint(root, state, checkpoint, content, common_guard=common_guard)
+        from .reviewer import require_review
+        require_review(root, state, content, accepted["review"], subject=checkpoint, common_guard=common_guard)
         checked.add(identity)
         pending.extend(accepted["dependency_ids"])
         manifests.extend(checkpoint["evidence_digests"])
 
 
-def audit_state(root, state, content):
+def audit_state(root, state, content, *, common_guard=None):
     """Return failed accepted identities without changing recorded history."""
     failures = {}
     for identity, accepted in state["acceptances"].items():
@@ -238,14 +240,18 @@ def audit_state(root, state, content):
         try:
             content.get_blob(s.digest(accepted["review"]))
             checkpoint = state["checkpoints"][accepted["checkpoint_id"]]
-            audit_checkpoint(root, state, checkpoint, content, verify=True)
+            audit_checkpoint(root, state, checkpoint, content, verify=True, common_guard=common_guard)
             s.require(content.get_blob(s.digest(accepted["review"])) == accepted["review"], "Pinned review differs", "digest_mismatch")
+            from .reviewer import require_review
+            require_review(root, state, content, accepted["review"], subject=checkpoint, common_guard=common_guard)
         except SearchError as error:
             failures[identity] = {"code": error.code, "message": error.message}
     closure = state["control"]["closure"]
     if closure is not None and state["proof_status"] in {"proved", "disproved"}:
         try:
             s.require(content.get_blob(s.digest(closure["review"])) == closure["review"], "Final review differs", "digest_mismatch")
+            from .reviewer import require_review
+            require_review(root, state, content, closure["review"], subject=closure["subject"], common_guard=common_guard)
             for item in closure["subject"]["deliverables"]:
                 content.get_artifact(item["digest"])
             for delivery in closure["subject"]["local_deliveries"]:
@@ -363,7 +369,7 @@ def audit_local_delivery(root, state, delivery, content):
         raise SearchError("delivery_required", "Local delivery validation failed", {"reason": str(error)}) from error
 
 
-def audit_manifest(root, state, digest, content, claim_digest=None, verify=True, visiting=None):
+def audit_manifest(root, state, digest, content, claim_digest=None, verify=True, visiting=None, *, common_guard=None):
     visiting = set() if visiting is None else visiting
     s.require(digest not in visiting and len(visiting) < 256, "Evidence dependency cycle or excessive depth", "dependency_cycle")
     manifest = content.get_blob(digest)
@@ -402,7 +408,7 @@ def audit_manifest(root, state, digest, content, claim_digest=None, verify=True,
     s.strings(manifest["dependencies"])
     child_standards = []
     for child in manifest["dependencies"]:
-        child_standards.append(audit_manifest(root, state, child, content, verify=verify, visiting=visiting | {digest}))
+        child_standards.append(audit_manifest(root, state, child, content, verify=verify, visiting=visiting | {digest}, common_guard=common_guard))
     if manifest["kind"] == "analytical":
         s.require(manifest["verification"] is None and "proof" in roles, "Analytical evidence requires its proof and no executable verification record")
         s.require(roles <= {"proof", "source", "study", "input"}, "Computational artifacts cannot be relabelled analytical")
@@ -412,7 +418,7 @@ def audit_manifest(root, state, digest, content, claim_digest=None, verify=True,
         s.require(required <= roles, "Computational manifest omits required evidence")
         classification, standard = "computational", "certificate" if manifest["kind"] == "certificate" else "lean-kernel"
         if verify:
-            audit_verification(state, manifest, content)
+            audit_verification(state, manifest, content, root=root, common_guard=common_guard)
     if any(kind == "computational" for kind, _ in child_standards):
         classification = "computational"
         s.require(manifest["kind"] != "analytical", "An analytical wrapper cannot certify a computational dependency")
@@ -421,7 +427,7 @@ def audit_manifest(root, state, digest, content, claim_digest=None, verify=True,
     return classification, standard
 
 
-def audit_verification(state, manifest, content):
+def audit_verification(state, manifest, content, *, root=None, common_guard=None):
     """Consume Task 5 terminal execution records without executing a checker."""
     verification = manifest["verification"]
     s.closed(verification, "run_id result_digest policy_review requested_declaration requested_type_digest")
@@ -456,6 +462,10 @@ def audit_verification(state, manifest, content):
     s.require(content.get_blob(s.digest(subject)) == subject and content.get_blob(s.digest(spec["input_review"])) == spec["input_review"],
               "Pinned input review differs", "digest_mismatch")
     validate_review(verification["policy_review"], verification["result_digest"], manifest["claim_digest"])
+    if root is not None:
+        from .reviewer import require_review
+        require_review(root, state, content, spec["input_review"], subject=subject, common_guard=common_guard)
+        require_review(root, state, content, verification["policy_review"], subject=result, common_guard=common_guard)
     commands = s.records(result["commands"])
     s.require(len(commands) == (2 if manifest["kind"] == "lean" else 1), "Verification command record is incomplete")
     s.require([command["argv"] for command in commands] == run["commands"],
@@ -500,7 +510,7 @@ def audit_verification(state, manifest, content):
                   "Certificate records cannot fabricate Lean declaration metadata")
 
 
-def audit_checkpoint(root, state, checkpoint, content, verify=True):
+def audit_checkpoint(root, state, checkpoint, content, verify=True, *, common_guard=None):
     origin = checkpoint["origin"]
     if origin["kind"] == "external_result":
         content.get_artifact(origin["source_digest"])
@@ -523,6 +533,8 @@ def audit_checkpoint(root, state, checkpoint, content, verify=True):
         for review_id in node["admission"]["review_ids"]:
             review = state["reviews"][review_id]
             s.require(content.get_blob(review["digest"]) == review["record"], "Producer admission review differs", "digest_mismatch")
+            from .reviewer import require_review
+            require_review(root, state, content, review["record"], common_guard=common_guard)
         try:
             raw = safe_path(root, node["attack_slug"] + "/journal.jsonl").read_bytes()
         except OSError as error:
@@ -534,7 +546,7 @@ def audit_checkpoint(root, state, checkpoint, content, verify=True):
         last = _strict_json(lines[-1], "invalid_input")
         s.require(last.get("move") == origin["move"] and last.get("problem_digest") == receipt["problem_digest"],
                   "Journalled problem version differs from the acknowledged reservation", "digest_mismatch")
-    standards = [audit_manifest(root, state, digest, content, s.digest(checkpoint["claim"]), verify=verify)
+    standards = [audit_manifest(root, state, digest, content, s.digest(checkpoint["claim"]), verify=verify, common_guard=common_guard)
                  for digest in checkpoint["evidence_digests"]]
     if not standards:
         return "analytical", "reviewed"

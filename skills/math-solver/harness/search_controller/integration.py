@@ -86,7 +86,7 @@ def audit_work(controller, state, node, content, *, common_guard=None):
     from .research import audit_amendment as audit_foundation_amendment, effective_foundation
     audit_foundation_amendment(state, node, content)
     from .computation_io import audit_amendment
-    audit_amendment(controller.root, state, node, content)
+    audit_amendment(controller.root, state, node, content, common_guard=common_guard)
     proposal = state["proposals"][node["proposal_id"]]
     s.require(content.get_blob(proposal["digest"]) == proposal["record"], "Admission proposal changed", "digest_mismatch")
     proposal_inputs(proposal["record"], content)
@@ -95,6 +95,8 @@ def audit_work(controller, state, node, content, *, common_guard=None):
     for identity in node["admission"]["review_ids"]:
         review = state["reviews"][identity]
         s.require(content.get_blob(review["digest"]) == review["record"], "Admission review changed", "digest_mismatch")
+    from .reviewer import node_reviews
+    node_reviews(controller.root, state, content, node, common_guard=common_guard)
 
 
 def build_begin(controller, state, spec, target, content):

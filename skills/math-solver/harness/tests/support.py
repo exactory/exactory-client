@@ -101,7 +101,9 @@ def admit_existing_workspace(attack_root, slug="sample", problem=None):
     from tests.research_support import pin_research
     pin_research(attack_root, candidate, inputs)
     controller.command("propose", {"proposal": candidate, "inputs": inputs}, 1, "proposal")
-    controller.command("review", {"proposal_id": "proposal-000001", "review": review(candidate), "inputs": []}, 2, "review")
+    from tests.native_reviewer_support import observe_review
+    controller.command("review", {"proposal_id": "proposal-000001",
+        "review": observe_review(controller, review(candidate), candidate), "inputs": []}, 2, "review")
     controller.command("admit", {}, 3, "admit", "proposal-000001")
     return controller
 

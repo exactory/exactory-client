@@ -1,11 +1,12 @@
 ---
-description: Develop a falsifiable hypothesis and prospective research cycle within the complete objective, using current literature, innovation studies, field doctrine, and human context. Use after the literature preparation gate and before experiment admission.
+description: Use when a managed author study needs a hypothesis, comparison of research directions, or a next investigation tranche before experiment admission.
 ---
 
 # Ideate
 
 Read the [research constitution](../../RESEARCH_CONSTITUTION.md) and follow the
-[managed research workflow](../../docs/research-workflow.md). Start with current
+[managed research workflow](../../docs/research-workflow.md) and
+[scientific contribution decisions](../../docs/research-decisions.md). Start with current
 `exactory-research status --summary`, `next --summary`, and `gate preparation`.
 The Grand Challenge record, the complete original objective, closed five-purpose
 loop, field synthesis, and the five innovation cases are established in
@@ -22,6 +23,21 @@ test, failure signal, and feasible resource demand. Include ambitious hypotheses
 when their assumptions and tests can be made precise. A valid negative result can
 resolve an important uncertainty; contribution is assessed from evidence.
 
+Before an author-chosen target is committed, use the versioned intent and
+prospective dossier to compare the proposed objective and approach with a
+credible alternative and branch closure. For a user-fixed question, compare
+methods or intermediate questions within that scope. Record evidence when only
+one candidate is feasible. Obtain two independent consequence bars before
+delivering the candidate slate, then separate objective-adequacy and
+approach-adequacy findings under the verified reviewer protocol. Author advocacy
+does not establish the bar. A strategic approval neither completes preparation
+nor admits execution.
+
+Inspect verification findings, failed checks, reviewer findings and unexpected
+observations for research leads. Preserve each lead's original identity, source,
+verification status and relation to the question; do not claim inherited knowledge
+as a new result. For an unselected lead, record the reason and reopening condition.
+
 In a development round, read the admitted goal in the saved `round-admit` output
 (`reviews/round-00N/admission.json`), the carried developments it pursues, and the
 `downstream` and `next_step` records before forming hypotheses.
@@ -37,8 +53,11 @@ retains the assumptions under which the result was assessed
 (`inheritance_assumptions_missing` otherwise), and its deduction explains how the
 result contributes to the round's objective.
 
-Use fresh captured searches to test each consequential novelty claim. The
-literature-review skill is part of this plugin and governs the refresh. Record
+Use captured primary-source evidence to test each consequential novelty claim.
+Reuse a current verified finding when it still answers the same question; search
+when the question, source coverage or evidence has changed. The literature-review
+skill governs the refresh and source-delta declaration, including newly relevant
+sources outside earlier bindings. Record
 `nothing-new`, `scooped`, `replicate-extend`, `contradicted`, or `novel-confirmed`
 with actual sources, scope, and unresolved gaps. Reframe a scooped claim or test a
 contradiction explicitly. Keep basic science eligible when applications are unknown.
@@ -60,7 +79,32 @@ obligations. A special case contributes to the original objective without replac
 it. Link a successor to its predecessor checkpoint and inherited evidence; reopen
 a failed branch only when new evidence addresses the recorded obstruction.
 
-Create the managed `cycle` before running code. Pin its actual program and inputs
+State the evidence-to-target relation as direct, logical, bounded, empirically
+validated, conventional idealization or unestablished. A proxy fitting one
+observable cannot distinguish mechanisms that fit that observable equally well.
+Plan the independent observable or justified transfer test before treating the
+proxy as a decisive test. A narrow result may have value at its supported level;
+the independent assessment must establish that value without borrowing the
+importance of an unresolved wider claim.
+
+Choose the earliest affordable test that can change the research choice. A
+necessary baseline has a named dependency, bounded completion condition and exit
+into that test. Record an `investigate` decision with its named question, adequate
+method or bounded adequacy probe, resource tranche, end/failure conditions and
+linked work items. The tranche may contain dependent cycles. At its end, question
+resolution or failure signal, reassess what was learned before admitting more
+work. A new cycle ID or more precision on the same non-discriminating observable
+does not renew an exhausted tranche. Charge all tranches to the same authorized
+run and preserve its unresolved objective.
+
+For critical work items, distinguish action disposition from actual execution.
+At the next commitment, test an unresolved item, establish its specific
+obstruction, or use it to justify a different route or branch closure. Relabeling
+unattempted work as adopted, deferred or `next_round` supplies no evidence. If the
+consequence has shrunk, explicitly reconsider whether it would justify starting
+the study now, using current alternatives and without credit for sunk effort.
+
+Create the managed `cycle` under that current decision before running code. Pin its actual program and inputs
 with `artifact`, `admit` the exact plan with the resource reservation, then
 `bind-run` its backend, seed, timeout, input paths, and expected outputs. Follow the
 executable recipe in the workflow. Changes to these choices require a current

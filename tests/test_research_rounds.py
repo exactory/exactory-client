@@ -940,34 +940,34 @@ class RoundStatusTests(RoundsCase):
     def test_status_at_evaluate_carries_publication_and_round_obligations_in_priority_order(self):
         from research_harness.cli import status_report
         from research_harness.report_views import status_summary
-        self.set_stage("literature")
         self.pin()
+        self.set_stage("literature")
         report = status_report(self.store)
         self.assertNotIn("round_decision_missing", [o["code"] for o in report["obligations"]])
+        self.assertIn("research_intent_missing", [o["code"] for o in report["obligations"]])
         self.assertEqual(report["round"]["number"], 1)
         self.set_stage("evaluate")
         report = status_report(self.store)
-        self.assertEqual([o["code"] for o in report["obligations"]], ["round_decision_missing"])
+        self.assertEqual([o["code"] for o in report["obligations"]], ["research_intent_missing"])
         self.assertFalse(report["ready"])
-        self.assertEqual(report["next"]["code"], "round_decision_missing")
+        self.assertEqual(report["next"]["code"], "research_intent_missing")
         (self.root / "draft/paper.pdf").write_bytes(b"%PDF-1.4\n% changed\n%%EOF")
         report = status_report(self.store)
-        self.assertEqual([o["code"] for o in report["obligations"]], ["publication_artifact_changed"])
+        self.assertEqual({o["code"] for o in report["obligations"]}, {"publication_artifact_changed", "research_intent_missing"})
         self.assertEqual(report["counts"]["obligations"], len(report["obligations"]))
         summary = status_summary(status_report(self.store))
         self.assertEqual(summary["round"], rounds.round_summary(self.gate_report()))
 
     def test_a_manuscript_awaiting_reviews_is_led_to_the_reviews_before_the_round(self):
         from research_harness.cli import status_report
-        self.set_stage("evaluate")
         self.pin(reviews=0, measure=False)
+        self.set_stage("evaluate")
         codes = [o["code"] for o in status_report(self.store)["obligations"]]
-        self.assertEqual(codes, ["manuscript_reviews_required", "manuscript_measurement_missing", "round_decision_missing"])
+        self.assertEqual(set(codes), {"manuscript_reviews_required", "research_intent_missing"})
 
     def test_the_round_summary_is_bounded_and_carries_the_active_round(self):
         from research_harness.cli import status_report
         from research_harness.operations import prepared_mutation
-        self.set_stage("evaluate")
         # Before any admission: no limits, no development account, no progress and no usage.
         summary = status_report(self.store)["round"]
         self.assertEqual((summary["number"], summary["active"], summary["limits"], summary["budget"], summary["progress"],
@@ -998,6 +998,12 @@ class RoundStatusTests(RoundsCase):
         summary = status_report(self.store)["round"]
         self.assertEqual((summary["active"], summary["decision"], summary["assessed"]), (False, None, True))
         self.assertEqual((summary["progress"]["cycles"], summary["progress"]["new_claims"]), (1, 1))
+        # Adopting a managed workspace preserves the historical report. Its new
+        # authorization obligation does not turn old evidence into approval.
+        self.set_stage("evaluate")
+        managed_summary = status_report(self.store)["round"]
+        self.assertEqual(managed_summary, summary)
+        self.assertEqual({o["code"] for o in self.gate_report()["obligations"]}, {"research_intent_missing"})
         # The manuscript changed after the assessment: no bundle is current, and the round's counts are still reported.
         (self.root / "draft/paper.pdf").write_bytes(b"%PDF-1.4\n% changed\n%%EOF")
         summary = status_report(self.store)["round"]
@@ -1039,27 +1045,28 @@ class ConstitutionUpgradeTests(RoundsCase):
 
     def test_a_study_before_evaluate_reports_the_staleness_of_its_recorded_decisions(self):
         self.set_stage("experiment")
-        self.assertEqual(self.codes(), [])
+        self.assertEqual(self.codes(), ["research_intent_missing"])
         self.upgrade()
-        self.assertEqual(self.codes(), sorted(self.STALE + ["constitution_revalidation_required"]))
+        self.assertEqual(self.codes(), sorted(self.STALE + ["constitution_revalidation_required", "research_intent_missing"]))
         self.adopt()
-        self.assertEqual(self.codes(), self.STALE)
+        self.assertEqual(self.codes(), sorted(self.STALE + ["research_intent_missing"]))
 
     def test_a_study_at_evaluate_decides_after_fresh_readiness_and_a_new_pinned_bundle(self):
-        self.set_stage("evaluate")
         bundle = self.pin()
-        self.assertEqual(self.codes(), ["round_decision_missing"])
+        self.set_stage("evaluate")
+        self.assertEqual(self.codes(), ["research_intent_missing"])
         self.upgrade()
-        self.assertEqual(self.codes(), sorted(self.STALE + ["constitution_revalidation_required", "readiness_required"]))
-        stop = lambda current: self.mutate(rounds.record_round, self.decision_payload(current, decision="stop"))
-        self.assert_error("configuration_not_ready", lambda: stop(bundle))
+        self.assertEqual(self.codes(), sorted(self.STALE + ["constitution_revalidation_required", "readiness_required", "research_intent_missing"]))
         self.adopt()
-        self.assertEqual(self.codes(), sorted(self.STALE + ["readiness_required"]))
-        self.assert_error("readiness_required", lambda: stop(bundle))
+        self.assertEqual(self.codes(), sorted(self.STALE + ["readiness_required", "research_intent_missing"]))
         self.refresh_synthesis("v3")
         self.recandidate("v3", alternative="not_useful")
-        self.assertEqual(self.codes(), ["publication_readiness_stale"])
-        self.assert_error("publication_readiness_stale", lambda: stop(bundle))
+        self.assertEqual(self.codes(), ["publication_readiness_stale", "research_intent_missing"])
+        from managed_strategy_fixtures import result_decision
+        result_decision(self)
+        self.assertNotIn('research_intent_missing', self.codes())
+        self.assertIn('publication_readiness_stale', self.codes())
         current = self.pin(identifier="paper-v3")
-        self.assertEqual(self.codes(), ["round_decision_missing"])
-        self.assertEqual(stop(current)["result"]["decision"], "stop")
+        self.assertNotEqual(current['digest'], bundle['digest'])
+        self.assertNotIn('publication_readiness_stale', self.codes())
+        self.assertIn('research_post_measurement_decision_required', self.codes())

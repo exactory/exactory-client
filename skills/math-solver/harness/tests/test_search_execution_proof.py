@@ -29,6 +29,11 @@ class CertifiedBridgeExecutionTests(WorkspaceTest):
                 "dependencies": "The shell builtins verify the complete table; the bridge names the certified premise",
                 "policy": "The certificate checker, its completeness argument, and the algebraic bridge have been reviewed"}}
 
+    def observed_policy_review(self, subject_digest, claim_digest):
+        from tests.native_reviewer_support import observe_review
+        return observe_review(self.controller, self.result_review(subject_digest, claim_digest),
+                              self.controller.store.get_blob(subject_digest))
+
     def admit(self, candidate, node_number, strategy=OPENING):
         inputs = []
         for name, text in [("problem", candidate["claim"]["statement"]),
@@ -158,7 +163,7 @@ class CertifiedBridgeExecutionTests(WorkspaceTest):
         manifest = dict({key: run_inputs[key] for key in ("claim_digest", "artifacts", "external_dependencies")},
             schema_version=1, kind="certificate", dependencies=[],
             conclusion={"outcome": "proof", "dependency_ids": [], "route_bindings": []}, verification={"run_id": run["id"],
-                "result_digest": run["result_digest"], "policy_review": self.result_review(run["result_digest"], digest(residue_claim)),
+                "result_digest": run["result_digest"], "policy_review": self.observed_policy_review(run["result_digest"], digest(residue_claim)),
                 "requested_declaration": None, "requested_type_digest": None})
         self.record_result(premise_node, manifest)
         state = self.controller.status(full_audit=True)

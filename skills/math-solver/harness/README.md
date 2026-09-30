@@ -65,6 +65,15 @@ interpretation, reviewed verification, cash-out and root closure retain priority
 Generated search-tree and lineage views preserve the assessment sequence and
 failures. Neither an assessment nor a hypothesis resets an account.
 
+New independent native reviews use the shared observed adapter. Export their
+exact subject with `search review-packet --spec FILE --json`, then use the
+returned workspace and artifact in a verified `native_math` assignment. Submit
+the observed output unchanged through the existing native command. The
+[delivery contract](../SEARCH.md#observed-native-review-delivery) covers proposals,
+amendments, strategy assessments, input and result reviews, closure, adoption and
+recovery. It preserves native schemas and historical replay and adds no
+strategic-value gate. Declaring a host identity or a fresh agent is insufficient.
+
 ## Test
 
 From the plugin root:

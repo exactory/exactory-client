@@ -1,6 +1,6 @@
 ---
 name: evaluate
-description: Evaluate a paper locally without submitting anything - citation integrity, a blind quality review, and the verdict you expect the market to reach. Use when the user says to evaluate my draft, self-check my paper, or check my citations.
+description: Use when the user asks to evaluate a draft, self-check a paper, check its citations, or review a manuscript locally without submission.
 ---
 
 # Exactory: evaluate

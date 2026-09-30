@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 import time
@@ -22,6 +23,7 @@ from .storage import Store
 from .source_deferrals import defer_source, resume_source, assess_deferrals
 from .publication_scope import record_publication_scope, select_publication_scope, record_scoped_readiness_review
 from .workspace import find_workspace, strict_json
+from . import research_decisions, review_protocol, strategy
 
 
 OPERATIONS = {
@@ -65,7 +67,30 @@ OPERATIONS = {
     "round-assess": rounds.assess_round,
     "manuscript-prediction": predictions.record_prediction,
     "contribution-analysis": contribution.record_contribution_analysis,
+    "intent": strategy.record_intent,
+    "strategy": strategy.record_strategy,
+    "work-item": strategy.record_work_item,
+    "research-lead": strategy.record_lead,
+    "value-review": research_decisions.record_value_review,
+    "research-decision": research_decisions.record_research_decision,
+    "source-impact": research_decisions.record_source_impact,
+    "review-route": review_protocol.record_route,
+    "review-assignment": review_protocol.record_assignment,
+    "review-attempt": review_protocol.record_attempt,
+    "review-context": review_protocol.record_context_event,
+    "review-adjudication": review_protocol.record_adjudication,
 }
+
+
+def _review_probe(store, payload, **identity):
+    return review_protocol.probe_route(store, payload, credential=os.environ.get("OPENAI_API_KEY"), **identity)
+
+
+def _review_run(store, payload, **identity):
+    return review_protocol.invoke_assignment(store, payload, credential=os.environ.get("OPENAI_API_KEY"), **identity)
+
+
+OPERATIONS.update({"review-probe": _review_probe, "review-run": _review_run})
 
 from .execution import bind_execution, reconcile_execution, record_imported_execution
 OPERATIONS.update({"bind-run": bind_execution, "reconcile-run": reconcile_execution, "result": record_imported_execution})
@@ -204,6 +229,22 @@ def build_parser():
     example = commands.add_parser("example", allow_abbrev=False,
         help="Print an illustrative exact JSON payload without opening a workspace.")
     example.add_argument("operation", choices=sorted((*OPERATIONS, *ACQUISITION)))
+    decision = commands.add_parser("research-decision-assess", allow_abbrev=False,
+                                   help="Read the same scientific decision obligations used by managed entrypoints.")
+    decision.add_argument("--workspace", default=".")
+    decision.add_argument("--boundary", choices=("target", "cycle", "write", "publication", "round"), required=True)
+    decision.add_argument("--decision-id")
+    packet = commands.add_parser("strategy-packet", allow_abbrev=False,
+                                 help="Build a canonical reviewer packet without recording approval.")
+    packet.add_argument("--workspace", default=".")
+    packet.add_argument("--dossier-id")
+    packet.add_argument("--role", choices=review_protocol.ROLES, required=True)
+    packet.add_argument("--reviewer-id", required=True)
+    packet.add_argument("--context-file", help="Exact structured role context, including an adjudicated objection when applicable.")
+    route = commands.add_parser("review-route-assess", allow_abbrev=False,
+                                help="Read the context-isolation evidence for one exact runtime route.")
+    route.add_argument("--workspace", default=".")
+    route.add_argument("--route-id", required=True)
     return parser
 
 
@@ -243,8 +284,8 @@ def status_report(store, *, counters=False):
     profile = config["profile"] if config else "research"
     study = records.get("workspace", {}).get("study")
     action = "verification" if profile == "verification" else "readiness"
-    from .publication_scope import has_publication_scope, assess_manuscript_readiness
-    scoped_report = assess_manuscript_readiness(records, evaluation) if has_publication_scope(records) else None
+    from .publication_scope import has_publication_scope
+    scoped_report = gate_state(records, evaluation, "manuscript-readiness") if has_publication_scope(records) else None
     report = scoped_report if scoped_report is not None and action == "readiness" else gate_state(records, evaluation, action, profile=profile)
     round_report = None
     if config is not None and profile == "research":
@@ -335,6 +376,19 @@ def run(args):
         if args.command in OPERATIONS:
             return OPERATIONS[args.command](store, payload, **identity)
         return acquisition_command(store, args.command, payload, identity)
+    if args.command in ("research-decision-assess", "strategy-packet", "review-route-assess"):
+        snapshot = store.snapshot()
+        artifacts = Evaluation(snapshot["records"], ArtifactStore(root))
+        if args.command == "research-decision-assess":
+            return dict(research_decisions.decision_state(snapshot["records"], artifacts, args.boundary,
+                                                         decision_id=args.decision_id), revision=snapshot["revision"])
+        if args.command == "review-route-assess":
+            return dict(review_protocol.route_state(snapshot["records"], artifacts, args.route_id), revision=snapshot["revision"])
+        context = strict_json(Path(args.context_file).read_bytes()) if args.context_file else {}
+        if not isinstance(context, dict):
+            raise ResearchError("invalid_input", "Reviewer context must be a JSON object")
+        return review_protocol.build_packet(snapshot["records"], artifacts, args.dossier_id, args.role,
+                                            args.reviewer_id, **context)
     if args.command in ("status", "next"):
         report = status_report(store, counters=args.summary)
         if args.summary:

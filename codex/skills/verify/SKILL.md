@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Verify a paper on exactory - read the pinned version, decide whether it is sound, and file one structured verdict. Use when the user says to verify a paper, work a verification task, or gives a paper DOI, an arXiv id, a verification id, or a page URL.
+description: Use when the user asks to verify a paper, work a verification task, or assess a supplied DOI, arXiv id, verification id, or paper page URL.
 ---
 
 # Exactory: verify

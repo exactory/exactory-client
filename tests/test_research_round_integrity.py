@@ -20,7 +20,7 @@ class DepositRoundGateTests(_DepositTestCase):
         output = self._deposit(["--production", "--publish", "--confirm-publish",
                                 "--creator", "Example, Researcher"])
         self.assertIn("Managed record skipped (readiness_required): ", output)
-        self.assertIn("round_decision_missing", output)
+        self.assertIn("research_post_measurement_decision_required", output)
         self.assertEqual(self.fake_api.requests[0].full_url, "https://zenodo.org/api/deposit/depositions")
         records = Store(self.workspace_dir).snapshot()["records"]
         self.assertNotIn("publication_receipt", records)
@@ -74,7 +74,7 @@ class DepositRoundGateTests(_DepositTestCase):
         self.fake_api.requests.clear()
         output = self._deposit(["--new-version", "--creator", "Example, Researcher"])
         self.assertIn("Managed record skipped (readiness_required): ", output)
-        self.assertIn("round_decision_missing", output)
+        self.assertIn("research_bundle_stale", output)
         self.assertEqual(self.fake_api.requests[0].full_url,
                          "https://sandbox.zenodo.org/api/deposit/depositions/4242/actions/newversion")
         self.assertEqual(json.loads((self.workspace_dir / ".exactory/deposit.json").read_text())["deposition_id"], 4343)
@@ -166,8 +166,8 @@ class MeasurementPopulationTests(RoundsCase):
     def test_measurement_uses_the_three_reviewers_with_predictions(self):
         bundle = self.pin(reviews=0, measure=False)
         for name, score in (("gate-a", 5), ("gate-b", 5), ("measure-a", 7), ("measure-b", 8), ("measure-c", 9)):
-            payload = self.manuscript_review(bundle, name)
-            payload["review"] = self.artifacts.put(json.dumps(dict(self.core(), overall=score)).encode(), "application/json")
+            from integration_fixtures import build_manuscript_review
+            payload = build_manuscript_review(self, bundle, name, core=dict(self.core(), overall=score))
             self.mutate(publication.record_manuscript_review, payload)
             if name.startswith("measure-"):
                 self.mutate(predictions.record_prediction, self.prediction_payload(bundle, name.upper()))

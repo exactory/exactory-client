@@ -409,6 +409,8 @@ class TestColabBackend(_InsideWorkspaceTestCase):
         import threading
 
         self.write_script("n4.py", "import json\nprint(json.dumps({'metric': 1.5}))\n")
+        case = prepare_research(self.workspace)
+        admission = admit_lab(case, 'code/n4.py', backend='colab', timeout=10)
         self.mark_runner_alive()
 
         def run_runner() -> None:
@@ -421,7 +423,7 @@ class TestColabBackend(_InsideWorkspaceTestCase):
         runner_thread = threading.Thread(target=run_runner, daemon=True)
         runner_thread.start()
         output = _run_lab_command(
-            ["run", "code/n4.py", "--backend", "colab", "--timeout", "10"], None, self
+            ["run", "code/n4.py", "--admission", admission['id'], "--backend", "colab", "--timeout", "10"], None, self
         )
         runner_thread.join(timeout=10)
         record = json.loads(output.splitlines()[-1])

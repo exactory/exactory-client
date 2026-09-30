@@ -25,6 +25,10 @@ class SearchCLIWorkspace:
         self.sequence = 0
 
     def search(self, command, spec=None, target=None, revision=0, request=None, success=True):
+        if success and spec is not None and command != "init":
+            from search_controller.service import Controller
+            from tests.native_reviewer_support import attest_spec
+            attest_spec(Controller(self.root), spec)
         self.sequence += 1
         argv = [sys.executable, str(CLI), "--attack-root", str(self.root), "search", command]
         if target is not None:
@@ -33,7 +37,7 @@ class SearchCLIWorkspace:
             source = Path(self.temporary.name) / ("spec-%d.json" % self.sequence)
             source.write_text(json.dumps(spec))
             argv += ["--spec", str(source)]
-        if command not in {"status", "next"}:
+        if command not in {"status", "next", "strategy-context", "review-packet"}:
             argv += ["--expected-revision", str(revision), "--request-id", request or "request-%d" % self.sequence]
         argv += ["--json"]
         environment = dict(os.environ)

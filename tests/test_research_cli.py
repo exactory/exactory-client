@@ -325,7 +325,7 @@ os._exit(23)
         self.init_lab()
         gate = self.run_cli("exactory-research", "gate", "round")
         self.assertNotEqual(gate.returncode, 0)
-        self.assertIn("publication_bundle_missing", gate.stderr)
+        self.assertIn("research_intent_missing", gate.stderr)
         export = self.run_cli("exactory-research", "export", "--kind", "round", "--destination", str(self.root / "round-packet"))
         self.assertNotEqual(export.returncode, 0)
         self.assertIn("publication_bundle_missing", export.stderr)
@@ -448,7 +448,11 @@ class ResearchPreparationTests(DevelopmentCase):
         # The challenges ahead are recorded before the objective is written against them.
         self.json_command("grand-challenge", self.grand_challenge(self.links[0]))
         self.objective = {"kind": "objective", "id": "ordered-objective", "statement": "Establish the complete finite bound."}
-        self.json_command("target", {"target": self.objective, "reason": "Fix the full objective while preparing literature."})
+        from managed_strategy_fixtures import target_decision
+        decision = target_decision(self)
+        self.json_command("target", {"target": self.objective,
+            "reason": "Commit the independently assessed full objective while preparing literature.",
+            "decision_id": decision["id"]})
         self.json_command("standards", self.standards(self.links[0]))
         self.json_command("rationale", self.rationale(self.links[0]))
         self.json_command("context", self.context(self.links[0]))

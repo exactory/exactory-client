@@ -16,6 +16,7 @@ from tests.strategy_refresh_support import reassess_fixture
 class ReleaseWorkflowTests(WorkspaceTest):
     input_file = certified.CertifiedBridgeExecutionTests.input_file
     result_review = certified.CertifiedBridgeExecutionTests.result_review
+    observed_policy_review = certified.CertifiedBridgeExecutionTests.observed_policy_review
 
     def admit(self, candidate, strategy=OPENING):
         number = len(self.controller.status()["proposals"]) + 1
@@ -212,7 +213,7 @@ class ReleaseWorkflowTests(WorkspaceTest):
         manifest = dict({key: run_inputs[key] for key in ("claim_digest", "artifacts", "external_dependencies")},
             schema_version=1, kind="certificate", dependencies=[],
             conclusion={"outcome": "proof", "dependency_ids": [], "route_bindings": []}, verification={"run_id": run["id"],
-                "result_digest": run["result_digest"], "policy_review": self.result_review(run["result_digest"], digest(high)),
+                "result_digest": run["result_digest"], "policy_review": self.observed_policy_review(run["result_digest"], digest(high)),
                 "requested_declaration": None, "requested_type_digest": None})
         proof_cp = self.checkpoint(high, manifest, continuation)
 

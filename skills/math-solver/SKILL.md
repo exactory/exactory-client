@@ -26,6 +26,16 @@ replay remains available; fresh work after changed preparation needs a reviewed
 `search amend-foundation` and any separately required computation or strategy
 assessment. Preserve all original claims, proofs, failed methods, and costs.
 
+Every new independent native approval uses the shared observed reviewer adapter.
+Follow [the native review delivery contract](SEARCH.md#observed-native-review-delivery):
+export the exact native subject with `search review-packet`, use its returned
+artifact in a `native_math` assignment on a verified route, and retain the unchanged `review-run`
+output in the original native review field. A fresh agent or declared host name
+alone cannot establish independence. This applies to admission, reassessment,
+amendments, verification inputs and policy, result acceptance, closure, adoption
+and reviewed recovery. Native mathematical objectives keep their existing proof
+and resource rules; no strategic intent, dossier, bar or value gate is added.
+
 ## Overview
 
 The skill attacks a stated mathematical proposition end to end. It proceeds autonomously through routine work within admitted authority, while respecting an explicit user pause, exhausted accounts, required independent review, and any scope change that needs new authority. It has two deterministic layers. The objective controller's executable contract is `SEARCH.md`: it preserves the original request, admits reviewed nodes and finite tasks, owns resource accounts and controlled execution, binds accepted evidence, and decides when the root can close. The native harness is `harness/attack.py` (contract in `harness/SPEC.md`, usage in `harness/README.md`): inside each admitted node it owns the local workspace files, validates the mathematical walk, enforces eight moves per pass, three passes, and 24 moves overall, runs controlled certificate entrypoints, keeps the action list, and reports the local stage. The judgment half is this text: every judgment about the problem is written into a reviewed controller record or a file that the native harness validates and reads.
@@ -39,7 +49,7 @@ current evidence and retained failures, and classify every admitted strategy as
 continue, revise, defer or retire. Update affected studies, preconditions and
 native plans. Record the next hypotheses, success criteria and failure signals,
 or explain why the existing hypotheses still suffice. Obtain an independent
-review with a fresh context and submit `search reassess` using the exact contract
+review through the observed native adapter and submit `search reassess` using the exact contract
 in `SEARCH.md#mandatory-strategy-reassessment`. New research cannot continue under
 an old assessment. Reassessment preserves the original objective, all remaining
 obligations, proof requirements and resource accounts.

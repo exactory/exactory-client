@@ -1,15 +1,17 @@
 ---
-description: Draft a paper for exactory - take in the evidence, write the sections with registry-verified citations, and compile a paper that conforms to the field's doctrine. Use when a study has an idea and results and needs the paper written. For the full study from a topic, use /exactory:ai-science.
+description: Use when a managed study has supported results selected for a manuscript, or the user requests a paper from existing research evidence. For a full study from a topic, use /exactory:ai-science.
 ---
 
 # Draft a paper
 
 Read the [research constitution](../../RESEARCH_CONSTITUTION.md) and the
-[managed research workflow](../../docs/research-workflow.md). Begin or resume with
+[managed research workflow](../../docs/research-workflow.md) and
+[scientific contribution decisions](../../docs/research-decisions.md). Begin or resume with
 `exactory-research status --summary`, `next --summary`, and the current whole `gate readiness`.
 In a study with a selected source-limited contract (`select-publication-scope`), `gate manuscript-readiness` takes the place of `gate readiness` here; `gate readiness` still reports the complete objective.
-Writing requires an assessed research candidate and independent readiness review
-of its actual evidence before this stage. Existing manuscript files, an execution
+Writing requires an assessed research candidate, combined independent support and
+consequence findings, and a current canonical action permitting the manuscript.
+Check `research-decision-assess --boundary write`. Existing manuscript files, an execution
 metric, or an old passing review are not substitutes. For an existing unmanaged
 workspace, preserve and explicitly adopt its evidence, then resolve the current
 preparation and development obligations.
@@ -18,8 +20,9 @@ This skill is the drafting stage: evidence intake, then the draft itself. It is
 one stage of the Exactory AI Science loop, and it assumes the stages around it
 have their own homes:
 
-- Literature synthesis fixes the complete objective before `/exactory:ideate`
-  develops its prospective hypotheses and admitted tests.
+- Literature synthesis supplies the evidence for independent comparison before
+  author-chosen target commitment. `/exactory:ideate` develops the hypotheses,
+  deciding tests and investigation tranches within the complete objective.
 - The evaluate-and-improve loop is `/exactory:evaluate` under the ai-science
   loop ([the ai-science skill's LOOP.md](../ai-science/LOOP.md)).
 - Depositing the preprint is `/exactory:deposit`.
@@ -35,6 +38,30 @@ enabled.
 Complete the authorized drafting work while current prerequisites hold. Record
 blocking evidence, resource, or review conditions precisely and continue useful
 independent work within the user's limits.
+
+## Select the supported delivery
+
+Use the user's versioned actual instruction. `develop_manuscript` requires
+supported claims and an independently sufficient realized consequence. If the
+result falls below the scientific bar, continue a justified investigation or
+pivot, or close the branch with the remaining full objective explicit.
+
+An unconditional instruction to continue through writing, production deposit and
+submission already authorizes that chain for a valid supported limited result.
+When the current decision justifies `deliver_requested`, perform the requested
+delivery without asking again. The task may remain `open_research`; no artificial
+reclassification as a specified delivery is needed. Record that the artifact was
+delivered while the scientific bar and full objective remain unmet. An explicit
+quality condition on publication stays binding; an unspecified condition cannot
+be invented by the author. Ask only about genuinely unresolved scope or resources.
+
+Resolve validity obligations for retained claims or withdraw those claims and
+their downstream uses. Keep consequence-critical gaps visible even when an
+authorized narrower artifact can be delivered. Link review requests and
+`next_round` steps to work items with actual execution status; adoption and
+deferral are not completion. Preserve support and consequence as distinct findings
+from the combined assessment, rather than commissioning another full readiness
+review. Manuscript review still measures the actual paper separately.
 
 ## Security rules, before anything else
 

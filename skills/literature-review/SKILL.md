@@ -1,6 +1,6 @@
 ---
 name: literature-review
-description: Build a current source-grounded research or verification foundation before ideation, native admission, or exact-paper assessment. Use after cohort collection, for literature refresh, and whenever source, scope, or synthesis changes make current preparation pending.
+description: Use after cohort collection, before ideation or native admission, for exact-paper preparation, or when changed sources, scope or synthesis require a current literature foundation.
 ---
 
 # Literature review and synthesis
@@ -76,23 +76,23 @@ of this section. Under `sampled-v1` the five purposes are optional: record a sea
 for a finding that needs prior-art or contradiction evidence, and a recorded
 search still owes the current literature scope.
 
-In a development round (round number 2 or more), also run the four consequence
-purposes, each recorded after the round's admission and judged like the five
-above: `downstream` asks who is blocked by what the paper does not yet do, and
-its found works carry the passage that states the bottleneck; `next_step` asks
-whether the next step was already taken, and a `scooped` verdict withdraws the
-goal; `exemplars` asks how a comparable first result was developed into a larger
-contribution; `changes` asks what changed since the previous round, and a
-`contradicted` verdict returns the affected claims to a cycle. Select at least
-one exemplar with `require-fulltext` under the purpose `exemplar` and read it in
-full (`round_exemplar_missing` until the requirement exists, then
-`fulltext_reading_missing` until it is read); analyze it as one more innovation
-case (`within_field` when it comes from the study's field; an `external` exemplar
-counts toward the external cases, so replace an older external case rather than
-exceed the count the policy allows: exactly five under `lineage-v1`, and ten
-under the legacy policies). When the frontier changes, re-record the earlier
-judgments with their carried findings, and re-record `rationale`, `context` and
-`innovation` for the round.
+In a development round, inspect what the next scientific decision needs from the
+four consequence purposes: `downstream` (whose bottleneck remains), `next_step`
+(whether the result is already known), `exemplars` (how related work advanced),
+and `changes` (what evidence changed). Refresh affected purposes when the admitted
+question, scope or sources require it, and reuse verified sources and findings
+that still answer them. Do not produce new searches solely to obtain another
+receipt. Retain actual captured queries, decisive passages and reading evidence.
+A scooped or contradicted goal returns to the canonical research decision with
+its original evidence retained.
+
+When an exemplar is scientifically needed, read its primary source in full and
+analyze the transferable mechanism as an innovation case. Preserve the recorded
+preparation policy's family counts: an external exemplar replaces an older
+external case where necessary, rather than silently increasing the allowed count.
+Refresh affected rationale, context, innovation and dependent judgments with
+explicit carried findings. The [decision lifecycle](../../docs/research-decisions.md)
+keeps those source judgments distinct from independent support/value approval.
 
 ### The five-purpose loop (lineage-v1)
 
@@ -133,10 +133,31 @@ goals on the way. Read the field's lineage, reviews and stated open problems,
 and the open Grand Challenges of the cohort's field on exactory as one input.
 Record them with `grand-challenge` before ideation: each challenge with its
 horizon, its state, criteria that would show it reached, and evidence read in
-full. Then fix the complete original objective with `target` while still in
-`literature`, written against those challenges. The record stays current for
-the whole study. Record a new one, with the reason, only when the direction
-changes; an unchanged direction is not investigated again.
+full. The record stays current for the whole study. Record a new one, with the
+reason, only when the direction changes; an unchanged direction is not
+investigated again.
+
+For managed author research, follow the
+[prospective decision contract](../../docs/research-decisions.md#before-target-commitment)
+before locking an author-chosen objective. Record the actual user intent and a
+proposed-content dossier comparing objective and first approach, credible
+alternatives and available discrepancy leads. Two assessors first receive the
+original aim, resources and verified field context, including held-source identities
+and reading status, without the proposed objective, method, author recommendation
+or prior scores. Persist their independent worthwhile-consequence bars before
+reconciliation and slate delivery. Assess objective adequacy and approach adequacy
+separately. A fixed user problem stays fixed; compare methods within its scope.
+
+Commit the exact approved statement/scope with `target` while still in
+`literature`. A native ID is not required for the prospective binding and assigning
+it does not stale approval. Record every relevant source/preparation change since
+approval, including a new source absent from old dependencies. If the impact on
+nearest work, scope, transfer or the bar is material or unresolved, refresh the
+affected findings before commitment. Unrelated metadata leaves unchanged findings
+usable. The first result assessment checks that source-delta declaration.
+Prospective strategic approval does not discharge unread sources, preparation or
+cycle admission. Native mathematical preparation and external verification retain
+their own target/admission rules and do not acquire this author decision gate.
 
 Record source-grounded field standards and cohort doctrine, And/But/Therefore
 rationale, innovation studies, and scientific context. Under

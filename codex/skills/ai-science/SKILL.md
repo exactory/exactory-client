@@ -1,6 +1,6 @@
 ---
 name: ai-science
-description: Run a research study end to end on exactory, from cohort and literature synthesis through admitted experiments, independent research readiness review, drafting, manuscript review, and authorized publication. Use when the user asks for AI Science or a study from topic to submitted paper.
+description: Use when the user asks for AI Science or a managed research study from a topic or question through scientific results, a paper, or an authorized publication endpoint.
 ---
 
 # Exactory: ai-science
