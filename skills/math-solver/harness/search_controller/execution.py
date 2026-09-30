@@ -349,8 +349,10 @@ def launch(controller, run):
         try:
             process.wait(timeout=5)
         except subprocess.TimeoutExpired as error:
-            # A launcher that is still live keeps its run for a later search reconcile.
-            raise SearchError("recovery_required", "The launcher is still live. Run search reconcile after the launcher ends.") from error
+            # A launcher that is still live keeps its run for a later search reconcile. The details name the refusal
+            # that ended the launch, if any.
+            raise SearchError("recovery_required", "The launcher is still live. Run search reconcile after the launcher ends.",
+                              None if refusal is None else {"refusal": {"code": refusal.code, "message": refusal.message}}) from error
     if refusal is not None:
         if not released:
             # The launcher ended without authority to execute a producer, so its run is reconciled without guessing
