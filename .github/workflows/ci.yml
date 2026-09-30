@@ -8,8 +8,84 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    name: Python ${{ matrix.python-version }}
+  sources:
+    name: Resolve immutable test sources
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      client-commit: ${{ steps.revisions.outputs.client-commit }}
+      client-tree: ${{ steps.revisions.outputs.client-tree }}
+      marketplace-commit: ${{ steps.revisions.outputs.marketplace-commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: client
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: exactory/marketplace
+          ref: main
+          path: marketplace
+          persist-credentials: false
+      - name: Record the exact revisions for every test job
+        id: revisions
+        run: |
+          echo "client-commit=$(git -C client rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "client-tree=$(git -C client rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
+          echo "marketplace-commit=$(git -C marketplace rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  general:
+    name: Python ${{ matrix.python-version }} general shard ${{ matrix.shard }}
+    needs: sources
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9.25", "3.12.14", "3.14.7"]
+        shard: [0, 1, 2, 3]
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.sources.outputs.client-commit }}
+          path: client
+          persist-credentials: false
+      - name: Check out the paired marketplace contract
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: exactory/marketplace
+          ref: ${{ needs.sources.outputs.marketplace-commit }}
+          path: marketplace
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install Lean and build the real smoke fixture
+        uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596 # v1.6.0
+        with:
+          lake-package-directory: client/skills/math-solver/harness/fixtures/lean-smoke
+          build: true
+      - name: Run the complete assigned unittest partition
+        run: >-
+          python3 ci/unittest_shards.py run
+          --start-directory tests
+          --shard-index ${{ matrix.shard }} --shard-count 4
+          --marketplace ../marketplace
+          --result ci-results/shard-result.json
+      - name: Preserve partition and observed result, including failures
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: general-${{ matrix.python-version }}-${{ matrix.shard }}
+          path: client/ci-results/shard-result.json
+          if-no-files-found: error
+
+  checks:
+    name: Python ${{ matrix.python-version }} remaining checks
+    needs: sources
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     strategy:
@@ -28,13 +104,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.sources.outputs.client-commit }}
           path: client
           persist-credentials: false
       - name: Check out the paired marketplace contract
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: exactory/marketplace
-          ref: main
+          ref: ${{ needs.sources.outputs.marketplace-commit }}
           path: marketplace
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -52,11 +129,9 @@ jobs:
               python3 -m py_compile "$file"
             fi
           done
-          python3 -m compileall -q hooks codex research_harness tests skills/math-solver/harness
+          python3 -m compileall -q ci hooks codex research_harness tests skills/math-solver/harness
       - name: Check Codex entrypoints and hook registrations
         run: python3 codex/generate.py --check
-      - name: Run the tests
-        run: python3 -m unittest discover -s tests -v
       - name: Measure Codex adapter coverage, including hook subprocesses
         run: |
           python3 -m pip install coverage==${{ matrix.coverage-version }}
@@ -69,3 +144,51 @@ jobs:
         run: |
           find . -name '*.json' -not -path './.git/*' -print0 \
             | xargs -0 -n 1 python3 -m json.tool > /dev/null
+
+  test:
+    name: Python ${{ matrix.python-version }}
+    needs: [sources, general, checks]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9.25", "3.12.14", "3.14.7"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.sources.outputs.client-commit }}
+          path: client
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Download this Python version's observed partitions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: general-${{ matrix.python-version }}-*
+          path: shard-receipts
+      - name: Verify every discovered entry ran exactly once
+        working-directory: client
+        env:
+          CLIENT_COMMIT: ${{ needs.sources.outputs.client-commit }}
+          CLIENT_TREE: ${{ needs.sources.outputs.client-tree }}
+          MARKETPLACE_COMMIT: ${{ needs.sources.outputs.marketplace-commit }}
+        run: >-
+          python3 ci/unittest_shards.py verify
+          --receipts ../shard-receipts
+          --python-versions ${{ matrix.python-version }} --shard-count 4
+          --client-commit "$CLIENT_COMMIT" --client-tree "$CLIENT_TREE"
+          --marketplace-commit "$MARKETPLACE_COMMIT"
+          --result ../shard-summary.json
+      - name: Require every test and validation job to succeed
+        if: always()
+        env:
+          SOURCE_RESULT: ${{ needs.sources.result }}
+          GENERAL_RESULT: ${{ needs.general.result }}
+          CHECK_RESULT: ${{ needs.checks.result }}
+        run: |
+          test "$SOURCE_RESULT" = success
+          test "$GENERAL_RESULT" = success
+          test "$CHECK_RESULT" = success
