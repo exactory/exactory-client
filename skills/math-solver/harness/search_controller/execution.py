@@ -283,12 +283,7 @@ def launch(controller, run):
     directory = materialize(controller, run)
     process = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--launcher", str(directory)],
         stdin=subprocess.PIPE, bufsize=0, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-    def wait_for_launcher_end():
-        # A launcher that is still live after 5 seconds keeps its run for a later search reconcile.
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired as error:
-            raise SearchError("recovery_required", "The launcher is still live. Run search reconcile after the launcher ends.") from error
+    refusal = None
     released = False
     try:
         # A loaded machine starts the launcher slowly. While the launcher is alive, the launch waits for it to become
@@ -345,20 +340,23 @@ def launch(controller, run):
             # The exit wait below gives the launcher 5 more seconds. A launcher that ends in them is reconciled, and a
             # launcher that is still live is reported.
             pass
-    except SearchError:
-        if not released:
-            # The owned launcher has not received authority to execute a producer.
-            # Closing its input records a definite unstarted result, which can be
-            # reconciled without guessing whether a workload ran or charging it.
-            process.stdin.close()
-            wait_for_launcher_end()
-            reconcile_runs(controller)
-        raise
+    except SearchError as error:
+        refusal = error
     finally:
-        if process.stdin is not None and not process.stdin.closed:
-            process.stdin.close()
-        if process.poll() is None:
-            wait_for_launcher_end()
+        # A launcher that has not received its token reads the end of its input and records a definite unstarted
+        # result. The launch then waits once for the launcher to end.
+        process.stdin.close()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired as error:
+            # A launcher that is still live keeps its run for a later search reconcile.
+            raise SearchError("recovery_required", "The launcher is still live. Run search reconcile after the launcher ends.") from error
+    if refusal is not None:
+        if not released:
+            # The launcher ended without authority to execute a producer, so its run is reconciled without guessing
+            # whether a workload ran or charging it.
+            reconcile_runs(controller)
+        raise refusal
     reconcile_runs(controller)
 
 
