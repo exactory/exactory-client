@@ -272,7 +272,12 @@ def launch_execution(store, admission_id, *, expected_revision, request_id):
             worker.stdin.write((claim["token"] + "\n").encode())
             worker.stdin.flush()
             worker.stdin.close()
-            worker.wait(timeout=worker_wait_seconds)
+            try:
+                worker.wait(timeout=worker_wait_seconds)
+            except subprocess.TimeoutExpired:
+                # The exit wait below gives the worker 6 more seconds. A worker that ends in them is reconciled, and a
+                # worker that is still live is reported.
+                pass
         finally:
             if not worker.stdin.closed:
                 worker.stdin.close()
