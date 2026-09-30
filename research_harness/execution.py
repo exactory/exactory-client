@@ -252,10 +252,16 @@ def launch_execution(store, admission_id, *, expected_revision, request_id):
             return launch_colab(store, claim)
         directory = store.root / _directory(admission_id)
         json_projection(store.root, _directory(admission_id) + "/config.json", claim["config"])
-        with (directory / "launcher.log").open("wb") as diagnostics:
-            worker = subprocess.Popen([sys.executable, str(Path(__file__).with_name("launcher.py")),
-                str(directory), claim["config_artifact"]["sha256"], claim["token"]],
-                stdin=subprocess.PIPE, bufsize=0, stdout=diagnostics, stderr=diagnostics, start_new_session=True)
+        try:
+            with (directory / "launcher.log").open("wb") as diagnostics:
+                worker = subprocess.Popen([sys.executable, str(Path(__file__).with_name("launcher.py")),
+                    str(directory), claim["config_artifact"]["sha256"], claim["token"]],
+                    stdin=subprocess.PIPE, bufsize=0, stdout=diagnostics, stderr=diagnostics, start_new_session=True)
+        except OSError as error:
+            # At a limit on processes or open files, no worker holds the claimed token, so the program never runs.
+            raise ResearchError("execution_recovery_required", "The worker process did not start. Use exactory-research "
+                                "reconcile-run to record the claimed run as interrupted, with a reason.",
+                                {"errno": error.errno}) from error
         try:
             # A loaded machine starts the worker slowly. While the worker is alive, the launch waits for it to become
             # ready as long as it waits below for the run to end: the run's timeout plus 10 seconds.
