@@ -305,7 +305,7 @@ class SearchExecutionTests(WorkspaceTest):
         with patch.object(subprocess, "Popen", side_effect=fork_error), self.assertRaises(SearchError) as caught:
             invoke(self.controller, "run", spec)
         self.assertEqual((caught.exception.code, caught.exception.message, caught.exception.details),
-                         ("recovery_required", NEVER_STARTED_RUN_RECORDED_ERR_MSG, {"reason": str(fork_error)}))
+                         ("recovery_required", NEVER_STARTED_RUN_RECORDED_ERR_MSG, {"start_error": str(fork_error)}))
         run = self.controller.status()["runs"]["run-000001"]
         self.assertEqual((run["status"], run["termination"], run["started_units"], run["charged_units"]),
                          ("terminal", "never_started", 0, 0))
@@ -325,7 +325,7 @@ class SearchExecutionTests(WorkspaceTest):
                 self.assertRaises(SearchError) as caught:
             invoke(self.controller, "run", spec)
         self.assertEqual((caught.exception.code, caught.exception.message, caught.exception.details),
-                         ("recovery_required", NEVER_STARTED_RUN_RECORDED_ERR_MSG, {"reason": str(disk_full_error)}))
+                         ("recovery_required", NEVER_STARTED_RUN_RECORDED_ERR_MSG, {"start_error": str(disk_full_error)}))
         run = self.controller.status()["runs"]["run-000001"]
         self.assertEqual((run["status"], run["termination"], run["started_units"], run["charged_units"]),
                          ("terminal", "never_started", 0, 0))
@@ -347,7 +347,8 @@ class SearchExecutionTests(WorkspaceTest):
         self.assertEqual((caught.exception.code, caught.exception.message, caught.exception.details),
                          ("recovery_required", "The launcher did not start, so no command ran. The run stays reserved because "
                           "it could not be recorded as never started. After you remove the cause given in the details, search "
-                          "reconcile records it as indeterminate and charges its reserved unit.", {"reason": str(disk_full_error)}))
+                          "reconcile records it as indeterminate and charges its reserved unit.",
+                          {"start_error": str(disk_full_error), "record_error": str(disk_full_error)}))
         self.assertEqual(self.controller.status()["runs"]["run-000001"]["status"], "reserved")
         # As the message states, reconciliation cannot tell that no command ran.
         invoke(self.controller, "reconcile", {}, None)
@@ -358,15 +359,16 @@ class SearchExecutionTests(WorkspaceTest):
         from search_controller import execution
         spec = self.begin_a_move_for_a_job()
         fork_error = BlockingIOError(errno.EAGAIN, "Resource temporarily unavailable")
+        disk_full_error = OSError(errno.ENOSPC, "No space left on device")
         # The record of the never started run is written, and then the disk fills before reconciliation records it.
         with patch.object(subprocess, "Popen", side_effect=fork_error), \
-                patch.object(execution, "reconcile_runs", side_effect=OSError(errno.ENOSPC, "No space left on device")), \
+                patch.object(execution, "reconcile_runs", side_effect=disk_full_error), \
                 self.assertRaises(SearchError) as caught:
             invoke(self.controller, "run", spec)
         self.assertEqual((caught.exception.code, caught.exception.message, caught.exception.details),
                          ("recovery_required", "The launcher did not start, so no command ran. Remove the cause given in the "
                           "details, then run search reconcile to finish recording the run as never started.",
-                          {"reason": str(fork_error)}))
+                          {"start_error": str(fork_error), "reconcile_error": str(disk_full_error)}))
         self.assertEqual(self.controller.status()["runs"]["run-000001"]["status"], "reserved")
         invoke(self.controller, "reconcile", {}, None)
         run = self.controller.status()["runs"]["run-000001"]
