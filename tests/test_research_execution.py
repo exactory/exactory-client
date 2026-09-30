@@ -1,5 +1,6 @@
 """Real pinned launches, one-time claims, timeout and interrupted-owner recovery."""
 
+import errno
 import hashlib
 import importlib
 import json
@@ -389,13 +390,13 @@ class ResearchExecutionTests(DevelopmentCase):
     def test_worker_that_starts_within_the_run_timeout_completes_its_run(self):
         admission = admit_lab(self, body="print('{\"metric\": 7}')\n", timeout=30)
         api = importlib.import_module("research_harness.execution")
-        started = time.monotonic()
+        start_time = time.monotonic()
         # A loaded machine starts the worker slowly: it writes ready.json after the 10 seconds that the wait adds to
         # the run's timeout, so only a wait that grows with that timeout sees it.
         with self.start_worker_after("sleep 12"):
             result = api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
                                           request_id="slow-worker-start")
-        self.assertGreaterEqual(time.monotonic() - started, 12)
+        self.assertGreaterEqual(time.monotonic() - start_time, 12)
         self.assertTrue(result["ok"], result["stderr_tail"])
         self.assertEqual(result["metric"], {"metric": 7})
 
@@ -414,13 +415,13 @@ class ResearchExecutionTests(DevelopmentCase):
         from research_harness.errors import ResearchError
         admission = admit_lab(self, body="raise RuntimeError('must never launch')\n", timeout=60)
         api = importlib.import_module("research_harness.execution")
-        started = time.monotonic()
+        start_time = time.monotonic()
         # The script exits before it starts the worker, so ready.json is never written.
         with self.start_worker_after("exit 3"), self.assertRaises(ResearchError) as raised:
             api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
                                  request_id="worker-exits")
         # The wait ends when the worker exits, long before the run's timeout.
-        self.assertLess(time.monotonic() - started, 60)
+        self.assertLess(time.monotonic() - start_time, 60)
         self.assertEqual((raised.exception.code, raised.exception.message),
                          ("execution_recovery_required", "The launcher outcome is unknown; reconcile the claimed identity"))
         records = self.store.snapshot()["records"]
@@ -438,14 +439,14 @@ class ResearchExecutionTests(DevelopmentCase):
         from research_harness.errors import ResearchError
         admission = admit_lab(self, body="raise RuntimeError('must never launch')\n", timeout=0.15)
         api = importlib.import_module("research_harness.execution")
-        started = time.monotonic()
+        start_time = time.monotonic()
         # The worker process stays alive for 60 seconds and never writes ready.json.
         with self.start_worker_after("exec sleep 60"), self.assertRaises(ResearchError) as raised:
             api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
                                  request_id="worker-never-ready")
         # The wait ends at the run's timeout plus 10 seconds, and the exit wait after it at 6 seconds more, both while
         # the worker is alive.
-        self.assertLess(time.monotonic() - started, 60)
+        self.assertLess(time.monotonic() - start_time, 60)
         self.assertEqual((raised.exception.code, raised.exception.message),
                          ("execution_recovery_required", "The worker is still live or its outcome is unknown"))
         records = self.store.snapshot()["records"]
@@ -533,6 +534,53 @@ class ResearchExecutionTests(DevelopmentCase):
         records = self.store.snapshot()["records"]
         execution_id = records["execution_outcome"][admission["id"]]["execution_id"]
         self.assertEqual(records["execution"][execution_id]["payload"]["status"], "interrupted")
+
+    def assert_unstarted_worker_leaves_the_claimed_run_to_reconcile(self, api, admission, refusal_error, error_number):
+        """The launch that ended with `refusal_error` keeps its claim without an outcome, and reconcile-run records it."""
+        self.assertEqual(refusal_error.as_dict(), {"code": "execution_recovery_required", "message":
+            "The worker process did not start. Use exactory-research reconcile-run to record the claimed run as "
+            "interrupted, with a reason.", "details": {"errno": error_number}})
+        records = self.store.snapshot()["records"]
+        self.assertIn(admission["id"], records["execution_claim"])
+        self.assertNotIn("execution_outcome", records)
+        # The documented recovery records the claimed run as interrupted.
+        result = api.reconcile_execution(self.store, {"admission_id": admission["id"], "resolution": "interrupted",
+            "reason": "The worker process did not start."}, expected_revision=self.store.revision,
+            request_id="recover-unstarted-worker")
+        self.assertFalse(result["ok"])
+        records = self.store.snapshot()["records"]
+        execution_id = records["execution_outcome"][admission["id"]]["execution_id"]
+        self.assertEqual(records["execution"][execution_id]["payload"]["status"], "interrupted")
+
+    def test_worker_that_cannot_start_leaves_the_claimed_run_to_reconcile(self):
+        from research_harness.errors import ResearchError
+        admission = admit_lab(self, body="raise RuntimeError('must never launch')\n")
+        api = importlib.import_module("research_harness.execution")
+        # At the limit of the user's processes, fork fails with EAGAIN.
+        fork_error = BlockingIOError(errno.EAGAIN, "Resource temporarily unavailable")
+        with mock.patch.object(subprocess, "Popen", side_effect=fork_error), \
+                self.assertRaises(ResearchError) as raised:
+            api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                 request_id="worker-cannot-start")
+        self.assert_unstarted_worker_leaves_the_claimed_run_to_reconcile(api, admission, raised.exception, errno.EAGAIN)
+
+    def test_worker_log_that_cannot_open_leaves_the_claimed_run_to_reconcile(self):
+        from research_harness.errors import ResearchError
+        admission = admit_lab(self, body="raise RuntimeError('must never launch')\n")
+        api = importlib.import_module("research_harness.execution")
+        path_open = Path.open
+
+        def refuse_the_worker_log(path, *args, **kwargs):
+            # At the limit of the process's open files, open fails with EMFILE.
+            if path.name == "launcher.log":
+                raise OSError(errno.EMFILE, "Too many open files")
+            return path_open(path, *args, **kwargs)
+
+        with mock.patch.object(Path, "open", autospec=True, side_effect=refuse_the_worker_log), \
+                self.assertRaises(ResearchError) as raised:
+            api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                 request_id="worker-log-cannot-open")
+        self.assert_unstarted_worker_leaves_the_claimed_run_to_reconcile(api, admission, raised.exception, errno.EMFILE)
 
     def test_run_timeout_shorter_than_the_worker_start_still_gives_an_observed_run(self):
         admission = admit_lab(self, body="import time\ntime.sleep(30)\n", timeout=0.15)

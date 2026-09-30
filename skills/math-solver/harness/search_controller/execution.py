@@ -280,10 +280,50 @@ def process_observations(state):
 
 def launch(controller, run):
     from .integration import internal_operation
-    directory = materialize(controller, run)
-    process = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--launcher", str(directory)],
-        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-    released = False
+    try:
+        directory = materialize(controller, run)
+        process = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--launcher", str(directory)],
+            stdin=subprocess.PIPE, bufsize=0, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    except FileExistsError:
+        # The run directory existed before this launch and can hold another launcher's records, so the launch writes
+        # no record into it.
+        raise
+    except OSError as start_error:
+        # No launcher process exists, so no command ran. The launch writes the terminal record that a launcher writes
+        # when it receives no token, and reconciliation records the run as never started, without a charge. The details
+        # name every error that stopped the launch by its step.
+        try:
+            atomic_record(Path(run["snapshot_root"]).parent / "terminal.json", {"token": run["token"], "commands": [],
+                          "started_units": 0, "termination": "never_started", "outputs": []})
+        except OSError as record_error:
+            raise SearchError("recovery_required", "The launcher did not start, so no command ran. The run stays reserved "
+                              "because writing its never-started record failed. Remove the causes given in the details, then "
+                              "run search reconcile. It records the run as never started if that record exists, and otherwise "
+                              "as indeterminate with its reserved units charged.",
+                              {"start_error": str(start_error), "record_error": str(record_error)}) from start_error
+        try:
+            reconcile_runs(controller)
+        except OSError as reconcile_error:
+            raise SearchError("recovery_required", "The launcher did not start, so no command ran, and the reconciliation "
+                              "of its never-started run did not complete. Remove the causes given in the details, then run "
+                              "search reconcile.",
+                              {"start_error": str(start_error), "reconcile_error": str(reconcile_error)}) from start_error
+        raise SearchError("recovery_required", "The launcher did not start, so no command ran. The run is recorded as "
+                          "never started. Remove the cause given in the details, then run search next.",
+                          {"start_error": str(start_error)}) from start_error
+    def require_launcher_end(refusal_error):
+        # Every path of the launch calls this once. A launcher that has not received its token reads the end of its
+        # input and records a definite unstarted result. A launcher that is still live after 5 seconds keeps its run
+        # for a later search reconcile, and the details name the refusal that ended the launch, if any.
+        process.stdin.close()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired as error:
+            details = None if refusal_error is None else {"refusal": {
+                "code": refusal_error.code, "message": refusal_error.message, "details": refusal_error.details}}
+            raise SearchError("recovery_required", "The launcher is still live. Run search reconcile after the launcher ends.",
+                              details) from error
+    is_token_released = False
     try:
         # A loaded machine starts the launcher slowly. While the launcher is alive, the launch waits for it to become
         # ready as long as it waits below for the run to end: the run's timeout plus 10 seconds.
@@ -323,28 +363,35 @@ def launch(controller, run):
                     move = state["service"]["moves"][run["reservation_id"]]
                     require_producer_context(state, run, move)
                     audit_research_plans(controller, state, move)
-                process.stdin.write((run["token"] + "\n").encode())
-                process.stdin.flush()
-                released = True
+                try:
+                    # The launcher's input is unbuffered (bufsize=0): this one write sends the token, and neither the flush
+                    # nor the close has anything left to send.
+                    process.stdin.write((run["token"] + "\n").encode())
+                    process.stdin.flush()
+                    is_token_released = True
+                except BrokenPipeError:
+                    # A launcher that ended before it read its token ran no command, and reconciliation records its run.
+                    pass
         process.stdin.close()
-        process.wait(timeout=launcher_wait_seconds)
-    except SearchError:
-        if not released:
-            # The owned launcher has not received authority to execute a producer.
-            # Closing its input records a definite unstarted result, which can be
-            # reconciled without guessing whether a workload ran or charging it.
-            process.stdin.close()
-            process.wait(timeout=5)
+        try:
+            process.wait(timeout=launcher_wait_seconds)
+        except subprocess.TimeoutExpired:
+            # The exit wait below gives the launcher 5 more seconds. A launcher that ends in them is reconciled, and a
+            # launcher that is still live is reported.
+            pass
+    except SearchError as refusal_error:
+        # The launch waits for the launcher and reconciles while it handles the refusal, so an error from either step
+        # shows the refusal as its context.
+        require_launcher_end(refusal_error)
+        if not is_token_released:
+            # The launcher ended without its token, so no producer ran. Reconciliation records the run as never started
+            # when the launcher wrote that record, and otherwise as indeterminate with its reserved units charged.
             reconcile_runs(controller)
         raise
-    finally:
-        if process.stdin is not None and not process.stdin.closed:
-            process.stdin.close()
-        if process.poll() is None:
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired as error:
-                raise SearchError("recovery_required", "The launcher remains live after prelaunch refusal; retain the reserved run and reconcile") from error
+    except BaseException:
+        require_launcher_end(None)
+        raise
+    require_launcher_end(None)
     reconcile_runs(controller)
 
 
