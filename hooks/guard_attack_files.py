@@ -13,12 +13,17 @@ The hook first runs `math_search.guard`. In a managed search tree (a workspace
 whose parent holds `.search/tree.json`), that check denies a write to anything
 the search controller owns, the payload of another tool that names the tree,
 and any operation whose check fails with an error. The hook then denies a Write
-or an Edit to any of the eight files, and a Bash command that writes to one
-through a redirect, `tee`, `cp`, `mv`, `rm`, `truncate`, `dd`, or `sed -i`
-when the target names the file by a path that contains a `/`, resolved against
-the payload's working directory. Reading them is untouched. Any other file, any
-other tool, and any error of the hook's own checks are silent: exit 0, no
-output.
+or an Edit to any of the eight files. It also denies a Bash command that writes,
+that is, one that holds a word that begins with `>`, or `tee`, `cp`, `mv`,
+`rm`, `truncate` or `dd`, or `sed` with `-i`, when one of its words, with a
+leading `>` removed, is a path that contains a `/` and resolves, from the
+payload's working directory, to one of the eight files. The check reads words,
+not write targets: it denies a writing command that only reads one of the
+files, and it misses a file named without a `/`, a write after a `cd`, a
+redirection whose word does not begin with `>` (such as `2>`, `&>` or
+`x>file`), `>|file` without a space, and `dd of=`. A command that does not
+write is untouched. Any other file, any other tool, and any error of the hook's
+own checks are silent: exit 0, no output.
 """
 
 from __future__ import annotations
