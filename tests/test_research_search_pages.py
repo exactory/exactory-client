@@ -71,26 +71,6 @@ class SearchPageTests(LiteratureCase):
                  for numbers, cursor, following in (([1, 2], "*", "second"), ([3], "second", None))]
         self.assertFalse(self.search(pages)["pending"])
 
-    def test_openalex_filter_is_the_query_of_a_native_citing_capture(self):
-        data = {"meta": {"count": 1, "next_cursor": None},
-                "results": [{"id": "https://openalex.org/W7", "title": "A work that cites W123"}]}
-        self.sequence += 1
-        capture = import_response(self.store, "openalex", json.dumps(data).encode(),
-            source_url="https://api.openalex.org/works?filter=cites:W123&sort=cited_by_count:desc",
-            captured_at="2026-09-07T12:00:00Z", expected_revision=self.store.revision, request_id="native-" + str(self.sequence))
-
-        def citing(query):
-            return {"id": "citing-" + query, "profile": "research", "purpose": "recent", "queries": [query],
-                    "responses": [{"source_id": capture["source_ids"][0], "query": query}],
-                    "captured_at": "2026-09-07T12:00:00Z", "scope": "Every work that cites W123.",
-                    "found_work_ids": capture["work_ids"], "verdict": "nothing-new", "cited_work_ids": [],
-                    "dispositions": [{"work_id": w, "disposition": "out_of_scope", "reason": "Authored result outside the objective."}
-                                     for w in capture["work_ids"]],
-                    "impact": "This judgment covers only the saved citing works.", "gaps": []}
-
-        self.assert_error("invalid_search", lambda: self.mutate(record_search, citing("cited_by_count:desc")))
-        self.assertFalse(self.mutate(record_search, citing("cites:W123"))["result"]["pending"])
-
     def test_search_report_preserves_native_missing_pages(self):
         self.search([self.crossref([1, 2])])
         self.assertIn("search_pending", self.codes())

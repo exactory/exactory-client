@@ -47,25 +47,6 @@ class LiteratureCase(unittest.TestCase):
                             expected_revision=self.store.revision, request_id="refs-" + str(self.sequence))
         return identifier
 
-    def capture_search(self, purpose="direct", found=(), verdict="nothing-new"):
-        """Capture an authored MCP search response that returns `found` and return the payload of its judgment."""
-        query = purpose + " bounded sequence comparison"
-        data = {"query": query, "results": [{"id": identifier, "title": "Later authored evidence"} for identifier in found]}
-        self.sequence += 1
-        result = import_response(self.store, "mcp", json.dumps(data).encode(), source_url="https://example.org/search",
-            captured_at="2026-09-07T12:00:00Z", media_type="application/json",
-            mappings=[{"id": "/results/%d/id" % i, "title": "/results/%d/title" % i} for i in range(len(found))],
-            expected_revision=self.store.revision, request_id="search-capture-" + str(self.sequence))
-        source = result["source_ids"][0]
-        return {"id": purpose, "profile": "research", "purpose": purpose, "queries": [query],
-                "responses": [{"source_id": source, "query": query,
-                               "query_locator": {"kind": "json", "pointer": "/query", "value": query},
-                               "results_pointer": "/results"}],
-                "captured_at": "2026-09-07T12:00:00Z", "scope": "The bounded-sequence contribution in this study.",
-                "found_work_ids": list(found), "verdict": verdict, "cited_work_ids": [],
-                "dispositions": [{"work_id": w, "disposition": "relevant", "reason": "Found by the authored search."} for w in found],
-                "impact": "No matching prior contribution was exposed in this saved search.", "gaps": []}
-
     def verification_target(self, number=999):
         """An unpinned verification target: the work is registered, its main document is not captured yet."""
         return {"kind": "work", "id": self.metadata(number), "source_id": None, "sha256": None}
