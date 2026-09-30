@@ -557,8 +557,8 @@ class ResearchExecutionTests(DevelopmentCase):
         admission = admit_lab(self, body="raise RuntimeError('must never launch')\n")
         api = importlib.import_module("research_harness.execution")
         # At the limit of the user's processes, fork fails with EAGAIN.
-        fork_failure = BlockingIOError(errno.EAGAIN, "Resource temporarily unavailable")
-        with mock.patch.object(subprocess, "Popen", side_effect=fork_failure), \
+        fork_error = BlockingIOError(errno.EAGAIN, "Resource temporarily unavailable")
+        with mock.patch.object(subprocess, "Popen", side_effect=fork_error), \
                 self.assertRaises(ResearchError) as raised:
             api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
                                  request_id="worker-cannot-start")
