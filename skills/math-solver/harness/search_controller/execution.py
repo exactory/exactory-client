@@ -285,7 +285,10 @@ def launch(controller, run):
         stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     released = False
     try:
-        deadline = time.monotonic() + 5
+        # A loaded machine starts the launcher slowly. While the launcher is alive, the launch waits for it to become
+        # ready as long as it waits below for the run to end: the run's timeout plus 10 seconds.
+        launcher_wait_seconds = run["timeout_seconds"] + 10
+        deadline = time.monotonic() + launcher_wait_seconds
         while not (directory / "ready.json").exists() and process.poll() is None and time.monotonic() < deadline:
             time.sleep(0.01)
         s.require((directory / "ready.json").exists(), "Launcher did not establish its identity", "recovery_required")
@@ -324,7 +327,7 @@ def launch(controller, run):
                 process.stdin.flush()
                 released = True
         process.stdin.close()
-        process.wait(timeout=run["timeout_seconds"] + 10)
+        process.wait(timeout=launcher_wait_seconds)
     except SearchError:
         if not released:
             # The owned launcher has not received authority to execute a producer.
