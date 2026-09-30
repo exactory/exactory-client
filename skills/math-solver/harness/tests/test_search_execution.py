@@ -154,12 +154,12 @@ class SearchExecutionTests(WorkspaceTest):
         step.mkdir()
         (step / "job.py").write_text("print('never runs')\n")
         invoke(self.controller, "begin", begin_spec())
-        started = time.monotonic()
+        start_time = time.monotonic()
         # The script exits before it starts the launcher, so ready.json is never written.
         with self.start_launcher_after("exit 3"), self.assertRaises(SearchError) as caught:
             invoke(self.controller, "run", command_spec(self.workspace, [sys.executable, "job.py"], 60))
         # The wait ends when the launcher exits, long before the run's timeout.
-        self.assertLess(time.monotonic() - started, 60)
+        self.assertLess(time.monotonic() - start_time, 60)
         self.assertEqual((caught.exception.code, caught.exception.message),
                          ("recovery_required", "Launcher did not establish its identity"))
         self.assertEqual(self.controller.status()["runs"]["run-000001"]["started_units"], 0)
@@ -169,12 +169,12 @@ class SearchExecutionTests(WorkspaceTest):
         step.mkdir()
         (step / "job.py").write_text("print('never runs')\n")
         invoke(self.controller, "begin", begin_spec())
-        started = time.monotonic()
+        start_time = time.monotonic()
         # The launcher process stays alive for 60 seconds and never writes ready.json.
         with self.start_launcher_after("exec sleep 60"), self.assertRaises(SearchError) as caught:
             invoke(self.controller, "run", command_spec(self.workspace, [sys.executable, "job.py"], 1))
         # The wait ends at the run's timeout plus 10 seconds, and the exit waits after it end while the launcher lives.
-        self.assertLess(time.monotonic() - started, 60)
+        self.assertLess(time.monotonic() - start_time, 60)
         self.assertEqual(caught.exception.code, "recovery_required")
         self.assertEqual(self.controller.status()["runs"]["run-000001"]["started_units"], 0)
 
@@ -309,11 +309,11 @@ class SearchExecutionTests(WorkspaceTest):
                 self.start_launcher_after('printf x > "$4/ready.json"; exec sleep 60'), \
                 self.assertRaises(SearchError) as caught:
             invoke(self.controller, "run", spec)
-        with self.assertRaises(json.JSONDecodeError) as malformed:
+        with self.assertRaises(json.JSONDecodeError) as decode_caught:
             json.loads("x")
         self.assertEqual((caught.exception.code, caught.exception.details),
                          ("recovery_required", {"refusal": {"code": "recovery_conflict", "message": "stored JSON is malformed",
-                                                            "details": {"reason": str(malformed.exception)}}}))
+                                                            "details": {"reason": str(decode_caught.exception)}}}))
 
     def test_refused_launch_whose_reconciliation_fails_keeps_the_refusal_in_the_traceback(self):
         from search_controller import execution
@@ -360,8 +360,8 @@ class SearchExecutionTests(WorkspaceTest):
             invoke(self.controller, "run", spec)
         # The launch closed the launcher's input and waited for it, so the launcher recorded that it started no command.
         self.assertIsNotNone(launchers[0].poll())
-        terminal = self.attack_root / ".search" / "runs" / "run-000001" / "terminal.json"
-        self.assertEqual(json.loads(terminal.read_text())["termination"], "never_started")
+        terminal_path = self.attack_root / ".search" / "runs" / "run-000001" / "terminal.json"
+        self.assertEqual(json.loads(terminal_path.read_text())["termination"], "never_started")
 
     def begin_a_move_for_a_job(self):
         step = self.workspace / "deterministic" / "job"

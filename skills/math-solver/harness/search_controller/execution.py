@@ -322,7 +322,7 @@ def launch(controller, run):
             raise SearchError("recovery_required", "The launcher is still live. Run search reconcile after the launcher ends.",
                               None if refusal_error is None else {"refusal": {"code": refusal_error.code,
                               "message": refusal_error.message, "details": refusal_error.details}}) from error
-    released = False
+    is_token_released = False
     try:
         # A loaded machine starts the launcher slowly. While the launcher is alive, the launch waits for it to become
         # ready as long as it waits below for the run to end: the run's timeout plus 10 seconds.
@@ -367,7 +367,7 @@ def launch(controller, run):
                     # nor the close has anything left to send.
                     process.stdin.write((run["token"] + "\n").encode())
                     process.stdin.flush()
-                    released = True
+                    is_token_released = True
                 except BrokenPipeError:
                     # A launcher that ended before it read its token ran no command, and reconciliation records its run.
                     pass
@@ -382,7 +382,7 @@ def launch(controller, run):
         # The launch waits for the launcher and reconciles while it handles the refusal, so an error from either step
         # shows the refusal as its context.
         require_launcher_end(refusal_error)
-        if not released:
+        if not is_token_released:
             # The launcher ended without its token, so no producer ran. Reconciliation records the run as never started
             # when the launcher wrote that record, and otherwise as indeterminate with its reserved units charged.
             reconcile_runs(controller)
