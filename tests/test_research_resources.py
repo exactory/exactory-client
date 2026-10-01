@@ -20,8 +20,8 @@ def limits(**values):
     return base
 
 
-def build_usage(wall_seconds):
-    return {"model": "fixture", "input_tokens": None, "output_tokens": None, "wall_seconds": wall_seconds}
+def build_usage(wall_seconds=None, input_tokens=None):
+    return {"model": "fixture", "input_tokens": input_tokens, "output_tokens": None, "wall_seconds": wall_seconds}
 
 
 class ResourceTests(LiteratureCase):
@@ -81,17 +81,41 @@ class ResourceTests(LiteratureCase):
             record_reading_batch, {"id": "b2", "depth": "abstract", "items": [item(b)], "usage": build_usage(10 ** 400)}))
         self.assertEqual(self.store.snapshot(), before)
 
-    def test_a_charge_that_carries_an_account_total_beyond_the_float_range_is_refused(self):
-        # Integer charges within the float range can sum beyond it. A later float charge then raised OverflowError.
+    def test_integer_charges_sum_beyond_the_float_range_as_in_0_49_0(self):
+        # Python adds two integers exactly at any size, so token counts and integer wall seconds keep their totals
+        # beyond the float range (about 1.8e308), as 0.49.0 kept them.
         from research_harness.reading import record_reading_batch
-        a, b = self.metadata(1), self.metadata(2)
-        self.mutate(record_reading_batch, {"id": "b1", "depth": "abstract", "items": [item(a)], "usage": build_usage(10 ** 308)})
+        charges = (build_usage(input_tokens=10 ** 400), build_usage(10 ** 308, input_tokens=5), build_usage(10 ** 308),
+                   build_usage(5))
+        for number, usage in enumerate(charges, 1):
+            self.mutate(record_reading_batch, {"id": "b" + str(number), "depth": "abstract",
+                                               "items": [item(self.metadata(number))], "usage": usage})
+        charged = self.account()["charged"]
+        self.assertEqual((charged["model_input_tokens"], charged["wall_seconds"]), (10 ** 400 + 5, 2 * 10 ** 308 + 5))
+
+    def test_a_float_charge_to_an_integer_total_beyond_the_float_range_is_refused(self):
+        # Integer charges within the float range can sum beyond it. Python cannot add a float to such an integer: it
+        # raised OverflowError, and read-batch printed a traceback instead of a JSON error.
+        from research_harness.reading import record_reading_batch
+        for number in (1, 2):
+            self.mutate(record_reading_batch, {"id": "b" + str(number), "depth": "abstract",
+                                               "items": [item(self.metadata(number))], "usage": build_usage(10 ** 308)})
+        float_charge = {"id": "b3", "depth": "abstract", "items": [item(self.metadata(3))], "usage": build_usage(1.5)}
         before = self.store.snapshot()
-        self.assert_error("invalid_input", lambda: self.mutate(
-            record_reading_batch, {"id": "b2", "depth": "abstract", "items": [item(b)], "usage": build_usage(10 ** 308)}))
+        self.assert_error("invalid_input", lambda: self.mutate(record_reading_batch, float_charge))
         self.assertEqual(self.store.snapshot(), before)
-        self.mutate(record_reading_batch, {"id": "b3", "depth": "abstract", "items": [item(b)], "usage": build_usage(1.5)})
-        self.assertEqual(self.account()["charged"]["wall_seconds"], 10 ** 308 + 1.5)
+        self.mutate(record_reading_batch, dict(float_charge, usage=build_usage(1)))
+        self.assertEqual(self.account()["charged"]["wall_seconds"], 2 * 10 ** 308 + 1)
+
+    def test_float_charges_that_sum_beyond_the_float_range_are_refused(self):
+        # Two floats sum to infinity beyond the float range, and the store writes only finite numbers.
+        from research_harness.reading import record_reading_batch
+        self.mutate(record_reading_batch, {"id": "b1", "depth": "abstract", "items": [item(self.metadata(1))],
+                                           "usage": build_usage(1e308)})
+        second = {"id": "b2", "depth": "abstract", "items": [item(self.metadata(2))], "usage": build_usage(1e308)}
+        before = self.store.snapshot()
+        self.assert_error("invalid_input", lambda: self.mutate(record_reading_batch, second))
+        self.assertEqual(self.store.snapshot(), before)
 
     def test_a_charge_to_a_total_that_an_earlier_release_stored_beyond_the_float_range_is_refused(self):
         # 0.49.0 and earlier stored an integer charge of any size, so an account can hold a total beyond the float
