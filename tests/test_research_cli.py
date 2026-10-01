@@ -40,6 +40,24 @@ class ResearchCliTests(unittest.TestCase):
         return self.run_cli("exactory-research", command, "--file", str(path),
                             "--expected-revision", str(revision), "--request-id", request_id)
 
+    def test_a_refused_command_input_creates_no_store(self):
+        # init, adopt and an acquisition outside a workspace create the store. A payload beyond the command bound is
+        # refused before that, so the refusal changes nothing in the directory.
+        deep_payload = {"value": 0}
+        for _ in range(64):
+            deep_payload = {"value": deep_payload}
+        path = self.root / "deep.json"
+        path.write_text(json.dumps(deep_payload))
+        for command in ("init", "adopt", "fulltext"):
+            with self.subTest(command=command):
+                workspace = self.root / command
+                workspace.mkdir()
+                result = self.run_cli("exactory-research", command, "--workspace", str(workspace), "--file", str(path),
+                                      "--expected-revision", "0", "--request-id", command + "-deep")
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertEqual(json.loads(result.stderr)["error"]["code"], "invalid_input")
+                self.assertFalse((workspace / ".exactory").exists())
+
     def test_initialization_creates_a_pending_current_contract(self):
         self.init_lab()
         self.assertTrue((self.root / ".exactory/research.sqlite3").is_file())
