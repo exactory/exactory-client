@@ -23,6 +23,14 @@ QUERY_PARAMETER_NAMES = {"arxiv": frozenset({"search_query"}),
 PAGINATION_PARAMETER_NAMES = {"arxiv": frozenset({"start", "max_results"}),
                               "crossref": frozenset({"offset", "rows", "cursor"}),
                               "openalex": frozenset({"page", "per_page", "cursor"})}
+# The URL parameters that decide which works a native request matches, as the registries' API references define
+# them: arXiv search_query and id_list (https://info.arxiv.org/help/api/user-manual.html); Crossref query, every
+# field query query.<field>, and filter (https://api.crossref.org/swagger-docs); OpenAlex search with its variants
+# search.exact and search.semantic, filter, and corpus (https://help.openalex.org/api/ and
+# https://help.openalex.org/api/searching/). A dotted name belongs to the name before its first dot.
+MATCHING_PARAMETER_NAMES = {"arxiv": frozenset({"search_query", "id_list"}),
+                            "crossref": frozenset({"query", "filter"}),
+                            "openalex": frozenset({"search", "filter", "corpus"})}
 
 
 def _parse_parameters(source):
@@ -33,16 +41,17 @@ def _parse_parameters(source):
     return pairs
 
 
-def compute_request_identity(source):
-    """The request a native registry capture answers: its provider, endpoint and every parameter except the
-    paging ones, so the pages of one request and repeated captures of it share one identity. None for a web
-    or MCP capture, whose request the harness does not parse."""
-    paging_names = PAGINATION_PARAMETER_NAMES.get(source["provider"])
-    if paging_names is None:
+def compute_query_identity(source):
+    """The query a native registry capture asks: its provider, endpoint and the parameters that decide which works
+    match. Captures that differ only in another parameter (ordering, field selection, sampling, facets and
+    grouping, paging, a contact address or key, or a parameter the registry does not list) ask the same query.
+    None for a web or MCP capture, whose request the harness does not parse."""
+    names = MATCHING_PARAMETER_NAMES.get(source["provider"])
+    if names is None:
         return None
     url = urlsplit(source["url"])
     return {"provider": source["provider"], "endpoint": urlunsplit((url.scheme, url.netloc, url.path, "", "")),
-            "parameters": sorted((k, v) for k, v in _parse_parameters(source) if k not in paging_names)}
+            "parameters": sorted((k, v) for k, v in _parse_parameters(source) if k.split(".", 1)[0] in names)}
 
 
 def _number(parameters, key, default, minimum, maximum=None):
@@ -79,9 +88,12 @@ def native_page(source, data, query, scope):
         pending.append({"code": "search_page_metadata_mismatch", "source_id": source["id"]})
     if any(k in parameters for k in ("sample", "group_by", "group-by")):
         pending.append({"code": "search_pagination_unsupported", "source_id": source["id"]})
+    # One sort order cannot continue the pages of another, so a page group keeps every parameter except paging.
     # Cursor continuations must retain every parameter, including page size.
-    group = dict(compute_request_identity(source), query=query, scope=scope, mode=mode,
-                 cursor_page_size=size if mode == "cursor" else None)
+    url = urlsplit(source["url"])
+    group = {"provider": provider, "endpoint": urlunsplit((url.scheme, url.netloc, url.path, "", "")),
+             "parameters": sorted((k, v) for k, v in pairs if k not in PAGINATION_PARAMETER_NAMES[provider]),
+             "query": query, "scope": scope, "mode": mode, "cursor_page_size": size if mode == "cursor" else None}
     return {"group": group, "source_id": source["id"], "sha256": source["response"]["sha256"],
             "position": cursor if mode == "cursor" else offset, "size": size, "total": page.total,
             "count": page.returned_count, "next_cursor": page.next_cursor,

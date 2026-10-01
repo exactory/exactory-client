@@ -307,13 +307,18 @@ record it as a `recent` search response whose query is the filter value,
 
 A purpose is covered when its question has an answer grounded in at least one
 read paper judged `relevant` or `contradictory`, or when two distinct captured
-queries for that purpose returned no relevant hit. Each captured native request
-counts as one query, including its pages and repeated captures, and two requests
-count apart even when they share a query value; `web` and `mcp` captures of one
-query count once, and not at all when a native request of the purpose was bound
-to that query. The record of each purpose states which. For each uncovered
-purpose, a new query is captured and up to 20
-more abstracts are read. The loop stops when every purpose is covered, when a
+queries for that purpose returned no relevant hit. A native capture counts by
+the query it asks: its provider, endpoint and the parameters that decide which
+works match (arXiv `search_query` and `id_list`; Crossref `query`, every field
+query `query.<field>` and `filter`; OpenAlex `search`, `search.exact`,
+`search.semantic`, `filter` and `corpus`). Its pages and repeated captures, and
+captures that differ only in another parameter such as a sort order, a field
+selection or a `mailto` address, count once; two captures whose matching
+parameters differ count apart even when they share a query value. `web` and
+`mcp` captures of one query count once, and not at all when a native capture of
+the purpose was bound to that query. The record of each purpose states which.
+For each uncovered purpose, a new query is captured and up to 20 more abstracts
+are read. The loop stops when every purpose is covered, when a
 round adds no `relevant` or `contradictory` paper to any uncovered purpose, or
 when the study has registered 100 abstract readings in the loop. At the limit,
 the uncovered purposes are recorded as gaps with the queries tried. `loop-close`
