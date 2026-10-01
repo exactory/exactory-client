@@ -169,6 +169,12 @@ def _check_step(step: dict, sample_count: int, relative_tolerance: float) -> dic
         for point in points:
             value_from = _evaluate_expression(from_expression, point)
             value_to = _evaluate_expression(to_expression, point)
+            # A bound or a result beyond the float range is infinite, and two infinite sides differ by NaN, which
+            # the tolerance test below never flags. A value may be complex, so cmath checks its finite parts.
+            if not (cmath.isfinite(value_from) and cmath.isfinite(value_to)):
+                result["status"] = "unparseable"
+                result["detail"] = "evaluation failed: a side has no finite value at a sampled point"
+                return result
             difference = abs(value_from - value_to)
             scale = max(abs(value_from), abs(value_to), 1.0)
             if difference > relative_tolerance * scale + _ABSOLUTE_TOLERANCE:
