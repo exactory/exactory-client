@@ -196,7 +196,7 @@ class GraphTests(LiteratureCase):
                                               "link": bibliography}]},
                 "resolutions": []}
 
-    def test_a_passage_bundle_keeps_its_occurrences_beside_an_article_bundle_in_either_import_order(self):
+    def test_a_passage_bundle_is_read_only_while_no_acquired_original_has_a_bundle_in_either_import_order(self):
         roots = [self.metadata(n, references=[{"unstructured": "A tool-reported reference"}]) for n in (1, 2, 3)]
         passage_first, article_first, passage_only = roots
         captures = {version: self.capture(version, "The article body. References: an article reference.") for version in roots}
@@ -210,7 +210,11 @@ class GraphTests(LiteratureCase):
         self.scope(roots)
         records = self.store.snapshot()["records"]
         graph = citation_graph(records, "research")
-        self.assertEqual({r["occurrence_id"] for r in graph["references"]}, set(records["reference_occurrence"]))
+        # The article bundles supersede the passages imported before and after them; the passage-only version reads its passage.
+        superseded = {o for b in ("passage-1", "passage-2") for o in records["source_bundle"][b]["occurrence_ids"]}
+        self.assertEqual({r["occurrence_id"] for r in graph["references"]}, set(records["reference_occurrence"]) - superseded)
+        self.assertFalse(superseded & {o.get("reference_id") for o in graph["obligations"]})
+        self.assertTrue(set(records["source_bundle"]["passage-3"]["occurrence_ids"]) <= {o.get("reference_id") for o in graph["obligations"]})
 
     def test_shorter_registry_observation_does_not_prove_or_replace_bibliography(self):
         a = self.metadata(references=[{"unstructured": "Observed item " + str(i)} for i in range(6)])
