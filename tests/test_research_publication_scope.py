@@ -8,6 +8,29 @@ from research_harness.cli import OPERATIONS
 
 
 class PublicationScopeTests(SourceLimitedCase):
+    def test_new_support_on_the_same_scoped_science_preserves_the_pinned_manuscript(self):
+        from research_harness import publication
+        self.prepare_source_limited()
+        self.record_scope()
+        self.accept_scope()
+        bundle = self.scoped_manuscript()
+        self.mutate(self.scope_api().record_scoped_readiness_review,
+                    self.scope_review("additional-support", assessor="additional-scoped-reviewer"))
+        self.assertEqual(publication._bundle(self.store.snapshot()["records"], self.artifacts)["digest"], bundle["digest"])
+
+    def test_combined_scoped_support_preserves_the_unmet_complete_objective(self):
+        self.prepare_source_limited()
+        self.record_scope()
+        payload = self.scope_review()
+        before = self.store.snapshot()
+        changes, report = self.scope_api().prepare_combined_scoped_support(
+            before["records"], self.artifacts, payload, revision=before["revision"] + 1, request_id="combined-scoped")
+        self.assertTrue(report["ready"], report["obligations"])
+        self.assertFalse(report["objective_complete"])
+        self.assertEqual(report["scientific_target_digest"], payload["target"]["scientific_target_digest"])
+        self.assertEqual(changes[0][0], "scoped_readiness_review")
+        self.assertEqual(self.store.snapshot(), before)
+
     def test_supported_manuscript_keeps_full_objective_and_checkpoint_incomplete(self):
         self.assertIn("publication-scope", OPERATIONS)
         payload = self.prepare_source_limited()

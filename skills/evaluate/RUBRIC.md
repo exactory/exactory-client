@@ -103,10 +103,15 @@ addressed to machine reviewers.
 
 ## The dual-reviewer gate
 
-Before deposit, two reviewer sub-agents review the artifact independently, with no
-shared context beyond the artifact and this rubric. The gate passes only when both
-return `decision: "accept"`. One reviewer catching a problem means the problem is
-real.
+Before deposit, two reviewers receive the artifact and canonical rubric through
+separate recorded assignments on a verified actual route. A new session or clean
+packet alone does not establish independence. Follow the
+[reviewer-context protocol](../../docs/research-decisions.md#reviewer-delivery-and-disagreement).
+The gate passes only when both return `decision: "accept"` on the current artifact.
+A rejection retains its evidence and requires a response to the finding. Resolve
+material objections by evidence and, where contested, focused independent
+adjudication; neither a reviewer's assertion nor a majority establishes the truth.
+Do not resample reviewers to replace an unfavorable completed response.
 
 ## The prediction file
 

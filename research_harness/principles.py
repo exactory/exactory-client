@@ -148,7 +148,7 @@ It preserves earlier events.
     artifacts = ArtifactStore(store.root)
 
     def prepare(records, value):
-        fields(value, ("target", "reason"), ("authorization",))
+        fields(value, ("target", "reason"), ("authorization", "decision_id", "source_impact"))
         text(value["reason"], "Target decision reason")
         config = _configuration(records)
         current = config["target"]
@@ -161,6 +161,14 @@ It preserves earlier events.
         updated = dict(config, target=value["target"])
         changes = [("configuration", "research", updated)] + (_narrowing(records, artifacts, current, value) if changed else [])
         if config["profile"] == "research" and value["target"] is not None:
+            from .strategy import managed_research
+            if managed_research(records) and current != value["target"]:
+                from .research_decisions import prepare_objective_commitment
+                commitment_changes, _ = prepare_objective_commitment(
+                    records, artifacts, value["target"],
+                    decision_id=value.get("decision_id"),
+                    source_impact=value.get("source_impact"), revision=expected_revision + 1)
+                changes.extend(commitment_changes)
             changes.append(immutable_record(records, "research_objective", value["target"]["id"], value["target"]))
         return changes, updated
 

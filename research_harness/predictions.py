@@ -15,7 +15,7 @@ from .evaluation import Evaluation
 from .evidence import digest
 from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .development import cycle_authors
-from .publication import SCORE_SCALES, _assessor_key, _bundle, latest_reviews, validate_assessor
+from .publication import SCORE_SCALES, _assessor_key, _bundle, latest_reviews, validate_assessor, require_manuscript_assignment
 
 _ERROR = "invalid_prediction"
 # One measurement is three blind assessors, each with a review and a prediction on the exact bundle.
@@ -46,7 +46,7 @@ def record_prediction(store, payload, *, expected_revision, request_id):
 
     def prepare(records, value):
         evaluation = Evaluation(records, artifacts)
-        fields(value, ("id", "bundle_digest", "blind", "assessor", "prediction", "reasons"), code=_ERROR)
+        fields(value, ("id", "bundle_digest", "blind", "assessor", "prediction", "reasons"), ("assignment_id",), code=_ERROR)
         text(value["id"], "Prediction ID", code=_ERROR)
         bundle = _bundle(records, evaluation)
         if value["bundle_digest"] != bundle["digest"]:
@@ -69,6 +69,7 @@ def record_prediction(store, payload, *, expected_revision, request_id):
         if len(predicting) >= MEASUREMENT_ASSESSORS:
             raise ResearchError("manuscript_prediction_excess", "This bundle already has the three predicting assessors of its "
                                 "measurement; measure again on the next bundle", {"assessors": len(predicting)})
+        require_manuscript_assignment(records, evaluation, value, bundle, prediction=value["prediction"])
         record = {"id": value["id"], "payload": value, "bundle_digest": bundle["digest"], "prediction": value["prediction"],
                   "reviewed_revision": expected_revision + 1, "request_id": request_id}
         record["digest"] = digest(record)
@@ -111,3 +112,23 @@ def measurement_summary(records, bundle):
     reviews.update({key: _measure([core[key] for core in cores] if complete else []) for key, _ in SCORE_SCALES})
     return {"complete": complete, "reviews": reviews,
             "predictions": {"count": len(selected), "percentile": _measure(percentiles)}}
+
+
+def measurement_state(records, artifacts, bundle):
+    """Keep historical numbers, but recheck independence before a new decision."""
+    from .graph import obligation
+    result = measurement_summary(records, bundle)
+    selected, paired, _ = _pair_measurement(records, bundle)
+    obligations = []
+    for record in selected:
+        try:
+            require_manuscript_assignment(records, artifacts, record["payload"], bundle, prediction=record["prediction"])
+        except ResearchError as error:
+            obligations.append(obligation(error.code, error.message, prediction_id=record["id"], **(error.details or {})))
+    for record in paired:
+        try:
+            require_manuscript_assignment(records, artifacts, record, bundle, core=record["core"])
+        except ResearchError as error:
+            obligations.append(obligation(error.code, error.message, review_id=record["id"], **(error.details or {})))
+    return dict(result, complete=result["complete"] and not obligations, historical_complete=result["complete"],
+                independence_obligations=obligations)

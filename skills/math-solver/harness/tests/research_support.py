@@ -20,10 +20,9 @@ def pin_research(root, candidate, inputs, *, original=None):
     if original is None:
         original = Controller(root).status()["contract"]
     objective = {"kind": "objective", "id": "native-complete-objective", "statement": original["original_claim"]["statement"]}
-    if not (root / ".exactory/research.sqlite3").exists():
+    store = Store(root, create=True)
+    if "research" not in store.snapshot()["records"].get("configuration", {}):
         store = prepare_research(root, objective).store
-    else:
-        store = Store(root)
     delivery = export_native(store, root, root / "research/native-inputs" / uuid.uuid4().hex)
     candidate.update(schema_version=3, computation=candidate.get("computation"), foundation=delivery["foundation"])
     inputs.extend(delivery["inputs"])
@@ -43,4 +42,6 @@ def amendment_spec(controller, node_id, foundation, inputs, reason="Adopt comple
               "reviewer": provenance("foundation-reviewer"), "decision": "approve",
               "findings": {key: "The exact native claim, source bytes and current preparation were independently assessed."
                            for key in ("statement", "assumptions", "scope", "dependencies", "policy")}}
+    from tests.native_reviewer_support import observe_review
+    review = observe_review(controller, review, subject, inputs=inputs)
     return {"subject": subject, "review": review, "inputs": inputs}

@@ -143,6 +143,8 @@ class StrategyRefreshExecutionTests(WorkspaceTest):
         self.assertEqual(self.run_cli("plan", self.slug)[0], 0)
         spec = self.spec()
         revision = self.controller.status()["revision"]
+        from tests.native_reviewer_support import attest_spec
+        attest_spec(self.controller, spec)
         original = self.controller.command("reassess", spec, revision, "first-assessment")
         invoke(self.controller, "begin", begin_spec())
         problem = self.read_json("problem.json")

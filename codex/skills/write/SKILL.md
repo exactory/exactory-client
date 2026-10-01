@@ -1,6 +1,6 @@
 ---
 name: write
-description: Draft a paper for exactory - take in the evidence, write the sections with registry-verified citations, and compile a paper that conforms to the field's doctrine. Use when a study has an idea and results and needs the paper written. For the full study from a topic, use /exactory:ai-science.
+description: Use when a managed study has supported results selected for a manuscript, or the user requests a paper from existing research evidence. For a full study from a topic, use /exactory:ai-science.
 ---
 
 # Exactory: write

@@ -12,6 +12,7 @@ from search_controller.service import Controller
 from tests.search_fixtures import contract, review
 from tests.test_search_cli import SearchCLIWorkspace
 from tests.research_support import pin_research
+from tests.native_reviewer_support import observe_review
 from research_harness.storage import Store
 
 
@@ -35,7 +36,8 @@ class NativeResearchTests(SearchCLIWorkspace, unittest.TestCase):
         value = self.prepared_proposal(common=False)
         pin_research(self.root, value["proposal"], value["inputs"])
         controller.command("propose", value, 1, "new-proposal")
-        controller.command("review", {"proposal_id": "proposal-000001", "review": review(value["proposal"]), "inputs": []}, 2, "review")
+        observed = observe_review(controller, review(value["proposal"]), value["proposal"])
+        controller.command("review", {"proposal_id": "proposal-000001", "review": observed, "inputs": []}, 2, "review")
         snapshot = controller.store.get_blob(value["proposal"]["foundation"]["snapshot_digest"])
         common = Store(self.root)
         reference = next(iter(common.snapshot()["records"]["source"].values()))["response"]
@@ -73,7 +75,8 @@ class NativeResearchTests(SearchCLIWorkspace, unittest.TestCase):
         controller = self.native()
         value = self.prepared_proposal()
         controller.command("propose", value, 1, "new-proposal")
-        controller.command("review", {"proposal_id": "proposal-000001", "review": review(value["proposal"]), "inputs": []}, 2, "review")
+        observed = observe_review(controller, review(value["proposal"]), value["proposal"])
+        controller.command("review", {"proposal_id": "proposal-000001", "review": observed, "inputs": []}, 2, "review")
         common = Store(self.root)
         revision = common.revision
         common.mutate("fixture.note", {"text": "An unrelated operational note."},
@@ -147,7 +150,8 @@ class NativeResearchTests(SearchCLIWorkspace, unittest.TestCase):
             controller.command("propose", wrong, 1, "wrong-source")
         self.assertEqual(caught.exception.code, "research_target_mismatch")
         controller.command("propose", value, 1, "external-verification")
-        controller.command("review", {"proposal_id": "proposal-000001", "review": review(value["proposal"]), "inputs": []}, 2, "review")
+        observed = observe_review(controller, review(value["proposal"]), value["proposal"])
+        controller.command("review", {"proposal_id": "proposal-000001", "review": observed, "inputs": []}, 2, "review")
         controller.command("admit", {}, 3, "admit", "proposal-000001")
         self.assertEqual(controller.status()["nodes"]["node-000001"]["role"], "verification")
 

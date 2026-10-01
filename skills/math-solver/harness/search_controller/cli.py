@@ -53,13 +53,13 @@ def run_search(args):
 def install_parser(commands, strategies_default):
     search = commands.add_parser("search", help="manage one persistent mathematical objective")
     nested = search.add_subparsers(dest="search_command", required=True, parser_class=SearchParser)
-    readonly = {"status", "next", "strategy-context"}
+    readonly = {"status", "next", "strategy-context", "review-packet"}
     specs = {"init", "adopt", "propose", "review", "begin", "run", "checkpoint", "accept",
-             "retreat", "replan", "focus", "pause", "resume", "hook-stop", "complete", "amend-computation", "amend-foundation", "interpret", "reassess"}
+             "retreat", "replan", "focus", "pause", "resume", "hook-stop", "complete", "amend-computation", "amend-foundation", "interpret", "reassess", "review-packet"}
     targets = {"admit", "begin", "run", "accept", "retreat", "amend-computation", "amend-foundation", "interpret"}
     for name in ["init", "adopt", "propose", "review", "admit", "begin", "run", "reconcile",
                  "checkpoint", "accept", "retreat", "replan", "focus", "pause", "resume",
-                 "audit", "status", "next", "hook-stop", "render", "complete", "amend-computation", "amend-foundation", "interpret", "strategy-context", "reassess"]:
+                 "audit", "status", "next", "hook-stop", "render", "complete", "amend-computation", "amend-foundation", "interpret", "strategy-context", "reassess", "review-packet"]:
         parser = nested.add_parser(name)
         if name in {"init", "focus", "resume"}:
             parser.add_argument("--workspace-root", type=Path)

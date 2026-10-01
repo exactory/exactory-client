@@ -92,8 +92,123 @@ def current_number(records):
     return latest["number"] if latest else 1
 
 
+def _managed(records):
+    from .strategy import managed_research
+    return managed_research(records)
+
+
+def _canonical_adapter(store, payload, name, *, expected_revision, request_id):
+    """Legacy command names acknowledge the current scientific decision without a second vote."""
+    artifacts = ArtifactStore(store.root)
+    def prepare(records, value):
+        from .decision_integration import require_decision
+        _fields(value, ('id', 'research_decision_id', 'reason'))
+        _text(value['id'], 'Round adapter ID')
+        _text(value['reason'], 'Round adapter reason')
+        state = require_decision(records, artifacts, 'round', decision_id=value['research_decision_id'])
+        decision = state['decision']
+        continuing = decision['payload']['action'] in ('investigate', 'pivot')
+        if name == 'admit' and not continuing:
+            raise ResearchError('invalid_round', 'A round admission names an investigate or pivot decision')
+        kinds = CHECKS_CONTINUE if continuing else CHECKS_STOP
+        checks = [{'review_id': identifier,
+                   'checks': [item for item in records['value_review'][identifier]['payload']['value']['assurances']
+                              if item['kind'] in kinds]}
+                  for identifier in decision['payload']['review_ids']]
+        record = dict(value, adapter=name, decision_digest=decision['digest'],
+                      decision='continue' if continuing else 'stop', assurances=checks,
+                      recorded_revision=expected_revision + 1)
+        return [immutable_record(records, 'round_adapter', value['id'], record)], record
+    return prepared_mutation(store, 'round.' + name, payload, prepare,
+                             expected_revision=expected_revision, request_id=request_id)
+
+
+def _canonical_factual_assessment(store, payload, *, expected_revision, request_id):
+    """Record observed tranche outcomes even when the old approval can no longer admit work."""
+    artifacts = ArtifactStore(store.root)
+    def prepare(records, value):
+        from . import strategy
+        _fields(value, ('id', 'research_decision_id', 'reason', 'outcome', 'cycle_ids', 'evidence'))
+        _text(value['id'], 'Factual round assessment ID')
+        _text(value['reason'], 'Factual result against the promised tranche')
+        _choice(value['outcome'], ('answered', 'failed', 'exhausted', 'unresolved'), 'Tranche outcome')
+        _strings(value['cycle_ids'], 'Assessed tranche cycles', nonempty=True)
+        decision = strategy.get_record(records, 'research_decision', value['research_decision_id'])
+        dossier = strategy.get_record(records, 'strategy_dossier', decision['payload']['dossier_id'])
+        tranche = dossier['payload']['tranche']
+        if decision['payload']['action'] not in ('investigate', 'pivot') or tranche is None:
+            raise ResearchError('invalid_round', 'Assess the promised result of an actual bounded investigation')
+        strategy.evidence(records, artifacts, value['evidence'])
+        supplied = {(e.get('record_kind'), e.get('id'), e.get('digest')) for e in value['evidence'] if e.get('kind') == 'record'}
+        cycles, statuses, observed_failure = [], set(), False
+        for identifier in value['cycle_ids']:
+            cycle = strategy.get_record(records, 'cycle', identifier)
+            plan = strategy.get_record(records, 'cycle_plan', identifier)
+            if (plan.get('research_decision') or {}).get('id') != decision['id']:
+                raise ResearchError('round_cycle_mismatch', 'Every assessed cycle must belong to the original decision and tranche')
+            assessment = strategy.get_record(records, 'cycle_assessment', cycle.get('assessment_id'), 'round_assessment_missing')
+            if ('cycle_assessment', assessment['id'], digest(assessment)) not in supplied:
+                raise ResearchError('round_evidence_missing', 'Bind each factual cycle assessment by its exact recorded digest')
+            statuses.add(cycle['status'])
+            observed_failure = observed_failure or any(f.get('status') == 'observed' for f in assessment['payload'].get('failures', []))
+            cycles.append({'id': identifier, 'status': cycle['status'], 'assessment_id': assessment['id'], 'assessment_digest': digest(assessment)})
+        reserved = sum(a['reserved_units'] for a in records.get('execution_admission', {}).values()
+                       if (a.get('research_decision') or {}).get('id') == decision['id'])
+        supported = {'answered': 'complete' in statuses, 'failed': 'failed' in statuses or observed_failure,
+                     'exhausted': 'budget_paused' in statuses or reserved >= tranche['limit']['amount'], 'unresolved': True}
+        if not supported[value['outcome']]:
+            raise ResearchError('round_outcome_unsupported', 'The claimed tranche outcome must agree with the recorded cycles and resources')
+        record = dict(value, promised_tranche=tranche, observed_cycles=cycles, reserved_units=reserved,
+                      decision_digest=decision['digest'], assessed_revision=expected_revision + 1)
+        record['digest'] = digest(record)
+        return [immutable_record(records, 'round_factual_assessment', value['id'], record)], record
+    return prepared_mutation(store, 'round.assess', payload, prepare,
+                             expected_revision=expected_revision, request_id=request_id)
+
+
+def _canonical_state(records, artifacts):
+    from .research_decisions import decision_state
+    state = decision_state(records, artifacts, 'round')
+    decision = state['decision']
+    dossier = None if decision is None else records['strategy_dossier'][decision['payload']['dossier_id']]
+    action = None if decision is None else decision['payload']['action']
+    continuing = action in ('investigate', 'pivot')
+    selected = publication.find_selected_bundle(records)
+    obligations = state['obligations']
+    historical = latest_admission(records)
+    historical_assessment = assessment_for(records, historical['id']) if historical is not None else None
+    evaluation = Evaluation.of(records, artifacts)
+    try:
+        current_bundle = publication._bundle(records, evaluation) if selected is not None else None
+    except ResearchError:
+        current_bundle = None
+    progress = (derive_progress(records, evaluation, historical, current_bundle)
+                if historical is not None and 'resource_limits' in historical else None)
+    active = (historical is not None and historical_assessment is None) or any(
+        cycle.get('status') in ('planned', 'executed', 'active') for cycle in records.get('cycle', {}).values())
+    assessed = (historical_assessment is not None and current_bundle is not None
+                and historical_assessment['bundle_digest'] == current_bundle['digest'])
+    return {'ready': state['ready'], 'obligations': obligations, 'decision_obligations': obligations,
+            'progress_obligations': [], 'round': current_number(records), 'active': active,
+            'assessed': assessed or (decision is not None and decision['payload']['phase'] != 'prospective'),
+            'decision': None if decision is None else 'continue' if continuing else 'stop',
+            'decision_id': None if decision is None else decision['id'],
+            'next': None if not continuing else dossier['payload']['tranche'], 'progress': progress,
+            'analysis': selected is not None and contribution.find_analysis(records, selected['digest']) is not None,
+            'measurement': predictions.measurement_summary(records, selected) if selected else None,
+            'limits': (dossier['payload']['tranche'] if dossier is not None else
+                       historical.get('resource_limits') if historical is not None else None),
+            'budget': resources.account_report(records, 'research').get('development'),
+            'digest': state['digest'], 'counts': {'obligations': len(obligations)},
+            'mechanical_only': True, 'research_decision': state}
+
+
 def active_round(records):
     """The admitted round without an assessment, or None."""
+    # Managed research uses the canonical tranche and source-impact state. Historical
+    # round admissions remain readable, but do not impose fresh-search quotas.
+    if _managed(records):
+        return None
     latest = latest_admission(records)
     return latest if latest is not None and assessment_for(records, latest["id"]) is None else None
 
@@ -348,6 +463,8 @@ def _next(records, context, evidence, value, number, pursued):
 
 def record_round(store, payload, *, expected_revision, request_id):
     """Close the current round on the exact bundle and decide: continue with a goal, or stop."""
+    if _managed(store.snapshot()['records']):
+        return _canonical_adapter(store, payload, 'decide', expected_revision=expected_revision, request_id=request_id)
     artifacts = ArtifactStore(store.root)
 
     def prepare(records, value):
@@ -397,6 +514,8 @@ def record_round(store, payload, *, expected_revision, request_id):
 
 def record_round_review(store, payload, *, expected_revision, request_id):
     """An independent assessor's judgment of one round decision."""
+    if _managed(store.snapshot()['records']):
+        return _canonical_adapter(store, payload, 'review', expected_revision=expected_revision, request_id=request_id)
     artifacts = ArtifactStore(store.root)
 
     def prepare(records, value):
@@ -466,6 +585,8 @@ def _field_change(records, change):
 
 def admit_round(store, payload, *, expected_revision, request_id):
     """Open the approved next round: charge the development budget, widen the objective, record the opening state."""
+    if _managed(store.snapshot()['records']):
+        return _canonical_adapter(store, payload, 'admit', expected_revision=expected_revision, request_id=request_id)
     artifacts = ArtifactStore(store.root)
 
     def prepare(records, value):
@@ -572,6 +693,8 @@ def _validate_judgments(values, expected, name, evidence):
 
 def assess_round(store, payload, *, expected_revision, request_id):
     """Judge the current round against its goal on the exact current bundle, and derive what the round did."""
+    if _managed(store.snapshot()['records']):
+        return _canonical_factual_assessment(store, payload, expected_revision=expected_revision, request_id=request_id)
     artifacts = ArtifactStore(store.root)
 
     def prepare(records, value):
@@ -674,6 +797,8 @@ def round_state(records, artifacts):
     whether the selected bundle has its contribution analysis. `decision` is
     set only when an approved decision closing the current round binds the current bundle; an admitted
     decision is never reported, because its admission opened the round that the gate now closes."""
+    if _managed(records):
+        return _canonical_state(records, artifacts)
     evaluation = Evaluation.of(records, artifacts)
     latest = latest_admission(records)
     number = current_number(records)

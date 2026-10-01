@@ -14,7 +14,7 @@ def computation_inputs(value, content):
         s.require(bool(content.get_artifact(item).strip()), "Computation evidence is empty", "missing_evidence")
 
 
-def audit_computation(root, state, proposal, value, content):
+def audit_computation(root, state, proposal, value, content, *, common_guard=None):
     validate_basis(state, proposal, value)
     computation_inputs(value, content)
     checked = set()
@@ -24,11 +24,14 @@ def audit_computation(root, state, proposal, value, content):
             accepted = state["acceptances"][identity]
             s.require(content.get_blob(s.digest(accepted["review"])) == accepted["review"],
                       "Computation basis review changed", "digest_mismatch")
-            audit_checkpoint(root, state, state["checkpoints"][accepted["checkpoint_id"]], content)
+            checkpoint = state["checkpoints"][accepted["checkpoint_id"]]
+            audit_checkpoint(root, state, checkpoint, content, common_guard=common_guard)
+            from .reviewer import require_review
+            require_review(root, state, content, accepted["review"], subject=checkpoint, common_guard=common_guard)
             checked.add(identity)
 
 
-def audit_amendment(root, state, node, content):
+def audit_amendment(root, state, node, content, *, common_guard=None):
     amendment = state["service"]["computation_amendments"].get(node["id"])
     if amendment is None:
         return
@@ -36,7 +39,7 @@ def audit_amendment(root, state, node, content):
               and content.get_blob(s.digest(amendment["review"])) == amendment["review"],
               "Pinned computation amendment or review changed", "digest_mismatch")
     audit_computation(root, state, state["proposals"][node["proposal_id"]]["record"],
-                      amendment["subject"]["computation"], content)
+                      amendment["subject"]["computation"], content, common_guard=common_guard)
 
 
 def audit_run_result(state, run, content):

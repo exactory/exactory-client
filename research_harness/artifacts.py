@@ -30,6 +30,17 @@ def _filesystem_error(error: OSError) -> ResearchError:
     return ResearchError("storage_io", "Research filesystem operation failed", {"errno": error.errno})
 
 
+@contextmanager
+def _artifact_operation():
+    """Translate errors only within an artifact operation's own I/O boundary."""
+    try:
+        yield
+    except FileNotFoundError:
+        raise
+    except OSError as error:
+        raise _filesystem_error(error) from error
+
+
 def _relative_parts(relative: str):
     if (not isinstance(relative, str) or not relative or "\\" in relative or "\x00" in relative
             or any(part in ("", ".", "..") for part in relative.split("/"))):
@@ -54,30 +65,33 @@ class _Workspace:
         parts = list(self.root.parts[1:]) + _relative_parts(relative)
         descriptor = None
         try:
-            descriptor = os.open(self.root.anchor, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-            for name in parts:
-                if create:
-                    try:
-                        os.mkdir(name, mode=0o700, dir_fd=descriptor)
-                    except FileExistsError:
-                        pass
-                child = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-                                dir_fd=descriptor)
-                try:
+            try:
+                descriptor = os.open(self.root.anchor, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                for name in parts:
                     if create:
-                        # An existing entry may belong to a paused earlier creator.
-                        # Sync its checked parent before acknowledging any child use.
-                        os.fsync(descriptor)
-                except BaseException:
-                    os.close(child)
-                    raise
-                os.close(descriptor)
-                descriptor = child
+                        try:
+                            os.mkdir(name, mode=0o700, dir_fd=descriptor)
+                        except FileExistsError:
+                            pass
+                    child = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                    dir_fd=descriptor)
+                    try:
+                        if create:
+                            # An existing entry may belong to a paused earlier creator.
+                            # Sync its checked parent before acknowledging any child use.
+                            os.fsync(descriptor)
+                    except BaseException:
+                        os.close(child)
+                        raise
+                    os.close(descriptor)
+                    descriptor = child
+            except FileNotFoundError:
+                raise
+            except OSError as error:
+                raise _filesystem_error(error) from error
+            # The caller can hold this directory while committing another store.
+            # Preserve its failure type and let its own recovery protocol run.
             yield descriptor
-        except FileNotFoundError:
-            raise
-        except OSError as error:
-            raise _filesystem_error(error) from error
         finally:
             if descriptor is not None:
                 os.close(descriptor)
@@ -140,7 +154,7 @@ class ArtifactStore:
     def put(self, data: bytes, media_type: str) -> dict:
         reference = describe_artifact(data, media_type)
         digest = reference["sha256"]
-        with self._workspace.directory(_OBJECT_DIRECTORY, create=True) as directory:
+        with _artifact_operation(), self._workspace.directory(_OBJECT_DIRECTORY, create=True) as directory:
             try:
                 _verify_object(directory, reference)
                 os.fsync(directory)
@@ -174,3 +188,5 @@ class ArtifactStore:
         except FileNotFoundError as error:
             raise ResearchError("artifact_missing", "Artifact has not been stored",
                                 {"path": ref["path"]}) from error
+        except OSError as error:
+            raise _filesystem_error(error) from error

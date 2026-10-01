@@ -35,6 +35,13 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.50.0](docs/releases/0.50.0.md) adds scientific contribution decisions
+before committing an objective and after results. Managed studies compare
+consequences and approaches, retain critical reviewer work, and bind independent
+assessments to observed reviewer contexts. One phase-specific decision serves
+existing target, cycle, writing, publication and round commands. This is an
+experimental workflow change; scientific efficacy is not established.
+
 Version [0.49.0](docs/releases/0.49.0.md) waits for a slow local worker or
 math-solver launcher as long as for its run. In the cases it repairs, a launch
 whose worker or launcher ends early or cannot start records the run's outcome

@@ -1,6 +1,6 @@
 ---
 name: ideate
-description: Develop a falsifiable hypothesis and prospective research cycle within the complete objective, using current literature, innovation studies, field doctrine, and human context. Use after the literature preparation gate and before experiment admission.
+description: Use when a managed author study needs a hypothesis, comparison of research directions, or a next investigation tranche before experiment admission.
 ---
 
 # Exactory: ideate

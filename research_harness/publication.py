@@ -22,7 +22,10 @@ SCORE_SCALES = (("soundness", 4), ("presentation", 4), ("contribution", 4), ("ov
 CHANGE_AXES = ("soundness", "presentation", "contribution")
 
 
-def _ready(records, artifacts):
+def _ready(records, artifacts, *, check_decision=True):
+    if check_decision:
+        from .decision_integration import require_decision
+        require_decision(records, artifacts, "write")
     from .publication_scope import assess_manuscript_readiness, has_publication_scope
     if has_publication_scope(records):
         report = assess_manuscript_readiness(records, artifacts)
@@ -35,6 +38,16 @@ def _ready(records, artifacts):
         raise ResearchError("readiness_required", "Current whole-candidate readiness is required for the manuscript",
                             {"obligations": report["obligations"]})
     return report
+
+
+def _scientific_readiness(report):
+    """Bind unchanged science independently of a later support assessor's identity.
+
+    The current support verdict is always checked by _ready before this binding.
+    The full report digest and original review remain retained as pin-time history.
+    """
+    return {"kind": "scientific-inputs-v1",
+            "digest": digest({key: value for key, value in report.items() if key != "review"})}
 
 
 def _claim_markers(claim):
@@ -121,6 +134,7 @@ def prepare_publication(store, payload, *, expected_revision, request_id):
                                        value.get("citation_accounting"))
         bundle = dict(value, files=saved, citation_accounting=accounting, candidate=candidate,
                       readiness_digest=digest(report), readiness_review=readiness_review,
+                      readiness_binding=_scientific_readiness(report),
                       review_inputs=report["review_inputs"], prepared_revision=expected_revision,
                       execution_observations=report["execution_observations"],
                       mechanical_only=True)
@@ -145,8 +159,20 @@ def _bundle(records, artifacts):
     bundle = find_selected_bundle(records)
     if bundle is None:
         raise ResearchError("publication_bundle_missing", "Prepare the exact PDF, abstract, bibliography and claims")
-    report = _ready(records, artifacts)
-    if digest(report) != bundle["readiness_digest"]:
+    report = _ready(records, artifacts, check_decision=False)
+    binding = bundle.get("readiness_binding")
+    unchanged = (_scientific_readiness(report) == binding if binding is not None
+                 else digest(report) == bundle["readiness_digest"])
+    if not unchanged and binding is None and isinstance(bundle.get("readiness_review"), dict):
+        original_review = bundle["readiness_review"]
+        if not bundle.get("publication_scope"):
+            original_review = original_review.get("assessment")
+        # Reconstruct the old report using only its pinned reviewer finding.
+        # Every current scientific dependency must still match the old digest,
+        # and _ready has already checked that current support passes.
+        if original_review is not None:
+            unchanged = digest(dict(report, review=original_review)) == bundle["readiness_digest"]
+    if not unchanged:
         raise ResearchError("publication_readiness_stale", "Prepare and review the manuscript against current whole-candidate readiness")
     for item in bundle["files"].values():
         if item is not None and read_file(artifacts.root, item["path"]) != artifacts.read(item["artifact"]):
@@ -189,7 +215,7 @@ def validate_assessor(artifacts, assessor, authors):
 
 
 def _review(records, artifacts, value, bundle):
-    fields(value, ("id", "bundle_digest", "assessor", "review", "blind"))
+    fields(value, ("id", "bundle_digest", "assessor", "review", "blind"), ("assignment_id",))
     text(value["id"], "Manuscript review ID")
     if value["bundle_digest"] != bundle["digest"]:
         raise ResearchError("publication_review_stale", "Review the exact current manuscript bundle")
@@ -212,6 +238,29 @@ def _review(records, artifacts, value, bundle):
     if "changes_for_maximum" in core:
         _check_changes_for_maximum(core)
     return core
+
+
+def require_manuscript_assignment(records, artifacts, value, bundle, *, core=None, prediction=None):
+    """Bind independence and content to the actual reviewed manuscript input."""
+    from .review_protocol import assignment_state
+    identifier = value.get("assignment_id")
+    if identifier is None:
+        raise ResearchError("review_assignment_missing", "Use the observed independent manuscript assignment; historical assertions remain unverified")
+    state = assignment_state(records, artifacts, identifier)
+    if not state["ready"]:
+        raise ResearchError("review_context_unverified", "The current reviewer context does not establish independence", {"obligations": state["obligations"]})
+    assignment = records["review_assignment"][identifier]
+    packet = strict_json(artifacts.read(assignment["packet"]))
+    if (state["role"] != "manuscript" or packet.get("paper", {}).get("bundle_digest") != bundle["digest"]
+            or assignment.get("context", {}).get("bundle") != bundle
+            or _assessor_key(state["reviewer_id"]) != _assessor_key(value["assessor"]["id"])):
+        raise ResearchError("publication_review_stale", "The observed assessor must review this exact manuscript bundle")
+    observed = state["output"]
+    if core is not None and observed.get("review") != core:
+        raise ResearchError("review_output_mismatch", "Record the actual reviewer's unchanged scientific review")
+    if prediction is not None and (observed.get("prediction") != prediction or observed.get("reasons") != value["reasons"]):
+        raise ResearchError("review_output_mismatch", "Record the actual reviewer's unchanged prediction and reasons")
+    return state
 
 
 def _check_changes_for_maximum(core):
@@ -238,6 +287,7 @@ def record_manuscript_review(store, payload, *, expected_revision, request_id):
             if saved["bundle_digest"] == bundle["digest"] and _assessor_key(saved["assessor"]["id"]) == key:
                 raise ResearchError("manuscript_review_duplicate", "This assessor already reviewed this exact bundle; a rejection stands until the manuscript changes",
                                     {"review_id": saved["id"]})
+        require_manuscript_assignment(records, artifacts, value, bundle, core=core)
         record = dict(value, core=core, reviewed_revision=expected_revision, digest=digest(value))
         return [immutable_record(records, "manuscript_review", value["id"], record)], record
     return prepared_mutation(store, "publication.review", payload, prepare,
@@ -279,7 +329,13 @@ def publication_state(records, artifacts, action="publication"):
         cores = {}
         for saved in records.get("manuscript_review", {}).values():
             if saved["bundle_digest"] == bundle["digest"]:
-                cores[saved["id"]] = _review(records, artifacts, {k: saved[k] for k in ("id", "bundle_digest", "assessor", "review", "blind")}, bundle)
+                value = {k: saved[k] for k in ("id", "bundle_digest", "assessor", "review", "blind", "assignment_id") if k in saved}
+                cores[saved["id"]] = _review(records, artifacts, value, bundle)
+                if action != "manuscript":
+                    try:
+                        require_manuscript_assignment(records, artifacts, value, bundle, core=cores[saved["id"]])
+                    except ResearchError as error:
+                        obligations.append(obligation(error.code, error.message, review_id=saved["id"], **(error.details or {})))
         reviews = list(latest_reviews(records, bundle["digest"]).values())
         if action != "manuscript" and (len(reviews) < 2 or any(cores[saved["id"]]["decision"] != "accept" for saved in reviews)):
             obligations.append(obligation("manuscript_reviews_required", "Obtain two independent accepting reviews of this exact manuscript and resolve current rejections."))
@@ -293,7 +349,11 @@ def publication_state(records, artifacts, action="publication"):
                 obligations.append(obligation("submission_receipt_required", "Associate the current publication with the server's exact task target."))
     except ResearchError as error:
         obligations.append(obligation(error.code, error.message, **(error.details or {})))
+    from .decision_integration import decision_report
+    strategic = decision_report(records, artifacts, "write" if action == "manuscript" else "publication")
+    obligations.extend(strategic["obligations"])
     return {"ready": not obligations, "obligations": obligations, "bundle": bundle, "reviews": reviews,
+            "research_decision": strategic,
             "historical_publications": list(records.get("publication_receipt", {}).values()),
             "historical_submissions": list(records.get("submission_receipt", {}).values()),
             "digest": digest({"bundle": bundle["digest"] if bundle else None, "reviews": reviews, "obligations": obligations}),

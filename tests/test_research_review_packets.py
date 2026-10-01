@@ -75,14 +75,22 @@ class PacketTests(ResearchPublicationTests):
         report = api.publication_report(self.store)
         self.assertFalse(report["ready"])
         self.assertEqual({r["assessor"]["id"] for r in report["reviews"]}, {"reviewer-a", "reviewer-b"})
-        # A second review of the same bundle by reviewer-a recorded before the duplicate rule
-        # existed: the assessor's latest review stands.
+        # A later historical review stays readable, but cannot acquire observed
+        # independence from the earlier review's assignment.
         records = self.store.snapshot()["records"]
         legacy = dict(records["manuscript_review"]["reviewer-a"], id="reviewer-a-legacy", reviewed_revision=self.store.revision,
-                      review=self.artifacts.put(json.dumps(self.core("accept")).encode(), "application/json"))
+                      review=self.artifacts.put(json.dumps(self.core("accept")).encode(), "application/json"),
+                      core=self.core("accept"))
+        legacy.pop("assignment_id")
         self.store.mutate("legacy", {}, lambda tx: tx.put("manuscript_review", "reviewer-a-legacy", legacy),
                           expected_revision=self.store.revision, request_id="legacy-review")
-        self.assertTrue(api.publication_report(self.store)["ready"])
+        historical = api.publication_report(self.store)
+        self.assertFalse(historical["ready"])
+        self.assertIn("review_assignment_missing", {item["code"] for item in historical["obligations"]})
+        self.assertEqual({review["id"] for review in historical["reviews"]}, {"reviewer-a-legacy", "reviewer-b"})
+        saved = self.store.snapshot()["records"]["manuscript_review"]
+        self.assertEqual(saved["reviewer-a"]["core"]["decision"], "reject")
+        self.assertEqual(saved["reviewer-a-legacy"]["core"]["decision"], "accept")
         (self.root / "draft/paper.pdf").write_bytes(b"%PDF-1.4\n% Revised after the rejection.\n%%EOF")
         revised = self.mutate(api.prepare_publication, dict(self.bundle_payload(), id="paper-2"))["result"]
         self.assertNotEqual(revised["digest"], bundle["digest"])

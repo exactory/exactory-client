@@ -116,9 +116,12 @@ command is a reproduction instruction, not evidence that it ran.
 
 ## Reviews and continuation
 
-A readiness export delivers the selected assessed research candidate and actual
-evidence to an independent assessor before writing. A manuscript export later
-delivers the exact paper and claim evidence for two distinct blind reviews.
+A result dossier delivers the selected assessed research candidate and actual
+evidence to two independent assessors before writing. Each assesses support before
+consequence in one response; the canonical findings derive compatible readiness.
+Use the [decision protocol](../../docs/research-decisions.md) for exact delivery,
+context verification and objection handling. A manuscript export later delivers
+the exact paper and claim evidence for distinct blind reviews.
 Original review JSON, provenance, digests, and receipts stay retained. The current
 whole gate decides mechanical eligibility; a historical review does not.
 

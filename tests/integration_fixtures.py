@@ -40,24 +40,42 @@ def build_review_core(decision="accept"):
                 "contribution": ["Establish the bound for every bounded input sequence, not only for n in [0, 3]."]}}
 
 
-def build_manuscript_review(case, bundle, assessor, decision="accept"):
+def build_manuscript_review(case, bundle, assessor, decision="accept", *, core=None, percentile=30, band=(20, 40)):
     """One blind reviewer's unchanged rubric JSON, wrapped for `manuscript-review` on the exact bundle."""
-    return {"id": assessor, "bundle_digest": bundle["digest"], "assessor": {"id": assessor, "kind": "agent",
+    from reviewer_fixtures import manuscript_assignment
+    core = build_review_core(decision) if core is None else core
+    prediction = _prediction_value(percentile, band)
+    reasons = ["The authored fixture states a narrow finite result."]
+    assignment = manuscript_assignment(case, bundle, assessor, core, prediction, reasons)
+    value = {"id": assessor, "bundle_digest": bundle["digest"], "assessor": {"id": assessor, "kind": "agent",
             "provenance": case.artifacts.put(("Authored independent context " + assessor).encode(), "text/plain"),
             "relationship": "A separate fixture assessor.",
             "independence_basis": "A new blind context received the manuscript and exact evidence bytes."},
-            "review": case.artifacts.put(json.dumps(build_review_core(decision)).encode(), "application/json"), "blind": True}
+            "review": case.artifacts.put(json.dumps(core).encode(), "application/json"), "blind": True}
+    if assignment is not None:
+        value["assignment_id"] = assignment
+    return value
+
+
+def _prediction_value(percentile, band):
+    return {"corpus": "arxiv", "category": "cs.LG", "windowStart": "2026-01-01", "windowEnd": "2026-01-31",
+            "percentile": percentile, "band": {"best": band[0], "worst": band[1]}}
 
 
 def build_prediction(case, bundle, assessor, percentile=30, band=(20, 40)):
     """One blind assessor's cohort prediction on the bundle, in the study fixture's cohort."""
-    return {"id": assessor + "-prediction", "bundle_digest": bundle["digest"], "blind": True,
+    from reviewer_fixtures import manuscript_assignment
+    prediction = _prediction_value(percentile, band)
+    reasons = ["The authored fixture states a narrow finite result."]
+    assignment = manuscript_assignment(case, bundle, assessor, build_review_core(), prediction, reasons)
+    value = {"id": assessor + "-prediction", "bundle_digest": bundle["digest"], "blind": True,
             "assessor": {"id": assessor, "kind": "agent",
                          "provenance": case.artifacts.put(("Blind context " + assessor).encode(), "text/plain"),
                          "relationship": "A separate fixture assessor.", "independence_basis": "A blind context received the exact manuscript."},
-            "prediction": {"corpus": "arxiv", "category": "cs.LG", "windowStart": "2026-01-01", "windowEnd": "2026-01-31",
-                           "percentile": percentile, "band": {"best": band[0], "worst": band[1]}},
-            "reasons": ["The authored fixture states a narrow finite result."]}
+            "prediction": prediction, "reasons": reasons}
+    if assignment is not None:
+        value["assignment_id"] = assignment
+    return value
 
 
 def record_measurement(case, bundle, suffix, percentiles=(30, 25, 40)):
@@ -65,7 +83,7 @@ def record_measurement(case, bundle, suffix, percentiles=(30, 25, 40)):
     from research_harness import predictions, publication
     for number, percentile in enumerate(percentiles, 1):
         assessor = "measure-" + suffix + "-" + str(number)
-        case.mutate(publication.record_manuscript_review, build_manuscript_review(case, bundle, assessor))
+        case.mutate(publication.record_manuscript_review, build_manuscript_review(case, bundle, assessor, percentile=percentile))
         case.mutate(predictions.record_prediction, build_prediction(case, bundle, assessor, percentile))
 
 
@@ -100,6 +118,9 @@ def build_contribution_analysis(case, bundle, suffix):
 def record_contribution_analysis(case, bundle, suffix):
     """The contribution analysis of the measured bundle, with its own captured investigation."""
     from research_harness import contribution
+    from managed_strategy_fixtures import managed, record_managed_analysis
+    if managed(case):
+        return record_managed_analysis(case, bundle, suffix)
     return case.mutate(contribution.record_contribution_analysis, build_contribution_analysis(case, bundle, suffix))["result"]
 
 
@@ -148,7 +169,12 @@ def prepare_research(root, objective=None, *, candidate=False):
     if config is None:
         case.mutate(case.api("principles").initialize_research, {"profile": "research", "target": case.objective, "preparation_policy": "exhaustive-v1"})
     elif config["target"] is None:
-        case.mutate(case.api("principles").set_target, {"target": case.objective, "reason": "Fix the complete fixture objective before planning."})
+        from managed_strategy_fixtures import target_decision
+        decision = target_decision(case)
+        value = {"target": case.objective, "reason": "Fix the complete fixture objective before planning."}
+        if decision is not None:
+            value['decision_id'] = decision['id']
+        case.mutate(case.api("principles").set_target, value)
     else:
         case.assertEqual(config["target"], case.objective)
     work = case.metadata()
@@ -200,12 +226,16 @@ def observed_candidate(case):
     case.mutate(case.development().assess_cycle, case.assessment(plan, execution))
     case.save_checkpoint()
     case.mutate(case.development().record_readiness_review, case.review(execution))
+    from managed_strategy_fixtures import result_decision
+    result_decision(case)
     return execution
 
 
 def prepare_manuscript(case, *, pdf="draft/paper.pdf", sources=None, stop=False):
     """Pin the existing manuscript and record two actual independent reviews."""
     from research_harness import publication
+    from managed_strategy_fixtures import result_decision
+    result_decision(case)
     claims = case.root / "evidence/claims.json"
     claims.parent.mkdir(parents=True, exist_ok=True)
     claims.write_text(json.dumps([{"id": "bound", "claim": "The maximum is 9."}]))
@@ -218,9 +248,12 @@ def prepare_manuscript(case, *, pdf="draft/paper.pdf", sources=None, stop=False)
     for number in (1, 2):
         case.mutate(publication.record_manuscript_review,
                     build_manuscript_review(case, bundle, identifier + "-reviewer-" + str(number)))
-    case.assertTrue(publication.publication_report(case.store)["ready"])
+    report = publication.publication_report(case.store, 'manuscript')
+    case.assertTrue(report['ready'], report['obligations'])
     if stop:
         approve_publication_stop(case, bundle)
+        report = publication.publication_report(case.store)
+        case.assertTrue(report['ready'], report['obligations'])
     return bundle
 
 
@@ -229,8 +262,17 @@ def approve_publication_stop(case, bundle):
 
     The decision needs the bundle's complete measurement and contribution analysis: the fixture records
     them when the bundle has none, and lists the analysis's steps as deferred candidates."""
-    from research_harness import contribution, predictions, rounds
+    from research_harness import contribution, predictions, research_decisions, rounds
     suffix = "stop-" + bundle["id"]
+    from managed_strategy_fixtures import managed, measure_publication, publication_decision
+    if managed(case):
+        measure_publication(case, bundle, suffix)
+        if contribution.find_analysis(case.store.snapshot()['records'], bundle['digest']) is None:
+            record_contribution_analysis(case, bundle, suffix)
+        report = research_decisions.decision_state(case.store.snapshot()['records'], case.artifacts, 'publication')
+        decision = report['decision'] if report['ready'] else publication_decision(case, bundle)
+        return case.mutate(rounds.record_round_review, {'id': 'managed-round-' + decision['id'],
+            'research_decision_id': decision['id'], 'reason': 'Use the same current observed scientific decision.'})['result']
     if predictions.select_measurement_reviews(case.store.snapshot()["records"], bundle) is None:
         record_measurement(case, bundle, suffix)
     analysis = contribution.find_analysis(case.store.snapshot()["records"], bundle["digest"]) \
@@ -280,6 +322,8 @@ def admit_lab(case, script="code/program.py", *, body=None, run_id="lab-run", ba
         path.write_text(body)
     plan = plan or case.plan(max_units=max_units)
     plan["resource_limits"]["unit"] = usage_unit
+    from managed_strategy_fixtures import bind_plan
+    plan = bind_plan(case, plan)
     case.mutate(case.development().plan_cycle, plan)
     pinned = case.store.snapshot()["records"]["cycle_plan"][plan["id"]]
     admission = {"id": run_id, "cycle_id": plan["id"], "plan_digest": pinned["digest"], "reserved_units": reserved_units,

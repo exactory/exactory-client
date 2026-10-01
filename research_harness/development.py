@@ -463,8 +463,11 @@ def plan_cycle(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
         context = _Context(records, artifacts)
         context.require_ready()
+        from .decision_integration import require_decision
+        strategic = require_decision(records, artifacts, "cycle", decision_id=value.get("decision_id"))
         _fields(value, ("id", "author", "objective", "scope", "hypothesis", "question", "strategy", "predecessor", "inheritance",
-                        "reopening", "distinguishing_test", "expected_outcomes", "failure_signals", "evidence_requirements", "literature", "resource_limits"))
+                        "reopening", "distinguishing_test", "expected_outcomes", "failure_signals", "evidence_requirements", "literature", "resource_limits"),
+                ("decision_id", "candidate_id"))
         for key in ("id", "author", "hypothesis", "question", "distinguishing_test"):
             _text(value[key], "Plan " + key)
         if value["objective"] != context.objective:
@@ -498,6 +501,10 @@ def plan_cycle(store, payload, *, expected_revision, request_id):
         dependencies = _plan_dependencies(context, value)
         record = {"id": value["id"], "payload": value, "dependencies": dependencies, "strategy_key": key,
                   "planned_revision": expected_revision + 1, "request_id": request_id}
+        if strategic.get("decision") is not None:
+            from .research_decisions import validate_cycle_decision
+            binding = validate_cycle_decision(records, artifacts, value, strategic["decision"])
+            record["research_decision"] = {"id": strategic["decision"]["id"], "digest": strategic["decision"]["digest"], "binding": binding}
         record["digest"] = digest(record)
         account = dict(account, cycles=account["cycles"] + [value["id"]])
         cycle = {"id": value["id"], "plan_digest": record["digest"], "status": "planned", "execution_ids": [],
@@ -549,6 +556,8 @@ that run. An idempotent admission response retains its original reservation.
         _text(value["id"], "Run/admission ID")
         context = _Context(records, artifacts)
         context.require_ready()
+        from .decision_integration import require_decision
+        strategic = require_decision(records, artifacts, "cycle", decision_id=(plan.get("research_decision") or {}).get("id"))
         if value["plan_digest"] != plan["digest"]:
             raise ResearchError("plan_digest_mismatch", "Admit the exact immutable plan the launcher will execute")
         account = records["strategy_account"][plan["strategy_key"]]
@@ -568,6 +577,10 @@ that run. An idempotent admission response retains its original reservation.
             raise ResearchError("cycle_closed", "Use an explicit successor checkpoint and development question after assessing this branch")
         record = dict(value, strategy_key=plan["strategy_key"], admitted_revision=expected_revision + 1, request_id=request_id,
                       dependencies=plan["dependencies"])
+        if strategic.get("decision") is not None:
+            from .research_decisions import validate_cycle_decision
+            binding = validate_cycle_decision(records, artifacts, plan["payload"], strategic["decision"], reserved_units=value["reserved_units"])
+            record["research_decision"] = {"id": strategic["decision"]["id"], "digest": strategic["decision"]["digest"], "binding": binding}
         record["digest"] = digest(record)
         account = dict(account, executions=account["executions"] + 1, charged_units=account["charged_units"] + value["reserved_units"])
         changes = [immutable_record(records, "execution_admission", value["id"], record),
@@ -597,6 +610,11 @@ def validate_admitted_execution(records, artifacts, admission_id):
     plan = _get(records, "cycle_plan", admission["cycle_id"], "unknown_cycle")
     context = _Context(records, artifacts)
     context.require_ready()
+    if admission.get("research_decision"):
+        from .decision_integration import require_decision
+        state = require_decision(records, artifacts, "cycle", decision_id=admission["research_decision"]["id"])
+        if state["decision"]["digest"] != admission["research_decision"]["digest"]:
+            raise ResearchError("research_decision_stale", "The admitted execution must retain its exact reviewed decision")
     account = records["strategy_account"][plan["strategy_key"]]
     require_accounted_usage(records, artifacts, plan["strategy_key"])
     _validate_reopening(context, plan["payload"], account)
@@ -1201,23 +1219,34 @@ def _review(context, value, candidate):
             "mechanical_only": True}
 
 
+def prepare_combined_support(records, artifacts, payload, *, revision, request_id):
+    """Validate and prepare one response's support section without committing it.
+
+    A strategic response commits these compatible readiness records with its
+    value findings in the same transaction. The existing exact candidate and
+    evidence checks remain authoritative; no decision is read here.
+    """
+    context = _Context(records, artifacts)
+    context.require_objective()
+    candidate, _ = _candidate(context)
+    if candidate is None:
+        raise ResearchError("candidate_checkpoint_missing", "Provide a current assessed candidate for independent review")
+    report = _review(context, payload, candidate)
+    artifact = artifacts.put(json.dumps(payload, ensure_ascii=False, sort_keys=True, allow_nan=False,
+                                        separators=(",", ":")).encode(), "application/json")
+    record = {"id": payload["id"], "payload": payload, "candidate": candidate, "assessment": report,
+              "artifact": artifact, "reviewed_revision": revision, "request_id": request_id}
+    return [immutable_record(records, "readiness_review", payload["id"], record),
+            ("development_selection", "review", {"review_id": payload["id"]})], report
+
+
 def record_readiness_review(store, payload, *, expected_revision, request_id):
     """Archive an identified independent assessment of the exact candidate snapshot."""
     artifacts = ArtifactStore(store.root)
 
     def prepare(records, value):
-        context = _Context(records, artifacts)
-        context.require_objective()
-        candidate, _ = _candidate(context)
-        if candidate is None:
-            raise ResearchError("candidate_checkpoint_missing", "Provide a current assessed candidate for independent review")
-        report = _review(context, value, candidate)
-        artifact = artifacts.put(json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False,
-                                              separators=(",", ":")).encode(), "application/json")
-        record = {"id": value["id"], "payload": value, "candidate": candidate, "assessment": report,
-                  "artifact": artifact, "reviewed_revision": expected_revision + 1, "request_id": request_id}
-        return [immutable_record(records, "readiness_review", value["id"], record),
-                ("development_selection", "review", {"review_id": value["id"]})], report
+        return prepare_combined_support(records, artifacts, value,
+                                        revision=expected_revision + 1, request_id=request_id)
 
     return prepared_mutation(store, "development.readiness_review", payload, prepare, expected_revision=expected_revision, request_id=request_id)
 

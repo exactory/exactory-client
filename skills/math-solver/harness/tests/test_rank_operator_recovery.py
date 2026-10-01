@@ -11,6 +11,7 @@ import attack
 from search_controller.schema import digest
 from tests.search_execution_support import admit_workspace
 from tests.search_fixtures import provenance
+from tests.native_reviewer_support import observe_review
 from tests.support import WorkspaceTest
 
 
@@ -80,6 +81,7 @@ class RankOperatorRecoveryTests(WorkspaceTest):
                   "findings": {key: "The exact synthetic fixture satisfies the declared recovery condition."
                                for key in ["read_only_origin", "delta", "authority", "preservation", "quiescence"]},
                   "unresolved_objections": []}
+        review = observe_review(self.controller, review, subject)
         return {"rank_recovery": {"subject": subject, "review": review}}
 
     def repair(self, spec=None, request="recover-interrupted-rank"):

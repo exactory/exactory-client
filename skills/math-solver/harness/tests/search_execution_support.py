@@ -68,10 +68,13 @@ def admit_workspace(root, slug="sample", max_runs=24, computational=False, exact
         from tests.research_support import pin_research
         pin_research(root, candidate, inputs)
         controller.command("propose", {"proposal": candidate, "inputs": inputs}, 1, "proposal")
-        controller.command("review", {"proposal_id": "proposal-000001", "review": review(candidate), "inputs": []}, 2, "review")
+        from tests.native_reviewer_support import observe_review
+        controller.command("review", {"proposal_id": "proposal-000001",
+            "review": observe_review(controller, review(candidate), candidate), "inputs": []}, 2, "review")
         revision = 3
         if candidate["category"] == "standalone":
-            controller.command("review", {"proposal_id": "proposal-000001", "review": review(candidate, "reviewer-two"), "inputs": []}, 3, "second-review")
+            controller.command("review", {"proposal_id": "proposal-000001",
+                "review": observe_review(controller, review(candidate, "reviewer-two"), candidate), "inputs": []}, 3, "second-review")
             revision = 4
         controller.command("admit", {}, revision, "admit", "proposal-000001")
     if historical:
@@ -116,6 +119,8 @@ def begin_spec():
 
 
 def invoke(controller, name, spec, target="node-000001"):
+    from tests.native_reviewer_support import attest_spec
+    attest_spec(controller, spec)
     revision = controller.status()["revision"]
     return controller.command(name, spec, revision, "execution-%d-%s" % (revision, name), target)
 
@@ -145,5 +150,7 @@ def review_native_inputs(controller, slug, step_name, kind="certificate", review
             "scope": "The checker verifies the complete declared fixture domain",
             "dependencies": "All local fixture inputs and explicitly declared dependencies are pinned",
             "policy": "This review authorizes input-bound verification, with result acceptance still pending"}}
+    from tests.native_reviewer_support import observe_review
+    value = observe_review(controller, value, verification_entry_subject(node, spec))
     (controller.root / slug / "deterministic" / step_name / "verification-review.json").write_text(json.dumps(value))
     return value

@@ -1,6 +1,6 @@
 ---
 name: experiment
-description: Execute admitted research cycles, assess actual results and validity, preserve checkpoints and failed branches, and obtain independent research readiness review before writing. Use after current preparation and a prospective experiment admission.
+description: Use when executing an admitted research cycle, assessing actual results, renewing an investigation tranche, or deciding whether supported results can enter writing.
 ---
 
 # Exactory: experiment

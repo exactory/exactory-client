@@ -43,9 +43,31 @@ class ResearchPublicationTests(DevelopmentCase):
         return build_manuscript_review(self, bundle, assessor, decision)
 
     def review_of(self, bundle, assessor, core):
-        payload = self.manuscript_review(bundle, assessor)
-        payload["review"] = self.artifacts.put(json.dumps(core).encode(), "application/json")
-        return payload
+        return build_manuscript_review(self, bundle, assessor, core=core)
+
+    def test_another_support_assessment_does_not_change_the_exact_scientific_manuscript(self):
+        api = self.publication()
+        bundle = self.mutate(api.prepare_publication, self.bundle_payload())["result"]
+        payload = self.review(self.execution_payload, identifier="additional-support")
+        payload["assessor"]["id"] = "additional-support-reviewer"
+        self.mutate(self.development().record_readiness_review, payload)
+        self.assertEqual(api._bundle(self.store.snapshot()["records"], self.artifacts)["digest"], bundle["digest"])
+
+    def test_a_later_failed_support_assessment_still_blocks_the_exact_manuscript(self):
+        api = self.publication()
+        self.mutate(api.prepare_publication, self.bundle_payload())
+        payload = self.review(self.execution_payload, identifier="adverse-support")
+        payload.update(verdict="not_ready")
+        payload["checks"][0]["status"] = "failed"
+        self.mutate(self.development().record_readiness_review, payload)
+        self.assert_error("readiness_required", lambda: api._bundle(self.store.snapshot()["records"], self.artifacts))
+
+    def test_new_manuscript_review_requires_an_observed_independent_assignment(self):
+        api = self.publication()
+        bundle = self.mutate(api.prepare_publication, self.bundle_payload())["result"]
+        payload = self.manuscript_review(bundle, "unobserved-reviewer")
+        payload.pop("assignment_id", None)
+        self.assert_error("review_assignment_missing", lambda: self.mutate(api.record_manuscript_review, payload))
 
     def test_a_review_names_the_changes_for_each_score_below_the_maximum(self):
         api = self.publication()
@@ -65,7 +87,7 @@ class ResearchPublicationTests(DevelopmentCase):
         recorded = self.mutate(api.record_manuscript_review, self.review_of(bundle, "reviewer-at-maximum", at_maximum))["result"]
         self.assertEqual(recorded["core"]["changes_for_maximum"]["soundness"], [])
 
-    def test_a_review_recorded_before_the_changes_field_still_counts(self):
+    def test_legacy_review_content_is_retained_without_fabricated_independence(self):
         from research_harness.evidence import digest
         from research_harness.operations import prepared_mutation
         api = self.publication()
@@ -75,10 +97,14 @@ class ResearchPublicationTests(DevelopmentCase):
         legacy_core = {key: value for key, value in saved["core"].items() if key != "changes_for_maximum"}
         legacy = dict(saved, id="reviewer-legacy", assessor=dict(saved["assessor"], id="reviewer-legacy"),
                       review=self.artifacts.put(json.dumps(legacy_core).encode(), "application/json"), core=legacy_core)
+        legacy.pop("assignment_id", None)
         legacy["digest"] = digest({key: legacy[key] for key in ("id", "bundle_digest", "assessor", "review", "blind")})
         self.mutate(lambda store, payload, **identity: prepared_mutation(store, "test.legacy-review", payload,
                     lambda records, value: ([("manuscript_review", legacy["id"], legacy)], legacy), **identity), {})
-        self.assertTrue(api.publication_report(self.store)["ready"])
+        report = api.publication_report(self.store)
+        self.assertFalse(report["ready"])
+        self.assertIn("review_assignment_missing", {item["code"] for item in report["obligations"]})
+        self.assertEqual(self.store.snapshot()["records"]["manuscript_review"]["reviewer-legacy"]["core"], legacy_core)
 
     def test_readiness_alone_is_not_a_manuscript_or_dual_review_receipt(self):
         api = self.publication()

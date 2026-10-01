@@ -276,7 +276,7 @@ checkpoint, acceptance, journal or run evidence recorded after the failure.
 Related failures include logical ancestors, the same resource-account lineage,
 and nodes with the same claim. A new slug or sibling alone is insufficient.
 
-Obtain a separate reviewer with a fresh context. Give the reviewer the original
+Obtain a separate reviewer through the [observed native adapter](#observed-native-review-delivery). Give the reviewer the original
 claim, full current context, previous assessments and retained failures, referenced
 immutable evidence, proposed assessment, studies, and current plans. Ask whether
 each disposition follows from what changed, whether any failed method is being
@@ -285,9 +285,10 @@ can advance the residual claim. Use `ResultReview` with
 `subject_digest = SHA256(StrategyAssessment)` and
 `claim_digest = SHA256(Contract.original_claim)`. All five findings are required.
 The reviewer must differ from both the assessment author and every current
-admission author in actor and attestation IDs. The harness checks record coverage,
-bindings and declared independence; it does not authenticate identities or decide
-mathematical relevance from prose. Do not fabricate a reviewer identity.
+admission author in actor and attestation IDs. The shared adapter also verifies the
+actual invocation, delivered packet and inspected context boundary. These checks
+do not decide mathematical relevance from prose. Previous scientific assessments
+and failures are intended continuity evidence, and are included explicitly.
 
 Submit the reviewed record with the current revision and a unique request ID.
 The service freezes the context, assessment, review and native plans, and records
@@ -587,7 +588,8 @@ controller. It does not publish results or replace the
 existing math-solver workflow. Checkpoints, proof acceptance, and scheduling are
 pure logic. Task 4 implements the filesystem service, CLI, adoption and generated
 views. Task 5 adds metered execution, reservation reconciliation and native guards.
-Host adapters remain subsequent tasks.
+The shared reviewer adapter supplies observed isolation for new independent
+native approvals while the native model keeps its existing scientific rules.
 
 ## Pure model and storage integration
 
@@ -852,9 +854,10 @@ The subject digest covers the full immutable proposal, including studies, task,
 limits, and decomposition; the claim digest covers its exact claim. Reviews never
 occur inside their own hashed subject. The author and reviewers must have distinct
 actor IDs and attestation IDs. Two reviewers of one proposal must also differ in
-both fields. The host/operator supplies the records. The CLI must validate their
-provenance boundary; a user-editable name is not cryptographic authentication of
-intellectual independence. `source: "model"` is not accepted.
+both fields. Historical host/operator records retain their original provenance.
+New independent reviews use the observed assignment described below; a declared
+name or an imported assertion cannot establish independent delivery.
+`source: "model"` is not accepted.
 
 All reviews used for admission must approve and have no unresolved blocking
 objection. Main and coverage need one independent approval. Standalone needs two.
@@ -864,6 +867,89 @@ and significance, finite tasks require necessity, and renewal requires renewal
 basis. Inapplicable findings use empty strings. Admission reviews cannot be added
 or changed after admission. A revise/reject outcome needs a revised proposal and
 new bound reviews; it cannot be hidden by adding an optimistic review.
+
+### Observed native review delivery
+
+The native `Review`, `ResultReview` and recovery-review shapes remain unchanged.
+New approvals use `source: "host"`, the actual shared reviewer ID as `actor_id`,
+and `attestation_id: "review-assignment:ASSIGNMENT_ID"`. Choose the assignment ID
+before exporting the packet. The service binds that exact assignment's observed
+output, root, objective, subject, claim, contract and evidence. It rejects an
+author-edited output or an unverified, changed or contaminated reviewer context.
+No research intent, strategy dossier, bar or value record is required here.
+
+Export one packet with this closed record:
+
+```text
+review-packet --spec FILE:
+{kind: "proposal"|"result"|"recovery", subject: ExactNativeSubject,
+ claim_digest: SHA256|null,
+ reviewer: {source: "host", actor_id: ReviewerID,
+            attestation_id: "review-assignment:ASSIGNMENT_ID"},
+ inputs: [Input]}
+```
+
+Use `proposal` for a proposal `Review`; use `result` for a `ResultReview`,
+including strategy reassessment, amendments, verifier input/policy, acceptance
+and closure; use `recovery` for the original recovery review without a claim
+digest. Recovery alone uses `claim_digest: null`. `subject` is exactly the native
+record whose canonical hash the existing review contract requires, excluding its
+review. Supply any as-yet uncommitted referenced native files through `inputs`.
+The exporter captures typed verifier inputs, adoption/recovery snapshots, and
+strategy context and plans under their existing exact-byte contracts.
+An adoption allowance whose subject contains `proposal_digest` and
+`snapshot_digest` needs those exact unpublished blobs and their referenced
+artifacts in `inputs`; a digest alone cannot supply their contents.
+
+```sh
+exactory-math --attack-root attack search review-packet --spec native-review.json --json
+```
+
+The result is `{workspace, native_packet, subject_digest, claim_digest}`.
+`workspace` is the existing native common-preparation workspace, or the native
+root when it has none. Use that returned path for the shared commands. Export
+writes immutable common evidence objects and does not append a native event.
+It needs no expected revision or request ID.
+
+Register and actually probe a supported reviewer route using
+[the shared route instructions](../../docs/research-decisions.md#commands-and-shared-state).
+Create this assignment with the returned `native_packet` reference:
+
+```text
+{id: ASSIGNMENT_ID, route_id: VerifiedRouteID, dossier_id: null,
+ role: "native_math", reviewer_id: ReviewerID, author_id: ActualAuthorID,
+ context: {native_packet: ArtifactRef}}
+```
+
+Run `exactory-research review-assignment --workspace WORKSPACE --file assignment.json`
+and `exactory-research review-run --workspace WORKSPACE --file invocation.json`,
+each with its current `--expected-revision` and unique `--request-id`.
+The invocation is `{id: AttemptID, assignment_id: ASSIGNMENT_ID}`. These are real
+reviewer calls and must remain within the user's authorized resources. Read the
+retained observed output and submit it unchanged in the appropriate native
+command. For native verification, save that exact input `ResultReview` as
+`verification-review.json`. The shared runner retains rejected result/recovery
+responses, but they cannot be converted into approve-only native records.
+
+The packet retains the original objective and proof policy, exact subject,
+required scientific context, previous relevant strategy assessments and failures,
+and immutable evidence closure. Missing content references are explicit;
+reviewers must not approve obligations they cannot inspect. The original native
+scientific checks remain required. Selected certificate/Lean executables have
+explicit path, digest and size in `execution_provenance`; their machine code is
+not presented as scientific text. The native executor still verifies their bytes
+and the complete typed toolchain inventory. Unsupported binary scientific input
+requires a supported exact-byte delivery mechanism, and is never silently turned
+into executable provenance.
+
+Pure event replay preserves historical records without contacting a reviewer.
+Missing old runtime metadata means historical independence is unknown, not that
+contamination has been proved. Old proposed reviews alone cannot authorize a new
+admission. Already admitted work and accepted evidence retain their history and
+native validity rules. Instrumented reviews are rechecked whenever current work
+relies on them; later contamination blocks their current use without rewriting
+the old event. Shared reviewer state remains locked through a native commit and
+through the final audit at actual process authorization.
 
 ## Derived state and stable accounts
 
@@ -1455,6 +1541,7 @@ Public command specs are closed records:
 | init | `{contract: Contract}` |
 | propose | `{proposal: Proposal, inputs: [Input]}` |
 | review | `{proposal_id: ID, review: Review, inputs: [Input]}` |
+| review-packet | Exact export record under [Observed native review delivery](#observed-native-review-delivery); no native event |
 | admit ID | `{}`; `--spec` may be omitted |
 | begin ID | The `begin NODE --spec FILE` record under [Metered execution and native integration](#metered-execution-and-native-integration) |
 | run ID | The tagged `run NODE --spec FILE` record under [Metered execution and native integration](#metered-execution-and-native-integration) |
@@ -1473,6 +1560,7 @@ Public command specs are closed records:
 | audit, render, status, next, strategy-context | `{}`; no spec file |
 
 `status`, `next`, and `strategy-context` are read-only and need no revision or request ID.
+`review-packet` exports immutable evidence and likewise needs no revision or request ID.
 Every other public command uses the current `--expected-revision` and a unique
 `--request-id`. Commands whose table row defines a nonempty spec require
 `--spec FILE`; `admit` accepts an optional empty spec and `reconcile` an optional
@@ -1503,8 +1591,8 @@ Duplicate JSON keys and non-finite JSON are rejected. Inputs are copied into
 immutable stores before the event document commits. Study/source digests in
 proposals identify nonempty raw artifacts; inherited evidence identifies manifest
 blobs. Reviews are separately stored blobs and never occur inside the subject
-whose digest they review. Host/operator provenance is an explicit trust boundary;
-the CLI cannot establish intellectual independence cryptographically.
+whose digest they review. New independent review fields must match an observed
+shared native assignment; declared host/operator labels alone are insufficient.
 
 Mutation receipts contain `objective_id`, `revision`, `proof_status`, and `command`.
 They describe the original committed mutation on identical request replay.

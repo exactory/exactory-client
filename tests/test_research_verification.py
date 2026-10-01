@@ -9,6 +9,7 @@ from unittest import mock
 
 from literature_fixtures import FIELDS
 from research_harness.literature import foundation_report
+from reviewer_fixtures import verdict_assignment
 from test_research_synthesis import SynthesisCase
 
 
@@ -31,7 +32,7 @@ class ResearchVerificationTests(SynthesisCase):
         return {"stance": "sound", "summary": "The finite bound is supported.", "rationaleSections": [],
                 "prediction": {"corpus": "arxiv", "category": "cs.LG", "windowStart": "2026-01-01", "windowEnd": "2026-01-31", "percentile": 50, "band": {"best": 35, "worst": 65}}}
 
-    def bind(self, api):
+    def bind(self, api, *, observed=True):
         task = self.mutate(api.record_task, {"task": self.task})["result"]
         payload = {"id": "verdict-1", "task_digest": task["digest"],
                    "body": self.artifacts.put(json.dumps(self.verdict()).encode(), "application/json"),
@@ -39,7 +40,38 @@ class ResearchVerificationTests(SynthesisCase):
                        "independence_basis": "The verifier is not an author and read no other verdicts.", "blind": True,
                        "checks": [{"dimension": dimension, "reason": "The scoped source supports this separate assessment.", "evidence": [self.linked]}
                                   for dimension in ("soundness", "novelty", "impact")]}}
+        if observed:
+            payload["assessment"]["assignment_id"] = verdict_assignment(self, payload)
         return self.mutate(api.bind_verdict, payload)["result"]
+
+    def test_independence_prose_alone_cannot_authorize_a_new_verdict(self):
+        self.assert_error("review_assignment_missing", lambda: self.bind(self.verifier(), observed=False))
+
+    def test_observed_external_verification_needs_no_strategic_research_gate(self):
+        bound = self.bind(self.verifier())
+        records = self.store.snapshot()["records"]
+        self.assertNotIn("research_intent", records)
+        self.assertNotIn("strategy_dossier", records)
+        self.assertTrue(bound["assessment"]["assignment_id"])
+
+    def test_observed_verdict_cannot_be_replaced_when_binding(self):
+        api = self.verifier()
+        bound = self.bind(api)
+        payload = {key: copy.deepcopy(bound[key]) for key in ("id", "task_digest", "body", "assessment")}
+        payload.update(id="substitution", body=self.artifacts.put(json.dumps(
+            dict(self.verdict(), summary="An unobserved replacement judgment.")).encode(), "application/json"))
+        self.assert_error("review_output_mismatch", lambda: self.mutate(api.bind_verdict, payload))
+
+    def test_later_context_exposure_blocks_posting_without_erasing_the_verdict(self):
+        from research_harness import review_protocol
+        api = self.verifier()
+        bound = self.bind(api)
+        self.mutate(review_protocol.record_context_event, {"id": "later-exposure",
+            "assignment_id": bound["assessment"]["assignment_id"], "kind": "contamination",
+            "source": "test-observation", "reason": "An earlier verdict entered the review context.",
+            "evidence": [self.artifacts.put(b"Observed earlier verdict in the delivered input.", "text/plain")]})
+        self.assert_error("review_context_unverified", lambda: api.validate_verdict(self.store, self.task, self.verdict()))
+        self.assertEqual(self.store.snapshot()["records"]["verdict_assessment"][bound["id"]], bound)
 
     def test_request_creator_can_bind_but_wrong_version_cannot_mutate(self):
         api = self.verifier()
@@ -84,6 +116,7 @@ class ResearchVerificationTests(SynthesisCase):
                        supersedesVerdictId=observed["viewerVerdictId"])
         payload = {k: copy.deepcopy(bound[k]) for k in ("id", "task_digest", "body", "assessment")}
         payload.update(id="assessment-after-unknown", body=self.artifacts.put(json.dumps(revised).encode(), "application/json"))
+        payload["assessment"]["assignment_id"] = verdict_assignment(self, payload)
         self.mutate(api.bind_verdict, payload)
         self.assert_error("verdict_reconciliation_pending", lambda: send_verdict(self.store, observed, revised, client,
             expected_revision=self.store.revision, request_id="attempt-different-assessment"))
@@ -179,6 +212,7 @@ class ResearchVerificationTests(SynthesisCase):
         payload = {k: copy.deepcopy(bound[k]) for k in ("id", "task_digest", "body", "assessment")}
         payload["id"] = "verdict-revision"
         payload["body"] = self.artifacts.put(json.dumps(revised).encode(), "application/json")
+        payload["assessment"]["assignment_id"] = verdict_assignment(self, payload)
         self.mutate(api.bind_verdict, payload)
         send_verdict(self.store, observed, revised, client, expected_revision=self.store.revision, request_id="send-revision")
         self.assertEqual([c[2] for c in calls], [body, revised])
@@ -196,6 +230,7 @@ class ResearchVerificationTests(SynthesisCase):
         def assess(identifier, body):
             payload = {k: copy.deepcopy(bound[k]) for k in ("id", "task_digest", "body", "assessment")}
             payload.update(id=identifier, body=self.artifacts.put(json.dumps(body).encode(), "application/json"))
+            payload["assessment"]["assignment_id"] = verdict_assignment(self, payload)
             self.mutate(api.bind_verdict, payload)
         body = self.verdict()
         send_verdict(self.store, self.task, body, client, expected_revision=self.store.revision, request_id="confirmed-first")
@@ -274,6 +309,7 @@ class SampledVerificationCase(SynthesisCase):
                        "independence_basis": "The verifier is not an author and read no other verdicts.", "blind": True,
                        "checks": [{"dimension": d, "reason": "The scoped source supports this separate assessment.", "evidence": [self.linked]}
                                   for d in ("soundness", "novelty", "impact")]}}
+        payload["assessment"]["assignment_id"] = verdict_assignment(self, payload)
         return self.mutate(api.bind_verdict, payload)["result"]
 
     def refusal(self, percentile, band):
@@ -287,6 +323,17 @@ class SampledVerificationCase(SynthesisCase):
 class SampledVerificationTests(SampledVerificationCase):
     works = (2, 3, 4, 5)
     positions = ("above", "above", "above", "below")
+
+    def test_verifier_receives_the_actual_sample_statistic_without_prior_verdicts(self):
+        from research_harness import sampling
+        api = self.api("verification")
+        task = self.mutate(api.record_task, {"task": self.task})["result"]
+        records = self.store.snapshot()["records"]
+        records["verdict_assessment"] = {"earlier": {"summary": "EXCLUDED_PRIOR_VERDICT"}}
+        packet = api.review_packet(records, self.artifacts, task["digest"])
+        self.assertEqual(packet["sampling_context"]["prediction"], sampling.prediction(records))
+        self.assertEqual(packet["sampling_context"]["sample"], sampling.current_sample(records))
+        self.assertNotIn("EXCLUDED_PRIOR_VERDICT", json.dumps(packet))
 
     def test_the_verdict_carries_the_sample_prediction(self):
         from research_harness import sampling

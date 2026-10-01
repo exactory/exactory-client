@@ -1,6 +1,6 @@
 # Research constitution
 
-Version: 5
+Version: 6
 
 This is the common research-policy document for this plugin. System, host, and
 user constraints continue to govern. A managed study records this document's
@@ -17,7 +17,11 @@ deployment date, commercial use, or measured benefit to satisfy a form.
 
 Keep the complete objective distinct from special cases, branch scopes, and
 remaining obligations. A successful branch contributes evidence to the full
-objective; it does not silently replace that objective.
+objective; it does not silently replace that objective. Record scientific success,
+artifact delivery and publication authority separately. An unconditional user
+instruction through a named endpoint remains effective without another permission
+question. An explicit scientific quality condition remains binding. A limited
+delivery does not certify that the broader scientific objective was achieved.
 
 ## Direction by Grand Challenge
 
@@ -26,13 +30,29 @@ goal its field is trying to reach and, where useful, the nearer large goals
 on the way, each with criteria that would show it reached. The author records
 them before ideation and keeps them for the whole study; they are investigated
 again only when evidence changes them. Contribution is judged by how far the
-paper moves the community working on these challenges toward them. Every step
-toward them follows from established evidence, without a leap. After each
-measurement of the manuscript, the author compares the reviewers' stated
-requirements for the highest scores with the challenges, investigates briefly,
-and records the next steps and the community each one serves; the paper
-develops along those steps. Blind reviewers and verifiers judge the paper
-without the challenges.
+research moves the community working on these challenges toward them. Each
+inference needs evidence with matching assumptions and scope. A new hypothesis
+may follow from a failed approach, a tested assumption or the shared objective;
+it need not be a deduction from an earlier positive claim. Preserve the earlier
+evidence and explain why relevant failures do not defeat the new route.
+
+In managed author research, assess the proposed objective and approach before
+committing them. Two independent assessors first state worthwhile consequences
+from the user's aim and verified field context before receiving the author's
+candidate slate. Compare credible alternatives and the option of not pursuing
+the branch. At the result decision, each assessor judges scientific support
+before realized consequence in one combined assessment. A truthful contribution
+statement, favorable score or completed form alone cannot authorize development.
+Expected theorems, decisive negative results and important narrow theory remain
+eligible. A proxy supports a wider inference only with an adequate transfer
+argument. Reconsider a reduced consequence against alternatives without credit
+for sunk effort, retaining the original unmet objective.
+
+After manuscript measurement, connect reviewer demands to the same persistent
+work items and decision. Refresh sources when a named scientific question needs
+new evidence; reuse verified sources and findings when they still answer it.
+Blind manuscript reviewers and verifiers judge the paper without the author's
+strategic advocacy or previous scores.
 
 ## Faithful study and attribution
 
@@ -120,6 +140,20 @@ Respect assigned resources and record pauses or exhaustion without treating them
 as proof of success, impossibility, or source unavailability. A strategy,
 checkpoint, local finish, or complete form is not scientific acceptance.
 
+Choose the earliest affordable test that can change a commitment. A prerequisite
+baseline has a bounded completion condition and an explicit next deciding test.
+Each investigation has a named question, resource tranche, end condition and
+failure signal. Assess its actual outcome before authorizing another tranche;
+a new identifier does not reset resources or erase a failure. Unknown resources
+are not zero, and a branch or tranche limit does not invent a whole-run limit.
+Continue authorized independent work while a dependency is repaired.
+
+Keep adopting a request distinct from attempting or validating it. A retained
+claim's validity obligation must be resolved or the claim withdrawn. An unresolved
+consequence-critical obligation prevents claiming that consequence. Deferral
+retains the reason, evidence, resource implications, reopening condition and
+effect on current claims; a later-round label does not establish infeasibility.
+
 ## Independent verification
 
 Verification uses the same source, reading, and field-standard rigor. It evaluates
@@ -131,6 +165,17 @@ prior art without the appropriate historical source version. A verifier's
 population work is the sample; prior-art evidence for a specific finding comes
 from targeted searches, at most twenty abstract readings per verification.
 
+Every claimed independent or blind assessment needs a verified context route.
+Record the actual host/version, invocation, allowed evidence, prompt and packet
+bindings, tested exclusions and positive evidence-access controls. A fresh
+session, different directory or clean packet alone does not exclude inherited
+author history, automatic memory, prior assessments or later tool exposure.
+Keep unknown isolation and observed contamination distinct. Preserve failed
+calls and exposed reviews; reassess affected current approvals after repairing
+the route without rewriting historical scientific content. Resolve material
+review objections with evidence and focused adjudication, not majority voting
+or repeated sampling for a favorable opinion.
+
 The managed checks establish mechanical prerequisites and documented inspection.
 They do not guarantee comprehension, entailment, truth outside a checker's scope,
 novelty, social benefit, or a breakthrough. Independent scientific assessment and
@@ -138,14 +183,27 @@ the native mathematical acceptance rules remain necessary.
 
 ## Development across rounds
 
-A study produces one paper and develops it across rounds. Each round begins from
-the paper as it stands and ends with a paper that contains what the earlier rounds
-established; intermediate states are not published. A round is authorized by a
-goal that states what the field will be able to do afterwards, for whom, in which
-direction, which criteria of the Grand Challenge it advances, with the criteria
-that recognize success and the conditions that end the round early. An independent assessor judges the goal before the round and
-judges the decision to stop before publication. Every round performs new
-investigation of the paper's consequences and adds evidence and claims; a round
-spent on presentation alone does not count as development. Stopping on evidence
-is a correct outcome and is recorded as one. A measurement target is a stopping
-condition for the author, never an instruction to a reviewer.
+Managed author research uses one phase-specific decision lifecycle for objective
+commitment, investigations, results before writing and post-measurement rounds.
+The decision records scientific action, artifact disposition and the full
+objective's status separately. It may investigate, develop a supported manuscript,
+pivot, close a branch or deliver an artifact covered by the user's instruction.
+A branch can close with its result or failure report before any manuscript exists.
+Closure does not complete an unresolved full objective.
+
+Existing round commands consume the same decision and assessment. Preserve the
+substance of their impact, demand, novelty, feasibility, distinctness, continuity,
+Grand Challenge and stopping checks; do not add a duplicate strategic approval.
+Retain earlier claims, evidence and failures, with explicit revised or withdrawn
+scope. Presentation improvements remain useful communication work and are not
+counted as new scientific knowledge. Manuscript scores remain measurements and
+author stopping conditions, never instructions to reviewers.
+
+Existing historical decisions and completed manuscripts retain their recorded
+status. Adopting this policy requires explicit current assessment at the next
+substantial commitment; it does not fabricate earlier strategic reviews or rerun
+every old cycle. An already admitted cycle may finish and retain its evidence.
+Native mathematical search, standalone evaluation and verification retain their
+own decision contracts. Sharing source infrastructure does not make them managed
+author research; the common integrity and reviewer-context requirements still
+apply wherever independent assessment is claimed.

@@ -326,7 +326,7 @@ class ComputationBasisTests(WorkspaceTest):
         with self.assertRaises(SearchError) as caught:
             node, _, spec = self.finite_producer(candidate)
             invoke(self.controller, "run", spec, node["id"])
-        self.assertEqual(caught.exception.code, "computation_required")
+        self.assertEqual(caught.exception.code, "corrupt_artifact")
         self.assertEqual(self.controller.status()["accounts"], before)
         self.assertFalse(marker.exists())
 

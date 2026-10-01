@@ -4,7 +4,9 @@ Read the [research constitution](../../RESEARCH_CONSTITUTION.md) and the
 [managed research workflow](../../docs/research-workflow.md). The common SQLite
 Store owns research evidence and current gates. The files below are human working
 artifacts and projections; creating this layout does not establish readiness.
-Writing follows independent research readiness assessment. The manuscript reviews
+Writing follows the combined independent support/consequence assessment and
+current action in the [decision protocol](../../docs/research-decisions.md).
+The manuscript reviews
 described here evaluate the exact paper separately.
 
 `exactory-draft init` creates this layout. Every path below is relative to the
@@ -127,10 +129,12 @@ At the start of each iteration:
    claim or reframes the contribution, search for that specific change before
    making it, and log the pass. A result that was novel last iteration can be
    scooped by now.
-3. Read the latest contribution analysis and the reviews' `changes_for_maximum`.
-   Rank the weaknesses by how much each holds the overall score down, and revise
-   the highest-leverage ones first. A contribution change that needs new
-   evidence goes back to a cycle, not into the text.
+3. Read the latest contribution analysis, canonical decision, linked work items
+   and the reviews' `changes_for_maximum`. Resolve validity and consequence-critical
+   gaps before comparing optional improvements by scientific value, resources and
+   the user's aim. A contribution change that needs new evidence returns to an
+   admitted investigation tranche. A request to improve a score alone does not
+   establish an obligation or justify another experiment.
 
 At the end of each iteration, save the reviews under `reviews/` and append
 one line to `reviews/score_history.jsonl`, so the score trajectory stays
@@ -150,14 +154,22 @@ metadata and `superseded` entries omitted. Their internal history stays in the
 pinned ledger for the round gate and round assessor. Export leaves that ledger
 unchanged.
 
+A neutral packet and new session are necessary delivery controls, not proof of
+context isolation. Use a verified route, canonical prompt and recorded assignment;
+test startup instructions, memory, hooks and evidence/tool access. Preserve any
+later exposure and invalidate the affected independence claim before consuming
+that approval. See the decision protocol for contamination recovery.
+
 ## The measurement (the improvement loop)
 
-One measurement is three independent blind reviews, run as sub-agents
-spawned fresh for that iteration. The reviewers share no context: each
+One measurement is three independent blind reviews, delivered through recorded
+assignments on a verified actual route for that iteration. The reviewers share no context: each
 sees the artifact, the evaluate skill's RUBRIC.md and the study's cohort (for
 the prediction) only, and none knows the others exist. The measurement value
 is the median of the three overall scores. A measurement is valid only with all three reviews; when a
-reviewer fails, relaunch that reviewer alone.
+reviewer invocation fails, retain its failed attempt and retry that assignment
+under the bounded operational retry policy. An unfavorable scientific response
+is a completed review, not an invocation failure.
 
 Save each loop review as `reviews/review_NNN_rM.json` (M is 1 to 3). A
 manual single-pass review outside the loop keeps `reviews/review_NNN.json`.
@@ -200,7 +212,8 @@ current status and records. Unmeasured changes are preserved until understood;
 they are not automatically reset. Respect a user's local-only artifact policy.
 
 For publication, pin the exact current manuscript bundle and export its actual
-bytes for two independent blind assessors. Preserve unchanged original rubric
+bytes for two independent blind assessors through the verified assignment
+protocol. Preserve unchanged original rubric
 JSON and actual provenance, record `manuscript-review` for the bundle digest,
 and run the current whole `gate publication`. Historical review files and score
 measurements do not authorize publication; the user's instruction does, and the
