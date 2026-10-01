@@ -29,8 +29,9 @@ def measure_nesting(value):
 
 def run_export(root, kind):
     """Run exactory-research export --kind KIND on the workspace at root into a new directory."""
-    return subprocess.run([sys.executable, str(PLUGIN / "bin/exactory-research"), "export", "--kind", kind, "--workspace",
-                           str(root), "--destination", str(root / ("export-" + kind))], capture_output=True, text=True)
+    return subprocess.run([sys.executable, str(PLUGIN / "bin/exactory-research"), "export", "--kind", kind,
+                           "--workspace", str(root), "--destination", str(root / ("export-" + kind))],
+                          capture_output=True, text=True)
 
 
 def build_nested_result_program(levels):
@@ -549,9 +550,9 @@ class CommandDepthBoundTests(DevelopmentCase):
         """Run exactory-research COMMAND on this workspace with the payload at the current revision."""
         path = self.root / (request_id + ".json")
         path.write_text(json.dumps(payload))
-        return subprocess.run([sys.executable, str(PLUGIN / "bin/exactory-research"), command, "--workspace", str(self.root),
-                               "--file", str(path), "--expected-revision", str(self.store.revision), "--request-id", request_id],
-                              capture_output=True, text=True)
+        return subprocess.run([sys.executable, str(PLUGIN / "bin/exactory-research"), command, "--workspace",
+                               str(self.root), "--file", str(path), "--expected-revision", str(self.store.revision),
+                               "--request-id", request_id], capture_output=True, text=True)
 
     def assert_command_recorded(self, command, payload, request_id):
         revision = self.store.revision
@@ -577,7 +578,8 @@ class CommandDepthBoundTests(DevelopmentCase):
         (self.root / "evidence/claims.json").write_text(json.dumps([{"id": "bound", "claim": "The maximum is 9."}]))
         receipt = self.assert_command_recorded("manuscript", {
             "id": "paper-1", "files": {"pdf": "draft/paper.pdf", "abstract": "draft/abstract.txt",
-                                       "bibliography": "draft/references.bib", "claims": "evidence/claims.json", "sources": None},
+                                       "bibliography": "draft/references.bib", "claims": "evidence/claims.json",
+                                       "sources": None},
             "claim_evidence": [{"claim_id": "bound", "evidence": [self.result_evidence(execution)]}],
             "citation_accounting": account_fixture_citations(self)}, "manuscript-at-bound")
         publication = importlib.import_module("research_harness.publication")

@@ -137,12 +137,14 @@ def charge(source, purpose, amounts, *, unknown=(), refuse=True):
         if amount is None:
             unknowns[unit] += 1
             continue
-        # Python adds an int and a float by converting the int to a float, which raises OverflowError for an int beyond the
-        # float range (about 1.8e308). Two ints sum exactly at any size, so integer charges can carry a total beyond that
-        # range, as an earlier release also stored it. Only a sum of an int and a float that holds such an int is refused.
-        if type(charged[unit]) is not type(amount) and not (is_finite_number(charged[unit]) and is_finite_number(amount)):
-            raise ResearchError("invalid_input", "The " + unit + " charge cannot be added to its account total, because one "
-                                "is a float and the other an integer beyond the float range")
+        # Python adds an int and a float by converting the int to a float, which raises OverflowError for an int beyond
+        # the float range (about 1.8e308). Two ints sum exactly at any size, so integer charges can carry a total beyond
+        # that range, as an earlier release also stored it. Only a sum of an int and a float that holds such an int is
+        # refused.
+        if (type(charged[unit]) is not type(amount)
+                and not (is_finite_number(charged[unit]) and is_finite_number(amount))):
+            raise ResearchError("invalid_input", "The " + unit + " charge cannot be added to its account total, "
+                                "because one is a float and the other an integer beyond the float range")
         if refuse:
             _check(budget, account, reserved, unit, amount)
         charged[unit] += amount

@@ -152,8 +152,9 @@ class TestCheck(unittest.TestCase):
         # With one infinite side the difference is infinite, but so is the tolerance, which scales with the larger
         # side, so the comparison never flags the step either.
         report = _run_check([
-            {"label": "infinite " + side + " side", "from": "x" if side == "left" else "1", "to": "1" if side == "left" else "x",
-             "vars": {"x": [0, float("inf")]}} for side in ("left", "right")], self)
+            {"label": "infinite " + side + " side", "from": "x" if side == "left" else "1",
+             "to": "1" if side == "left" else "x", "vars": {"x": [0, float("inf")]}}
+            for side in ("left", "right")], self)
         self.assertEqual([step["status"] for step in report["steps"]], ["unparseable", "unparseable"])
         self.assertEqual(report["invalid"], 0)
 
@@ -163,7 +164,8 @@ class TestCheck(unittest.TestCase):
         # The first point that this label samples is one of them.
         step = {"label": "zero term B", "from": "x + y*y*y*y*0", "to": "x + 1",
                 "vars": {"x": [0.0, 1.0], "y": [0.0, 2e77]}}
-        points = _derive._sample_points(step["vars"], _derive._SAMPLE_COUNT_DEFAULT, _derive._seed_for_step(step["label"]))
+        points = _derive._sample_points(step["vars"], _derive._SAMPLE_COUNT_DEFAULT,
+                                        _derive._seed_for_step(step["label"]))
         finite_points = [point for point in points if math.isfinite(_derive._evaluate_expression(step["from"], point))]
         self.assertLess(len(finite_points), len(points))
         self.assertNotEqual(finite_points[0], points[0])
@@ -185,8 +187,8 @@ class TestCheck(unittest.TestCase):
 
     def test_a_wrong_step_with_complex_sides_has_a_json_witness(self) -> None:
         # JSON has no complex number, so a complex side of the witness gives its real and imaginary parts.
-        report = _run_check([{"label": "complex wrong", "from": "x**0.5", "to": "x**0.5 + 1", "vars": {"x": [-4.0, -1.0]}}],
-                            self)
+        report = _run_check([{"label": "complex wrong", "from": "x**0.5", "to": "x**0.5 + 1",
+                              "vars": {"x": [-4.0, -1.0]}}], self)
         step = report["steps"][0]
         self.assertEqual(step["status"], "invalid")
         value_from, value_to = step["witness"]["value_from"], step["witness"]["value_to"]

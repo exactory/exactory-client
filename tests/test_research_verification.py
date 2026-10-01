@@ -36,9 +36,12 @@ class ResearchVerificationTests(SynthesisCase):
     def build_bind_payload(self, task_digest, body, identifier="verdict-1"):
         return {"id": identifier, "task_digest": task_digest,
                 "body": self.artifacts.put(json.dumps(body).encode(), "application/json"),
-                "assessment": {"assessor": "independent-verifier", "provenance": self.artifacts.put(b"Authored separate verification context.", "text/plain"),
+                "assessment": {"assessor": "independent-verifier",
+                    "provenance": self.artifacts.put(b"Authored separate verification context.", "text/plain"),
                     "independence_basis": "The verifier is not an author and read no other verdicts.", "blind": True,
-                    "checks": [{"dimension": dimension, "reason": "The scoped source supports this separate assessment.", "evidence": [self.linked]}
+                    "checks": [{"dimension": dimension,
+                                "reason": "The scoped source supports this separate assessment.",
+                                "evidence": [self.linked]}
                                for dimension in ("soundness", "novelty", "impact")]}}
 
     def bind(self, api):
@@ -59,7 +62,8 @@ class ResearchVerificationTests(SynthesisCase):
         task = self.mutate(api.record_task, {"task": self.task})["result"]
         body = self.build_verdict_of_depth(32)
         self.assertEqual(measure_nesting(body), 32)
-        self.assertEqual(self.mutate(api.bind_verdict, self.build_bind_payload(task["digest"], body))["result"]["id"], "verdict-1")
+        self.assertEqual(self.mutate(api.bind_verdict, self.build_bind_payload(task["digest"], body))["result"]["id"],
+                         "verdict-1")
 
     def test_a_verdict_body_beyond_the_command_depth_bound_is_refused(self):
         from research_harness.errors import ResearchError
@@ -86,7 +90,8 @@ class ResearchVerificationTests(SynthesisCase):
         task = self.mutate(api.record_task, {"task": self.task})["result"]
         payload = self.build_bind_payload(task["digest"], dict(self.verdict(), rationaleSections=[10 ** 4300]))
         before = self.store.snapshot()
-        with self.assertRaisesRegex(ResearchError, "^The verdict body must hold no integer of more than 4300 digits") as raised:
+        with self.assertRaisesRegex(ResearchError,
+                                    "^The verdict body must hold no integer of more than 4300 digits") as raised:
             self.mutate(api.bind_verdict, payload)
         self.assertEqual(raised.exception.code, "invalid_input")
         self.assertEqual(self.store.snapshot(), before)

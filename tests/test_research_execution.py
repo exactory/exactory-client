@@ -251,7 +251,8 @@ class ResearchExecutionTests(DevelopmentCase):
         # A retained terminal whose duration is an integer beyond the float range (about 1.8e308) has no valid measured
         # duration. math.isfinite raises OverflowError for it, which escaped as a traceback. Only an outcome recorded
         # with null usage, as the former producer recorded a failed run, reaches this check with such a terminal.
-        admission = admit_lab(self, body="raise SystemExit(7)\n", usage_unit="wall_seconds", reserved_units=0.01, max_units=1)
+        admission = admit_lab(self, body="raise SystemExit(7)\n", usage_unit="wall_seconds", reserved_units=0.01,
+                              max_units=1)
         api = importlib.import_module("research_harness.execution")
         with mock.patch.object(api, "reconcile_execution", side_effect=OSError("The launcher exited after the run")):
             with self.assertRaisesRegex(OSError, "The launcher exited after the run"):
@@ -266,8 +267,8 @@ class ResearchExecutionTests(DevelopmentCase):
             return original_record_execution(store, payload, **identity)
 
         with mock.patch.object(api, "record_execution", side_effect=record_null_usage):
-            api.reconcile_execution(self.store, {"admission_id": admission["id"]}, expected_revision=self.store.revision,
-                                    request_id="reconcile")
+            api.reconcile_execution(self.store, {"admission_id": admission["id"]},
+                                    expected_revision=self.store.revision, request_id="reconcile")
         following_admission = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
         following_admission["id"] = "following-run"
         before = self.store.snapshot()
@@ -605,7 +606,8 @@ class ResearchExecutionTests(DevelopmentCase):
         api = importlib.import_module("research_harness.execution")
         payload = {"admission_id": "lab-run", "script": "code/program.py", "backend": "local",
                    "timeout_seconds": int(sys.float_info.max), "inputs": [], "usage_unit": "execution",
-                   "outputs": [{"id": "result", "requirement_id": "measurements", "path": "stdout", "media_type": "text/plain"}]}
+                   "outputs": [{"id": "result", "requirement_id": "measurements", "path": "stdout",
+                                "media_type": "text/plain"}]}
         self.assertEqual(self.mutate(api.bind_execution, payload)["result"]["timeout_seconds"], int(sys.float_info.max))
 
     def test_symlinked_venv_interpreter_runs_the_program_with_its_own_site_packages(self):
@@ -960,7 +962,8 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assertEqual(result["metric"], json.loads(metric_json))
         following_admission = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
         following_admission["id"] = "following-run"
-        self.assertEqual(self.mutate(self.development().admit_execution, following_admission)["result"]["id"], following_admission["id"])
+        self.assertEqual(self.mutate(self.development().admit_execution, following_admission)["result"]["id"],
+                         following_admission["id"])
 
     # Limits of H13 that the user accepted on 2026-09-30 at about 19:50 PDT. Each operation below fails with
     # invalid_input and changes nothing, because a new record or result copies a value that an earlier release
@@ -982,8 +985,8 @@ class ResearchExecutionTests(DevelopmentCase):
     def reconcile_as_earlier_release(self, admission):
         api = importlib.import_module("research_harness.execution")
         with self.write_as_earlier_release():
-            api.reconcile_execution(self.store, {"admission_id": admission["id"]}, expected_revision=self.store.revision,
-                                    request_id="earlier-reconcile")
+            api.reconcile_execution(self.store, {"admission_id": admission["id"]},
+                                    expected_revision=self.store.revision, request_id="earlier-reconcile")
 
     def assert_refused_without_a_change(self, action, refusal):
         from research_harness.errors import ResearchError
@@ -1013,11 +1016,13 @@ class ResearchExecutionTests(DevelopmentCase):
         """Admit, bind, launch and observe the fixture program with the store's bounds turned off; return the
         execution payload. The program writes the result and validation outputs that the fixture assessment cites."""
         api = importlib.import_module("research_harness.execution")
-        outputs = [{"id": name, "requirement_id": requirement, "path": "results/" + name + ".json", "media_type": "application/json"}
+        outputs = [{"id": name, "requirement_id": requirement, "path": "results/" + name + ".json",
+                    "media_type": "application/json"}
                    for name, requirement in (("result", "measurements"), ("validation", "checks"))]
         with self.write_as_earlier_release():
             admission = admit_lab(self, outputs=outputs, **admit_options)
-            api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision, request_id="earlier-release")
+            api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                 request_id="earlier-release")
         records = self.store.snapshot()["records"]
         return records["execution"][records["execution_outcome"][admission["id"]]["execution_id"]]["payload"]
 
@@ -1037,7 +1042,8 @@ class ResearchExecutionTests(DevelopmentCase):
         (self.root / "draft/references.bib").write_text("@article{bounded,title={Authored bound}}\n")
         (self.root / "evidence/claims.json").write_text(json.dumps([{"id": "bound", "claim": "The maximum is 9."}]))
         return {"id": "paper-1", "files": {"pdf": "draft/paper.pdf", "abstract": "draft/abstract.txt",
-                                           "bibliography": "draft/references.bib", "claims": "evidence/claims.json", "sources": None},
+                                           "bibliography": "draft/references.bib", "claims": "evidence/claims.json",
+                                           "sources": None},
                 "claim_evidence": [{"claim_id": "bound", "evidence": [self.result_evidence(execution)]}],
                 "citation_accounting": account_fixture_citations(self)}
 
@@ -1045,7 +1051,8 @@ class ResearchExecutionTests(DevelopmentCase):
         """Claim the fixture program as exactory-client 0.47.0 did, with a last stdout line whose metric nests
         `levels` levels, and observe it; return the execution payload."""
         import integration_fixtures
-        program = integration_fixtures.OBSERVED_PROGRAM + "print(" + repr(build_nested_metric_json(levels).decode()) + ")\n"
+        program = (integration_fixtures.OBSERVED_PROGRAM + "print(" + repr(build_nested_metric_json(levels).decode())
+                   + ")\n")
         with self.claim_as_earlier_release(), mock.patch.object(integration_fixtures, "OBSERVED_PROGRAM", program):
             return integration_fixtures.observe_run(self)
 
@@ -1061,8 +1068,10 @@ class ResearchExecutionTests(DevelopmentCase):
         admission = self.launch_as_earlier_release_until_the_launcher_exits(metric_json)
         self.reconcile_as_earlier_release(admission)
         for reconcile in (lambda: api.reconcile_execution(self.store, {"admission_id": admission["id"]},
-                                                          expected_revision=self.store.revision, request_id="new-reconcile"),
-                          lambda: api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                                          expected_revision=self.store.revision,
+                                                          request_id="new-reconcile"),
+                          lambda: api.launch_execution(self.store, admission["id"],
+                                                       expected_revision=self.store.revision,
                                                        request_id="earlier-release")):
             revision = self.store.revision
             self.assertEqual(reconcile()["metric"], json.loads(metric_json))
@@ -1072,7 +1081,8 @@ class ResearchExecutionTests(DevelopmentCase):
         # The bundle holds the metric of each cited run five levels deep (execution_observations), 101 levels here.
         from research_harness.publication import prepare_publication
         payload = self.build_manuscript_payload(self.observe_earlier_release_claim_with_metric(96))
-        self.assert_refused_without_a_change(lambda: self.mutate(prepare_publication, payload), "nest at most 100 levels")
+        self.assert_refused_without_a_change(lambda: self.mutate(prepare_publication, payload),
+                                             "nest at most 100 levels")
 
     def test_a_manuscript_that_cites_an_earlier_release_run_whose_metric_nests_95_levels_is_recorded(self):
         from research_harness.publication import prepare_publication
@@ -1136,8 +1146,8 @@ class ResearchExecutionTests(DevelopmentCase):
         import integration_fixtures
         from research_harness.publication import prepare_publication
         self.convert_integers_of_any_length()
-        payload = self.build_manuscript_payload(self.observe_run_as_earlier_release(body=integration_fixtures.OBSERVED_PROGRAM,
-                                                                                    seed=10 ** 4300))
+        payload = self.build_manuscript_payload(
+            self.observe_run_as_earlier_release(body=integration_fixtures.OBSERVED_PROGRAM, seed=10 ** 4300))
         self.assert_refused_without_a_change(lambda: self.mutate(prepare_publication, payload),
                                              "no integer of more than 4300 digits")
 
@@ -1188,7 +1198,8 @@ class RunMetricTests(unittest.TestCase):
         earlier = {"script": "code/refine_cycle.py"}
         fallback, declared = "work/results/refine_cycle.json", "work/results/run_cycle.json"
         for dimension, within, beyond in (("nesting", build_nested_metric_json(32), build_nested_metric_json(33)),
-                                          ("integer digits", build_integer_metric_json(4300), build_integer_metric_json(4301))):
+                                          ("integer digits", build_integer_metric_json(4300),
+                                           build_integer_metric_json(4301))):
             with self.subTest(dimension=dimension):
                 for path in ("stdout", fallback, declared):
                     self.assertEqual(output_metric(config, {path: within}), json.loads(within))

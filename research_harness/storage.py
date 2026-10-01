@@ -118,7 +118,8 @@ def _check_bounds(value, name, max_depth, depth_reason):
             pending.extend((child, depth + 1) for child in (item.values() if isinstance(item, dict) else item))
         elif type(item) is int and abs(item) > _MAX_STORED_INTEGER:
             raise ResearchError("invalid_input", name + " must hold no integer of more than "
-                                + str(_MAX_STORED_INTEGER_DIGITS) + " digits so that every supported Python reads it back")
+                                + str(_MAX_STORED_INTEGER_DIGITS)
+                                + " digits so that every supported Python reads it back")
 
 
 def _check_stored_bounds(value, max_depth=_MAX_STORED_DEPTH):

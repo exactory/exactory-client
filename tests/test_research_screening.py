@@ -68,8 +68,8 @@ class ScreeningRuleTests(ScreenedCase):
         # OverflowError when it was added to a float account total.
         usage = {"model": None, "input_tokens": None, "output_tokens": None, "wall_seconds": 1.5}
         screener = {"kind": "agent", "model": None}
-        self.mutate(record_screening_batch, {"id": "screen-1", "screener": screener, "items": [self.item(1, "doctrine", "weak")],
-                                             "usage": usage})
+        self.mutate(record_screening_batch, {"id": "screen-1", "screener": screener,
+                                             "items": [self.item(1, "doctrine", "weak")], "usage": usage})
         before = self.store.snapshot()
         self.assert_error("invalid_batch", lambda: self.mutate(record_screening_batch, {
             "id": "screen-2", "screener": screener, "items": [self.item(2, "doctrine", "weak")],

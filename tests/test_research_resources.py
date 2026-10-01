@@ -75,23 +75,26 @@ class ResourceTests(LiteratureCase):
         # raised OverflowError, and read-batch printed a traceback instead of a JSON error.
         from research_harness.reading import record_reading_batch
         a, b = self.metadata(1), self.metadata(2)
-        self.mutate(record_reading_batch, {"id": "b1", "depth": "abstract", "items": [item(a)], "usage": build_usage(1.5)})
+        self.mutate(record_reading_batch, {"id": "b1", "depth": "abstract", "items": [item(a)],
+                                           "usage": build_usage(1.5)})
         before = self.store.snapshot()
         self.assert_error("invalid_batch", lambda: self.mutate(
-            record_reading_batch, {"id": "b2", "depth": "abstract", "items": [item(b)], "usage": build_usage(10 ** 400)}))
+            record_reading_batch, {"id": "b2", "depth": "abstract", "items": [item(b)],
+                                   "usage": build_usage(10 ** 400)}))
         self.assertEqual(self.store.snapshot(), before)
 
     def test_integer_charges_sum_beyond_the_float_range_as_in_0_49_0(self):
         # Python adds two integers exactly at any size, so token counts and integer wall seconds keep their totals
         # beyond the float range (about 1.8e308), as 0.49.0 kept them.
         from research_harness.reading import record_reading_batch
-        charge_usages = (build_usage(input_tokens=10 ** 400), build_usage(10 ** 308, input_tokens=5), build_usage(10 ** 308),
-                         build_usage(5))
+        charge_usages = (build_usage(input_tokens=10 ** 400), build_usage(10 ** 308, input_tokens=5),
+                         build_usage(10 ** 308), build_usage(5))
         for number, usage in enumerate(charge_usages, 1):
             self.mutate(record_reading_batch, {"id": "b" + str(number), "depth": "abstract",
                                                "items": [item(self.metadata(number))], "usage": usage})
         charged_totals = self.account()["charged"]
-        self.assertEqual((charged_totals["model_input_tokens"], charged_totals["wall_seconds"]), (10 ** 400 + 5, 2 * 10 ** 308 + 5))
+        self.assertEqual((charged_totals["model_input_tokens"], charged_totals["wall_seconds"]),
+                         (10 ** 400 + 5, 2 * 10 ** 308 + 5))
 
     def test_a_float_charge_to_an_integer_total_beyond_the_float_range_is_refused(self):
         # Integer charges within the float range can sum beyond it. Python cannot add a float to such an integer: it
@@ -100,7 +103,8 @@ class ResourceTests(LiteratureCase):
         for number in (1, 2):
             self.mutate(record_reading_batch, {"id": "b" + str(number), "depth": "abstract",
                                                "items": [item(self.metadata(number))], "usage": build_usage(10 ** 308)})
-        float_charge_batch = {"id": "b3", "depth": "abstract", "items": [item(self.metadata(3))], "usage": build_usage(1.5)}
+        float_charge_batch = {"id": "b3", "depth": "abstract", "items": [item(self.metadata(3))],
+                              "usage": build_usage(1.5)}
         before = self.store.snapshot()
         self.assert_error("invalid_input", lambda: self.mutate(record_reading_batch, float_charge_batch))
         self.assertEqual(self.store.snapshot(), before)
@@ -112,8 +116,8 @@ class ResourceTests(LiteratureCase):
         # resources.charge takes the amounts of every purpose, so it refuses the sum itself.
         from research_harness.resources import charge
         records = self.store.snapshot()["records"]
-        records["resource_account"] = {"research:literature": {"key": "research:literature", "charged": {"wall_seconds": 1.5},
-                                                               "unknown": {}}}
+        records["resource_account"] = {"research:literature": {"key": "research:literature",
+                                                               "charged": {"wall_seconds": 1.5}, "unknown": {}}}
         self.assert_error("invalid_input", lambda: charge(records, "literature", {"wall_seconds": 10 ** 400}))
 
     def test_float_charges_that_sum_beyond_the_float_range_are_refused(self):
@@ -133,7 +137,8 @@ class ResourceTests(LiteratureCase):
         a, b = self.metadata(1), self.metadata(2)
         with mock.patch("research_harness.reading.is_finite_number", return_value=True, create=True), \
                 mock.patch("research_harness.resources.is_finite_number", return_value=True, create=True):
-            self.mutate(record_reading_batch, {"id": "b1", "depth": "abstract", "items": [item(a)], "usage": build_usage(10 ** 400)})
+            self.mutate(record_reading_batch, {"id": "b1", "depth": "abstract", "items": [item(a)],
+                                               "usage": build_usage(10 ** 400)})
         float_charge_batch = {"id": "b2", "depth": "abstract", "items": [item(b)], "usage": build_usage(1.5)}
         before = self.store.snapshot()
         self.assert_error("invalid_input", lambda: self.mutate(record_reading_batch, float_charge_batch))

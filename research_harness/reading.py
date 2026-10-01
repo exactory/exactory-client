@@ -38,7 +38,8 @@ from .components import find_component_page_obligations, is_component
 from .evaluation import Evaluation
 from .evidence import digest
 from .graph import main_captures, obligation, selected_bundle
-from .operations import fields, immutable_record, is_finite_number, iso_date, prepared_mutation, profile_name, strings, text
+from .operations import (fields, immutable_record, is_finite_number, iso_date, prepared_mutation, profile_name, strings,
+                         text)
 from .principles import preparation_policy
 from . import resources
 from .source_links import TEXT_KINDS, complete_original, contains, covers_text, exact_work, link_identity, original_identity, span_locator, validate_link

@@ -118,8 +118,8 @@ class ResearchGuidanceTests(unittest.TestCase):
                       "observation exceed the store bounds.", workflow)
         self.assertIn("For such a run, `reconcile-run` fails with `invalid_input`, the run has an outcome but no "
                       "observation, and its strategy admits no further run.", workflow)
-        self.assertIn("`reconcile-run` of such a run without an observation, when the metric nests more than 98 levels.",
-                      reference)
+        self.assertIn("`reconcile-run` of such a run without an observation, when the metric nests more than 98 "
+                      "levels.", reference)
 
     def test_workflow_states_how_a_partial_computational_result_is_published(self):
         workflow = " ".join((PLUGIN / "docs/research-workflow.md").read_text().split())
