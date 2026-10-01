@@ -300,10 +300,12 @@ exactory-research loop-close --file loop-closure.json --expected-revision REVISI
 exactory-research require-fulltext --file lineage-parent.json --expected-revision REVISION --request-id lineage-001   # purpose lineage, depends_on
 ```
 
-A citing-papers capture is an OpenAlex query with the filter `cites:<parent id>`.
-Save its original response with `import-response` (provider `openalex`) and
-record it as a `recent` search response whose query is the filter value,
-`cites:<parent id>`.
+A citing-papers capture is an OpenAlex query whose filter holds
+`cites:<parent id>`. Save its original response with `import-response`
+(provider `openalex`) and record it as a `recent` search response whose query is
+the whole filter value: `cites:W123` for the filter `cites:W123`, and
+`cites:W123,from_publication_date:2025-01-01` when the filter also holds a date
+clause.
 
 A purpose is covered when its question has an answer grounded in at least one
 read paper judged `relevant` or `contradictory`, or when two distinct captured
