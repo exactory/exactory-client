@@ -1,6 +1,7 @@
 """Resource budgets and accounts: reservation, reconciliation, refusal and obligations."""
 
 import json
+from unittest import mock
 
 from literature_fixtures import FIELDS, LiteratureCase
 from research_harness.errors import ResearchError
@@ -91,6 +92,23 @@ class ResourceTests(LiteratureCase):
         self.assertEqual(self.store.snapshot(), before)
         self.mutate(record_reading_batch, {"id": "b3", "depth": "abstract", "items": [item(b)], "usage": build_usage(1.5)})
         self.assertEqual(self.account()["charged"]["wall_seconds"], 10 ** 308 + 1.5)
+
+    def test_a_charge_to_a_total_that_an_earlier_release_stored_beyond_the_float_range_is_refused(self):
+        # 0.49.0 and earlier stored an integer charge of any size, so an account can hold a total beyond the float
+        # range. A float charge raised OverflowError there, in the budget check when the unit has a limit.
+        from research_harness.reading import record_reading_batch
+        a, b = self.metadata(1), self.metadata(2)
+        with mock.patch("research_harness.reading.is_finite_number", return_value=True, create=True), \
+                mock.patch("research_harness.resources.is_finite_number", return_value=True, create=True):
+            self.mutate(record_reading_batch, {"id": "b1", "depth": "abstract", "items": [item(a)], "usage": build_usage(10 ** 400)})
+        float_charge = {"id": "b2", "depth": "abstract", "items": [item(b)], "usage": build_usage(1.5)}
+        before = self.store.snapshot()
+        self.assert_error("invalid_input", lambda: self.mutate(record_reading_batch, float_charge))
+        self.assertEqual(self.store.snapshot(), before)
+        self.budget(wall_seconds=10 ** 500)
+        before = self.store.snapshot()
+        self.assert_error("invalid_input", lambda: self.mutate(record_reading_batch, float_charge))
+        self.assertEqual(self.store.snapshot(), before)
 
     def test_acquisition_reserves_then_reconciles_and_refuses_over_the_limit(self):
         from research_harness.acquisition import acquire_work
