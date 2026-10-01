@@ -13,6 +13,8 @@ from development_fixtures import DevelopmentCase
 import integration_fixtures
 from integration_fixtures import (account_fixture_citations, approve_publication_stop, build_manuscript_review,
                                   build_review_core, observe_run, observed_candidate)
+from research_fixtures import client
+from source_limited_fixtures import SourceLimitedCase
 
 
 PLUGIN = Path(__file__).resolve().parents[1]
@@ -23,6 +25,17 @@ def measure_nesting(value):
     if isinstance(value, dict):
         value = list(value.values())
     return 1 + max(map(measure_nesting, value), default=0) if isinstance(value, list) else 0
+
+
+def build_fulltext_payload(levels):
+    """A fulltext payload of a supplement component whose assessment nests so that the payload nests `levels` levels."""
+    assessment = "A nested component assessment."
+    for _ in range(levels - 2):
+        assessment = [assessment]
+    return {"identifier": "arxiv:2601.00090v1", "url": "https://example.org/supplement",
+            "component": {"kind": "supplement", "unit_id": "supplement", "parent_source_id": "unused",
+                          "parent_original_sha256": "0" * 64, "expected_original_sha256": "1" * 64,
+                          "basis": "component_correspondence", "assessment": assessment}}
 
 
 class ResearchPublicationTests(DevelopmentCase):
@@ -538,10 +551,10 @@ class CommandDepthBoundTests(DevelopmentCase):
 
     def test_an_assessment_at_the_command_depth_bound_reaches_the_manuscript(self):
         # The bundle of manuscript holds each cycle's assessment payload 5 levels deeper than the payload is
-        # (review_inputs.branches.CYCLE.assessment.payload), within the 8 levels that the command bound keeps free.
+        # (review_inputs.branches.CYCLE.assessment.payload), within the 36 levels that the command bound keeps free.
         # The review and manuscript payloads cite the same evidence one level less deep than the assessment does.
-        execution, assessment = self.build_assessment_of_nested_result(85)
-        self.assertEqual(measure_nesting(assessment), 92)
+        execution, assessment = self.build_assessment_of_nested_result(57)
+        self.assertEqual(measure_nesting(assessment), 64)
         self.assert_command_recorded("assess", assessment, "assess-at-bound")
         self.save_checkpoint()
         self.assert_command_recorded("review", self.review(execution), "review-at-bound")
@@ -559,19 +572,31 @@ class CommandDepthBoundTests(DevelopmentCase):
         publication = importlib.import_module("research_harness.publication")
         self.assertEqual(publication.find_selected_bundle(self.store.snapshot()["records"]), receipt["result"])
 
-    def test_an_assessment_one_level_beyond_the_command_depth_bound_is_refused(self):
-        _, assessment = self.build_assessment_of_nested_result(86)
-        self.assertEqual(measure_nesting(assessment), 93)
+    def assert_command_refused(self, command, payload, request_id):
+        """The command fails with invalid_input and the command bound's own message, and changes nothing."""
         before = self.store.snapshot()
-        result = self.run_command("assess", assessment, "assess-beyond-bound")
+        result = self.run_command(command, payload, request_id)
         self.assertEqual(result.returncode, 1)
-        self.assertEqual(json.loads(result.stderr)["error"]["code"], "invalid_input")
+        error = json.loads(result.stderr)["error"]
+        self.assertEqual(error["code"], "invalid_input")
+        self.assertTrue(error["message"].startswith("A command input must nest at most 64 levels"), error["message"])
         self.assertEqual(self.store.snapshot(), before)
 
+    def test_an_assessment_one_level_beyond_the_command_depth_bound_is_refused(self):
+        _, assessment = self.build_assessment_of_nested_result(58)
+        self.assertEqual(measure_nesting(assessment), 65)
+        self.assert_command_refused("assess", assessment, "assess-beyond-bound")
+
+    def test_a_fulltext_payload_one_level_beyond_the_command_depth_bound_is_refused(self):
+        # The command refuses the payload file before it makes a request.
+        payload = build_fulltext_payload(65)
+        self.assertEqual(measure_nesting(payload), 65)
+        self.assert_command_refused("fulltext", payload, "fulltext-beyond-bound")
+
     def test_a_retry_of_a_committed_assessment_beyond_the_command_bound_returns_its_receipt(self):
-        # The store bounds a payload at 100 levels, so an earlier release, or a direct call, could commit this
+        # The store bounds a payload at 100 levels, so an earlier release, or a direct call, committed such an
         # assessment. A retry of that request returns its original receipt, as the store returns it.
-        _, assessment = self.build_assessment_of_nested_result(86)
+        _, assessment = self.build_assessment_of_nested_result(58)
         receipt = self.development().assess_cycle(self.store, assessment, expected_revision=self.store.revision,
                                                   request_id="assess-committed")
         before = self.store.snapshot()
@@ -579,3 +604,32 @@ class CommandDepthBoundTests(DevelopmentCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout), receipt)
         self.assertEqual(self.store.snapshot(), before)
+
+
+class FulltextComponentDepthTests(SourceLimitedCase):
+    """A fulltext component that the command accepts fits the bundle of manuscript, which holds it 10 levels deeper."""
+
+    def add_missing_supplement(self, version, capture=None):
+        # The deepest copy found: acquire_fulltext records the component of a fulltext payload as given while its fetch
+        # is pending, and each source deferral copies the whole work, which manuscript copies into its bundle.
+        from research_harness.acquisition import acquire_fulltext
+        from research_harness.storage import check_command_bounds
+        bundle = super().add_missing_supplement(version, capture)
+        payload = dict(build_fulltext_payload(64), identifier=version)
+        self.assertEqual(measure_nesting(payload), 64)
+        check_command_bounds(payload)
+        http, _, _ = client([(404, {"Content-Type": "text/html"}, b"missing")], max_retries=0)
+        self.sequence += 1
+        result = acquire_fulltext(self.store, version, payload["url"], http=http, component=payload["component"],
+                                  expected_revision=self.store.revision, request_id="component-" + str(self.sequence))
+        self.assertEqual(result["status"], "pending")
+        return bundle
+
+    def test_a_fulltext_component_at_the_command_depth_bound_reaches_the_manuscript(self):
+        self.prepare_source_limited()
+        self.record_scope()
+        self.accept_scope()
+        bundle = self.scoped_manuscript()
+        # review_inputs.synthesis.foundation.source_deferrals[0].dependencies.work.fulltexts[K].component.spec holds the
+        # payload's component 10 levels deeper than the payload does.
+        self.assertEqual(measure_nesting(bundle), 74)
