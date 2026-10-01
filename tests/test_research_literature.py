@@ -539,22 +539,47 @@ class SearchDispositionTests(LiteratureCase):
         replacement = self.search("direct", [dropped])
         replacement["id"] = "direct-2"
         self.mutate(record_search, replacement)
-
-        def stale_codes(search_ids):
-            """The obligation and notice codes that each judgment reports."""
-            report = foundation_report(self.store, "research")
-            return {s: (sorted(x["code"] for x in report["obligations"] if x.get("search_id") == s),
-                        sorted(x["code"] for x in report["notices"] if x.get("search_id") == s)) for s in search_ids}
-
-        # A judgment that found a work of the dropped family still rests on it, so only its frontier is stale.
-        self.assertEqual(stale_codes(("direct-2", "theory", "adjacent")),
+        # No root cites the dropped family, so the citation graph never read a reference of it, and adjacent, which
+        # found it, still rests on unchanged evidence: only its frontier is stale.
+        self.assertEqual(self.collect_stale_codes(("direct-2", "theory", "adjacent")),
                          {"direct-2": ([], []), "theory": (["search_evidence_stale", "search_frontier_stale"], []),
                           "adjacent": (["search_frontier_stale"], [])})
         # Recording a purpose again clears its staleness.
         theory = self.search("theory")
         theory["id"] = "theory-2"
         self.mutate(record_search, theory)
-        self.assertEqual(stale_codes(("theory-2",)), {"theory-2": ([], [])})
+        self.assertEqual(self.collect_stale_codes(("theory-2",)), {"theory-2": ([], [])})
+
+    def test_a_dropped_family_whose_references_the_graph_read_stales_the_evidence_of_a_judgment_that_found_it(self):
+        """The same consequence of H2 when the root cites the dropped family, and for a judgment recorded before
+        the family was required."""
+        root = self.metadata(1, references=[{"id": "arxiv:2601.00002v1"}])
+        dropped = self.metadata(2, references=[{"unstructured": "A reference of the dropped source"}])
+        self.scope([root])
+        self.mutate(record_search, self.search("theory"))
+        direct = self.search("direct", [dropped])
+        direct["cited_work_ids"] = [dropped]
+        self.mutate(record_search, direct)
+        adjacent = self.search("adjacent", [dropped])
+        adjacent["dispositions"][0]["disposition"] = "out_of_scope"
+        self.mutate(record_search, adjacent)
+        # theory was recorded before the family was required, so it is stale while the family is required.
+        self.assertEqual(self.collect_stale_codes(("theory",)),
+                         {"theory": (["search_evidence_stale", "search_frontier_stale"], [])})
+        replacement = self.search("direct", [dropped])
+        replacement["id"] = "direct-2"
+        self.mutate(record_search, replacement)
+        # While the family was required, the graph read the reference of its version; adjacent, which found it and was
+        # recorded then, reports both codes. The drop ends the staleness of theory.
+        self.assertEqual(self.collect_stale_codes(("direct-2", "theory", "adjacent")),
+                         {"direct-2": ([], []), "theory": ([], []),
+                          "adjacent": (["search_evidence_stale", "search_frontier_stale"], [])})
+
+    def collect_stale_codes(self, search_ids):
+        """The obligation and notice codes that each judgment reports."""
+        report = foundation_report(self.store, "research")
+        return {s: (sorted(x["code"] for x in report["obligations"] if x.get("search_id") == s),
+                    sorted(x["code"] for x in report["notices"] if x.get("search_id") == s)) for s in search_ids}
 
     def test_recording_another_purpose_does_not_stale_a_selected_search(self):
         a = self.metadata()
