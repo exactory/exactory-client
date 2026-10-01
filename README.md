@@ -321,13 +321,17 @@ variables' ranges — and, using only a whitelisted arithmetic grammar (never
 counterexample: the step is invalid, and the witness is reproducible. Agreement
 is soft evidence. When SymPy is installed it adds a symbolic verdict, but it is
 never a hard dependency. Each step is an object whose `vars` maps every variable
-name to a `[low, high]` range. A step is `unparseable`, which means not checked,
-when it is malformed or an expression cannot be evaluated at a sampled point. A
-sampled point at which a side has no finite value is skipped, and a step with no
-other point is `unparseable` too. A complex side of a witness is given as its
-`real` and `imag` parts. A witness point keeps the sampled values. With a range
-bound beyond the float range, a sampled value can be `Infinity`, `-Infinity` or
-`NaN`, which standard JSON lacks.
+name to a `[low, high]` range. Each bound is read with Python's `float()`, so
+`true`, `false` and a numeric string such as `"1"` count as numbers. A step is
+`unparseable`, which means not checked, when it is malformed or an expression
+cannot be evaluated at a sampled point. A bound that `float()` cannot read also
+makes the step `unparseable`. A sampled point at which a side has no finite
+value is skipped, and a step with no other point is `unparseable` too. A complex
+side of a witness is given as its `real` and `imag` parts. A witness point keeps
+the sampled values. With a range bound beyond the float range, a sampled value
+can be `Infinity`, `-Infinity` or `NaN`, which standard JSON lacks. A steps file
+fails with exit code 2, and no step is checked, when it is not a readable JSON
+list. That includes a file nested beyond the interpreter's recursion limit.
 
 **`exactory-math`** runs the harness of the `/exactory:math-solver` skill
 from the user's workspace. A managed objective starts with `search init`, current
