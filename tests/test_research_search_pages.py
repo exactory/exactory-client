@@ -95,6 +95,42 @@ class SearchPageTests(LiteratureCase):
             self.assertEqual(len({json.dumps(i, sort_keys=True) for i in identities}), len(identities), provider)
         self.assertIsNone(compute_query_identity({"provider": "web", "url": endpoints["openalex"] + "?search=dram+erasure"}))
 
+    def test_spellings_of_one_request_share_its_query_identity(self):
+        from research_harness.search_pages import compute_query_identity
+
+        def identity(provider, url):
+            return compute_query_identity({"provider": provider, "url": url})
+
+        # Per provider: a capture's URL, and other spellings of its request that ask the same query.
+        cases = {"arxiv": ("https://export.arxiv.org/api/query?search_query=all:erasure&id_list=2601.00001,2601.00002",
+                           ["https://export.arxiv.org/api/query/?search_query=all:erasure&id_list=2601.00001,2601.00002",
+                            "https://export.arxiv.org:443/api/query?search_query=all:erasure&id_list=2601.00001,2601.00002",
+                            "https://export.arxiv.org/api/query?search_query=all:erasure&id_list=2601.00002,2601.00001",
+                            "https://export.arxiv.org/api/query?search_query=all:erasure&id_list=2601.00002,2601.00001,2601.00002"]),
+                 "crossref": ("https://api.crossref.org/works?query=dram+erasure&filter=type:journal-article,from-pub-date:2020",
+                              ["https://api.crossref.org/works/?query=dram+erasure&filter=type:journal-article,from-pub-date:2020",
+                               "https://API.Crossref.org/works?query=dram+erasure&filter=type:journal-article,from-pub-date:2020",
+                               "https://api.crossref.org/works?query=dram+erasure&filter=from-pub-date:2020,type:journal-article",
+                               "https://api.crossref.org/works?query=dram+erasure&query.author=&filter=type:journal-article,from-pub-date:2020"]),
+                 "openalex": ("https://api.openalex.org/works?search=dram+erasure&filter=type:article,is_oa:true",
+                              ["https://api.openalex.org/works/?search=dram+erasure&filter=type:article,is_oa:true",
+                               "https://api.openalex.org:443/works?search=dram+erasure&filter=type:article,is_oa:true",
+                               "https://api.openalex.org/works?search=dram+erasure&filter=is_oa:true,type:article",
+                               "https://api.openalex.org/works?search=dram+erasure&filter=is_oa:true,type:article,"
+                               "&search.exact="])}
+        for provider, (base, spellings) in cases.items():
+            for spelling in spellings:
+                self.assertEqual(identity(provider, spelling), identity(provider, base), (provider, spelling))
+        # An empty list parameter is no parameter, and a list parameter with other items asks another query.
+        self.assertEqual(identity("openalex", "https://api.openalex.org/works?search=dram+erasure&filter="),
+                         identity("openalex", "https://api.openalex.org/works?search=dram+erasure"))
+        self.assertNotEqual(identity("openalex", "https://api.openalex.org/works?search=dram+erasure&filter=type:article"),
+                            identity("openalex", "https://api.openalex.org/works?search=dram+erasure&filter=type:article,is_oa:true"))
+        self.assertNotEqual(identity("crossref", "https://api.crossref.org/works?query=dram+erasure&filter=type:journal-article"),
+                            identity("crossref", "https://api.crossref.org/works?query=dram+erasure&filter=type:journal-article,type:book"))
+        self.assertNotEqual(identity("arxiv", "https://export.arxiv.org/api/query?id_list=2601.00001"),
+                            identity("arxiv", "https://export.arxiv.org/api/query?id_list=2601.00001,2601.00002"))
+
     def test_openalex_empty_and_complete_cursor_chain_are_admitted(self):
         empty = self.page("openalex", {"meta": {"count": 0, "next_cursor": None}, "results": []},
             {"search": "bounded", "cursor": "*", "per_page": "2"})

@@ -245,6 +245,27 @@ class LoopTests(LineageCase):
         purpose = lineage.loop_state(self.store.snapshot()["records"], "research")["purposes"]["originals"]
         self.assertEqual((purpose["queries"], purpose["covered"]), (1, False))
 
+    def test_captures_whose_urls_spell_one_query_differently_count_once(self):
+        root = self.metadata(1)
+        self.scope([root])
+        # Each purpose binds one search value to two captures whose URLs differ only in a trailing slash, the default
+        # port, the letter case of the host, an empty filter, or the order of the clauses of one filter.
+        spellings = {"direct": ("https://api.openalex.org/works?search=direct%20erasure",
+                                "https://api.openalex.org/works/?search=direct%20erasure"),
+                     "originals": ("https://api.openalex.org/works?search=originals%20erasure",
+                                   "https://api.openalex.org:443/works?search=originals%20erasure"),
+                     "theory": ("https://api.openalex.org/works?search=theory%20erasure",
+                                "https://API.OpenAlex.org/works?search=theory%20erasure"),
+                     "adjacent": ("https://api.openalex.org/works?search=adjacent%20erasure",
+                                  "https://api.openalex.org/works?search=adjacent%20erasure&filter="),
+                     "recent": ("https://api.openalex.org/works?search=recent%20erasure&filter=type:article,is_oa:true",
+                                "https://api.openalex.org/works?search=recent%20erasure&filter=is_oa:true,type:article")}
+        for purpose, urls in spellings.items():
+            self.judge_captures(purpose + "-1", purpose, [(self.capture_native("openalex", url), purpose + " erasure") for url in urls])
+        purposes = lineage.loop_state(self.store.snapshot()["records"], "research")["purposes"]
+        self.assertEqual({p: (purposes[p]["queries"], purposes[p]["covered"]) for p in spellings},
+                         {p: (1, False) for p in spellings})
+
     def test_a_closure_cannot_cover_a_purpose_with_one_query_captured_in_two_sort_orders(self):
         root = self.metadata(1)
         self.scope([root])
