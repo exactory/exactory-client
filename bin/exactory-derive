@@ -166,15 +166,16 @@ def _check_step(step: dict, sample_count: int, relative_tolerance: float) -> dic
     try:
         points = (_sample_points(variable_ranges, sample_count, _seed_for_step(label))
                   if variable_ranges else [{}])
+        compared_count = 0
         for point in points:
             value_from = _evaluate_expression(from_expression, point)
             value_to = _evaluate_expression(to_expression, point)
             # A bound or a result beyond the float range is infinite, and two infinite sides differ by NaN, which
-            # the tolerance test below never flags. A value may be complex, so cmath checks its finite parts.
+            # the tolerance test below never flags, so such a point is skipped. A value may be complex, so cmath
+            # checks its finite parts.
             if not (cmath.isfinite(value_from) and cmath.isfinite(value_to)):
-                result["status"] = "unparseable"
-                result["detail"] = "evaluation failed: a side has no finite value at a sampled point"
-                return result
+                continue
+            compared_count += 1
             difference = abs(value_from - value_to)
             scale = max(abs(value_from), abs(value_to), 1.0)
             if difference > relative_tolerance * scale + _ABSOLUTE_TOLERANCE:
@@ -190,6 +191,10 @@ def _check_step(step: dict, sample_count: int, relative_tolerance: float) -> dic
     except (ValueError, ZeroDivisionError, OverflowError) as error:
         result["status"] = "unparseable"
         result["detail"] = f"evaluation failed: {error}"
+        return result
+    if not compared_count:
+        result["status"] = "unparseable"
+        result["detail"] = "evaluation failed: no sampled point gives both sides a finite value"
         return result
 
     if not variable_ranges:
