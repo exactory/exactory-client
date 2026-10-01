@@ -216,6 +216,31 @@ class GraphTests(LiteratureCase):
         self.assertFalse(superseded & {o.get("reference_id") for o in graph["obligations"]})
         self.assertTrue(set(records["source_bundle"]["passage-3"]["occurrence_ids"]) <= {o.get("reference_id") for o in graph["obligations"]})
 
+    def test_an_original_that_a_bundle_links_as_a_supplement_is_read_only_as_another_body_in_either_import_order(self):
+        roots = [self.metadata(n) for n in (1, 2)]
+        bundles = []
+        for number, root in enumerate(roots, 1):
+            article = self.capture(root, "The article body. References: an article reference.")
+            supplement = self.capture(root, "The supplement body. References: a supplement reference.")
+            main = self.bundle_with_unknown_entry(root, article, "main-%d" % number, "an article reference")
+            main["units"].append({"id": "supplement", "kind": "supplement", "required": True,
+                                  "link": self.link(root, supplement["source_id"], supplement["text"])})
+            own = self.bundle_with_unknown_entry(root, supplement, "supplement-%d" % number, "a supplement reference")
+            # The first version imports its main bundle first, the second version the supplement's own bundle.
+            bundles += [main, own] if number == 1 else [own, main]
+        for bundle in bundles:
+            self.mutate(import_bundle, bundle)
+        self.scope(roots)
+        records = self.store.snapshot()["records"]
+        graph = citation_graph(records, "research")
+        # Each main bundle links the other original as a supplement, so that original is another body of its version
+        # and its own bundle is not read beside the main bundle.
+        read_bundle_ids = {records["reference_occurrence"][r["occurrence_id"]].get("bundle_id") for r in graph["references"]}
+        self.assertEqual(read_bundle_ids - {None}, {"main-1", "main-2"})
+        supplement_occurrence_ids = {occurrence_id for bundle_id in ("supplement-1", "supplement-2")
+                                     for occurrence_id in records["source_bundle"][bundle_id]["occurrence_ids"]}
+        self.assertFalse(supplement_occurrence_ids & {o.get("reference_id") for o in graph["obligations"]})
+
     def test_shorter_registry_observation_does_not_prove_or_replace_bibliography(self):
         a = self.metadata(references=[{"unstructured": "Observed item " + str(i)} for i in range(6)])
         self.metadata(references=[{"unstructured": "Observed item " + str(i)} for i in range(5)])
