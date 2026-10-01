@@ -42,6 +42,14 @@ _MAX_REVISION = (1 << 63) - 1
 _MAX_STORED_INTEGER_DIGITS = 4300
 _MAX_STORED_INTEGER = 10 ** _MAX_STORED_INTEGER_DIGITS - 1
 _MAX_STORED_DEPTH = 100
+# A later record holds a value of a command input deeper than the input does, and each copy must fit the store's own
+# bound, so a command input nests at most _MAX_STORED_DEPTH - _DEEPEST_COPY_OFFSET levels (check_command_bounds). The
+# deepest copy is in the bundle of manuscript: review_inputs.synthesis.foundation.inventory[i].body_coverage.readings[ID]
+# holds each current full reading, whose record is its payload with an assessment added, at level 9, so 8 levels deeper
+# than the payload. The record of a source bundle, also its payload with fields added, is as deep in
+# source_deferrals[i].dependencies.bundles[ID]. An assessment, a plan or an execution payload is at most 6 levels deeper
+# there, and the remote intent of a sent verdict holds its body 3 levels deeper than the body file.
+_DEEPEST_COPY_OFFSET = 8
 _PUBLICATION_NAME = re.compile(r"\.research-[0-9a-f]{32}\.sqlite3\Z")
 _WORKSPACE_LOCKS = weakref.WeakValueDictionary()
 _LOCK_REGISTRY_GUARD = threading.Lock()
@@ -109,6 +117,12 @@ def _check_stored_bounds(value, max_depth=_MAX_STORED_DEPTH):
         elif type(item) is int and abs(item) > _MAX_STORED_INTEGER:
             raise ResearchError("invalid_input", "JSON to store must hold no integer of more than "
                                 + str(_MAX_STORED_INTEGER_DIGITS) + " digits so that every supported Python reads it back")
+
+
+def check_command_bounds(value):
+    """Refuse a command input that a later record could not copy whole: the store's bounds, with room for the deepest
+    copy."""
+    _check_stored_bounds(value, _MAX_STORED_DEPTH - _DEEPEST_COPY_OFFSET)
 
 
 def _canonical(value, code: str = "invalid_input") -> str:

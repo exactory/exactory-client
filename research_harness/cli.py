@@ -18,7 +18,7 @@ from .limits import limits_report
 from .operations import fields
 from .provenance import runtime_provenance
 from .report_views import current_obligations, next_summary, obligations_page, order_obligations, status_summary
-from .storage import Store
+from .storage import Store, check_command_bounds
 from .source_deferrals import defer_source, resume_source, assess_deferrals
 from .publication_scope import record_publication_scope, select_publication_scope, record_scoped_readiness_review
 from .workspace import find_workspace, strict_json
@@ -331,6 +331,13 @@ def run(args):
         store = Store(root)
     if args.command in OPERATIONS or args.command in ACQUISITION:
         payload = strict_json(Path(args.file).read_bytes())
+        try:
+            check_command_bounds(payload)
+        except ResearchError:
+            # The store returns a committed request's receipt before it checks the payload, so a retry of a request
+            # that an earlier release committed beyond this bound still gets its original receipt.
+            if store.committed_request(args.request_id) is None:
+                raise
         identity = {"expected_revision": args.expected_revision, "request_id": args.request_id}
         if args.command in OPERATIONS:
             return OPERATIONS[args.command](store, payload, **identity)
