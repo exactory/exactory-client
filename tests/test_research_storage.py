@@ -829,12 +829,17 @@ print(json.dumps(Store(Path(sys.argv[1])).snapshot()))
         # A caller or a callback can build a JSON array as a tuple, and the store writes it as a list.
         beyond = {"integer": ({"value": 10 ** 4300}, {"value": -(10 ** 4300)}),
                   "nesting": (build_nested_value(101), build_nested_value(101, tuple))}
+        # The store's own messages, which differ from those of the command bound.
+        refusal_messages = {
+            "integer": "JSON to store must hold no integer of more than 4300 digits so that every supported Python reads it back",
+            "nesting": "JSON to store must nest at most 100 levels so that every supported Python reads it back"}
         for dimension, values in beyond.items():
             for index, value in enumerate(values):
                 for place in ("payload", "record", "result"):
                     request_id = dimension + "-" + str(index) + "-" + place
                     with self.subTest(request_id=request_id):
-                        self.assert_error("invalid_input", lambda: mutate(request_id, **{place: value}))
+                        error = self.assert_error("invalid_input", lambda: mutate(request_id, **{place: value}))
+                        self.assertEqual(error.message, refusal_messages[dimension])
                         # A payload beyond the bounds fails before its callback runs.
                         self.assertEqual(request_id in called, place != "payload")
         self.assertEqual(store.snapshot(), {"revision": 0, "records": {}})

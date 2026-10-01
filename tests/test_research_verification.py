@@ -4,6 +4,7 @@ import copy
 import importlib
 import json
 from pathlib import Path
+import sys
 import threading
 from unittest import mock
 
@@ -68,7 +69,24 @@ class ResearchVerificationTests(SynthesisCase):
         self.assertEqual(measure_nesting(body), 33)
         payload = self.build_bind_payload(task["digest"], body)
         before = self.store.snapshot()
-        with self.assertRaisesRegex(ResearchError, "must nest at most 32 levels") as raised:
+        # The bind-verdict payload itself is shallow; the message names the input that nests too deep.
+        with self.assertRaisesRegex(ResearchError, "^The verdict body must nest at most 32 levels") as raised:
+            self.mutate(api.bind_verdict, payload)
+        self.assertEqual(raised.exception.code, "invalid_input")
+        self.assertEqual(self.store.snapshot(), before)
+
+    def test_a_verdict_body_with_an_integer_beyond_the_store_bound_is_refused(self):
+        # Python 3.9.6 reads an integer of any length, so there only the command bound refuses it. Write and read the
+        # body as that interpreter does. The message names the body, not the bind-verdict payload that refers to it.
+        from research_harness.errors import ResearchError
+        if hasattr(sys, "set_int_max_str_digits"):
+            self.addCleanup(sys.set_int_max_str_digits, sys.get_int_max_str_digits())
+            sys.set_int_max_str_digits(0)
+        api = self.verifier()
+        task = self.mutate(api.record_task, {"task": self.task})["result"]
+        payload = self.build_bind_payload(task["digest"], dict(self.verdict(), rationaleSections=[10 ** 4300]))
+        before = self.store.snapshot()
+        with self.assertRaisesRegex(ResearchError, "^The verdict body must hold no integer of more than 4300 digits") as raised:
             self.mutate(api.bind_verdict, payload)
         self.assertEqual(raised.exception.code, "invalid_input")
         self.assertEqual(self.store.snapshot(), before)
