@@ -123,6 +123,15 @@ class TestCheck(unittest.TestCase):
         self.assertEqual(report["steps"][0]["status"], "unparseable")
         self.assertEqual(report["invalid"], 0)
 
+    def test_a_range_bound_beyond_the_float_range_is_a_warning_not_a_traceback(self) -> None:
+        # A JSON integer beyond the float range (about 1.8e308) has no float value. Sampling the range raised
+        # OverflowError before the step caught its evaluation errors, so the check ended in a traceback.
+        report = _run_check([{
+            "label": "huge bound", "from": "x", "to": "x", "vars": {"x": [0, 10 ** 400]},
+        }], self)
+        self.assertEqual(report["steps"][0]["status"], "unparseable")
+        self.assertEqual(report["invalid"], 0)
+
     def test_the_check_is_deterministic_across_runs(self) -> None:
         steps = [{"label": "wrong", "from": "(x + 1)**2", "to": "x**2 + 1",
                   "vars": {"x": [1.0, 5.0]}}]
