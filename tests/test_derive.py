@@ -203,6 +203,36 @@ class TestCheck(unittest.TestCase):
         self.assertTrue(step["detail"].startswith("evaluation failed: "))
         self.assertEqual(self.exit_code, 0)
 
+    def test_a_malformed_step_is_reported_as_an_input_error(self) -> None:
+        # A range is [low, high], vars is an object, and a step is an object. Each malformed shape ended the run in an
+        # IndexError, KeyError or AttributeError traceback, except a range of three bounds, whose third was ignored.
+        steps = [{"label": "one bound", "from": "x", "to": "x", "vars": {"x": [1.0]}},
+                 {"label": "no bounds", "from": "x", "to": "x", "vars": {"x": []}},
+                 {"label": "three bounds", "from": "x", "to": "x", "vars": {"x": [0.0, 1.0, 2.0]}},
+                 {"label": "object range", "from": "x", "to": "x", "vars": {"x": {"low": 0.0, "high": 1.0}}},
+                 {"label": "list vars", "from": "x", "to": "x", "vars": [["x", 0.0, 1.0]]},
+                 "x = x"]
+        report = _run_check(steps, self)
+        self.assertEqual([step["label"] for step in report["steps"]],
+                         ["one bound", "no bounds", "three bounds", "object range", "list vars", ""])
+        for step in report["steps"]:
+            with self.subTest(step=step["label"]):
+                self.assertEqual((step["status"], step["witness"]), ("unparseable", None))
+                self.assertTrue(step["detail"].startswith("invalid step: "), step["detail"])
+        self.assertEqual((report["counts"]["unparseable"], report["invalid"], self.exit_code), (6, 0, 0))
+
+    def test_a_complex_value_whose_length_exceeds_the_float_range_is_compared(self) -> None:
+        # abs() of a complex number is its length, which raises OverflowError beyond the float range although both
+        # parts are finite; x + csqrt(-1)*x has parts of about 1.5e308 and a length of about 2.1e308.
+        report = _run_check([
+            {"label": "equal", "from": "x + csqrt(-1)*x", "to": "x + csqrt(-1)*x", "vars": {"x": [1.5e308, 1.6e308]}},
+            {"label": "wrong", "from": "x + csqrt(-1)*x", "to": "x/2 + csqrt(-1)*x", "vars": {"x": [1.5e308, 1.6e308]}},
+        ], self)
+        equal, wrong = report["steps"]
+        self.assertIn(equal["status"], ("consistent", "verified"))
+        self.assertEqual(wrong["status"], "invalid")
+        self.assertAlmostEqual(wrong["witness"]["value_from"]["real"] / wrong["witness"]["value_to"]["real"], 2.0)
+
     def test_a_step_with_equal_complex_values_stays_consistent(self) -> None:
         # A negative base to a fractional power gives a complex value with finite parts, which the check compares.
         report = _run_check([{"label": "complex power", "from": "x**0.5", "to": "x**0.5", "vars": {"x": [-4.0, -1.0]}}],
