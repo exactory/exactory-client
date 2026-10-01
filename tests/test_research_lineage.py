@@ -163,41 +163,84 @@ class LoopTests(LineageCase):
         purposes = lineage.loop_state(self.store.snapshot()["records"], "research")["purposes"]
         self.assertEqual((purposes["recent"]["queries"], purposes["recent"]["covered"]), (2, True))
 
+    def capture_native(self, provider, url):
+        """Import an empty native response captured from url and return its source id."""
+        data = {"message": {"total-results": 0, "items": []}} if provider == "crossref" else {"meta": {"count": 0, "next_cursor": None}, "results": []}
+        self.sequence += 1
+        return import_response(self.store, provider, json.dumps(data).encode(), source_url=url, captured_at="2026-09-07T12:00:00Z",
+                               expected_revision=self.store.revision, request_id="native-" + str(self.sequence))["source_ids"][0]
+
+    def judge_captures(self, identifier, purpose, bindings):
+        """Record a nothing-new judgment that binds each (source id, query) pair."""
+        self.mutate(record_search, {"id": identifier, "profile": "research", "purpose": purpose,
+                                    "queries": sorted({query for _, query in bindings}),
+                                    "responses": [{"source_id": source, "query": query} for source, query in bindings],
+                                    "captured_at": "2026-09-07T12:00:00Z", "scope": "The works the saved requests returned.",
+                                    "found_work_ids": [], "verdict": "nothing-new", "cited_work_ids": [], "dispositions": [],
+                                    "impact": "The requests returned no work.", "gaps": []})
+
     def test_a_native_request_counts_once_and_distinct_requests_count_apart(self):
         root = self.metadata(1)
         self.scope([root])
-
-        def capture(provider, url):
-            """Import an empty native response captured from url and return its source id."""
-            data = {"message": {"total-results": 0, "items": []}} if provider == "crossref" else {"meta": {"count": 0, "next_cursor": None}, "results": []}
-            self.sequence += 1
-            return import_response(self.store, provider, json.dumps(data).encode(), source_url=url, captured_at="2026-09-07T12:00:00Z",
-                                   expected_revision=self.store.revision, request_id="native-" + str(self.sequence))["source_ids"][0]
-
-        def judge(purpose, bindings):
-            """Record a nothing-new judgment that binds each (source id, query) pair."""
-            self.mutate(record_search, {"id": purpose + "-requests", "profile": "research", "purpose": purpose,
-                                        "queries": sorted({query for _, query in bindings}),
-                                        "responses": [{"source_id": source, "query": query} for source, query in bindings],
-                                        "captured_at": "2026-09-07T12:00:00Z", "scope": "The works the saved requests returned.",
-                                        "found_work_ids": [], "verdict": "nothing-new", "cited_work_ids": [], "dispositions": [],
-                                        "impact": "The requests returned no work.", "gaps": []})
-
+        capture = self.capture_native
         # Two Crossref requests share their bibliographic query and name different authors.
         smith = capture("crossref", "https://api.crossref.org/works?query=dram%20erasure&query.author=Smith")
         jones = capture("crossref", "https://api.crossref.org/works?query=dram%20erasure&query.author=Jones")
-        judge("theory", [(smith, "dram erasure"), (smith, "Smith"), (jones, "dram erasure"), (jones, "Jones")])
+        self.judge_captures("theory-requests", "theory", [(smith, "dram erasure"), (smith, "Smith"), (jones, "dram erasure"), (jones, "Jones")])
         # Two OpenAlex requests share their search and differ in a filter.
         broad = capture("openalex", "https://api.openalex.org/works?search=landauer%20bound")
         narrow = capture("openalex", "https://api.openalex.org/works?search=landauer%20bound&filter=from_publication_date:2025-01-01")
-        judge("adjacent", [(broad, "landauer bound"), (narrow, "landauer bound")])
+        self.judge_captures("adjacent-requests", "adjacent", [(broad, "landauer bound"), (narrow, "landauer bound")])
         # One OpenAlex request is captured twice, and each capture binds a different query parameter.
         url = "https://api.openalex.org/works?search=dram%20erasure&filter=cites:W9"
         first, second = capture("openalex", url), capture("openalex", url)
-        judge("recent", [(first, "dram erasure"), (second, "cites:W9")])
+        self.judge_captures("recent-requests", "recent", [(first, "dram erasure"), (second, "cites:W9")])
         purposes = lineage.loop_state(self.store.snapshot()["records"], "research")["purposes"]
         self.assertEqual({p: (purposes[p]["queries"], purposes[p]["covered"]) for p in ("theory", "adjacent", "recent")},
                          {"theory": (2, True), "adjacent": (2, True), "recent": (1, False)})
+
+    def test_captures_of_one_query_that_differ_only_in_sort_select_or_mailto_count_once(self):
+        root = self.metadata(1)
+        self.scope([root])
+        capture = self.capture_native
+        # One search value captured twice; the second capture only adds a sort order.
+        plain = capture("openalex", "https://api.openalex.org/works?search=landauer%20bound")
+        ranked = capture("openalex", "https://api.openalex.org/works?search=landauer%20bound&sort=cited_by_count:desc")
+        self.judge_captures("theory-1", "theory", [(plain, "landauer bound"), (ranked, "landauer bound")])
+        # One search value in two judgments; the captures differ only in the contact address of the polite pool.
+        first = capture("openalex", "https://api.openalex.org/works?search=dram%20erasure&mailto=a@example.org")
+        second = capture("openalex", "https://api.openalex.org/works?search=dram%20erasure&mailto=b@example.org")
+        self.judge_captures("adjacent-1", "adjacent", [(first, "dram erasure")])
+        self.judge_captures("adjacent-2", "adjacent", [(second, "dram erasure")])
+        # One search value; the second capture only narrows the returned fields.
+        whole = capture("openalex", "https://api.openalex.org/works?search=bit%20reset")
+        narrowed = capture("openalex", "https://api.openalex.org/works?search=bit%20reset&select=id,title")
+        self.judge_captures("direct-1", "direct", [(whole, "bit reset"), (narrowed, "bit reset")])
+        purposes = lineage.loop_state(self.store.snapshot()["records"], "research")["purposes"]
+        self.assertEqual({p: (purposes[p]["queries"], purposes[p]["covered"]) for p in ("theory", "adjacent", "direct")},
+                         {"theory": (1, False), "adjacent": (1, False), "direct": (1, False)})
+
+    def test_captures_that_differ_only_in_a_parameter_the_registry_does_not_list_count_once(self):
+        root = self.metadata(1)
+        self.scope([root])
+        plain = self.capture_native("crossref", "https://api.crossref.org/works?query=dram%20erasure")
+        tagged = self.capture_native("crossref", "https://api.crossref.org/works?query=dram%20erasure&nocache=1")
+        self.judge_captures("originals-1", "originals", [(plain, "dram erasure"), (tagged, "dram erasure")])
+        purpose = lineage.loop_state(self.store.snapshot()["records"], "research")["purposes"]["originals"]
+        self.assertEqual((purpose["queries"], purpose["covered"]), (1, False))
+
+    def test_a_closure_cannot_cover_a_purpose_with_one_query_captured_in_two_sort_orders(self):
+        root = self.metadata(1)
+        self.scope([root])
+        for purpose in lineage.SEARCH_PURPOSES:
+            url = "https://api.openalex.org/works?search=" + purpose + "%20erasure"
+            bindings = [(self.capture_native("openalex", url), purpose + " erasure"),
+                        (self.capture_native("openalex", url + "&sort=cited_by_count:desc"), purpose + " erasure")]
+            self.judge_captures(purpose + "-1", purpose, bindings)
+        closure = {"id": "closure-1", "purposes": {p: {"status": "covered", "note": "Two captured queries returned nothing relevant."}
+                                                    for p in lineage.SEARCH_PURPOSES}}
+        self.assert_error("invalid_input", lambda: self.mutate(lineage.record_loop_closure, closure))
+        self.assertIn("loop_closure_missing", self.codes())
 
     def test_a_tool_capture_adds_no_query_to_a_native_request_bound_to_the_same_value(self):
         root = self.metadata(1)

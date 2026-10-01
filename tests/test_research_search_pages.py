@@ -61,6 +61,40 @@ class SearchPageTests(LiteratureCase):
                  self.crossref([3], total=3, cursor="second", filter="type:book")]
         self.assertTrue(self.search(pages)["pending"])
 
+    def test_different_sort_orders_cannot_supply_each_others_missing_page(self):
+        first = self.crossref([1, 2], sort="published")
+        self.assertTrue(self.search([first, self.crossref([3, 4], cursor="second", next_cursor="third", sort="relevance")])["pending"])
+        self.assertFalse(self.search([first, self.crossref([3, 4], cursor="second", next_cursor="third", sort="published")])["pending"])
+
+    def test_only_the_parameters_that_decide_the_matched_works_enter_the_query_identity(self):
+        from research_harness.search_pages import compute_query_identity
+        endpoints = {"arxiv": "https://export.arxiv.org/api/query", "crossref": "https://api.crossref.org/works",
+                     "openalex": "https://api.openalex.org/works"}
+
+        def identity(provider, query):
+            return compute_query_identity({"provider": provider, "url": endpoints[provider] + "?" + query})
+
+        # Per provider: a capture, captures that ask the same query, and captures that each ask another query.
+        cases = {"arxiv": ("search_query=all:erasure",
+                           ["sortBy=submittedDate&sortOrder=ascending", "start=10&max_results=5", "nocache=1"],
+                           ["search_query=all:landauer", "search_query=all:erasure&id_list=2601.00001"]),
+                 "crossref": ("query=dram+erasure",
+                              ["sort=published&order=asc", "select=DOI,title", "sample=5", "facet=type-name:*",
+                               "rows=5&offset=10", "cursor=*", "mailto=a@example.org", "nocache=1"],
+                              ["query=landauer", "query=dram+erasure&query.author=Smith", "query=dram+erasure&query.title=Erasure",
+                               "query=dram+erasure&filter=type:journal-article"]),
+                 "openalex": ("search=dram+erasure",
+                              ["sort=cited_by_count:desc", "select=id,title", "sample=5&seed=7", "group_by=type", "per-page=5&page=2",
+                               "per_page=5&cursor=*", "mailto=a@example.org&api_key=KEY", "nocache=1"],
+                              ["search=landauer", "search.exact=dram+erasure", "search.semantic=dram+erasure",
+                               "search=dram+erasure&filter=cites:W123", "search=dram+erasure&corpus=all"])}
+        for provider, (base, extras, others) in cases.items():
+            for extra in extras:
+                self.assertEqual(identity(provider, base + "&" + extra), identity(provider, base), (provider, extra))
+            identities = [identity(provider, query) for query in [base] + others]
+            self.assertEqual(len({json.dumps(i, sort_keys=True) for i in identities}), len(identities), provider)
+        self.assertIsNone(compute_query_identity({"provider": "web", "url": endpoints["openalex"] + "?search=dram+erasure"}))
+
     def test_openalex_empty_and_complete_cursor_chain_are_admitted(self):
         empty = self.page("openalex", {"meta": {"count": 0, "next_cursor": None}, "results": []},
             {"search": "bounded", "cursor": "*", "per_page": "2"})
