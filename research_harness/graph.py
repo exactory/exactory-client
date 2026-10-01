@@ -9,11 +9,12 @@ Graph traversal includes every registry occurrence of a Tier 1/2 captured versio
 and the occurrences of the bundle selected for each of its acquired originals that
 has a bundle. Only a version none of whose acquired originals has a bundle reads
 the bundle selected for each other body among its bundles, such as the saved
-response of a passage, so a passage bundle is not read beside a bundle of an
-acquired original, whichever was imported first. A verification target reads the
-bundle of each acquired original whatever its pin; the pin decides only which
-originals owe a complete bibliography. A bundle that a later bundle of the same
-body replaced contributes no occurrence. A root
+response of a passage, so a bundle of another body is not read beside a bundle of
+an acquired original, whichever was imported first, while a passage bundle whose
+body is an acquired original is read as that original's bundle. A verification
+target reads the bundle of each acquired original whatever its pin; the pin
+decides only which originals owe a complete bibliography. A bundle that a later
+bundle of the same body replaced contributes no occurrence. A root
 (Tier 1) is read in full with its complete bibliography. Its references are Tier 3
 (abstract) unless an active full-text requirement of this profile selects them
 (require-fulltext, or a work cited by the selected search judgment of a purpose);
