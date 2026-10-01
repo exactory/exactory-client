@@ -259,20 +259,20 @@ class ResearchExecutionTests(DevelopmentCase):
                                      request_id="duration-beyond-floats")
         terminal = self.root / api._directory(admission["id"]) / "terminal.json"
         terminal.write_text(json.dumps(dict(json.loads(terminal.read_bytes()), duration_s=10 ** 309)))
-        record_execution = api.record_execution
+        original_record_execution = api.record_execution
 
         def record_null_usage(store, payload, **identity):
             payload["usage"]["units"] = None
-            return record_execution(store, payload, **identity)
+            return original_record_execution(store, payload, **identity)
 
         with mock.patch.object(api, "record_execution", side_effect=record_null_usage):
             api.reconcile_execution(self.store, {"admission_id": admission["id"]}, expected_revision=self.store.revision,
                                     request_id="reconcile")
-        following = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
-        following["id"] = "following-run"
+        following_admission = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
+        following_admission["id"] = "following-run"
         before = self.store.snapshot()
         self.assert_error("execution_usage_reconciliation_required",
-                          lambda: self.mutate(self.development().admit_execution, following))
+                          lambda: self.mutate(self.development().admit_execution, following_admission))
         self.assertEqual(self.store.snapshot(), before)
 
     def test_accounted_wall_outcome_recovers_observation_before_new_permission(self):
@@ -1009,17 +1009,17 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assert_error(code, lambda: self.mutate(self.development().admit_execution, following_admission))
         self.assertEqual(self.store.snapshot(), before)
 
-    def observe_run_as_earlier_release(self, **admission):
+    def observe_run_as_earlier_release(self, **admit_options):
         """Admit, bind, launch and observe the fixture program with the store's bounds turned off; return the
         execution payload. The program writes the result and validation outputs that the fixture assessment cites."""
         api = importlib.import_module("research_harness.execution")
         outputs = [{"id": name, "requirement_id": requirement, "path": "results/" + name + ".json", "media_type": "application/json"}
                    for name, requirement in (("result", "measurements"), ("validation", "checks"))]
         with self.write_as_earlier_release():
-            admitted = admit_lab(self, outputs=outputs, **admission)
-            api.launch_execution(self.store, admitted["id"], expected_revision=self.store.revision, request_id="earlier-release")
+            admission = admit_lab(self, outputs=outputs, **admit_options)
+            api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision, request_id="earlier-release")
         records = self.store.snapshot()["records"]
-        return records["execution"][records["execution_outcome"][admitted["id"]]["execution_id"]]["payload"]
+        return records["execution"][records["execution_outcome"][admission["id"]]["execution_id"]]["payload"]
 
     def build_manuscript_payload(self, execution):
         """Assess the run, select its checkpoint, record the readiness review and write the manuscript files; return the

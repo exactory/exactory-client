@@ -316,9 +316,9 @@ def run(args):
             # The store returns a committed request's receipt before it checks the payload, so a retry of a request
             # that an earlier release committed beyond this bound still gets its original receipt. Only an existing
             # store holds such a request, and init, adopt and acquisition create a store only after this check.
-            existing = find_workspace(root, required=False)
-            if (existing is None or not (existing / ".exactory/research.sqlite3").exists()
-                    or Store(existing).committed_request(args.request_id) is None):
+            existing_workspace = find_workspace(root, required=False)
+            if (existing_workspace is None or not (existing_workspace / ".exactory/research.sqlite3").exists()
+                    or Store(existing_workspace).committed_request(args.request_id) is None):
                 raise
     if args.command in ("init", "adopt"):
         root = find_workspace(root, required=False) or root
@@ -336,8 +336,8 @@ def run(args):
         root = find_workspace(root)
         store = Store(root)
     elif args.command in ACQUISITION:
-        existing = find_workspace(root, required=False)
-        store = Store(existing) if existing is not None else Store(root, create=True)
+        existing_workspace = find_workspace(root, required=False)
+        store = Store(existing_workspace) if existing_workspace is not None else Store(root, create=True)
     else:
         root = find_workspace(root)
         store = Store(root)

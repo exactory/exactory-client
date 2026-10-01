@@ -228,10 +228,11 @@ class TestCheck(unittest.TestCase):
             {"label": "equal", "from": "x + csqrt(-1)*x", "to": "x + csqrt(-1)*x", "vars": {"x": [1.5e308, 1.6e308]}},
             {"label": "wrong", "from": "x + csqrt(-1)*x", "to": "x/2 + csqrt(-1)*x", "vars": {"x": [1.5e308, 1.6e308]}},
         ], self)
-        equal, wrong = report["steps"]
-        self.assertIn(equal["status"], ("consistent", "verified"))
-        self.assertEqual(wrong["status"], "invalid")
-        self.assertAlmostEqual(wrong["witness"]["value_from"]["real"] / wrong["witness"]["value_to"]["real"], 2.0)
+        equal_step, wrong_step = report["steps"]
+        self.assertIn(equal_step["status"], ("consistent", "verified"))
+        self.assertEqual(wrong_step["status"], "invalid")
+        self.assertAlmostEqual(wrong_step["witness"]["value_from"]["real"] / wrong_step["witness"]["value_to"]["real"],
+                               2.0)
 
     def test_a_step_with_equal_complex_values_stays_consistent(self) -> None:
         # A negative base to a fractional power gives a complex value with finite parts, which the check compares.
