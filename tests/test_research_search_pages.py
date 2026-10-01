@@ -131,6 +131,32 @@ class SearchPageTests(LiteratureCase):
         self.assertNotEqual(identity("arxiv", "https://export.arxiv.org/api/query?id_list=2601.00001"),
                             identity("arxiv", "https://export.arxiv.org/api/query?id_list=2601.00001,2601.00002"))
 
+    def test_an_openalex_filter_value_is_compared_without_letter_case_and_its_alternatives_as_a_set(self):
+        from research_harness.search_pages import compute_query_identity
+        endpoints = {"crossref": "https://api.crossref.org/works", "openalex": "https://api.openalex.org/works"}
+
+        def compute_identity(provider, query):
+            return compute_query_identity({"provider": provider, "url": endpoints[provider] + "?" + query})
+
+        # OpenAlex reads filter values without regard to letter case, and the | alternatives of one filter, after a
+        # leading ! that negates them all, as a set (https://help.openalex.org/api/filtering/).
+        for query, spelling in (("filter=type:article", "filter=type:Article"),
+                                ("filter=cites:W1|W2", "filter=cites:W2|W1"),
+                                ("filter=cites:W1|W2", "filter=cites:w2|W1|W2"),
+                                ("filter=type:!article|book", "filter=type:!book|article"),
+                                ("search=erasure&filter=cites:W1|W2,type:article",
+                                 "search=erasure&filter=type:ARTICLE,cites:W2|w1")):
+            self.assertEqual(compute_identity("openalex", spelling), compute_identity("openalex", query), (query, spelling))
+        # The filter name keeps its letter case, a leading ! negates the filter, other alternatives ask another query,
+        # and the values of the other matching parameters keep their letter case.
+        for provider, query, other_query in (("openalex", "filter=type:article", "filter=Type:article"),
+                                             ("openalex", "filter=type:article", "filter=type:!article"),
+                                             ("openalex", "filter=cites:W1|W2", "filter=cites:W1"),
+                                             ("openalex", "search=dram+erasure", "search=DRAM+erasure"),
+                                             ("crossref", "filter=type:journal-article", "filter=type:Journal-Article")):
+            self.assertNotEqual(compute_identity(provider, other_query), compute_identity(provider, query),
+                                (provider, query, other_query))
+
     def test_openalex_empty_and_complete_cursor_chain_are_admitted(self):
         empty = self.page("openalex", {"meta": {"count": 0, "next_cursor": None}, "results": []},
             {"search": "bounded", "cursor": "*", "per_page": "2"})

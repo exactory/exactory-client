@@ -266,6 +266,20 @@ class LoopTests(LineageCase):
         self.assertEqual({p: (purposes[p]["queries"], purposes[p]["covered"]) for p in spellings},
                          {p: (1, False) for p in spellings})
 
+    def test_captures_whose_filter_values_spell_one_query_differently_count_once(self):
+        root = self.metadata(1)
+        self.scope([root])
+        # Each purpose binds one search value to two captures whose filters differ only in the letter case of a value or
+        # in the order of the | alternatives of one filter, which OpenAlex reads as one filter.
+        filter_spellings = {"theory": ("type:article", "type:Article"), "adjacent": ("cites:W1|W2", "cites:W2|W1")}
+        for purpose, spellings in filter_spellings.items():
+            url = "https://api.openalex.org/works?search=" + purpose + "%20erasure&filter="
+            bindings = [(self.capture_native("openalex", url + spelling), purpose + " erasure") for spelling in spellings]
+            self.judge_captures(purpose + "-1", purpose, bindings)
+        purposes = lineage.loop_state(self.store.snapshot()["records"], "research")["purposes"]
+        self.assertEqual({p: (purposes[p]["queries"], purposes[p]["covered"]) for p in filter_spellings},
+                         {p: (1, False) for p in filter_spellings})
+
     def test_a_closure_cannot_cover_a_purpose_with_one_query_captured_in_two_sort_orders(self):
         root = self.metadata(1)
         self.scope([root])
