@@ -107,6 +107,15 @@ class ResourceTests(LiteratureCase):
         self.mutate(record_reading_batch, dict(float_charge, usage=build_usage(1)))
         self.assertEqual(self.account()["charged"]["wall_seconds"], 2 * 10 ** 308 + 1)
 
+    def test_an_integer_charge_beyond_the_float_range_to_a_float_total_is_refused(self):
+        # The other order of the same sum. read-batch and screen-batch refuse such wall seconds before the charge, but
+        # resources.charge takes the amounts of every purpose, so it refuses the sum itself.
+        from research_harness.resources import charge
+        records = self.store.snapshot()["records"]
+        records["resource_account"] = {"research:literature": {"key": "research:literature", "charged": {"wall_seconds": 1.5},
+                                                               "unknown": {}}}
+        self.assert_error("invalid_input", lambda: charge(records, "literature", {"wall_seconds": 10 ** 400}))
+
     def test_float_charges_that_sum_beyond_the_float_range_are_refused(self):
         # Two floats sum to infinity beyond the float range, and the store writes only finite numbers.
         from research_harness.reading import record_reading_batch
