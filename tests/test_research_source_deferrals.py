@@ -273,6 +273,38 @@ class SourceDeferralTests(DeferralCase, LiteratureCase):
         self.mutate(record_search, successor)
         self.assertEqual(foundation_report(self.store, "research")["source_deferrals"][0]["status"], "stale")
 
+    def test_a_deferral_stays_active_while_the_citation_graph_keeps_its_version_a_required_full_text(self):
+        # The root cites v1 exactly. direct-2 replaces direct-1 and cites v2 of the same family, so the family stays
+        # Tier 2 and v1 stays a required full text after its only requirement record retires. 0.47.0 recorded the
+        # binding digest below for the deferral; a deferral it recorded stays active while that binding is unchanged.
+        root = self.metadata(1, references=[{"id": "arxiv:2601.00002v1"}])
+        v1, v2 = self.metadata(2, version=1), self.metadata(2, version=2)
+        self.scope([root])
+        first = self.capture_search("direct", [v1])
+        first["id"], first["cited_work_ids"] = "direct-1", [v1]
+        self.mutate(record_search, first)
+        self.capture(v1, status=404)
+        self.defer(v1)
+        self.assertEqual(foundation_report(self.store, "research")["source_deferrals"][0]["dependency_digest"],
+                         "72d8d8fb6987eab70ef5447be4422530fbb5b253a1bcd6cfee9f0eab6d66a1de")
+        successor = self.capture_search("direct", [v2])
+        successor["id"], successor["cited_work_ids"] = "direct-2", [v2]
+        self.mutate(record_search, successor)
+        report = foundation_report(self.store, "research")
+        item = next(i for i in report["inventory"] if i["version_id"] == v1)
+        self.assertEqual((item["tier"], item["required_depth"]), (2, "fulltext"))
+        self.assertEqual(report["source_deferrals"][0]["status"], "active")
+        self.assertFalse([o for o in report["obligations"] if o.get("version_id") == v1])
+        self.assertTrue([o for o in report["deferred_obligations"] if o.get("version_id") == v1])
+        # Once no judgment cites the family, v1 falls to Tier 3, no record of it is bound and the decision is stale.
+        third = self.capture_search("direct")
+        third["id"] = "direct-3"
+        self.mutate(record_search, third)
+        report = foundation_report(self.store, "research")
+        item = next(i for i in report["inventory"] if i["version_id"] == v1)
+        self.assertEqual((item["tier"], item["required_depth"]), (3, "abstract"))
+        self.assertEqual(report["source_deferrals"][0]["status"], "stale")
+
     def test_resume_restores_obligations_and_receipts_replay_without_reselection(self):
         _, gap = self.setup_gap()
         operation = self.get_operation("defer-source")

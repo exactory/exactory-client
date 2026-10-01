@@ -227,6 +227,30 @@ class LiteratureTests(LiteratureCase):
                                    "frontier_digest": "ee1f3b6412947c75e91131d4a6a41c14ff6f12f93f77a34413d72f94332f8105",
                                    "graph": "914cc22d3e42e805276605b8b58edf6c04a7fe424562a55b8bd18b703787ad16"})
 
+    def test_a_version_the_citation_graph_keeps_required_keeps_its_requirement_records_in_the_digests(self):
+        """The expected digests were computed by 0.47.0, for which a replaced judgment's requirements still counted.
+        The root cites v1 exactly. direct-2 replaces direct-1 and cites v2 of the same family, so the family stays
+        Tier 2 and v1 stays a required full text after its only requirement record retires."""
+        root = self.metadata(1, references=[{"id": "arxiv:2601.00002v1"}])
+        v1, v2 = self.metadata(2, version=1), self.metadata(2, version=2)
+        self.scope([root])
+        for identifier, cited in (("direct-1", v1), ("direct-2", v2)):
+            search = self.search("direct", [cited])
+            search["id"], search["cited_work_ids"] = identifier, [cited]
+            self.mutate(record_search, search)
+        report = foundation_report(self.store, "research")
+        self.assertEqual({name: report[name] for name in ("requirements_digest", "stable_digest")},
+                         {"requirements_digest": "979cf0a03406022553c6466c6b080c70be3b6583e9cf01d46261d65c25d8441b",
+                          "stable_digest": "8d6ebf335b13e108853601032e2581b0f43944a30f4bae39facbfec17dbc7e15"})
+        # Once no judgment cites the family, v1 falls to Tier 3, v2 is only a found work and no record of either is held.
+        third = self.search("direct")
+        third["id"] = "direct-3"
+        self.mutate(record_search, third)
+        report = foundation_report(self.store, "research")
+        self.assertEqual({x["version_id"]: (x["tier"], x["required_depth"]) for x in report["inventory"] if x["version_id"] in (v1, v2)},
+                         {v1: (3, "abstract"), v2: (None, None)})
+        self.assertEqual(report["requirements_digest"], digest({}))
+
     def test_tool_passage_is_scoped_to_its_article_and_cannot_repair_failed_origin(self):
         a, b = self.metadata(), self.metadata(2)
         failed = self.capture(a, status=403)
