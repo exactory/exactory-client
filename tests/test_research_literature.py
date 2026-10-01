@@ -575,6 +575,34 @@ class SearchDispositionTests(LiteratureCase):
                          {"direct-2": ([], []), "theory": ([], []),
                           "adjacent": (["search_evidence_stale", "search_frontier_stale"], [])})
 
+    def test_a_judgment_that_found_a_dropped_family_before_the_graph_read_its_references_keeps_only_a_stale_frontier(self):
+        """The exception to the same consequence of H2 depends on the references of the family that the graph had read
+        when the judgment was recorded, not on those it read later."""
+        dropped_version_id = self.metadata(2)
+        root = self.metadata(1, references=[{"id": dropped_version_id}])
+        self.scope([root])
+        direct = self.search("direct", [dropped_version_id])
+        direct["cited_work_ids"] = [dropped_version_id]
+        self.mutate(record_search, direct)
+        adjacent = self.search("adjacent", [dropped_version_id])
+        adjacent["dispositions"][0]["disposition"] = "out_of_scope"
+        self.mutate(record_search, adjacent)
+        self.assertEqual(self.collect_stale_codes(("adjacent",)), {"adjacent": ([], [])})
+        # A reference of the dropped version arrives after adjacent was recorded, while the family is still required.
+        raw = {"id": dropped_version_id, "title": "Authored references",
+               "references": [{"unstructured": "A reference of the dropped source"}]}
+        self.sequence += 1
+        import_response(self.store, "mcp", json.dumps(raw).encode(), source_url="https://example.org/tool",
+                        captured_at="2026-09-07T12:00:00Z", media_type="application/json",
+                        mappings=[{"id": "/id", "title": "/title", "references": "/references"}],
+                        expected_revision=self.store.revision, request_id="late-references-" + str(self.sequence))
+        self.assertEqual(self.collect_stale_codes(("adjacent",)), {"adjacent": (["search_evidence_stale"], [])})
+        replacement = self.search("direct", [dropped_version_id])
+        replacement["id"] = "direct-2"
+        self.mutate(record_search, replacement)
+        # The family falls to Tier 3, so the graph no longer reads that reference, as when adjacent was recorded.
+        self.assertEqual(self.collect_stale_codes(("adjacent",)), {"adjacent": (["search_frontier_stale"], [])})
+
     def collect_stale_codes(self, search_ids):
         """The obligation and notice codes that each judgment reports."""
         report = foundation_report(self.store, "research")
