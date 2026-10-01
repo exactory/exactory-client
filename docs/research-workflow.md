@@ -455,9 +455,13 @@ Deliver the entire fresh export directory to an independent assessor, including
 `inputs.json`, its candidate and plan digests, actual source/output bytes, and
 execution observations. The assessor evaluates the exact candidate's validity,
 scope, novelty, contribution, development, and branch obligations. Retain the
-original assessment and actual assessor provenance, then record `review` for that
-candidate. An author cannot invent an independent review or treat identity
-declarations as authenticated scientific judgment.
+original assessment and actual assessor provenance, then record `review` for
+that candidate. An author cannot invent an independent review or treat identity
+declarations as authenticated scientific judgment. A command input nests at most
+64 levels. The `review` payload cites each evidence reference of the candidate
+one level deeper than `result.evidence` of an assessment holds it. So an
+assessment of 64 levels whose deepest value is in `result.evidence` leaves no
+room for its `review`.
 
 ```sh
 exactory-research artifact --file assessor-provenance.json --expected-revision REVISION --request-id pin-research-assessor-001
@@ -524,14 +528,16 @@ literature that the study used. Every work with a full-text reading, and every
 work that a selected five-purpose search cites, is cited by the bibliography or
 has a `citation_accounting` item with a bibliography key or a reason
 (`citation_accounting_incomplete` lists the rest). `manuscript` fails with
-`invalid_input` and changes nothing when the bundle it builds holds a value
-beyond the store bounds that an earlier release allowed. One such value is the
-metric of a cited run that exactory-client 0.47.0 or earlier claimed, nested more
-than 95 levels. Another is a seed of more than 4300 digits in the admission of
-any cycle. An earlier release stored such a seed only under an interpreter
+`invalid_input` and changes nothing in two cases. Its payload cites evidence one
+level deeper than `result.evidence` of an assessment holds it. It fails if that
+makes it nest more than 64 levels. The bundle it builds fails when it holds a
+value that an earlier release stored beyond the store bounds. One such value is
+the metric of a cited run that exactory-client 0.47.0 or earlier claimed, nested
+more than 95 levels. Another is a seed of more than 4300 digits in the admission
+of any cycle. An earlier release stored such a seed only under an interpreter
 without a limit on integer string conversion.
-[Actual execution](research-cli.md#actual-execution) gives these cases.
-Export its actual bytes for two distinct independent blind assessors. Save each
+[Actual execution](research-cli.md#actual-execution) gives these cases. Export
+its actual bytes for two distinct independent blind assessors. Save each
 unchanged original rubric JSON and assessor provenance, then wrap those artifact
 references with `manuscript-review`. The manuscript review is separate from the
 earlier research readiness assessment.
