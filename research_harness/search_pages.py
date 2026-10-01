@@ -38,6 +38,10 @@ MATCHING_PARAMETER_NAMES = {"arxiv": frozenset({"search_query", "id_list"}),
 # (https://info.arxiv.org/help/api/user-manual.html).
 LIST_PARAMETER_NAMES = {"arxiv": frozenset({"id_list"}), "crossref": frozenset({"filter"}),
                         "openalex": frozenset({"filter"})}
+# The list parameters whose items are filters, name:values, that the registry reads without regard to the letter case
+# of the values and with the | alternatives of the values, after a leading ! that negates them all, as a set: an
+# OpenAlex filter (https://help.openalex.org/api/filtering/). The name keeps its letter case.
+CASELESS_FILTER_PARAMETER_NAMES = {"arxiv": frozenset(), "crossref": frozenset(), "openalex": frozenset({"filter"})}
 
 
 def _parse_parameters(source):
@@ -53,16 +57,26 @@ def compute_query_identity(source):
     match. Captures that differ only in another parameter (ordering, field selection, sampling, facets and
     grouping, paging, a contact address or key, or a parameter the registry does not list) ask the same query, and
     so do captures whose URLs spell one query differently: the endpoint is its host and its path without a trailing
-    slash, an empty parameter or list item is no parameter, and the items of a list parameter form a set. None for
-    a web or MCP capture, whose request the harness does not parse."""
+    slash, an empty parameter or list item is no parameter, the items of a list parameter form a set, and an OpenAlex
+    filter is compared as OpenAlex reads it, without regard to the letter case of its values and with its |
+    alternatives as a set. None for a web or MCP capture, whose request the harness does not parse."""
     names = MATCHING_PARAMETER_NAMES.get(source["provider"])
     if names is None:
         return None
     list_names = LIST_PARAMETER_NAMES[source["provider"]]
+    caseless_names = CASELESS_FILTER_PARAMETER_NAMES[source["provider"]]
     parameters = set()
     for key, value in _parse_parameters(source):
-        if key.split(".", 1)[0] in names:
-            parameters.update((key, item) for item in (value.split(",") if key in list_names else [value]) if item)
+        if key.split(".", 1)[0] not in names:
+            continue
+        for item in (value.split(",") if key in list_names else [value]):
+            if key in caseless_names:
+                name, colon, value_text = item.partition(":")
+                negation_prefix = "!" if value_text.startswith("!") else ""
+                alternatives = set(value_text[len(negation_prefix):].lower().split("|"))
+                item = name + colon + negation_prefix + "|".join(sorted(alternatives))
+            if item:
+                parameters.add((key, item))
     url = urlsplit(source["url"])
     endpoint = urlunsplit((url.scheme, url.hostname, url.path.rstrip("/"), "", ""))
     return {"provider": source["provider"], "endpoint": endpoint, "parameters": sorted(parameters)}

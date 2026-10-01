@@ -319,12 +319,16 @@ selection or a `mailto` address, count once. So do captures whose URLs spell one
 query differently: the endpoint is compared by its host and its path without a
 trailing slash, an empty parameter or list item counts as absent, and the
 comma-separated items of a `filter` or an arXiv `id_list` are compared as a set,
-because the registries combine them in any order. Two captures whose matching
-parameters differ in any other way count apart, even when they share a query
-value; this includes another letter case of a value and another order of the
-`|` alternatives of an OpenAlex filter clause. `web` and `mcp` captures of one
-query count once, and not at all when a native capture of the purpose was bound
-to that query. The record of each purpose states which.
+because the registries combine them in any order. An OpenAlex `filter` is
+compared as OpenAlex reads it: the letter case of its values does not count, and
+the `|` alternatives of one filter, after a leading `!` that negates them all,
+are compared as a set, so `type:Article` asks the same query as `type:article`,
+and `cites:W2|W1` as `cites:W1|W2`. Two captures whose matching parameters
+differ in any other way count apart, even when they share a query value; this
+includes the name of a filter in another letter case and another letter case of
+the value of any other matching parameter, such as `search`. `web` and `mcp`
+captures of one query count once, and not at all when a native capture of the
+purpose was bound to that query. The record of each purpose states which.
 For each uncovered purpose, a new query is captured and up to 20 more abstracts
 are read. The loop stops when every purpose is covered, when a
 round adds no `relevant` or `contradictory` paper to any uncovered purpose, or
