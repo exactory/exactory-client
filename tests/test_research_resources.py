@@ -19,6 +19,10 @@ def limits(**values):
     return base
 
 
+def build_usage(wall_seconds):
+    return {"model": "fixture", "input_tokens": None, "output_tokens": None, "wall_seconds": wall_seconds}
+
+
 class ResourceTests(LiteratureCase):
     def setUp(self):
         super().setUp()
@@ -64,6 +68,29 @@ class ResourceTests(LiteratureCase):
         self.assert_error("resource_budget_exhausted", lambda: self.mutate(record_reading_batch, {"id": "b2", "depth": "abstract", "items": [item(b)]}))
         self.assertEqual(self.store.snapshot(), before)
         self.assertIn("resource_budget_exhausted", self.codes()) if self.store.snapshot()["records"].get("literature_scope") else None
+
+    def test_wall_seconds_beyond_the_float_range_are_refused_before_the_charge(self):
+        # An integer beyond the float range (about 1.8e308) has no float value, so adding it to a float account total
+        # raised OverflowError, and read-batch printed a traceback instead of a JSON error.
+        from research_harness.reading import record_reading_batch
+        a, b = self.metadata(1), self.metadata(2)
+        self.mutate(record_reading_batch, {"id": "b1", "depth": "abstract", "items": [item(a)], "usage": build_usage(1.5)})
+        before = self.store.snapshot()
+        self.assert_error("invalid_batch", lambda: self.mutate(
+            record_reading_batch, {"id": "b2", "depth": "abstract", "items": [item(b)], "usage": build_usage(10 ** 400)}))
+        self.assertEqual(self.store.snapshot(), before)
+
+    def test_a_charge_that_carries_an_account_total_beyond_the_float_range_is_refused(self):
+        # Integer charges within the float range can sum beyond it. A later float charge then raised OverflowError.
+        from research_harness.reading import record_reading_batch
+        a, b = self.metadata(1), self.metadata(2)
+        self.mutate(record_reading_batch, {"id": "b1", "depth": "abstract", "items": [item(a)], "usage": build_usage(10 ** 308)})
+        before = self.store.snapshot()
+        self.assert_error("invalid_input", lambda: self.mutate(
+            record_reading_batch, {"id": "b2", "depth": "abstract", "items": [item(b)], "usage": build_usage(10 ** 308)}))
+        self.assertEqual(self.store.snapshot(), before)
+        self.mutate(record_reading_batch, {"id": "b3", "depth": "abstract", "items": [item(b)], "usage": build_usage(1.5)})
+        self.assertEqual(self.account()["charged"]["wall_seconds"], 10 ** 308 + 1.5)
 
     def test_acquisition_reserves_then_reconciles_and_refuses_over_the_limit(self):
         from research_harness.acquisition import acquire_work
