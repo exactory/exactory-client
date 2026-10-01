@@ -31,6 +31,13 @@ PAGINATION_PARAMETER_NAMES = {"arxiv": frozenset({"start", "max_results"}),
 MATCHING_PARAMETER_NAMES = {"arxiv": frozenset({"search_query", "id_list"}),
                             "crossref": frozenset({"query", "filter"}),
                             "openalex": frozenset({"search", "filter", "corpus"})}
+# The matching parameters whose value is a comma-separated list that the registry reads as a set: an OpenAlex filter,
+# whose clauses are combined with AND (https://help.openalex.org/api/filtering/), a Crossref filter, whose
+# name:value pairs are combined with AND, or with OR when they repeat a name
+# (https://github.com/CrossRef/rest-api-doc/blob/master/README.md), and an arXiv id_list
+# (https://info.arxiv.org/help/api/user-manual.html).
+LIST_PARAMETER_NAMES = {"arxiv": frozenset({"id_list"}), "crossref": frozenset({"filter"}),
+                        "openalex": frozenset({"filter"})}
 
 
 def _parse_parameters(source):
@@ -44,14 +51,21 @@ def _parse_parameters(source):
 def compute_query_identity(source):
     """The query a native registry capture asks: its provider, endpoint and the parameters that decide which works
     match. Captures that differ only in another parameter (ordering, field selection, sampling, facets and
-    grouping, paging, a contact address or key, or a parameter the registry does not list) ask the same query.
-    None for a web or MCP capture, whose request the harness does not parse."""
+    grouping, paging, a contact address or key, or a parameter the registry does not list) ask the same query, and
+    so do captures whose URLs spell one query differently: the endpoint is its host and its path without a trailing
+    slash, an empty parameter or list item is no parameter, and the items of a list parameter form a set. None for
+    a web or MCP capture, whose request the harness does not parse."""
     names = MATCHING_PARAMETER_NAMES.get(source["provider"])
     if names is None:
         return None
+    list_names = LIST_PARAMETER_NAMES[source["provider"]]
+    parameters = set()
+    for key, value in _parse_parameters(source):
+        if key.split(".", 1)[0] in names:
+            parameters.update((key, item) for item in (value.split(",") if key in list_names else [value]) if item)
     url = urlsplit(source["url"])
-    return {"provider": source["provider"], "endpoint": urlunsplit((url.scheme, url.netloc, url.path, "", "")),
-            "parameters": sorted((k, v) for k, v in _parse_parameters(source) if k.split(".", 1)[0] in names)}
+    endpoint = urlunsplit((url.scheme, url.hostname, url.path.rstrip("/"), "", ""))
+    return {"provider": source["provider"], "endpoint": endpoint, "parameters": sorted(parameters)}
 
 
 def _number(parameters, key, default, minimum, maximum=None):
