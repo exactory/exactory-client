@@ -173,6 +173,36 @@ class TestCheck(unittest.TestCase):
         self.assertAlmostEqual(witness["value_to"] - witness["value_from"], 1.0)
         self.assertEqual((report["invalid"], self.exit_code), (1, 1))
 
+    def test_a_step_with_complex_function_values_is_checked(self) -> None:
+        # csqrt and cexp return complex numbers, which the check compares; float() of one raised TypeError.
+        report = _run_check([{"label": name, "from": name + "(x)", "to": name + "(x)", "vars": {"x": [1.0, 4.0]}}
+                             for name in ("csqrt", "cexp")], self)
+        for step in report["steps"]:
+            with self.subTest(step=step["label"]):
+                self.assertIn(step["status"], ("consistent", "verified"))
+        self.assertEqual(self.exit_code, 0)
+
+    def test_a_wrong_step_with_complex_sides_has_a_json_witness(self) -> None:
+        # JSON has no complex number, so a complex side of the witness gives its real and imaginary parts.
+        report = _run_check([{"label": "complex wrong", "from": "x**0.5", "to": "x**0.5 + 1", "vars": {"x": [-4.0, -1.0]}}],
+                            self)
+        step = report["steps"][0]
+        self.assertEqual(step["status"], "invalid")
+        value_from, value_to = step["witness"]["value_from"], step["witness"]["value_to"]
+        self.assertEqual(set(value_from), {"real", "imag"})
+        self.assertAlmostEqual(value_to["real"] - value_from["real"], 1.0)
+        self.assertAlmostEqual(value_from["imag"], math.sqrt(-step["witness"]["point"]["x"]))
+        self.assertEqual(self.exit_code, 1)
+
+    def test_a_real_function_of_a_complex_value_is_unparseable(self) -> None:
+        # math.sin takes real numbers only and raises TypeError for a complex one, a value it cannot evaluate.
+        report = _run_check([{"label": "real of complex", "from": "sin(csqrt(x))", "to": "sin(csqrt(x))",
+                              "vars": {"x": [-4.0, -1.0]}}], self)
+        step = report["steps"][0]
+        self.assertEqual((step["status"], step["witness"]), ("unparseable", None))
+        self.assertTrue(step["detail"].startswith("evaluation failed: "))
+        self.assertEqual(self.exit_code, 0)
+
     def test_a_step_with_equal_complex_values_stays_consistent(self) -> None:
         # A negative base to a fractional power gives a complex value with finite parts, which the check compares.
         report = _run_check([{"label": "complex power", "from": "x**0.5", "to": "x**0.5", "vars": {"x": [-4.0, -1.0]}}],
