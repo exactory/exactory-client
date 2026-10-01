@@ -419,11 +419,14 @@ exactory-client 0.47.0 or earlier claimed whose metric makes the observation
 exceed the store bounds. For such a run, `reconcile-run` fails with
 `invalid_input`, the run has an outcome but no observation, and its strategy
 admits no further run. A retry of `exactory-lab run` with its original request
-ID fails in the same way. [Actual execution](research-cli.md#actual-execution)
-in the CLI reference gives the bounds and a second exception for the seed of a
-run. A valid negative finding differs from a broken implementation, missing
-output, or unknown execution. An exit code or metric alone does not settle
-validity or the full objective.
+ID fails in the same way. An earlier release can also have observed such a run.
+Then a new `reconcile-run` request, and that retry of `exactory-lab run`, fail
+with `invalid_input` and change nothing if the metric nests more than 99 levels.
+[Actual execution](research-cli.md#actual-execution) in the CLI reference gives
+the bounds and a second exception for the seed of a run. A valid negative
+finding differs from a broken implementation, missing output, or unknown
+execution. An exit code or metric alone does not settle validity or the full
+objective.
 
 ## Develop and review the research before writing
 
@@ -520,11 +523,18 @@ claim-to-evidence mappings with `manuscript`. The pin also accounts for the
 literature that the study used. Every work with a full-text reading, and every
 work that a selected five-purpose search cites, is cited by the bibliography or
 has a `citation_accounting` item with a bibliography key or a reason
-(`citation_accounting_incomplete` lists the rest). Export its actual bytes for two
-distinct independent blind assessors. Save each unchanged original rubric JSON
-and assessor provenance, then wrap those artifact references with
-`manuscript-review`. The manuscript review is separate from the earlier research
-readiness assessment.
+(`citation_accounting_incomplete` lists the rest). `manuscript` fails with
+`invalid_input` and changes nothing when the bundle it builds holds a value
+beyond the store bounds that an earlier release allowed. One such value is the
+metric of a cited run that exactory-client 0.47.0 or earlier claimed, nested more
+than 95 levels. Another is a seed of more than 4300 digits in the admission of
+any cycle. An earlier release stored such a seed only under an interpreter
+without a limit on integer string conversion.
+[Actual execution](research-cli.md#actual-execution) gives these cases.
+Export its actual bytes for two distinct independent blind assessors. Save each
+unchanged original rubric JSON and assessor provenance, then wrap those artifact
+references with `manuscript-review`. The manuscript review is separate from the
+earlier research readiness assessment.
 
 ```sh
 exactory-research manuscript --file manuscript.json --expected-revision REVISION --request-id pin-manuscript-001
