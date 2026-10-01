@@ -164,7 +164,30 @@ def _format_json_number(value: float | complex) -> float | dict:
     return {"real": value.real, "imag": value.imag} if isinstance(value, complex) else value
 
 
+def _measure_magnitude(value: float | complex) -> float:
+    """The absolute value of a real number, and the larger absolute part of a complex one. abs() of a complex number
+    is its length, which raises OverflowError beyond the float range although both parts are finite."""
+    return max(abs(value.real), abs(value.imag)) if isinstance(value, complex) else abs(value)
+
+
+def _find_step_input_error(step) -> str | None:
+    """What makes the step malformed, or None: a step is an object whose vars maps each name to a [low, high] range."""
+    if not isinstance(step, dict):
+        return "a step must be a JSON object"
+    variable_ranges = step.get("vars") or {}
+    if not isinstance(variable_ranges, dict):
+        return "vars must map each variable name to a [low, high] range"
+    for name, bounds in variable_ranges.items():
+        if not isinstance(bounds, list) or len(bounds) != 2:
+            return "the range of " + name + " must be [low, high]"
+    return None
+
+
 def _check_step(step: dict, sample_count: int, relative_tolerance: float) -> dict:
+    input_error = _find_step_input_error(step)
+    if input_error is not None:
+        label = str(step.get("label", "")) if isinstance(step, dict) else ""
+        return {"label": label, "status": "unparseable", "witness": None, "detail": "invalid step: " + input_error}
     label = str(step.get("label", ""))
     from_expression = str(step.get("from", ""))
     to_expression = str(step.get("to", ""))
@@ -184,8 +207,8 @@ def _check_step(step: dict, sample_count: int, relative_tolerance: float) -> dic
             if not (cmath.isfinite(value_from) and cmath.isfinite(value_to)):
                 continue
             compared_count += 1
-            difference = abs(value_from - value_to)
-            scale = max(abs(value_from), abs(value_to), 1.0)
+            difference = _measure_magnitude(value_from - value_to)
+            scale = max(_measure_magnitude(value_from), _measure_magnitude(value_to), 1.0)
             if difference > relative_tolerance * scale + _ABSOLUTE_TOLERANCE:
                 result["status"] = "invalid"
                 result["witness"] = {"point": point, "value_from": _format_json_number(value_from),
