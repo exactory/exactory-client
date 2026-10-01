@@ -163,13 +163,13 @@ class TestCheck(unittest.TestCase):
         step = {"label": "zero term B", "from": "x + y*y*y*y*0", "to": "x + 1",
                 "vars": {"x": [0.0, 1.0], "y": [0.0, 2e77]}}
         points = _derive._sample_points(step["vars"], _derive._SAMPLE_COUNT_DEFAULT, _derive._seed_for_step(step["label"]))
-        finite = [point for point in points if math.isfinite(_derive._evaluate_expression(step["from"], point))]
-        self.assertLess(len(finite), len(points))
-        self.assertNotEqual(finite[0], points[0])
+        finite_points = [point for point in points if math.isfinite(_derive._evaluate_expression(step["from"], point))]
+        self.assertLess(len(finite_points), len(points))
+        self.assertNotEqual(finite_points[0], points[0])
         report = _run_check([step], self)
         witness = report["steps"][0]["witness"]
         self.assertEqual(report["steps"][0]["status"], "invalid")
-        self.assertEqual(witness["point"], finite[0])
+        self.assertEqual(witness["point"], finite_points[0])
         self.assertAlmostEqual(witness["value_to"] - witness["value_from"], 1.0)
         self.assertEqual((report["invalid"], self.exit_code), (1, 1))
 

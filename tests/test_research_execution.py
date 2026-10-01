@@ -884,10 +884,10 @@ class ResearchExecutionTests(DevelopmentCase):
         """Patch the claim config to the one of exactory-client 0.47.0, which has no metric_output and so no metric
         bound."""
         api = importlib.import_module("research_harness.execution")
-        materialize = api._materialize
+        original_materialize = api._materialize
 
         def materialize_as_earlier_release(*args):
-            config = materialize(*args)
+            config = original_materialize(*args)
             del config["metric_output"]
             return config
 
@@ -927,10 +927,10 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assertIn(admission["id"], before["records"]["execution_outcome"])
         self.assertNotIn(admission["id"], before["records"].get("execution_observation", {}))
         reconcile("reconcile-again")
-        following = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
-        following["id"] = "following-run"
+        following_admission = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
+        following_admission["id"] = "following-run"
         self.assert_error("execution_usage_reconciliation_required",
-                          lambda: self.mutate(self.development().admit_execution, following))
+                          lambda: self.mutate(self.development().admit_execution, following_admission))
         self.assertEqual(self.store.snapshot(), before)
 
     # A limit of H13 that the user accepted on 2026-09-30: the store cannot record the observation of a run that
@@ -958,9 +958,9 @@ class ResearchExecutionTests(DevelopmentCase):
         result = api.reconcile_execution(self.store, {"admission_id": admission["id"]},
                                          expected_revision=self.store.revision, request_id="reconcile")
         self.assertEqual(result["metric"], json.loads(metric_json))
-        following = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
-        following["id"] = "following-run"
-        self.assertEqual(self.mutate(self.development().admit_execution, following)["result"]["id"], following["id"])
+        following_admission = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
+        following_admission["id"] = "following-run"
+        self.assertEqual(self.mutate(self.development().admit_execution, following_admission)["result"]["id"], following_admission["id"])
 
     # Limits of H13 that the user accepted on 2026-09-30 at about 19:50 PDT. Each operation below fails with
     # invalid_input and changes nothing, because a new record or result copies a value that an earlier release
@@ -975,9 +975,9 @@ class ResearchExecutionTests(DevelopmentCase):
         if hasattr(sys, "set_int_max_str_digits"):
             self.addCleanup(sys.set_int_max_str_digits, sys.get_int_max_str_digits())
             sys.set_int_max_str_digits(0)
-        worker_environment = mock.patch.dict(os.environ, {"PYTHONINTMAXSTRDIGITS": "0"})
-        worker_environment.start()
-        self.addCleanup(worker_environment.stop)
+        worker_digits_patcher = mock.patch.dict(os.environ, {"PYTHONINTMAXSTRDIGITS": "0"})
+        worker_digits_patcher.start()
+        self.addCleanup(worker_digits_patcher.stop)
 
     def reconcile_as_earlier_release(self, admission):
         api = importlib.import_module("research_harness.execution")
@@ -1003,10 +1003,10 @@ class ResearchExecutionTests(DevelopmentCase):
             self.store, admission["id"], expected_revision=self.store.revision, request_id="earlier-release"), refusal)
 
     def assert_the_next_admission_fails(self, admission, code):
-        following = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
-        following["id"] = "following-run"
+        following_admission = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
+        following_admission["id"] = "following-run"
         before = self.store.snapshot()
-        self.assert_error(code, lambda: self.mutate(self.development().admit_execution, following))
+        self.assert_error(code, lambda: self.mutate(self.development().admit_execution, following_admission))
         self.assertEqual(self.store.snapshot(), before)
 
     def observe_run_as_earlier_release(self, **admission):
@@ -1021,11 +1021,10 @@ class ResearchExecutionTests(DevelopmentCase):
         records = self.store.snapshot()["records"]
         return records["execution"][records["execution_outcome"][admitted["id"]]["execution_id"]]["payload"]
 
-    def prepare_manuscript_pin(self, execution):
+    def build_manuscript_payload(self, execution):
         """Assess the run, select its checkpoint, record the readiness review and write the manuscript files; return the
-        action that pins the manuscript, whose claim cites the run."""
+        manuscript payload, whose claim cites the run."""
         from integration_fixtures import account_fixture_citations
-        from research_harness.publication import prepare_publication
         self.execution_payload = execution
         plan = self.store.snapshot()["records"]["cycle_plan"][execution["cycle_id"]]["payload"]
         self.mutate(self.development().assess_cycle, self.assessment(plan, execution))
@@ -1037,11 +1036,10 @@ class ResearchExecutionTests(DevelopmentCase):
         (self.root / "draft/abstract.txt").write_text("The exact finite bound was enumerated.")
         (self.root / "draft/references.bib").write_text("@article{bounded,title={Authored bound}}\n")
         (self.root / "evidence/claims.json").write_text(json.dumps([{"id": "bound", "claim": "The maximum is 9."}]))
-        payload = {"id": "paper-1", "files": {"pdf": "draft/paper.pdf", "abstract": "draft/abstract.txt",
-                                              "bibliography": "draft/references.bib", "claims": "evidence/claims.json", "sources": None},
-                   "claim_evidence": [{"claim_id": "bound", "evidence": [self.result_evidence(execution)]}],
-                   "citation_accounting": account_fixture_citations(self)}
-        return lambda: self.mutate(prepare_publication, payload)
+        return {"id": "paper-1", "files": {"pdf": "draft/paper.pdf", "abstract": "draft/abstract.txt",
+                                           "bibliography": "draft/references.bib", "claims": "evidence/claims.json", "sources": None},
+                "claim_evidence": [{"claim_id": "bound", "evidence": [self.result_evidence(execution)]}],
+                "citation_accounting": account_fixture_citations(self)}
 
     def observe_earlier_release_claim_with_metric(self, levels):
         """Claim the fixture program as exactory-client 0.47.0 did, with a last stdout line whose metric nests
@@ -1072,12 +1070,14 @@ class ResearchExecutionTests(DevelopmentCase):
 
     def test_a_manuscript_that_cites_an_earlier_release_run_whose_metric_nests_96_levels_is_refused(self):
         # The bundle holds the metric of each cited run five levels deep (execution_observations), 101 levels here.
-        pin = self.prepare_manuscript_pin(self.observe_earlier_release_claim_with_metric(96))
-        self.assert_refused_without_a_change(pin, "nest at most 100 levels")
+        from research_harness.publication import prepare_publication
+        payload = self.build_manuscript_payload(self.observe_earlier_release_claim_with_metric(96))
+        self.assert_refused_without_a_change(lambda: self.mutate(prepare_publication, payload), "nest at most 100 levels")
 
     def test_a_manuscript_that_cites_an_earlier_release_run_whose_metric_nests_95_levels_is_recorded(self):
-        pin = self.prepare_manuscript_pin(self.observe_earlier_release_claim_with_metric(95))
-        self.assertEqual(pin()["result"]["id"], "paper-1")
+        from research_harness.publication import prepare_publication
+        payload = self.build_manuscript_payload(self.observe_earlier_release_claim_with_metric(95))
+        self.assertEqual(self.mutate(prepare_publication, payload)["result"]["id"], "paper-1")
 
     def test_an_earlier_release_admission_with_a_seed_of_4301_digits_cannot_be_launched(self):
         # The claim holds the seed in its config.
@@ -1104,12 +1104,12 @@ class ResearchExecutionTests(DevelopmentCase):
         # The earlier release recorded the outcome and stopped before the observation, which holds the seed.
         self.convert_integers_of_any_length()
         api = importlib.import_module("research_harness.execution")
-        mutate = api.prepared_mutation
+        original_prepared_mutation = api.prepared_mutation
 
         def stop_before_the_observation(store, operation, *args, **kwargs):
             if operation == "execution.observe":
                 raise OSError("The earlier release stopped before the observation")
-            return mutate(store, operation, *args, **kwargs)
+            return original_prepared_mutation(store, operation, *args, **kwargs)
 
         with self.write_as_earlier_release():
             admission = admit_lab(self, body="print('{\"metric\": 7}')\n", seed=10 ** 4300)
@@ -1134,10 +1134,12 @@ class ResearchExecutionTests(DevelopmentCase):
     def test_a_manuscript_of_a_study_with_an_earlier_release_seed_of_4301_digits_is_refused(self):
         # The bundle holds the admissions and executions of every cycle and the claim of each cited run.
         import integration_fixtures
+        from research_harness.publication import prepare_publication
         self.convert_integers_of_any_length()
-        pin = self.prepare_manuscript_pin(self.observe_run_as_earlier_release(body=integration_fixtures.OBSERVED_PROGRAM,
-                                                                         seed=10 ** 4300))
-        self.assert_refused_without_a_change(pin, "no integer of more than 4300 digits")
+        payload = self.build_manuscript_payload(self.observe_run_as_earlier_release(body=integration_fixtures.OBSERVED_PROGRAM,
+                                                                                    seed=10 ** 4300))
+        self.assert_refused_without_a_change(lambda: self.mutate(prepare_publication, payload),
+                                             "no integer of more than 4300 digits")
 
 
 class RunMetricTests(unittest.TestCase):
