@@ -308,6 +308,18 @@ def run(args):
         examples = strict_json((Path(__file__).resolve().parents[1] / "docs/research-cli-examples.json").read_bytes())
         return examples[args.operation]
     root = Path(args.workspace).absolute()
+    if args.command in OPERATIONS or args.command in ACQUISITION:
+        payload = strict_json(Path(args.file).read_bytes())
+        try:
+            check_command_bounds(payload)
+        except ResearchError:
+            # The store returns a committed request's receipt before it checks the payload, so a retry of a request
+            # that an earlier release committed beyond this bound still gets its original receipt. Only an existing
+            # store holds such a request, and init, adopt and acquisition create a store only after this check.
+            existing = find_workspace(root, required=False)
+            if (existing is None or not (existing / ".exactory/research.sqlite3").exists()
+                    or Store(existing).committed_request(args.request_id) is None):
+                raise
     if args.command in ("init", "adopt"):
         root = find_workspace(root, required=False) or root
         store = Store(root, create=True)
@@ -330,14 +342,6 @@ def run(args):
         root = find_workspace(root)
         store = Store(root)
     if args.command in OPERATIONS or args.command in ACQUISITION:
-        payload = strict_json(Path(args.file).read_bytes())
-        try:
-            check_command_bounds(payload)
-        except ResearchError:
-            # The store returns a committed request's receipt before it checks the payload, so a retry of a request
-            # that an earlier release committed beyond this bound still gets its original receipt.
-            if store.committed_request(args.request_id) is None:
-                raise
         identity = {"expected_revision": args.expected_revision, "request_id": args.request_id}
         if args.command in OPERATIONS:
             return OPERATIONS[args.command](store, payload, **identity)
