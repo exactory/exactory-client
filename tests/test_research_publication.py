@@ -4,6 +4,8 @@ import hashlib
 import importlib
 import json
 from pathlib import Path
+import subprocess
+import sys
 from unittest import mock
 from research_harness.errors import ResearchError
 
@@ -499,8 +501,8 @@ class ResearchPublicationTests(DevelopmentCase):
         self.assert_error("review_not_independent", lambda: api.validate_assessor(evaluation, dict(assessor, kind="robot"), []))
 
 
-class PayloadDepthBoundTests(DevelopmentCase):
-    """A value that assess accepts stays storable in the bundle of manuscript, which holds it deeper."""
+class CommandDepthBoundTests(DevelopmentCase):
+    """A payload that exactory-research accepts stays storable in every later record, such as the bundle of manuscript."""
 
     def setUp(self):
         super().setUp()
@@ -519,31 +521,61 @@ class PayloadDepthBoundTests(DevelopmentCase):
         plan = self.store.snapshot()["records"]["cycle_plan"][execution["cycle_id"]]["payload"]
         return execution, self.assessment(plan, execution)
 
-    def test_an_assessment_at_the_payload_depth_bound_reaches_the_manuscript(self):
+    def run_command(self, command, payload, request_id):
+        """Run exactory-research COMMAND on this workspace with the payload at the current revision."""
+        path = self.root / (request_id + ".json")
+        path.write_text(json.dumps(payload))
+        return subprocess.run([sys.executable, str(PLUGIN / "bin/exactory-research"), command, "--workspace", str(self.root),
+                               "--file", str(path), "--expected-revision", str(self.store.revision), "--request-id", request_id],
+                              capture_output=True, text=True)
+
+    def assert_command_recorded(self, command, payload, request_id):
+        revision = self.store.revision
+        result = self.run_command(command, payload, request_id)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.store.revision, revision + 1)
+        return json.loads(result.stdout)
+
+    def test_an_assessment_at_the_command_depth_bound_reaches_the_manuscript(self):
         # The bundle of manuscript holds each cycle's assessment payload 5 levels deeper than the payload is
-        # (review_inputs.branches.CYCLE.assessment.payload), within the 8 levels that the payload bound keeps free.
+        # (review_inputs.branches.CYCLE.assessment.payload), within the 8 levels that the command bound keeps free.
+        # The review and manuscript payloads cite the same evidence one level less deep than the assessment does.
         execution, assessment = self.build_assessment_of_nested_result(85)
         self.assertEqual(measure_nesting(assessment), 92)
-        self.mutate(self.development().assess_cycle, assessment)
+        self.assert_command_recorded("assess", assessment, "assess-at-bound")
         self.save_checkpoint()
-        self.mutate(self.development().record_readiness_review, self.review(execution))
+        self.assert_command_recorded("review", self.review(execution), "review-at-bound")
         for name in ("draft", "evidence"):
             (self.root / name).mkdir()
         (self.root / "draft/paper.pdf").write_bytes(b"%PDF-1.4\n% Authored depth bound fixture.\n%%EOF")
         (self.root / "draft/abstract.txt").write_text("The exact finite bound was enumerated.")
         (self.root / "draft/references.bib").write_text("@article{bounded,title={Authored bound}}\n")
         (self.root / "evidence/claims.json").write_text(json.dumps([{"id": "bound", "claim": "The maximum is 9."}]))
-        publication = importlib.import_module("research_harness.publication")
-        bundle = self.mutate(publication.prepare_publication, {
+        receipt = self.assert_command_recorded("manuscript", {
             "id": "paper-1", "files": {"pdf": "draft/paper.pdf", "abstract": "draft/abstract.txt",
                                        "bibliography": "draft/references.bib", "claims": "evidence/claims.json", "sources": None},
             "claim_evidence": [{"claim_id": "bound", "evidence": [self.result_evidence(execution)]}],
-            "citation_accounting": account_fixture_citations(self)})["result"]
-        self.assertEqual(publication.find_selected_bundle(self.store.snapshot()["records"]), bundle)
+            "citation_accounting": account_fixture_citations(self)}, "manuscript-at-bound")
+        publication = importlib.import_module("research_harness.publication")
+        self.assertEqual(publication.find_selected_bundle(self.store.snapshot()["records"]), receipt["result"])
 
-    def test_an_assessment_one_level_beyond_the_payload_depth_bound_is_refused(self):
+    def test_an_assessment_one_level_beyond_the_command_depth_bound_is_refused(self):
         _, assessment = self.build_assessment_of_nested_result(86)
         self.assertEqual(measure_nesting(assessment), 93)
         before = self.store.snapshot()
-        self.assert_error("invalid_input", lambda: self.mutate(self.development().assess_cycle, assessment))
+        result = self.run_command("assess", assessment, "assess-beyond-bound")
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(json.loads(result.stderr)["error"]["code"], "invalid_input")
+        self.assertEqual(self.store.snapshot(), before)
+
+    def test_a_retry_of_a_committed_assessment_beyond_the_command_bound_returns_its_receipt(self):
+        # The store bounds a payload at 100 levels, so an earlier release, or a direct call, could commit this
+        # assessment. A retry of that request returns its original receipt, as the store returns it.
+        _, assessment = self.build_assessment_of_nested_result(86)
+        receipt = self.development().assess_cycle(self.store, assessment, expected_revision=self.store.revision,
+                                                  request_id="assess-committed")
+        before = self.store.snapshot()
+        result = self.run_command("assess", assessment, "assess-committed")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), receipt)
         self.assertEqual(self.store.snapshot(), before)

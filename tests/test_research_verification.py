@@ -9,6 +9,7 @@ from unittest import mock
 
 from literature_fixtures import FIELDS
 from research_harness.literature import foundation_report
+from test_research_publication import measure_nesting
 from test_research_synthesis import SynthesisCase
 
 
@@ -31,15 +32,43 @@ class ResearchVerificationTests(SynthesisCase):
         return {"stance": "sound", "summary": "The finite bound is supported.", "rationaleSections": [],
                 "prediction": {"corpus": "arxiv", "category": "cs.LG", "windowStart": "2026-01-01", "windowEnd": "2026-01-31", "percentile": 50, "band": {"best": 35, "worst": 65}}}
 
+    def build_bind_payload(self, task_digest, body, identifier="verdict-1"):
+        return {"id": identifier, "task_digest": task_digest,
+                "body": self.artifacts.put(json.dumps(body).encode(), "application/json"),
+                "assessment": {"assessor": "independent-verifier", "provenance": self.artifacts.put(b"Authored separate verification context.", "text/plain"),
+                    "independence_basis": "The verifier is not an author and read no other verdicts.", "blind": True,
+                    "checks": [{"dimension": dimension, "reason": "The scoped source supports this separate assessment.", "evidence": [self.linked]}
+                               for dimension in ("soundness", "novelty", "impact")]}}
+
     def bind(self, api):
         task = self.mutate(api.record_task, {"task": self.task})["result"]
-        payload = {"id": "verdict-1", "task_digest": task["digest"],
-                   "body": self.artifacts.put(json.dumps(self.verdict()).encode(), "application/json"),
-                   "assessment": {"assessor": "independent-verifier", "provenance": self.artifacts.put(b"Authored separate verification context.", "text/plain"),
-                       "independence_basis": "The verifier is not an author and read no other verdicts.", "blind": True,
-                       "checks": [{"dimension": dimension, "reason": "The scoped source supports this separate assessment.", "evidence": [self.linked]}
-                                  for dimension in ("soundness", "novelty", "impact")]}}
-        return self.mutate(api.bind_verdict, payload)["result"]
+        return self.mutate(api.bind_verdict, self.build_bind_payload(task["digest"], self.verdict()))["result"]
+
+    def build_verdict_of_depth(self, levels):
+        """The fixture verdict whose rationaleSections nest so that the body nests `levels` levels in all."""
+        sections = "A rationale section."
+        for _ in range(levels - 1):
+            sections = [sections]
+        return dict(self.verdict(), rationaleSections=sections)
+
+    def test_a_verdict_body_at_the_command_depth_bound_is_bound(self):
+        # exactory verify sends the bound body, and the remote intent keeps it up to 3 levels deeper than the body
+        # file holds it, so bind-verdict reads a body of at most 92 levels, as exactory-research reads a payload.
+        api = self.verifier()
+        task = self.mutate(api.record_task, {"task": self.task})["result"]
+        body = self.build_verdict_of_depth(92)
+        self.assertEqual(measure_nesting(body), 92)
+        self.assertEqual(self.mutate(api.bind_verdict, self.build_bind_payload(task["digest"], body))["result"]["id"], "verdict-1")
+
+    def test_a_verdict_body_beyond_the_command_depth_bound_is_refused(self):
+        api = self.verifier()
+        task = self.mutate(api.record_task, {"task": self.task})["result"]
+        body = self.build_verdict_of_depth(93)
+        self.assertEqual(measure_nesting(body), 93)
+        payload = self.build_bind_payload(task["digest"], body)
+        before = self.store.snapshot()
+        self.assert_error("invalid_input", lambda: self.mutate(api.bind_verdict, payload))
+        self.assertEqual(self.store.snapshot(), before)
 
     def test_request_creator_can_bind_but_wrong_version_cannot_mutate(self):
         api = self.verifier()
