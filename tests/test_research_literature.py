@@ -525,6 +525,37 @@ class SearchDispositionTests(LiteratureCase):
         self.assertEqual(record("direct-3", "direct", [again]), set())
         self.assertEqual(record("theory", "theory", [elsewhere]), set())
 
+    def test_a_replacement_that_drops_a_family_only_its_predecessor_required_stales_the_other_purposes(self):
+        """The user accepted this consequence of H2 on 2026-09-29; under exhaustive-v1 the stale judgments are obligations."""
+        a, dropped = self.metadata(), "arxiv:2602.00014v1"
+        self.scope([a])
+        direct = self.search("direct", [dropped])
+        direct["cited_work_ids"] = [dropped]
+        self.mutate(record_search, direct)
+        self.mutate(record_search, self.search("theory"))
+        adjacent = self.search("adjacent", [dropped])
+        adjacent["dispositions"][0]["disposition"] = "out_of_scope"
+        self.mutate(record_search, adjacent)
+        replacement = self.search("direct", [dropped])
+        replacement["id"] = "direct-2"
+        self.mutate(record_search, replacement)
+
+        def stale_codes(search_ids):
+            """The obligation and notice codes that each judgment reports."""
+            report = foundation_report(self.store, "research")
+            return {s: (sorted(x["code"] for x in report["obligations"] if x.get("search_id") == s),
+                        sorted(x["code"] for x in report["notices"] if x.get("search_id") == s)) for s in search_ids}
+
+        # A judgment that found a work of the dropped family still rests on it, so only its frontier is stale.
+        self.assertEqual(stale_codes(("direct-2", "theory", "adjacent")),
+                         {"direct-2": ([], []), "theory": (["search_evidence_stale", "search_frontier_stale"], []),
+                          "adjacent": (["search_frontier_stale"], [])})
+        # Recording a purpose again clears its staleness.
+        theory = self.search("theory")
+        theory["id"] = "theory-2"
+        self.mutate(record_search, theory)
+        self.assertEqual(stale_codes(("theory-2",)), {"theory-2": ([], [])})
+
     def test_recording_another_purpose_does_not_stale_a_selected_search(self):
         a = self.metadata()
         self.scope([a])

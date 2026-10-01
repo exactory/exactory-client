@@ -72,6 +72,22 @@ class TierAndStalenessTests(LineageCase):
         self.assertIn("search_evidence_stale", {o["code"] for o in report["notices"]})
         self.assertIn("stable_digest", report)
 
+    def test_a_replacement_that_drops_a_family_only_its_predecessor_required_leaves_notices_on_the_other_purposes(self):
+        root = self.metadata(1)
+        self.scope([root])
+        dropped = self.metadata(2)
+        direct = self.search("direct", [dropped], disposition="relevant")
+        direct["cited_work_ids"] = [dropped]
+        self.mutate(record_search, direct)
+        theory = self.search("theory", [])
+        self.mutate(record_search, theory)
+        self.mutate(record_search, self.search("direct", [dropped], disposition="relevant"))
+        from research_harness.literature import foundation_report
+        report = foundation_report(self.store, "research")
+        self.assertFalse([x for x in report["obligations"] if x.get("search_id") == theory["id"]])
+        self.assertEqual(sorted(x["code"] for x in report["notices"] if x.get("search_id") == theory["id"]),
+                         ["search_evidence_stale", "search_frontier_stale"])
+
     def test_a_query_pools_the_hits_of_all_its_responses(self):
         root = self.metadata(1)
         self.scope([root])
