@@ -132,6 +132,26 @@ class TestCheck(unittest.TestCase):
         self.assertEqual(report["steps"][0]["status"], "unparseable")
         self.assertEqual(report["invalid"], 0)
 
+    def test_a_wrong_step_whose_samples_have_no_finite_value_is_not_reported_consistent(self) -> None:
+        # A JSON bound beyond the float range (1e400) reads as infinity, and a product beyond the float range is
+        # infinite. The two sides then differ by NaN, which no tolerance comparison flags, so a wrong step passed.
+        report = _run_check([
+            {"label": "infinite bound", "from": "x", "to": "x + 1", "vars": {"x": [0, float("inf")]}},
+            {"label": "overflowing product", "from": "a*b*a*b", "to": "2*a*a*b*b",
+             "vars": {"a": [1e100, 1e200], "b": [1e100, 1e200]}},
+        ], self)
+        for step in report["steps"]:
+            with self.subTest(step=step["label"]):
+                self.assertEqual((step["status"], step["witness"]), ("unparseable", None))
+                self.assertTrue(step["detail"].startswith("evaluation failed: "))
+        self.assertEqual(report["invalid"], 0)
+
+    def test_a_step_with_equal_complex_values_stays_consistent(self) -> None:
+        # A negative base to a fractional power gives a complex value with finite parts, which the check compares.
+        report = _run_check([{"label": "complex power", "from": "x**0.5", "to": "x**0.5", "vars": {"x": [-4.0, -1.0]}}],
+                            self)
+        self.assertIn(report["steps"][0]["status"], ("consistent", "verified"))
+
     def test_the_check_is_deterministic_across_runs(self) -> None:
         steps = [{"label": "wrong", "from": "(x + 1)**2", "to": "x**2 + 1",
                   "vars": {"x": [1.0, 5.0]}}]
