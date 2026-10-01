@@ -6,9 +6,14 @@ an incomplete pin may be prepared but cannot complete the foundation. Scope
 changes replace literature_scope/{profile}; Store events preserve prior scopes.
 
 Graph traversal includes every registry occurrence of a Tier 1/2 captured version
-and, for each original body among its bundles (an acquired original, or the saved
-response of a passage), the occurrences of the bundle selected for that body. A
-bundle that a later bundle of the same body replaced contributes no occurrence. A root
+and the occurrences of the bundle selected for each of its acquired originals that
+has a bundle. Only a version none of whose acquired originals has a bundle reads
+the bundle selected for each other body among its bundles, such as the saved
+response of a passage, so a passage bundle is not read beside a bundle of an
+acquired original, whichever was imported first. A verification target reads the
+bundle of each acquired original whatever its pin; the pin decides only which
+originals owe a complete bibliography. A bundle that a later bundle of the same
+body replaced contributes no occurrence. A root
 (Tier 1) is read in full with its complete bibliography. Its references are Tier 3
 (abstract) unless an active full-text requirement of this profile selects them
 (require-fulltext, or a work cited by the selected search judgment of a purpose);
@@ -163,10 +168,18 @@ def citation_graph(records, profile):
             continue
         versions.setdefault(work["work_id"], set()).add(identifier)
         tiers[work["work_id"]] = 1
-    # A registry observation has no bundle and is always read. Of the bundles of one original body, only the
-    # selected one is read, so an occurrence of a bundle that a later one replaced carries no obligation.
-    read_bundle_ids = {selected_bundle(records, b["version_id"], {"id": b["version_id"], "sha256": b["original_sha256"]})["id"]
-                       for b in records.get("source_bundle", {}).values()}
+    # A registry observation has no bundle and is always read. Of a version's bundles, the graph reads the one
+    # selected for each acquired original that has a bundle; a version none of whose acquired originals has a
+    # bundle reads the one selected for each other body instead, such as the saved response of a passage. A
+    # bundle that a later bundle of the same body replaced is never read, so its occurrences carry no obligation.
+    bodies = {}
+    for bundle in records.get("source_bundle", {}).values():
+        bodies.setdefault(bundle["version_id"], set()).add(bundle["original_sha256"])
+    read_bundle_ids = set()
+    for version, version_bodies in bodies.items():
+        acquired = version_bodies & {c["original"]["sha256"] for c in main_captures(records, records["work"][version])}
+        read_bundle_ids.update(selected_bundle(records, version, {"id": version, "sha256": body})["id"]
+                               for body in acquired or version_bodies)
     by_source = {}
     for occurrence in records.get("reference_occurrence", {}).values():
         if "bundle_id" not in occurrence or occurrence["bundle_id"] in read_bundle_ids:
