@@ -59,7 +59,7 @@ class UnsafeExpressionError(Exception):
     """An expression fell outside the safe arithmetic grammar."""
 
 
-def _evaluate_expression(expression: str, values: dict) -> float:
+def _evaluate_expression(expression: str, values: dict) -> float | complex:
     try:
         tree = ast.parse(expression, mode="eval")
     except SyntaxError as error:
@@ -67,7 +67,7 @@ def _evaluate_expression(expression: str, values: dict) -> float:
     return _evaluate_node(tree.body, values)
 
 
-def _evaluate_node(node: ast.AST, values: dict) -> float:
+def _evaluate_node(node: ast.AST, values: dict) -> float | complex:
     if isinstance(node, ast.Constant):
         if isinstance(node.value, bool) or not isinstance(node.value, (int, float)):
             raise UnsafeExpressionError("only numeric constants are allowed")
@@ -92,11 +92,14 @@ def _evaluate_node(node: ast.AST, values: dict) -> float:
         if function is None:
             raise UnsafeExpressionError(f"function not allowed: {node.func.id}")
         arguments = [_evaluate_node(argument, values) for argument in node.args]
-        return float(function(*arguments))
+        value = function(*arguments)
+        # csqrt and cexp return complex numbers, which the check compares as they are. The real functions return
+        # numbers that become floats, since some of them return integers.
+        return value if isinstance(value, complex) else float(value)
     raise UnsafeExpressionError(f"unsupported expression element: {type(node).__name__}")
 
 
-def _apply_binary_operator(operator: ast.operator, left: float, right: float) -> float:
+def _apply_binary_operator(operator: ast.operator, left: float | complex, right: float | complex) -> float | complex:
     if isinstance(operator, ast.Add):
         return left + right
     if isinstance(operator, ast.Sub):
@@ -156,6 +159,11 @@ def _try_symbolic_zero(from_expression: str, to_expression: str,
         return None
 
 
+def _format_json_number(value: float | complex) -> float | dict:
+    """A float as it is, and a complex number, which JSON lacks, as its real and imaginary parts."""
+    return {"real": value.real, "imag": value.imag} if isinstance(value, complex) else value
+
+
 def _check_step(step: dict, sample_count: int, relative_tolerance: float) -> dict:
     label = str(step.get("label", ""))
     from_expression = str(step.get("from", ""))
@@ -180,15 +188,16 @@ def _check_step(step: dict, sample_count: int, relative_tolerance: float) -> dic
             scale = max(abs(value_from), abs(value_to), 1.0)
             if difference > relative_tolerance * scale + _ABSOLUTE_TOLERANCE:
                 result["status"] = "invalid"
-                result["witness"] = {"point": point, "value_from": value_from,
-                                     "value_to": value_to}
+                result["witness"] = {"point": point, "value_from": _format_json_number(value_from),
+                                     "value_to": _format_json_number(value_to)}
                 result["detail"] = "the two sides differ at this point"
                 return result
     except UnsafeExpressionError as error:
         result["status"] = "unparseable"
         result["detail"] = str(error)
         return result
-    except (ValueError, ZeroDivisionError, OverflowError) as error:
+    except (TypeError, ValueError, ZeroDivisionError, OverflowError) as error:
+        # TypeError: a function of real numbers, such as sin, given a complex value.
         result["status"] = "unparseable"
         result["detail"] = f"evaluation failed: {error}"
         return result
