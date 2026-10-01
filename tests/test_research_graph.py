@@ -47,17 +47,17 @@ class GraphTests(LiteratureCase):
         self.metadata(3)
         self.scope([a])
 
-        def tiers():
+        def read_tiers():
             return {node["work_id"]: node["tier"] for node in citation_graph(self.store.snapshot()["records"], "research")["nodes"]}
 
         first = self.capture_search("direct", [b, c])
         first["cited_work_ids"] = [b, c]
         self.mutate(record_search, first)
-        self.assertEqual(tiers(), {a[:-2]: 1, b[:-2]: 2, c[:-2]: 2})
+        self.assertEqual(read_tiers(), {a[:-2]: 1, b[:-2]: 2, c[:-2]: 2})
         second = self.capture_search("direct", [b, c])
         second["id"], second["cited_work_ids"] = "direct-2", [b]
         self.mutate(record_search, second)
-        self.assertEqual(tiers(), {a[:-2]: 1, b[:-2]: 2, c[:-2]: 3})
+        self.assertEqual(read_tiers(), {a[:-2]: 1, b[:-2]: 2, c[:-2]: 3})
 
     def test_a_target_whose_archive_lost_its_hyphen_is_refused_with_its_canonical_form(self):
         a = self.metadata()
@@ -111,10 +111,11 @@ class GraphTests(LiteratureCase):
         second = self.bundle(a, capture, "bundle-2")
         second["bibliography"]["entries"] = [dict(entry, target=b, kind="paper", reason="The entry names the acquired B.")]
         self.mutate(import_bundle, second)
-        revised = self.capture(a, "A uses B in the revised text. References: B, a revised preprint.")
-        third = self.bundle(a, revised, "bundle-3")
+        revised_capture = self.capture(a, "A uses B in the revised text. References: B, a revised preprint.")
+        third = self.bundle(a, revised_capture, "bundle-3")
+        revised_locator = self.span(revised_capture["text"], "B, a revised preprint")
         third["bibliography"]["entries"] = [{"target": b, "kind": "paper", "reason": "The revised entry names the acquired B.",
-                                             "link": dict(third["units"][1]["link"], locator=self.span(revised["text"], "B, a revised preprint"))}]
+                                             "link": dict(third["units"][1]["link"], locator=revised_locator)}]
         self.mutate(import_bundle, third)
         records = self.store.snapshot()["records"]
         bundles = records["source_bundle"]
@@ -133,7 +134,8 @@ class GraphTests(LiteratureCase):
         self.scope([a])
         self.mutate(require_fulltext, {"id": "selected-c", "profile": "research", "version_id": c,
                                        "purpose": "major_claim", "reason": "The transfer rests on C's mechanism."})
-        observed = next(o for o in self.store.snapshot()["records"]["reference_occurrence"].values() if o["target"] is None)
+        observed_occurrence = next(o for o in self.store.snapshot()["records"]["reference_occurrence"].values()
+                                   if o["target"] is None)
         capture = self.capture(a, "The proof uses B and C. References: Authored B lemma; Paper C; laboratory notebook.")
         bundle = self.bundle(a, capture, "bundle-a")
         base = bundle["units"][1]["link"]
@@ -144,7 +146,7 @@ class GraphTests(LiteratureCase):
                    {"target": None, "kind": "nonpaper", "reason": "The entry names a laboratory notebook.",
                     "link": dict(base, locator=self.span(capture["text"], "laboratory notebook"))}]
         bundle["bibliography"]["entries"] = entries
-        bundle["resolutions"] = [dict(entries[0], reference_id=observed["id"])]
+        bundle["resolutions"] = [dict(entries[0], reference_id=observed_occurrence["id"])]
         self.mutate(import_bundle, bundle)
         capture_c = self.capture(c, "C extends earlier work. References: an unnamed manuscript.")
         bundle_c = self.bundle(c, capture_c, "bundle-c")
@@ -154,7 +156,7 @@ class GraphTests(LiteratureCase):
         self.assertEqual(digest(citation_graph(self.store.snapshot()["records"], "research")),
                          "5327c853eed2e6163dcc878a56617fe8ef3a3ceba564dcbf8dec5edb1193a32b")
 
-    def bundle_with_unknown_entry(self, version, capture, bundle_id, quote):
+    def build_bundle_with_unknown_entry(self, version, capture, bundle_id, quote):
         """An article bundle whose one bibliography entry, the quoted text, names no identifier."""
         bundle = self.bundle(version, capture, bundle_id)
         bundle["bibliography"]["entries"] = [{"target": None, "kind": "unknown", "reason": "The entry names no identifier.",
@@ -166,8 +168,8 @@ class GraphTests(LiteratureCase):
         first = self.capture(t, "T body one. References: first original entry.")
         second = self.capture(t, "T body two. References: second original entry.")
         # The second original's bundle is imported first, so the version's latest bundle belongs to the first original.
-        self.mutate(import_bundle, self.bundle_with_unknown_entry(t, second, "bundle-2", "second original entry"))
-        self.mutate(import_bundle, self.bundle_with_unknown_entry(t, first, "bundle-1", "first original entry"))
+        self.mutate(import_bundle, self.build_bundle_with_unknown_entry(t, second, "bundle-2", "second original entry"))
+        self.mutate(import_bundle, self.build_bundle_with_unknown_entry(t, first, "bundle-1", "first original entry"))
         records = self.store.snapshot()["records"]
         occurrences = set(records["reference_occurrence"])
         originals = {c["source_id"]: c["original"]["sha256"] for c in records["work"][t]["fulltexts"]}
@@ -177,16 +179,17 @@ class GraphTests(LiteratureCase):
             self.assertEqual({r["occurrence_id"] for r in graph["references"]}, occurrences, source_id)
             self.assertEqual({o["reference_id"] for o in graph["obligations"] if o["code"] == "reference_unresolved"}, occurrences, source_id)
 
-    def passage(self, version, bundle_id):
+    def build_passage_bundle(self, version, bundle_id):
         """A partial passage bundle on the version's saved tool response; its one bibliography entry names no identifier."""
         records = self.store.snapshot()["records"]
         source_id = next(s for s in records["work"][version]["source_ids"] if records["source"][s]["provider"] == "mcp")
 
-        def link(pointer, value):
+        def build_link(pointer, value):
             return {"version_id": version, "source_id": source_id, "artifact": records["source"][source_id]["response"],
                     "locator": {"kind": "json", "pointer": pointer, "value": value}}
 
-        body, bibliography = link("/title", "Authored references"), link("/references/0/unstructured", "A tool-reported reference")
+        body = build_link("/title", "Authored references")
+        bibliography = build_link("/references/0/unstructured", "A tool-reported reference")
         return {"id": bundle_id, "version_id": version, "source_id": source_id, "scope": "passage", "completeness": "partial",
                 "units": [{"id": "passage", "kind": "text", "required": True, "link": body},
                           {"id": "bibliography", "kind": "bibliography", "required": True, "link": bibliography}],
@@ -201,33 +204,40 @@ class GraphTests(LiteratureCase):
         passage_first, article_first, passage_only = roots
         captures = {version: self.capture(version, "The article body. References: an article reference.") for version in roots}
         # Each version has an available original; the last one has only a passage bundle.
-        for bundle in (self.passage(passage_first, "passage-1"),
-                       self.bundle_with_unknown_entry(passage_first, captures[passage_first], "article-1", "an article reference"),
-                       self.bundle_with_unknown_entry(article_first, captures[article_first], "article-2", "an article reference"),
-                       self.passage(article_first, "passage-2"),
-                       self.passage(passage_only, "passage-3")):
+        for bundle in (self.build_passage_bundle(passage_first, "passage-1"),
+                       self.build_bundle_with_unknown_entry(passage_first, captures[passage_first], "article-1",
+                                                            "an article reference"),
+                       self.build_bundle_with_unknown_entry(article_first, captures[article_first], "article-2",
+                                                            "an article reference"),
+                       self.build_passage_bundle(article_first, "passage-2"),
+                       self.build_passage_bundle(passage_only, "passage-3")):
             self.mutate(import_bundle, bundle)
         self.scope(roots)
         records = self.store.snapshot()["records"]
         graph = citation_graph(records, "research")
         # The article bundles supersede the passages imported before and after them; the passage-only version reads its passage.
-        superseded = {o for b in ("passage-1", "passage-2") for o in records["source_bundle"][b]["occurrence_ids"]}
-        self.assertEqual({r["occurrence_id"] for r in graph["references"]}, set(records["reference_occurrence"]) - superseded)
-        self.assertFalse(superseded & {o.get("reference_id") for o in graph["obligations"]})
+        superseded_occurrence_ids = {o for b in ("passage-1", "passage-2")
+                                     for o in records["source_bundle"][b]["occurrence_ids"]}
+        self.assertEqual({r["occurrence_id"] for r in graph["references"]},
+                         set(records["reference_occurrence"]) - superseded_occurrence_ids)
+        self.assertFalse(superseded_occurrence_ids & {o.get("reference_id") for o in graph["obligations"]})
         self.assertTrue(set(records["source_bundle"]["passage-3"]["occurrence_ids"]) <= {o.get("reference_id") for o in graph["obligations"]})
 
     def test_an_original_that_a_bundle_links_as_a_supplement_is_read_only_as_another_body_in_either_import_order(self):
         roots = [self.metadata(n) for n in (1, 2)]
         bundles = []
         for number, root in enumerate(roots, 1):
-            article = self.capture(root, "The article body. References: an article reference.")
-            supplement = self.capture(root, "The supplement body. References: a supplement reference.")
-            main = self.bundle_with_unknown_entry(root, article, "main-%d" % number, "an article reference")
-            main["units"].append({"id": "supplement", "kind": "supplement", "required": True,
-                                  "link": self.link(root, supplement["source_id"], supplement["text"])})
-            own = self.bundle_with_unknown_entry(root, supplement, "supplement-%d" % number, "a supplement reference")
+            article_capture = self.capture(root, "The article body. References: an article reference.")
+            supplement_capture = self.capture(root, "The supplement body. References: a supplement reference.")
+            main_bundle = self.build_bundle_with_unknown_entry(root, article_capture, "main-%d" % number,
+                                                               "an article reference")
+            supplement_unit = {"id": "supplement", "kind": "supplement", "required": True,
+                               "link": self.link(root, supplement_capture["source_id"], supplement_capture["text"])}
+            main_bundle["units"].append(supplement_unit)
+            supplement_bundle = self.build_bundle_with_unknown_entry(root, supplement_capture, "supplement-%d" % number,
+                                                                     "a supplement reference")
             # The first version imports its main bundle first, the second version the supplement's own bundle.
-            bundles += [main, own] if number == 1 else [own, main]
+            bundles += [main_bundle, supplement_bundle] if number == 1 else [supplement_bundle, main_bundle]
         for bundle in bundles:
             self.mutate(import_bundle, bundle)
         self.scope(roots)

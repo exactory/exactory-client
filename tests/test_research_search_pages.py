@@ -71,7 +71,7 @@ class SearchPageTests(LiteratureCase):
         endpoints = {"arxiv": "https://export.arxiv.org/api/query", "crossref": "https://api.crossref.org/works",
                      "openalex": "https://api.openalex.org/works"}
 
-        def identity(provider, query):
+        def compute_identity(provider, query):
             return compute_query_identity({"provider": provider, "url": endpoints[provider] + "?" + query})
 
         # Per provider: a capture, captures that ask the same query, and captures that each ask another query.
@@ -90,15 +90,16 @@ class SearchPageTests(LiteratureCase):
                                "search=dram+erasure&filter=cites:W123", "search=dram+erasure&corpus=all"])}
         for provider, (base, extras, others) in cases.items():
             for extra in extras:
-                self.assertEqual(identity(provider, base + "&" + extra), identity(provider, base), (provider, extra))
-            identities = [identity(provider, query) for query in [base] + others]
+                self.assertEqual(compute_identity(provider, base + "&" + extra), compute_identity(provider, base),
+                                 (provider, extra))
+            identities = [compute_identity(provider, query) for query in [base] + others]
             self.assertEqual(len({json.dumps(i, sort_keys=True) for i in identities}), len(identities), provider)
         self.assertIsNone(compute_query_identity({"provider": "web", "url": endpoints["openalex"] + "?search=dram+erasure"}))
 
     def test_spellings_of_one_request_share_its_query_identity(self):
         from research_harness.search_pages import compute_query_identity
 
-        def identity(provider, url):
+        def compute_identity(provider, url):
             return compute_query_identity({"provider": provider, "url": url})
 
         # Per provider: a capture's URL, and other spellings of its request that ask the same query.
@@ -120,16 +121,21 @@ class SearchPageTests(LiteratureCase):
                                "&search.exact="])}
         for provider, (base, spellings) in cases.items():
             for spelling in spellings:
-                self.assertEqual(identity(provider, spelling), identity(provider, base), (provider, spelling))
+                self.assertEqual(compute_identity(provider, spelling), compute_identity(provider, base),
+                                 (provider, spelling))
         # An empty list parameter is no parameter, and a list parameter with other items asks another query.
-        self.assertEqual(identity("openalex", "https://api.openalex.org/works?search=dram+erasure&filter="),
-                         identity("openalex", "https://api.openalex.org/works?search=dram+erasure"))
-        self.assertNotEqual(identity("openalex", "https://api.openalex.org/works?search=dram+erasure&filter=type:article"),
-                            identity("openalex", "https://api.openalex.org/works?search=dram+erasure&filter=type:article,is_oa:true"))
-        self.assertNotEqual(identity("crossref", "https://api.crossref.org/works?query=dram+erasure&filter=type:journal-article"),
-                            identity("crossref", "https://api.crossref.org/works?query=dram+erasure&filter=type:journal-article,type:book"))
-        self.assertNotEqual(identity("arxiv", "https://export.arxiv.org/api/query?id_list=2601.00001"),
-                            identity("arxiv", "https://export.arxiv.org/api/query?id_list=2601.00001,2601.00002"))
+        self.assertEqual(compute_identity("openalex", "https://api.openalex.org/works?search=dram+erasure&filter="),
+                         compute_identity("openalex", "https://api.openalex.org/works?search=dram+erasure"))
+        self.assertNotEqual(
+            compute_identity("openalex", "https://api.openalex.org/works?search=dram+erasure&filter=type:article"),
+            compute_identity("openalex",
+                             "https://api.openalex.org/works?search=dram+erasure&filter=type:article,is_oa:true"))
+        self.assertNotEqual(
+            compute_identity("crossref", "https://api.crossref.org/works?query=dram+erasure&filter=type:journal-article"),
+            compute_identity("crossref",
+                             "https://api.crossref.org/works?query=dram+erasure&filter=type:journal-article,type:book"))
+        self.assertNotEqual(compute_identity("arxiv", "https://export.arxiv.org/api/query?id_list=2601.00001"),
+                            compute_identity("arxiv", "https://export.arxiv.org/api/query?id_list=2601.00001,2601.00002"))
 
     def test_an_openalex_filter_value_is_compared_without_letter_case_and_its_alternatives_as_a_set(self):
         from research_harness.search_pages import compute_query_identity
@@ -175,7 +181,7 @@ class SearchPageTests(LiteratureCase):
             source_url="https://api.openalex.org/works?filter=cites:W123&sort=cited_by_count:desc",
             captured_at="2026-09-07T12:00:00Z", expected_revision=self.store.revision, request_id="native-" + str(self.sequence))
 
-        def citing(query):
+        def build_citing_judgment(query):
             return {"id": "citing-" + query, "profile": "research", "purpose": "recent", "queries": [query],
                     "responses": [{"source_id": capture["source_ids"][0], "query": query}],
                     "captured_at": "2026-09-07T12:00:00Z", "scope": "Every work that cites W123.",
@@ -184,8 +190,8 @@ class SearchPageTests(LiteratureCase):
                                      for w in capture["work_ids"]],
                     "impact": "This judgment covers only the saved citing works.", "gaps": []}
 
-        self.assert_error("invalid_search", lambda: self.mutate(record_search, citing("cited_by_count:desc")))
-        self.assertFalse(self.mutate(record_search, citing("cites:W123"))["result"]["pending"])
+        self.assert_error("invalid_search", lambda: self.mutate(record_search, build_citing_judgment("cited_by_count:desc")))
+        self.assertFalse(self.mutate(record_search, build_citing_judgment("cites:W123"))["result"]["pending"])
 
     def test_search_report_preserves_native_missing_pages(self):
         self.search([self.crossref([1, 2])])
