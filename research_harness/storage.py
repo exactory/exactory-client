@@ -42,13 +42,16 @@ _MAX_REVISION = (1 << 63) - 1
 _MAX_STORED_INTEGER_DIGITS = 4300
 _MAX_STORED_INTEGER = 10 ** _MAX_STORED_INTEGER_DIGITS - 1
 _MAX_STORED_DEPTH = 100
-# A command input (a payload file of exactory-research, a verdict body of bind-verdict) nests at most _MAX_COMMAND_DEPTH
-# levels, 36 below the store's bound, because later records hold copies of its values deeper. The deepest copy found is
-# 10 levels deeper: acquire_fulltext records the component of a fulltext payload as given while its fetch is pending,
-# each source deferral copies the whole work, and the bundle of manuscript holds the deferrals, so
-# review_inputs.synthesis.foundation.source_deferrals[i].dependencies.work.fulltexts[k].component.spec holds payload
-# level 2 at level 12. The other 26 levels are headroom for copies that later releases add.
-_MAX_COMMAND_DEPTH = 64
+# A value that the harness takes in nests at most _MAX_INPUT_DEPTH levels: a payload file of exactory-research, a
+# verdict body of bind-verdict, and the metric of a run (execution_outputs), which has had this bound since 0.48.0.
+# Later records and reviewer exports hold copies of its values deeper. A reviewer export reads JSON of at most 40 levels
+# (scientific_delivery._MAX_DEPTH, scientific_json._check_nesting_bound), and the deepest export copy found is 7 levels
+# deeper: the readiness export of a source-limited study holds, at inputs.sources.work, the component of a fulltext
+# payload, which acquire_fulltext records as given while the fetch is pending; a round packet holds a metric as deep.
+# The deepest record copy found is 10 levels deeper, at
+# review_inputs.synthesis.foundation.source_deferrals[i].dependencies.work.fulltexts[k].component.spec in the bundle of
+# manuscript. So an input of 32 levels fits both: it reaches 39 levels in an export and 42 levels in a record.
+_MAX_INPUT_DEPTH = 32
 _PUBLICATION_NAME = re.compile(r"\.research-[0-9a-f]{32}\.sqlite3\Z")
 _WORKSPACE_LOCKS = weakref.WeakValueDictionary()
 _LOCK_REGISTRY_GUARD = threading.Lock()
@@ -124,10 +127,9 @@ def _check_stored_bounds(value, max_depth=_MAX_STORED_DEPTH):
 
 
 def check_command_bounds(value):
-    """Refuse a command input that nests deeper than the command bound or holds an integer beyond the store's bound."""
-    _check_bounds(value, _MAX_COMMAND_DEPTH, "A command input must nest at most " + str(_MAX_COMMAND_DEPTH)
-                  + " levels, which leaves room within the store's " + str(_MAX_STORED_DEPTH)
-                  + " levels for deeper copies in later records")
+    """Refuse a command input that nests deeper than the input bound or holds an integer beyond the store's bound."""
+    _check_bounds(value, _MAX_INPUT_DEPTH, "A command input must nest at most " + str(_MAX_INPUT_DEPTH)
+                  + " levels, which leaves room for deeper copies of its values in later records and reviewer exports")
 
 
 def _canonical(value, code: str = "invalid_input") -> str:
