@@ -527,7 +527,7 @@ def _foundation_state(evaluation, profile):
     critical = {target["id"]} if target else set()
     full_requirements = {k: r for k, r in find_active_requirements(records).items() if r["profile"] == profile}
     # The digests hold every record of a required version (graph.find_bound_requirements).
-    bound_requirements = {k: r for k, r in find_bound_requirements(records).items() if r["profile"] == profile}
+    bound_requirements = find_bound_requirements(records, profile, graph)
     for requirement in full_requirements.values():
         version = requirement["version_id"]
         requirements[version] = "fulltext"

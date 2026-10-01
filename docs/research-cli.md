@@ -187,9 +187,10 @@ validity, contradiction handling, budgets, actual execution and independent
 review remain ordinary obligations.
 
 The decision binds the source captures, required units, readings and the
-version's requirement records: every record while any of them counts, and none
-once none counts. A change makes it `stale` and restores ordinary blocking
-obligations.
+version's requirement records: every record while the version is a required
+full text, because one of its records counts or the citation graph places it at
+Tier 1 or 2, and none once it is not. A change makes it `stale` and restores
+ordinary blocking obligations.
 Record a new decision with a new ID to reassess the gap. `resume-source` restores
 the ordinary obligations explicitly. `status` retains active, stale, superseded
 and resumed decisions, and `status --summary` counts them and deferred obligations.

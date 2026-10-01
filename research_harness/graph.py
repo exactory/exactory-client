@@ -52,16 +52,18 @@ def find_active_requirements(records):
     return {key: value for key, value in records.get("fulltext_requirement", {}).items() if key not in retired}
 
 
-def find_bound_requirements(records):
-    """The full-text requirements that a binding or a digest holds: {id: requirement}.
+def find_bound_requirements(records, profile, graph):
+    """The full-text requirements of the profile that a binding or a digest holds: {id: requirement}.
 
-    It holds every record of a version while any record of that version, in the same profile, counts. For
-    such a version these are the records that bindings held before a replaced judgment's requirements
-    stopped counting. A binding therefore changes when a record is added or a version stops being required,
-    and not when a record stops counting while another record of its version still counts."""
-    counted = {(r["profile"], r["version_id"]) for r in find_active_requirements(records).values()}
+    It holds every record of a version while the version is a required full text: while one of its own records
+    counts, or while the profile's citation graph places it at Tier 1 or 2. For such a version these are the
+    records that bindings held before a replaced judgment's requirements stopped counting. A binding therefore
+    changes when a record is added or a version starts or stops being a required full text, and not when a
+    record stops counting while its version stays a required full text."""
+    required = {version for node in graph["nodes"] if node["tier"] <= 2 for version in node["version_ids"]}
+    required.update(r["version_id"] for r in find_active_requirements(records).values() if r["profile"] == profile)
     return {key: value for key, value in records.get("fulltext_requirement", {}).items()
-            if (value["profile"], value["version_id"]) in counted}
+            if value["profile"] == profile and value["version_id"] in required}
 
 
 def validate_target(records, target, roots):
