@@ -146,6 +146,15 @@ class TestCheck(unittest.TestCase):
                 self.assertTrue(step["detail"].startswith("evaluation failed: "))
         self.assertEqual(report["invalid"], 0)
 
+    def test_a_wrong_step_with_one_side_without_a_finite_value_is_not_reported_consistent(self) -> None:
+        # With one infinite side the difference is infinite, but so is the tolerance, which scales with the larger
+        # side, so the comparison never flags the step either.
+        report = _run_check([
+            {"label": "infinite " + side + " side", "from": "x" if side == "left" else "1", "to": "1" if side == "left" else "x",
+             "vars": {"x": [0, float("inf")]}} for side in ("left", "right")], self)
+        self.assertEqual([step["status"] for step in report["steps"]], ["unparseable", "unparseable"])
+        self.assertEqual(report["invalid"], 0)
+
     def test_a_step_with_equal_complex_values_stays_consistent(self) -> None:
         # A negative base to a fractional power gives a complex value with finite parts, which the check compares.
         report = _run_check([{"label": "complex power", "from": "x**0.5", "to": "x**0.5", "vars": {"x": [-4.0, -1.0]}}],
