@@ -27,6 +27,21 @@ def measure_nesting(value):
     return 1 + max(map(measure_nesting, value), default=0) if isinstance(value, list) else 0
 
 
+def run_export(root, kind):
+    """Run exactory-research export --kind KIND on the workspace at root into a new directory."""
+    return subprocess.run([sys.executable, str(PLUGIN / "bin/exactory-research"), "export", "--kind", kind, "--workspace",
+                           str(root), "--destination", str(root / ("export-" + kind))], capture_output=True, text=True)
+
+
+def build_nested_result_program(levels):
+    """A run program whose JSON result holds a value nested `levels` lists deep, which the fixture assessment cites
+    through json locators, so that the assessment payload nests `levels` + 7 levels."""
+    return ('import json\nfrom pathlib import Path\nnested = 9\nfor _ in range(%d):\n    nested = [nested]\n'
+            'Path("results/result.json").write_text(json.dumps({"result": nested}))\n'
+            'Path("results/validation.json").write_text(json.dumps({"validation": {"passed": True}}))\n'
+            'print(json.dumps({"metric": 9}))\n') % levels
+
+
 def build_fulltext_payload(levels):
     """A fulltext payload of a supplement component whose assessment nests so that the payload nests `levels` levels."""
     assessment = "A nested component assessment."
@@ -515,7 +530,7 @@ class ResearchPublicationTests(DevelopmentCase):
 
 
 class CommandDepthBoundTests(DevelopmentCase):
-    """A payload that exactory-research accepts stays storable in every later record, such as the bundle of manuscript."""
+    """A payload that exactory-research accepts fits every later record and reviewer export that copies its values."""
 
     def setUp(self):
         super().setUp()
@@ -524,11 +539,7 @@ class CommandDepthBoundTests(DevelopmentCase):
     def build_assessment_of_nested_result(self, levels):
         """Observe a run whose JSON result holds a value nested `levels` lists deep; return the run and the fixture
         assessment, whose json locators cite that value."""
-        program = ('import json\nfrom pathlib import Path\nnested = 9\nfor _ in range(%d):\n    nested = [nested]\n'
-                   'Path("results/result.json").write_text(json.dumps({"result": nested}))\n'
-                   'Path("results/validation.json").write_text(json.dumps({"validation": {"passed": True}}))\n'
-                   'print(json.dumps({"metric": 9}))\n') % levels
-        with mock.patch.object(integration_fixtures, "OBSERVED_PROGRAM", program):
+        with mock.patch.object(integration_fixtures, "OBSERVED_PROGRAM", build_nested_result_program(levels)):
             execution = observe_run(self)
         self.execution_payload = execution
         plan = self.store.snapshot()["records"]["cycle_plan"][execution["cycle_id"]]["payload"]
@@ -551,10 +562,10 @@ class CommandDepthBoundTests(DevelopmentCase):
 
     def test_an_assessment_at_the_command_depth_bound_reaches_the_manuscript(self):
         # The bundle of manuscript holds each cycle's assessment payload 5 levels deeper than the payload is
-        # (review_inputs.branches.CYCLE.assessment.payload), within the 36 levels that the command bound keeps free.
-        # The review and manuscript payloads cite the same evidence one level less deep than the assessment does.
-        execution, assessment = self.build_assessment_of_nested_result(57)
-        self.assertEqual(measure_nesting(assessment), 64)
+        # (review_inputs.branches.CYCLE.assessment.payload), well within the store's 100 levels. The review and
+        # manuscript payloads cite the same evidence one level less deep than the assessment does.
+        execution, assessment = self.build_assessment_of_nested_result(25)
+        self.assertEqual(measure_nesting(assessment), 32)
         self.assert_command_recorded("assess", assessment, "assess-at-bound")
         self.save_checkpoint()
         self.assert_command_recorded("review", self.review(execution), "review-at-bound")
@@ -579,24 +590,24 @@ class CommandDepthBoundTests(DevelopmentCase):
         self.assertEqual(result.returncode, 1)
         error = json.loads(result.stderr)["error"]
         self.assertEqual(error["code"], "invalid_input")
-        self.assertTrue(error["message"].startswith("A command input must nest at most 64 levels"), error["message"])
+        self.assertTrue(error["message"].startswith("A command input must nest at most 32 levels"), error["message"])
         self.assertEqual(self.store.snapshot(), before)
 
     def test_an_assessment_one_level_beyond_the_command_depth_bound_is_refused(self):
-        _, assessment = self.build_assessment_of_nested_result(58)
-        self.assertEqual(measure_nesting(assessment), 65)
+        _, assessment = self.build_assessment_of_nested_result(26)
+        self.assertEqual(measure_nesting(assessment), 33)
         self.assert_command_refused("assess", assessment, "assess-beyond-bound")
 
     def test_a_fulltext_payload_one_level_beyond_the_command_depth_bound_is_refused(self):
         # The command refuses the payload file before it makes a request.
-        payload = build_fulltext_payload(65)
-        self.assertEqual(measure_nesting(payload), 65)
+        payload = build_fulltext_payload(33)
+        self.assertEqual(measure_nesting(payload), 33)
         self.assert_command_refused("fulltext", payload, "fulltext-beyond-bound")
 
     def test_a_retry_of_a_committed_assessment_beyond_the_command_bound_returns_its_receipt(self):
         # The store bounds a payload at 100 levels, so an earlier release, or a direct call, committed such an
         # assessment. A retry of that request returns its original receipt, as the store returns it.
-        _, assessment = self.build_assessment_of_nested_result(58)
+        _, assessment = self.build_assessment_of_nested_result(26)
         receipt = self.development().assess_cycle(self.store, assessment, expected_revision=self.store.revision,
                                                   request_id="assess-committed")
         before = self.store.snapshot()
@@ -607,29 +618,50 @@ class CommandDepthBoundTests(DevelopmentCase):
 
 
 class FulltextComponentDepthTests(SourceLimitedCase):
-    """A fulltext component that the command accepts fits the bundle of manuscript, which holds it 10 levels deeper."""
+    """A fulltext component that the command accepts fits the readiness export, which holds it 7 levels deeper, and the
+    bundle of manuscript, which holds it 10 levels deeper."""
 
     def add_missing_supplement(self, version, capture=None):
-        # The deepest copy found: acquire_fulltext records the component of a fulltext payload as given while its fetch
-        # is pending, and each source deferral copies the whole work, which manuscript copies into its bundle.
+        # The deepest copies found: acquire_fulltext records the component of a fulltext payload as given while its
+        # fetch is pending. The readiness packet holds the work in inputs.sources, each source deferral copies the whole
+        # work, and manuscript copies the deferrals into its bundle. A network error saves no response, so the scoped
+        # readiness export delivers the study (a saved error response is a pending capture that it refuses).
         from research_harness.acquisition import acquire_fulltext
         from research_harness.storage import check_command_bounds
         bundle = super().add_missing_supplement(version, capture)
-        payload = dict(build_fulltext_payload(64), identifier=version)
-        self.assertEqual(measure_nesting(payload), 64)
+        payload = dict(build_fulltext_payload(32), identifier=version)
+        self.assertEqual(measure_nesting(payload), 32)
         check_command_bounds(payload)
-        http, _, _ = client([(404, {"Content-Type": "text/html"}, b"missing")], max_retries=0)
+        http, _, _ = client([OSError("The supplement host is unreachable")], max_retries=0)
         self.sequence += 1
         result = acquire_fulltext(self.store, version, payload["url"], http=http, component=payload["component"],
                                   expected_revision=self.store.revision, request_id="component-" + str(self.sequence))
         self.assertEqual(result["status"], "pending")
         return bundle
 
-    def test_a_fulltext_component_at_the_command_depth_bound_reaches_the_manuscript(self):
-        self.prepare_source_limited()
-        self.record_scope()
+    def test_a_fulltext_component_at_the_command_depth_bound_reaches_the_readiness_export_and_the_manuscript(self):
+        self.prepare_delivery(accept=False)
+        result = run_export(self.root, "readiness")
+        self.assertEqual(result.returncode, 0, result.stderr)
         self.accept_scope()
         bundle = self.scoped_manuscript()
         # review_inputs.synthesis.foundation.source_deferrals[0].dependencies.work.fulltexts[K].component.spec holds the
         # payload's component 10 levels deeper than the payload does.
-        self.assertEqual(measure_nesting(bundle), 74)
+        self.assertEqual(measure_nesting(bundle), 42)
+
+
+class ScopedAssessmentDepthTests(SourceLimitedCase):
+    """An assessment that the command accepts fits the readiness and manuscript exports of a source-limited study."""
+
+    def test_an_assessment_at_the_command_depth_bound_reaches_the_readiness_and_manuscript_exports(self):
+        from research_harness.storage import check_command_bounds
+        with mock.patch.object(integration_fixtures, "OBSERVED_PROGRAM", build_nested_result_program(25)):
+            self.prepare_delivery(accept=False)
+        self.assertEqual(measure_nesting(self.assessment_payload), 32)
+        check_command_bounds(self.assessment_payload)
+        result = run_export(self.root, "readiness")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.accept_scope()
+        self.scoped_manuscript()
+        result = run_export(self.root, "manuscript")
+        self.assertEqual(result.returncode, 0, result.stderr)

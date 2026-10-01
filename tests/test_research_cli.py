@@ -44,7 +44,7 @@ class ResearchCliTests(unittest.TestCase):
         # init, adopt and an acquisition outside a workspace create the store. A payload beyond the command bound is
         # refused before that, so the refusal changes nothing in the directory.
         deep_payload = {"value": 0}
-        for _ in range(64):
+        for _ in range(32):
             deep_payload = {"value": deep_payload}
         path = self.root / "deep.json"
         path.write_text(json.dumps(deep_payload))

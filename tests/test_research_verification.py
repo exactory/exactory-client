@@ -53,22 +53,22 @@ class ResearchVerificationTests(SynthesisCase):
 
     def test_a_verdict_body_at_the_command_depth_bound_is_bound(self):
         # exactory verify sends the bound body, and the remote intent keeps it up to 3 levels deeper than the body
-        # file holds it, so bind-verdict reads a body of at most 64 levels, as exactory-research reads a payload.
+        # file holds it, so bind-verdict reads a body of at most 32 levels, as exactory-research reads a payload.
         api = self.verifier()
         task = self.mutate(api.record_task, {"task": self.task})["result"]
-        body = self.build_verdict_of_depth(64)
-        self.assertEqual(measure_nesting(body), 64)
+        body = self.build_verdict_of_depth(32)
+        self.assertEqual(measure_nesting(body), 32)
         self.assertEqual(self.mutate(api.bind_verdict, self.build_bind_payload(task["digest"], body))["result"]["id"], "verdict-1")
 
     def test_a_verdict_body_beyond_the_command_depth_bound_is_refused(self):
         from research_harness.errors import ResearchError
         api = self.verifier()
         task = self.mutate(api.record_task, {"task": self.task})["result"]
-        body = self.build_verdict_of_depth(65)
-        self.assertEqual(measure_nesting(body), 65)
+        body = self.build_verdict_of_depth(33)
+        self.assertEqual(measure_nesting(body), 33)
         payload = self.build_bind_payload(task["digest"], body)
         before = self.store.snapshot()
-        with self.assertRaisesRegex(ResearchError, "^A command input must nest at most 64 levels") as raised:
+        with self.assertRaisesRegex(ResearchError, "must nest at most 32 levels") as raised:
             self.mutate(api.bind_verdict, payload)
         self.assertEqual(raised.exception.code, "invalid_input")
         self.assertEqual(self.store.snapshot(), before)
