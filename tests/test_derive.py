@@ -8,6 +8,7 @@ import importlib.util
 import io
 import json
 import math
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -220,6 +221,36 @@ class TestCheck(unittest.TestCase):
                 self.assertEqual((step["status"], step["witness"]), ("unparseable", None))
                 self.assertTrue(step["detail"].startswith("invalid step: "), step["detail"])
         self.assertEqual((report["counts"]["unparseable"], report["invalid"], self.exit_code), (6, 0, 0))
+
+    def test_an_expression_nested_beyond_the_interpreter_limits_is_unparseable(self) -> None:
+        # The parser or the evaluator stops on each of these: RecursionError under Python 3.9.6, and under 3.13.8
+        # RecursionError or, for the chain of powers, MemoryError ("Parser stack overflowed"). Each side would equal
+        # the other if it could be evaluated, so only that stop makes a step unparseable.
+        report = _run_check([
+            {"label": "sum of 3000 terms", "from": "+".join(["x"] * 3000), "to": "3000*x", "vars": {"x": [1.0, 2.0]}},
+            {"label": "3000 unary minus signs", "from": "-" * 3000 + "x", "to": "x", "vars": {"x": [1.0, 2.0]}},
+            {"label": "chain of 3000 powers", "from": "**".join(["x"] * 3000), "to": "x", "vars": {"x": [1.0, 1.0]}},
+        ], self)
+        for step in report["steps"]:
+            with self.subTest(step=step["label"]):
+                self.assertEqual((step["status"], step["witness"]), ("unparseable", None))
+                self.assertTrue(step["detail"].startswith("evaluation failed: "), step["detail"])
+        self.assertEqual((report["counts"]["unparseable"], self.exit_code), (3, 0))
+
+    def test_a_steps_file_nested_beyond_the_recursion_limit_is_an_input_error(self) -> None:
+        # json.loads stops on a file nested 100,000 levels with RecursionError under Python 3.9.6 and 3.13.8.
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        steps_path = Path(directory.name) / "steps.json"
+        steps_path.write_text("[" * 100000 + "]" * 100000, encoding="utf-8")
+        args = _derive._build_parser().parse_args(["check", "--steps-file", str(steps_path)])
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            with self.assertRaises(SystemExit) as caught:
+                args.handler(args)
+        self.assertEqual(caught.exception.code, 2)
+        self.assertTrue(stderr.getvalue().startswith("Cannot read the steps file: "), stderr.getvalue())
+        self.assertEqual(stdout.getvalue(), "")
 
     def test_a_complex_value_whose_length_exceeds_the_float_range_is_compared(self) -> None:
         # abs() of a complex number is its length, which raises OverflowError beyond the float range although both
