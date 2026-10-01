@@ -105,31 +105,32 @@ def _json_types(value):
     raise ValueError("Value is not representable in JSON")
 
 
-def _check_bounds(value, max_depth, depth_err_msg):
-    """Refuse a value that nests deeper than max_depth levels, with depth_err_msg, or holds an integer that some
-    supported Python cannot read back. The top container is level 1."""
+def _check_bounds(value, name, max_depth, depth_reason):
+    """Refuse a value that nests deeper than max_depth levels or holds an integer that some supported Python cannot
+    read back; the top container is level 1. The refusal calls the value name, and depth_reason ends a depth refusal."""
     pending = [(value, 1)]
     while pending:
         item, depth = pending.pop()
         if isinstance(item, (dict, list, tuple)):
             if depth > max_depth:
-                raise ResearchError("invalid_input", depth_err_msg)
+                raise ResearchError("invalid_input", name + " must nest at most " + str(max_depth) + " levels"
+                                    + depth_reason)
             pending.extend((child, depth + 1) for child in (item.values() if isinstance(item, dict) else item))
         elif type(item) is int and abs(item) > _MAX_STORED_INTEGER:
-            raise ResearchError("invalid_input", "JSON to store must hold no integer of more than "
+            raise ResearchError("invalid_input", name + " must hold no integer of more than "
                                 + str(_MAX_STORED_INTEGER_DIGITS) + " digits so that every supported Python reads it back")
 
 
 def _check_stored_bounds(value, max_depth=_MAX_STORED_DEPTH):
     """Refuse a value to store beyond the bounds that every supported Python reads back."""
-    _check_bounds(value, max_depth, "JSON to store must nest at most " + str(max_depth)
-                  + " levels so that every supported Python reads it back")
+    _check_bounds(value, "JSON to store", max_depth, " so that every supported Python reads it back")
 
 
-def check_command_bounds(value):
-    """Refuse a command input that nests deeper than the input bound or holds an integer beyond the store's bound."""
-    _check_bounds(value, _MAX_INPUT_DEPTH, "A command input must nest at most " + str(_MAX_INPUT_DEPTH)
-                  + " levels, which leaves room for deeper copies of its values in later records and reviewer exports")
+def check_command_bounds(value, input_name="A command input"):
+    """Refuse a command input that nests deeper than the input bound or holds an integer beyond the store's bound. The
+    refusal calls the input input_name."""
+    _check_bounds(value, input_name, _MAX_INPUT_DEPTH,
+                  ", which leaves room for deeper copies of its values in later records and reviewer exports")
 
 
 def _canonical(value, code: str = "invalid_input") -> str:
