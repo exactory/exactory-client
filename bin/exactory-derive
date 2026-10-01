@@ -219,8 +219,10 @@ def _check_step(step: dict, sample_count: int, relative_tolerance: float) -> dic
         result["status"] = "unparseable"
         result["detail"] = str(error)
         return result
-    except (TypeError, ValueError, ZeroDivisionError, OverflowError) as error:
-        # TypeError: a function of real numbers, such as sin, given a complex value.
+    except (TypeError, ValueError, ZeroDivisionError, OverflowError, RecursionError, MemoryError) as error:
+        # TypeError: a function of real numbers, such as sin, given a complex value. RecursionError and MemoryError: an
+        # expression nested beyond what the parser or the recursive evaluator handles; CPython's parser reports a source
+        # too complex to parse as MemoryError.
         result["status"] = "unparseable"
         result["detail"] = f"evaluation failed: {error}"
         return result
@@ -246,7 +248,8 @@ def _check_step(step: dict, sample_count: int, relative_tolerance: float) -> dic
 def _run_check(args: argparse.Namespace) -> None:
     try:
         steps = json.loads(Path(args.steps_file).read_text(encoding="utf-8"))
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, RecursionError) as error:
+        # RecursionError: JSON nested beyond the interpreter's recursion limit.
         print(f"Cannot read the steps file: {error}", file=sys.stderr)
         raise SystemExit(2)
     if not isinstance(steps, list):
