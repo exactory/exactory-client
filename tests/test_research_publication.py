@@ -4,14 +4,23 @@ import hashlib
 import importlib
 import json
 from pathlib import Path
+from unittest import mock
 from research_harness.errors import ResearchError
 
 from development_fixtures import DevelopmentCase
+import integration_fixtures
 from integration_fixtures import (account_fixture_citations, approve_publication_stop, build_manuscript_review,
-                                  build_review_core, observed_candidate)
+                                  build_review_core, observe_run, observed_candidate)
 
 
 PLUGIN = Path(__file__).resolve().parents[1]
+
+
+def measure_nesting(value):
+    """The nesting of a JSON value as the store counts it: the top container is level 1."""
+    if isinstance(value, dict):
+        value = list(value.values())
+    return 1 + max(map(measure_nesting, value), default=0) if isinstance(value, list) else 0
 
 
 class ResearchPublicationTests(DevelopmentCase):
@@ -488,3 +497,53 @@ class ResearchPublicationTests(DevelopmentCase):
         self.assertEqual(api.validate_assessor(evaluation, assessor, ["cycle-author"]), assessor)
         self.assert_error("review_not_independent", lambda: api.validate_assessor(evaluation, dict(assessor, id="CYCLE-AUTHOR "), ["cycle-author"]))
         self.assert_error("review_not_independent", lambda: api.validate_assessor(evaluation, dict(assessor, kind="robot"), []))
+
+
+class PayloadDepthBoundTests(DevelopmentCase):
+    """A value that assess accepts stays storable in the bundle of manuscript, which holds it deeper."""
+
+    def setUp(self):
+        super().setUp()
+        self.prepared_study()
+
+    def build_assessment_of_nested_result(self, levels):
+        """Observe a run whose JSON result holds a value nested `levels` lists deep; return the run and the fixture
+        assessment, whose json locators cite that value."""
+        program = ('import json\nfrom pathlib import Path\nnested = 9\nfor _ in range(%d):\n    nested = [nested]\n'
+                   'Path("results/result.json").write_text(json.dumps({"result": nested}))\n'
+                   'Path("results/validation.json").write_text(json.dumps({"validation": {"passed": True}}))\n'
+                   'print(json.dumps({"metric": 9}))\n') % levels
+        with mock.patch.object(integration_fixtures, "OBSERVED_PROGRAM", program):
+            execution = observe_run(self)
+        self.execution_payload = execution
+        plan = self.store.snapshot()["records"]["cycle_plan"][execution["cycle_id"]]["payload"]
+        return execution, self.assessment(plan, execution)
+
+    def test_an_assessment_at_the_payload_depth_bound_reaches_the_manuscript(self):
+        # The bundle of manuscript holds each cycle's assessment payload 5 levels deeper than the payload is
+        # (review_inputs.branches.CYCLE.assessment.payload), within the 8 levels that the payload bound keeps free.
+        execution, assessment = self.build_assessment_of_nested_result(85)
+        self.assertEqual(measure_nesting(assessment), 92)
+        self.mutate(self.development().assess_cycle, assessment)
+        self.save_checkpoint()
+        self.mutate(self.development().record_readiness_review, self.review(execution))
+        for name in ("draft", "evidence"):
+            (self.root / name).mkdir()
+        (self.root / "draft/paper.pdf").write_bytes(b"%PDF-1.4\n% Authored depth bound fixture.\n%%EOF")
+        (self.root / "draft/abstract.txt").write_text("The exact finite bound was enumerated.")
+        (self.root / "draft/references.bib").write_text("@article{bounded,title={Authored bound}}\n")
+        (self.root / "evidence/claims.json").write_text(json.dumps([{"id": "bound", "claim": "The maximum is 9."}]))
+        publication = importlib.import_module("research_harness.publication")
+        bundle = self.mutate(publication.prepare_publication, {
+            "id": "paper-1", "files": {"pdf": "draft/paper.pdf", "abstract": "draft/abstract.txt",
+                                       "bibliography": "draft/references.bib", "claims": "evidence/claims.json", "sources": None},
+            "claim_evidence": [{"claim_id": "bound", "evidence": [self.result_evidence(execution)]}],
+            "citation_accounting": account_fixture_citations(self)})["result"]
+        self.assertEqual(publication.find_selected_bundle(self.store.snapshot()["records"]), bundle)
+
+    def test_an_assessment_one_level_beyond_the_payload_depth_bound_is_refused(self):
+        _, assessment = self.build_assessment_of_nested_result(86)
+        self.assertEqual(measure_nesting(assessment), 93)
+        before = self.store.snapshot()
+        self.assert_error("invalid_input", lambda: self.mutate(self.development().assess_cycle, assessment))
+        self.assertEqual(self.store.snapshot(), before)

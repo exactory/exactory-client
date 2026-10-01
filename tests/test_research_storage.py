@@ -826,22 +826,24 @@ print(json.dumps(Store(Path(sys.argv[1])).snapshot()))
                 return result
             return store.mutate("add", payload or {}, apply, expected_revision=store.revision, request_id=request_id)
 
-        # A caller or a callback can build a JSON array as a tuple, and the store writes it as a list.
-        beyond = {"integer": ({"value": 10 ** 4300}, {"value": -(10 ** 4300)}),
-                  "nesting": (build_nested_value(101), build_nested_value(101, tuple))}
-        for dimension, values in beyond.items():
-            for index, value in enumerate(values):
-                for place in ("payload", "record", "result"):
-                    request_id = dimension + "-" + str(index) + "-" + place
-                    with self.subTest(request_id=request_id):
-                        self.assert_error("invalid_input", lambda: mutate(request_id, **{place: value}))
-                        # A payload beyond the bounds fails before its callback runs.
-                        self.assertEqual(request_id in called, place != "payload")
+        # A caller or a callback can build a JSON array as a tuple, and the store writes it as a list. A later record
+        # holds a value of a payload up to 8 levels deeper than the payload does, so a payload nests at most 92
+        # levels, 8 fewer than a record or a result.
+        for place, levels in (("payload", 93), ("record", 101), ("result", 101)):
+            beyond = {"integer-0": {"value": 10 ** 4300}, "integer-1": {"value": -(10 ** 4300)},
+                      "nesting-0": build_nested_value(levels), "nesting-1": build_nested_value(levels, tuple)}
+            for name, value in beyond.items():
+                request_id = name + "-" + place
+                with self.subTest(request_id=request_id):
+                    self.assert_error("invalid_input", lambda: mutate(request_id, **{place: value}))
+                    # A payload beyond the bounds fails before its callback runs.
+                    self.assertEqual(request_id in called, place != "payload")
         self.assertEqual(store.snapshot(), {"revision": 0, "records": {}})
 
         within = {"integer": {"value": [10 ** 4300 - 1, -(10 ** 4300 - 1)]}, "nesting": build_nested_value(100)}
+        payloads = {"integer": within["integer"], "nesting": build_nested_value(92)}
         for dimension, value in within.items():
-            mutate(dimension, payload=value, record=value, result=value)
+            mutate(dimension, payload=payloads[dimension], record=value, result=value)
         if limit is not None:
             # Read the store as Python 3.11 and later do.
             sys.set_int_max_str_digits(limit)
@@ -849,7 +851,7 @@ print(json.dumps(Store(Path(sys.argv[1])).snapshot()))
         self.assertEqual(reopened.snapshot(), {"revision": 2, "records": {"work": within}})
         for dimension, value in within.items():
             committed = reopened.committed_request(dimension)
-            self.assertEqual((committed["payload"], committed["response"]["result"]), (value, value))
+            self.assertEqual((committed["payload"], committed["response"]["result"]), (payloads[dimension], value))
 
     def test_values_beyond_the_bounds_that_an_earlier_release_stored_read_as_before(self):
         from research_harness import storage
@@ -859,7 +861,7 @@ print(json.dumps(Store(Path(sys.argv[1])).snapshot()))
         stored = {"integer": {"value": 10 ** 4300}, "nesting": build_nested_value(101)}
         receipts = {}
         # exactory-client 0.48.0 and earlier stored such values: write them without the store's bounds.
-        with mock.patch.object(storage, "_check_stored_bounds", lambda value: None):
+        with mock.patch.object(storage, "_check_stored_bounds", lambda value, max_depth=None: None):
             for dimension, value in stored.items():
                 def apply(tx):
                     tx.put("work", dimension, value)
