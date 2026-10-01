@@ -7,6 +7,7 @@ import importlib.machinery
 import importlib.util
 import io
 import json
+import math
 import unittest
 from pathlib import Path
 
@@ -154,6 +155,23 @@ class TestCheck(unittest.TestCase):
              "vars": {"x": [0, float("inf")]}} for side in ("left", "right")], self)
         self.assertEqual([step["status"] for step in report["steps"]], ["unparseable", "unparseable"])
         self.assertEqual(report["invalid"], 0)
+
+    def test_a_wrong_step_is_invalid_at_its_first_finite_differing_point(self) -> None:
+        # y*y*y*y is infinite for y above about 1.16e77, and infinity times 0 is NaN, so some sampled points give the
+        # first side no finite value. The check skips those points and compares the others, as 0.49.0 did.
+        # The first point that this label samples is one of them.
+        step = {"label": "zero term B", "from": "x + y*y*y*y*0", "to": "x + 1",
+                "vars": {"x": [0.0, 1.0], "y": [0.0, 2e77]}}
+        points = _derive._sample_points(step["vars"], _derive._SAMPLE_COUNT_DEFAULT, _derive._seed_for_step(step["label"]))
+        finite = [point for point in points if math.isfinite(_derive._evaluate_expression(step["from"], point))]
+        self.assertLess(len(finite), len(points))
+        self.assertNotEqual(finite[0], points[0])
+        report = _run_check([step], self)
+        witness = report["steps"][0]["witness"]
+        self.assertEqual(report["steps"][0]["status"], "invalid")
+        self.assertEqual(witness["point"], finite[0])
+        self.assertAlmostEqual(witness["value_to"] - witness["value_from"], 1.0)
+        self.assertEqual((report["invalid"], self.exit_code), (1, 1))
 
     def test_a_step_with_equal_complex_values_stays_consistent(self) -> None:
         # A negative base to a fractional power gives a complex value with finite parts, which the check compares.
