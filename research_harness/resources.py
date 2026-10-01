@@ -8,11 +8,16 @@ allowance of every acquisition operation that is still admitted, so an
 interrupted or superseded operation holds nothing once it is no longer
 admitted. Admission refuses work that has no room for one request; batches
 charge their counts and any reported model usage. Usage already spent is
-always recorded; exhaustion is an obligation, never readiness. The exceptions
-are a charge that Python cannot add to its account total, a float and an
-integer beyond the float range (about 1.8e308), which is refused, and float
-charges that sum beyond that range, which the store refuses because it
-writes only finite numbers. The `development` purpose counts admitted
+recorded; exhaustion is an obligation, never readiness. Three kinds of
+charge fail instead and change nothing. A charge that makes an account total
+an integer of more than 4300 digits fails with invalid_input, because the
+store refuses that integer. Python cannot add a float to an integer beyond
+the float range (about 1.8e308). So a float charge to such an integer total,
+or such an integer charge to a float total, fails with invalid_input. A
+charge whose sum with the total is a float beyond the float range is
+infinite. It fails with invalid_input, because the store writes only finite
+numbers. A check against a limit of its unit refuses it first, with
+resource_budget_exhausted. The `development` purpose counts admitted
 development rounds in the `rounds` unit; `round-admit` charges one round.
 """
 
