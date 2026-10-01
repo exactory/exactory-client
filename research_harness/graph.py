@@ -49,12 +49,12 @@ def find_active_requirements(records):
     judgment of its profile and purpose; once the selection names another judgment, they stop
     counting. The stored records never change, and every other requirement always counts."""
     selection = records.get("search_selection", {})
-    retired = set()
+    retired_ids = set()
     for search in records.get("literature_search", {}).values():
-        selected = selection.get(search["profile"] + ":" + search["purpose"], {}).get("search_id")
-        if selected is not None and selected != search["id"]:
-            retired.update(format_search_requirement_id(search["id"], version) for version in search["cited_work_ids"])
-    return {key: value for key, value in records.get("fulltext_requirement", {}).items() if key not in retired}
+        selected_id = selection.get(search["profile"] + ":" + search["purpose"], {}).get("search_id")
+        if selected_id is not None and selected_id != search["id"]:
+            retired_ids.update(format_search_requirement_id(search["id"], version) for version in search["cited_work_ids"])
+    return {key: value for key, value in records.get("fulltext_requirement", {}).items() if key not in retired_ids}
 
 
 def find_bound_requirements(records, profile, graph):
@@ -65,10 +65,10 @@ def find_bound_requirements(records, profile, graph):
     records that bindings held before a replaced judgment's requirements stopped counting. A binding therefore
     changes when a record is added or a version starts or stops being a required full text, and not when a
     record stops counting while its version stays a required full text."""
-    required = {version for node in graph["nodes"] if node["tier"] <= 2 for version in node["version_ids"]}
-    required.update(r["version_id"] for r in find_active_requirements(records).values() if r["profile"] == profile)
+    required_versions = {version for node in graph["nodes"] if node["tier"] <= 2 for version in node["version_ids"]}
+    required_versions.update(r["version_id"] for r in find_active_requirements(records).values() if r["profile"] == profile)
     return {key: value for key, value in records.get("fulltext_requirement", {}).items()
-            if value["profile"] == profile and value["version_id"] in required}
+            if value["profile"] == profile and value["version_id"] in required_versions}
 
 
 def validate_target(records, target, roots):
@@ -177,9 +177,10 @@ def citation_graph(records, profile):
         bodies.setdefault(bundle["version_id"], set()).add(bundle["original_sha256"])
     read_bundle_ids = set()
     for version, version_bodies in bodies.items():
-        acquired = version_bodies & {c["original"]["sha256"] for c in main_captures(records, records["work"][version])}
+        acquired_bodies = version_bodies & {c["original"]["sha256"]
+                                            for c in main_captures(records, records["work"][version])}
         read_bundle_ids.update(selected_bundle(records, version, {"id": version, "sha256": body})["id"]
-                               for body in acquired or version_bodies)
+                               for body in acquired_bodies or version_bodies)
     by_source = {}
     for occurrence in records.get("reference_occurrence", {}).values():
         if "bundle_id" not in occurrence or occurrence["bundle_id"] in read_bundle_ids:

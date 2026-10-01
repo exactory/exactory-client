@@ -66,19 +66,20 @@ def loop_state(records, profile="research"):
         # its saved response and the query bound to it, so it adds no query when a native capture of the purpose
         # was bound to the same value: the harness cannot tell it from another capture of that query. Each group
         # holds the keys of one captured query.
-        groups, natively_bound = [], set()
+        groups, natively_bound_keys = [], set()
         for response in (r for s in own for r in s["responses"]):
             identity = compute_query_identity(records["source"][response["source_id"]])
             if identity is not None:
                 keys = {("native", digest(identity))}
-                natively_bound.add(("query", response["query"]))
+                natively_bound_keys.add(("query", response["query"]))
             else:
                 keys = {("source", response["source_id"]), ("query", response["query"])}
-            overlapping = [group for group in groups if group & keys]
-            groups = [group for group in groups if not group & keys] + [keys.union(*overlapping)]
-        captured = [group for group in groups if not group & natively_bound]
-        empty = len(captured) >= 2 and not any(d["disposition"] in COVERING for s in own for d in s.get("dispositions", []))
-        purposes[purpose] = {"readings": len(hits), "relevant": len(relevant), "queries": len(captured),
+            overlapping_groups = [group for group in groups if group & keys]
+            groups = [group for group in groups if not group & keys] + [keys.union(*overlapping_groups)]
+        captured_queries = [group for group in groups if not group & natively_bound_keys]
+        empty = len(captured_queries) >= 2 and not any(d["disposition"] in COVERING
+                                                       for s in own for d in s.get("dispositions", []))
+        purposes[purpose] = {"readings": len(hits), "relevant": len(relevant), "queries": len(captured_queries),
                              "queries_tried": sorted(queries), "covered": bool(relevant) or empty}
     return {"readings": len(readings), "limit": LOOP_LIMIT, "purposes": purposes,
             "digest": digest([sorted(r["id"] for r in readings), sorted(s["id"] for s in searches)])}
