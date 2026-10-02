@@ -254,6 +254,22 @@ class TestCheck(unittest.TestCase):
         self.assertTrue(stderr.getvalue().startswith("Cannot read the steps file: "), stderr.getvalue())
         self.assertEqual(stdout.getvalue(), "")
 
+    def test_a_steps_file_nested_beyond_32_levels_is_an_input_error_under_every_python(self) -> None:
+        # Python 3.14 reads JSON nested 100,000 levels, where 3.9 to 3.13 raise RecursionError, so the tool bounds the
+        # nesting itself: every supported Python then refuses the same files.
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        steps_path = Path(directory.name) / "steps.json"
+        steps_path.write_text("[" * 33 + "]" * 33, encoding="utf-8")
+        args = _derive._build_parser().parse_args(["check", "--steps-file", str(steps_path)])
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            with self.assertRaises(SystemExit) as caught:
+                args.handler(args)
+        self.assertEqual(caught.exception.code, 2)
+        self.assertEqual(stderr.getvalue(), "Cannot read the steps file: it nests more than 32 levels\n")
+        self.assertEqual(stdout.getvalue(), "")
+
     def test_a_complex_value_whose_length_exceeds_the_float_range_is_compared(self) -> None:
         # abs() of a complex number is its length, which raises OverflowError beyond the float range although both
         # parts are finite; x + csqrt(-1)*x has parts of about 1.5e308 and a length of about 2.1e308.
