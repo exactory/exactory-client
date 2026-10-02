@@ -677,6 +677,37 @@ class FulltextComponentDepthTests(SourceLimitedCase):
         # payload's component 10 levels deeper than the payload does.
         self.assertEqual(measure_nesting(bundle), 42)
 
+    def test_a_fulltext_component_at_the_command_depth_bound_reaches_the_paper_review_assignment(self):
+        # A paper review assignment repeats the stored bundle at context.bundle, and its record holds the component 12
+        # levels deeper than the fulltext payload does.
+        from reviewer_fixtures import response
+        from research_harness import review_protocol
+        self.prepare_delivery()
+        bundle = self.scoped_manuscript()
+        self.mutate(review_protocol.record_route, {"id": "paper-route", "adapter": "openai_responses_v1",
+            "model": "fixture-model", "endpoint": "https://api.openai.com/v1/responses",
+            "configuration": {"max_output_tokens": 10000, "timeout_seconds": 5}})
+        def answer_probe(route, request, credential):
+            packet = json.loads(request["input"][0]["content"])
+            return response({"allowed_control": packet["allowed_control"],
+                             "evidence_control": packet["evidence_control"], "excluded_controls": []})
+        with mock.patch("research_harness.review_transport.send_request", side_effect=answer_probe):
+            self.mutate(review_protocol.probe_route, {"id": "paper-probe", "route_id": "paper-route"},
+                        credential="fixture")
+        payload = {"id": "paper-assignment", "route_id": "paper-route", "dossier_id": None, "role": "manuscript",
+                   "reviewer_id": "paper-reviewer", "author_id": bundle["candidate"]["authors"][0],
+                   "context": {"bundle": bundle}}
+        path = self.root / "paper-assignment.json"
+        path.write_text(json.dumps(payload))
+        result = subprocess.run([sys.executable, str(PLUGIN / "bin/exactory-research"), "review-assignment",
+                                 "--workspace", str(self.root), "--file", str(path), "--expected-revision",
+                                 str(self.store.revision), "--request-id", "paper-assignment"],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        saved = self.store.snapshot()["records"]["review_assignment"]["paper-assignment"]
+        self.assertEqual(saved["context"]["bundle"], bundle)
+        self.assertEqual(measure_nesting(saved), 44)
+
 
 class ScopedAssessmentDepthTests(SourceLimitedCase):
     """An assessment that the command accepts fits the readiness and manuscript exports of a source-limited study."""
