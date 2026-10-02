@@ -35,6 +35,14 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.50.1](docs/releases/0.50.1.md) adds the literature repairs and the
+store bounds that 0.49.0 left out. A search judgment owes full readings of the
+works it cites only while it is the selected judgment of its purpose, a
+citing-works capture binds its OpenAlex filter, and the citation graph reads one
+bundle for each original. The store writes only JSON that every supported Python
+reads back, and a command input nests at most 32 levels. `exactory-derive`
+reports malformed and complex inputs without a Python traceback.
+
 Version [0.50.0](docs/releases/0.50.0.md) adds scientific contribution decisions
 before committing an objective and after results. Managed studies compare
 consequences and approaches, retain critical reviewer work, and bind independent
