@@ -163,6 +163,21 @@ class SearchPageTests(LiteratureCase):
             self.assertNotEqual(compute_identity(provider, other_query), compute_identity(provider, query),
                                 (provider, query, other_query))
 
+    def test_an_openalex_search_filter_keeps_the_letter_case_of_its_boolean_operators(self):
+        from research_harness.search_pages import compute_query_identity
+
+        def compute_identity(query):
+            return compute_query_identity({"provider": "openalex", "url": "https://api.openalex.org/works?" + query})
+
+        # OpenAlex reads the Boolean operators of a search only in uppercase (https://help.openalex.org/api/searching/),
+        # so the value of a .search filter keeps its letter case, while the other filters of the same parameter do not.
+        for query, other_query in (("filter=title.search:dram+AND+erasure", "filter=title.search:dram+and+erasure"),
+                                   ("filter=raw_author_name.search:Smith+OR+Jones",
+                                    "filter=raw_author_name.search:Smith+or+Jones")):
+            self.assertNotEqual(compute_identity(other_query), compute_identity(query), (query, other_query))
+        self.assertEqual(compute_identity("filter=type:Article,title.search:dram+AND+erasure"),
+                         compute_identity("filter=title.search:dram+AND+erasure,type:article"))
+
     def test_openalex_empty_and_complete_cursor_chain_are_admitted(self):
         empty = self.page("openalex", {"meta": {"count": 0, "next_cursor": None}, "results": []},
             {"search": "bounded", "cursor": "*", "per_page": "2"})
