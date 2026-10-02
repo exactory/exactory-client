@@ -70,7 +70,8 @@ def _choice(value, choices, name):
 
 
 def _number(value, name, positive=False, integer=False):
-    if not (is_finite_number(value) and (type(value) is int or not integer) and value >= 0 and (not positive or value > 0)):
+    if not (is_finite_number(value) and (type(value) is int or not integer) and value >= 0
+            and (not positive or value > 0)):
         raise ResearchError("invalid_development", name + " must be a finite " + ("positive" if positive else "nonnegative") + " number")
 
 

@@ -8,9 +8,16 @@ allowance of every acquisition operation that is still admitted, so an
 interrupted or superseded operation holds nothing once it is no longer
 admitted. Admission refuses work that has no room for one request; batches
 charge their counts and any reported model usage. Usage already spent is
-always recorded; exhaustion is an obligation, never readiness. The one
-exception is a charge whose account total is beyond the float range before
-or after it, which is refused. The `development` purpose counts admitted
+recorded; exhaustion is an obligation, never readiness. Three kinds of
+charge fail instead and change nothing. A charge that makes an account total
+an integer of more than 4300 digits fails with invalid_input, because the
+store refuses that integer. Python cannot add a float to an integer beyond
+the float range (about 1.8e308). So a float charge to such an integer total,
+or such an integer charge to a float total, fails with invalid_input. A
+charge whose sum with the total is a float beyond the float range is
+infinite. It fails with invalid_input, because the store writes only finite
+numbers. A check against a limit of its unit refuses it first, with
+resource_budget_exhausted. The `development` purpose counts admitted
 development rounds in the `rounds` unit; `round-admit` charges one round.
 """
 
@@ -130,10 +137,14 @@ def charge(source, purpose, amounts, *, unknown=(), refuse=True):
         if amount is None:
             unknowns[unit] += 1
             continue
-        # A float charge cannot be added to a total beyond the float range. Integer charges can sum beyond it, and an
-        # earlier release stored such a total, so the stored total is checked before the sum and the new total after it.
-        if not (is_finite_number(charged[unit]) and is_finite_number(charged[unit] + amount)):
-            raise ResearchError("invalid_input", "The " + unit + " account total must stay a finite number")
+        # Python adds an int and a float by converting the int to a float, which raises OverflowError for an int beyond
+        # the float range (about 1.8e308). Two ints sum exactly at any size, so integer charges can carry a total beyond
+        # that range, as an earlier release also stored it. Only a sum of an int and a float that holds such an int is
+        # refused.
+        if (type(charged[unit]) is not type(amount)
+                and not (is_finite_number(charged[unit]) and is_finite_number(amount))):
+            raise ResearchError("invalid_input", "The " + unit + " charge cannot be added to its account total, "
+                                "because one is a float and the other an integer beyond the float range")
         if refuse:
             _check(budget, account, reserved, unit, amount)
         charged[unit] += amount

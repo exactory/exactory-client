@@ -4,12 +4,14 @@ import copy
 import importlib
 import json
 from pathlib import Path
+import sys
 import threading
 from unittest import mock
 
 from literature_fixtures import FIELDS
 from research_harness.literature import foundation_report
 from reviewer_fixtures import verdict_assignment
+from test_research_publication import measure_nesting
 from test_research_synthesis import SynthesisCase
 
 
@@ -32,17 +34,75 @@ class ResearchVerificationTests(SynthesisCase):
         return {"stance": "sound", "summary": "The finite bound is supported.", "rationaleSections": [],
                 "prediction": {"corpus": "arxiv", "category": "cs.LG", "windowStart": "2026-01-01", "windowEnd": "2026-01-31", "percentile": 50, "band": {"best": 35, "worst": 65}}}
 
-    def bind(self, api, *, observed=True):
-        task = self.mutate(api.record_task, {"task": self.task})["result"]
-        payload = {"id": "verdict-1", "task_digest": task["digest"],
-                   "body": self.artifacts.put(json.dumps(self.verdict()).encode(), "application/json"),
-                   "assessment": {"assessor": "independent-verifier", "provenance": self.artifacts.put(b"Authored separate verification context.", "text/plain"),
+    def build_bind_payload(self, task_digest, body, identifier="verdict-1", observed=True):
+        payload = {"id": identifier, "task_digest": task_digest,
+                   "body": self.artifacts.put(json.dumps(body).encode(), "application/json"),
+                   "assessment": {"assessor": "independent-verifier",
+                       "provenance": self.artifacts.put(b"Authored separate verification context.", "text/plain"),
                        "independence_basis": "The verifier is not an author and read no other verdicts.", "blind": True,
-                       "checks": [{"dimension": dimension, "reason": "The scoped source supports this separate assessment.", "evidence": [self.linked]}
+                       "checks": [{"dimension": dimension,
+                                   "reason": "The scoped source supports this separate assessment.",
+                                   "evidence": [self.linked]}
                                   for dimension in ("soundness", "novelty", "impact")]}}
         if observed:
             payload["assessment"]["assignment_id"] = verdict_assignment(self, payload)
+        return payload
+
+    def bind(self, api, *, observed=True):
+        task = self.mutate(api.record_task, {"task": self.task})["result"]
+        payload = self.build_bind_payload(task["digest"], self.verdict(), observed=observed)
         return self.mutate(api.bind_verdict, payload)["result"]
+
+    def build_verdict_of_depth(self, levels):
+        """The fixture verdict whose rationaleSections nest so that the body nests `levels` levels in all."""
+        sections = "A rationale section."
+        for _ in range(levels - 1):
+            sections = [sections]
+        return dict(self.verdict(), rationaleSections=sections)
+
+    def test_a_verdict_body_at_the_command_depth_bound_is_bound(self):
+        # exactory verify sends the bound body, and the remote intent keeps it up to 3 levels deeper than the body
+        # file holds it, so bind-verdict reads a body of at most 32 levels, as exactory-research reads a payload.
+        api = self.verifier()
+        task = self.mutate(api.record_task, {"task": self.task})["result"]
+        body = self.build_verdict_of_depth(32)
+        self.assertEqual(measure_nesting(body), 32)
+        self.assertEqual(self.mutate(api.bind_verdict, self.build_bind_payload(task["digest"], body))["result"]["id"],
+                         "verdict-1")
+
+    def test_a_verdict_body_beyond_the_command_depth_bound_is_refused(self):
+        from research_harness.errors import ResearchError
+        api = self.verifier()
+        task = self.mutate(api.record_task, {"task": self.task})["result"]
+        body = self.build_verdict_of_depth(33)
+        self.assertEqual(measure_nesting(body), 33)
+        # bind-verdict checks the body bound before the reviewer assignment, so the payload needs no observed one.
+        payload = self.build_bind_payload(task["digest"], body, observed=False)
+        before = self.store.snapshot()
+        # The bind-verdict payload itself is shallow; the message names the input that nests too deep.
+        with self.assertRaisesRegex(ResearchError, "^The verdict body must nest at most 32 levels") as raised:
+            self.mutate(api.bind_verdict, payload)
+        self.assertEqual(raised.exception.code, "invalid_input")
+        self.assertEqual(self.store.snapshot(), before)
+
+    def test_a_verdict_body_with_an_integer_beyond_the_store_bound_is_refused(self):
+        # Python 3.9.6 reads an integer of any length, so there only the command bound refuses it. Write and read the
+        # body as that interpreter does. The message names the body, not the bind-verdict payload that refers to it.
+        from research_harness.errors import ResearchError
+        if hasattr(sys, "set_int_max_str_digits"):
+            self.addCleanup(sys.set_int_max_str_digits, sys.get_int_max_str_digits())
+            sys.set_int_max_str_digits(0)
+        api = self.verifier()
+        task = self.mutate(api.record_task, {"task": self.task})["result"]
+        # An observed assignment would store the integer itself, so the payload has none; the body bound comes first.
+        payload = self.build_bind_payload(task["digest"], dict(self.verdict(), rationaleSections=[10 ** 4300]),
+                                          observed=False)
+        before = self.store.snapshot()
+        with self.assertRaisesRegex(ResearchError,
+                                    "^The verdict body must hold no integer of more than 4300 digits") as raised:
+            self.mutate(api.bind_verdict, payload)
+        self.assertEqual(raised.exception.code, "invalid_input")
+        self.assertEqual(self.store.snapshot(), before)
 
     def test_independence_prose_alone_cannot_authorize_a_new_verdict(self):
         self.assert_error("review_assignment_missing", lambda: self.bind(self.verifier(), observed=False))

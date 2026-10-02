@@ -6,14 +6,8 @@ from pathlib import Path
 
 from .artifacts import _regular_file
 from .errors import ResearchError
-from .storage import _check_stored_bounds
+from .storage import _MAX_INPUT_DEPTH, _check_stored_bounds
 from .workspace import checked_parent, read_file, strict_json
-
-
-# A metric is copied into the run's records, which every supported Python must read back, so it must pass
-# the store's check, here with a smaller depth. A scientific delivery walks at most 40 levels, and a round
-# packet holds the metric 7 levels deep.
-_METRIC_MAX_DEPTH = 32
 
 
 def output_path(path):
@@ -96,7 +90,8 @@ def _read_metric(data, *, is_bounded):
     try:
         value = strict_json(data)
         if is_bounded:
-            _check_stored_bounds(value, _METRIC_MAX_DEPTH)
+            # A metric has the bound of every value that the harness takes in (storage._MAX_INPUT_DEPTH).
+            _check_stored_bounds(value, _MAX_INPUT_DEPTH)
     except ResearchError:
         return None
     return value

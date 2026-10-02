@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 from research_harness.storage import Store
 from development_fixtures import DevelopmentCase
@@ -39,6 +40,42 @@ class ResearchCliTests(unittest.TestCase):
         path.write_text(json.dumps(payload))
         return self.run_cli("exactory-research", command, "--file", str(path),
                             "--expected-revision", str(revision), "--request-id", request_id)
+
+    def test_a_refused_command_input_creates_no_store(self):
+        # init, adopt and an acquisition outside a workspace create the store. A payload beyond the command bound is
+        # refused before that, so the refusal changes nothing in the directory.
+        deep_payload = {"value": 0}
+        for _ in range(32):
+            deep_payload = {"value": deep_payload}
+        path = self.root / "deep.json"
+        path.write_text(json.dumps(deep_payload))
+        for command in ("init", "adopt", "fulltext"):
+            with self.subTest(command=command):
+                workspace = self.root / command
+                workspace.mkdir()
+                result = self.run_cli("exactory-research", command, "--workspace", str(workspace), "--file", str(path),
+                                      "--expected-revision", "0", "--request-id", command + "-deep")
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertEqual(json.loads(result.stderr)["error"]["code"], "invalid_input")
+                self.assertFalse((workspace / ".exactory").exists())
+
+    def test_a_command_input_with_an_integer_beyond_the_store_bound_is_named_in_the_refusal(self):
+        # Python 3.9.6 reads an integer of any length, so there only the command bound refuses it. Write the payload,
+        # and read it in the command, as that interpreter does.
+        if hasattr(sys, "set_int_max_str_digits"):
+            self.addCleanup(sys.set_int_max_str_digits, sys.get_int_max_str_digits())
+            sys.set_int_max_str_digits(0)
+        path = self.root / "long-integer.json"
+        path.write_text(json.dumps({"value": 10 ** 4300}))
+        with mock.patch.dict(os.environ, {"PYTHONINTMAXSTRDIGITS": "0"}):
+            result = self.run_cli("exactory-research", "init", "--workspace", str(self.root), "--file", str(path),
+                                  "--expected-revision", "0", "--request-id", "init-long-integer")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        error = json.loads(result.stderr)["error"]
+        self.assertEqual(error["code"], "invalid_input")
+        self.assertTrue(error["message"].startswith("A command input must hold no integer of more than 4300 digits"),
+                        error["message"])
+        self.assertFalse((self.root / ".exactory").exists())
 
     def test_initialization_creates_a_pending_current_contract(self):
         self.init_lab()

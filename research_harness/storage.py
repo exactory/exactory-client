@@ -42,6 +42,21 @@ _MAX_REVISION = (1 << 63) - 1
 _MAX_STORED_INTEGER_DIGITS = 4300
 _MAX_STORED_INTEGER = 10 ** _MAX_STORED_INTEGER_DIGITS - 1
 _MAX_STORED_DEPTH = 100
+# A value that the harness takes in nests at most _MAX_INPUT_DEPTH levels: a payload file of exactory-research, a
+# verdict body of bind-verdict, and the metric of a run (execution_outputs), which has had this bound since 0.48.0.
+# Later records and reviewer exports hold copies of its values deeper. A reviewer export reads JSON of at most 40 levels
+# (scientific_delivery._MAX_DEPTH, scientific_json._check_nesting_bound). The deepest export copy found is 8 levels
+# deeper: the readiness export of a source-limited study holds each full reading at
+# inputs.synthesis.foundation.inventory[i].body_coverage.readings[id], so a read payload of 32 levels reaches 40 levels
+# there. A read payload nests deeply only inside the locators of its links, and ScientificDelivery.walk copies a locator
+# without adding the levels inside it to the depth. The deepest copy found whose levels the walk counts is 7 levels
+# deeper: the same export holds, at inputs.sources.work, the component of a fulltext payload, which acquire_fulltext
+# records as given while the fetch is pending; a round packet holds a metric as deep. The deepest record copy found is
+# 10 levels deeper, at
+# review_inputs.synthesis.foundation.source_deferrals[i].dependencies.work.fulltexts[k].component.spec in the bundle of
+# manuscript. So an input of 32 levels stays within the 40 levels of an export, and reaches 42 of the store's 100 levels
+# in a record.
+_MAX_INPUT_DEPTH = 32
 _PUBLICATION_NAME = re.compile(r"\.research-[0-9a-f]{32}\.sqlite3\Z")
 _WORKSPACE_LOCKS = weakref.WeakValueDictionary()
 _LOCK_REGISTRY_GUARD = threading.Lock()
@@ -95,20 +110,33 @@ def _json_types(value):
     raise ValueError("Value is not representable in JSON")
 
 
-def _check_stored_bounds(value, max_depth=_MAX_STORED_DEPTH):
-    """Refuse a value to store that nests deeper than max_depth levels or holds an integer that some supported
-    Python cannot read back. The top container is level 1."""
+def _check_bounds(value, name, max_depth, depth_reason):
+    """Refuse a value that nests deeper than max_depth levels or holds an integer that some supported Python cannot
+    read back; the top container is level 1. The refusal calls the value name, and depth_reason ends a depth refusal."""
     pending = [(value, 1)]
     while pending:
         item, depth = pending.pop()
         if isinstance(item, (dict, list, tuple)):
             if depth > max_depth:
-                raise ResearchError("invalid_input", "JSON to store must nest at most " + str(max_depth)
-                                    + " levels so that every supported Python reads it back")
+                raise ResearchError("invalid_input", name + " must nest at most " + str(max_depth) + " levels"
+                                    + depth_reason)
             pending.extend((child, depth + 1) for child in (item.values() if isinstance(item, dict) else item))
         elif type(item) is int and abs(item) > _MAX_STORED_INTEGER:
-            raise ResearchError("invalid_input", "JSON to store must hold no integer of more than "
-                                + str(_MAX_STORED_INTEGER_DIGITS) + " digits so that every supported Python reads it back")
+            raise ResearchError("invalid_input", name + " must hold no integer of more than "
+                                + str(_MAX_STORED_INTEGER_DIGITS)
+                                + " digits so that every supported Python reads it back")
+
+
+def _check_stored_bounds(value, max_depth=_MAX_STORED_DEPTH):
+    """Refuse a value to store beyond the bounds that every supported Python reads back."""
+    _check_bounds(value, "JSON to store", max_depth, " so that every supported Python reads it back")
+
+
+def check_command_bounds(value, input_name="A command input"):
+    """Refuse a command input that nests deeper than the input bound or holds an integer beyond the store's bound. The
+    refusal calls the input input_name."""
+    _check_bounds(value, input_name, _MAX_INPUT_DEPTH,
+                  ", which leaves room for deeper copies of its values in later records and reviewer exports")
 
 
 def _canonical(value, code: str = "invalid_input") -> str:

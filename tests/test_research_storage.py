@@ -816,61 +816,68 @@ print(json.dumps(Store(Path(sys.argv[1])).snapshot()))
         # than 4300 digits. Write as the earlier Python does, so that the store's bound itself must refuse it.
         limit = self.allow_integers_of_any_length()
         store = Store(self.workspace, create=True)
-        called = []
+        called_request_ids = []
 
         def mutate(request_id, *, payload=None, record=None, result=None):
             def apply(tx):
-                called.append(request_id)
+                called_request_ids.append(request_id)
                 if record is not None:
                     tx.put("work", request_id, record)
                 return result
             return store.mutate("add", payload or {}, apply, expected_revision=store.revision, request_id=request_id)
 
         # A caller or a callback can build a JSON array as a tuple, and the store writes it as a list.
-        beyond = {"integer": ({"value": 10 ** 4300}, {"value": -(10 ** 4300)}),
-                  "nesting": (build_nested_value(101), build_nested_value(101, tuple))}
-        for dimension, values in beyond.items():
+        values_beyond_bounds = {"integer": ({"value": 10 ** 4300}, {"value": -(10 ** 4300)}),
+                                "nesting": (build_nested_value(101), build_nested_value(101, tuple))}
+        # The store's own messages, which differ from those of the command bound.
+        refusal_messages = {
+            "integer": ("JSON to store must hold no integer of more than 4300 digits so that every supported Python "
+                        "reads it back"),
+            "nesting": "JSON to store must nest at most 100 levels so that every supported Python reads it back"}
+        for dimension, values in values_beyond_bounds.items():
             for index, value in enumerate(values):
                 for place in ("payload", "record", "result"):
                     request_id = dimension + "-" + str(index) + "-" + place
                     with self.subTest(request_id=request_id):
-                        self.assert_error("invalid_input", lambda: mutate(request_id, **{place: value}))
+                        error = self.assert_error("invalid_input", lambda: mutate(request_id, **{place: value}))
+                        self.assertEqual(error.message, refusal_messages[dimension])
                         # A payload beyond the bounds fails before its callback runs.
-                        self.assertEqual(request_id in called, place != "payload")
+                        self.assertEqual(request_id in called_request_ids, place != "payload")
         self.assertEqual(store.snapshot(), {"revision": 0, "records": {}})
 
-        within = {"integer": {"value": [10 ** 4300 - 1, -(10 ** 4300 - 1)]}, "nesting": build_nested_value(100)}
-        for dimension, value in within.items():
+        values_within_bounds = {"integer": {"value": [10 ** 4300 - 1, -(10 ** 4300 - 1)]},
+                                "nesting": build_nested_value(100)}
+        for dimension, value in values_within_bounds.items():
             mutate(dimension, payload=value, record=value, result=value)
         if limit is not None:
             # Read the store as Python 3.11 and later do.
             sys.set_int_max_str_digits(limit)
         reopened = Store(self.workspace)
-        self.assertEqual(reopened.snapshot(), {"revision": 2, "records": {"work": within}})
-        for dimension, value in within.items():
-            committed = reopened.committed_request(dimension)
-            self.assertEqual((committed["payload"], committed["response"]["result"]), (value, value))
+        self.assertEqual(reopened.snapshot(), {"revision": 2, "records": {"work": values_within_bounds}})
+        for dimension, value in values_within_bounds.items():
+            committed_request = reopened.committed_request(dimension)
+            self.assertEqual((committed_request["payload"], committed_request["response"]["result"]), (value, value))
 
     def test_values_beyond_the_bounds_that_an_earlier_release_stored_read_as_before(self):
         from research_harness import storage
         # Read as Python 3.9.6 does: it reads an integer of any length, so a store that holds one is readable there.
         self.allow_integers_of_any_length()
         store = Store(self.workspace, create=True)
-        stored = {"integer": {"value": 10 ** 4300}, "nesting": build_nested_value(101)}
+        stored_values = {"integer": {"value": 10 ** 4300}, "nesting": build_nested_value(101)}
         receipts = {}
         # exactory-client 0.48.0 and earlier stored such values: write them without the store's bounds.
         with mock.patch.object(storage, "_check_stored_bounds", lambda value: None):
-            for dimension, value in stored.items():
+            for dimension, value in stored_values.items():
                 def apply(tx):
                     tx.put("work", dimension, value)
                     return value
                 receipts[dimension] = store.mutate("add", value, apply, expected_revision=store.revision,
                                                    request_id=dimension)
         reopened = Store(self.workspace)
-        self.assertEqual(reopened.snapshot(), {"revision": 2, "records": {"work": stored}})
+        self.assertEqual(reopened.snapshot(), {"revision": 2, "records": {"work": stored_values}})
         with reopened.guarded_snapshot() as guard:
-            self.assertEqual(guard.snapshot()["records"], {"work": stored})
-        for dimension, value in stored.items():
+            self.assertEqual(guard.snapshot()["records"], {"work": stored_values})
+        for dimension, value in stored_values.items():
             self.assertEqual(reopened.committed_request(dimension)["payload"], value)
             # A retry of the committed request returns its original receipt.
             self.assertEqual(reopened.mutate("add", value, lambda tx: self.fail("A committed replay ran the callback"),

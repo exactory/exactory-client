@@ -68,13 +68,23 @@ class ScreeningRuleTests(ScreenedCase):
         # OverflowError when it was added to a float account total.
         usage = {"model": None, "input_tokens": None, "output_tokens": None, "wall_seconds": 1.5}
         screener = {"kind": "agent", "model": None}
-        self.mutate(record_screening_batch, {"id": "screen-1", "screener": screener, "items": [self.item(1, "doctrine", "weak")],
-                                             "usage": usage})
+        self.mutate(record_screening_batch, {"id": "screen-1", "screener": screener,
+                                             "items": [self.item(1, "doctrine", "weak")], "usage": usage})
         before = self.store.snapshot()
         self.assert_error("invalid_batch", lambda: self.mutate(record_screening_batch, {
             "id": "screen-2", "screener": screener, "items": [self.item(2, "doctrine", "weak")],
             "usage": dict(usage, wall_seconds=10 ** 400)}))
         self.assertEqual(self.store.snapshot(), before)
+
+    def test_integer_token_charges_sum_beyond_the_float_range_as_in_0_49_0(self):
+        # A screening batch charges its account as read-batch does, and two integers sum exactly at any size.
+        usage = {"model": None, "input_tokens": 10 ** 400, "output_tokens": None, "wall_seconds": None}
+        screener = {"kind": "agent", "model": None}
+        for number in (1, 2):
+            self.mutate(record_screening_batch, {"id": "screen-" + str(number), "screener": screener,
+                                                 "items": [self.item(number, "doctrine", "weak")], "usage": usage})
+        account = self.store.snapshot()["records"]["resource_account"]["research:screening"]
+        self.assertEqual(account["charged"]["model_input_tokens"], 2 * 10 ** 400)
 
     def test_screening_needs_the_screened_policy(self):
         from research_harness.principles import change_policy
