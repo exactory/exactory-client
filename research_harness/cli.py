@@ -352,7 +352,9 @@ def run(args):
     if args.command in OPERATIONS or args.command in ACQUISITION:
         payload = strict_json(Path(args.file).read_bytes())
         try:
-            check_command_bounds(payload)
+            # A paper review assignment repeats a stored bundle, which the store bounds already hold.
+            check_command_bounds(review_protocol.drop_repeated_bundle(payload) if args.command == "review-assignment"
+                                 else payload)
         except ResearchError:
             # The store returns a committed request's receipt before it checks the payload, so a retry of a request
             # that an earlier release committed beyond this bound still gets its original receipt. Only an existing

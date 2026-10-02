@@ -632,6 +632,20 @@ class CommandDepthBoundTests(DevelopmentCase):
         self.assertEqual(measure_nesting(payload), 33)
         self.assert_command_refused("fulltext", payload, "fulltext-beyond-bound")
 
+    def test_a_review_assignment_counts_every_value_but_a_paper_review_bundle_against_the_command_bound(self):
+        # Only the bundle that a paper review repeats must equal a stored record, so only that bundle is not counted.
+        deep = "A nested value."
+        for _ in range(32):
+            deep = [deep]
+        assignment = {"id": "assignment", "route_id": "route", "dossier_id": None, "reviewer_id": "reviewer",
+                      "author_id": "author"}
+        for name, payload in (("bundle of another role", dict(assignment, role="bar", context={"bundle": deep})),
+                              ("artifact_refs of a paper review",
+                               dict(assignment, role="manuscript", context={"bundle": {}, "artifact_refs": deep}))):
+            with self.subTest(name):
+                self.assertEqual(measure_nesting(payload), 34)
+                self.assert_command_refused("review-assignment", payload, "assignment-" + payload["role"])
+
     def test_a_retry_of_a_committed_assessment_beyond_the_command_bound_returns_its_receipt(self):
         # The store bounds a payload at 100 levels, so an earlier release, or a direct call, committed such an
         # assessment. A retry of that request returns its original receipt, as the store returns it.
@@ -646,8 +660,9 @@ class CommandDepthBoundTests(DevelopmentCase):
 
 
 class FulltextComponentDepthTests(SourceLimitedCase):
-    """A fulltext component that the command accepts fits the readiness export, which holds it 7 levels deeper, and the
-    bundle of manuscript, which holds it 10 levels deeper."""
+    """A fulltext component that the command accepts fits the readiness export, which holds it 7 levels deeper, the
+    bundle of manuscript, which holds it 10 levels deeper, and the paper review assignment, which holds it 12 levels
+    deeper."""
 
     def add_missing_supplement(self, version, capture=None):
         # The deepest copies found: acquire_fulltext records the component of a fulltext payload as given while its

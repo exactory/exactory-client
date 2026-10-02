@@ -538,10 +538,12 @@ source/result access and verified exclusion of author history and prior scores.
 A clean export or fresh-agent label alone does not establish independence.
 
 A command input nests at most 32 levels, so that later records and reviewer
-exports can hold deeper copies of its values. The `review` payload cites each
+exports can hold deeper copies of its values. A `review` payload cites each
 evidence reference of the candidate one level deeper than `result.evidence` of
-an assessment holds it. So an assessment of 32 levels whose deepest value is in
-`result.evidence` leaves no room for its `review`.
+an assessment holds it, and a `value-review` holds such a support assessment in
+its `support` field, one level deeper again. So an assessment whose deepest
+value in `result.evidence` is at level 31 leaves no room for its `value-review`,
+and one at level 32 leaves no room for its `review`.
 
 ```sh
 exactory-research value-review --file result-review-a.json --expected-revision REVISION --request-id value-review-a

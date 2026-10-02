@@ -43,19 +43,21 @@ _MAX_STORED_INTEGER_DIGITS = 4300
 _MAX_STORED_INTEGER = 10 ** _MAX_STORED_INTEGER_DIGITS - 1
 _MAX_STORED_DEPTH = 100
 # A value that the harness takes in nests at most _MAX_INPUT_DEPTH levels: a payload file of exactory-research, a
-# verdict body of bind-verdict, and the metric of a run (execution_outputs), which has had this bound since 0.48.0.
-# Later records and reviewer exports hold copies of its values deeper. A reviewer export reads JSON of at most 40 levels
-# (scientific_delivery._MAX_DEPTH, scientific_json._check_nesting_bound). The deepest export copy found is 8 levels
-# deeper: the readiness export of a source-limited study holds each full reading at
-# inputs.synthesis.foundation.inventory[i].body_coverage.readings[id], so a read payload of 32 levels reaches 40 levels
-# there. A read payload nests deeply only inside the locators of its links, and ScientificDelivery.walk copies a locator
-# without adding the levels inside it to the depth. The deepest copy found whose levels the walk counts is 7 levels
-# deeper: the same export holds, at inputs.sources.work, the component of a fulltext payload, which acquire_fulltext
-# records as given while the fetch is pending; a round packet holds a metric as deep. The deepest record copy found is
-# 10 levels deeper, at
-# review_inputs.synthesis.foundation.source_deferrals[i].dependencies.work.fulltexts[k].component.spec in the bundle of
-# manuscript. So an input of 32 levels stays within the 40 levels of an export, and reaches 42 of the store's 100 levels
-# in a record.
+# verdict body of bind-verdict, and the metric of a run (execution_outputs), which has had this bound since 0.48.0. A
+# paper review assignment repeats the stored bundle of manuscript, which the command bound does not count
+# (review_protocol.drop_repeated_bundle). Later records and reviewer exports hold copies of the values of an input
+# deeper. A reviewer export reads JSON of at most 40 levels (scientific_delivery._MAX_DEPTH,
+# scientific_json._check_nesting_bound). The deepest export copy found is 9 levels deeper: the packet of a review
+# assignment with role result in a source-limited study holds the readiness export at readiness, which holds each full
+# reading at inputs.synthesis.foundation.inventory[i].body_coverage.readings[id], so a read payload of 32 levels reaches
+# 41 levels there. A read payload nests deeply only inside the locators of its links, and ScientificDelivery.walk copies
+# a locator without adding the levels inside it to the depth. The deepest copy found whose levels the walk counts is 8
+# levels deeper: the same packet holds, at readiness.inputs.sources.work, the component of a fulltext payload, which
+# acquire_fulltext records as given while the fetch is pending. So an input of 32 levels reaches the 40 levels of an
+# export. The deepest record copy found is 12 levels deeper, at context.bundle of a paper review assignment, whose
+# bundle holds the same component at
+# review_inputs.synthesis.foundation.source_deferrals[i].dependencies.work.fulltexts[k].component.spec. So an input of
+# 32 levels reaches 44 of the store's 100 levels in a record.
 _MAX_INPUT_DEPTH = 32
 _PUBLICATION_NAME = re.compile(r"\.research-[0-9a-f]{32}\.sqlite3\Z")
 _WORKSPACE_LOCKS = weakref.WeakValueDictionary()
