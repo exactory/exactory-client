@@ -19,6 +19,14 @@ from research_harness.errors import ResearchError
 from research_harness.storage import Store
 
 
+def build_nested_value(levels, container=list):
+    """An object and levels - 1 lists or tuples inside it, {"value": [[...[0]...]]}: levels containers in all."""
+    value = 0
+    for _ in range(levels - 1):
+        value = container((value,))
+    return {"value": value}
+
+
 class ResearchStorageTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -45,6 +53,14 @@ class ResearchStorageTests(unittest.TestCase):
             return {"id": key}
         return store.mutate("add", {"key": key, "title": title}, apply,
                             expected_revision=revision, request_id=request)
+
+    def allow_integers_of_any_length(self):
+        """Convert integers of any length, as Python 3.9.6 does, and return the interpreter's own limit."""
+        limit = sys.get_int_max_str_digits() if hasattr(sys, "get_int_max_str_digits") else None
+        if limit is not None:
+            self.addCleanup(sys.set_int_max_str_digits, limit)
+            sys.set_int_max_str_digits(0)
+        return limit
 
     def test_callback_contract_returns_the_original_committed_envelope(self):
         store = Store(self.workspace, create=True)
@@ -794,6 +810,73 @@ print(json.dumps(Store(Path(sys.argv[1])).snapshot()))
             self.assert_error("invalid_input", lambda: store.mutate(
                 "add", {}, apply, expected_revision=0, request_id="add"))
         self.assertEqual(store.snapshot(), {"revision": 0, "records": {}})
+
+    def test_mutation_stores_only_values_that_every_supported_python_reads_back(self):
+        # Python 3.9.6 converts integers of any length, and Python 3.11 and later refuse to read one of more
+        # than 4300 digits. Write as the earlier Python does, so that the store's bound itself must refuse it.
+        limit = self.allow_integers_of_any_length()
+        store = Store(self.workspace, create=True)
+        called = []
+
+        def mutate(request_id, *, payload=None, record=None, result=None):
+            def apply(tx):
+                called.append(request_id)
+                if record is not None:
+                    tx.put("work", request_id, record)
+                return result
+            return store.mutate("add", payload or {}, apply, expected_revision=store.revision, request_id=request_id)
+
+        # A caller or a callback can build a JSON array as a tuple, and the store writes it as a list.
+        beyond = {"integer": ({"value": 10 ** 4300}, {"value": -(10 ** 4300)}),
+                  "nesting": (build_nested_value(101), build_nested_value(101, tuple))}
+        for dimension, values in beyond.items():
+            for index, value in enumerate(values):
+                for place in ("payload", "record", "result"):
+                    request_id = dimension + "-" + str(index) + "-" + place
+                    with self.subTest(request_id=request_id):
+                        self.assert_error("invalid_input", lambda: mutate(request_id, **{place: value}))
+                        # A payload beyond the bounds fails before its callback runs.
+                        self.assertEqual(request_id in called, place != "payload")
+        self.assertEqual(store.snapshot(), {"revision": 0, "records": {}})
+
+        within = {"integer": {"value": [10 ** 4300 - 1, -(10 ** 4300 - 1)]}, "nesting": build_nested_value(100)}
+        for dimension, value in within.items():
+            mutate(dimension, payload=value, record=value, result=value)
+        if limit is not None:
+            # Read the store as Python 3.11 and later do.
+            sys.set_int_max_str_digits(limit)
+        reopened = Store(self.workspace)
+        self.assertEqual(reopened.snapshot(), {"revision": 2, "records": {"work": within}})
+        for dimension, value in within.items():
+            committed = reopened.committed_request(dimension)
+            self.assertEqual((committed["payload"], committed["response"]["result"]), (value, value))
+
+    def test_values_beyond_the_bounds_that_an_earlier_release_stored_read_as_before(self):
+        from research_harness import storage
+        # Read as Python 3.9.6 does: it reads an integer of any length, so a store that holds one is readable there.
+        self.allow_integers_of_any_length()
+        store = Store(self.workspace, create=True)
+        stored = {"integer": {"value": 10 ** 4300}, "nesting": build_nested_value(101)}
+        receipts = {}
+        # exactory-client 0.48.0 and earlier stored such values: write them without the store's bounds.
+        with mock.patch.object(storage, "_check_stored_bounds", lambda value: None):
+            for dimension, value in stored.items():
+                def apply(tx):
+                    tx.put("work", dimension, value)
+                    return value
+                receipts[dimension] = store.mutate("add", value, apply, expected_revision=store.revision,
+                                                   request_id=dimension)
+        reopened = Store(self.workspace)
+        self.assertEqual(reopened.snapshot(), {"revision": 2, "records": {"work": stored}})
+        with reopened.guarded_snapshot() as guard:
+            self.assertEqual(guard.snapshot()["records"], {"work": stored})
+        for dimension, value in stored.items():
+            self.assertEqual(reopened.committed_request(dimension)["payload"], value)
+            # A retry of the committed request returns its original receipt.
+            self.assertEqual(reopened.mutate("add", value, lambda tx: self.fail("A committed replay ran the callback"),
+                                             expected_revision=0, request_id=dimension), receipts[dimension])
+        # A later mutation replays the history that holds these values.
+        self.assertEqual(self.add(reopened, revision=2, request="later")["revision"], 3)
 
     def test_transaction_rejects_missing_or_invalid_record_lookup_keys(self):
         store = Store(self.workspace, create=True)

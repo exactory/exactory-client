@@ -6,15 +6,14 @@ from pathlib import Path
 
 from .artifacts import _regular_file
 from .errors import ResearchError
+from .storage import _check_stored_bounds
 from .workspace import checked_parent, read_file, strict_json
 
 
-# A metric is copied into the run's records, which every supported Python must read back. Python 3.9.6
-# writes an integer of any length, but Python 3.11 and later refuse to parse one of more than 4300 digits
-# (sys.int_info.default_max_str_digits). A scientific delivery walks at most 40 levels, and a round packet
-# holds the metric 7 levels deep.
+# A metric is copied into the run's records, which every supported Python must read back, so it must pass
+# the store's check, here with a smaller depth. A scientific delivery walks at most 40 levels, and a round
+# packet holds the metric 7 levels deep.
 _METRIC_MAX_DEPTH = 32
-_METRIC_MAX_INTEGER = 10 ** 4300 - 1
 
 
 def output_path(path):
@@ -96,19 +95,10 @@ def _read_metric(data, *, is_bounded):
     """The JSON of one metric source, or None when it is not finite JSON or, if bounded, exceeds the metric bound."""
     try:
         value = strict_json(data)
+        if is_bounded:
+            _check_stored_bounds(value, _METRIC_MAX_DEPTH)
     except ResearchError:
         return None
-    if not is_bounded:
-        return value
-    pending = [(value, 1)]
-    while pending:
-        item, depth = pending.pop()
-        if isinstance(item, (dict, list)):
-            if depth > _METRIC_MAX_DEPTH:
-                return None
-            pending.extend((child, depth + 1) for child in (item.values() if isinstance(item, dict) else item))
-        elif type(item) is int and abs(item) > _METRIC_MAX_INTEGER:
-            return None
     return value
 
 

@@ -145,6 +145,8 @@ class BinaryPdfTests(unittest.TestCase):
         for locator in (
             {"kind": "pdf", "page_index": 1, "printed_page": "2", "region": [0, 0, 1, 1]},
             {"kind": "pdf", "page_index": 0, "printed_page": "1", "region": [0, 0, 2, 1]},
+            # An integer beyond the float range (about 1.8e308), for which math.isfinite raises OverflowError.
+            {"kind": "pdf", "page_index": 0, "printed_page": "1", "region": [0, 0, 10 ** 309, 1]},
         ):
             with self.subTest(locator=locator):
                 with self.assertRaises(ResearchError) as failure:

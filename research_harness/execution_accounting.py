@@ -1,9 +1,8 @@
 """Current execution permission over immutable measured resource history."""
 
-import math
-
 from .errors import ResearchError
 from .evidence import digest
+from .operations import is_finite_number
 from .workspace import strict_json
 
 
@@ -38,7 +37,7 @@ def require_accounted_usage(records, artifacts, strategy_key):
         measured = terminal.get("duration_s")
         if measured is None:
             continue
-        if type(measured) not in (int, float) or not math.isfinite(measured) or measured < 0:
+        if not is_finite_number(measured) or measured < 0:
             raise ResearchError("execution_usage_reconciliation_required", "The retained terminal has no valid measured duration", details)
         units = execution["payload"]["usage"]["units"]
         accounted = max(admission["reserved_units"], units if units is not None else 0)

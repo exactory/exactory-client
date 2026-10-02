@@ -8,14 +8,15 @@ allowance of every acquisition operation that is still admitted, so an
 interrupted or superseded operation holds nothing once it is no longer
 admitted. Admission refuses work that has no room for one request; batches
 charge their counts and any reported model usage. Usage already spent is
-always recorded; exhaustion is an obligation, never readiness. The
-`development` purpose counts admitted development rounds in the `rounds`
-unit; `round-admit` charges one round.
+always recorded; exhaustion is an obligation, never readiness. The one
+exception is a charge whose account total is beyond the float range before
+or after it, which is refused. The `development` purpose counts admitted
+development rounds in the `rounds` unit; `round-admit` charges one round.
 """
 
 from .errors import ResearchError
 from .graph import obligation
-from .operations import fields, prepared_mutation, profile_name, text
+from .operations import fields, is_finite_number, prepared_mutation, profile_name, text
 
 
 UNITS = ("network_requests", "source_bytes", "readings", "screenings", "model_input_tokens", "model_output_tokens", "wall_seconds", "rounds")
@@ -129,6 +130,10 @@ def charge(source, purpose, amounts, *, unknown=(), refuse=True):
         if amount is None:
             unknowns[unit] += 1
             continue
+        # A float charge cannot be added to a total beyond the float range. Integer charges can sum beyond it, and an
+        # earlier release stored such a total, so the stored total is checked before the sum and the new total after it.
+        if not (is_finite_number(charged[unit]) and is_finite_number(charged[unit] + amount)):
+            raise ResearchError("invalid_input", "The " + unit + " account total must stay a finite number")
         if refuse:
             _check(budget, account, reserved, unit, amount)
         charged[unit] += amount

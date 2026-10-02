@@ -38,7 +38,7 @@ from .components import find_component_page_obligations, is_component
 from .evaluation import Evaluation
 from .evidence import digest
 from .graph import main_captures, obligation, selected_bundle
-from .operations import fields, immutable_record, iso_date, prepared_mutation, profile_name, strings, text
+from .operations import fields, immutable_record, is_finite_number, iso_date, prepared_mutation, profile_name, strings, text
 from .principles import preparation_policy
 from . import resources
 from .source_links import TEXT_KINDS, complete_original, contains, covers_text, exact_work, link_identity, original_identity, span_locator, validate_link
@@ -232,7 +232,7 @@ def _usage(value):
         if value[key] is not None and (type(value[key]) is not int or value[key] < 0):
             raise ResearchError("invalid_batch", "Token usage is a nonnegative integer or null when unknown")
     seconds = value["wall_seconds"]
-    if seconds is not None and (type(seconds) not in (int, float) or seconds < 0):
+    if seconds is not None and not (is_finite_number(seconds) and seconds >= 0):
         raise ResearchError("invalid_batch", "Wall seconds are a nonnegative number or null when unknown")
     return dict(value)
 

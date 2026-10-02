@@ -6,9 +6,18 @@ an incomplete pin may be prepared but cannot complete the foundation. Scope
 changes replace literature_scope/{profile}; Store events preserve prior scopes.
 
 Graph traversal includes every registry occurrence of a Tier 1/2 captured version
-and, for each original body among its bundles (an acquired original, or the saved
-response of a passage), the occurrences of the bundle selected for that body. A
-bundle that a later bundle of the same body replaced contributes no occurrence. A root
+and the occurrences of the bundle selected for each of its acquired originals that
+has a bundle. An acquired original is an available main original (main_captures),
+so an original that a bundle of another of the version's bodies links as a
+supplement unit is another body. Only a version none of whose acquired originals
+has a bundle reads the bundle selected for each other body among its bundles, such
+as the saved response of a passage or such a supplement, so a bundle of another
+body is not read beside a bundle of an acquired original, whichever was imported
+first, while a passage bundle whose body is an acquired original is read as that
+original's bundle. A verification target reads the bundle of each acquired
+original whatever its pin; the pin decides only which originals owe a complete
+bibliography. A bundle that a later bundle of the same body replaced contributes
+no occurrence. A root
 (Tier 1) is read in full with its complete bibliography. Its references are Tier 3
 (abstract) unless an active full-text requirement of this profile selects them
 (require-fulltext, or a work cited by the selected search judgment of a purpose);
@@ -44,24 +53,26 @@ def find_active_requirements(records):
     judgment of its profile and purpose; once the selection names another judgment, they stop
     counting. The stored records never change, and every other requirement always counts."""
     selection = records.get("search_selection", {})
-    retired = set()
+    retired_ids = set()
     for search in records.get("literature_search", {}).values():
-        selected = selection.get(search["profile"] + ":" + search["purpose"], {}).get("search_id")
-        if selected is not None and selected != search["id"]:
-            retired.update(format_search_requirement_id(search["id"], version) for version in search["cited_work_ids"])
-    return {key: value for key, value in records.get("fulltext_requirement", {}).items() if key not in retired}
+        selected_id = selection.get(search["profile"] + ":" + search["purpose"], {}).get("search_id")
+        if selected_id is not None and selected_id != search["id"]:
+            retired_ids.update(format_search_requirement_id(search["id"], version) for version in search["cited_work_ids"])
+    return {key: value for key, value in records.get("fulltext_requirement", {}).items() if key not in retired_ids}
 
 
-def find_bound_requirements(records):
-    """The full-text requirements that a binding or a digest holds: {id: requirement}.
+def find_bound_requirements(records, profile, graph):
+    """The full-text requirements of the profile that a binding or a digest holds: {id: requirement}.
 
-    It holds every record of a version while any record of that version, in the same profile, counts. For
-    such a version these are the records that bindings held before a replaced judgment's requirements
-    stopped counting. A binding therefore changes when a record is added or a version stops being required,
-    and not when a record stops counting while another record of its version still counts."""
-    counted = {(r["profile"], r["version_id"]) for r in find_active_requirements(records).values()}
+    It holds every record of a version while the version is a required full text: while one of its own records
+    counts, or while the profile's citation graph places it at Tier 1 or 2. For such a version these are the
+    records that bindings held before a replaced judgment's requirements stopped counting. A binding therefore
+    changes when a record is added or a version starts or stops being a required full text, and not when a
+    record stops counting while its version stays a required full text."""
+    required_versions = {version for node in graph["nodes"] if node["tier"] <= 2 for version in node["version_ids"]}
+    required_versions.update(r["version_id"] for r in find_active_requirements(records).values() if r["profile"] == profile)
     return {key: value for key, value in records.get("fulltext_requirement", {}).items()
-            if (value["profile"], value["version_id"]) in counted}
+            if value["profile"] == profile and value["version_id"] in required_versions}
 
 
 def validate_target(records, target, roots):
@@ -161,10 +172,20 @@ def citation_graph(records, profile):
             continue
         versions.setdefault(work["work_id"], set()).add(identifier)
         tiers[work["work_id"]] = 1
-    # A registry observation has no bundle and is always read. Of the bundles of one original body, only the
-    # selected one is read, so an occurrence of a bundle that a later one replaced carries no obligation.
-    read_bundle_ids = {selected_bundle(records, b["version_id"], {"id": b["version_id"], "sha256": b["original_sha256"]})["id"]
-                       for b in records.get("source_bundle", {}).values()}
+    # A registry observation has no bundle and is always read. Of a version's bundles, the graph reads the one
+    # selected for each acquired original that has a bundle; a version none of whose acquired originals has a
+    # bundle reads the one selected for each other body instead, such as the saved response of a passage or an
+    # original that the bundle of another body links as a supplement. A bundle that a later bundle of the same
+    # body replaced is never read, so its occurrences carry no obligation.
+    bodies = {}
+    for bundle in records.get("source_bundle", {}).values():
+        bodies.setdefault(bundle["version_id"], set()).add(bundle["original_sha256"])
+    read_bundle_ids = set()
+    for version, version_bodies in bodies.items():
+        acquired_bodies = version_bodies & {c["original"]["sha256"]
+                                            for c in main_captures(records, records["work"][version])}
+        read_bundle_ids.update(selected_bundle(records, version, {"id": version, "sha256": body})["id"]
+                               for body in acquired_bodies or version_bodies)
     by_source = {}
     for occurrence in records.get("reference_occurrence", {}).values():
         if "bundle_id" not in occurrence or occurrence["bundle_id"] in read_bundle_ids:

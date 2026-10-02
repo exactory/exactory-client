@@ -20,6 +20,16 @@ from integration_fixtures import admit_lab, make_venv
 PLUGIN = Path(__file__).resolve().parents[1]
 
 
+def build_nested_metric_json(levels):
+    """An object and levels - 1 lists inside it, {"metric": [[...[0]...]]}: levels containers in all."""
+    return b'{"metric": ' + b"[" * (levels - 1) + b"0" + b"]" * (levels - 1) + b"}"
+
+
+def build_integer_metric_json(digits):
+    """A metric object whose one integer has the given number of digits."""
+    return b'{"metric": ' + b"9" * digits + b"}"
+
+
 class ResearchExecutionTests(DevelopmentCase):
     def setUp(self):
         super().setUp()
@@ -236,6 +246,34 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assertEqual(self.store.snapshot(), before)
         self.assertNotIn("historically-admitted", before["records"]["execution_claim"])
         self.assertFalse((self.root / api._directory("historically-admitted") / "terminal.json").exists())
+
+    def test_retained_terminal_whose_duration_is_beyond_the_float_range_blocks_new_admission(self):
+        # A retained terminal whose duration is an integer beyond the float range (about 1.8e308) has no valid measured
+        # duration. math.isfinite raises OverflowError for it, which escaped as a traceback. Only an outcome recorded
+        # with null usage, as the former producer recorded a failed run, reaches this check with such a terminal.
+        admission = admit_lab(self, body="raise SystemExit(7)\n", usage_unit="wall_seconds", reserved_units=0.01, max_units=1)
+        api = importlib.import_module("research_harness.execution")
+        with mock.patch.object(api, "reconcile_execution", side_effect=OSError("The launcher exited after the run")):
+            with self.assertRaisesRegex(OSError, "The launcher exited after the run"):
+                api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                     request_id="duration-beyond-floats")
+        terminal = self.root / api._directory(admission["id"]) / "terminal.json"
+        terminal.write_text(json.dumps(dict(json.loads(terminal.read_bytes()), duration_s=10 ** 309)))
+        record_execution = api.record_execution
+
+        def record_null_usage(store, payload, **identity):
+            payload["usage"]["units"] = None
+            return record_execution(store, payload, **identity)
+
+        with mock.patch.object(api, "record_execution", side_effect=record_null_usage):
+            api.reconcile_execution(self.store, {"admission_id": admission["id"]}, expected_revision=self.store.revision,
+                                    request_id="reconcile")
+        following = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
+        following["id"] = "following-run"
+        before = self.store.snapshot()
+        self.assert_error("execution_usage_reconciliation_required",
+                          lambda: self.mutate(self.development().admit_execution, following))
+        self.assertEqual(self.store.snapshot(), before)
 
     def test_accounted_wall_outcome_recovers_observation_before_new_permission(self):
         admission = admit_lab(self, body="print('{\"metric\": 7}')\n", usage_unit="wall_seconds",
@@ -601,6 +639,22 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assertTrue(result["ok"], result["stderr_tail"])
         self.assertEqual(result["metric"], {"metric": 7})
 
+    def test_bind_run_refuses_an_integer_timeout_beyond_the_float_range(self):
+        # The launcher counts a run's timeout on a float clock. math.isfinite raises OverflowError for an integer beyond
+        # the float range (about 1.8e308), which exactory-research printed as a traceback instead of a JSON error.
+        from research_harness.errors import ResearchError
+        with self.assertRaises(ResearchError) as refused:
+            admit_lab(self, body="print('{\"metric\": 7}')\n", timeout=10 ** 309)
+        self.assertEqual((refused.exception.code, refused.exception.message),
+                         ("invalid_execution", "A finite positive timeout is required"))
+        self.assertNotIn("execution_binding", self.store.snapshot()["records"])
+        # The largest integer that a float holds is still a finite timeout.
+        api = importlib.import_module("research_harness.execution")
+        payload = {"admission_id": "lab-run", "script": "code/program.py", "backend": "local",
+                   "timeout_seconds": int(sys.float_info.max), "inputs": [], "usage_unit": "execution",
+                   "outputs": [{"id": "result", "requirement_id": "measurements", "path": "stdout", "media_type": "text/plain"}]}
+        self.assertEqual(self.mutate(api.bind_execution, payload)["result"]["timeout_seconds"], int(sys.float_info.max))
+
     def test_symlinked_venv_interpreter_runs_the_program_with_its_own_site_packages(self):
         interpreter = make_venv(self)
         admission = admit_lab(self, interpreter=str(interpreter),
@@ -873,6 +927,78 @@ class ResearchExecutionTests(DevelopmentCase):
         records = self.store.snapshot()["records"]
         _observed(records, self.artifacts, records["execution_outcome"][admission["id"]]["execution_id"])
 
+    def launch_as_earlier_release_until_the_launcher_exits(self, metric_json):
+        """Run a program that prints metric_json under a claim config of exactory-client 0.47.0, which has no
+        metric_output and so no metric bound. The launcher exits after the run ends and before it records the
+        outcome, so the run has a terminal file and no recorded outcome. Returns the admission."""
+        api = importlib.import_module("research_harness.execution")
+        materialize = api._materialize
+
+        def materialize_as_earlier_release(*args):
+            config = materialize(*args)
+            del config["metric_output"]
+            return config
+
+        admission = admit_lab(self, body="print(" + repr(metric_json.decode()) + ")\n")
+        with mock.patch.object(api, "_materialize", side_effect=materialize_as_earlier_release), \
+                mock.patch.object(api, "reconcile_execution", side_effect=OSError("The launcher exited after the run")):
+            with self.assertRaisesRegex(OSError, "The launcher exited after the run"):
+                api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                     request_id="earlier-release")
+        return admission
+
+    def assert_the_store_refuses_the_observation(self, admission, refusal):
+        """reconcile-run records the outcome and then fails with invalid_input, because the store refuses the
+        observation. A retry fails without a change, and the strategy admits no further run."""
+        from research_harness.errors import ResearchError
+        api = importlib.import_module("research_harness.execution")
+
+        def reconcile(request_id):
+            with self.assertRaisesRegex(ResearchError, refusal) as raised:
+                api.reconcile_execution(self.store, {"admission_id": admission["id"]},
+                                        expected_revision=self.store.revision, request_id=request_id)
+            self.assertEqual(raised.exception.code, "invalid_input")
+
+        reconcile("reconcile")
+        before = self.store.snapshot()
+        self.assertIn(admission["id"], before["records"]["execution_outcome"])
+        self.assertNotIn(admission["id"], before["records"].get("execution_observation", {}))
+        reconcile("reconcile-again")
+        following = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
+        following["id"] = "following-run"
+        self.assert_error("execution_usage_reconciliation_required",
+                          lambda: self.mutate(self.development().admit_execution, following))
+        self.assertEqual(self.store.snapshot(), before)
+
+    # A limit of H13 that the user accepted on 2026-09-30: the store cannot record the observation of a run that
+    # exactory-client 0.47.0 or earlier claimed when the run's metric exceeds the store bounds, so the run keeps an
+    # outcome without an observation, and its strategy admits no further run. Releases 0.48.0 and 0.49.0 recorded
+    # such a run. The observation holds the metric two levels deep, so a metric of 99 levels makes it 101 levels deep.
+    def test_earlier_release_run_whose_metric_nests_beyond_the_store_bound_cannot_be_reconciled(self):
+        admission = self.launch_as_earlier_release_until_the_launcher_exits(build_nested_metric_json(99))
+        self.assert_the_store_refuses_the_observation(admission, "nest at most 100 levels")
+
+    def test_earlier_release_run_whose_metric_holds_an_integer_beyond_the_store_bound_cannot_be_reconciled(self):
+        # The same accepted limit. Python 3.9.6 reads an integer of any length, and Python 3.11 and later read no
+        # metric from it. Reconcile as Python 3.9.6 does, so that the store's own bound refuses the metric.
+        if hasattr(sys, "set_int_max_str_digits"):
+            self.addCleanup(sys.set_int_max_str_digits, sys.get_int_max_str_digits())
+            sys.set_int_max_str_digits(0)
+        admission = self.launch_as_earlier_release_until_the_launcher_exits(build_integer_metric_json(4301))
+        self.assert_the_store_refuses_the_observation(admission, "no integer of more than 4300 digits")
+
+    def test_earlier_release_run_whose_metric_fits_the_store_bound_is_reconciled(self):
+        # The accepted limit starts one level deeper: a metric of 98 levels makes an observation of 100 levels.
+        api = importlib.import_module("research_harness.execution")
+        metric_json = build_nested_metric_json(98)
+        admission = self.launch_as_earlier_release_until_the_launcher_exits(metric_json)
+        result = api.reconcile_execution(self.store, {"admission_id": admission["id"]},
+                                         expected_revision=self.store.revision, request_id="reconcile")
+        self.assertEqual(result["metric"], json.loads(metric_json))
+        following = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
+        following["id"] = "following-run"
+        self.assertEqual(self.mutate(self.development().admit_execution, following)["result"]["id"], following["id"])
+
 
 class RunMetricTests(unittest.TestCase):
     def test_metric_sources_keep_their_order_and_an_earlier_run_config_keeps_its_metric(self):
@@ -919,16 +1045,8 @@ class RunMetricTests(unittest.TestCase):
         config = {"script": "code/refine_cycle.py", "metric_output": "work/results/run_cycle.json"}
         earlier = {"script": "code/refine_cycle.py"}
         fallback, declared = "work/results/refine_cycle.json", "work/results/run_cycle.json"
-
-        def build_nested_json(levels):
-            # An object and levels - 1 lists inside it: {"metric": [[...[0]...]]}.
-            return b'{"metric": ' + b"[" * (levels - 1) + b"0" + b"]" * (levels - 1) + b"}"
-
-        def build_integer_json(digits):
-            return b'{"metric": ' + b"9" * digits + b"}"
-
-        for dimension, within, beyond in (("nesting", build_nested_json(32), build_nested_json(33)),
-                                          ("integer digits", build_integer_json(4300), build_integer_json(4301))):
+        for dimension, within, beyond in (("nesting", build_nested_metric_json(32), build_nested_metric_json(33)),
+                                          ("integer digits", build_integer_metric_json(4300), build_integer_metric_json(4301))):
             with self.subTest(dimension=dimension):
                 for path in ("stdout", fallback, declared):
                     self.assertEqual(output_metric(config, {path: within}), json.loads(within))

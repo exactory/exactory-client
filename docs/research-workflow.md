@@ -340,20 +340,39 @@ exactory-research loop-close --file loop-closure.json --expected-revision REVISI
 exactory-research require-fulltext --file lineage-parent.json --expected-revision REVISION --request-id lineage-001   # purpose lineage, depends_on
 ```
 
-A citing-papers capture is an OpenAlex query with the filter `cites:<parent id>`.
-Save its original response with `import-response` (provider `openalex`) and
-record it as a `recent` search response whose query is the filter value,
-`cites:<parent id>`.
+A citing-papers capture is an OpenAlex query whose filter holds
+`cites:<parent id>`. Save its original response with `import-response`
+(provider `openalex`) and record it as a `recent` search response whose query is
+the whole filter value: `cites:W123` for the filter `cites:W123`, and
+`cites:W123,from_publication_date:2025-01-01` when the filter also holds a date
+clause.
 
 A purpose is covered when its question has an answer grounded in at least one
 read paper judged `relevant` or `contradictory`, or when two distinct captured
-queries for that purpose returned no relevant hit. Each captured native request
-counts as one query, including its pages and repeated captures, and two requests
-count apart even when they share a query value; `web` and `mcp` captures of one
-query count once, and not at all when a native request of the purpose was bound
-to that query. The record of each purpose states which. For each uncovered
-purpose, a new query is captured and up to 20
-more abstracts are read. The loop stops when every purpose is covered, when a
+queries for that purpose returned no relevant hit. A native capture counts by
+the query it asks: its provider, endpoint and the parameters that decide which
+works match (arXiv `search_query` and `id_list`; Crossref `query`, every field
+query `query.<field>` and `filter`; OpenAlex `search`, `search.exact`,
+`search.semantic`, `filter` and `corpus`). Its pages and repeated captures, and
+captures that differ only in another parameter such as a sort order, a field
+selection or a `mailto` address, count once. So do captures whose URLs spell one
+query differently: the endpoint is compared by its host and its path without a
+trailing slash, an empty parameter or list item counts as absent, and the
+comma-separated items of a `filter` or an arXiv `id_list` are compared as a set,
+because the registries combine them in any order. An OpenAlex `filter` is
+compared as OpenAlex reads it: the letter case of its values does not count, and
+the `|` alternatives of one filter, after a leading `!` that negates them all,
+are compared as a set, so `type:Article` asks the same query as `type:article`,
+and `cites:W2|W1` as `cites:W1|W2`. Two captures whose matching parameters
+differ in any other way count apart, even when they share a query value; this
+includes the name of a filter in another letter case, another letter case of the
+value of a `.search` filter such as `title.search` (OpenAlex reads its Boolean
+operators only in uppercase), and another letter case of the value of any other
+matching parameter, such as `search`. `web` and `mcp`
+captures of one query count once, and not at all when a native capture of the
+purpose was bound to that query. The record of each purpose states which.
+For each uncovered purpose, a new query is captured and up to 20 more abstracts
+are read. The loop stops when every purpose is covered, when a
 round adds no `relevant` or `contradictory` paper to any uncovered purpose, or
 when the study has registered 100 abstract readings in the loop. At the limit,
 the uncovered purposes are recorded as gaps with the queries tried. `loop-close`
@@ -466,9 +485,16 @@ a new run. `admit` refuses a new admission of the same strategy with
 
 Keep failed and timed-out executions and their usage. `reconcile-run` completes
 interrupted observation using the same admission; unknown released work remains
-pending with its reservation retained. A valid negative finding differs from a
-broken implementation, missing output, or unknown execution. An exit code or
-metric alone does not settle validity or the full objective.
+pending with its reservation retained. One exception is a run that
+exactory-client 0.47.0 or earlier claimed whose metric makes the observation
+exceed the store bounds. For such a run, `reconcile-run` fails with
+`invalid_input`, the run has an outcome but no observation, and its strategy
+admits no further run. A retry of `exactory-lab run` with its original request
+ID fails in the same way. [Actual execution](research-cli.md#actual-execution)
+in the CLI reference gives the bounds and a second exception for the seed of a
+run. A valid negative finding differs from a broken implementation, missing
+output, or unknown execution. An exit code or metric alone does not settle
+validity or the full objective.
 
 ## Develop and review the research before writing
 

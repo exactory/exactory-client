@@ -354,20 +354,21 @@ def _build_judged_records(records, value):
     requirements that count and names no search selection, so none of them is retired again."""
     selection = records.get("search_selection", {}).get(value["profile"] + ":" + value["purpose"])
     previous = records.get("literature_search", {}).get(selection["search_id"]) if selection else None
-    retiring = set()
+    retiring_ids = set()
     if previous is not None and previous["id"] != value["id"]:
-        retiring = {format_search_requirement_id(previous["id"], version) for version in previous["cited_work_ids"]}
+        retiring_ids = {format_search_requirement_id(previous["id"], version) for version in previous["cited_work_ids"]}
     works = records.get("work", {})
-    cited = {works[version]["work_id"] for version in value["cited_work_ids"]}
-    counted = find_active_requirements(records)
-    judged = {key: requirement for key, requirement in records.get("fulltext_requirement", {}).items()
-              if (key in counted and key not in retiring)
-              or (requirement["profile"] == value["profile"] and works.get(requirement["version_id"], {}).get("work_id") in cited)}
+    cited_families = {works[version]["work_id"] for version in value["cited_work_ids"]}
+    counted_requirements = find_active_requirements(records)
+    judged_requirements = {key: requirement for key, requirement in records.get("fulltext_requirement", {}).items()
+                           if (key in counted_requirements and key not in retiring_ids)
+                           or (requirement["profile"] == value["profile"]
+                               and works.get(requirement["version_id"], {}).get("work_id") in cited_families)}
     # When the view keeps exactly the requirements that count, the judgment is assessed on the records
     # themselves, with the caller's evaluation.
-    if judged == counted:
+    if judged_requirements == counted_requirements:
         return records
-    return dict(records, fulltext_requirement=judged, search_selection={})
+    return dict(records, fulltext_requirement=judged_requirements, search_selection={})
 
 
 def _items_list(value, name):
@@ -422,10 +423,11 @@ def record_search(store, payload, *, expected_revision, request_id):
         if current_scope is None:
             raise ResearchError("roots_missing", "Define the literature scope before recording a dependent search")
         _dispositions(records, value)
-        judged = Evaluation.of(_build_judged_records(records, value), evaluation)
+        judged_evaluation = Evaluation.of(_build_judged_records(records, value), evaluation)
         record = dict(value, scope_digest=digest(current_scope), pending=pending, page_groups=page_groups,
-                      evidence_digest=_search_evidence_digest(judged, current_scope, found, value["cited_work_ids"]),
-                      frontier_digest=frontier_digest(judged, value["profile"]))
+                      evidence_digest=_search_evidence_digest(judged_evaluation, current_scope, found,
+                                                              value["cited_work_ids"]),
+                      frontier_digest=frontier_digest(judged_evaluation, value["profile"]))
         changes = [immutable_record(records, "literature_search", value["id"], record)]
         changes.append(("search_selection", value["profile"] + ":" + value["purpose"], {"search_id": value["id"]}))
         for version in value["cited_work_ids"]:
@@ -527,7 +529,7 @@ def _foundation_state(evaluation, profile):
     critical = {target["id"]} if target else set()
     full_requirements = {k: r for k, r in find_active_requirements(records).items() if r["profile"] == profile}
     # The digests hold every record of a required version (graph.find_bound_requirements).
-    bound_requirements = {k: r for k, r in find_bound_requirements(records).items() if r["profile"] == profile}
+    bound_requirements = find_bound_requirements(records, profile, graph)
     for requirement in full_requirements.values():
         version = requirement["version_id"]
         requirements[version] = "fulltext"
