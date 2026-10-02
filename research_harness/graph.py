@@ -5,9 +5,13 @@ historical_cutoff?}. Verification target is {kind: work, id, source_id, sha256};
 an incomplete pin may be prepared but cannot complete the foundation. Scope
 changes replace literature_scope/{profile}; Store events preserve prior scopes.
 
-Graph traversal includes every occurrence from Tier 1/2 captured versions. A root
+Graph traversal includes every registry occurrence of a Tier 1/2 captured version
+and, for each original body among its bundles (an acquired original, or the saved
+response of a passage), the occurrences of the bundle selected for that body. A
+bundle that a later bundle of the same body replaced contributes no occurrence. A root
 (Tier 1) is read in full with its complete bibliography. Its references are Tier 3
-(abstract) unless the author selected them with require-fulltext for this profile;
+(abstract) unless an active full-text requirement of this profile selects them
+(require-fulltext, or a work cited by the selected search judgment of a purpose);
 a selected reference is Tier 2 (full reading and complete bibliography) wherever it
 appears in the network, and its own references are Tier 3 unless selected too. The author therefore reads few papers in full while every
 reference of those papers is still inventoried and read at abstract depth.
@@ -18,6 +22,7 @@ of its unambiguous family without claiming their contents are interchangeable.
 
 from .errors import ResearchError
 from .components import is_component
+from .evidence import digest
 from .identities import family_versions, normalize_identifier
 from .operations import fields, iso_date, prepared_mutation, profile_name, strings
 from .source_links import exact_work, fulltext_capture
@@ -25,6 +30,38 @@ from .source_links import exact_work, fulltext_capture
 
 def obligation(code, explanation, **affected):
     return dict(code=code, explanation=explanation, **affected)
+
+
+def format_search_requirement_id(search_id, version_id):
+    """The ID of the full-text requirement that a search judgment creates for one cited work."""
+    return "search:" + digest([search_id, version_id])
+
+
+def find_active_requirements(records):
+    """The full-text requirements that count now: {id: requirement}.
+
+    A search judgment owns the requirements of its cited works only while it is the selected
+    judgment of its profile and purpose; once the selection names another judgment, they stop
+    counting. The stored records never change, and every other requirement always counts."""
+    selection = records.get("search_selection", {})
+    retired = set()
+    for search in records.get("literature_search", {}).values():
+        selected = selection.get(search["profile"] + ":" + search["purpose"], {}).get("search_id")
+        if selected is not None and selected != search["id"]:
+            retired.update(format_search_requirement_id(search["id"], version) for version in search["cited_work_ids"])
+    return {key: value for key, value in records.get("fulltext_requirement", {}).items() if key not in retired}
+
+
+def find_bound_requirements(records):
+    """The full-text requirements that a binding or a digest holds: {id: requirement}.
+
+    It holds every record of a version while any record of that version, in the same profile, counts. For
+    such a version these are the records that bindings held before a replaced judgment's requirements
+    stopped counting. A binding therefore changes when a record is added or a version stops being required,
+    and not when a record stops counting while another record of its version still counts."""
+    counted = {(r["profile"], r["version_id"]) for r in find_active_requirements(records).values()}
+    return {key: value for key, value in records.get("fulltext_requirement", {}).items()
+            if (value["profile"], value["version_id"]) in counted}
 
 
 def validate_target(records, target, roots):
@@ -113,7 +150,7 @@ def citation_graph(records, profile):
     versions, tiers = {}, {}
     obligations, references = [], {}
     selected_families = set()
-    for requirement in records.get("fulltext_requirement", {}).values():
+    for requirement in find_active_requirements(records).values():
         work = records.get("work", {}).get(requirement["version_id"])
         if requirement["profile"] == profile and work is not None:
             selected_families.add(work["work_id"])
@@ -124,9 +161,14 @@ def citation_graph(records, profile):
             continue
         versions.setdefault(work["work_id"], set()).add(identifier)
         tiers[work["work_id"]] = 1
+    # A registry observation has no bundle and is always read. Of the bundles of one original body, only the
+    # selected one is read, so an occurrence of a bundle that a later one replaced carries no obligation.
+    read_bundle_ids = {selected_bundle(records, b["version_id"], {"id": b["version_id"], "sha256": b["original_sha256"]})["id"]
+                       for b in records.get("source_bundle", {}).values()}
     by_source = {}
     for occurrence in records.get("reference_occurrence", {}).values():
-        by_source.setdefault(occurrence["source_work_id"], []).append(occurrence)
+        if "bundle_id" not in occurrence or occurrence["bundle_id"] in read_bundle_ids:
+            by_source.setdefault(occurrence["source_work_id"], []).append(occurrence)
     processed = {}
     while True:
         pending = [(family, version) for family in sorted(versions) if tiers[family] <= 2

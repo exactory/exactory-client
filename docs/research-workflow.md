@@ -180,7 +180,10 @@ reference with `require-fulltext` for a major claim, novelty judgment, innovatio
 transfer, or validity decision. A selected reference is Tier 2 wherever it appears:
 read in full with its complete bibliography, and its own references become Tier 3.
 Few papers are read in full; every reference of those papers is still inventoried
-and read at abstract depth. Preserve all occurrences and exact versions.
+and read at abstract depth. Preserve all occurrences and exact versions. A work
+that a search judgment cites is required in full in the same way while that
+judgment is the selected search of its purpose; recording a new search for the
+purpose retires the requirements of the works it no longer cites.
 
 Under `lineage-v1` and `sampled-v1` the Tier 3 abstract obligation is removed.
 The bibliography of a full-read paper is still inventoried for identity, and it
@@ -338,13 +341,18 @@ exactory-research require-fulltext --file lineage-parent.json --expected-revisio
 ```
 
 A citing-papers capture is an OpenAlex query with the filter `cites:<parent id>`.
-Save its original response with `import-response` and record it as a `recent`
-search response.
+Save its original response with `import-response` (provider `openalex`) and
+record it as a `recent` search response whose query is the filter value,
+`cites:<parent id>`.
 
 A purpose is covered when its question has an answer grounded in at least one
 read paper judged `relevant` or `contradictory`, or when two distinct captured
-queries for that purpose returned no relevant hit. The record of each purpose
-states which. For each uncovered purpose, a new query is captured and up to 20
+queries for that purpose returned no relevant hit. Each captured native request
+counts as one query, including its pages and repeated captures, and two requests
+count apart even when they share a query value; `web` and `mcp` captures of one
+query count once, and not at all when a native request of the purpose was bound
+to that query. The record of each purpose states which. For each uncovered
+purpose, a new query is captured and up to 20
 more abstracts are read. The loop stops when every purpose is covered, when a
 round adds no `relevant` or `contradictory` paper to any uncovered purpose, or
 when the study has registered 100 abstract readings in the loop. At the limit,

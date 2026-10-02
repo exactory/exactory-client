@@ -14,7 +14,10 @@ scope, found_work_ids, verdict, cited_work_ids, impact, gaps, dispositions,
 resolved?}. Responses contain {source_id, query, query_locator?, results_pointer?}.
 Every found work carries one disposition (relevant, contradictory,
 potentially_relevant, out_of_scope, duplicate, unresolved) with a reason; cited
-works are relevant or contradictory. A new search for a purpose carries forward
+works are relevant or contradictory. Each cited work is a critical full-text
+requirement while its judgment is the selected one of its profile and purpose;
+the requirements of a replaced judgment stop counting
+(graph.find_active_requirements). A new search for a purpose carries forward
 every contradictory or unresolved work of the selected search, or names it under
 resolved with a reason. A judgment stays current while its scope, the content of
 the works it rests on (roots, required full texts, found and cited works) and the
@@ -40,7 +43,8 @@ from .errors import ResearchError
 from .components import compute_binding_identity, is_component, validate_binding
 from .evaluation import Evaluation
 from .evidence import digest
-from .graph import citation_graph, obligation, selected_bundle, validate_target
+from .graph import (citation_graph, find_active_requirements, find_bound_requirements, format_search_requirement_id, obligation,
+                    selected_bundle, validate_target)
 from .http import safe_url
 from .imports import _pointer
 from .operations import fields, immutable_record, iso_date, prepared_mutation, profile_name, strings, text, timestamp
@@ -49,7 +53,7 @@ from .providers import _json
 from . import resources
 from . import screening
 from .reading import bundle_digest, current_readings, fulltext_coverage, registry_abstract_present, required_unit_obligations
-from .search_pages import enumerate_pages, native_page
+from .search_pages import QUERY_PARAMETER_NAMES, enumerate_pages, native_page
 from .source_links import captured_source, complete_original, contains, covers_text, exact_work, fulltext_capture, original_identity, read_locator, validate_link
 
 
@@ -213,8 +217,7 @@ def _search_response(records, artifacts, response, scope):
         if read_locator(artifacts, source["response"], response["query_locator"]) != response["query"]:
             raise ResearchError("invalid_search", "The recorded query must equal its original response value")
     else:
-        names = {"arxiv": {"search_query"}, "openalex": {"search"}, "crossref": {"query", "query.bibliographic", "query.author"}}
-        names = names.get(source["provider"], {"q", "query", "search", "search_query"})
+        names = QUERY_PARAMETER_NAMES.get(source["provider"], {"q", "query", "search", "search_query"})
         actual = [value for key, value in parse_qsl(urlsplit(source["url"]).query) if key in names]
         if response["query"] not in actual:
             raise ResearchError("invalid_search", "Bind the exact search-query parameter or a saved response query value; URL path fragments are insufficient")
@@ -259,7 +262,7 @@ families of required full texts. The works other purposes found enter a section 
 judgments digest, so recording one purpose does not stale the others."""
     records = evaluation.records
     rows = {(node["work_id"], str(node["tier"])) for node in _graph(evaluation, profile)["nodes"]}
-    for requirement in records.get("fulltext_requirement", {}).values():
+    for requirement in find_active_requirements(records).values():
         work = records.get("work", {}).get(requirement["version_id"])
         if requirement["profile"] == profile and work:
             rows.add((work["work_id"], "requirement"))
@@ -276,7 +279,7 @@ def _relevant_versions(records, scope, found, cited):
     for version in list(scope.get("roots", [])) + list(found) + list(cited):
         work = records.get("work", {}).get(version)
         families.add(work["work_id"] if work else version)
-    for requirement in records.get("fulltext_requirement", {}).values():
+    for requirement in find_active_requirements(records).values():
         work = records.get("work", {}).get(requirement["version_id"])
         if requirement["profile"] == scope["profile"] and work:
             families.add(work["work_id"])
@@ -341,6 +344,32 @@ def _dispositions(records, value):
     return judged
 
 
+def _build_judged_records(records, value):
+    """The records a new judgment is assessed against. Once it is selected, the requirements of the
+    judgment it replaces stop counting, and it creates its own for the works it cites. The graph, the
+    frontier and the evidence digest see a requirement only through its work family, so each family the
+    new judgment cites keeps in view every requirement record of its profile that covered it, including
+    the records of replaced judgments. The judgment is then stale for itself only when it cites a family
+    that no requirement record covered before, as when every requirement counted. The view lists the
+    requirements that count and names no search selection, so none of them is retired again."""
+    selection = records.get("search_selection", {}).get(value["profile"] + ":" + value["purpose"])
+    previous = records.get("literature_search", {}).get(selection["search_id"]) if selection else None
+    retiring = set()
+    if previous is not None and previous["id"] != value["id"]:
+        retiring = {format_search_requirement_id(previous["id"], version) for version in previous["cited_work_ids"]}
+    works = records.get("work", {})
+    cited = {works[version]["work_id"] for version in value["cited_work_ids"]}
+    counted = find_active_requirements(records)
+    judged = {key: requirement for key, requirement in records.get("fulltext_requirement", {}).items()
+              if (key in counted and key not in retiring)
+              or (requirement["profile"] == value["profile"] and works.get(requirement["version_id"], {}).get("work_id") in cited)}
+    # When the view keeps exactly the requirements that count, the judgment is assessed on the records
+    # themselves, with the caller's evaluation.
+    if judged == counted:
+        return records
+    return dict(records, fulltext_requirement=judged, search_selection={})
+
+
 def _items_list(value, name):
     if not isinstance(value, list):
         raise ResearchError("invalid_search", name + " must be an array")
@@ -393,13 +422,14 @@ def record_search(store, payload, *, expected_revision, request_id):
         if current_scope is None:
             raise ResearchError("roots_missing", "Define the literature scope before recording a dependent search")
         _dispositions(records, value)
+        judged = Evaluation.of(_build_judged_records(records, value), evaluation)
         record = dict(value, scope_digest=digest(current_scope), pending=pending, page_groups=page_groups,
-                      evidence_digest=_search_evidence_digest(evaluation, current_scope, found, value["cited_work_ids"]),
-                      frontier_digest=frontier_digest(evaluation, value["profile"]))
+                      evidence_digest=_search_evidence_digest(judged, current_scope, found, value["cited_work_ids"]),
+                      frontier_digest=frontier_digest(judged, value["profile"]))
         changes = [immutable_record(records, "literature_search", value["id"], record)]
         changes.append(("search_selection", value["profile"] + ":" + value["purpose"], {"search_id": value["id"]}))
         for version in value["cited_work_ids"]:
-            identifier = "search:" + digest([value["id"], version])
+            identifier = format_search_requirement_id(value["id"], version)
             requirement = {"id": identifier, "profile": value["profile"], "version_id": version, "purpose": "novelty",
                            "reason": "Source cited in search judgment " + value["id"] + ": " + value["impact"], "critical": True}
             if current_scope.get("historical_cutoff") and value["purpose"] != "recent":
@@ -495,7 +525,9 @@ def _foundation_state(evaluation, profile):
             requirements[version] = "fulltext" if node["tier"] <= 2 else "abstract"
             reasons.setdefault(version, []).append("tier_" + str(node["tier"]))
     critical = {target["id"]} if target else set()
-    full_requirements = {k: r for k, r in records.get("fulltext_requirement", {}).items() if r["profile"] == profile}
+    full_requirements = {k: r for k, r in find_active_requirements(records).items() if r["profile"] == profile}
+    # The digests hold every record of a required version (graph.find_bound_requirements).
+    bound_requirements = {k: r for k, r in find_bound_requirements(records).items() if r["profile"] == profile}
     for requirement in full_requirements.values():
         version = requirement["version_id"]
         requirements[version] = "fulltext"
@@ -653,7 +685,7 @@ def _foundation_state(evaluation, profile):
     dependencies = {"scope": scope, "target": records.get("configuration", {}).get("research", {}).get("target") if profile == "verification" else None,
                     "works": {v: records["work"][v] for v in sorted(relevant) if v in records.get("work", {})}, "aliases": aliases,
                     "sources": {s: records["source"][s] for s in sorted(source_ids)}, "graph": graph, "bundles": bundles,
-                    "readings": used_readings, "collections": collections, "cohort_digest": cohort_state["digest"], "requirements": full_requirements,
+                    "readings": used_readings, "collections": collections, "cohort_digest": cohort_state["digest"], "requirements": bound_requirements,
                     "searches": searches, "availability": availability}
     dependencies["search_selection"] = selected_searches
     # Without deferral records the report keeps its earlier keys and digests,
@@ -676,8 +708,8 @@ def _foundation_state(evaluation, profile):
             **(dict(deferral_dependency, deferred_obligations=deferred_obligations) if deferrals else {}),
             "population_digest": digest(population), "frontier_digest": frontier_digest(evaluation, profile),
             "judgments_digest": digest(judgments),
-            "requirements_digest": digest({"requirements": full_requirements, **deferral_dependency}) if deferrals else digest(full_requirements),
-            "stable_digest": digest({"scope": scope, "requirements": sorted(full_requirements),
+            "requirements_digest": digest({"requirements": bound_requirements, **deferral_dependency}) if deferrals else digest(bound_requirements),
+            "stable_digest": digest({"scope": scope, "requirements": sorted(bound_requirements),
                                      "closure": (records.get("loop_closure_selection", {}).get("current") or {}).get("id"),
                                      "sample": (records.get("cohort_sample_selection", {}).get("current") or {}).get("id"),
                                      **deferral_dependency}),
