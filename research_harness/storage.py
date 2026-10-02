@@ -32,6 +32,33 @@ _SCHEMA_VERSION = 1
 _BUSY_TIMEOUT_SECONDS = 1.0
 _DATABASE = "research.sqlite3"
 _MAX_REVISION = (1 << 63) - 1
+# Every supported Python (3.9 to 3.14) must read back what the store writes. Only writes check these bounds,
+# so a store that an earlier release wrote reads as before. Python 3.9.6 converts an integer of any length,
+# and Python 3.11 and later refuse to parse one of more than 4300 digits (sys.int_info.default_max_str_digits).
+# The default recursion limit of 1000 frames bounds the nesting that a read handles. Measured on 2026-09-30 at
+# the top level of a script under Python 3.9.6, 3.11.11, 3.12.8 and 3.13.8: _load reads back 990 to 993 levels,
+# Store.snapshot a record value of 982 to 985 levels, and Store.guarded_snapshot, whose copy.deepcopy takes
+# two frames for each level, a record value of 492 levels. The depth bound keeps a wide margin below 492.
+_MAX_STORED_INTEGER_DIGITS = 4300
+_MAX_STORED_INTEGER = 10 ** _MAX_STORED_INTEGER_DIGITS - 1
+_MAX_STORED_DEPTH = 100
+# A value that the harness takes in nests at most _MAX_INPUT_DEPTH levels: a payload file of exactory-research, a
+# verdict body of bind-verdict, and the metric of a run (execution_outputs), which has had this bound since 0.48.0. A
+# paper review assignment repeats the stored bundle of manuscript, which the command bound does not count
+# (review_protocol.drop_repeated_bundle). Later records and reviewer exports hold copies of the values of an input
+# deeper. A reviewer export reads JSON of at most 40 levels (scientific_delivery._MAX_DEPTH,
+# scientific_json._check_nesting_bound). The deepest export copy found is 9 levels deeper: the packet of a review
+# assignment with role result in a source-limited study holds the readiness export at readiness, which holds each full
+# reading at inputs.synthesis.foundation.inventory[i].body_coverage.readings[id], so a read payload of 32 levels reaches
+# 41 levels there. A read payload nests deeply only inside the locators of its links, and ScientificDelivery.walk copies
+# a locator without adding the levels inside it to the depth. The deepest copy found whose levels the walk counts is 8
+# levels deeper: the same packet holds, at readiness.inputs.sources.work, the component of a fulltext payload, which
+# acquire_fulltext records as given while the fetch is pending. So an input of 32 levels reaches the 40 levels of an
+# export. The deepest record copy found is 12 levels deeper, at context.bundle of a paper review assignment, whose
+# bundle holds the same component at
+# review_inputs.synthesis.foundation.source_deferrals[i].dependencies.work.fulltexts[k].component.spec. So an input of
+# 32 levels reaches 44 of the store's 100 levels in a record.
+_MAX_INPUT_DEPTH = 32
 _PUBLICATION_NAME = re.compile(r"\.research-[0-9a-f]{32}\.sqlite3\Z")
 _WORKSPACE_LOCKS = weakref.WeakValueDictionary()
 _LOCK_REGISTRY_GUARD = threading.Lock()
@@ -83,6 +110,35 @@ def _json_types(value):
             _json_types(item)
         return
     raise ValueError("Value is not representable in JSON")
+
+
+def _check_bounds(value, name, max_depth, depth_reason):
+    """Refuse a value that nests deeper than max_depth levels or holds an integer that some supported Python cannot
+    read back; the top container is level 1. The refusal calls the value name, and depth_reason ends a depth refusal."""
+    pending = [(value, 1)]
+    while pending:
+        item, depth = pending.pop()
+        if isinstance(item, (dict, list, tuple)):
+            if depth > max_depth:
+                raise ResearchError("invalid_input", name + " must nest at most " + str(max_depth) + " levels"
+                                    + depth_reason)
+            pending.extend((child, depth + 1) for child in (item.values() if isinstance(item, dict) else item))
+        elif type(item) is int and abs(item) > _MAX_STORED_INTEGER:
+            raise ResearchError("invalid_input", name + " must hold no integer of more than "
+                                + str(_MAX_STORED_INTEGER_DIGITS)
+                                + " digits so that every supported Python reads it back")
+
+
+def _check_stored_bounds(value, max_depth=_MAX_STORED_DEPTH):
+    """Refuse a value to store beyond the bounds that every supported Python reads back."""
+    _check_bounds(value, "JSON to store", max_depth, " so that every supported Python reads it back")
+
+
+def check_command_bounds(value, input_name="A command input"):
+    """Refuse a command input that nests deeper than the input bound or holds an integer beyond the store's bound. The
+    refusal calls the input input_name."""
+    _check_bounds(value, input_name, _MAX_INPUT_DEPTH,
+                  ", which leaves room for deeper copies of its values in later records and reviewer exports")
 
 
 def _canonical(value, code: str = "invalid_input") -> str:
@@ -255,6 +311,7 @@ class Transaction:
         _text(key, "Record key")
         if not isinstance(value, dict):
             raise ResearchError("invalid_input", "Record value must be a JSON object")
+        _check_stored_bounds(value)
         encoded = _canonical(value)
         self._connection.execute("INSERT OR REPLACE INTO records (kind, key, value, digest) VALUES (?, ?, ?, ?)",
                                  (kind, key, encoded, _digest(encoded)))
@@ -498,13 +555,18 @@ class Store:
             if revision != expected_revision:
                 raise ResearchError("stale_revision", "Research state changed; read the current revision before a new mutation",
                                     {"expected_revision": expected_revision, "revision": revision})
+            # A committed request returns above without this check, so a retry of a request that an earlier
+            # release stored beyond the bounds still gets its original receipt.
+            _check_stored_bounds(payload)
             transaction = Transaction(connection)
             try:
-                result = _canonical(apply(transaction))
+                result = apply(transaction)
+                _check_stored_bounds(result)
+                encoded_result = _canonical(result)
             finally:
                 transaction._active = False
             next_revision = revision + 1
-            response = {"revision": next_revision, "request_id": request_id, "result": json.loads(result)}
+            response = {"revision": next_revision, "request_id": request_id, "result": json.loads(encoded_result)}
             event = {"revision": next_revision, "request_id": request_id, "operation": operation,
                      "payload": json.loads(encoded_payload), "changes": transaction._changes,
                      "result": response["result"]}
@@ -512,7 +574,7 @@ class Store:
                 "INSERT INTO events (revision, request_id, operation, payload, changes, result, digest) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (next_revision, request_id, operation, encoded_payload, _canonical(transaction._changes),
-                 result, _digest(_canonical(event))))
+                 encoded_result, _digest(_canonical(event))))
             encoded_response = _canonical(response)
             connection.execute("INSERT INTO receipts (request_id, revision, response, digest) VALUES (?, ?, ?, ?)",
                                (request_id, next_revision, encoded_response, _digest(encoded_response)))

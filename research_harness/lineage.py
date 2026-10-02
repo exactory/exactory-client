@@ -11,6 +11,7 @@ from .literature import SEARCH_PURPOSES  # literature imports lineage inside fun
 from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .principles import preparation_policy
 from .reading import selected_abstract  # reading imports lineage inside functions only, so this stays acyclic.
+from .search_pages import compute_query_identity
 
 LINEAGE = "lineage-v1"
 LOOP_LIMIT = 100
@@ -46,7 +47,8 @@ def candidate_families(records):
 
 
 def loop_state(records, profile="research"):
-    """Per purpose: loop readings, covering readings, the distinct queries tried, and whether the purpose is covered."""
+    """Per purpose: loop readings, covering readings, the number of distinct captured queries and the query
+    strings tried, and whether the purpose is covered."""
     readings = loop_readings(records)
     searches = [s for s in records.get("literature_search", {}).values()
                 if s["profile"] == profile and s["purpose"] in SEARCH_PURPOSES]
@@ -56,8 +58,28 @@ def loop_state(records, profile="research"):
         relevant = [r for r in hits if r["batch"]["loop"]["disposition"] in COVERING]
         own = [s for s in searches if s["purpose"] == purpose]
         queries = {q for s in own for q in s["queries"]}
-        empty = len(queries) >= 2 and not any(d["disposition"] in COVERING for s in own for d in s.get("dispositions", []))
-        purposes[purpose] = {"readings": len(hits), "relevant": len(relevant), "queries": len(queries),
+        # Each captured query counts once. A native registry capture is known by the query it asks: its provider,
+        # endpoint and the parameters that decide which works match (search_pages.compute_query_identity). Its
+        # pages, its repeated captures and captures that differ only in another parameter, such as a sort order,
+        # therefore count once whatever query parameter a judgment binds, and two captures whose matching
+        # parameters differ count apart even when they share a query value. A web or MCP capture is known only by
+        # its saved response and the query bound to it, so it adds no query when a native capture of the purpose
+        # was bound to the same value: the harness cannot tell it from another capture of that query. Each group
+        # holds the keys of one captured query.
+        groups, natively_bound_keys = [], set()
+        for response in (r for s in own for r in s["responses"]):
+            identity = compute_query_identity(records["source"][response["source_id"]])
+            if identity is not None:
+                keys = {("native", digest(identity))}
+                natively_bound_keys.add(("query", response["query"]))
+            else:
+                keys = {("source", response["source_id"]), ("query", response["query"])}
+            overlapping_groups = [group for group in groups if group & keys]
+            groups = [group for group in groups if not group & keys] + [keys.union(*overlapping_groups)]
+        captured_queries = [group for group in groups if not group & natively_bound_keys]
+        empty = len(captured_queries) >= 2 and not any(d["disposition"] in COVERING
+                                                       for s in own for d in s.get("dispositions", []))
+        purposes[purpose] = {"readings": len(hits), "relevant": len(relevant), "queries": len(captured_queries),
                              "queries_tried": sorted(queries), "covered": bool(relevant) or empty}
     return {"readings": len(readings), "limit": LOOP_LIMIT, "purposes": purposes,
             "digest": digest([sorted(r["id"] for r in readings), sorted(s["id"] for s in searches)])}

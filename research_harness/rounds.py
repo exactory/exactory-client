@@ -14,7 +14,7 @@ from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
-from .graph import obligation
+from .graph import find_active_requirements, obligation
 from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .workspace import strict_json
 from . import challenge, contribution, development, literature, predictions, principles, publication, resources
@@ -232,7 +232,7 @@ def count_full_readings(records):
 def has_round_exemplar(records, admission):
     """Whether a research full-text requirement with the exemplar purpose was recorded after the round opened."""
     return any(r["profile"] == "research" and r["purpose"] == "exemplar" and r["id"] not in admission["opening"]["requirement_ids"]
-               for r in records.get("fulltext_requirement", {}).values())
+               for r in find_active_requirements(records).values())
 
 
 class _RoundEvidence:
@@ -569,7 +569,7 @@ def _opening(records, evaluation, bundle):
     selection = records.get("search_selection", {})
     return {"bundle_id": bundle["id"], "bundle_digest": bundle["digest"], "claim_ids": sorted(c["id"] for c in claims),
             "search_selection": {p: selection.get("research:" + p, {}).get("search_id") for p in OPENING_PURPOSES},
-            "requirement_ids": sorted(records.get("fulltext_requirement", {})),
+            "requirement_ids": sorted(find_active_requirements(records)),
             "cycle_ids": sorted(records.get("cycle", {})), "fulltext_reading_count": count_full_readings(records),
             "accounts": resources.account_report(records, "research")}
 

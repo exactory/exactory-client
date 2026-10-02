@@ -35,6 +35,14 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.50.1](docs/releases/0.50.1.md) adds the literature repairs and the
+store bounds that 0.49.0 left out. A search judgment owes full readings of the
+works it cites only while it is the selected judgment of its purpose, a
+citing-works capture binds its OpenAlex filter, and the citation graph reads one
+bundle for each original. The store writes only JSON that every supported Python
+reads back, and a command input nests at most 32 levels. `exactory-derive`
+reports malformed and complex inputs without a Python traceback.
+
 Version [0.50.0](docs/releases/0.50.0.md) adds scientific contribution decisions
 before committing an objective and after results. Managed studies compare
 consequences and approaches, retain critical reviewer work, and bind independent
@@ -341,7 +349,18 @@ variables' ranges — and, using only a whitelisted arithmetic grammar (never
 `eval`), finds a point where the two sides differ. Such a point is a
 counterexample: the step is invalid, and the witness is reproducible. Agreement
 is soft evidence. When SymPy is installed it adds a symbolic verdict, but it is
-never a hard dependency.
+never a hard dependency. Each step is an object whose `vars` maps every variable
+name to a `[low, high]` range. Each bound is read with Python's `float()`, so
+`true`, `false` and a numeric string such as `"1"` count as numbers. A step is
+`unparseable`, which means not checked, when it is malformed or an expression
+cannot be evaluated at a sampled point. A bound that `float()` cannot read also
+makes the step `unparseable`. A sampled point at which a side has no finite
+value is skipped, and a step with no other point is `unparseable` too. A complex
+side of a witness is given as its `real` and `imag` parts. A witness point keeps
+the sampled values. With a range bound beyond the float range, a sampled value
+can be `Infinity`, `-Infinity` or `NaN`, which standard JSON lacks. A steps file
+fails with exit code 2, and no step is checked, when it is not a readable JSON
+list or nests more than 32 levels.
 
 **`exactory-math`** runs the harness of the `/exactory:math-solver` skill
 from the user's workspace. A managed objective starts with `search init`, current

@@ -8,6 +8,7 @@ Callbacks only apply the prepared record patch and receipt through Transaction.
 
 import json
 from datetime import date, datetime
+import math
 
 from .errors import ResearchError
 from .provenance import runtime_provenance
@@ -47,6 +48,15 @@ def strings(value, name, *, nonempty=False, code="invalid_input"):
     if len(set(value)) != len(value):
         raise ResearchError(code, name + " cannot contain duplicates")
     return value
+
+
+def is_finite_number(value):
+    """Whether value is an int or a float, not a bool, with a finite float value. An integer beyond the float range
+    (about 1.8e308) has none, and math.isfinite raises OverflowError for it."""
+    try:
+        return type(value) in (int, float) and math.isfinite(value)
+    except OverflowError:
+        return False
 
 
 def profile_name(value):

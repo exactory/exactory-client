@@ -19,7 +19,7 @@ from .limits import limits_report
 from .operations import fields
 from .provenance import runtime_provenance
 from .report_views import current_obligations, next_summary, obligations_page, order_obligations, status_summary
-from .storage import Store
+from .storage import Store, check_command_bounds
 from .source_deferrals import defer_source, resume_source, assess_deferrals
 from .publication_scope import record_publication_scope, select_publication_scope, record_scoped_readiness_review
 from .workspace import find_workspace, strict_json
@@ -349,6 +349,20 @@ def run(args):
         examples = strict_json((Path(__file__).resolve().parents[1] / "docs/research-cli-examples.json").read_bytes())
         return examples[args.operation]
     root = Path(args.workspace).absolute()
+    if args.command in OPERATIONS or args.command in ACQUISITION:
+        payload = strict_json(Path(args.file).read_bytes())
+        try:
+            # A paper review assignment repeats a stored bundle, which the store bounds already hold.
+            check_command_bounds(review_protocol.drop_repeated_bundle(payload) if args.command == "review-assignment"
+                                 else payload)
+        except ResearchError:
+            # The store returns a committed request's receipt before it checks the payload, so a retry of a request
+            # that an earlier release committed beyond this bound still gets its original receipt. Only an existing
+            # store holds such a request, and init, adopt and acquisition create a store only after this check.
+            existing_workspace = find_workspace(root, required=False)
+            if (existing_workspace is None or not (existing_workspace / ".exactory/research.sqlite3").exists()
+                    or Store(existing_workspace).committed_request(args.request_id) is None):
+                raise
     if args.command in ("init", "adopt"):
         root = find_workspace(root, required=False) or root
         store = Store(root, create=True)
@@ -365,13 +379,12 @@ def run(args):
         root = find_workspace(root)
         store = Store(root)
     elif args.command in ACQUISITION:
-        existing = find_workspace(root, required=False)
-        store = Store(existing) if existing is not None else Store(root, create=True)
+        existing_workspace = find_workspace(root, required=False)
+        store = Store(existing_workspace) if existing_workspace is not None else Store(root, create=True)
     else:
         root = find_workspace(root)
         store = Store(root)
     if args.command in OPERATIONS or args.command in ACQUISITION:
-        payload = strict_json(Path(args.file).read_bytes())
         identity = {"expected_revision": args.expected_revision, "request_id": args.request_id}
         if args.command in OPERATIONS:
             return OPERATIONS[args.command](store, payload, **identity)

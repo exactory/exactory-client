@@ -34,6 +34,11 @@ _USER_AGENT = f"exactory-derive/{_PLUGIN_VERSION}"
 
 _DERIVATION_REPORT_PATH = Path(".exactory") / "derivation-check.json"
 
+# A steps file nests 4 levels: the list, a step, its vars and a range. Python 3.14 reads JSON nested far deeper than
+# 3.9 to 3.13, which raise RecursionError, so the tool bounds the nesting itself and every supported Python refuses
+# the same files.
+_MAX_STEPS_FILE_DEPTH = 32
+
 # The whitelist of callable names, bound to real math/cmath functions. Any name
 # not here, and any node type not handled in the walker, makes an expression
 # unsafe. This is the security boundary for untrusted expression strings.
@@ -59,7 +64,7 @@ class UnsafeExpressionError(Exception):
     """An expression fell outside the safe arithmetic grammar."""
 
 
-def _evaluate_expression(expression: str, values: dict) -> float:
+def _evaluate_expression(expression: str, values: dict) -> float | complex:
     try:
         tree = ast.parse(expression, mode="eval")
     except SyntaxError as error:
@@ -67,7 +72,7 @@ def _evaluate_expression(expression: str, values: dict) -> float:
     return _evaluate_node(tree.body, values)
 
 
-def _evaluate_node(node: ast.AST, values: dict) -> float:
+def _evaluate_node(node: ast.AST, values: dict) -> float | complex:
     if isinstance(node, ast.Constant):
         if isinstance(node.value, bool) or not isinstance(node.value, (int, float)):
             raise UnsafeExpressionError("only numeric constants are allowed")
@@ -92,11 +97,14 @@ def _evaluate_node(node: ast.AST, values: dict) -> float:
         if function is None:
             raise UnsafeExpressionError(f"function not allowed: {node.func.id}")
         arguments = [_evaluate_node(argument, values) for argument in node.args]
-        return float(function(*arguments))
+        value = function(*arguments)
+        # csqrt and cexp return complex numbers, which the check compares as they are. The real functions return
+        # numbers that become floats, since some of them return integers.
+        return value if isinstance(value, complex) else float(value)
     raise UnsafeExpressionError(f"unsupported expression element: {type(node).__name__}")
 
 
-def _apply_binary_operator(operator: ast.operator, left: float, right: float) -> float:
+def _apply_binary_operator(operator: ast.operator, left: float | complex, right: float | complex) -> float | complex:
     if isinstance(operator, ast.Add):
         return left + right
     if isinstance(operator, ast.Sub):
@@ -156,34 +164,76 @@ def _try_symbolic_zero(from_expression: str, to_expression: str,
         return None
 
 
+def _format_json_number(value: float | complex) -> float | dict:
+    """A float as it is, and a complex number, which JSON lacks, as its real and imaginary parts."""
+    return {"real": value.real, "imag": value.imag} if isinstance(value, complex) else value
+
+
+def _measure_magnitude(value: float | complex) -> float:
+    """The absolute value of a real number, and the larger absolute part of a complex one. abs() of a complex number
+    is its length, which raises OverflowError beyond the float range although both parts are finite."""
+    return max(abs(value.real), abs(value.imag)) if isinstance(value, complex) else abs(value)
+
+
+def _find_step_input_error(step) -> str | None:
+    """What makes the step malformed, or None: a step is an object whose vars maps each name to a [low, high] range."""
+    if not isinstance(step, dict):
+        return "a step must be a JSON object"
+    variable_ranges = step.get("vars") or {}
+    if not isinstance(variable_ranges, dict):
+        return "vars must map each variable name to a [low, high] range"
+    for name, bounds in variable_ranges.items():
+        if not isinstance(bounds, list) or len(bounds) != 2:
+            return "the range of " + name + " must be [low, high]"
+    return None
+
+
 def _check_step(step: dict, sample_count: int, relative_tolerance: float) -> dict:
+    input_error = _find_step_input_error(step)
+    if input_error is not None:
+        label = str(step.get("label", "")) if isinstance(step, dict) else ""
+        return {"label": label, "status": "unparseable", "witness": None, "detail": "invalid step: " + input_error}
     label = str(step.get("label", ""))
     from_expression = str(step.get("from", ""))
     to_expression = str(step.get("to", ""))
     variable_ranges = step.get("vars") or {}
     result = {"label": label, "status": "consistent", "witness": None, "detail": ""}
 
-    points = (_sample_points(variable_ranges, sample_count, _seed_for_step(label))
-              if variable_ranges else [{}])
     try:
+        points = (_sample_points(variable_ranges, sample_count, _seed_for_step(label))
+                  if variable_ranges else [{}])
+        compared_count = 0
         for point in points:
             value_from = _evaluate_expression(from_expression, point)
             value_to = _evaluate_expression(to_expression, point)
-            difference = abs(value_from - value_to)
-            scale = max(abs(value_from), abs(value_to), 1.0)
+            # A bound or a result beyond the float range is infinite, and two infinite sides differ by NaN, which
+            # the tolerance test below never flags, so such a point is skipped. A value may be complex, so cmath
+            # checks its finite parts.
+            if not (cmath.isfinite(value_from) and cmath.isfinite(value_to)):
+                continue
+            compared_count += 1
+            difference = _measure_magnitude(value_from - value_to)
+            scale = max(_measure_magnitude(value_from), _measure_magnitude(value_to), 1.0)
             if difference > relative_tolerance * scale + _ABSOLUTE_TOLERANCE:
                 result["status"] = "invalid"
-                result["witness"] = {"point": point, "value_from": value_from,
-                                     "value_to": value_to}
+                result["witness"] = {"point": point, "value_from": _format_json_number(value_from),
+                                     "value_to": _format_json_number(value_to)}
                 result["detail"] = "the two sides differ at this point"
                 return result
     except UnsafeExpressionError as error:
         result["status"] = "unparseable"
         result["detail"] = str(error)
         return result
-    except (ValueError, ZeroDivisionError, OverflowError) as error:
+    except (TypeError, ValueError, ZeroDivisionError, OverflowError, RecursionError, MemoryError) as error:
+        # TypeError: a function of real numbers, such as sin, given a complex value. RecursionError and MemoryError: an
+        # expression nested beyond what the parser or the recursive evaluator handles; CPython's parser reports a source
+        # too complex to parse as MemoryError.
         result["status"] = "unparseable"
         result["detail"] = f"evaluation failed: {error}"
+        return result
+    if not compared_count:
+        result["status"] = "unparseable"
+        result["detail"] = "evaluation failed: no sampled point gives both sides a finite value"
         return result
 
     if not variable_ranges:
@@ -203,9 +253,18 @@ def _check_step(step: dict, sample_count: int, relative_tolerance: float) -> dic
 def _run_check(args: argparse.Namespace) -> None:
     try:
         steps = json.loads(Path(args.steps_file).read_text(encoding="utf-8"))
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, RecursionError) as error:
+        # RecursionError: JSON nested beyond the interpreter's recursion limit.
         print(f"Cannot read the steps file: {error}", file=sys.stderr)
         raise SystemExit(2)
+    pending = [(steps, 1)]
+    while pending:
+        item, depth = pending.pop()
+        if isinstance(item, (dict, list)):
+            if depth > _MAX_STEPS_FILE_DEPTH:
+                print(f"Cannot read the steps file: it nests more than {_MAX_STEPS_FILE_DEPTH} levels", file=sys.stderr)
+                raise SystemExit(2)
+            pending.extend((child, depth + 1) for child in (item.values() if isinstance(item, dict) else item))
     if not isinstance(steps, list):
         print("The steps file must hold a JSON list of steps.", file=sys.stderr)
         raise SystemExit(2)

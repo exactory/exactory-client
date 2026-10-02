@@ -9,7 +9,7 @@ from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
-from .graph import citation_graph, main_captures, selected_bundle
+from .graph import citation_graph, find_bound_requirements, main_captures, selected_bundle
 from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .reading import required_unit_obligations
 from .source_links import exact_work
@@ -91,8 +91,7 @@ def _build_binding(records, evaluation, version):
         source_ids.add(bundle["source_id"])
         source_ids.update(u["link"]["source_id"] for u in bundle["units"] if u["link"])
     return {"work": work, "ineligible": _is_ineligible(records, version),
-            "requirements": {i: r for i, r in records.get("fulltext_requirement", {}).items()
-                             if r["profile"] == "research" and r["version_id"] == version},
+            "requirements": {i: r for i, r in find_bound_requirements(records, "research", graph).items() if r["version_id"] == version},
             "tier": next((n["tier"] for n in graph["nodes"] if version in n["version_ids"]), None),
             "historical_cutoff": records.get("literature_scope", {}).get("research", {}).get("historical_cutoff"),
             "sources": {i: records.get("source", {}).get(i) for i in sorted(source_ids)},

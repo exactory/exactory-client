@@ -7,6 +7,8 @@ import importlib.machinery
 import importlib.util
 import io
 import json
+import math
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -122,6 +124,170 @@ class TestCheck(unittest.TestCase):
         }], self)
         self.assertEqual(report["steps"][0]["status"], "unparseable")
         self.assertEqual(report["invalid"], 0)
+
+    def test_a_range_bound_beyond_the_float_range_is_a_warning_not_a_traceback(self) -> None:
+        # A JSON integer beyond the float range (about 1.8e308) has no float value. Sampling the range raised
+        # OverflowError before the step caught its evaluation errors, so the check ended in a traceback.
+        report = _run_check([{
+            "label": "huge bound", "from": "x", "to": "x", "vars": {"x": [0, 10 ** 400]},
+        }], self)
+        self.assertEqual(report["steps"][0]["status"], "unparseable")
+        self.assertEqual(report["invalid"], 0)
+
+    def test_a_wrong_step_whose_samples_have_no_finite_value_is_not_reported_consistent(self) -> None:
+        # A JSON bound beyond the float range (1e400) reads as infinity, and a product beyond the float range is
+        # infinite. The two sides then differ by NaN, which no tolerance comparison flags, so a wrong step passed.
+        report = _run_check([
+            {"label": "infinite bound", "from": "x", "to": "x + 1", "vars": {"x": [0, float("inf")]}},
+            {"label": "overflowing product", "from": "a*b*a*b", "to": "2*a*a*b*b",
+             "vars": {"a": [1e100, 1e200], "b": [1e100, 1e200]}},
+        ], self)
+        for step in report["steps"]:
+            with self.subTest(step=step["label"]):
+                self.assertEqual((step["status"], step["witness"]), ("unparseable", None))
+                self.assertTrue(step["detail"].startswith("evaluation failed: "))
+        self.assertEqual(report["invalid"], 0)
+
+    def test_a_wrong_step_with_one_side_without_a_finite_value_is_not_reported_consistent(self) -> None:
+        # With one infinite side the difference is infinite, but so is the tolerance, which scales with the larger
+        # side, so the comparison never flags the step either.
+        report = _run_check([
+            {"label": "infinite " + side + " side", "from": "x" if side == "left" else "1",
+             "to": "1" if side == "left" else "x", "vars": {"x": [0, float("inf")]}}
+            for side in ("left", "right")], self)
+        self.assertEqual([step["status"] for step in report["steps"]], ["unparseable", "unparseable"])
+        self.assertEqual(report["invalid"], 0)
+
+    def test_a_wrong_step_is_invalid_at_its_first_finite_differing_point(self) -> None:
+        # y*y*y*y is infinite for y above about 1.16e77, and infinity times 0 is NaN, so some sampled points give the
+        # first side no finite value. The check skips those points and compares the others, as 0.49.0 did.
+        # The first point that this label samples is one of them.
+        step = {"label": "zero term B", "from": "x + y*y*y*y*0", "to": "x + 1",
+                "vars": {"x": [0.0, 1.0], "y": [0.0, 2e77]}}
+        points = _derive._sample_points(step["vars"], _derive._SAMPLE_COUNT_DEFAULT,
+                                        _derive._seed_for_step(step["label"]))
+        finite_points = [point for point in points if math.isfinite(_derive._evaluate_expression(step["from"], point))]
+        self.assertLess(len(finite_points), len(points))
+        self.assertNotEqual(finite_points[0], points[0])
+        report = _run_check([step], self)
+        witness = report["steps"][0]["witness"]
+        self.assertEqual(report["steps"][0]["status"], "invalid")
+        self.assertEqual(witness["point"], finite_points[0])
+        self.assertAlmostEqual(witness["value_to"] - witness["value_from"], 1.0)
+        self.assertEqual((report["invalid"], self.exit_code), (1, 1))
+
+    def test_a_step_with_complex_function_values_is_checked(self) -> None:
+        # csqrt and cexp return complex numbers, which the check compares; float() of one raised TypeError.
+        report = _run_check([{"label": name, "from": name + "(x)", "to": name + "(x)", "vars": {"x": [1.0, 4.0]}}
+                             for name in ("csqrt", "cexp")], self)
+        for step in report["steps"]:
+            with self.subTest(step=step["label"]):
+                self.assertIn(step["status"], ("consistent", "verified"))
+        self.assertEqual(self.exit_code, 0)
+
+    def test_a_wrong_step_with_complex_sides_has_a_json_witness(self) -> None:
+        # JSON has no complex number, so a complex side of the witness gives its real and imaginary parts.
+        report = _run_check([{"label": "complex wrong", "from": "x**0.5", "to": "x**0.5 + 1",
+                              "vars": {"x": [-4.0, -1.0]}}], self)
+        step = report["steps"][0]
+        self.assertEqual(step["status"], "invalid")
+        value_from, value_to = step["witness"]["value_from"], step["witness"]["value_to"]
+        self.assertEqual(set(value_from), {"real", "imag"})
+        self.assertAlmostEqual(value_to["real"] - value_from["real"], 1.0)
+        self.assertAlmostEqual(value_from["imag"], math.sqrt(-step["witness"]["point"]["x"]))
+        self.assertEqual(self.exit_code, 1)
+
+    def test_a_real_function_of_a_complex_value_is_unparseable(self) -> None:
+        # math.sin takes real numbers only and raises TypeError for a complex one, a value it cannot evaluate.
+        report = _run_check([{"label": "real of complex", "from": "sin(csqrt(x))", "to": "sin(csqrt(x))",
+                              "vars": {"x": [-4.0, -1.0]}}], self)
+        step = report["steps"][0]
+        self.assertEqual((step["status"], step["witness"]), ("unparseable", None))
+        self.assertTrue(step["detail"].startswith("evaluation failed: "))
+        self.assertEqual(self.exit_code, 0)
+
+    def test_a_malformed_step_is_reported_as_an_input_error(self) -> None:
+        # A range is [low, high], vars is an object, and a step is an object. Each malformed shape ended the run in an
+        # IndexError, KeyError or AttributeError traceback, except a range of three bounds, whose third was ignored.
+        steps = [{"label": "one bound", "from": "x", "to": "x", "vars": {"x": [1.0]}},
+                 {"label": "no bounds", "from": "x", "to": "x", "vars": {"x": []}},
+                 {"label": "three bounds", "from": "x", "to": "x", "vars": {"x": [0.0, 1.0, 2.0]}},
+                 {"label": "object range", "from": "x", "to": "x", "vars": {"x": {"low": 0.0, "high": 1.0}}},
+                 {"label": "list vars", "from": "x", "to": "x", "vars": [["x", 0.0, 1.0]]},
+                 "x = x"]
+        report = _run_check(steps, self)
+        self.assertEqual([step["label"] for step in report["steps"]],
+                         ["one bound", "no bounds", "three bounds", "object range", "list vars", ""])
+        for step in report["steps"]:
+            with self.subTest(step=step["label"]):
+                self.assertEqual((step["status"], step["witness"]), ("unparseable", None))
+                self.assertTrue(step["detail"].startswith("invalid step: "), step["detail"])
+        self.assertEqual((report["counts"]["unparseable"], report["invalid"], self.exit_code), (6, 0, 0))
+
+    def test_an_expression_nested_beyond_the_interpreter_limits_is_unparseable(self) -> None:
+        # The parser or the evaluator stops on each of these: RecursionError under Python 3.9.6, and under 3.13.8
+        # RecursionError or, for the chain of powers, MemoryError ("Parser stack overflowed"). Each side would equal
+        # the other if it could be evaluated, so only that stop makes a step unparseable.
+        report = _run_check([
+            {"label": "sum of 3000 terms", "from": "+".join(["x"] * 3000), "to": "3000*x", "vars": {"x": [1.0, 2.0]}},
+            {"label": "3000 unary minus signs", "from": "-" * 3000 + "x", "to": "x", "vars": {"x": [1.0, 2.0]}},
+            {"label": "chain of 3000 powers", "from": "**".join(["x"] * 3000), "to": "x", "vars": {"x": [1.0, 1.0]}},
+        ], self)
+        for step in report["steps"]:
+            with self.subTest(step=step["label"]):
+                self.assertEqual((step["status"], step["witness"]), ("unparseable", None))
+                self.assertTrue(step["detail"].startswith("evaluation failed: "), step["detail"])
+        self.assertEqual((report["counts"]["unparseable"], self.exit_code), (3, 0))
+
+    def test_a_steps_file_nested_beyond_the_recursion_limit_is_an_input_error(self) -> None:
+        # json.loads stops on a file nested 100,000 levels with RecursionError under Python 3.9.6 and 3.13.8.
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        steps_path = Path(directory.name) / "steps.json"
+        steps_path.write_text("[" * 100000 + "]" * 100000, encoding="utf-8")
+        args = _derive._build_parser().parse_args(["check", "--steps-file", str(steps_path)])
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            with self.assertRaises(SystemExit) as caught:
+                args.handler(args)
+        self.assertEqual(caught.exception.code, 2)
+        self.assertTrue(stderr.getvalue().startswith("Cannot read the steps file: "), stderr.getvalue())
+        self.assertEqual(stdout.getvalue(), "")
+
+    def test_a_steps_file_nested_beyond_32_levels_is_an_input_error_under_every_python(self) -> None:
+        # Python 3.14 reads JSON nested 100,000 levels, where 3.9 to 3.13 raise RecursionError, so the tool bounds the
+        # nesting itself: every supported Python then refuses the same files.
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        steps_path = Path(directory.name) / "steps.json"
+        steps_path.write_text("[" * 33 + "]" * 33, encoding="utf-8")
+        args = _derive._build_parser().parse_args(["check", "--steps-file", str(steps_path)])
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            with self.assertRaises(SystemExit) as caught:
+                args.handler(args)
+        self.assertEqual(caught.exception.code, 2)
+        self.assertEqual(stderr.getvalue(), "Cannot read the steps file: it nests more than 32 levels\n")
+        self.assertEqual(stdout.getvalue(), "")
+
+    def test_a_complex_value_whose_length_exceeds_the_float_range_is_compared(self) -> None:
+        # abs() of a complex number is its length, which raises OverflowError beyond the float range although both
+        # parts are finite; x + csqrt(-1)*x has parts of about 1.5e308 and a length of about 2.1e308.
+        report = _run_check([
+            {"label": "equal", "from": "x + csqrt(-1)*x", "to": "x + csqrt(-1)*x", "vars": {"x": [1.5e308, 1.6e308]}},
+            {"label": "wrong", "from": "x + csqrt(-1)*x", "to": "x/2 + csqrt(-1)*x", "vars": {"x": [1.5e308, 1.6e308]}},
+        ], self)
+        equal_step, wrong_step = report["steps"]
+        self.assertIn(equal_step["status"], ("consistent", "verified"))
+        self.assertEqual(wrong_step["status"], "invalid")
+        self.assertAlmostEqual(wrong_step["witness"]["value_from"]["real"] / wrong_step["witness"]["value_to"]["real"],
+                               2.0)
+
+    def test_a_step_with_equal_complex_values_stays_consistent(self) -> None:
+        # A negative base to a fractional power gives a complex value with finite parts, which the check compares.
+        report = _run_check([{"label": "complex power", "from": "x**0.5", "to": "x**0.5", "vars": {"x": [-4.0, -1.0]}}],
+                            self)
+        self.assertIn(report["steps"][0]["status"], ("consistent", "verified"))
 
     def test_the_check_is_deterministic_across_runs(self) -> None:
         steps = [{"label": "wrong", "from": "(x + 1)**2", "to": "x**2 + 1",

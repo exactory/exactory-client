@@ -3,28 +3,16 @@ import json
 
 from literature_fixtures import LiteratureCase
 from research_harness.acquisition import import_response
-from research_harness.literature import export_foundation, foundation_report, import_bundle, record_search
+from research_harness.evaluation import Evaluation
+from research_harness.evidence import digest
+from research_harness.graph import citation_graph
+from research_harness.literature import export_foundation, foundation_report, frontier, import_bundle, record_search
 from research_harness.reading import record_availability, record_reading, require_fulltext
 
 
 class LiteratureTests(LiteratureCase):
-    def search(self, purpose="direct", found=(), verdict="nothing-new"):
-        query = purpose + " bounded sequence comparison"
-        data = {"query": query, "results": [{"id": identifier, "title": "Later authored evidence"} for identifier in found]}
-        self.sequence += 1
-        result = import_response(self.store, "mcp", json.dumps(data).encode(), source_url="https://example.org/search",
-            captured_at="2026-09-07T12:00:00Z", media_type="application/json",
-            mappings=[{"id": "/results/%d/id" % i, "title": "/results/%d/title" % i} for i in range(len(found))],
-            expected_revision=self.store.revision, request_id="search-capture-" + str(self.sequence))
-        source = result["source_ids"][0]
-        return {"id": purpose, "profile": "research", "purpose": purpose, "queries": [query],
-                "responses": [{"source_id": source, "query": query,
-                               "query_locator": {"kind": "json", "pointer": "/query", "value": query},
-                               "results_pointer": "/results"}],
-                "captured_at": "2026-09-07T12:00:00Z", "scope": "The bounded-sequence contribution in this study.",
-                "found_work_ids": list(found), "verdict": verdict, "cited_work_ids": [],
-                "dispositions": [{"work_id": w, "disposition": "relevant", "reason": "Found by the authored search."} for w in found],
-                "impact": "No matching prior contribution was exposed in this saved search.", "gaps": []}
+    def search(self, *args, **kwargs):
+        return self.capture_search(*args, **kwargs)
 
     def test_graph_reading_does_not_discharge_all_cohort_abstracts(self):
         collection = self.cohort()
@@ -189,6 +177,80 @@ class LiteratureTests(LiteratureCase):
         self.assertTrue((self.root / exported["inventory"]).exists())
         (self.root / exported["coverage"]).write_text("Fabricated readiness", encoding="utf-8")
         self.assertEqual(report["digest"], foundation_report(self.store, "research")["digest"])
+
+    def test_a_study_that_replaces_no_judgment_keeps_its_requirement_graph_and_frontier_results(self):
+        """The expected digests were computed before a search judgment could retire requirements."""
+        a = self.metadata(1, references=[{"id": "arxiv:2601.00002v1"}, {"unstructured": "An unidentified manuscript"}])
+        b, c = self.metadata(2), self.metadata(3)
+        self.scope([a])
+        bundle = self.bundle(a, self.capture(a, "A extends B. References: B."))
+        self.mutate(import_bundle, bundle)
+        self.mutate(record_reading, self.full_note(bundle))
+        self.mutate(require_fulltext, {"id": "major", "profile": "research", "version_id": c,
+                                       "purpose": "major_claim", "reason": "The main claim rests on C."})
+        # A development purpose such as changes is selected per purpose like the five; nothing replaces it here.
+        for purpose, cited_version_ids in (("direct", [b]), ("theory", ["arxiv:2602.00009v1"]), ("recent", []),
+                                           ("changes", ["arxiv:2602.00010v1"])):
+            search = self.search(purpose, cited_version_ids)
+            search["cited_work_ids"] = cited_version_ids
+            self.mutate(record_search, search)
+        report = foundation_report(self.store, "research")
+        results = {name: report[name] for name in ("digest", "requirements_digest", "stable_digest", "frontier_digest")}
+        results["graph"] = digest(citation_graph(self.store.snapshot()["records"], "research"))
+        self.assertEqual(results, {"digest": "c92af5808a724ffc0214a127da32426fe05a2b326bc746b708cd678a82d3fbca",
+                                   "requirements_digest": "40725685d44538d53371a5d3c377d36ba1421506c8ea5459f1c04ff4efc39f9e",
+                                   "stable_digest": "74006c8ec83fcbd082955a049ad68413722239eb8fd2f69c6ed082c36fdbe2ce",
+                                   "frontier_digest": "78bc24748a0de14d1067afc603a8808e0ae4a8701db07de43c7304816c147033",
+                                   "graph": "00dc7b2a9f1fef533e38b2ae7ffbaac071f6f5514a4f31c3f3b259ee9d25e4cc"})
+
+    def test_a_study_whose_replacements_cite_the_same_works_again_keeps_its_results_of_0_47_0(self):
+        """The expected digests were computed by 0.47.0, for which a replaced judgment's requirements still counted.
+        direct-2 and theory-2 cite the works of the judgments they replace again, so every work stays required."""
+        a = self.metadata(1, references=[{"id": "arxiv:2601.00002v1"}])
+        b, c = self.metadata(2), self.metadata(3)
+        self.scope([a])
+        bundle = self.bundle(a, self.capture(a, "A extends B. References: B."))
+        self.mutate(import_bundle, bundle)
+        self.mutate(record_reading, self.full_note(bundle))
+        self.mutate(require_fulltext, {"id": "major", "profile": "research", "version_id": c,
+                                       "purpose": "major_claim", "reason": "The main claim rests on C."})
+        for identifier, purpose, cited_version_ids in (("direct", "direct", [b]), ("direct-2", "direct", [b]),
+                                                       ("theory", "theory", [b, c]), ("theory-2", "theory", [b, c])):
+            search = self.search(purpose, [b, c])
+            search["id"], search["cited_work_ids"] = identifier, cited_version_ids
+            self.mutate(record_search, search)
+        report = foundation_report(self.store, "research")
+        results = {name: report[name] for name in ("digest", "requirements_digest", "stable_digest", "frontier_digest")}
+        results["graph"] = digest(citation_graph(self.store.snapshot()["records"], "research"))
+        self.assertEqual(results, {"digest": "7190a612d1648f4db3f23556e2d89477d99cdbe75249104dc55abd28394568a9",
+                                   "requirements_digest": "7483c10e93eb429414c59718b8ddbface63031ac17d89ac95c3dfd844838be1c",
+                                   "stable_digest": "fa8dc371f4d6a5b68a1448529eb80a5c3c325d81f0792db172becb49f67d993f",
+                                   "frontier_digest": "ee1f3b6412947c75e91131d4a6a41c14ff6f12f93f77a34413d72f94332f8105",
+                                   "graph": "914cc22d3e42e805276605b8b58edf6c04a7fe424562a55b8bd18b703787ad16"})
+
+    def test_a_version_the_citation_graph_keeps_required_keeps_its_requirement_records_in_the_digests(self):
+        """The expected digests were computed by 0.47.0, for which a replaced judgment's requirements still counted.
+        The root cites v1 exactly. direct-2 replaces direct-1 and cites v2 of the same family, so the family stays
+        Tier 2 and v1 stays a required full text after its only requirement record retires."""
+        root = self.metadata(1, references=[{"id": "arxiv:2601.00002v1"}])
+        v1, v2 = self.metadata(2, version=1), self.metadata(2, version=2)
+        self.scope([root])
+        for identifier, cited_version_id in (("direct-1", v1), ("direct-2", v2)):
+            search = self.search("direct", [cited_version_id])
+            search["id"], search["cited_work_ids"] = identifier, [cited_version_id]
+            self.mutate(record_search, search)
+        report = foundation_report(self.store, "research")
+        self.assertEqual({name: report[name] for name in ("requirements_digest", "stable_digest")},
+                         {"requirements_digest": "979cf0a03406022553c6466c6b080c70be3b6583e9cf01d46261d65c25d8441b",
+                          "stable_digest": "8d6ebf335b13e108853601032e2581b0f43944a30f4bae39facbfec17dbc7e15"})
+        # Once no judgment cites the family, v1 falls to Tier 3, v2 is only a found work and no record of either is held.
+        third = self.search("direct")
+        third["id"] = "direct-3"
+        self.mutate(record_search, third)
+        report = foundation_report(self.store, "research")
+        self.assertEqual({x["version_id"]: (x["tier"], x["required_depth"]) for x in report["inventory"] if x["version_id"] in (v1, v2)},
+                         {v1: (3, "abstract"), v2: (None, None)})
+        self.assertEqual(report["requirements_digest"], digest({}))
 
     def test_tool_passage_is_scoped_to_its_article_and_cannot_repair_failed_origin(self):
         a, b = self.metadata(), self.metadata(2)
@@ -355,7 +417,7 @@ class LiteratureTests(LiteratureCase):
 
 class SearchDispositionTests(LiteratureCase):
     def search(self, *args, **kwargs):
-        return LiteratureTests.search(self, *args, **kwargs)
+        return self.capture_search(*args, **kwargs)
 
     def test_dispositions_are_required_complete_and_bound_to_citations(self):
         a = self.metadata()
@@ -398,6 +460,157 @@ class SearchDispositionTests(LiteratureCase):
         dismissed["id"] = "direct-5"
         dismissed["dispositions"][0]["disposition"] = "out_of_scope"
         self.assert_error("search_findings_dropped", lambda: self.mutate(record_search, dismissed))
+
+    def test_a_replaced_judgment_retires_the_requirements_only_it_created(self):
+        a = self.metadata()
+        self.scope([a])
+        kept_version_id, dropped_version_id = "arxiv:2602.00009v1", "arxiv:2602.00010v1"
+        first = self.search("direct", [kept_version_id, dropped_version_id])
+        first["cited_work_ids"] = [kept_version_id, dropped_version_id]
+        self.mutate(record_search, first)
+        second = self.search("direct", [kept_version_id, dropped_version_id])
+        second["id"], second["cited_work_ids"] = "direct-2", [kept_version_id]
+        self.mutate(record_search, second)
+        records = self.store.snapshot()["records"]
+        self.assertEqual(len(records["fulltext_requirement"]), 3)
+        report = foundation_report(self.store, "research")
+        depths = {x["version_id"]: x["required_depth"] for x in report["inventory"]}
+        self.assertEqual((depths[kept_version_id], depths[dropped_version_id]), ("fulltext", None))
+        missing_reading_version_ids = {x["version_id"] for x in report["obligations"]
+                                       if x["code"] == "fulltext_reading_missing"}
+        self.assertIn(kept_version_id, missing_reading_version_ids)
+        self.assertNotIn(dropped_version_id, missing_reading_version_ids)
+        rows = frontier(Evaluation(records, self.artifacts), "research")
+        self.assertIn([kept_version_id[:-2], "requirement"], rows)
+        self.assertNotIn([dropped_version_id[:-2], "requirement"], rows)
+        # The successor was judged against the requirements that count once it is selected.
+        self.assertFalse({"search_evidence_stale", "search_frontier_stale"} & self.codes())
+        # A requirement of another origin stays whatever the search judgments say.
+        self.mutate(require_fulltext, {"id": "validity", "profile": "research", "version_id": dropped_version_id,
+                                       "purpose": "validity", "reason": "The validity decision rests on this source."})
+        self.assertIn(dropped_version_id, {x["version_id"] for x in self.store_obligations()
+                                           if x["code"] == "fulltext_reading_missing"})
+
+    def test_a_successor_that_cites_another_version_of_a_replaced_citation_is_current(self):
+        a = self.metadata()
+        self.scope([a])
+        earlier_version_id, later_version_id = "arxiv:2602.00011v1", "arxiv:2602.00011v2"
+        first = self.search("direct", [earlier_version_id])
+        first["cited_work_ids"] = [earlier_version_id]
+        self.mutate(record_search, first)
+        second = self.search("direct", [later_version_id])
+        second["id"], second["cited_work_ids"] = "direct-2", [later_version_id]
+        self.mutate(record_search, second)
+        report = foundation_report(self.store, "research")
+        depths = {x["version_id"]: x["required_depth"] for x in report["inventory"]}
+        self.assertEqual((depths[earlier_version_id], depths[later_version_id]), (None, "fulltext"))
+        # The family is required before and after the replacement, so the successor's frontier is current.
+        self.assertFalse({"search_evidence_stale", "search_frontier_stale"} & {x["code"] for x in report["obligations"]})
+
+    def test_a_judgment_that_cites_a_family_only_a_replaced_judgment_cited_is_current(self):
+        a = self.metadata()
+        self.scope([a])
+        same_purpose_version_id, other_purpose_version_id = "arxiv:2602.00012v1", "arxiv:2602.00013v1"
+
+        def record(identifier, purpose, cited_version_ids):
+            """Record a judgment that finds both works and return the staleness codes of that judgment."""
+            search = self.search(purpose, [same_purpose_version_id, other_purpose_version_id])
+            search["id"], search["cited_work_ids"] = identifier, cited_version_ids
+            self.mutate(record_search, search)
+            report = foundation_report(self.store, "research")
+            return {x["code"] for x in report["obligations"] + report["notices"] if x.get("search_id") == identifier}
+
+        record("direct", "direct", [same_purpose_version_id, other_purpose_version_id])
+        # direct-2 cites neither work, so only the requirements of the replaced judgment direct cover their families.
+        self.assertEqual(record("direct-2", "direct", []), set())
+        # Before a judgment could retire requirements, every requirement counted, so a later judgment that cites
+        # one of the families again, of the same purpose or of another, was current when it was recorded.
+        self.assertEqual(record("direct-3", "direct", [same_purpose_version_id]), set())
+        self.assertEqual(record("theory", "theory", [other_purpose_version_id]), set())
+
+    def test_a_replacement_that_drops_a_family_only_its_predecessor_required_stales_the_other_purposes(self):
+        """The user accepted this consequence of H2 on 2026-09-29; under exhaustive-v1 the stale judgments are obligations."""
+        a, dropped_version_id = self.metadata(), "arxiv:2602.00014v1"
+        self.scope([a])
+        direct = self.search("direct", [dropped_version_id])
+        direct["cited_work_ids"] = [dropped_version_id]
+        self.mutate(record_search, direct)
+        self.mutate(record_search, self.search("theory"))
+        adjacent = self.search("adjacent", [dropped_version_id])
+        adjacent["dispositions"][0]["disposition"] = "out_of_scope"
+        self.mutate(record_search, adjacent)
+        replacement = self.search("direct", [dropped_version_id])
+        replacement["id"] = "direct-2"
+        self.mutate(record_search, replacement)
+        # No root cites the dropped family, so the citation graph never read a reference of it, and adjacent, which
+        # found it, still rests on unchanged evidence: only its frontier is stale.
+        self.assertEqual(self.collect_stale_codes(("direct-2", "theory", "adjacent")),
+                         {"direct-2": ([], []), "theory": (["search_evidence_stale", "search_frontier_stale"], []),
+                          "adjacent": (["search_frontier_stale"], [])})
+        # Recording a purpose again clears its staleness.
+        theory = self.search("theory")
+        theory["id"] = "theory-2"
+        self.mutate(record_search, theory)
+        self.assertEqual(self.collect_stale_codes(("theory-2",)), {"theory-2": ([], [])})
+
+    def test_a_dropped_family_whose_references_the_graph_read_stales_the_evidence_of_a_judgment_that_found_it(self):
+        """The same consequence of H2 when the root cites the dropped family, and for a judgment recorded before
+        the family was required."""
+        root = self.metadata(1, references=[{"id": "arxiv:2601.00002v1"}])
+        dropped_version_id = self.metadata(2, references=[{"unstructured": "A reference of the dropped source"}])
+        self.scope([root])
+        self.mutate(record_search, self.search("theory"))
+        direct = self.search("direct", [dropped_version_id])
+        direct["cited_work_ids"] = [dropped_version_id]
+        self.mutate(record_search, direct)
+        adjacent = self.search("adjacent", [dropped_version_id])
+        adjacent["dispositions"][0]["disposition"] = "out_of_scope"
+        self.mutate(record_search, adjacent)
+        # theory was recorded before the family was required, so it is stale while the family is required.
+        self.assertEqual(self.collect_stale_codes(("theory",)),
+                         {"theory": (["search_evidence_stale", "search_frontier_stale"], [])})
+        replacement = self.search("direct", [dropped_version_id])
+        replacement["id"] = "direct-2"
+        self.mutate(record_search, replacement)
+        # While the family was required, the graph read the reference of its version; adjacent, which found it and was
+        # recorded then, reports both codes. The drop ends the staleness of theory.
+        self.assertEqual(self.collect_stale_codes(("direct-2", "theory", "adjacent")),
+                         {"direct-2": ([], []), "theory": ([], []),
+                          "adjacent": (["search_evidence_stale", "search_frontier_stale"], [])})
+
+    def test_a_judgment_that_found_a_dropped_family_before_the_graph_read_its_references_keeps_only_a_stale_frontier(self):
+        """The exception to the same consequence of H2 depends on the references of the family that the graph had read
+        when the judgment was recorded, not on those it read later."""
+        dropped_version_id = self.metadata(2)
+        root = self.metadata(1, references=[{"id": dropped_version_id}])
+        self.scope([root])
+        direct = self.search("direct", [dropped_version_id])
+        direct["cited_work_ids"] = [dropped_version_id]
+        self.mutate(record_search, direct)
+        adjacent = self.search("adjacent", [dropped_version_id])
+        adjacent["dispositions"][0]["disposition"] = "out_of_scope"
+        self.mutate(record_search, adjacent)
+        self.assertEqual(self.collect_stale_codes(("adjacent",)), {"adjacent": ([], [])})
+        # A reference of the dropped version arrives after adjacent was recorded, while the family is still required.
+        references_response = {"id": dropped_version_id, "title": "Authored references",
+                               "references": [{"unstructured": "A reference of the dropped source"}]}
+        self.sequence += 1
+        import_response(self.store, "mcp", json.dumps(references_response).encode(), source_url="https://example.org/tool",
+                        captured_at="2026-09-07T12:00:00Z", media_type="application/json",
+                        mappings=[{"id": "/id", "title": "/title", "references": "/references"}],
+                        expected_revision=self.store.revision, request_id="late-references-" + str(self.sequence))
+        self.assertEqual(self.collect_stale_codes(("adjacent",)), {"adjacent": (["search_evidence_stale"], [])})
+        replacement = self.search("direct", [dropped_version_id])
+        replacement["id"] = "direct-2"
+        self.mutate(record_search, replacement)
+        # The family falls to Tier 3, so the graph no longer reads that reference, as when adjacent was recorded.
+        self.assertEqual(self.collect_stale_codes(("adjacent",)), {"adjacent": (["search_frontier_stale"], [])})
+
+    def collect_stale_codes(self, search_ids):
+        """The obligation and notice codes that each judgment reports."""
+        report = foundation_report(self.store, "research")
+        return {s: (sorted(x["code"] for x in report["obligations"] if x.get("search_id") == s),
+                    sorted(x["code"] for x in report["notices"] if x.get("search_id") == s)) for s in search_ids}
 
     def test_recording_another_purpose_does_not_stale_a_selected_search(self):
         a = self.metadata()

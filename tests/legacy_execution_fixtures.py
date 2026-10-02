@@ -7,6 +7,7 @@ guard intact. The fixture needs no Git history, old installation or worktree.
 """
 
 import hashlib
+import math
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -27,6 +28,8 @@ def legacy_execution_writers():
         raise AssertionError("The identified historical writer fixture changed")
     namespace = dict(vars(development))
     namespace.update(vars(execution))
+    # The historical modules imported math themselves; the current ones check numbers without it.
+    namespace["math"] = math
     namespace["__name__"] = __name__ + ".f5b3c46"
     exec(compile(source, str(path), "exec"), namespace)
     return SimpleNamespace(admit_execution=namespace["admit_execution"], bind_execution=namespace["bind_execution"])

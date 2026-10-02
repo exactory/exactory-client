@@ -4,6 +4,7 @@ import errno
 import hashlib
 import importlib
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -18,6 +19,16 @@ from integration_fixtures import admit_lab, make_venv
 
 
 PLUGIN = Path(__file__).resolve().parents[1]
+
+
+def build_nested_metric_json(levels):
+    """An object and levels - 1 lists inside it, {"metric": [[...[0]...]]}: levels containers in all."""
+    return b'{"metric": ' + b"[" * (levels - 1) + b"0" + b"]" * (levels - 1) + b"}"
+
+
+def build_integer_metric_json(digits):
+    """A metric object whose one integer has the given number of digits."""
+    return b'{"metric": ' + b"9" * digits + b"}"
 
 
 class ResearchExecutionTests(DevelopmentCase):
@@ -236,6 +247,35 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assertEqual(self.store.snapshot(), before)
         self.assertNotIn("historically-admitted", before["records"]["execution_claim"])
         self.assertFalse((self.root / api._directory("historically-admitted") / "terminal.json").exists())
+
+    def test_retained_terminal_whose_duration_is_beyond_the_float_range_blocks_new_admission(self):
+        # A retained terminal whose duration is an integer beyond the float range (about 1.8e308) has no valid measured
+        # duration. math.isfinite raises OverflowError for it, which escaped as a traceback. Only an outcome recorded
+        # with null usage, as the former producer recorded a failed run, reaches this check with such a terminal.
+        admission = admit_lab(self, body="raise SystemExit(7)\n", usage_unit="wall_seconds", reserved_units=0.01,
+                              max_units=1)
+        api = importlib.import_module("research_harness.execution")
+        with mock.patch.object(api, "reconcile_execution", side_effect=OSError("The launcher exited after the run")):
+            with self.assertRaisesRegex(OSError, "The launcher exited after the run"):
+                api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                     request_id="duration-beyond-floats")
+        terminal = self.root / api._directory(admission["id"]) / "terminal.json"
+        terminal.write_text(json.dumps(dict(json.loads(terminal.read_bytes()), duration_s=10 ** 309)))
+        original_record_execution = api.record_execution
+
+        def record_null_usage(store, payload, **identity):
+            payload["usage"]["units"] = None
+            return original_record_execution(store, payload, **identity)
+
+        with mock.patch.object(api, "record_execution", side_effect=record_null_usage):
+            api.reconcile_execution(self.store, {"admission_id": admission["id"]},
+                                    expected_revision=self.store.revision, request_id="reconcile")
+        following_admission = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
+        following_admission["id"] = "following-run"
+        before = self.store.snapshot()
+        self.assert_error("execution_usage_reconciliation_required",
+                          lambda: self.mutate(self.development().admit_execution, following_admission))
+        self.assertEqual(self.store.snapshot(), before)
 
     def test_accounted_wall_outcome_recovers_observation_before_new_permission(self):
         admission = admit_lab(self, body="print('{\"metric\": 7}')\n", usage_unit="wall_seconds",
@@ -601,6 +641,23 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assertTrue(result["ok"], result["stderr_tail"])
         self.assertEqual(result["metric"], {"metric": 7})
 
+    def test_bind_run_refuses_an_integer_timeout_beyond_the_float_range(self):
+        # The launcher counts a run's timeout on a float clock. math.isfinite raises OverflowError for an integer beyond
+        # the float range (about 1.8e308), which exactory-research printed as a traceback instead of a JSON error.
+        from research_harness.errors import ResearchError
+        with self.assertRaises(ResearchError) as refused:
+            admit_lab(self, body="print('{\"metric\": 7}')\n", timeout=10 ** 309)
+        self.assertEqual((refused.exception.code, refused.exception.message),
+                         ("invalid_execution", "A finite positive timeout is required"))
+        self.assertNotIn("execution_binding", self.store.snapshot()["records"])
+        # The largest integer that a float holds is still a finite timeout.
+        api = importlib.import_module("research_harness.execution")
+        payload = {"admission_id": "lab-run", "script": "code/program.py", "backend": "local",
+                   "timeout_seconds": int(sys.float_info.max), "inputs": [], "usage_unit": "execution",
+                   "outputs": [{"id": "result", "requirement_id": "measurements", "path": "stdout",
+                                "media_type": "text/plain"}]}
+        self.assertEqual(self.mutate(api.bind_execution, payload)["result"]["timeout_seconds"], int(sys.float_info.max))
+
     def test_symlinked_venv_interpreter_runs_the_program_with_its_own_site_packages(self):
         interpreter = make_venv(self)
         admission = admit_lab(self, interpreter=str(interpreter),
@@ -873,6 +930,275 @@ class ResearchExecutionTests(DevelopmentCase):
         records = self.store.snapshot()["records"]
         _observed(records, self.artifacts, records["execution_outcome"][admission["id"]]["execution_id"])
 
+    def claim_as_earlier_release(self):
+        """Patch the claim config to the one of exactory-client 0.47.0, which has no metric_output and so no metric
+        bound."""
+        api = importlib.import_module("research_harness.execution")
+        original_materialize = api._materialize
+
+        def materialize_as_earlier_release(*args):
+            config = original_materialize(*args)
+            del config["metric_output"]
+            return config
+
+        return mock.patch.object(api, "_materialize", side_effect=materialize_as_earlier_release)
+
+    def launch_until_the_launcher_exits(self, admission):
+        """The launcher exits after the run ends and before it records the outcome, so the run has a terminal file
+        and no recorded outcome. The launch request ID is earlier-release."""
+        api = importlib.import_module("research_harness.execution")
+        with mock.patch.object(api, "reconcile_execution", side_effect=OSError("The launcher exited after the run")):
+            with self.assertRaisesRegex(OSError, "The launcher exited after the run"):
+                api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                     request_id="earlier-release")
+
+    def launch_as_earlier_release_until_the_launcher_exits(self, metric_json):
+        """Run a program that prints metric_json under a claim config of exactory-client 0.47.0 until the launcher
+        exits. Returns the admission."""
+        admission = admit_lab(self, body="print(" + repr(metric_json.decode()) + ")\n")
+        with self.claim_as_earlier_release():
+            self.launch_until_the_launcher_exits(admission)
+        return admission
+
+    def assert_the_store_refuses_the_observation(self, admission, refusal):
+        """reconcile-run records the outcome and then fails with invalid_input, because the store refuses the
+        observation. A retry fails without a change, and the strategy admits no further run."""
+        from research_harness.errors import ResearchError
+        api = importlib.import_module("research_harness.execution")
+
+        def reconcile(request_id):
+            with self.assertRaisesRegex(ResearchError, refusal) as raised:
+                api.reconcile_execution(self.store, {"admission_id": admission["id"]},
+                                        expected_revision=self.store.revision, request_id=request_id)
+            self.assertEqual(raised.exception.code, "invalid_input")
+
+        reconcile("reconcile")
+        before = self.store.snapshot()
+        self.assertIn(admission["id"], before["records"]["execution_outcome"])
+        self.assertNotIn(admission["id"], before["records"].get("execution_observation", {}))
+        reconcile("reconcile-again")
+        following_admission = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
+        following_admission["id"] = "following-run"
+        self.assert_error("execution_usage_reconciliation_required",
+                          lambda: self.mutate(self.development().admit_execution, following_admission))
+        self.assertEqual(self.store.snapshot(), before)
+
+    # A limit of H13 that the user accepted on 2026-09-30: the store cannot record the observation of a run that
+    # exactory-client 0.47.0 or earlier claimed when the run's metric exceeds the store bounds, so the run keeps an
+    # outcome without an observation, and its strategy admits no further run. Releases 0.48.0 and 0.49.0 recorded
+    # such a run. The observation holds the metric two levels deep, so a metric of 99 levels makes it 101 levels deep.
+    def test_earlier_release_run_whose_metric_nests_beyond_the_store_bound_cannot_be_reconciled(self):
+        admission = self.launch_as_earlier_release_until_the_launcher_exits(build_nested_metric_json(99))
+        self.assert_the_store_refuses_the_observation(admission, "nest at most 100 levels")
+
+    def test_earlier_release_run_whose_metric_holds_an_integer_beyond_the_store_bound_cannot_be_reconciled(self):
+        # The same accepted limit. Python 3.9.6 reads an integer of any length, and Python 3.11 and later read no
+        # metric from it. Reconcile as Python 3.9.6 does, so that the store's own bound refuses the metric.
+        if hasattr(sys, "set_int_max_str_digits"):
+            self.addCleanup(sys.set_int_max_str_digits, sys.get_int_max_str_digits())
+            sys.set_int_max_str_digits(0)
+        admission = self.launch_as_earlier_release_until_the_launcher_exits(build_integer_metric_json(4301))
+        self.assert_the_store_refuses_the_observation(admission, "no integer of more than 4300 digits")
+
+    def test_earlier_release_run_whose_metric_fits_the_store_bound_is_reconciled(self):
+        # The accepted limit starts one level deeper: a metric of 98 levels makes an observation of 100 levels.
+        api = importlib.import_module("research_harness.execution")
+        metric_json = build_nested_metric_json(98)
+        admission = self.launch_as_earlier_release_until_the_launcher_exits(metric_json)
+        result = api.reconcile_execution(self.store, {"admission_id": admission["id"]},
+                                         expected_revision=self.store.revision, request_id="reconcile")
+        self.assertEqual(result["metric"], json.loads(metric_json))
+        following_admission = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
+        following_admission["id"] = "following-run"
+        self.assertEqual(self.mutate(self.development().admit_execution, following_admission)["result"]["id"],
+                         following_admission["id"])
+
+    # Limits of H13 that the user accepted on 2026-09-30 at about 19:50 PDT. Each operation below fails with
+    # invalid_input and changes nothing, because a new record or result copies a value that an earlier release
+    # stored beyond the store bounds; 0.49.0 recorded each of them. A test writes such a value as an earlier
+    # release did, with the store's bounds turned off.
+    def write_as_earlier_release(self):
+        from research_harness import storage
+        return mock.patch.object(storage, "_check_stored_bounds", lambda value, max_depth=None: None)
+
+    def convert_integers_of_any_length(self):
+        """Convert integers of any length here and in the worker, as Python 3.9.6 does, which stored such a seed."""
+        if hasattr(sys, "set_int_max_str_digits"):
+            self.addCleanup(sys.set_int_max_str_digits, sys.get_int_max_str_digits())
+            sys.set_int_max_str_digits(0)
+        worker_digits_patcher = mock.patch.dict(os.environ, {"PYTHONINTMAXSTRDIGITS": "0"})
+        worker_digits_patcher.start()
+        self.addCleanup(worker_digits_patcher.stop)
+
+    def reconcile_as_earlier_release(self, admission):
+        api = importlib.import_module("research_harness.execution")
+        with self.write_as_earlier_release():
+            api.reconcile_execution(self.store, {"admission_id": admission["id"]},
+                                    expected_revision=self.store.revision, request_id="earlier-reconcile")
+
+    def assert_refused_without_a_change(self, action, refusal):
+        from research_harness.errors import ResearchError
+        before = self.store.snapshot()
+        with self.assertRaisesRegex(ResearchError, refusal) as raised:
+            action()
+        self.assertEqual(raised.exception.code, "invalid_input")
+        self.assertEqual(self.store.snapshot(), before)
+
+    def assert_reconcile_and_launch_retry_are_refused(self, admission, refusal):
+        """A new reconcile-run request, and the retry of exactory-lab run whose launch stopped before it reconciled."""
+        api = importlib.import_module("research_harness.execution")
+        self.assert_refused_without_a_change(lambda: api.reconcile_execution(
+            self.store, {"admission_id": admission["id"]}, expected_revision=self.store.revision,
+            request_id="new-reconcile"), refusal)
+        self.assert_refused_without_a_change(lambda: api.launch_execution(
+            self.store, admission["id"], expected_revision=self.store.revision, request_id="earlier-release"), refusal)
+
+    def assert_the_next_admission_fails(self, admission, code):
+        following_admission = {key: admission[key] for key in ("cycle_id", "plan_digest", "command", "reserved_units")}
+        following_admission["id"] = "following-run"
+        before = self.store.snapshot()
+        self.assert_error(code, lambda: self.mutate(self.development().admit_execution, following_admission))
+        self.assertEqual(self.store.snapshot(), before)
+
+    def observe_run_as_earlier_release(self, **admit_options):
+        """Admit, bind, launch and observe the fixture program with the store's bounds turned off; return the
+        execution payload. The program writes the result and validation outputs that the fixture assessment cites."""
+        api = importlib.import_module("research_harness.execution")
+        outputs = [{"id": name, "requirement_id": requirement, "path": "results/" + name + ".json",
+                    "media_type": "application/json"}
+                   for name, requirement in (("result", "measurements"), ("validation", "checks"))]
+        with self.write_as_earlier_release():
+            admission = admit_lab(self, outputs=outputs, **admit_options)
+            api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                                 request_id="earlier-release")
+        records = self.store.snapshot()["records"]
+        return records["execution"][records["execution_outcome"][admission["id"]]["execution_id"]]["payload"]
+
+    def build_manuscript_payload(self, execution):
+        """Assess the run, select its checkpoint, record the readiness review and write the manuscript files; return the
+        manuscript payload, whose claim cites the run."""
+        from integration_fixtures import account_fixture_citations
+        self.execution_payload = execution
+        plan = self.store.snapshot()["records"]["cycle_plan"][execution["cycle_id"]]["payload"]
+        self.mutate(self.development().assess_cycle, self.assessment(plan, execution))
+        self.save_checkpoint()
+        self.mutate(self.development().record_readiness_review, self.review(execution))
+        for name in ("draft", "evidence"):
+            (self.root / name).mkdir(exist_ok=True)
+        (self.root / "draft/paper.pdf").write_bytes(b"%PDF-1.4\n% Authored accepted-limit fixture.\n%%EOF")
+        (self.root / "draft/abstract.txt").write_text("The exact finite bound was enumerated.")
+        (self.root / "draft/references.bib").write_text("@article{bounded,title={Authored bound}}\n")
+        (self.root / "evidence/claims.json").write_text(json.dumps([{"id": "bound", "claim": "The maximum is 9."}]))
+        return {"id": "paper-1", "files": {"pdf": "draft/paper.pdf", "abstract": "draft/abstract.txt",
+                                           "bibliography": "draft/references.bib", "claims": "evidence/claims.json",
+                                           "sources": None},
+                "claim_evidence": [{"claim_id": "bound", "evidence": [self.result_evidence(execution)]}],
+                "citation_accounting": account_fixture_citations(self)}
+
+    def observe_earlier_release_claim_with_metric(self, levels):
+        """Claim the fixture program as exactory-client 0.47.0 did, with a last stdout line whose metric nests
+        `levels` levels, and observe it; return the execution payload."""
+        import integration_fixtures
+        program = (integration_fixtures.OBSERVED_PROGRAM + "print(" + repr(build_nested_metric_json(levels).decode())
+                   + ")\n")
+        with self.claim_as_earlier_release(), mock.patch.object(integration_fixtures, "OBSERVED_PROGRAM", program):
+            return integration_fixtures.observe_run(self)
+
+    def test_a_new_reconcile_of_an_earlier_release_observation_whose_metric_nests_100_levels_is_refused(self):
+        # The result of a new reconcile-run request holds the metric one level deep, 101 levels for this metric.
+        admission = self.launch_as_earlier_release_until_the_launcher_exits(build_nested_metric_json(100))
+        self.reconcile_as_earlier_release(admission)
+        self.assert_reconcile_and_launch_retry_are_refused(admission, "nest at most 100 levels")
+
+    def test_a_new_reconcile_of_an_earlier_release_observation_whose_metric_nests_99_levels_is_recorded(self):
+        api = importlib.import_module("research_harness.execution")
+        metric_json = build_nested_metric_json(99)
+        admission = self.launch_as_earlier_release_until_the_launcher_exits(metric_json)
+        self.reconcile_as_earlier_release(admission)
+        for reconcile in (lambda: api.reconcile_execution(self.store, {"admission_id": admission["id"]},
+                                                          expected_revision=self.store.revision,
+                                                          request_id="new-reconcile"),
+                          lambda: api.launch_execution(self.store, admission["id"],
+                                                       expected_revision=self.store.revision,
+                                                       request_id="earlier-release")):
+            revision = self.store.revision
+            self.assertEqual(reconcile()["metric"], json.loads(metric_json))
+            self.assertEqual(self.store.revision, revision + 1)
+
+    def test_a_manuscript_that_cites_an_earlier_release_run_whose_metric_nests_96_levels_is_refused(self):
+        # The bundle holds the metric of each cited run five levels deep (execution_observations), 101 levels here.
+        from research_harness.publication import prepare_publication
+        payload = self.build_manuscript_payload(self.observe_earlier_release_claim_with_metric(96))
+        self.assert_refused_without_a_change(lambda: self.mutate(prepare_publication, payload),
+                                             "nest at most 100 levels")
+
+    def test_a_manuscript_that_cites_an_earlier_release_run_whose_metric_nests_95_levels_is_recorded(self):
+        from research_harness.publication import prepare_publication
+        payload = self.build_manuscript_payload(self.observe_earlier_release_claim_with_metric(95))
+        self.assertEqual(self.mutate(prepare_publication, payload)["result"]["id"], "paper-1")
+
+    def test_an_earlier_release_admission_with_a_seed_of_4301_digits_cannot_be_launched(self):
+        # The claim holds the seed in its config.
+        self.convert_integers_of_any_length()
+        api = importlib.import_module("research_harness.execution")
+        with self.write_as_earlier_release():
+            admission = admit_lab(self, body="print('{\"metric\": 7}')\n", seed=10 ** 4300)
+        self.assert_refused_without_a_change(lambda: api.launch_execution(
+            self.store, admission["id"], expected_revision=self.store.revision, request_id="seed-launch"),
+            "no integer of more than 4300 digits")
+        self.assert_the_next_admission_fails(admission, "execution_pending")
+
+    def test_an_earlier_release_claim_with_a_seed_of_4301_digits_cannot_be_reconciled(self):
+        # The outcome holds the seed in its command, and the store refuses it before it records anything.
+        self.convert_integers_of_any_length()
+        with self.write_as_earlier_release():
+            admission = admit_lab(self, body="print('{\"metric\": 7}')\n", seed=10 ** 4300)
+            self.launch_until_the_launcher_exits(admission)
+        self.assert_reconcile_and_launch_retry_are_refused(admission, "no integer of more than 4300 digits")
+        self.assertNotIn(admission["id"], self.store.snapshot()["records"].get("execution_outcome", {}))
+        self.assert_the_next_admission_fails(admission, "execution_pending")
+
+    def test_an_earlier_release_outcome_with_a_seed_of_4301_digits_cannot_be_observed(self):
+        # The earlier release recorded the outcome and stopped before the observation, which holds the seed.
+        self.convert_integers_of_any_length()
+        api = importlib.import_module("research_harness.execution")
+        original_prepared_mutation = api.prepared_mutation
+
+        def stop_before_the_observation(store, operation, *args, **kwargs):
+            if operation == "execution.observe":
+                raise OSError("The earlier release stopped before the observation")
+            return original_prepared_mutation(store, operation, *args, **kwargs)
+
+        with self.write_as_earlier_release():
+            admission = admit_lab(self, body="print('{\"metric\": 7}')\n", seed=10 ** 4300)
+            self.launch_until_the_launcher_exits(admission)
+            with mock.patch.object(api, "prepared_mutation", side_effect=stop_before_the_observation), \
+                    self.assertRaisesRegex(OSError, "stopped before the observation"):
+                api.reconcile_execution(self.store, {"admission_id": admission["id"]},
+                                        expected_revision=self.store.revision, request_id="earlier-reconcile")
+        self.assert_reconcile_and_launch_retry_are_refused(admission, "no integer of more than 4300 digits")
+        self.assertIn(admission["id"], self.store.snapshot()["records"]["execution_outcome"])
+        self.assert_the_next_admission_fails(admission, "execution_usage_reconciliation_required")
+
+    def test_a_new_reconcile_of_an_earlier_release_observation_with_a_seed_of_4301_digits_is_refused(self):
+        # The result of a new reconcile-run request holds the seed.
+        self.convert_integers_of_any_length()
+        with self.write_as_earlier_release():
+            admission = admit_lab(self, body="print('{\"metric\": 7}')\n", seed=10 ** 4300)
+            self.launch_until_the_launcher_exits(admission)
+        self.reconcile_as_earlier_release(admission)
+        self.assert_reconcile_and_launch_retry_are_refused(admission, "no integer of more than 4300 digits")
+
+    def test_a_manuscript_of_a_study_with_an_earlier_release_seed_of_4301_digits_is_refused(self):
+        # The bundle holds the admissions and executions of every cycle and the claim of each cited run.
+        import integration_fixtures
+        from research_harness.publication import prepare_publication
+        self.convert_integers_of_any_length()
+        payload = self.build_manuscript_payload(
+            self.observe_run_as_earlier_release(body=integration_fixtures.OBSERVED_PROGRAM, seed=10 ** 4300))
+        self.assert_refused_without_a_change(lambda: self.mutate(prepare_publication, payload),
+                                             "no integer of more than 4300 digits")
+
 
 class RunMetricTests(unittest.TestCase):
     def test_metric_sources_keep_their_order_and_an_earlier_run_config_keeps_its_metric(self):
@@ -919,16 +1245,9 @@ class RunMetricTests(unittest.TestCase):
         config = {"script": "code/refine_cycle.py", "metric_output": "work/results/run_cycle.json"}
         earlier = {"script": "code/refine_cycle.py"}
         fallback, declared = "work/results/refine_cycle.json", "work/results/run_cycle.json"
-
-        def build_nested_json(levels):
-            # An object and levels - 1 lists inside it: {"metric": [[...[0]...]]}.
-            return b'{"metric": ' + b"[" * (levels - 1) + b"0" + b"]" * (levels - 1) + b"}"
-
-        def build_integer_json(digits):
-            return b'{"metric": ' + b"9" * digits + b"}"
-
-        for dimension, within, beyond in (("nesting", build_nested_json(32), build_nested_json(33)),
-                                          ("integer digits", build_integer_json(4300), build_integer_json(4301))):
+        for dimension, within, beyond in (("nesting", build_nested_metric_json(32), build_nested_metric_json(33)),
+                                          ("integer digits", build_integer_metric_json(4300),
+                                           build_integer_metric_json(4301))):
             with self.subTest(dimension=dimension):
                 for path in ("stdout", fallback, declared):
                     self.assertEqual(output_metric(config, {path: within}), json.loads(within))

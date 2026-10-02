@@ -6,7 +6,8 @@ import json
 from development_fixtures import DevelopmentCase
 from literature_fixtures import LiteratureCase
 from research_harness.cli import OPERATIONS, status_report
-from research_harness.literature import foundation_report, import_bundle
+from research_harness.graph import format_search_requirement_id
+from research_harness.literature import foundation_report, import_bundle, record_search
 from research_harness.reading import record_reading, require_fulltext
 from research_harness.report_views import status_summary
 
@@ -232,6 +233,77 @@ class SourceDeferralTests(DeferralCase, LiteratureCase):
                                "reason": "Another unavailable proof appendix.", "url": "https://example.org/appendix"})
         self.mutate(import_bundle, later)
         self.assertEqual(foundation_report(self.store, "research")["source_deferrals"][-1]["status"], "stale")
+
+    def test_a_replaced_search_judgment_stales_the_deferral_of_a_work_only_it_cited(self):
+        root, gap = self.metadata(), self.metadata(2)
+        self.scope([root])
+        judgment = self.capture_search("direct", [gap])
+        judgment["cited_work_ids"] = [gap]
+        self.mutate(record_search, judgment)
+        self.defer(gap)
+        self.assertEqual(foundation_report(self.store, "research")["source_deferrals"][0]["status"], "active")
+        # The successor returns no work, so only the retired requirement changes the deferral's binding.
+        successor = self.capture_search("direct")
+        successor["id"] = "direct-2"
+        self.mutate(record_search, successor)
+        report = foundation_report(self.store, "research")
+        self.assertEqual(report["source_deferrals"][0]["status"], "stale")
+        self.assertFalse([o for o in report["obligations"] + report["deferred_obligations"] if o.get("version_id") == gap])
+
+    def test_a_deferral_keeps_the_binding_of_0_47_0_while_its_version_stays_required(self):
+        # A replaced judgment and the selected one both cite the deferred version, so it stays a required full
+        # text. 0.47.0 bound every requirement record of the version and recorded the digest below; a deferral
+        # it recorded stays active only while the binding of the same records is unchanged.
+        root, gap = self.metadata(), self.metadata(2)
+        self.scope([root])
+        for identifier in ("adjacent-1", "adjacent-2"):
+            judgment = self.capture_search("adjacent", [gap])
+            judgment["id"], judgment["cited_work_ids"] = identifier, [gap]
+            self.mutate(record_search, judgment)
+        self.capture(gap, status=404)
+        self.defer(gap)
+        deferral = foundation_report(self.store, "research")["source_deferrals"][0]
+        self.assertEqual(sorted(deferral["dependencies"]["requirements"]),
+                         sorted(format_search_requirement_id(search, gap) for search in ("adjacent-1", "adjacent-2")))
+        self.assertEqual((deferral["status"], deferral["dependency_digest"]),
+                         ("active", "829c4b805ae0e0abb97c905806f518ed60930426562adb3968956333c02659bb"))
+        # Once no judgment cites the version, none of its requirements count and the decision is stale.
+        successor = self.capture_search("adjacent")
+        successor["id"] = "adjacent-3"
+        self.mutate(record_search, successor)
+        self.assertEqual(foundation_report(self.store, "research")["source_deferrals"][0]["status"], "stale")
+
+    def test_a_deferral_stays_active_while_the_citation_graph_keeps_its_version_a_required_full_text(self):
+        # The root cites v1 exactly. direct-2 replaces direct-1 and cites v2 of the same family, so the family stays
+        # Tier 2 and v1 stays a required full text after its only requirement record retires. 0.47.0 recorded the
+        # binding digest below for the deferral; a deferral it recorded stays active while that binding is unchanged.
+        root = self.metadata(1, references=[{"id": "arxiv:2601.00002v1"}])
+        v1, v2 = self.metadata(2, version=1), self.metadata(2, version=2)
+        self.scope([root])
+        first = self.capture_search("direct", [v1])
+        first["id"], first["cited_work_ids"] = "direct-1", [v1]
+        self.mutate(record_search, first)
+        self.capture(v1, status=404)
+        self.defer(v1)
+        self.assertEqual(foundation_report(self.store, "research")["source_deferrals"][0]["dependency_digest"],
+                         "72d8d8fb6987eab70ef5447be4422530fbb5b253a1bcd6cfee9f0eab6d66a1de")
+        successor = self.capture_search("direct", [v2])
+        successor["id"], successor["cited_work_ids"] = "direct-2", [v2]
+        self.mutate(record_search, successor)
+        report = foundation_report(self.store, "research")
+        item = next(i for i in report["inventory"] if i["version_id"] == v1)
+        self.assertEqual((item["tier"], item["required_depth"]), (2, "fulltext"))
+        self.assertEqual(report["source_deferrals"][0]["status"], "active")
+        self.assertFalse([o for o in report["obligations"] if o.get("version_id") == v1])
+        self.assertTrue([o for o in report["deferred_obligations"] if o.get("version_id") == v1])
+        # Once no judgment cites the family, v1 falls to Tier 3, no record of it is bound and the decision is stale.
+        third = self.capture_search("direct")
+        third["id"] = "direct-3"
+        self.mutate(record_search, third)
+        report = foundation_report(self.store, "research")
+        item = next(i for i in report["inventory"] if i["version_id"] == v1)
+        self.assertEqual((item["tier"], item["required_depth"]), (3, "abstract"))
+        self.assertEqual(report["source_deferrals"][0]["status"], "stale")
 
     def test_resume_restores_obligations_and_receipts_replay_without_reselection(self):
         _, gap = self.setup_gap()

@@ -20,6 +20,7 @@ from .operations import fields, immutable_record, prepared_mutation, text
 from .principles import preparation_policy
 from .reading import validate_read_evidence
 from .source_links import validate_link
+from .storage import check_command_bounds
 from .synthesis import synthesis_state
 from .workspace import strict_json
 
@@ -141,6 +142,9 @@ def bind_verdict(store, payload, *, expected_revision, request_id):
             raise ResearchError("verification_task_required", "Acquire and bind the task-only server target first")
         report, target, identity = _preparation(records, artifacts, task["task"])
         body = _body(artifacts, value["body"])
+        # exactory verify sends this body, and the remote intent keeps it deeper than its file, so it is a command
+        # input. The bind-verdict payload only refers to the body, so the refusal names the body.
+        check_command_bounds(body, "The verdict body")
         sample_prediction = None
         if preparation_policy(records) == SAMPLED:
             sample_prediction = prediction(records)
