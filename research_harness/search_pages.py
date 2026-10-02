@@ -40,7 +40,9 @@ LIST_PARAMETER_NAMES = {"arxiv": frozenset({"id_list"}), "crossref": frozenset({
                         "openalex": frozenset({"filter"})}
 # The list parameters whose items are filters, name:values, that the registry reads without regard to the letter case
 # of the values and with the | alternatives of the values, after a leading ! that negates them all, as a set: an
-# OpenAlex filter (https://help.openalex.org/api/filtering/). The name keeps its letter case.
+# OpenAlex filter (https://help.openalex.org/api/filtering/). The name keeps its letter case, and so does the value of
+# a filter whose name ends in .search, because OpenAlex reads the Boolean operators of a search only in uppercase
+# (https://help.openalex.org/api/searching/).
 CASELESS_FILTER_PARAMETER_NAMES = {"arxiv": frozenset(), "crossref": frozenset(), "openalex": frozenset({"filter"})}
 
 
@@ -58,8 +60,9 @@ def compute_query_identity(source):
     grouping, paging, a contact address or key, or a parameter the registry does not list) ask the same query, and
     so do captures whose URLs spell one query differently: the endpoint is its host and its path without a trailing
     slash, an empty parameter or list item is no parameter, the items of a list parameter form a set, and an OpenAlex
-    filter is compared as OpenAlex reads it, without regard to the letter case of its values and with its |
-    alternatives as a set. None for a web or MCP capture, whose request the harness does not parse."""
+    filter is compared as OpenAlex reads it, without regard to the letter case of its values (except the value of a
+    .search filter) and with its | alternatives as a set. None for a web or MCP capture, whose request the harness
+    does not parse."""
     names = MATCHING_PARAMETER_NAMES.get(source["provider"])
     if names is None:
         return None
@@ -73,7 +76,10 @@ def compute_query_identity(source):
             if key in caseless_names:
                 name, colon, value_text = item.partition(":")
                 negation_prefix = "!" if value_text.startswith("!") else ""
-                alternatives = set(value_text[len(negation_prefix):].lower().split("|"))
+                alternatives_text = value_text[len(negation_prefix):]
+                if not name.endswith(".search"):
+                    alternatives_text = alternatives_text.lower()
+                alternatives = set(alternatives_text.split("|"))
                 item = name + colon + negation_prefix + "|".join(sorted(alternatives))
             if item:
                 parameters.add((key, item))

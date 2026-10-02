@@ -325,8 +325,10 @@ the `|` alternatives of one filter, after a leading `!` that negates them all,
 are compared as a set, so `type:Article` asks the same query as `type:article`,
 and `cites:W2|W1` as `cites:W1|W2`. Two captures whose matching parameters
 differ in any other way count apart, even when they share a query value; this
-includes the name of a filter in another letter case and another letter case of
-the value of any other matching parameter, such as `search`. `web` and `mcp`
+includes the name of a filter in another letter case, another letter case of the
+value of a `.search` filter such as `title.search` (OpenAlex reads its Boolean
+operators only in uppercase), and another letter case of the value of any other
+matching parameter, such as `search`. `web` and `mcp`
 captures of one query count once, and not at all when a native capture of the
 purpose was bound to that query. The record of each purpose states which.
 For each uncovered purpose, a new query is captured and up to 20 more abstracts
