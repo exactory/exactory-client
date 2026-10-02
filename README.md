@@ -352,7 +352,7 @@ side of a witness is given as its `real` and `imag` parts. A witness point keeps
 the sampled values. With a range bound beyond the float range, a sampled value
 can be `Infinity`, `-Infinity` or `NaN`, which standard JSON lacks. A steps file
 fails with exit code 2, and no step is checked, when it is not a readable JSON
-list. That includes a file nested beyond the interpreter's recursion limit.
+list or nests more than 32 levels.
 
 **`exactory-math`** runs the harness of the `/exactory:math-solver` skill
 from the user's workspace. A managed objective starts with `search init`, current

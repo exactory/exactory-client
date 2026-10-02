@@ -34,6 +34,11 @@ _USER_AGENT = f"exactory-derive/{_PLUGIN_VERSION}"
 
 _DERIVATION_REPORT_PATH = Path(".exactory") / "derivation-check.json"
 
+# A steps file nests 4 levels: the list, a step, its vars and a range. Python 3.14 reads JSON nested far deeper than
+# 3.9 to 3.13, which raise RecursionError, so the tool bounds the nesting itself and every supported Python refuses
+# the same files.
+_MAX_STEPS_FILE_DEPTH = 32
+
 # The whitelist of callable names, bound to real math/cmath functions. Any name
 # not here, and any node type not handled in the walker, makes an expression
 # unsafe. This is the security boundary for untrusted expression strings.
@@ -252,6 +257,14 @@ def _run_check(args: argparse.Namespace) -> None:
         # RecursionError: JSON nested beyond the interpreter's recursion limit.
         print(f"Cannot read the steps file: {error}", file=sys.stderr)
         raise SystemExit(2)
+    pending = [(steps, 1)]
+    while pending:
+        item, depth = pending.pop()
+        if isinstance(item, (dict, list)):
+            if depth > _MAX_STEPS_FILE_DEPTH:
+                print(f"Cannot read the steps file: it nests more than {_MAX_STEPS_FILE_DEPTH} levels", file=sys.stderr)
+                raise SystemExit(2)
+            pending.extend((child, depth + 1) for child in (item.values() if isinstance(item, dict) else item))
     if not isinstance(steps, list):
         print("The steps file must hold a JSON list of steps.", file=sys.stderr)
         raise SystemExit(2)
