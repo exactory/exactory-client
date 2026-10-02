@@ -104,7 +104,9 @@ to `exactory-research batches --destination DIR --loop --candidates FILE`, which
 exports the selected searches' unread hits together with those candidates. The
 second is the papers that cite the parent within the window, an OpenAlex query
 with the filter `cites:<parent id>` saved with `import-response` and recorded as
-a `recent` search response.
+a `recent` search response. Bind the whole filter value as that response's
+query, for example `cites:W123,from_publication_date:2025-01-01` when the filter
+also holds the window's date clause.
 
 Read every exported abstract and register it with `read-batch` as one loop entry
 carrying `loop: {purposes, disposition, source}`, where source is `search`,
