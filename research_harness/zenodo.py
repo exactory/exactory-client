@@ -1,5 +1,6 @@
 """Deposit reviewed immutable bytes with persisted remote-step reconciliation."""
 
+from contextlib import contextmanager
 import hashlib
 
 from .artifacts import ArtifactStore
@@ -52,6 +53,14 @@ def _current(store, binding):
 
 def _deposition(intent):
     return intent["responses"].get("create", {}).get("response")
+
+
+def has_claimed_publish(intent):
+    """Whether a deposit intent ever claimed its publish step: the claim is pending, its response
+    is confirmed, or a remote read found the record unpublished and discarded the claim. From
+    that claim on, the deposit stays bound to its own record until that record is published."""
+    return ("publish" in intent["responses"] or (intent["pending"] or {}).get("name") == "publish"
+            or any(entry["name"] == "publish" for entry in intent.get("discarded", [])))
 
 
 def _files_match(document, binding, artifacts):
@@ -145,7 +154,29 @@ def _set_preview(store, identifier, binding, client, record_id):
                        lambda: client("PUT", url, json_body=updated), expected_revision=checked_revision)
 
 
-def continue_deposit(store, identifier, client, *, reconcile=False):
+# The owner key of a workspace's deposit commands. Intents own "remote:<id>", verdict targets
+# "verdict:<id>", and admissions their own ids, so this key names no other owner.
+_WORKSPACE_DEPOSITS_OWNER_ID = "deposit:workspace"
+
+
+@contextmanager
+def own_workspace_deposits(root):
+    """Own the deposit commands of the workspace at `root` for the caller's whole command.
+    Per-intent ownership alone lets two runs act on one recorded deposit from different
+    observations, so every command that reads a deposit's journal or intent, or starts a
+    deposit, takes this first; continue_deposit takes the intent's own lock inside it, never
+    before it. A second owner is refused with remote_operation_owned and sends nothing."""
+    try:
+        with _owner(root, _WORKSPACE_DEPOSITS_OWNER_ID):
+            yield
+    except ResearchError as error:
+        if error.code != "execution_live":
+            raise
+        raise ResearchError("remote_operation_owned", "Another exactory-draft run owns the deposits of this workspace."
+                            " Wait for that run to end. Then run this command again.") from error
+
+
+def continue_deposit(store, identifier, client, *, reconcile=False, finish_only=False):
     with _owner(store.root, "remote:" + identifier):
         intent = get_intent(store, identifier)
         if intent["status"] == "complete":
@@ -153,6 +184,15 @@ def continue_deposit(store, identifier, client, *, reconcile=False):
             return store.snapshot()["records"]["publication_receipt"][identifier]
         if reconcile:
             intent = reconcile_pending(store, identifier, client)
+        # A publication the intent has confirmed, by its response or by a remote read, is a
+        # fact on Zenodo: it is recorded without the manuscript check, so an edited draft
+        # cannot keep a published record unrecorded (design 2026-10-12 §17).
+        if "publish" in intent["responses"]:
+            return _finish_deposit(store, identifier, intent)
+        if finish_only:
+            raise ResearchError("publication_unconfirmed",
+                                "The record of this deposit is not published. Run exactory-draft deposit to finish it.",
+                                {"request_id": identifier})
         binding = intent["binding"]
         checked_revision = _current(store, binding)
         base = binding["base_url"]
@@ -184,24 +224,31 @@ def continue_deposit(store, identifier, client, *, reconcile=False):
                     lambda: client("PUT", base + "/deposit/depositions/" + str(deposition["id"]), json_body={"metadata": metadata}), expected_revision=checked_revision)
         _current(store, binding)
         _set_preview(store, identifier, binding, client, deposition["id"])
-        published = None
         if binding["publish"]:
             checked_revision = _current(store, binding)
-            published = remote_step(store, identifier, "publish", {"deposition_id": deposition["id"]},
+            remote_step(store, identifier, "publish", {"deposition_id": deposition["id"]},
                 lambda: client("POST", base + "/deposit/depositions/" + str(deposition["id"]) + "/actions/publish"), expected_revision=checked_revision)
-        state = {"environment": binding["environment"], "deposition_id": deposition["id"], "draft_url": deposition.get("links", {}).get("html", "")}
-        if published is not None:
-            if not published.get("doi") or str(published.get("id")) != str(deposition["id"]):
-                raise ResearchError("remote_reconciliation_required", "The publish response has not established the concrete version's DOI")
-            state.update(doi=published["doi"], concept_doi=published.get("conceptdoi", ""),
-                         record_url=published.get("links", {}).get("record_html", ""))
-        receipt = dict(state, intent_id=identifier, bundle_digest=binding["bundle_digest"], uploads=binding["uploads"],
-                       published_response=published, prepared_revision=binding["prepared_revision"])
-        if binding.get("publication_scope") is not None:
-            receipt["publication_scope"] = binding["publication_scope"]
-        result = finish_intent(store, identifier, "publication_receipt", receipt, workspace=state)
-        export_workspace(store)
-        return result
+        return _finish_deposit(store, identifier, get_intent(store, identifier))
+
+
+def _finish_deposit(store, identifier, intent):
+    """Record the receipt and the workspace deposit from the intent's confirmed responses."""
+    binding = intent["binding"]
+    deposition = _deposition(intent)
+    published = intent["responses"].get("publish", {}).get("response")
+    state = {"environment": binding["environment"], "deposition_id": deposition["id"], "draft_url": deposition.get("links", {}).get("html", "")}
+    if published is not None:
+        if not published.get("doi") or str(published.get("id")) != str(deposition["id"]):
+            raise ResearchError("remote_reconciliation_required", "The publish response has not established the concrete version's DOI")
+        state.update(doi=published["doi"], concept_doi=published.get("conceptdoi", ""),
+                     record_url=published.get("links", {}).get("record_html", ""))
+    receipt = dict(state, intent_id=identifier, bundle_digest=binding["bundle_digest"], uploads=binding["uploads"],
+                   published_response=published, prepared_revision=binding["prepared_revision"])
+    if binding.get("publication_scope") is not None:
+        receipt["publication_scope"] = binding["publication_scope"]
+    result = finish_intent(store, identifier, "publication_receipt", receipt, workspace=state)
+    export_workspace(store)
+    return result
 
 
 def validate_deposit(store, pdf, abstract, sources, *, new_version, environment):
@@ -219,11 +266,17 @@ def validate_deposit(store, pdf, abstract, sources, *, new_version, environment)
     return report
 
 
-def deposit(store, binding, client, *, expected_revision, request_id):
+def begin_deposit(store, binding, *, expected_revision, request_id):
+    """Check a managed deposit and save its intent before any remote write. The same request
+    saved earlier returns that intent, so an interrupted deposit resumes on it."""
     _current(store, binding)
     if binding["new_version"] and (binding["prior"] is None or binding["prior"]["environment"] != binding["environment"]):
         raise ResearchError("publication_prior_required", "A revised deposit must use the prior concrete record in the same environment")
-    intent = begin_intent(store, "deposit", binding, expected_revision=expected_revision, request_id=request_id)
+    return begin_intent(store, "deposit", binding, expected_revision=expected_revision, request_id=request_id)
+
+
+def deposit(store, binding, client, *, expected_revision, request_id):
+    intent = begin_deposit(store, binding, expected_revision=expected_revision, request_id=request_id)
     # An interrupted deposit continues from its saved intent: a fresh intent has
     # no claimed step, so reconciliation returns at once and nothing changes.
     return continue_deposit(store, intent["id"], client, reconcile=True)
