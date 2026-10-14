@@ -368,7 +368,7 @@ def _read_exactory_json(argv: list[str], api_url: str) -> dict:
 def _resolve_problem_target(problem_id: str) -> dict:
     """The problem a deposit is for, checked before the first Zenodo write (design 2026-10-12
     §17): a standing problem, and an account with the ORCID iD the attachment needs. The
-    origin is kept with it, so a retry attaches against the same application."""
+    origin is kept with it, so a retry attaches against the same application when this run names it."""
     if not UUID_RE.fullmatch(problem_id):
         _exit_with_error(f'"{problem_id}" is not a problem id. Copy the id from the problem page.', 2)
     api_url = read_api_base_url()
@@ -396,11 +396,15 @@ def _hold_deposit_lock():
 @_hold_deposit_lock()
 def _run_deposit(args: argparse.Namespace) -> None:
     # An unsettled deposit for a problem is settled before this run reads any other input, so the
-    # recorded operation decides, never the current draft or environment (design 2026-10-12 §17).
-    # The settle completes the operation that the earlier run approved with its own flags, as
-    # reconcile does, so this run's flags decide nothing about it. A settled journal does not block
-    # this run: its publication is certain, and attach-problem attaches the record.
+    # recorded operation decides, never the current draft (design 2026-10-12 §17). The settle
+    # completes the operation that the earlier run approved with its own flags, as reconcile does,
+    # so this run's flags decide nothing about it. A settled journal does not block this run: its
+    # publication is certain, and attach-problem attaches the record.
     journal = _read_problem_journal("Nothing was deposited.")
+    # The journal drives a request to its recorded origin when this run settles it, and the run names
+    # that origin in a command when it publishes for a problem and replaces a settled journal.
+    if journal is not None and (not journal["settled"] or (args.math_problem_id is not None and args.publish)):
+        _require_current_origin(journal)
     if journal is not None and not journal["settled"] and _settle_problem_deposit(journal, may_publish=True):
         print(f"This run completed the earlier deposit for problem {journal['math_problem']['problem_id']},"
               " which the earlier run started with its own approval. It deposited nothing new."
@@ -799,6 +803,27 @@ def _is_attachment_outstanding(journal: dict) -> bool:
             and (not journal["settled"] or "doi" in journal))
 
 
+def _require_current_origin(journal: dict) -> None:
+    """A journal drives its exactory requests to the origin that it records, and those requests carry
+    the API key of the user. A workspace can come from someone else, so the recorded origin is used
+    only when it is the origin that the environment of this run names (the one origin rule of
+    research_harness.exactory_api). Otherwise the command stops before it sends anything, and the
+    journal stays as it is. A journal with no attachment left to do drives no request."""
+    problem_target = journal["math_problem"]
+    current_origin = read_api_base_url()
+    if not _is_attachment_outstanding(journal) or problem_target["api_url"] == current_origin:
+        return
+    removal_advice = ""
+    if not journal["settled"]:
+        removal_advice = " " + _build_journal_removal_advice(_name_journal_deposition(journal))
+    _exit_with_error(f"The recorded deposit for problem {problem_target['problem_id']} names the exactory origin"
+                     f" {problem_target['api_url']}. This run uses the exactory origin {current_origin}."
+                     " The recorded origin would receive your API key."
+                     f" Nothing was sent, and {_PROBLEM_DEPOSIT_JOURNAL_PATH} stays as it is."
+                     f" If {problem_target['api_url']} is your own exactory origin, run the command again with"
+                     f" EXACTORY_API_URL set to {problem_target['api_url']}.{removal_advice}")
+
+
 def _build_attach_command_msg(journal: dict) -> str:
     """The command that attaches the record of a settled journal by hand."""
     problem_target = journal["math_problem"]
@@ -889,7 +914,8 @@ def _mark_journal_settled(journal: dict, record: dict) -> dict:
 
 def _attach_recorded_record(journal: dict) -> None:
     """After publication (design 2026-10-12 §17): a published production record attaches to its
-    problem through the recorded origin, and the journal is marked attached. Attaching the same
+    problem through the recorded origin, which is the origin of this run (_require_current_origin has
+    checked it), and the journal is marked attached. Attaching the same
     paper again changes nothing (design 2026-10-12 §12), so a retry after a lost mark is safe. A
     failed attachment leaves the journal settled and unattached, and attach-problem retries the
     attachment alone: it reads no Zenodo token and sends no Zenodo request."""
@@ -993,13 +1019,15 @@ def _build_nothing_to_attach_msg(journal: dict) -> str:
 @_hold_deposit_lock()
 def _run_attach_problem(args: argparse.Namespace) -> None:
     """Settle the recorded deposit for a problem and attach its record, and only that (design
-    2026-10-12 §17). The origin, the problem, and the operation come from the journal, whatever
-    the current draft or environment says. This command never publishes. A settled journal
-    already holds the record, so its attachment reads no Zenodo token and sends no Zenodo request."""
+    2026-10-12 §17). The problem and the operation come from the journal, whatever the current draft
+    says, and the origin of the journal must be the origin of this run. This command never
+    publishes. A settled journal already holds the record, so its attachment reads no Zenodo token
+    and sends no Zenodo request."""
     journal = _read_problem_journal("Nothing was attached.")
     if journal is None:
         _exit_with_error(f"{_PROBLEM_DEPOSIT_JOURNAL_PATH} does not exist here. Run attach-problem from the"
                          " workspace root of a deposit made with --math-problem.")
+    _require_current_origin(journal)
     if not journal["settled"]:
         _settle_problem_deposit(journal, may_publish=False)
     elif _is_attachment_pending(journal):

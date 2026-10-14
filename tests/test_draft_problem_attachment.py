@@ -34,6 +34,7 @@ from test_draft import (
 )
 
 _PROBLEM_ID = "656c336e-e892-4c47-80d2-a71d022f4116"
+_OTHER_PROBLEM_ID = "11111111-2222-4333-8444-555555555555"
 _PROBLEM_TARGET = {"problem_id": _PROBLEM_ID, "api_url": "https://api.test"}
 _PRODUCTION_PUBLISH = ["--production", "--publish", "--confirm-publish", "--creator", "Shiroshita, Ryosuke"]
 _PROBLEM_DEPOSIT = [*_PRODUCTION_PUBLISH, "--math-problem", _PROBLEM_ID]
@@ -208,10 +209,19 @@ class TestManagedDepositForAProblem(_DepositTestCase):
                          (True, False, "10.5281/zenodo.4242"))
         sent = len(self.fake_api.requests)
 
-        # A changed environment does not move the attachment: the recorded origin decides. The journal
-        # holds the record, so the retry reads no Zenodo token and sends no Zenodo request.
+        # Another environment does not move the attachment: the recorded origin must be the origin of
+        # the run, so the command stops before it sends anything, and the journal stays.
         os.environ["EXACTORY_API_URL"] = "https://elsewhere.test"
         del os.environ["ZENODO_TOKEN"], os.environ["ZENODO_SANDBOX_TOKEN"]
+        stopped = _run_draft_command(["attach-problem"], 1, self)
+        self.assertIn("names the exactory origin https://api.test. This run uses the exactory origin"
+                      " https://elsewhere.test.", stopped)
+        self.assertEqual(len(self.exactory.links()), 1)
+        self.assertFalse(_read_journal(self.workspace_dir)["attached"])
+
+        # On the recorded origin, the journal holds the record, so the retry reads no Zenodo token and
+        # sends no Zenodo request.
+        os.environ["EXACTORY_API_URL"] = "https://api.test"
         _run_draft_command(["attach-problem"], None, self)
 
         self.assertEqual(len(self.fake_api.requests), sent)
@@ -240,13 +250,11 @@ class TestManagedDepositForAProblem(_DepositTestCase):
         self.assertEqual(self._requested(), [("GET", "https://zenodo.org/api/deposit/depositions/4242")])
         self.assertEqual(len(self.exactory.links()), 1)
 
-    def test_a_rerun_settles_the_recorded_intent_whatever_the_draft_and_the_origin_say(self) -> None:
+    def test_a_rerun_settles_the_recorded_intent_whatever_the_draft_says(self) -> None:
         uploaded = self._lose_the_publish_response()
-        # The draft changes and the environment names another application. Without the
-        # journal, the changed draft sends the rerun down the direct path, which creates and
-        # publishes a second record.
+        # The draft changes. Without the journal, the changed draft sends the rerun down the direct
+        # path, which creates and publishes a second record.
         (self.workspace_dir / "draft" / "references.bib").unlink()
-        os.environ["EXACTORY_API_URL"] = "https://elsewhere.test"
         self._answer_with_the_published_record(uploaded)
 
         self._deposit(_PROBLEM_DEPOSIT)
@@ -302,11 +310,9 @@ class TestManagedDepositForAProblem(_DepositTestCase):
 
     def test_changed_inputs_after_attach_problem_found_the_deposition_unpublished_select_no_new_operation(self) -> None:
         intent_id = self._find_the_deposition_unpublished_with_attach_problem(self._lose_the_publish_response())
-        # The draft changes and the environment names another application. A released journal
-        # would let this run select another operation: the changed draft takes the direct path,
-        # which creates and publishes a second record.
+        # The draft changes. A released journal would let this run select another operation: the
+        # changed draft takes the direct path, which creates and publishes a second record.
         (self.workspace_dir / "draft" / "references.bib").unlink()
-        os.environ["EXACTORY_API_URL"] = "https://elsewhere.test"
 
         output = self._deposit(_PROBLEM_DEPOSIT, expected_exit_code=1)
 
@@ -352,10 +358,9 @@ class TestManagedDepositForAProblem(_DepositTestCase):
         self.assertIn(f"{_JOURNAL_PATH_TEXT} stays as the recovery record of this deposit.", refused)
         self.assertFalse(_read_journal(self.workspace_dir)["settled"])
         self.assertEqual(self.fake_api.requests, [])
-        # The environment names another application, so the released run selects another
-        # operation. A reconcile that published the recorded intent while this run released its
-        # journal left two published records.
-        os.environ["EXACTORY_API_URL"] = "https://elsewhere.test"
+        # Another problem makes another deposit, so the released run selects another operation. A
+        # reconcile that published the recorded intent while this run released its journal left two
+        # published records.
         reconcile_outputs, journal_writes = [], []
 
         def spy_on_the_journal_writes(write_projection):
@@ -367,7 +372,7 @@ class TestManagedDepositForAProblem(_DepositTestCase):
         with unittest.mock.patch.object(_draft, "json_projection", _interleave_before_the_journal_release(
                 spy_on_the_journal_writes(_draft.json_projection),
                 lambda: reconcile_outputs.append(_run_draft_command(["reconcile", intent_id], 1, self)))):
-            self._deposit(_PROBLEM_DEPOSIT)
+            self._deposit([*_PRODUCTION_PUBLISH, "--math-problem", _OTHER_PROBLEM_ID])
 
         # The release marks the unclaimed operation settled with no DOI: it never published a record.
         self.assertEqual(journal_writes[0], {"operation_id": intent_id, "path": "managed", "environment": "production",
@@ -378,7 +383,8 @@ class TestManagedDepositForAProblem(_DepositTestCase):
         records = Store(self.workspace_dir).snapshot()["records"]
         self.assertNotEqual(records["remote_intent"][intent_id]["status"], "complete")
         self.assertNotIn(intent_id, records["publication_receipt"])
-        self.assertEqual([url for _, url in self.exactory.links()], ["https://elsewhere.test"])
+        self.assertEqual(self.exactory.links(), [(["link-problem-paper", _OTHER_PROBLEM_ID, "--identifier",
+                                                   "10.5281/zenodo.4242"], "https://api.test")])
 
     def test_reconcile_from_a_subdirectory_finishes_the_recorded_intent(self) -> None:
         intent_id = self._stop_before_the_publish_claim()
@@ -533,7 +539,6 @@ class TestDirectDepositForAProblem(_PlainWorkspaceDepositTestCase):
         self.assertEqual((journal["settled"], journal["attached"], journal["doi"]),
                          (True, False, "10.5281/zenodo.4242"))
         sent = len(self.fake_api.requests)
-        os.environ["EXACTORY_API_URL"] = "https://elsewhere.test"
         del os.environ["ZENODO_TOKEN"], os.environ["ZENODO_SANDBOX_TOKEN"]
 
         _run_draft_command(["attach-problem"], None, self)
@@ -865,6 +870,17 @@ class _PublishedWithoutDoiZenodoApi(_FakeZenodoApi):
         return super().__call__(request)
 
 
+class _PublishedForeignDepositionZenodoApi(_FakeZenodoApi):
+    """Answers like the fake, except that deposition 4000 of the foreign journal reads back published."""
+
+    def __call__(self, request):
+        if request.get_method() == "GET" and request.full_url.endswith("/deposit/depositions/4000"):
+            self.requests.append(request)
+            return {"id": 4000, "submitted": True, "doi": "10.5072/zenodo.4000",
+                    "links": {"record_html": "https://sandbox.zenodo.org/records/4000"}}
+        return super().__call__(request)
+
+
 class _ScreenAtPublishZenodoApi(_FakeZenodoApi):
     """Answers like the fake, and keeps what the command had printed on stderr when the publish
     request went out: what the user has read before a record becomes permanent."""
@@ -922,16 +938,16 @@ class TestProblemDepositJournalStates(_PlainWorkspaceDepositTestCase):
         self.assertNotIn("link-problem-paper", output)
 
     def test_a_deposit_for_a_problem_first_names_the_command_that_attaches_the_earlier_record(self) -> None:
-        earlier_problem = {"problem_id": "11111111-2222-4333-8444-555555555555", "api_url": "https://earlier.test"}
+        earlier_problem = {"problem_id": _OTHER_PROBLEM_ID, "api_url": "https://api.test"}
         self._record_journal(dict(_UNATTACHED_JOURNAL, math_problem=earlier_problem))
         self._answer_with(_ScreenAtPublishZenodoApi())
 
         self._deposit(_PROBLEM_DEPOSIT)
 
         # The user has read the command before the new record is published, and the journal moved on.
-        command = (f"EXACTORY_API_URL=https://earlier.test exactory link-problem-paper"
-                   f" 11111111-2222-4333-8444-555555555555 --identifier {_EARLIER_DOI}")
-        self.assertIn("The earlier deposit for problem 11111111-2222-4333-8444-555555555555 is published as"
+        command = (f"EXACTORY_API_URL=https://api.test exactory link-problem-paper"
+                   f" {_OTHER_PROBLEM_ID} --identifier {_EARLIER_DOI}")
+        self.assertIn(f"The earlier deposit for problem {_OTHER_PROBLEM_ID} is published as"
                       f" {_EARLIER_DOI}, and its record is not attached yet. To attach it, run this command:\n{command}",
                       self.fake_api.read_before_publish)
         journal = _read_journal(self.workspace_dir)
@@ -958,21 +974,20 @@ class TestProblemDepositJournalStates(_PlainWorkspaceDepositTestCase):
         self.assertNotIn("To attach it, run this command", output)
         self.assertEqual(_read_journal(self.workspace_dir), _UNATTACHED_JOURNAL)
 
-    def test_attach_problem_attaches_a_settled_record_alone_through_the_recorded_origin(self) -> None:
-        earlier = dict(_UNATTACHED_JOURNAL, math_problem={"problem_id": "11111111-2222-4333-8444-555555555555",
+    def test_attach_problem_attaches_a_settled_record_alone_when_the_run_names_the_recorded_origin(self) -> None:
+        earlier = dict(_UNATTACHED_JOURNAL, math_problem={"problem_id": _OTHER_PROBLEM_ID,
                                                           "api_url": "https://earlier.test"})
         self._record_journal(earlier)
-        os.environ["EXACTORY_API_URL"] = "https://elsewhere.test"
+        os.environ["EXACTORY_API_URL"] = "https://earlier.test"
         del os.environ["ZENODO_TOKEN"], os.environ["ZENODO_SANDBOX_TOKEN"]
 
         output = _run_draft_command(["attach-problem"], None, self)
 
-        self.assertEqual(self.exactory.calls, [(["link-problem-paper", "11111111-2222-4333-8444-555555555555",
+        self.assertEqual(self.exactory.calls, [(["link-problem-paper", _OTHER_PROBLEM_ID,
                                                  "--identifier", _EARLIER_DOI], "https://earlier.test")])
         self.assertEqual(self.fake_api.requests, [])
         self.assertEqual(_read_journal(self.workspace_dir), dict(earlier, attached=True))
-        self.assertIn(f"Record {_EARLIER_DOI} is attached to https://earlier.test/math/11111111-2222-4333-8444-555555555555.",
-                      output)
+        self.assertIn(f"Record {_EARLIER_DOI} is attached to https://earlier.test/math/{_OTHER_PROBLEM_ID}.", output)
 
     def test_attach_problem_has_nothing_to_attach_in_the_other_settled_states(self) -> None:
         for journal, reason in (
@@ -988,6 +1003,75 @@ class TestProblemDepositJournalStates(_PlainWorkspaceDepositTestCase):
                 self.assertEqual(_read_journal(self.workspace_dir), journal)
         self.assertEqual(self.exactory.calls, [])
         self.assertEqual(self.fake_api.requests, [])
+
+    def _at_another_origin(self, journal: dict) -> dict:
+        return dict(journal, math_problem={"problem_id": _OTHER_PROBLEM_ID, "api_url": "https://recorded.test"})
+
+    def _assert_stopped_before_sending_anything(self, output: str, journal: dict, current_origin: str = "https://api.test") -> None:
+        self.assertIn(f"The recorded deposit for problem {_OTHER_PROBLEM_ID} names the exactory origin"
+                      f" https://recorded.test. This run uses the exactory origin {current_origin}. The recorded origin"
+                      f" would receive your API key. Nothing was sent, and {_JOURNAL_PATH_TEXT} stays as it is. If"
+                      " https://recorded.test is your own exactory origin, run the command again with EXACTORY_API_URL"
+                      " set to https://recorded.test.", output)
+        # An unsettled journal may hold an unpublished deposition, so only its message gives the removal rule.
+        self.assertEqual(_REMOVAL_RULE in output, not journal["settled"])
+        self.assertEqual(self.fake_api.requests, [])
+        self.assertEqual(self.exactory.calls, [])
+        self.assertEqual(_read_journal(self.workspace_dir), journal)
+
+    def test_a_journal_at_another_origin_sends_nothing_from_attach_problem_or_a_deposit_that_uses_it(self) -> None:
+        deposit = ["deposit", "--abstract-file", "draft/abstract.txt"]
+        for label, journal, argv in (
+                ("unsettled", self._at_another_origin(_OTHER_JOURNAL), ["attach-problem"]),
+                ("unsettled", self._at_another_origin(_OTHER_JOURNAL), [*deposit, *_PROBLEM_DEPOSIT]),
+                ("unsettled", self._at_another_origin(_OTHER_JOURNAL), [*deposit, *_PRODUCTION_PUBLISH]),
+                ("unattached", self._at_another_origin(_UNATTACHED_JOURNAL), ["attach-problem"]),
+                ("unattached", self._at_another_origin(_UNATTACHED_JOURNAL), [*deposit, *_PROBLEM_DEPOSIT])):
+            with self.subTest(journal=label, command=" ".join(argv[:1] + argv[-2:])):
+                self._record_journal(journal)
+
+                output = _run_draft_command(argv, 1, self)
+
+                self._assert_stopped_before_sending_anything(output, journal)
+
+    def test_the_current_origin_is_the_default_origin_when_the_environment_names_none(self) -> None:
+        del os.environ["EXACTORY_API_URL"]
+        journal = self._at_another_origin(_UNATTACHED_JOURNAL)
+        self._record_journal(journal)
+
+        output = _run_draft_command(["attach-problem"], 1, self)
+
+        self._assert_stopped_before_sending_anything(output, journal, "https://www.exactory.ai")
+
+    def test_a_journal_at_another_origin_does_not_stop_what_it_does_not_drive(self) -> None:
+        unattached = self._at_another_origin(_UNATTACHED_JOURNAL)
+        self._record_journal(unattached)
+        # A deposit for no problem never uses a settled journal, and a draft replaces nothing.
+        self._deposit(_PRODUCTION_PUBLISH)
+        self._deposit(["--production", "--creator", "Shiroshita, Ryosuke", "--math-problem", _PROBLEM_ID])
+        self.assertEqual(_count_publishes(self.fake_api), 1)
+        self.assertEqual(_read_journal(self.workspace_dir), unattached)
+        # A journal with nothing left to attach drives no request, whatever origin it records.
+        for label, journal in (("attached", self._at_another_origin(_ATTACHED_JOURNAL)),
+                               ("sandbox", self._at_another_origin(_SANDBOX_JOURNAL)),
+                               ("released", self._at_another_origin(_RELEASED_JOURNAL))):
+            with self.subTest(journal=label):
+                self._record_journal(journal)
+                output = _run_draft_command(["attach-problem"], None, self)
+                self.assertIn("Nothing was changed.", output)
+                self.assertEqual(_read_journal(self.workspace_dir), journal)
+                self._deposit(_PROBLEM_DEPOSIT)
+                self.assertEqual(_read_journal(self.workspace_dir)["math_problem"], _PROBLEM_TARGET)
+        # An unsettled sandbox deposit is never attached, so its settle sends nothing to the recorded origin.
+        self.exactory.calls.clear()
+        sandbox = dict(self._at_another_origin(_OTHER_JOURNAL), environment="sandbox",
+                       base_url="https://sandbox.zenodo.org/api")
+        self._record_journal(sandbox)
+        self._answer_with(_PublishedForeignDepositionZenodoApi())
+        _run_draft_command(["attach-problem"], None, self)
+        self.assertEqual(self.exactory.calls, [])
+        journal = _read_journal(self.workspace_dir)
+        self.assertEqual((journal["settled"], journal["attached"], journal["doi"]), (True, False, "10.5072/zenodo.4000"))
 
     def test_a_sandbox_publish_settles_the_journal_and_attaches_nothing(self) -> None:
         output = self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke", "--math-problem", _PROBLEM_ID])
