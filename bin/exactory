@@ -18,6 +18,7 @@ import os
 import re
 import socket
 import sys
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -40,6 +41,22 @@ _BARE_ARXIV_ID_RE = re.compile(r"(\d{4}\.\d{4,5})(?:v\d+)?")
 # The server rejects more than this; the local check turns that into a message the
 # user reads before a request goes out. The server stays the authority.
 _MAX_DECLARED_CHALLENGES = 3
+# The math section (design 2026-10-12 §17). The server rejects more than these; the local
+# checks turn that into a message the user reads before a request goes out.
+_MAX_DECLARED_MATH_PROBLEMS = 3
+_MAX_CREATION_PAPERS = 10
+_MAX_CREATION_GITHUB_LINKS = 10
+_ACCOUNT_PAGE_PATH = "/account"
+# The report kinds of the section (design 2026-10-12 §19); the server owns the vocabulary.
+_MATH_REPORT_KINDS = ("math_problem", "math_status_event", "math_formal_statement", "math_proof",
+                      "math_lean_check", "math_post", "math_problem_paper", "math_github_link")
+# Every posted link mirrors the server's link rules (design 2026-10-12 §12): at most 500 UTF-16
+# code units, checked first, and no character of the Unicode categories Cc, Cf, or Cs (control
+# characters, invisible characters, unpaired surrogates). The server stays the authority; an
+# older Python knows a few late-added format characters fewer than the server does.
+_MAX_LINK_UTF16_UNITS = 500
+_NON_TEXT_CHARACTER_CATEGORIES = ("Cc", "Cf", "Cs")
+_GITHUB_PAGE_URL_PREFIX = "https://github.com/"
 _CHECK_COMMAND_PATH = Path(__file__).with_name("exactory-check")
 
 # The release version has one definition: the plugin manifest. Deriving the
@@ -121,6 +138,11 @@ def _save_api_key(api_key: str, email: str, label: str) -> Path:
     return path
 
 
+def _read_api_base_url() -> str:
+    """The application origin every command talks to: EXACTORY_API_URL, or the default."""
+    return os.environ.get("EXACTORY_API_URL", _DEFAULT_API_URL).rstrip("/")
+
+
 def _send_request(method: str, path: str, body: dict | None = None, *,
                   authenticated: bool = True,
                   allow_missing: bool = False,
@@ -133,7 +155,7 @@ def _send_request(method: str, path: str, body: dict | None = None, *,
             _exit_with_error(_NO_KEY_ERR_MSG, 2)
         headers["Authorization"] = f"Bearer {api_key}"
 
-    base_url = os.environ.get("EXACTORY_API_URL", _DEFAULT_API_URL).rstrip("/")
+    base_url = _read_api_base_url()
     request = urllib.request.Request(
         base_url + path,
         method=method,
@@ -174,6 +196,22 @@ def _describe_http_error(status: int, detail: str, error_messages: dict[int, str
 def _print_json(payload: dict) -> None:
     json.dump(payload, sys.stdout, indent=2)
     print()
+
+
+def _build_api_path(*segments: str) -> str:
+    """An /api/v1 path whose every segment is percent-encoded, ids included."""
+    return "/api/v1/" + "/".join(urllib.parse.quote(segment, safe="") for segment in segments)
+
+
+def _require_linked_orcid() -> None:
+    """Writes that the math section gates on ORCID need a linked iD now (design 2026-10-12 §3).
+    The server stays the authority; this read stops before the write and names the page that
+    links an iD, which the server's generic 403 cannot."""
+    me, _ = _send_request("GET", "/api/v1/me")
+    if not me.get("orcidId"):
+        _exit_with_error("This operation needs an ORCID iD linked to your exactory account."
+                         f" Link one at {_read_api_base_url()}{_ACCOUNT_PAGE_PATH}."
+                         " Then run the command again.")
 
 
 def _run_submit(args: argparse.Namespace) -> None:
@@ -400,7 +438,7 @@ def _require_utf16_bounds(field_name: str, value: str,
 
 
 def _read_inline_or_file_text(inline: str | None, path: str | None) -> str:
-    """One challenge field arrives inline or as a file; argparse enforces that
+    """One text field arrives inline or as a file; argparse enforces that
     exactly one of the pair is set."""
     if inline is not None:
         return inline
@@ -412,14 +450,14 @@ def _read_inline_or_file_text(inline: str | None, path: str | None) -> str:
     raise AssertionError("unreachable")
 
 
-def _is_challenge_locator(locator: str) -> bool:
+def _is_citation_locator(locator: str) -> bool:
     """A locator an agent can resolve: a DOI, an arXiv id, or an https URL."""
     return bool(_DOI_LOCATOR_RE.fullmatch(locator)
                 or _ARXIV_LOCATOR_RE.fullmatch(locator)
                 or (locator.startswith("https://") and len(locator) > len("https://")))
 
 
-def _read_challenge_citations_file(path: str) -> list[dict]:
+def _read_citations_file(path: str) -> list[dict]:
     """Parse the citations file: a JSON array of {citation, locator} entries."""
     try:
         with open(path, encoding="utf-8") as handle:
@@ -453,7 +491,7 @@ def _read_challenge_citations_file(path: str) -> list[dict]:
         if _count_utf16_units(locator) > 500:
             _exit_with_error(f"The locator of entry {index} is over the limit of"
                              " 500 characters. Make it shorter.")
-        if not _is_challenge_locator(locator):
+        if not _is_citation_locator(locator):
             _exit_with_error(f"The locator of entry {index} is not a DOI, an arXiv"
                              " id, or an https URL. Correct it.")
         parsed.append({"citation": citation, "locator": locator})
@@ -502,7 +540,7 @@ def _run_post_challenge(args: argparse.Namespace) -> None:
             _read_inline_or_file_text(args.resolution_criteria,
                                       args.resolution_criteria_file),
             50, 5000),
-        "citations": _read_challenge_citations_file(args.citations_file),
+        "citations": _read_citations_file(args.citations_file),
     }
     if args.parent_id:
         body["parentId"] = args.parent_id
@@ -551,6 +589,120 @@ def _run_report_challenge(args: argparse.Namespace) -> None:
     _print_json(payload)
 
 
+def _require_math_area(area: str) -> str:
+    """The area is one math.* subject class; the server checks the exact code and its casing."""
+    if not area.lower().startswith("math.") or area.strip() != area:
+        _exit_with_error(f"The area {area} is not a math.* subject class. Give one such as math.NT or math.CO.")
+    return area
+
+
+def _require_posted_link(kind: str, url: str) -> None:
+    """The rules every link kind meets before its own check. The message names the kind and never
+    prints the value, which can be long or hold control characters."""
+    units = _count_utf16_units(url)
+    if units > _MAX_LINK_UTF16_UNITS:
+        _exit_with_error(f"The {kind} is {units} characters long. The limit is {_MAX_LINK_UTF16_UNITS}.")
+    if any(unicodedata.category(character) in _NON_TEXT_CHARACTER_CATEGORIES for character in url):
+        _exit_with_error(f"The {kind} contains a control character, an invisible character, or an unpaired"
+                         " surrogate. Give the link as plain text.")
+
+
+def _require_github_context_url(url: str) -> str:
+    """A context link is an https://github.com/ page; the poster gives the exact URL (design
+    2026-10-12 §12, decision 14). It needs the literal prefix, no whitespace, and a path after the
+    host."""
+    _require_posted_link("context link", url)
+    if not url.startswith(_GITHUB_PAGE_URL_PREFIX) or re.search(r"\s", url) \
+            or url[len(_GITHUB_PAGE_URL_PREFIX):][:1] in ("", "?", "#"):
+        _exit_with_error(f"{url} is not a context link. Give an https://github.com/ URL that names a page.")
+    return url
+
+
+def _run_me(args: argparse.Namespace) -> None:
+    payload, _ = _send_request("GET", "/api/v1/me")
+    _print_json(payload)
+
+
+def _run_problems(args: argparse.Namespace) -> None:
+    query = {"limit": str(args.limit)}
+    for key, value in (("q", args.query), ("status", args.status), ("area", args.area),
+                       ("sort", args.sort), ("cursor", args.cursor)):
+        if value:
+            query[key] = value
+    for key, enabled in (("hasFormalStatement", args.has_formal_statement), ("hasProof", args.has_proof),
+                         ("hasPassingLeanCheck", args.has_passing_lean_check)):
+        if enabled:
+            query[key] = "true"
+    payload, _ = _send_request("GET", "/api/v1/math-problems?" + urllib.parse.urlencode(query))
+    _print_json(payload)
+
+
+def _run_problem(args: argparse.Namespace) -> None:
+    payload, _ = _send_request("GET", _build_api_path("math-problems", args.problem_id))
+    _print_json(payload)
+
+
+def _run_problem_history(args: argparse.Namespace) -> None:
+    query = {"limit": str(args.limit)}
+    if args.cursor:
+        query["cursor"] = args.cursor
+    payload, _ = _send_request(
+        "GET", _build_api_path("math-problems", args.problem_id, "status-events") + "?" + urllib.parse.urlencode(query))
+    _print_json(payload)
+
+
+def _run_post_problem(args: argparse.Namespace) -> None:
+    body = {
+        "title": _require_utf16_bounds("title", args.title, 8, 200),
+        "area": _require_math_area(args.area),
+        "statement": _require_utf16_bounds(
+            "statement", _read_inline_or_file_text(args.statement, args.statement_file), 50, 20000),
+        "motivation": _require_utf16_bounds(
+            "motivation", _read_inline_or_file_text(args.motivation, args.motivation_file), 100, 10000),
+        "currentState": _require_utf16_bounds(
+            "current state", _read_inline_or_file_text(args.current_state, args.current_state_file), 100, 10000),
+        "resolutionCriteria": _require_utf16_bounds(
+            "resolution criteria",
+            _read_inline_or_file_text(args.resolution_criteria, args.resolution_criteria_file), 50, 5000),
+        "citations": _read_citations_file(args.citations_file),
+    }
+    if args.paper:
+        if len(args.paper) > _MAX_CREATION_PAPERS:
+            _exit_with_error(f"The command names {len(args.paper)} papers. The limit is"
+                             f" {_MAX_CREATION_PAPERS}. Remove some, and attach the rest with link-problem-paper.")
+        body["paperIdentifiers"] = args.paper
+    if args.github_link:
+        if len(args.github_link) > _MAX_CREATION_GITHUB_LINKS:
+            _exit_with_error(f"The command names {len(args.github_link)} context links. The limit is"
+                             f" {_MAX_CREATION_GITHUB_LINKS}. Remove some, and attach the rest with link-problem-github.")
+        body["githubLinks"] = [
+            {"url": _require_github_context_url(url), "label": _require_utf16_bounds("link label", label, 1, 100)}
+            for url, label in args.github_link
+        ]
+    _require_linked_orcid()
+    payload, _ = _send_request("POST", "/api/v1/math-problems", body)
+    _print_json(payload)
+
+
+def _run_vote_problem(args: argparse.Namespace) -> None:
+    path = _build_api_path("math-problems", args.problem_id, "vote")
+    if args.value == 0:
+        payload, _ = _send_request("DELETE", path)
+    else:
+        payload, _ = _send_request("PUT", path, {"value": args.value})
+    _print_json(payload)
+
+
+def _run_report_math(args: argparse.Namespace) -> None:
+    body = {"subjectKind": args.subject_kind, "subjectId": args.subject_id}
+    if args.note is not None:
+        body["note"] = _require_utf16_bounds("note", args.note, 1, 1000)
+    payload, status = _send_request("POST", "/api/v1/reports", body)
+    if status == 200:
+        print("The server returned the existing report for this content.", file=sys.stderr)
+    _print_json(payload)
+
+
 def _run_login(args: argparse.Namespace) -> None:
     if args.code is None:
         payload, _ = _send_request("POST", "/api/v1/email-codes", {"email": args.email},
@@ -590,8 +742,7 @@ def _run_whoami(args: argparse.Namespace) -> None:
 
 
 def _run_open_signup(args: argparse.Namespace) -> None:
-    base_url = os.environ.get("EXACTORY_API_URL", _DEFAULT_API_URL).rstrip("/")
-    url = base_url + "/signup"
+    url = _read_api_base_url() + "/signup"
     try:
         opened = webbrowser.open(url)
     except webbrowser.Error:
@@ -840,6 +991,77 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Why this challenge violates the rules, for the moderators only,"
              " 1-1000 characters.")
     report_challenge.set_defaults(handler=_run_report_challenge)
+
+    me = commands.add_parser("me", allow_abbrev=False,
+                             help="Show your display name and your linked ORCID iD.")
+    me.set_defaults(handler=_run_me)
+
+    problems = commands.add_parser("problems", allow_abbrev=False,
+                                   help="List and search the open mathematical problems.")
+    problems.add_argument("--query", help="Full-text search over title, statement, motivation, and current state.")
+    problems.add_argument("--status", choices=["open", "proved", "disproved", "all"],
+                          help="Only problems with this status. The server default is open.")
+    problems.add_argument("--area", help="Only problems in this math.* subject class, for example math.NT.")
+    problems.add_argument("--has-formal-statement", action="store_true", dest="has_formal_statement",
+                          help="Only problems with a standing formal statement.")
+    problems.add_argument("--has-proof", action="store_true", dest="has_proof",
+                          help="Only problems with a standing, current proof.")
+    problems.add_argument("--has-passing-lean-check", action="store_true", dest="has_passing_lean_check",
+                          help="Only problems whose current proof against the current formal statement has a"
+                               " counted pass report.")
+    problems.add_argument("--sort", choices=["relevance", "top", "new"],
+                          help="Result order. Default: relevance with --query, new without.")
+    problems.add_argument("--cursor", help="Opaque cursor from a previous page.")
+    problems.add_argument("--limit", type=int, default=25)
+    problems.set_defaults(handler=_run_problems)
+
+    problem = commands.add_parser("problem", allow_abbrev=False,
+                                  help="Show one problem with its formal statements, links, and latest status.")
+    problem.add_argument("problem_id")
+    problem.set_defaults(handler=_run_problem)
+
+    problem_history = commands.add_parser("problem-history", allow_abbrev=False,
+                                          help="Show a problem's status declarations, newest first.")
+    problem_history.add_argument("problem_id")
+    problem_history.add_argument("--cursor", help="Opaque cursor from a previous page.")
+    problem_history.add_argument("--limit", type=int, default=50)
+    problem_history.set_defaults(handler=_run_problem_history)
+
+    post_problem = commands.add_parser(
+        "post-problem", allow_abbrev=False,
+        help="Post an open mathematical problem. Needs a linked ORCID iD. Check every citation locator first.")
+    post_problem.add_argument("--title", required=True, help="The problem title, 8-200 characters.")
+    post_problem.add_argument("--area", required=True, help="One math.* subject class, for example math.CO.")
+    for name, bounds in (("statement", "the precise problem in TeX, 50-20000"),
+                         ("motivation", "why a resolution matters, 100-10000"),
+                         ("current-state", "the prior work and why the problem is open, 100-10000"),
+                         ("resolution-criteria", "what a proof or a disproof must establish, 50-5000")):
+        group = post_problem.add_mutually_exclusive_group(required=True)
+        group.add_argument(f"--{name}", help=f"The {name.replace('-', ' ')}: {bounds} characters.")
+        group.add_argument(f"--{name}-file", help=f"A file with the {name.replace('-', ' ')}.")
+    post_problem.add_argument(
+        "--citations-file", required=True,
+        help='A JSON file with 1-50 {"citation", "locator"} objects. The locator is a DOI, an arXiv id,'
+             " or an https URL.")
+    post_problem.add_argument("--paper", action="append",
+                              help="A related paper: an arXiv id or a DOI. Repeat, at most 10.")
+    post_problem.add_argument("--github-link", action="append", nargs=2, metavar=("URL", "LABEL"),
+                              help="A GitHub context link and its label. Repeat, at most 10.")
+    post_problem.set_defaults(handler=_run_post_problem)
+
+    vote_problem = commands.add_parser("vote-problem", allow_abbrev=False,
+                                       help="Vote on a problem, or clear your vote.")
+    vote_problem.add_argument("problem_id")
+    vote_problem.add_argument("--value", type=int, choices=[1, -1, 0], required=True,
+                              help="1 votes up. -1 votes down. 0 clears your vote.")
+    vote_problem.set_defaults(handler=_run_vote_problem)
+
+    report_math = commands.add_parser("report-math", allow_abbrev=False,
+                                      help="Report content of the math section that violates the platform rules.")
+    report_math.add_argument("subject_kind", choices=_MATH_REPORT_KINDS)
+    report_math.add_argument("subject_id")
+    report_math.add_argument("--note", help="Why the content violates the rules, for the moderators only, 1-1000 characters.")
+    report_math.set_defaults(handler=_run_report_math)
 
     return parser
 
