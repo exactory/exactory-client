@@ -446,5 +446,391 @@ class TestReportMath(_MathCliTestCase):
         self.assertEqual(self.sent, [])
 
 
+_MOVED_PATH_REASON = 'has a "." or ".." path step, a backslash, or an encoded slash'
+
+
+class TestFormalStatementsStatusAndLinks(_MathCliTestCase):
+    def test_add_formal_statement_sends_the_exact_link_and_the_targets(self) -> None:
+        url = f"https://github.com/o/r/blob/{_SHA}/Challenge.lean#L3-L9"
+        self.run_cli(["add-formal-statement", _PROBLEM_ID, "--lean-url", url, "--proof-target", "statement",
+                      "--disproof-target", "statement_false", "--note", "Lean v4.22.0, Mathlib at 1a2b3c4."])
+        self.assertEqual(self.read_sent_body("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/formal-statements"), {
+            "leanUrl": url, "proofTargets": ["statement"], "disproofTargets": ["statement_false"],
+            "note": "Lean v4.22.0, Mathlib at 1a2b3c4.",
+        })
+
+    def test_a_branch_link_is_refused_before_any_request(self) -> None:
+        _, stderr_text = self.run_cli(["add-formal-statement", _PROBLEM_ID, "--lean-url",
+                                       "https://github.com/o/r/blob/main/Challenge.lean", "--proof-target", "statement"],
+                                      expected_exit_code=1)
+        self.assertIn("full 40-character commit SHA", stderr_text)
+        self.assertEqual(self.sent, [])
+
+    def test_declare_status_names_the_resolving_proof_for_a_resolution(self) -> None:
+        self.run_cli(["declare-status", _PROBLEM_ID, "--status", "proved", "--resolving-proof", _PROOF_ID,
+                      "--note", "Proved by the cited proof."])
+        self.assertEqual(self.read_sent_body("PATCH", f"/api/v1/math-problems/{_PROBLEM_ID}"),
+                         {"status": "proved", "resolvingProofId": _PROOF_ID, "note": "Proved by the cited proof."})
+        self.run_cli(["declare-status", _PROBLEM_ID, "--status", "proved", "--note", "x"], expected_exit_code=1)
+        self.run_cli(["declare-status", _PROBLEM_ID, "--status", "open", "--resolving-proof", _PROOF_ID, "--note", "x"],
+                     expected_exit_code=1)
+
+    def test_links_go_to_their_routes_after_the_preflight(self) -> None:
+        self.run_cli(["link-problem-paper", _PROBLEM_ID, "--identifier", "2609.97001v3"])
+        self.run_cli(["link-problem-github", _PROBLEM_ID, "--url", "https://github.com/o/r/blob/main/README.md#usage",
+                      "--label", "Usage"])
+        self.assertEqual(self.list_sent_requests(), [
+            ("GET", "/api/v1/me"), ("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/papers"),
+            ("GET", "/api/v1/me"), ("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/github-links"),
+        ])
+        self.assertEqual(self.read_sent_body("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/papers"), {"identifier": "2609.97001v3"})
+        self.assertEqual(self.read_sent_body("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/github-links"),
+                         {"url": "https://github.com/o/r/blob/main/README.md#usage", "label": "Usage"})
+
+    def test_lean_source_links_meet_the_link_rules_before_any_request(self) -> None:
+        pinned = f"https://github.com/o/r/blob/{_SHA}"
+        refused = [
+            (f"{pinned}/" + "a" * (500 - len(pinned)), "is 501 characters long"),
+            (f"{pinned}/Challenge.lean" + chr(0x1B), _NON_TEXT_REASON),
+            (f"{pinned}/Chall" + chr(0x202E) + "enge.lean", _NON_TEXT_REASON),
+            (f"{pinned}/Challenge.lean" + chr(0xDFFF), _NON_TEXT_REASON),
+            # A URL parser resolves each of these, so the commit-pinned link could name a branch.
+            (f"{pinned}/../../../../other/repo/blob/main/Challenge.lean", _MOVED_PATH_REASON),
+            (f"{pinned}/./Challenge.lean", _MOVED_PATH_REASON),
+            (f"{pinned}/%2E%2e/Challenge.lean", _MOVED_PATH_REASON),
+            (f"{pinned}/lib/.%2E#L3", _MOVED_PATH_REASON),
+            (f"{pinned}/lib/..", _MOVED_PATH_REASON),
+            (f"{pinned}/lib%2FChallenge.lean", _MOVED_PATH_REASON),
+            (f"{pinned}/lib%2fChallenge.lean", _MOVED_PATH_REASON),
+            (f"{pinned}/lib\\Challenge.lean", _MOVED_PATH_REASON),
+            (f"https://github.com/o/../blob/{_SHA}/Challenge.lean", _MOVED_PATH_REASON),
+        ]
+        for url, reason in refused:
+            with self.subTest(url=url):
+                _, stderr_text = self.run_cli(["add-formal-statement", _PROBLEM_ID, "--lean-url", url,
+                                               "--proof-target", "statement"], expected_exit_code=1)
+                self.assertIn(reason, stderr_text)
+        self.assertEqual(self.sent, [])
+
+    def test_names_made_of_dots_stay_valid_in_a_lean_source_link(self) -> None:
+        pinned = f"https://github.com/o/r/blob/{_SHA}"
+        for url in (f"{pinned}/.github/Challenge.lean", f"{pinned}/a..b/...lean", f"{pinned}/%2e%2e%2e.lean"):
+            with self.subTest(url=url):
+                self.run_cli(["add-formal-statement", _PROBLEM_ID, "--lean-url", url, "--proof-target", "statement"])
+                self.assertEqual(json.loads(self.sent[-1].data.decode())["leanUrl"], url)
+
+    def test_a_context_link_keeps_a_dot_step_and_refuses_an_invisible_character(self) -> None:
+        url = "https://github.com/o/r/tree/main/../docs"
+        self.run_cli(["link-problem-github", _PROBLEM_ID, "--url", url, "--label", "Docs"])
+        self.assertEqual(self.read_sent_body("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/github-links")["url"], url)
+        _, stderr_text = self.run_cli(["link-problem-github", _PROBLEM_ID, "--url", url + chr(0x200B), "--label", "Docs"],
+                                      expected_exit_code=1)
+        self.assertIn(_NON_TEXT_REASON, stderr_text)
+
+
+# The classes below cover the branches of the four commands that the cases above do not reach: the optional
+# fields, the file form and the bounds of the note, the limit of 20 targets, the shapes of a Lean source link
+# that the server accepts or refuses, the label bounds, the preflight, and the ids in the routes.
+
+_LEAN_SOURCE_URL = f"https://github.com/o/r/blob/{_SHA}/Challenge.lean"
+
+# One valid command line for each command that writes to a problem by its id and needs a linked ORCID iD:
+# the command, the HTTP method of its write, the route after the problem id, and its other options.
+_PROBLEM_WRITE_COMMANDS = (
+    ("add-formal-statement", "POST", "/formal-statements",
+     ("--lean-url", _LEAN_SOURCE_URL, "--proof-target", "statement")),
+    ("declare-status", "PATCH", "", ("--status", "open", "--note", "Reopened after the correction.")),
+    ("link-problem-paper", "POST", "/papers", ("--identifier", "2609.97001v3")),
+    ("link-problem-github", "POST", "/github-links", ("--url", "https://github.com/o/r", "--label", "Code")),
+)
+
+
+def _build_target_options(flag: str, count: int) -> list[str]:
+    return [arg for i in range(count) for arg in (flag, f"target_{i}")]
+
+
+class TestWritesToAProblem(_MathCliTestCase):
+    def test_each_write_reads_the_caller_state_once_and_then_writes(self) -> None:
+        for command, method, route_after_id, options in _PROBLEM_WRITE_COMMANDS:
+            with self.subTest(command=command):
+                self.sent.clear()
+                self.run_cli([command, _PROBLEM_ID, *options])
+                write_path = f"/api/v1/math-problems/{_PROBLEM_ID}{route_after_id}"
+                self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me"), (method, write_path)])
+
+    def test_each_write_prints_the_answer_of_the_server(self) -> None:
+        for command, method, route_after_id, options in _PROBLEM_WRITE_COMMANDS:
+            with self.subTest(command=command):
+                answer = {"id": f"answer of {command}"}
+                self.answers[(method, f"/api/v1/math-problems/{_PROBLEM_ID}{route_after_id}")] = (201, answer)
+                stdout_text, _ = self.run_cli([command, _PROBLEM_ID, *options])
+                self.assertEqual(json.loads(stdout_text), answer)
+
+    def test_without_an_orcid_each_write_stops_before_the_request_and_names_the_account_page(self) -> None:
+        self.me = {"displayName": "Ada", "orcidId": None}
+        for command, _, _, options in _PROBLEM_WRITE_COMMANDS:
+            with self.subTest(command=command):
+                self.sent.clear()
+                _, stderr_text = self.run_cli([command, _PROBLEM_ID, *options], expected_exit_code=1)
+                self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me")])
+                self.assertIn("https://api.test/account", stderr_text)
+
+    def test_an_id_with_path_characters_stays_one_encoded_segment(self) -> None:
+        for command, method, route_after_id, options in _PROBLEM_WRITE_COMMANDS:
+            with self.subTest(command=command):
+                self.sent.clear()
+                self.run_cli([command, "../x?y", *options])
+                write_path = f"/api/v1/math-problems/..%2Fx%3Fy{route_after_id}"
+                self.assertEqual(self.list_sent_requests()[-1], (method, write_path))
+
+    def test_an_empty_or_dot_id_is_refused_before_any_request(self) -> None:
+        for unroutable_id in ("", ".", ".."):
+            for command, _, _, options in _PROBLEM_WRITE_COMMANDS:
+                with self.subTest(command=command, unroutable_id=unroutable_id):
+                    _, stderr_text = self.run_cli([command, unroutable_id, *options], expected_exit_code=1)
+                    self.assertIn("is not an identifier exactory can read", stderr_text)
+        self.assertEqual(self.sent, [])
+
+
+class TestWriteCommandParsers(unittest.TestCase):
+    def test_the_parser_refuses_a_command_line_that_misses_a_required_option(self) -> None:
+        for command, _, _, options in _PROBLEM_WRITE_COMMANDS:
+            _cli._build_parser().parse_args([command, _PROBLEM_ID, *options])
+        refused = [
+            ["add-formal-statement", _PROBLEM_ID, "--proof-target", "statement"],
+            ["add-formal-statement", _PROBLEM_ID, "--lean-url", _LEAN_SOURCE_URL],
+            ["add-formal-statement", _PROBLEM_ID, "--lean-url", _LEAN_SOURCE_URL, "--proof-target", "statement",
+             "--note", "n", "--note-file", "note.txt"],
+            ["declare-status", _PROBLEM_ID, "--note", "x"],
+            ["declare-status", _PROBLEM_ID, "--status", "open"],
+            ["declare-status", _PROBLEM_ID, "--status", "reopened", "--note", "x"],
+            ["declare-status", _PROBLEM_ID, "--status", "open", "--note", "x", "--note-file", "note.txt"],
+            ["link-problem-paper", _PROBLEM_ID],
+            ["link-problem-github", _PROBLEM_ID, "--url", "https://github.com/o/r"],
+            ["link-problem-github", _PROBLEM_ID, "--label", "Code"],
+        ]
+        for argv in refused:
+            with self.subTest(argv=argv):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    with self.assertRaises(SystemExit) as caught:
+                        _cli._build_parser().parse_args(argv)
+                self.assertEqual(caught.exception.code, 2)
+
+
+class TestFormalStatementInputs(_MathCliTestCase):
+    def build_add_formal_statement_argv(self, *extra: str, lean_url: str = _LEAN_SOURCE_URL) -> list[str]:
+        return ["add-formal-statement", _PROBLEM_ID, "--lean-url", lean_url, *extra]
+
+    def read_formal_statement_body(self) -> dict:
+        return self.read_sent_body("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/formal-statements")
+
+    def test_the_note_and_the_disproof_targets_are_left_out_when_not_given(self) -> None:
+        self.run_cli(self.build_add_formal_statement_argv("--proof-target", "statement"))
+        self.assertEqual(self.read_formal_statement_body(),
+                         {"leanUrl": _LEAN_SOURCE_URL, "proofTargets": ["statement"], "disproofTargets": []})
+
+    def test_the_targets_keep_the_order_they_were_given_in(self) -> None:
+        self.run_cli(self.build_add_formal_statement_argv(
+            "--proof-target", "b", "--proof-target", "a", "--disproof-target", "d", "--disproof-target", "c"))
+        body = self.read_formal_statement_body()
+        self.assertEqual((body["proofTargets"], body["disproofTargets"]), (["b", "a"], ["d", "c"]))
+
+    def test_the_note_can_come_from_a_file(self) -> None:
+        note_path = self.scratch_dir / "note.txt"
+        note_path.write_text("Lean v4.22.0, Mathlib at 1a2b3c4.\n", encoding="utf-8")
+        self.run_cli(self.build_add_formal_statement_argv("--proof-target", "statement", "--note-file", str(note_path)))
+        self.assertEqual(self.read_formal_statement_body()["note"], "Lean v4.22.0, Mathlib at 1a2b3c4.")
+
+    def test_a_missing_note_file_is_refused_before_any_request(self) -> None:
+        _, stderr_text = self.run_cli(self.build_add_formal_statement_argv(
+            "--proof-target", "statement", "--note-file", str(self.scratch_dir / "absent.txt")), expected_exit_code=1)
+        self.assertIn("does not exist", stderr_text)
+        self.assertEqual(self.sent, [])
+
+    def test_the_note_has_the_bounds_of_the_server_schema(self) -> None:
+        for note, is_accepted in (("", False), ("   ", False), ("n", True), ("n" * 2000, True), ("n" * 2001, False)):
+            with self.subTest(note_length=len(note)):
+                self.sent.clear()
+                argv = self.build_add_formal_statement_argv("--proof-target", "statement", "--note", note)
+                if is_accepted:
+                    self.run_cli(argv)
+                    self.assertEqual(self.read_formal_statement_body()["note"], note)
+                else:
+                    self.run_cli(argv, expected_exit_code=1)
+                    self.assertEqual(self.sent, [])
+
+    def test_twenty_targets_of_each_kind_are_accepted(self) -> None:
+        self.run_cli(self.build_add_formal_statement_argv(
+            *_build_target_options("--proof-target", 20), *_build_target_options("--disproof-target", 20)))
+        body = self.read_formal_statement_body()
+        self.assertEqual((len(body["proofTargets"]), len(body["disproofTargets"])), (20, 20))
+
+    def test_twenty_one_targets_of_either_kind_are_refused_with_the_count_and_one_remedy_per_sentence(self) -> None:
+        for extra_args, counted in (
+                (_build_target_options("--proof-target", 21), "21 proof targets"),
+                ([*_build_target_options("--proof-target", 1), *_build_target_options("--disproof-target", 21)],
+                 "21 disproof targets")):
+            with self.subTest(counted=counted):
+                _, stderr_text = self.run_cli(self.build_add_formal_statement_argv(*extra_args), expected_exit_code=1)
+                self.assertIn(counted, stderr_text)
+                self.assertIn("The limit is 20. Remove some.", stderr_text)
+        self.assertEqual(self.sent, [])
+
+    def test_lean_source_links_in_every_shape_the_server_accepts_are_sent_as_given(self) -> None:
+        accepted = [
+            _LEAN_SOURCE_URL,
+            f"https://github.com/o/r/tree/{_SHA}/lib/Challenge",
+            f"https://github.com/o/r/blob/{_SHA}",
+            f"https://github.com/o/r/tree/{_SHA}",
+            f"https://github.com/o/r/blob/{_SHA}/Challenge.lean#L3",
+            f"https://github.com/o/r/blob/{_SHA}/Challenge.lean#L3-L9",
+            f"https://github.com/my-org/r.github.io/blob/{_SHA}/Statement.lean",
+            f"https://github.com/{'o' * 39}/{'r' * 100}/blob/{_SHA}/Statement.lean",
+            f"https://github.com/o/r/blob/{_SHA}/" + "a" * (499 - len(f"https://github.com/o/r/blob/{_SHA}")),
+            f"https://github.com/o/r/blob/{_SHA}/lib./Challenge.",
+            f"https://github.com/o/r/blob/{_SHA}/%E2%88%80.lean",
+            f"https://github.com/o/r/blob/{_SHA}/" + chr(0xDC) + "ber.lean",
+            f"https://github.com/o/r/blob/{_SHA}/" + chr(0x1F600) + ".lean",
+        ]
+        for url in accepted:
+            with self.subTest(url=url):
+                self.sent.clear()
+                self.run_cli(self.build_add_formal_statement_argv("--proof-target", "statement", lean_url=url))
+                self.assertEqual(self.read_formal_statement_body()["leanUrl"], url)
+
+    def test_a_link_that_is_not_a_lean_source_at_a_full_commit_is_refused_before_any_request(self) -> None:
+        pinned = f"https://github.com/o/r/blob/{_SHA}"
+        refused = [
+            "",
+            f"https://github.com/o/r/blob/{_SHA[:7]}/Challenge.lean",
+            f"https://github.com/o/r/blob/{_SHA[:39]}/Challenge.lean",
+            f"https://github.com/o/r/blob/{_SHA}0/Challenge.lean",
+            f"https://github.com/o/r/blob/{_SHA.upper()}/Challenge.lean",
+            "https://github.com/o/r/blob/HEAD/Challenge.lean",
+            f"{pinned}/Challenge.lean?plain=1",
+            f"{pinned}/Challenge.lean#L3-9",
+            f"{pinned}/Challenge.lean#L",
+            f"{pinned}/Challenge.lean#L3-L9-L12",
+            f"{pinned}/Challenge.lean#section",
+            f"{pinned}/Challenge.lean#L" + chr(0x663),
+            f"{pinned}/",
+            f"{pinned}//Challenge.lean",
+            f"{pinned}/Challenge .lean",
+            " " + pinned,
+            pinned + " ",
+            f"https://github.com/o/r/commit/{_SHA}",
+            f"https://github.com/o/r/raw/{_SHA}/Challenge.lean",
+            f"https://github.com/o/r/blame/{_SHA}/Challenge.lean",
+            f"http://github.com/o/r/blob/{_SHA}/Challenge.lean",
+            f"HTTPS://github.com/o/r/blob/{_SHA}/Challenge.lean",
+            f"https://GitHub.com/o/r/blob/{_SHA}/Challenge.lean",
+            f"https://www.github.com/o/r/blob/{_SHA}/Challenge.lean",
+            f"https://gitlab.com/o/r/blob/{_SHA}/Challenge.lean",
+            f"https://github.com.evil.test/o/r/blob/{_SHA}/Challenge.lean",
+            f"https://githubxcom/o/r/blob/{_SHA}/Challenge.lean",
+            f"https://github.com/blob/{_SHA}/Challenge.lean",
+            f"https://github.com/extra/o/r/blob/{_SHA}/Challenge.lean",
+            f"https://github.com/{'o' * 40}/r/blob/{_SHA}/Challenge.lean",
+            f"https://github.com/-o/r/blob/{_SHA}/Challenge.lean",
+            f"https://github.com/o-/r/blob/{_SHA}/Challenge.lean",
+            f"https://github.com/o.o/r/blob/{_SHA}/Challenge.lean",
+            f"https://github.com/o/{'r' * 101}/blob/{_SHA}/Challenge.lean",
+            "https://github.com/o/r/actions/runs/123456789",
+        ]
+        for url in refused:
+            with self.subTest(url=url):
+                argv = self.build_add_formal_statement_argv("--proof-target", "statement", lean_url=url)
+                _, stderr_text = self.run_cli(argv, expected_exit_code=1)
+                self.assertIn(f"{url} is not a Lean source link", stderr_text)
+        self.assertEqual(self.sent, [])
+
+
+class TestDeclareStatusInputs(_MathCliTestCase):
+    def read_declaration_body(self) -> dict:
+        return self.read_sent_body("PATCH", f"/api/v1/math-problems/{_PROBLEM_ID}")
+
+    def test_an_open_declaration_sends_the_status_and_the_note_only(self) -> None:
+        self.run_cli(["declare-status", _PROBLEM_ID, "--status", "open", "--note", "Reopened after the correction."])
+        self.assertEqual(self.read_declaration_body(), {"status": "open", "note": "Reopened after the correction."})
+
+    def test_a_disproof_names_its_resolving_proof(self) -> None:
+        self.run_cli(["declare-status", _PROBLEM_ID, "--status", "disproved", "--resolving-proof", _PROOF_ID,
+                      "--note", "Disproved by the cited proof."])
+        self.assertEqual(self.read_declaration_body(), {
+            "status": "disproved", "resolvingProofId": _PROOF_ID, "note": "Disproved by the cited proof.",
+        })
+
+    def test_the_note_can_come_from_a_file(self) -> None:
+        note_path = self.scratch_dir / "note.txt"
+        note_path.write_text("Reopened after the correction.\n", encoding="utf-8")
+        self.run_cli(["declare-status", _PROBLEM_ID, "--status", "open", "--note-file", str(note_path)])
+        self.assertEqual(self.read_declaration_body()["note"], "Reopened after the correction.")
+
+    def test_a_missing_note_file_is_refused_before_any_request(self) -> None:
+        _, stderr_text = self.run_cli(["declare-status", _PROBLEM_ID, "--status", "open",
+                                       "--note-file", str(self.scratch_dir / "absent.txt")], expected_exit_code=1)
+        self.assertIn("does not exist", stderr_text)
+        self.assertEqual(self.sent, [])
+
+    def test_the_note_has_the_bounds_of_the_server_schema(self) -> None:
+        for note, is_accepted in (("", False), ("   ", False), ("n", True), ("n" * 5000, True), ("n" * 5001, False)):
+            with self.subTest(note_length=len(note)):
+                self.sent.clear()
+                argv = ["declare-status", _PROBLEM_ID, "--status", "open", "--note", note]
+                if is_accepted:
+                    self.run_cli(argv)
+                    self.assertEqual(self.read_declaration_body()["note"], note)
+                else:
+                    self.run_cli(argv, expected_exit_code=1)
+                    self.assertEqual(self.sent, [])
+
+    def test_a_missing_or_extra_resolving_proof_is_refused_with_its_remedy_before_any_request(self) -> None:
+        for argv, remedy in (
+                (["declare-status", _PROBLEM_ID, "--status", "proved", "--note", "x"],
+                 "A proved or disproved declaration names its resolving proof. Add --resolving-proof <proof-id>."),
+                (["declare-status", _PROBLEM_ID, "--status", "disproved", "--note", "x"],
+                 "A proved or disproved declaration names its resolving proof. Add --resolving-proof <proof-id>."),
+                (["declare-status", _PROBLEM_ID, "--status", "open", "--resolving-proof", _PROOF_ID, "--note", "x"],
+                 "An open declaration names no resolving proof. Remove --resolving-proof.")):
+            with self.subTest(argv=argv):
+                _, stderr_text = self.run_cli(argv, expected_exit_code=1)
+                self.assertIn(remedy, stderr_text)
+        self.assertEqual(self.sent, [])
+
+
+class TestLinkInputs(_MathCliTestCase):
+    def test_the_identifier_is_sent_as_given(self) -> None:
+        for identifier in ("10.5281/ZENODO.4242", "arXiv:2609.97001V3", "hep-th/9901001"):
+            with self.subTest(identifier=identifier):
+                self.sent.clear()
+                self.run_cli(["link-problem-paper", _PROBLEM_ID, "--identifier", identifier])
+                self.assertEqual(self.read_sent_body("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/papers"),
+                                 {"identifier": identifier})
+
+    def test_a_context_link_that_is_not_a_github_page_is_refused_before_any_request(self) -> None:
+        for url in ("http://github.com/o/r", "https://gitlab.com/o/r", "https://github.com/",
+                    "https://github.com/o/r tracking"):
+            with self.subTest(url=url):
+                _, stderr_text = self.run_cli(["link-problem-github", _PROBLEM_ID, "--url", url, "--label", "Code"],
+                                              expected_exit_code=1)
+                self.assertIn(f"{url} is not a context link", stderr_text)
+        self.assertEqual(self.sent, [])
+
+    def test_a_label_of_no_characters_or_over_one_hundred_is_refused_before_any_request(self) -> None:
+        for label in ("", "   ", "l" * 101):
+            with self.subTest(label_length=len(label)):
+                self.run_cli(["link-problem-github", _PROBLEM_ID, "--url", "https://github.com/o/r", "--label", label],
+                             expected_exit_code=1)
+        self.assertEqual(self.sent, [])
+
+    def test_a_label_of_one_hundred_characters_is_accepted_and_a_padded_label_is_trimmed(self) -> None:
+        for label, sent_label in (("l" * 100, "l" * 100), ("  Usage  ", "Usage")):
+            with self.subTest(label=label):
+                self.sent.clear()
+                self.run_cli(["link-problem-github", _PROBLEM_ID, "--url", "https://github.com/o/r", "--label", label])
+                body = self.read_sent_body("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/github-links")
+                self.assertEqual(body["label"], sent_label)
+
+
 if __name__ == "__main__":
     unittest.main()

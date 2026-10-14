@@ -46,6 +46,7 @@ _MAX_DECLARED_CHALLENGES = 3
 _MAX_DECLARED_MATH_PROBLEMS = 3
 _MAX_CREATION_PAPERS = 10
 _MAX_CREATION_GITHUB_LINKS = 10
+_MAX_FORMAL_STATEMENT_TARGETS = 20
 _ACCOUNT_PAGE_PATH = "/account"
 # The report kinds of the section (design 2026-10-12 §19); the server owns the vocabulary.
 _MATH_REPORT_KINDS = ("math_problem", "math_status_event", "math_formal_statement", "math_proof",
@@ -241,6 +242,14 @@ def _send_report(subject_kind: str, subject_id: str, note: str | None, existing_
     payload, status = _send_request("POST", "/api/v1/reports", body)
     if status == 200:
         print(existing_report_notice, file=sys.stderr)
+    _print_json(payload)
+
+
+def _send_math_write(method: str, path: str, body: dict) -> None:
+    """Send a write that the math section gates on a linked ORCID iD, and print the answer. The
+    caller runs every local check first, so a command that fails one sends no request."""
+    _require_linked_orcid()
+    payload, _ = _send_request(method, path, body)
     _print_json(payload)
 
 
@@ -622,6 +631,39 @@ def _require_github_context_url(url: str) -> str:
     return url
 
 
+# Mirrors leanSourceUrlSchema (design 2026-10-12 §5): a file or a directory at a full commit,
+# an optional line anchor, no query. The URL is sent exactly as given. The anchor uses [0-9], not
+# \d: the server's \d matches ASCII digits only, and Python's \d matches other Unicode digits too.
+_GITHUB_OWNER_REPO = r"https://github\.com/[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/[A-Za-z0-9._-]{1,100}"
+_LEAN_SOURCE_URL_RE = re.compile(
+    _GITHUB_OWNER_REPO + r"/(?:blob|tree)/[0-9a-f]{40}(?:/[^\s?#/]+)*(?:#L[0-9]+(?:-L[0-9]+)?)?")
+# Mirrors the server's path rule for Lean source and check evidence links: no "." or ".." path
+# step, each dot also written %2e in any case, no encoded slash in any case, and no backslash. A
+# URL parser resolves each of them, so a link pinned to a commit could name a branch (design
+# 2026-10-12 §5, §7). \Z, not $: Python's $ also matches before a final newline.
+_PATH_TRAVERSAL_RE = re.compile(r"/(?:\.|%2[eE]){1,2}(?:[/?#\\]|\Z)|%2[fF]|\\")
+
+
+def _require_exact_link_path(kind: str, url: str) -> None:
+    """A Lean source or check evidence link names its target by a path that no URL parser moves."""
+    if _PATH_TRAVERSAL_RE.search(url):
+        _exit_with_error(f'The {kind} {url} has a "." or ".." path step, a backslash, or an encoded'
+                         " slash. Give the link without them.")
+
+
+def _require_lean_source_url(url: str) -> str:
+    """The rules of every posted link run first, then the shape of a Lean source link, then the
+    path rule. The poster gives the exact URL (design 2026-10-12 §12, decision 14)."""
+    _require_posted_link("Lean source link", url)
+    if not _LEAN_SOURCE_URL_RE.fullmatch(url):
+        _exit_with_error(f"{url} is not a Lean source link. Give a github.com blob or tree URL at a full"
+                         " 40-character commit SHA, for example"
+                         " https://github.com/<owner>/<repo>/blob/<sha>/Statement.lean."
+                         " A branch name does not pin the content.")
+    _require_exact_link_path("Lean source link", url)
+    return url
+
+
 def _run_me(args: argparse.Namespace) -> None:
     payload, _ = _send_request("GET", "/api/v1/me")
     _print_json(payload)
@@ -683,9 +725,7 @@ def _run_post_problem(args: argparse.Namespace) -> None:
             {"url": _require_github_context_url(url), "label": _require_utf16_bounds("link label", label, 1, 100)}
             for url, label in args.github_link
         ]
-    _require_linked_orcid()
-    payload, _ = _send_request("POST", "/api/v1/math-problems", body)
-    _print_json(payload)
+    _send_math_write("POST", "/api/v1/math-problems", body)
 
 
 def _run_vote_problem(args: argparse.Namespace) -> None:
@@ -695,6 +735,43 @@ def _run_vote_problem(args: argparse.Namespace) -> None:
 def _run_report_math(args: argparse.Namespace) -> None:
     _send_report(args.subject_kind, args.subject_id, args.note,
                  "The server returned the existing report for this content.")
+
+
+def _run_add_formal_statement(args: argparse.Namespace) -> None:
+    disproof_targets = args.disproof_target or []
+    for target_kind, targets in (("proof", args.proof_target), ("disproof", disproof_targets)):
+        if len(targets) > _MAX_FORMAL_STATEMENT_TARGETS:
+            _exit_with_error(f"The command names {len(targets)} {target_kind} targets. The limit is"
+                             f" {_MAX_FORMAL_STATEMENT_TARGETS}. Remove some.")
+    body = {"leanUrl": _require_lean_source_url(args.lean_url), "proofTargets": args.proof_target,
+            "disproofTargets": disproof_targets}
+    if args.note is not None or args.note_file is not None:
+        body["note"] = _require_utf16_bounds("note", _read_inline_or_file_text(args.note, args.note_file), 1, 2000)
+    _send_math_write("POST", _build_api_path("math-problems", args.problem_id, "formal-statements"), body)
+
+
+def _run_declare_status(args: argparse.Namespace) -> None:
+    is_resolution = args.status != "open"
+    if is_resolution and not args.resolving_proof:
+        _exit_with_error("A proved or disproved declaration names its resolving proof."
+                         " Add --resolving-proof <proof-id>.")
+    if not is_resolution and args.resolving_proof:
+        _exit_with_error("An open declaration names no resolving proof. Remove --resolving-proof.")
+    body = {"status": args.status}
+    if is_resolution:
+        body["resolvingProofId"] = args.resolving_proof
+    body["note"] = _require_utf16_bounds("note", _read_inline_or_file_text(args.note, args.note_file), 1, 5000)
+    _send_math_write("PATCH", _build_api_path("math-problems", args.problem_id), body)
+
+
+def _run_link_problem_paper(args: argparse.Namespace) -> None:
+    _send_math_write("POST", _build_api_path("math-problems", args.problem_id, "papers"),
+                     {"identifier": args.identifier})
+
+
+def _run_link_problem_github(args: argparse.Namespace) -> None:
+    body = {"url": _require_github_context_url(args.url), "label": _require_utf16_bounds("label", args.label, 1, 100)}
+    _send_math_write("POST", _build_api_path("math-problems", args.problem_id, "github-links"), body)
 
 
 def _run_login(args: argparse.Namespace) -> None:
@@ -1056,6 +1133,54 @@ def _build_parser() -> argparse.ArgumentParser:
     report_math.add_argument("subject_id")
     report_math.add_argument("--note", help="Why the content violates the rules, for the moderators only, 1-1000 characters.")
     report_math.set_defaults(handler=_run_report_math)
+
+    add_formal_statement = commands.add_parser(
+        "add-formal-statement", allow_abbrev=False,
+        help="Add a formal statement version to a problem: a commit-pinned Lean link and its target"
+             " theorem names. Only the author or an admin. Needs a linked ORCID iD.")
+    add_formal_statement.add_argument("problem_id")
+    add_formal_statement.add_argument("--lean-url", required=True, dest="lean_url",
+                                      help="A github.com blob or tree URL at a full commit SHA.")
+    add_formal_statement.add_argument("--proof-target", action="append", required=True, dest="proof_target",
+                                      help="A theorem whose statement says the claim is true."
+                                           f" Repeat, 1-{_MAX_FORMAL_STATEMENT_TARGETS}.")
+    add_formal_statement.add_argument("--disproof-target", action="append", dest="disproof_target",
+                                      help="A theorem whose statement says the claim is false."
+                                           f" Repeat, 0-{_MAX_FORMAL_STATEMENT_TARGETS}.")
+    formal_statement_note = add_formal_statement.add_mutually_exclusive_group()
+    formal_statement_note.add_argument(
+        "--note", help="Toolchain, Mathlib revision, how to build; up to 2000 characters.")
+    formal_statement_note.add_argument("--note-file", dest="note_file", help="A file with the note.")
+    add_formal_statement.set_defaults(handler=_run_add_formal_statement)
+
+    declare_status = commands.add_parser(
+        "declare-status", allow_abbrev=False,
+        help="Declare a problem proved, disproved, or open again. Only the author or an admin."
+             " Needs a linked ORCID iD.")
+    declare_status.add_argument("problem_id")
+    declare_status.add_argument("--status", required=True, choices=["open", "proved", "disproved"])
+    declare_status.add_argument("--resolving-proof", dest="resolving_proof",
+                                help="The proof that resolves the problem; its claim matches the status.")
+    declaration_note = declare_status.add_mutually_exclusive_group(required=True)
+    declaration_note.add_argument("--note", help="Why, 1-5000 characters.")
+    declaration_note.add_argument("--note-file", dest="note_file", help="A file with the note.")
+    declare_status.set_defaults(handler=_run_declare_status)
+
+    link_problem_paper = commands.add_parser(
+        "link-problem-paper", allow_abbrev=False,
+        help="Attach a related paper to a problem by its arXiv id or DOI. Needs a linked ORCID iD.")
+    link_problem_paper.add_argument("problem_id")
+    link_problem_paper.add_argument("--identifier", required=True,
+                                    help="An arXiv id, with or without a version, or a DOI.")
+    link_problem_paper.set_defaults(handler=_run_link_problem_paper)
+
+    link_problem_github = commands.add_parser(
+        "link-problem-github", allow_abbrev=False,
+        help="Attach a GitHub context link to a problem. Needs a linked ORCID iD.")
+    link_problem_github.add_argument("problem_id")
+    link_problem_github.add_argument("--url", required=True, help="An https://github.com/ URL, sent exactly as given.")
+    link_problem_github.add_argument("--label", required=True, help="A short label, 1-100 characters.")
+    link_problem_github.set_defaults(handler=_run_link_problem_github)
 
     return parser
 
