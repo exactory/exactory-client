@@ -29,13 +29,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from research_harness.citation_report import report_citation_gate
 from research_harness.cli import add_identity, select_managed_path
 from research_harness.errors import ResearchError
+from research_harness.exactory_api import build_orcid_required_msg, read_api_base_url
 from research_harness.integration import command_identity, current_store
 from research_harness.submission import (check_submission_preconditions, check_verdict_preconditions,
                                          continue_submission, send_verdict, submit_managed)
 from research_harness.verification import record_task
 from research_harness.workspace import find_workspace, strict_json
 
-_DEFAULT_API_URL = "https://www.exactory.ai"
 _TIMEOUT_SECONDS = 30
 # [0-9], not \d: the server reads ASCII digits only, as the link patterns below explain.
 _BARE_ARXIV_ID_RE = re.compile(r"([0-9]{4}\.[0-9]{4,5})(?:v[0-9]+)?")
@@ -50,7 +50,6 @@ _MAX_CREATION_PAPERS = 10
 _MAX_CREATION_GITHUB_LINKS = 10
 _MAX_FORMAL_STATEMENT_TARGETS = 20
 _MAX_LEAN_CHECK_AXIOMS = 20
-_ACCOUNT_PAGE_PATH = "/account"
 # The first sentence of the help of every limit option of the section's lists.
 _PAGE_SIZE_HELP = "How many entries one page holds."
 # The report kinds of the section (design 2026-10-12 §19); the server owns the vocabulary.
@@ -154,11 +153,6 @@ def _save_api_key(api_key: str, email: str, label: str) -> Path:
     return path
 
 
-def _read_api_base_url() -> str:
-    """The application origin every command talks to: EXACTORY_API_URL, or the default."""
-    return os.environ.get("EXACTORY_API_URL", _DEFAULT_API_URL).rstrip("/")
-
-
 def _send_request(method: str, path: str, body: dict | None = None, *,
                   authenticated: bool = True,
                   allow_missing: bool = False,
@@ -171,7 +165,7 @@ def _send_request(method: str, path: str, body: dict | None = None, *,
             _exit_with_error(_NO_KEY_ERR_MSG, 2)
         headers["Authorization"] = f"Bearer {api_key}"
 
-    base_url = _read_api_base_url()
+    base_url = read_api_base_url()
     request = urllib.request.Request(
         base_url + path,
         method=method,
@@ -265,9 +259,7 @@ def _require_linked_orcid() -> None:
     links an iD, which the server's generic 403 cannot."""
     me, _ = _send_request("GET", "/api/v1/me")
     if not me.get("orcidId"):
-        _exit_with_error("This operation needs an ORCID iD linked to your exactory account."
-                         f" Link one at {_read_api_base_url()}{_ACCOUNT_PAGE_PATH}."
-                         " Then run the command again.")
+        _exit_with_error(build_orcid_required_msg("This operation", read_api_base_url()))
 
 
 def _send_vote(path: str, value: int) -> None:
@@ -392,11 +384,6 @@ def _quote_identifier_path(identifier: str) -> str:
 
 def _run_vote(args: argparse.Namespace) -> None:
     _send_vote(_build_api_path("verdicts", args.verdict_id, "vote"), args.value)
-
-
-_UUID_RE = re.compile(
-    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.IGNORECASE
-)
 
 
 def _run_verify(args: argparse.Namespace) -> None:
@@ -989,7 +976,7 @@ def _run_whoami(args: argparse.Namespace) -> None:
 
 
 def _run_open_signup(args: argparse.Namespace) -> None:
-    url = _read_api_base_url() + "/signup"
+    url = read_api_base_url() + "/signup"
     try:
         opened = webbrowser.open(url)
     except webbrowser.Error:

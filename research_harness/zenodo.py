@@ -55,6 +55,28 @@ def _deposition(intent):
     return intent["responses"].get("create", {}).get("response")
 
 
+def has_published_record(deposit_state):
+    """Whether a recorded deposit is a published record. A deposition has a DOI only once it is
+    published (the `doi` field of https://developers.zenodo.org, checked 2026-10-14), so a record
+    without one is a draft, or a direct deposit whose publish has not been confirmed."""
+    return bool(deposit_state.get("doi"))
+
+
+def require_published_prior(prior, environment):
+    """The record that a new version revises: the prior concrete record, which is a published
+    deposit in the same environment. A prior that is not published is refused with its
+    deposition named, and the managed and the direct path read it through this one rule."""
+    if prior is None or prior["environment"] != environment:
+        raise ResearchError("publication_prior_required", "A revised deposit must use the prior concrete record in the same environment")
+    if not has_published_record(prior):
+        page = f" ({prior['draft_url']})" if prior.get("draft_url") else ""
+        raise ResearchError("publication_prior_required",
+                            f"The prior deposit, deposition {prior['deposition_id']}{page}, has no DOI, so it is not a"
+                            " published record. A new version revises a published record. Publish that deposition"
+                            " first.",
+                            {"deposition_id": prior["deposition_id"]})
+
+
 def has_claimed_publish(intent):
     """Whether a deposit intent ever claimed its publish step: the claim is pending, its response
     is confirmed, or a remote read found the record unpublished and discarded the claim. From
@@ -199,8 +221,7 @@ def continue_deposit(store, identifier, client, *, reconcile=False, finish_only=
         metadata = dict(binding["metadata"], notes="Exactory publication intent " + identifier)
         if binding["new_version"]:
             prior = binding["prior"]
-            if prior is None or prior["environment"] != binding["environment"]:
-                raise ResearchError("publication_prior_required", "A revised deposit must use the prior concrete record in the same environment")
+            require_published_prior(prior, binding["environment"])
             def create():
                 response = client("POST", base + "/deposit/depositions/" + str(prior["deposition_id"]) + "/actions/newversion")
                 draft = response.get("links", {}).get("latest_draft")
@@ -260,9 +281,8 @@ def validate_deposit(store, pdf, abstract, sources, *, new_version, environment)
     records = store.snapshot()["records"]
     require_ready(round_state(records, Evaluation(records, ArtifactStore(store.root))),
                   "depositing the final development round")
-    prior = records.get("workspace", {}).get("deposit")
-    if new_version and (prior is None or prior["environment"] != environment):
-        raise ResearchError("publication_prior_required", "A revised deposit must use the prior concrete record in the same environment")
+    if new_version:
+        require_published_prior(records.get("workspace", {}).get("deposit"), environment)
     return report
 
 
@@ -270,8 +290,8 @@ def begin_deposit(store, binding, *, expected_revision, request_id):
     """Check a managed deposit and save its intent before any remote write. The same request
     saved earlier returns that intent, so an interrupted deposit resumes on it."""
     _current(store, binding)
-    if binding["new_version"] and (binding["prior"] is None or binding["prior"]["environment"] != binding["environment"]):
-        raise ResearchError("publication_prior_required", "A revised deposit must use the prior concrete record in the same environment")
+    if binding["new_version"]:
+        require_published_prior(binding["prior"], binding["environment"])
     return begin_intent(store, "deposit", binding, expected_revision=expected_revision, request_id=request_id)
 
 
