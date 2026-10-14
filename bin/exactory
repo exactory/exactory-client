@@ -208,7 +208,7 @@ def _build_api_path(*segments: str) -> str:
     segment is refused, so each id stays inside its own segment of the route."""
     for segment in segments:
         if segment in _UNROUTABLE_PATH_SEGMENTS:
-            _exit_with_error(f"{segment!r} is not an identifier exactory can read.")
+            _exit_with_error(f"{segment} is not an identifier exactory can read.")
     return "/api/v1/" + "/".join(urllib.parse.quote(segment, safe="") for segment in segments)
 
 

@@ -263,6 +263,7 @@ class TestProblemReadRequests(_MathCliTestCase):
         self.assertEqual(self.read_query(0), {"cursor": ["c2"], "limit": ["5"]})
         self.assertEqual(self.read_query(1), {"limit": ["50"]})
 
+
 class TestIdsStayInTheirRoute(_MathCliTestCase):
     """An id is one segment of its route: percent-encoding keeps a slash or a question mark inside
     it, and the empty id and the two dot ids are refused, because a URL parser would resolve them."""
@@ -286,6 +287,14 @@ class TestIdsStayInTheirRoute(_MathCliTestCase):
                 with self.subTest(argv=argv):
                     _, stderr_text = self.run_cli(argv, expected_exit_code=1)
                     self.assertIn("is not an identifier exactory can read", stderr_text)
+        self.assertEqual(self.list_sent_requests(), [])
+
+    def test_the_refusal_reads_like_the_refusal_of_the_released_task_command(self) -> None:
+        for unroutable_id in ("", ".", ".."):
+            with self.subTest(unroutable_id=unroutable_id):
+                _, math_stderr_text = self.run_cli(["problem", unroutable_id], expected_exit_code=1)
+                _, released_stderr_text = self.run_cli(["task", unroutable_id], expected_exit_code=1)
+                self.assertEqual(math_stderr_text, released_stderr_text)
         self.assertEqual(self.list_sent_requests(), [])
 
     def test_an_id_that_holds_dots_among_other_characters_is_kept(self) -> None:
@@ -408,6 +417,17 @@ class TestReportMath(_MathCliTestCase):
         self.assertEqual(self.read_sent_body("POST", "/api/v1/reports"), {"subjectKind": "math_proof", "subjectId": _PROOF_ID})
         self.assertEqual(json.loads(stdout_text), {"id": "r1", "status": "pending"})
         self.assertEqual(stderr_text, "")
+
+    def test_every_math_report_kind_is_accepted_and_sent_as_the_subject_kind(self) -> None:
+        # The eight report kinds of the math section (design 2026-10-12 §19). The server owns the
+        # vocabulary. The list is written out here, so a kind that the parser drops fails this test.
+        for kind in ("math_problem", "math_status_event", "math_formal_statement", "math_proof",
+                     "math_lean_check", "math_post", "math_problem_paper", "math_github_link"):
+            with self.subTest(kind=kind):
+                self.sent.clear()
+                self.run_cli(["report-math", kind, _PROOF_ID])
+                self.assertEqual(self.list_sent_requests(), [("POST", "/api/v1/reports")])
+                self.assertEqual(self.read_sent_body("POST", "/api/v1/reports")["subjectKind"], kind)
 
     def test_an_existing_report_is_named_on_stderr_and_printed(self) -> None:
         self.answers[("POST", "/api/v1/reports")] = (200, {"id": "r1", "status": "pending"})
