@@ -69,11 +69,10 @@ def require_published_prior(prior, environment):
     if prior is None or prior["environment"] != environment:
         raise ResearchError("publication_prior_required", "A revised deposit must use the prior concrete record in the same environment")
     if not has_published_record(prior):
-        page = f" ({prior['draft_url']})" if prior.get("draft_url") else ""
+        instruction = (f"Open {prior['draft_url']} and check its state." if prior.get("draft_url")
+                       else "Check its state on Zenodo.")
         raise ResearchError("publication_prior_required",
-                            f"The prior deposit, deposition {prior['deposition_id']}{page}, has no DOI, so it is not a"
-                            " published record. A new version revises a published record. Publish that deposition"
-                            " first.",
+                            f"The prior deposit, deposition {prior['deposition_id']}, has no recorded DOI. {instruction}",
                             {"deposition_id": prior["deposition_id"]})
 
 

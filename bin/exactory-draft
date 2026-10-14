@@ -30,11 +30,11 @@ import contextlib
 import html
 import json
 import os
-import shlex
 import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from pathlib import Path
@@ -44,7 +44,7 @@ from research_harness.errors import ResearchError
 from research_harness.exactory_api import UUID_RE, build_orcid_required_msg, read_api_base_url
 from research_harness.integration import command_identity, current_store, initialization_payload, initialize_workspace, record_direct_deposit
 from research_harness.storage import Store
-from research_harness.workspace import find_workspace, json_projection
+from research_harness.workspace import find_workspace, json_projection, read_file, strict_json
 from research_harness.citation_report import report_citation_gate
 from research_harness.zenodo import (PAPER_UPLOAD_NAME, RDM_JSON_MEDIA_TYPE, begin_deposit,
                                      build_draft_document_url, build_previewed_document,
@@ -52,10 +52,13 @@ from research_harness.zenodo import (PAPER_UPLOAD_NAME, RDM_JSON_MEDIA_TYPE, beg
                                      require_published_prior, validate_deposit)
 from research_harness.cli import add_identity, note_managed_record_skipped, select_managed_path
 
-# The Zenodo API of each environment (https://developers.zenodo.org). A journal names one of them,
-# and the journal check accepts no other pair, because a settle sends the Zenodo token to the base
-# URL that the journal holds.
+# The Zenodo API of each environment (https://developers.zenodo.org). The token of an environment
+# goes only to its API, a journal names one of the two, and the journal check accepts no other pair.
 _ZENODO_API_URLS = {"production": "https://zenodo.org/api", "sandbox": "https://sandbox.zenodo.org/api"}
+# The DOI prefix of each environment. https://developers.zenodo.org states: "The sandbox environment
+# will issue test DOIs using the 10.5072 prefix instead of Zenodo's normal prefix (10.5281)"
+# (checked 2026-10-14). A record belongs to the environment whose prefix its DOI carries.
+_DOI_PREFIXES = {"production": "10.5281/", "sandbox": "10.5072/"}
 _TIMEOUT_SECONDS = 180
 
 # The release version has one definition: the plugin manifest. Deriving the
@@ -173,23 +176,62 @@ def _run_init(args: argparse.Namespace) -> None:
 # ----------------------------------------------------------- Zenodo deposit
 
 
+class _RefusedRedirectError(Exception):
+    """A redirect that leaves the origin of its request, which the command does not follow."""
+
+    def __init__(self, target: str) -> None:
+        super().__init__(target)
+        self.target = target
+
+
+class _SameOriginRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """urllib sends the headers of a request, the bearer token included, on to the target of a
+    redirect. A redirect to another origin is refused, so the token stays with its origin."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if urllib.parse.urlsplit(newurl)[:2] != urllib.parse.urlsplit(req.full_url)[:2]:
+            raise _RefusedRedirectError(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 def _open_url(request: urllib.request.Request) -> dict:
     """Send one Zenodo API request and return the parsed JSON body. Tests
     replace this function; nothing else touches the network."""
-    with urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS) as response:
+    opener = urllib.request.build_opener(_SameOriginRedirectHandler)
+    with opener.open(request, timeout=_TIMEOUT_SECONDS) as response:
         body = response.read().decode("utf-8", "replace")
         return json.loads(body) if body else {}
+
+
+def _is_inside_zenodo_api(url: str, environment: str) -> bool:
+    """Whether `url` lies under the Zenodo API of the environment: the same scheme and host, and a
+    path under the API path."""
+    approved = urllib.parse.urlsplit(_ZENODO_API_URLS[environment])
+    try:
+        candidate = urllib.parse.urlsplit(url)
+    except ValueError:
+        return False
+    return ((candidate.scheme, candidate.netloc) == (approved.scheme, approved.netloc)
+            and (candidate.path == approved.path or candidate.path.startswith(approved.path + "/")))
 
 
 def _call_zenodo(method: str, url: str, token: str,
                  json_body: dict | list | None = None,
                  file_bytes: bytes | None = None,
                  accept: str | None = None,
-                 uncertain_outcome_advice_msg: str = _RETRY_ADVICE_MSG) -> dict:
+                 uncertain_outcome_advice_msg: str = _RETRY_ADVICE_MSG,
+                 *, environment: str) -> dict:
     """Send one request to the Zenodo API and return its JSON body. Exits with
     Zenodo's own error message on failure, and never echoes the token. The
     caller names the advice an uncertain outcome earns, because only the caller
-    knows whether its request can be sent again."""
+    knows whether its request can be sent again. This is the one place that adds the
+    token to a request, and it adds it only for an address under the Zenodo API of
+    the environment that the token belongs to: the URL of a saved response, an intent,
+    or a journal is checked like any other, and a redirect to another origin is not
+    followed."""
+    if not _is_inside_zenodo_api(url, environment):
+        _exit_with_error(f"The address {url} is not under {_ZENODO_API_URLS[environment]}, the Zenodo API of the"
+                         f" {environment} environment. The command sent nothing to it, and the token stayed here.")
     headers = {"Authorization": f"Bearer {token}", "User-Agent": _USER_AGENT}
     if accept is not None:
         headers["Accept"] = accept
@@ -202,6 +244,10 @@ def _call_zenodo(method: str, url: str, token: str,
         headers["Content-Type"] = "application/octet-stream"
     try:
         return _open_url(urllib.request.Request(url, method=method, data=data, headers=headers))
+    except _RefusedRedirectError as error:
+        _exit_with_error(f"Zenodo answered with a redirect to {error.target}, which is not on the origin of the"
+                         f" request. The command did not follow it, and the token was not sent there."
+                         f" {uncertain_outcome_advice_msg}")
     except urllib.error.HTTPError as error:
         detail = error.read().decode("utf-8", "replace")[:2000]
         message = f"The Zenodo API returned HTTP {error.code}.\n{detail}"
@@ -224,6 +270,14 @@ def _read_zenodo_token(production: bool) -> str:
         _exit_with_error(f"{env_name} is not set. Create a personal access token in the"
                          " Zenodo account settings. Then set the variable.", 2)
     return token
+
+
+def _build_zenodo_client(environment: str, token: str):
+    """The function that the managed deposit calls for every Zenodo request: the token of one
+    environment, which _call_zenodo sends only to the Zenodo API of that environment."""
+    def call(method: str, url: str, **kwargs) -> dict:
+        return _call_zenodo(method, url, token, environment=environment, **kwargs)
+    return call
 
 
 def _load_draft_state() -> dict:
@@ -398,17 +452,22 @@ def _run_deposit(args: argparse.Namespace) -> None:
     # An unsettled deposit for a problem is settled before this run reads any other input, so the
     # recorded operation decides, never the current draft (design 2026-10-12 §17). The settle
     # completes the operation that the earlier run approved with its own flags, as reconcile does,
-    # so this run's flags decide nothing about it. A settled journal does not block this run: its
-    # publication is certain, and attach-problem attaches the record.
+    # so this run's flags decide nothing about it. The settle drives requests to the recorded
+    # origin, so the origin of this run must be that origin.
     journal = _read_problem_journal("Nothing was deposited.")
-    # The journal drives a request to its recorded origin when this run settles it, and the run names
-    # that origin in a command when it publishes for a problem and replaces a settled journal.
-    if journal is not None and (not journal["settled"] or (args.math_problem_id is not None and args.publish)):
+    if journal is not None and not journal["settled"]:
         _require_current_origin(journal)
-    if journal is not None and not journal["settled"] and _settle_problem_deposit(journal, may_publish=True):
-        print(f"This run completed the earlier deposit for problem {journal['math_problem']['problem_id']},"
-              " which the earlier run started with its own approval. It deposited nothing new."
-              " Run the command again to start a new deposit.", file=sys.stderr)
+        if _settle_problem_deposit(journal, may_publish=True):
+            print(f"This run completed the earlier deposit for problem {journal['math_problem']['problem_id']},"
+                  " which the earlier run started with its own approval. It deposited nothing new."
+                  " Run the command again to start a new deposit.", file=sys.stderr)
+            return
+    elif journal is not None and args.publish and args.math_problem_id is not None \
+            and _is_attachment_pending(journal):
+        # While a settled journal has an unattached record, that operation stays the retry target,
+        # and only the user discards it. A deposit never replaces such a journal, so it never
+        # publishes a second record while the first one waits for its attachment.
+        _retry_pending_attachment(journal, args.math_problem_id)
         return
     from research_harness.cli import parse_managed_scope_arguments
     strict = parse_managed_scope_arguments(args)
@@ -496,9 +555,7 @@ def _deposit_managed(store, report: dict, args: argparse.Namespace, base_url: st
         _write_problem_journal(journal, "The recovery record of this deposit could not be written,"
                                         " so nothing was sent to Zenodo.")
     with _explain_unsettled_journal(journal):
-        receipt = continue_deposit(store, intent["id"],
-                                   lambda method, url, **kwargs: _call_zenodo(method, url, token, **kwargs),
-                                   reconcile=True)
+        receipt = continue_deposit(store, intent["id"], _build_zenodo_client(environment, token), reconcile=True)
         print(json.dumps(receipt, indent=2))
         if journal is not None:
             journal = _mark_journal_settled(journal, receipt)
@@ -517,7 +574,8 @@ def _deposit_directly(store, store_open_error, args: argparse.Namespace, base_ur
     if args.new_version:
         deposition = _open_new_version_draft(base_url, environment, token)
     else:
-        deposition = _call_zenodo("POST", f"{base_url}/deposit/depositions", token, json_body={})
+        deposition = _call_zenodo("POST", f"{base_url}/deposit/depositions", token, json_body={},
+                                  environment=environment)
     # The record exists from here on, and a publish cannot be made idempotent:
     # without a journal, a second run creates and publishes a second permanent
     # record. The user reads the id and the draft link first, so a lost response
@@ -525,13 +583,13 @@ def _deposit_directly(store, store_open_error, args: argparse.Namespace, base_ur
     draft_url = deposition.get("links", {}).get("html", "")
     print(f"Deposition {deposition['id']} is open on Zenodo: {draft_url}")
     bucket_url = deposition["links"]["bucket"]
-    _call_zenodo("PUT", f"{bucket_url}/{PAPER_UPLOAD_NAME}", token, file_bytes=pdf_bytes)
+    _call_zenodo("PUT", f"{bucket_url}/{PAPER_UPLOAD_NAME}", token, file_bytes=pdf_bytes, environment=environment)
     if sources_path is not None:
         _call_zenodo("PUT", f"{bucket_url}/{_name_sources_upload(sources_path)}", token,
-                     file_bytes=sources_bytes)
+                     file_bytes=sources_bytes, environment=environment)
     _call_zenodo("PUT", f"{base_url}/deposit/depositions/{deposition['id']}", token,
-                 json_body={"metadata": metadata})
-    _mark_paper_as_preview(base_url, deposition["id"], token)
+                 json_body={"metadata": metadata}, environment=environment)
+    _mark_paper_as_preview(base_url, environment, deposition["id"], token)
     state = {"environment": environment, "deposition_id": deposition["id"], "draft_url": draft_url}
     journal = None
     if args.publish and problem_target is not None:
@@ -552,7 +610,8 @@ def _deposit_directly(store, store_open_error, args: argparse.Namespace, base_ur
             publish_response = _call_zenodo(
                 "POST", f"{base_url}/deposit/depositions/{deposition['id']}/actions/publish", token,
                 uncertain_outcome_advice_msg=_build_uncertain_publish_advice(deposition["id"], draft_url,
-                                                                             problem_target))
+                                                                             problem_target),
+                environment=environment)
             state["doi"] = publish_response.get("doi", "")
             state["concept_doi"] = publish_response.get("conceptdoi", "")
             state["record_url"] = publish_response.get("links", {}).get("record_html", "")
@@ -569,12 +628,12 @@ def _deposit_directly(store, store_open_error, args: argparse.Namespace, base_ur
         _attach_recorded_record(journal)
 
 
-def _mark_paper_as_preview(base_url: str, record_id: int, token: str) -> None:
+def _mark_paper_as_preview(base_url: str, environment: str, record_id: int, token: str) -> None:
     """Make the paper the record's previewed file. research_harness.zenodo owns
     the draft-document contract this shares with the managed deposit."""
     draft_url = build_draft_document_url(base_url, record_id)
-    document = _call_zenodo("GET", draft_url, token, accept=RDM_JSON_MEDIA_TYPE)
-    _call_zenodo("PUT", draft_url, token, json_body=build_previewed_document(document))
+    document = _call_zenodo("GET", draft_url, token, accept=RDM_JSON_MEDIA_TYPE, environment=environment)
+    _call_zenodo("PUT", draft_url, token, json_body=build_previewed_document(document), environment=environment)
 
 
 def _open_new_version_draft(base_url: str, environment: str, token: str) -> dict:
@@ -600,11 +659,12 @@ def _open_new_version_draft(base_url: str, environment: str, token: str) -> dict
         "POST",
         f"{base_url}/deposit/depositions/{deposition_id}/actions/newversion",
         token,
+        environment=environment,
     )
     draft_url = created.get("links", {}).get("latest_draft", "")
     if draft_url == "":
         _exit_with_error("Zenodo returned no new-version draft link.")
-    return _call_zenodo("GET", draft_url, token)
+    return _call_zenodo("GET", draft_url, token, environment=environment)
 
 
 def _save_deposit_state(store, store_open_error, state: dict) -> None:
@@ -657,15 +717,23 @@ def _run_reconcile(args: argparse.Namespace) -> None:
     root = find_workspace()
     with own_workspace_deposits(root):
         journal = _read_problem_journal("Nothing was reconciled.", root)
-        store = current_store(root)
-        from research_harness.remote import get_intent
-        intent = get_intent(store, args.intent_id)
-        if intent["kind"] != "deposit":
-            raise ResearchError("remote_intent_mismatch", "Use a deposit intent for Zenodo reconciliation")
-        token = _read_zenodo_token(intent["binding"]["environment"] == "production")
-        receipt = continue_deposit(store, args.intent_id,
-            lambda method, url, **kwargs: _call_zenodo(method, url, token, **kwargs), reconcile=True)
-        print(json.dumps(receipt, indent=2))
+        # An error on the intent that the journal names ends with the note on that journal, like the
+        # exits of deposit and attach-problem.
+        with _explain_unsettled_journal(
+                journal if journal is not None and journal["operation_id"] == args.intent_id else None, root):
+            store = current_store(root)
+            from research_harness.remote import get_intent
+            intent = get_intent(store, args.intent_id)
+            if intent["kind"] != "deposit":
+                raise ResearchError("remote_intent_mismatch", "Use a deposit intent for Zenodo reconciliation")
+            if journal is not None and journal["operation_id"] == args.intent_id:
+                _require_intent_of_journal(intent, journal)
+            else:
+                _require_approved_intent(intent)
+            token = _read_zenodo_token(intent["binding"]["environment"] == "production")
+            receipt = continue_deposit(store, args.intent_id,
+                                       _build_zenodo_client(intent["binding"]["environment"], token), reconcile=True)
+            print(json.dumps(receipt, indent=2))
         if journal is not None and journal["operation_id"] == args.intent_id \
                 and _is_attachment_outstanding(journal):
             print(f"This deposit belongs to the recorded deposit for problem {journal['math_problem']['problem_id']},"
@@ -741,6 +809,9 @@ def _find_journal_flaw(journal: object) -> str | None:
             return 'the key "draft_url" must be a text'
     if "doi" in journal and not _is_nonempty_text(journal["doi"]):
         return 'the key "doi" must be a text that is not empty'
+    if "doi" in journal and not journal["doi"].startswith(_DOI_PREFIXES[environment]):
+        return (f'the key "doi" must start with {_DOI_PREFIXES[environment]},'
+                f" the DOI prefix of the {environment} environment")
     if journal["attached"] and not (journal["settled"] and "doi" in journal):
         return 'the key "attached" is true, but the journal is not settled with a DOI'
     return None
@@ -748,20 +819,29 @@ def _find_journal_flaw(journal: object) -> str | None:
 
 def _load_problem_journal(root: Path) -> dict | None:
     """The recovery journal of the latest deposit for a problem under `root`, or None when the
-    workspace has none. A file that cannot be read, or that fails the journal check, raises
-    problem_journal_untrusted with a message that starts with the file name."""
+    workspace has none. The file is read through the checked readers of the research harness:
+    read_file refuses a symlink and a file that is not regular, and strict_json refuses text that
+    is not finite JSON without duplicate keys, nesting that is too deep included. A file that cannot
+    be read, or that fails the journal check, raises problem_journal_untrusted with a message that
+    starts with the file name."""
     try:
-        journal = json.loads((root / _PROBLEM_DEPOSIT_JOURNAL_PATH).read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return None
-    except (OSError, ValueError) as error:
+        journal = strict_json(read_file(root, str(_PROBLEM_DEPOSIT_JOURNAL_PATH)).decode("utf-8"))
+    except ResearchError as error:
+        if error.code == "artifact_missing":
+            return None
+        raise ResearchError("problem_journal_untrusted",
+                            f"{_PROBLEM_DEPOSIT_JOURNAL_PATH} cannot be read. Cause: {error.message}.") from error
+    except UnicodeDecodeError as error:
         raise ResearchError("problem_journal_untrusted",
                             f"{_PROBLEM_DEPOSIT_JOURNAL_PATH} cannot be read. Cause: {error}.") from error
     flaw = _find_journal_flaw(journal)
     if flaw is not None:
-        raise ResearchError("problem_journal_untrusted",
-                            f"{_PROBLEM_DEPOSIT_JOURNAL_PATH} is not a journal this command can trust: {flaw}.")
+        raise ResearchError("problem_journal_untrusted", _build_untrusted_journal_msg(flaw))
     return journal
+
+
+def _build_untrusted_journal_msg(flaw: str) -> str:
+    return f"{_PROBLEM_DEPOSIT_JOURNAL_PATH} is not a journal this command can trust: {flaw}."
 
 
 def _read_problem_journal(failure_msg: str, root: Path | None = None) -> dict | None:
@@ -790,6 +870,73 @@ def _name_journal_deposition(journal: dict) -> str:
     return f'the deposition whose notes read "Exactory publication intent {journal["operation_id"]}"'
 
 
+def _find_intent_flaw(intent: dict, journal: dict) -> str | None:
+    """What makes a recorded intent another operation than the one that a journal names: its kind,
+    identity, environment, Zenodo address, or the problem that its metadata references. The journal
+    came from the workspace, and so did the intent, so the command executes the intent only when
+    the two agree."""
+    binding = intent.get("binding")
+    if not isinstance(binding, dict):
+        return "the intent has no binding"
+    if intent.get("kind") != "deposit":
+        return "the intent is not a deposit"
+    if intent.get("id") != journal["operation_id"]:
+        return f"the intent has the identity {intent.get('id')}, and the journal names {journal['operation_id']}"
+    if binding.get("environment") != journal["environment"]:
+        return (f"the intent is for the {binding.get('environment')} environment,"
+                f" and the journal names the {journal['environment']} environment")
+    if binding.get("base_url") != journal["base_url"]:
+        return f"the intent names the Zenodo address {binding.get('base_url')}, and the journal names {journal['base_url']}"
+    problem_target = journal["math_problem"]
+    metadata = binding.get("metadata")
+    expected = [{"identifier": f"{problem_target['api_url']}/math/{problem_target['problem_id']}",
+                 "relation": _PROBLEM_RELATION}]
+    if not isinstance(metadata, dict) or metadata.get("related_identifiers") != expected:
+        return "the intent does not name the problem of the journal"
+    return None
+
+
+def _require_intent_of_journal(intent: dict, journal: dict) -> None:
+    """Before a command reads a credential or executes the intent that a journal names, the two
+    must agree. A mismatch is refused with the message of a journal that cannot be trusted."""
+    flaw = _find_intent_flaw(intent, journal)
+    if flaw is not None:
+        raise ResearchError("problem_journal_untrusted",
+                            f"{_build_untrusted_journal_msg(flaw)}"
+                            f" {_build_journal_removal_advice('the deposition it names')} Nothing was sent.")
+
+
+def _require_approved_intent(intent: dict) -> None:
+    """Before reconcile reads a credential or executes an intent that no journal names, the intent
+    must be a deposit for one of the two Zenodo environments, at the address of that environment."""
+    binding = intent.get("binding")
+    environment = binding.get("environment") if isinstance(binding, dict) else None
+    if intent.get("kind") != "deposit":
+        flaw = "the intent is not a deposit"
+    elif not isinstance(environment, str) or environment not in _ZENODO_API_URLS:
+        flaw = "the intent names no Zenodo environment that this command knows"
+    elif binding.get("base_url") != _ZENODO_API_URLS[environment]:
+        flaw = (f"the intent names the Zenodo address {binding.get('base_url')}, which is not"
+                f" {_ZENODO_API_URLS[environment]}, the Zenodo API of the {environment} environment")
+    else:
+        return
+    _exit_with_error(f"The command does not execute intent {intent.get('id')}: {flaw}."
+                     " Nothing was sent, and no token was read.")
+
+
+def _find_record_flaw(journal: dict, record: dict) -> str | None:
+    """What makes the record of a settle another record than the journal names: its environment, or a
+    DOI whose prefix belongs to another environment."""
+    if record.get("environment") != journal["environment"]:
+        return (f"the record is for the {record.get('environment')} environment,"
+                f" and the journal names the {journal['environment']} environment")
+    prefix = _DOI_PREFIXES[journal["environment"]]
+    if not str(record.get("doi")).startswith(prefix):
+        return (f"the DOI {record.get('doi')} does not start with {prefix},"
+                f" the DOI prefix of the {journal['environment']} environment")
+    return None
+
+
 def _is_attachment_pending(journal: dict) -> bool:
     """Whether a checked journal holds a published production record that is not attached yet."""
     return (journal["settled"] and not journal["attached"] and journal["environment"] == "production"
@@ -810,61 +957,115 @@ def _require_current_origin(journal: dict) -> None:
     research_harness.exactory_api). Otherwise the command stops before it sends anything, and the
     journal stays as it is. A journal with no attachment left to do drives no request."""
     problem_target = journal["math_problem"]
-    current_origin = read_api_base_url()
-    if not _is_attachment_outstanding(journal) or problem_target["api_url"] == current_origin:
+    recorded_origin, current_origin = problem_target["api_url"], read_api_base_url()
+    if not _is_attachment_outstanding(journal) or recorded_origin == current_origin:
         return
-    removal_advice = ""
-    if not journal["settled"]:
-        removal_advice = " " + _build_journal_removal_advice(_name_journal_deposition(journal))
+    if journal["settled"]:
+        next_step = (f"run exactory-draft attach-problem with EXACTORY_API_URL set to {recorded_origin}."
+                     f" {_build_settled_removal_advice(journal)}")
+    else:
+        next_step = (f"run the command again with EXACTORY_API_URL set to {recorded_origin}."
+                     f" {_build_journal_removal_advice(_name_journal_deposition(journal))}")
     _exit_with_error(f"The recorded deposit for problem {problem_target['problem_id']} names the exactory origin"
-                     f" {problem_target['api_url']}. This run uses the exactory origin {current_origin}."
+                     f" {recorded_origin}. This run uses the exactory origin {current_origin}."
                      " The recorded origin would receive your API key."
                      f" Nothing was sent, and {_PROBLEM_DEPOSIT_JOURNAL_PATH} stays as it is."
-                     f" If {problem_target['api_url']} is your own exactory origin, run the command again with"
-                     f" EXACTORY_API_URL set to {problem_target['api_url']}.{removal_advice}")
+                     f" If {recorded_origin} is your own exactory origin, {next_step}")
 
 
-def _build_attach_command_msg(journal: dict) -> str:
-    """The command that attaches the record of a settled journal by hand."""
+def _build_settled_removal_advice(journal: dict) -> str:
+    """When removing a settled journal is safe: its record is published, so only the attachment is
+    given up. Removing it is the user's decision, and no command does it."""
+    return (f"If you decide not to attach the record, remove {_PROBLEM_DEPOSIT_JOURNAL_PATH}. Removing it is"
+            f" safe, because the record is published as {journal['doi']}. The command never removes it.")
+
+
+def _build_pending_attachment_refusal_msg(journal: dict, problem_id: str, closing_msg: str) -> str:
+    """The refusal of a deposit that names another problem while a settled journal holds a record
+    that is not attached yet. It names the record, its problem, and its origin, and gives the two
+    ways on: attach the record, or discard the journal."""
     problem_target = journal["math_problem"]
-    command = (f"EXACTORY_API_URL={shlex.quote(problem_target['api_url'])} exactory link-problem-paper"
-               f" {shlex.quote(problem_target['problem_id'])} --identifier {shlex.quote(journal['doi'])}")
-    return (f"The earlier deposit for problem {problem_target['problem_id']} is published as {journal['doi']},"
-            f" and its record is not attached yet. To attach it, run this command:\n{command}")
+    recorded_origin = problem_target["api_url"]
+    if recorded_origin == read_api_base_url():
+        attach_instruction = "Run exactory-draft attach-problem to finish that attachment."
+    else:
+        attach_instruction = (f"If {recorded_origin} is your own exactory origin, run exactory-draft attach-problem"
+                              f" with EXACTORY_API_URL set to {recorded_origin}.")
+    return (f"{_PROBLEM_DEPOSIT_JOURNAL_PATH} holds a published record that is not attached yet."
+            f" The record {journal['doi']} belongs to problem {problem_target['problem_id']} at the exactory origin"
+            f" {recorded_origin}. This deposit names the problem {problem_id}. {attach_instruction}"
+            f" {_build_settled_removal_advice(journal)} {closing_msg}")
 
 
-def _build_unsettled_journal_note(journal: dict | None) -> str:
+def _retry_pending_attachment(journal: dict, problem_id: str) -> None:
+    """A publishing deposit meets a settled journal with an unattached record (design 2026-10-12
+    §17). A deposit that names the problem of that record is a retry: it attaches the record and
+    publishes nothing new, on the managed and on the direct path. A deposit that names another
+    problem is refused before any request, and the journal stays."""
+    if problem_id.lower() != journal["math_problem"]["problem_id"].lower():
+        _exit_with_error(_build_pending_attachment_refusal_msg(
+            journal, problem_id, "Nothing was sent, and the journal stays as it is."))
+    _require_current_origin(journal)
+    _attach_recorded_record(journal)
+    print(f"The record {journal['doi']} of the earlier deposit for this problem is attached now. This run published"
+          " nothing new. To publish another record for this problem, run the command again.", file=sys.stderr)
+
+
+def _is_unclaimed_intent(journal: dict, root: Path) -> bool:
+    """Whether the managed intent of a journal never sent its publish request. A direct journal, and
+    an intent that cannot be read, answer no."""
+    if journal["path"] != "managed":
+        return False
+    try:
+        from research_harness.remote import get_intent
+        return not has_claimed_publish(get_intent(current_store(root), journal["operation_id"]))
+    except ResearchError:
+        return False
+
+
+def _build_unsettled_journal_note(journal: dict | None, root: Path | None = None) -> str:
     """What the user reads when the command stops while the journal of its deposit is unsettled.
     The note describes the file as it stands, so it is empty when the file records another
-    operation, or records this one as settled, or cannot be read."""
+    operation, or records this one as settled, or cannot be read. Its second sentence says what
+    the next deposit run does: it releases the journal of an intent that never sent its publish
+    request, and it reads any other deposition back from Zenodo."""
     if journal is None:
         return ""
+    root = Path.cwd() if root is None else root
     try:
-        recorded = _load_problem_journal(Path.cwd())
+        recorded = _load_problem_journal(root)
     except ResearchError:
         return ""
     if recorded is None or recorded["operation_id"] != journal["operation_id"] or recorded["settled"]:
         return ""
-    return (f"{_PROBLEM_DEPOSIT_JOURNAL_PATH} stays as the recovery record of this deposit. The next deposit or"
-            " attach-problem run reads the deposition back from Zenodo and settles it."
+    if _is_unclaimed_intent(recorded, root):
+        next_run = "The next deposit run releases it and deposits as usual."
+    else:
+        next_run = "The next deposit run reads the deposition back from Zenodo and settles it."
+    return (f"{_PROBLEM_DEPOSIT_JOURNAL_PATH} stays as the recovery record of this deposit. {next_run}"
             f" {_build_journal_removal_advice(_name_journal_deposition(recorded))}")
 
 
 @contextlib.contextmanager
-def _explain_unsettled_journal(journal: dict | None):
+def _explain_unsettled_journal(journal: dict | None, root: Path | None = None):
     """Every exit of the command while its journal is unsettled ends with the note on that journal:
     a store that refuses the record, a publish that Zenodo refuses or does not answer, and every
     other stop. The command exits through _exit_with_error or raises a ResearchError, and both
-    carry the note. A deposit that names no problem has no journal, and this does nothing."""
+    carry the note. The refusal of a journal that cannot be trusted is the one exception: it
+    carries its own message. A deposit that names no problem has no journal, and this does nothing.
+    The root is the workspace root of the journal, which is the current directory unless the
+    command resolves the root itself."""
     try:
         yield
     except SystemExit:
-        note = _build_unsettled_journal_note(journal)
+        note = _build_unsettled_journal_note(journal, root)
         if note:
             print(note, file=sys.stderr)
         raise
     except ResearchError as error:
-        note = _build_unsettled_journal_note(journal)
+        # A journal that cannot be trusted carries its own message and its own removal rule. The
+        # recovery note does not fit it, because the next run meets the same refusal.
+        note = "" if error.code == "problem_journal_untrusted" else _build_unsettled_journal_note(journal, root)
         if not note:
             raise
         # The messages of the research library end without a period, so the note starts a sentence.
@@ -875,11 +1076,10 @@ def _explain_unsettled_journal(journal: dict | None):
 def _write_problem_journal(journal: dict, failure_msg: str) -> None:
     """Persist the journal of one operation with the primitive that makes a projection atomic.
     The recorded journal is read first: a write keeps its own operation's journal current, and an
-    operation that starts, whose journal is unsettled, replaces only a settled one. So no write
-    takes the place of another operation's unsettled journal or marks another operation settled.
-    A new operation that replaces a journal with an unattached record names the command that
-    attaches that record first. A refused or failed write stops the command with `failure_msg`,
-    which states what was and was not published."""
+    operation that starts, whose journal is unsettled, replaces only a settled one with no
+    attachment pending. So no write takes the place of another operation's unsettled journal or of
+    an unattached record, and none marks another operation settled. A refused or failed write stops
+    the command with `failure_msg`, which states what was and was not published."""
     recorded = _read_problem_journal(failure_msg)
     if recorded is not None and recorded["operation_id"] != journal["operation_id"]:
         if journal["settled"] or not recorded["settled"]:
@@ -889,7 +1089,8 @@ def _write_problem_journal(journal: dict, failure_msg: str) -> None:
                              f" not this run's {journal['operation_id']}, so it was left as it is."
                              f" {recorded_advice}{failure_msg}")
         if _is_attachment_pending(recorded):
-            print(_build_attach_command_msg(recorded), file=sys.stderr)
+            _exit_with_error(_build_pending_attachment_refusal_msg(
+                recorded, journal["math_problem"]["problem_id"], f"The journal stays as it is. {failure_msg}"))
     try:
         json_projection(Path.cwd(), str(_PROBLEM_DEPOSIT_JOURNAL_PATH), journal)
     except (OSError, ResearchError) as error:
@@ -904,6 +1105,9 @@ def _mark_journal_settled(journal: dict, record: dict) -> dict:
         _exit_with_error(f"Deposition {record['deposition_id']} is published, but Zenodo answered without a DOI."
                          f" Open {record['draft_url']} and read its state. Then run exactory-draft attach-problem."
                          " It reads the deposition back and attaches the record.")
+    flaw = _find_record_flaw(journal, record)
+    if flaw is not None:
+        raise ResearchError("problem_journal_untrusted", f"{_build_untrusted_journal_msg(flaw)} Nothing was attached.")
     settled_journal = dict(journal, settled=True, doi=record["doi"])
     _write_problem_journal(settled_journal,
                            f"Record {record['doi']} is published and recorded, and the command cannot mark its"
@@ -929,7 +1133,8 @@ def _attach_recorded_record(journal: dict) -> None:
     if completed.returncode != 0:
         _exit_with_error(f"Record {journal['doi']} is published. Attaching it to problem {problem_target['problem_id']}"
                          f" failed:\n{completed.stderr.strip()}\nResolve that cause. Then run exactory-draft"
-                         " attach-problem. It attaches the recorded record and publishes nothing.")
+                         " attach-problem. It attaches the recorded record and publishes nothing."
+                         f" {_build_settled_removal_advice(journal)}")
     print(f"Record {journal['doi']} is attached to {problem_target['api_url']}/math/{problem_target['problem_id']}.",
           file=sys.stderr)
     _write_problem_journal(dict(journal, attached=True),
@@ -972,14 +1177,14 @@ def _settle_managed_publication(journal: dict, *, may_publish: bool) -> dict | N
     from research_harness.remote import get_intent
     store = current_store(find_workspace())
     intent = get_intent(store, journal["operation_id"])
+    _require_intent_of_journal(intent, journal)
     if not has_claimed_publish(intent):
         if not may_publish:
             _exit_with_error("The recorded deposit never sent its publish request, so there is no record to"
                              " attach. Run exactory-draft deposit to finish it.")
         return None
     token = _read_zenodo_token(journal["environment"] == "production")
-    return continue_deposit(store, journal["operation_id"],
-                            lambda method, url, **kwargs: _call_zenodo(method, url, token, **kwargs),
+    return continue_deposit(store, journal["operation_id"], _build_zenodo_client(journal["environment"], token),
                             reconcile=True, finish_only=not may_publish)
 
 
@@ -989,12 +1194,13 @@ def _settle_direct_publication(journal: dict, *, may_publish: bool) -> dict:
     nothing here creates a deposition, so no second record is published."""
     token = _read_zenodo_token(journal["environment"] == "production")
     deposition_url = f"{journal['base_url']}/deposit/depositions/{journal['deposition_id']}"
-    deposition = _call_zenodo("GET", deposition_url, token)
+    deposition = _call_zenodo("GET", deposition_url, token, environment=journal["environment"])
     if deposition.get("submitted") is False:
         if not may_publish:
             _exit_with_error(f"Deposition {journal['deposition_id']} is not published. Run exactory-draft deposit"
                              " to publish it. That command publishes this deposition and creates no other.")
-        deposition = _call_zenodo("POST", f"{deposition_url}/actions/publish", token)
+        deposition = _call_zenodo("POST", f"{deposition_url}/actions/publish", token,
+                                  environment=journal["environment"])
     if not deposition.get("doi"):
         _exit_with_error(f"Deposition {journal['deposition_id']} answers without a DOI. Open {journal['draft_url']}"
                          " and read its state. Then run the command again. It reads the deposition back and"
