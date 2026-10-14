@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""exactory: client for the exactory verification API.
+"""exactory: client for the exactory verification API and the exactory math section.
 
 Python standard library only. Authentication comes from EXACTORY_API_KEY, or
 from the credentials file that `exactory login` writes
@@ -47,6 +47,7 @@ _MAX_DECLARED_MATH_PROBLEMS = 3
 _MAX_CREATION_PAPERS = 10
 _MAX_CREATION_GITHUB_LINKS = 10
 _MAX_FORMAL_STATEMENT_TARGETS = 20
+_MAX_LEAN_CHECK_AXIOMS = 20
 _ACCOUNT_PAGE_PATH = "/account"
 # The report kinds of the section (design 2026-10-12 §19); the server owns the vocabulary.
 _MATH_REPORT_KINDS = ("math_problem", "math_status_event", "math_formal_statement", "math_proof",
@@ -270,6 +271,13 @@ def _run_submit(args: argparse.Namespace) -> None:
             _exit_with_error(f"The command names {len(args.challenge)} challenges."
                              f" The limit is {_MAX_DECLARED_CHALLENGES}. Remove some.")
         body["grandChallengeIds"] = args.challenge
+    if args.math_problem:
+        if len(args.math_problem) > _MAX_DECLARED_MATH_PROBLEMS:
+            _exit_with_error(f"The command names {len(args.math_problem)} math problems."
+                             f" The limit is {_MAX_DECLARED_MATH_PROBLEMS}. Remove some.")
+        body["mathProblemIds"] = args.math_problem
+        # Declaring problems is a math section contribution (design 2026-10-12 §3, §13).
+        _require_linked_orcid()
 
     # Inside a draft workspace the offline citation check runs first and prints
     # its report when it fails; the submit continues either way, because the
@@ -635,15 +643,23 @@ def _require_github_context_url(url: str) -> str:
     return url
 
 
-# Mirrors leanSourceUrlSchema (design 2026-10-12 §5): a file or a directory at a full commit,
-# an optional line anchor, no query. The URL is sent exactly as given. The anchor uses [0-9], not
-# \d: the server's \d matches ASCII digits only, and Python's \d matches other Unicode digits too.
-# The path segment keeps the server's \s, although _require_posted_link refuses whitespace first,
-# so that the pattern stays an exact copy of the server's.
+# The pieces that the Lean source and check evidence patterns share, named as in the server's
+# math-links.ts. The patterns use [0-9], not \d: the server's \d matches ASCII digits only, and
+# Python's \d matches other Unicode digits too. A path segment holds no "/", so each "/" opens
+# exactly one segment and a match takes time linear in the length of the link;
+# _require_posted_link caps a link at 500 characters before any pattern runs. The segment keeps
+# the server's \s, although _require_posted_link refuses whitespace first, so that the patterns
+# stay an exact copy of the server's.
 _GITHUB_REPOSITORY_URL_PATTERN_FRAGMENT = (
     r"https://github\.com/[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/[A-Za-z0-9._-]{1,100}")
+_COMMIT_SHA_PATTERN_FRAGMENT = r"[0-9a-f]{40}"
+_PATH_SEGMENT_PATTERN_FRAGMENT = r"/[^\s?#/]+"
+_LINE_ANCHOR_PATTERN_FRAGMENT = r"(?:#L[0-9]+(?:-L[0-9]+)?)?"
+# Mirrors leanSourceUrlSchema (design 2026-10-12 §5): a file or a directory at a full commit,
+# an optional line anchor, no query. The URL is sent exactly as given.
 _LEAN_SOURCE_URL_RE = re.compile(
-    _GITHUB_REPOSITORY_URL_PATTERN_FRAGMENT + r"/(?:blob|tree)/[0-9a-f]{40}(?:/[^\s?#/]+)*(?:#L[0-9]+(?:-L[0-9]+)?)?")
+    f"{_GITHUB_REPOSITORY_URL_PATTERN_FRAGMENT}/(?:blob|tree)/{_COMMIT_SHA_PATTERN_FRAGMENT}"
+    f"(?:{_PATH_SEGMENT_PATTERN_FRAGMENT})*{_LINE_ANCHOR_PATTERN_FRAGMENT}")
 # Mirrors the server's path rule for Lean source and check evidence links: no "." or ".." path
 # step, each dot also written %2e in any case, no encoded slash in any case, and no backslash. A
 # URL parser resolves each of them, so a link pinned to a commit could name a branch (design
@@ -668,6 +684,24 @@ def _require_lean_source_url(url: str) -> str:
                          " https://github.com/<owner>/<repo>/blob/<sha>/Statement.lean."
                          " A branch name does not pin the content.")
     _require_exact_link_path("Lean source link", url)
+    return url
+
+
+# Mirrors checkEvidenceUrlSchema (design 2026-10-12 §7): a GitHub Actions run, or a file at a
+# full commit. The URL is sent exactly as given.
+_CHECK_EVIDENCE_URL_RE = re.compile(
+    f"{_GITHUB_REPOSITORY_URL_PATTERN_FRAGMENT}/(?:actions/runs/[0-9]+(?:/job/[0-9]+)?"
+    f"|blob/{_COMMIT_SHA_PATTERN_FRAGMENT}(?:{_PATH_SEGMENT_PATTERN_FRAGMENT})+{_LINE_ANCHOR_PATTERN_FRAGMENT})")
+
+
+def _require_check_evidence_url(url: str) -> str:
+    """The rules of every posted link run first, then the shape of a check evidence link, then the
+    path rule. The poster gives the exact URL (design 2026-10-12 §12, decision 14)."""
+    _require_posted_link("check evidence link", url)
+    if not _CHECK_EVIDENCE_URL_RE.fullmatch(url):
+        _exit_with_error(f"{url} is not a check evidence link. Give a GitHub Actions run"
+                         " (https://github.com/<owner>/<repo>/actions/runs/<id>) or a file at a full commit SHA.")
+    _require_exact_link_path("check evidence link", url)
     return url
 
 
@@ -781,6 +815,104 @@ def _run_link_problem_github(args: argparse.Namespace) -> None:
     _send_math_write("POST", _build_api_path("math-problems", args.problem_id, "github-links"), body)
 
 
+# An arXiv id without a version, written as a bare id, an arxiv.org abs URL, or an arXiv DOI. The
+# server refuses it as a write-up, because the arXiv resolver cannot find which version is meant
+# (design 2026-10-12 §6). The server stays the authority for every other form.
+_ARXIV_WITHOUT_VERSION_RE = re.compile(
+    r"(?:https?://(?:www\.)?arxiv\.org/abs/|10\.48550/arxiv\.)?"
+    r"(?:[0-9]{4}\.[0-9]{4,5}|[a-z-]+(?:\.[a-z]{2})?/[0-9]{7})",
+    re.IGNORECASE)
+
+
+def _run_post_proof(args: argparse.Namespace) -> None:
+    summary = _require_utf16_bounds("summary", _read_inline_or_file_text(args.summary, args.summary_file), 100, 20000)
+    if args.writeup is None and args.lean_url is None:
+        _exit_with_error("A proof carries a write-up, a Lean solution, or both. Add --writeup, or --lean-url with"
+                         " --formal-statement-version.")
+    if (args.lean_url is None) != (args.formal_statement_version is None):
+        _exit_with_error("A Lean solution names the formal statement version it targets. Give --lean-url and"
+                         " --formal-statement-version together.")
+    body = {"claim": args.claim, "summary": summary}
+    if args.writeup is not None:
+        writeup = args.writeup.strip()
+        if _ARXIV_WITHOUT_VERSION_RE.fullmatch(writeup):
+            _exit_with_error(f"The write-up {writeup} is an arXiv id without a version. Name the exact version,"
+                             f" for example {writeup}v2.")
+        body["writeup"] = writeup
+    if args.lean_url is not None:
+        body["lean"] = {"url": _require_lean_source_url(args.lean_url),
+                        "formalStatementVersion": args.formal_statement_version}
+    if args.supersedes:
+        body["supersedesProofId"] = args.supersedes
+    _send_math_write("POST", _build_api_path("math-problems", args.problem_id, "proofs"), body)
+
+
+def _run_proofs(args: argparse.Namespace) -> None:
+    _print_page(_build_api_path("math-problems", args.problem_id, "proofs"), args)
+
+
+def _run_proof(args: argparse.Namespace) -> None:
+    payload, _ = _send_request("GET", _build_api_path("math-proofs", args.proof_id))
+    _print_json(payload)
+
+
+def _run_post_lean_check(args: argparse.Namespace) -> None:
+    """Posts the report of a check run outside exactory. Nothing runs here (design 2026-10-12 §7)."""
+    evidence_url = _require_check_evidence_url(args.evidence_url)
+    axioms = args.axiom or []
+    if len(axioms) > _MAX_LEAN_CHECK_AXIOMS:
+        _exit_with_error(f"The command names {len(axioms)} axioms."
+                         f" The limit is {_MAX_LEAN_CHECK_AXIOMS}. Remove some.")
+    body = {
+        "outcome": args.outcome,
+        "tool": _require_utf16_bounds("tool", args.tool, 1, 200),
+        "leanToolchain": _require_utf16_bounds("Lean toolchain", args.lean_toolchain, 1, 100),
+        "axioms": axioms,
+        "evidenceUrl": evidence_url,
+    }
+    if args.output_excerpt_file:
+        body["outputExcerpt"] = _require_utf16_bounds(
+            "output excerpt", _read_inline_or_file_text(None, args.output_excerpt_file), 1, 20000)
+    _send_math_write("POST", _build_api_path("math-proofs", args.proof_id, "lean-checks"), body)
+
+
+def _run_lean_checks(args: argparse.Namespace) -> None:
+    _print_page(_build_api_path("math-proofs", args.proof_id, "lean-checks"), args)
+
+
+def _run_lean_check(args: argparse.Namespace) -> None:
+    payload, _ = _send_request("GET", _build_api_path("math-lean-checks", args.check_id))
+    _print_json(payload)
+
+
+def _run_post_discussion(args: argparse.Namespace) -> None:
+    body = {"body": _require_utf16_bounds("post", _read_inline_or_file_text(args.body, args.body_file), 1, 10000)}
+    if args.reply_to:
+        body["replyToPostId"] = args.reply_to
+    _send_math_write("POST", _build_api_path("math-problems", args.problem_id, "posts"), body)
+
+
+def _run_discussion(args: argparse.Namespace) -> None:
+    _print_page(_build_api_path("math-problems", args.problem_id, "posts"), args)
+
+
+def _run_discussion_post(args: argparse.Namespace) -> None:
+    payload, _ = _send_request("GET", _build_api_path("math-posts", args.post_id))
+    _print_json(payload)
+
+
+def _print_page(path: str, args: argparse.Namespace) -> None:
+    """One page of a paginated list: the limit when given, and the cursor of a previous page. The server
+    judges every limit that goes out, a limit of 0 included."""
+    query = {}
+    if args.limit is not None:
+        query["limit"] = args.limit
+    if args.cursor:
+        query["cursor"] = args.cursor
+    payload, _ = _send_request("GET", path + ("?" + urllib.parse.urlencode(query) if query else ""))
+    _print_json(payload)
+
+
 def _run_login(args: argparse.Namespace) -> None:
     if args.code is None:
         payload, _ = _send_request("POST", "/api/v1/email-codes", {"email": args.email},
@@ -892,6 +1024,9 @@ def _build_parser() -> argparse.ArgumentParser:
                         help="A Grand Challenge this paper drew on. Repeat for"
                              " more than one, at most"
                              f" {_MAX_DECLARED_CHALLENGES}.")
+    submit.add_argument("--math-problem", action="append", dest="math_problem", metavar="PROBLEM_ID",
+                        help="A math problem this paper develops. Repeat for more than one, at most"
+                             f" {_MAX_DECLARED_MATH_PROBLEMS}. Needs a linked ORCID iD.")
     submit.set_defaults(handler=_run_submit)
     from research_harness.cli import add_managed_scope
     add_managed_scope(submit)
@@ -1188,6 +1323,84 @@ def _build_parser() -> argparse.ArgumentParser:
     link_problem_github.add_argument("--url", required=True, help="An https://github.com/ URL, sent exactly as given.")
     link_problem_github.add_argument("--label", required=True, help="A short label, 1-100 characters.")
     link_problem_github.set_defaults(handler=_run_link_problem_github)
+
+    post_proof = commands.add_parser(
+        "post-proof", allow_abbrev=False,
+        help="Post a proof or a disproof of a problem: a write-up at an exact version, a commit-pinned"
+             " Lean solution, or both. Needs a linked ORCID iD.")
+    post_proof.add_argument("problem_id")
+    post_proof.add_argument("--claim", required=True, choices=["proves", "disproves"])
+    proof_summary = post_proof.add_mutually_exclusive_group(required=True)
+    proof_summary.add_argument("--summary", help="The proof's summary in TeX, 100-20000 characters.")
+    proof_summary.add_argument("--summary-file", dest="summary_file", help="A file with the summary.")
+    post_proof.add_argument("--writeup",
+                            help="The write-up: an arXiv id with its version (2601.12345v2), a Zenodo DOI or"
+                                 " record URL.")
+    post_proof.add_argument("--lean-url", dest="lean_url",
+                            help="The Lean solution: a github.com blob or tree URL at a full commit SHA.")
+    post_proof.add_argument("--formal-statement-version", type=int, dest="formal_statement_version",
+                            help="The formal statement version the Lean solution targets.")
+    post_proof.add_argument("--supersedes", help="Your earlier proof of this problem that this one revises.")
+    post_proof.set_defaults(handler=_run_post_proof)
+
+    proofs = commands.add_parser("proofs", allow_abbrev=False, help="List a problem's current proofs.")
+    proofs.add_argument("problem_id")
+    proofs.add_argument("--cursor", help="Opaque cursor from a previous page.")
+    proofs.add_argument("--limit", type=int)
+    proofs.set_defaults(handler=_run_proofs)
+
+    proof = commands.add_parser("proof", allow_abbrev=False,
+                                help="Show one proof with its check summary and the verdicts on its write-up.")
+    proof.add_argument("proof_id")
+    proof.set_defaults(handler=_run_proof)
+
+    post_lean_check = commands.add_parser(
+        "post-lean-check", allow_abbrev=False,
+        help="Post the report of a Lean check you ran outside exactory on another account's proof."
+             " This command runs nothing. Needs a linked ORCID iD.")
+    post_lean_check.add_argument("proof_id")
+    post_lean_check.add_argument("--outcome", required=True, choices=["pass", "fail"])
+    post_lean_check.add_argument("--tool", required=True, help="What you ran, up to 200 characters.")
+    post_lean_check.add_argument("--lean-toolchain", required=True, dest="lean_toolchain",
+                                 help="The Lean toolchain as run, up to 100 characters.")
+    post_lean_check.add_argument("--axiom", action="append",
+                                 help=f"An axiom you permitted. Repeat, at most {_MAX_LEAN_CHECK_AXIOMS}.")
+    post_lean_check.add_argument("--evidence-url", required=True, dest="evidence_url",
+                                 help="A GitHub Actions run, or a file at a full commit SHA, that shows the check.")
+    post_lean_check.add_argument("--output-excerpt-file", dest="output_excerpt_file",
+                                 help="A file with an excerpt of the tool's output, up to 20000 characters.")
+    post_lean_check.set_defaults(handler=_run_post_lean_check)
+
+    lean_checks = commands.add_parser("lean-checks", allow_abbrev=False, help="List the Lean check reports of a proof.")
+    lean_checks.add_argument("proof_id")
+    lean_checks.add_argument("--cursor", help="Opaque cursor from a previous page.")
+    lean_checks.add_argument("--limit", type=int)
+    lean_checks.set_defaults(handler=_run_lean_checks)
+
+    lean_check = commands.add_parser("lean-check", allow_abbrev=False, help="Show one Lean check report.")
+    lean_check.add_argument("check_id")
+    lean_check.set_defaults(handler=_run_lean_check)
+
+    post_discussion = commands.add_parser(
+        "post-discussion", allow_abbrev=False,
+        help="Post in a problem's discussion, optionally as a reply. Needs a linked ORCID iD.")
+    post_discussion.add_argument("problem_id")
+    discussion_body = post_discussion.add_mutually_exclusive_group(required=True)
+    discussion_body.add_argument("--body", help="Plain text with TeX, 1-10000 characters.")
+    discussion_body.add_argument("--body-file", dest="body_file", help="A file with the post.")
+    post_discussion.add_argument("--reply-to", dest="reply_to", help="The post in the same discussion this replies to.")
+    post_discussion.set_defaults(handler=_run_post_discussion)
+
+    discussion = commands.add_parser("discussion", allow_abbrev=False,
+                                     help="List a problem's discussion, oldest first.")
+    discussion.add_argument("problem_id")
+    discussion.add_argument("--cursor", help="Opaque cursor from a previous page.")
+    discussion.add_argument("--limit", type=int)
+    discussion.set_defaults(handler=_run_discussion)
+
+    discussion_post = commands.add_parser("discussion-post", allow_abbrev=False, help="Show one discussion post.")
+    discussion_post.add_argument("post_id")
+    discussion_post.set_defaults(handler=_run_discussion_post)
 
     return parser
 

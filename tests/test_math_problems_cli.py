@@ -9,6 +9,7 @@ import io
 import json
 import os
 import tempfile
+import time
 import unittest
 import urllib.error
 import urllib.parse
@@ -536,6 +537,9 @@ class TestFormalStatementsStatusAndLinks(_MathCliTestCase):
 # that the server accepts or refuses, the label bounds, the preflight, and the ids in the routes.
 
 _LEAN_SOURCE_URL = f"https://github.com/o/r/blob/{_SHA}/Challenge.lean"
+# The two kinds of check evidence link: a GitHub Actions run, and a file at a full commit.
+_CHECK_RUN_URL = "https://github.com/checker/runs/actions/runs/123456789"
+_CHECK_FILE_URL = f"https://github.com/checker/runs/blob/{_SHA}/logs/check.txt"
 
 # One valid command line for each command that writes to a problem by its id and needs a linked ORCID iD:
 # the command, the HTTP method of its write, the route after the problem id, and its other options.
@@ -864,11 +868,16 @@ class TestWhitespaceInALink(_MathCliTestCase):
     def build_context_link_argv(self, url: str) -> list[str]:
         return ["link-problem-github", _PROBLEM_ID, "--url", url, "--label", "Code"]
 
+    def build_check_evidence_argv(self, url: str) -> list[str]:
+        return ["post-lean-check", _PROOF_ID, "--outcome", "pass", "--tool", "t", "--lean-toolchain", "v",
+                "--evidence-url", url]
+
     def list_link_kinds(self) -> tuple:
         """For each kind of link: its name in the messages, a valid link, and the command line that posts a link."""
         return (
             ("Lean source link", _LEAN_SOURCE_URL, self.build_lean_source_argv),
             ("context link", "https://github.com/o/r/issues/1", self.build_context_link_argv),
+            ("check evidence link", _CHECK_RUN_URL, self.build_check_evidence_argv),
         )
 
     def test_a_space_before_after_or_inside_a_link_is_named_as_the_cause(self) -> None:
@@ -883,7 +892,8 @@ class TestWhitespaceInALink(_MathCliTestCase):
     def test_a_space_is_named_before_the_shape_of_the_link_is_judged(self) -> None:
         for kind, url, build_argv in (
                 ("Lean source link", "https://github.com/o/r/blob/main/Chall enge.lean", self.build_lean_source_argv),
-                ("context link", "http://github.com/o/r tracking", self.build_context_link_argv)):
+                ("context link", "http://github.com/o/r tracking", self.build_context_link_argv),
+                ("check evidence link", "https://example.org/log txt", self.build_check_evidence_argv)):
             with self.subTest(kind=kind):
                 _, stderr_text = self.run_cli(build_argv(url), expected_exit_code=1)
                 self.assertIn(f"The {kind} {_WHITESPACE_REASON}.", stderr_text)
@@ -917,6 +927,687 @@ class TestWhitespaceInALink(_MathCliTestCase):
                     self.assertIn(f"The {kind} contains {_NON_TEXT_REASON}.", stderr_text)
                     self.assertNotIn(_WHITESPACE_REASON, stderr_text)
         self.assertEqual(self.sent, [])
+
+
+
+class TestLinkPatternsOnAHostilePath(unittest.TestCase):
+    def test_both_link_checks_refuse_a_long_hostile_path_in_linear_time(self) -> None:
+        # A segment class that admitted "/" would split this path in 2^26 ways and try each
+        # one before the trailing "?" fails the match.
+        hostile = f"https://github.com/o/r/blob/{_SHA}" + "/a" * 26 + "?"
+        started = time.perf_counter()
+        self.assertIsNone(_cli._LEAN_SOURCE_URL_RE.fullmatch(hostile))
+        self.assertIsNone(_cli._CHECK_EVIDENCE_URL_RE.fullmatch(hostile))
+        self.assertLess(time.perf_counter() - started, 0.1)
+
+
+class TestProofsChecksAndDiscussion(_MathCliTestCase):
+    def test_the_plugin_posts_a_formal_statement_a_lean_proof_and_a_check_report(self) -> None:
+        statement_url = f"https://github.com/o/r/blob/{_SHA}/Challenge.lean"
+        solution_url = f"https://github.com/o/r/tree/{_SHA}/Solution"
+        evidence_url = "https://github.com/checker/runs/actions/runs/123456789"
+        self.run_cli(["add-formal-statement", _PROBLEM_ID, "--lean-url", statement_url, "--proof-target", "statement"])
+        self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "proves", "--summary", "p" * 120,
+                      "--lean-url", solution_url, "--formal-statement-version", "1"])
+        self.run_cli(["post-lean-check", _PROOF_ID, "--outcome", "pass",
+                      "--tool", "leanprover/comparator at commit 1a2b3c4", "--lean-toolchain", "leanprover/lean4:v4.22.0",
+                      "--axiom", "propext", "--axiom", "Classical.choice", "--axiom", "Quot.sound",
+                      "--evidence-url", evidence_url])
+
+        self.assertEqual(self.read_sent_body("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/proofs"), {
+            "claim": "proves", "summary": "p" * 120, "lean": {"url": solution_url, "formalStatementVersion": 1},
+        })
+        self.assertEqual(self.read_sent_body("POST", f"/api/v1/math-proofs/{_PROOF_ID}/lean-checks"), {
+            "outcome": "pass", "tool": "leanprover/comparator at commit 1a2b3c4",
+            "leanToolchain": "leanprover/lean4:v4.22.0", "axioms": ["propext", "Classical.choice", "Quot.sound"],
+            "evidenceUrl": evidence_url,
+        })
+
+    def test_local_checks_refuse_an_unversioned_arxiv_write_up_and_a_non_github_evidence_link(self) -> None:
+        _, stderr_text = self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "proves", "--summary", "p" * 120,
+                                       "--writeup", "2601.12345"], expected_exit_code=1)
+        self.assertIn("2601.12345v2", stderr_text)
+        self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "proves", "--summary", "p" * 120], expected_exit_code=1)
+        self.run_cli(["post-lean-check", _PROOF_ID, "--outcome", "fail", "--tool", "t", "--lean-toolchain", "v",
+                      "--evidence-url", "https://example.org/log.txt"], expected_exit_code=1)
+        self.assertEqual(self.sent, [])
+
+    def test_check_evidence_and_lean_solution_links_meet_the_link_rules_before_any_request(self) -> None:
+        run = "https://github.com/checker/runs/actions/runs/123456789"
+        pinned_file = f"https://github.com/checker/runs/blob/{_SHA}/logs/check.txt"
+        refused = [
+            (run + "/" + "1" * (500 - len(run)), "is 501 characters long"),
+            (run + chr(0x7F), _NON_TEXT_REASON),
+            (pinned_file + chr(0x2066), _NON_TEXT_REASON),
+            (pinned_file + chr(0xD800), _NON_TEXT_REASON),
+            (f"https://github.com/checker/runs/blob/{_SHA}/logs/../../../other/repo/blob/main/check.txt",
+             _MOVED_PATH_REASON),
+            (f"https://github.com/checker/runs/blob/{_SHA}/logs/%2e/check.txt", _MOVED_PATH_REASON),
+            (f"https://github.com/checker/runs/blob/{_SHA}/logs%2Fcheck.txt", _MOVED_PATH_REASON),
+            (f"https://github.com/checker/runs/blob/{_SHA}/logs\\check.txt", _MOVED_PATH_REASON),
+        ]
+        for url, reason in refused:
+            with self.subTest(url=url):
+                _, stderr_text = self.run_cli(["post-lean-check", _PROOF_ID, "--outcome", "pass", "--tool", "t",
+                                               "--lean-toolchain", "v", "--evidence-url", url], expected_exit_code=1)
+                self.assertIn(reason, stderr_text)
+        _, stderr_text = self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "proves", "--summary", "p" * 120,
+                                       "--lean-url", f"https://github.com/o/r/tree/{_SHA}/Solution/..",
+                                       "--formal-statement-version", "1"], expected_exit_code=1)
+        self.assertIn(_MOVED_PATH_REASON, stderr_text)
+        self.assertEqual(self.sent, [])
+
+    def test_a_versioned_arxiv_write_up_and_a_revision_are_forwarded(self) -> None:
+        self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "disproves", "--summary", "d" * 120,
+                      "--writeup", "2601.12345v2", "--supersedes", _PROOF_ID])
+        self.assertEqual(self.read_sent_body("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/proofs"),
+                         {"claim": "disproves", "summary": "d" * 120, "writeup": "2601.12345v2", "supersedesProofId": _PROOF_ID})
+
+    def test_reads_and_the_discussion(self) -> None:
+        self.run_cli(["proofs", _PROBLEM_ID])
+        self.run_cli(["proof", _PROOF_ID])
+        self.run_cli(["lean-checks", _PROOF_ID])
+        self.run_cli(["lean-check", _PROOF_ID])
+        self.run_cli(["discussion", _PROBLEM_ID])
+        self.run_cli(["discussion-post", _PROOF_ID])
+        self.run_cli(["post-discussion", _PROBLEM_ID, "--body", "Is $n = 7$ within reach?", "--reply-to", _PROOF_ID])
+        self.assertEqual(self.list_sent_requests(), [
+            ("GET", f"/api/v1/math-problems/{_PROBLEM_ID}/proofs"),
+            ("GET", f"/api/v1/math-proofs/{_PROOF_ID}"),
+            ("GET", f"/api/v1/math-proofs/{_PROOF_ID}/lean-checks"),
+            ("GET", f"/api/v1/math-lean-checks/{_PROOF_ID}"),
+            ("GET", f"/api/v1/math-problems/{_PROBLEM_ID}/posts"),
+            ("GET", f"/api/v1/math-posts/{_PROOF_ID}"),
+            ("GET", "/api/v1/me"),
+            ("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/posts"),
+        ])
+        self.assertEqual(self.read_sent_body("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/posts"),
+                         {"body": "Is $n = 7$ within reach?", "replyToPostId": _PROOF_ID})
+
+
+class TestSubmitWithMathProblems(_MathCliTestCase):
+    def test_a_submission_with_problems_runs_the_preflight_and_sends_the_ids(self) -> None:
+        self.answers[("POST", "/api/v1/verifications")] = (201, {"id": "v1"})
+        self.run_cli(["submit", "--arxiv-id", "2601.12345v2", "--math-problem", _PROBLEM_ID])
+        self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me"), ("POST", "/api/v1/verifications")])
+        self.assertEqual(self.read_sent_body("POST", "/api/v1/verifications"),
+                         {"arxivId": "2601.12345v2", "mathProblemIds": [_PROBLEM_ID]})
+
+    def test_a_submission_without_problems_runs_no_preflight(self) -> None:
+        self.me = {"displayName": "Ada", "orcidId": None}
+        self.answers[("POST", "/api/v1/verifications")] = (201, {"id": "v1"})
+        self.run_cli(["submit", "--arxiv-id", "2601.12345v2"])
+        self.assertEqual(self.list_sent_requests(), [("POST", "/api/v1/verifications")])
+
+    def test_four_problems_are_refused_before_any_request(self) -> None:
+        argv = ["submit", "--arxiv-id", "2601.12345v2"]
+        for _ in range(4):
+            argv += ["--math-problem", _PROBLEM_ID]
+        self.run_cli(argv, expected_exit_code=1)
+        self.assertEqual(self.sent, [])
+
+
+# The classes below cover the branches of the new commands that the cases above do not reach: the shapes of a check
+# evidence link, the forms of a write-up, the bounds of every text field, the file forms, the limit of 20 axioms,
+# the query of a list, the ids in the routes, the limit of 3 problems at submission, and the parsers.
+
+_LEAN_SOLUTION_URL = f"https://github.com/o/r/tree/{_SHA}/Solution"
+
+
+def _build_axiom_options(count: int) -> list[str]:
+    return [arg for i in range(count) for arg in ("--axiom", f"axiom_{i}")]
+
+
+class TestPostProofInputs(_MathCliTestCase):
+    def build_post_proof_argv(self, *extra: str) -> list[str]:
+        return ["post-proof", _PROBLEM_ID, "--claim", "proves", "--summary", "p" * 120, *extra]
+
+    def read_proof_body(self) -> dict:
+        return self.read_sent_body("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/proofs")
+
+    def test_a_proof_sends_only_the_parts_it_was_given(self) -> None:
+        lean = ["--lean-url", _LEAN_SOLUTION_URL, "--formal-statement-version", "2"]
+        lean_part = {"url": _LEAN_SOLUTION_URL, "formalStatementVersion": 2}
+        for extra_args, sent_parts in (
+                (["--writeup", "2601.12345v2"], {"writeup": "2601.12345v2"}),
+                (lean, {"lean": lean_part}),
+                ([*lean, "--writeup", "10.5281/zenodo.123456"], {"writeup": "10.5281/zenodo.123456", "lean": lean_part})):
+            with self.subTest(extra_args=extra_args):
+                self.sent.clear()
+                self.run_cli(self.build_post_proof_argv(*extra_args))
+                self.assertEqual(self.read_proof_body(), {"claim": "proves", "summary": "p" * 120, **sent_parts})
+
+    def test_a_proof_without_a_writeup_and_without_a_lean_solution_is_refused_with_its_remedy(self) -> None:
+        for extra_args in ([], ["--formal-statement-version", "1"]):
+            with self.subTest(extra_args=extra_args):
+                _, stderr_text = self.run_cli(self.build_post_proof_argv(*extra_args), expected_exit_code=1)
+                self.assertIn("A proof carries a write-up, a Lean solution, or both. Add --writeup,"
+                              " or --lean-url with --formal-statement-version.", stderr_text)
+        self.assertEqual(self.sent, [])
+
+    def test_a_lean_solution_and_its_formal_statement_version_come_together(self) -> None:
+        for extra_args in (["--writeup", "2601.12345v2", "--lean-url", _LEAN_SOLUTION_URL],
+                           ["--writeup", "2601.12345v2", "--formal-statement-version", "1"]):
+            with self.subTest(extra_args=extra_args):
+                _, stderr_text = self.run_cli(self.build_post_proof_argv(*extra_args), expected_exit_code=1)
+                self.assertIn("A Lean solution names the formal statement version it targets."
+                              " Give --lean-url and --formal-statement-version together.", stderr_text)
+        self.assertEqual(self.sent, [])
+
+    def test_a_writeup_that_names_a_version_or_a_record_is_sent_trimmed(self) -> None:
+        for writeup in ("2601.12345v2", "2601.12345V2", "https://arxiv.org/abs/2601.12345v3", "10.48550/arXiv.2601.12345v2",
+                        "hep-th/9901001v3", "math.GT/0309136v1", "10.5281/zenodo.123456", "https://zenodo.org/records/123456"):
+            for padding in ("", "  "):
+                with self.subTest(writeup=writeup, padding=padding):
+                    self.sent.clear()
+                    self.run_cli(self.build_post_proof_argv("--writeup", padding + writeup + padding))
+                    self.assertEqual(self.read_proof_body()["writeup"], writeup)
+
+    def test_an_arxiv_id_in_any_form_without_a_version_is_refused_with_the_version_in_the_remedy(self) -> None:
+        for writeup in ("2601.12345", "2601.1234", "https://arxiv.org/abs/2601.12345", "http://www.arxiv.org/abs/2601.12345",
+                        "10.48550/arXiv.2601.12345", "10.48550/ARXIV.2601.12345", "HTTPS://ARXIV.ORG/ABS/2601.12345",
+                        "hep-th/9901001", "math.GT/0309136", "HEP-TH/9901001",
+                        "https://arxiv.org/abs/hep-th/9901001", "10.48550/arXiv.hep-th/9901001"):
+            with self.subTest(writeup=writeup):
+                _, stderr_text = self.run_cli(self.build_post_proof_argv("--writeup", f"  {writeup}  "), expected_exit_code=1)
+                self.assertIn(f"The write-up {writeup} is an arXiv id without a version."
+                              f" Name the exact version, for example {writeup}v2.", stderr_text)
+        self.assertEqual(self.sent, [])
+
+    def test_an_identifier_that_is_not_an_arxiv_id_is_left_to_the_server(self) -> None:
+        # Only an arXiv id without a version is known to be refused. Any other identifier goes out as given.
+        for writeup in ("2601.123456", "hep-th/990100", "10.1234/other-doi"):
+            with self.subTest(writeup=writeup):
+                self.sent.clear()
+                self.run_cli(self.build_post_proof_argv("--writeup", writeup))
+                self.assertEqual(self.read_proof_body()["writeup"], writeup)
+
+    def test_the_summary_has_the_bounds_of_the_server_schema(self) -> None:
+        for summary, is_accepted in (("s" * 99, False), ("s" * 100, True), ("s" * 20000, True), ("s" * 20001, False),
+                                     ("  " + "s" * 100 + "  ", True), (" " * 120, False)):
+            with self.subTest(summary_length=len(summary)):
+                self.sent.clear()
+                argv = ["post-proof", _PROBLEM_ID, "--claim", "proves", "--summary", summary, "--writeup", "2601.12345v2"]
+                if is_accepted:
+                    self.run_cli(argv)
+                    self.assertEqual(self.read_proof_body()["summary"], summary.strip())
+                else:
+                    self.run_cli(argv, expected_exit_code=1)
+                    self.assertEqual(self.sent, [])
+
+    def test_the_summary_can_come_from_a_file(self) -> None:
+        summary_path = self.scratch_dir / "summary.tex"
+        summary_path.write_text("s" * 100 + "\n", encoding="utf-8")
+        self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "disproves", "--summary-file", str(summary_path),
+                      "--writeup", "2601.12345v2"])
+        self.assertEqual(self.read_proof_body()["summary"], "s" * 100)
+
+    def test_a_missing_summary_file_is_refused_before_any_request(self) -> None:
+        _, stderr_text = self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "proves",
+                                       "--summary-file", str(self.scratch_dir / "absent.tex"),
+                                       "--writeup", "2601.12345v2"], expected_exit_code=1)
+        self.assertIn("does not exist", stderr_text)
+        self.assertEqual(self.sent, [])
+
+    def test_a_lean_solution_at_a_branch_is_refused_before_any_request(self) -> None:
+        _, stderr_text = self.run_cli(self.build_post_proof_argv(
+            "--lean-url", "https://github.com/o/r/blob/main/Solution.lean", "--formal-statement-version", "1"),
+            expected_exit_code=1)
+        self.assertIn("full 40-character commit SHA", stderr_text)
+        self.assertEqual(self.sent, [])
+
+
+class TestLeanCheckInputs(_MathCliTestCase):
+    def build_post_lean_check_argv(self, *extra: str, outcome: str = "pass", evidence_url: str = _CHECK_RUN_URL) -> list[str]:
+        return ["post-lean-check", _PROOF_ID, "--outcome", outcome, "--tool", "t", "--lean-toolchain", "v",
+                "--evidence-url", evidence_url, *extra]
+
+    def read_report_body(self) -> dict:
+        return self.read_sent_body("POST", f"/api/v1/math-proofs/{_PROOF_ID}/lean-checks")
+
+    def test_a_report_without_axioms_or_an_excerpt_sends_an_empty_axiom_list_and_no_excerpt(self) -> None:
+        self.run_cli(self.build_post_lean_check_argv())
+        self.assertEqual(self.read_report_body(),
+                         {"outcome": "pass", "tool": "t", "leanToolchain": "v", "axioms": [], "evidenceUrl": _CHECK_RUN_URL})
+
+    def test_a_failing_outcome_is_forwarded(self) -> None:
+        self.run_cli(self.build_post_lean_check_argv(outcome="fail"))
+        self.assertEqual(self.read_report_body()["outcome"], "fail")
+
+    def test_the_axioms_keep_the_order_they_were_given_in(self) -> None:
+        self.run_cli(self.build_post_lean_check_argv("--axiom", "Quot.sound", "--axiom", "propext"))
+        self.assertEqual(self.read_report_body()["axioms"], ["Quot.sound", "propext"])
+
+    def test_twenty_axioms_are_accepted(self) -> None:
+        self.run_cli(self.build_post_lean_check_argv(*_build_axiom_options(20)))
+        self.assertEqual(len(self.read_report_body()["axioms"]), 20)
+
+    def test_twenty_one_axioms_are_refused_with_the_count_and_one_remedy_per_sentence(self) -> None:
+        _, stderr_text = self.run_cli(self.build_post_lean_check_argv(*_build_axiom_options(21)), expected_exit_code=1)
+        self.assertIn("The command names 21 axioms. The limit is 20. Remove some.", stderr_text)
+        self.assertEqual(self.sent, [])
+
+    def test_the_tool_and_the_toolchain_have_the_bounds_of_the_server_schema(self) -> None:
+        for flag, field, maximum in (("--tool", "tool", 200), ("--lean-toolchain", "leanToolchain", 100)):
+            for value, is_accepted in (("", False), ("   ", False), ("x", True), ("x" * maximum, True), (" x ", True),
+                                       ("x" * (maximum + 1), False)):
+                with self.subTest(flag=flag, value_length=len(value)):
+                    self.sent.clear()
+                    argv = self.build_post_lean_check_argv()
+                    argv[argv.index(flag) + 1] = value
+                    if is_accepted:
+                        self.run_cli(argv)
+                        self.assertEqual(self.read_report_body()[field], value.strip())
+                    else:
+                        self.run_cli(argv, expected_exit_code=1)
+                        self.assertEqual(self.sent, [])
+
+    def test_the_output_excerpt_comes_from_a_file_with_the_bounds_of_the_server_schema(self) -> None:
+        excerpt_path = self.scratch_dir / "excerpt.txt"
+        for text, is_accepted in (("", False), ("  \n", False), ("o\n", True), ("o" * 20000, True), ("o" * 20001, False)):
+            with self.subTest(text_length=len(text)):
+                self.sent.clear()
+                excerpt_path.write_text(text, encoding="utf-8")
+                argv = self.build_post_lean_check_argv("--output-excerpt-file", str(excerpt_path))
+                if is_accepted:
+                    self.run_cli(argv)
+                    self.assertEqual(self.read_report_body()["outputExcerpt"], text.strip())
+                else:
+                    self.run_cli(argv, expected_exit_code=1)
+                    self.assertEqual(self.sent, [])
+
+    def test_a_missing_excerpt_file_is_refused_before_any_request(self) -> None:
+        _, stderr_text = self.run_cli(
+            self.build_post_lean_check_argv("--output-excerpt-file", str(self.scratch_dir / "absent.txt")),
+            expected_exit_code=1)
+        self.assertIn("does not exist", stderr_text)
+        self.assertEqual(self.sent, [])
+
+    def test_links_in_every_shape_the_server_accepts_are_sent_as_given(self) -> None:
+        pinned = f"https://github.com/o/r/blob/{_SHA}"
+        accepted = [
+            _CHECK_RUN_URL,
+            f"{_CHECK_RUN_URL}/job/987654321",
+            "https://github.com/o/r/actions/runs/0",
+            _CHECK_FILE_URL,
+            f"{pinned}/check.txt",
+            f"{pinned}/check.txt#L3",
+            f"{pinned}/check.txt#L3-L9",
+            f"{pinned}/logs/2026/10/check.txt",
+            f"https://github.com/my-org/r.github.io/blob/{_SHA}/check.txt",
+            f"https://github.com/{'o' * 39}/{'r' * 100}/blob/{_SHA}/check.txt",
+            f"{pinned}/" + "a" * (499 - len(pinned)),
+            f"{pinned}/%E2%88%80.txt",
+            f"{pinned}/" + chr(0xDC) + "ber.txt",
+            f"{pinned}/" + chr(0x1F600) + ".txt",
+        ]
+        for url in accepted:
+            with self.subTest(url=url):
+                self.sent.clear()
+                self.run_cli(self.build_post_lean_check_argv(evidence_url=url))
+                self.assertEqual(self.read_report_body()["evidenceUrl"], url)
+
+    def test_a_link_that_is_not_a_run_or_a_file_at_a_full_commit_is_refused_before_any_request(self) -> None:
+        pinned = f"https://github.com/o/r/blob/{_SHA}"
+        run = "https://github.com/o/r/actions/runs/123"
+        refused = [
+            "",
+            "https://example.org/log.txt",
+            "https://github.com/o/r",
+            "https://github.com/o/r/actions",
+            "https://github.com/o/r/actions/runs",
+            "https://github.com/o/r/actions/runs/",
+            "https://github.com/o/r/actions/runs/latest",
+            f"{run}x",
+            f"x{run}",
+            f"{run}/",
+            f"{run}/job",
+            f"{run}/job/",
+            f"{run}/job/abc",
+            f"{run}/job/1/job/2",
+            f"{run}/attempts/1",
+            f"{run}?check_suite_focus=true",
+            f"{run}#step:1:1",
+            f"{run}#L3",
+            "https://github.com/o/r/actions/workflows/ci.yml",
+            "https://github.com/o/r/runs/123",
+            "https://github.com/o/r/actions/runs/" + chr(0x663),
+            f"{run}/job/" + chr(0xFF13),
+            f"https://github.com/o/r/tree/{_SHA}/check.txt",
+            f"https://github.com/o/r/tree/{_SHA}",
+            pinned,
+            f"{pinned}/",
+            f"{pinned}//check.txt",
+            f"{pinned}/check.txt/",
+            f"https://github.com/o/r/blob/{_SHA[:7]}/check.txt",
+            f"https://github.com/o/r/blob/{_SHA[:39]}/check.txt",
+            f"https://github.com/o/r/blob/{_SHA}0/check.txt",
+            f"https://github.com/o/r/blob/{_SHA.upper()}/check.txt",
+            f"https://github.com/o/r/blob/{_SHA[:39]}g/check.txt",
+            "https://github.com/o/r/blob/main/check.txt",
+            f"{pinned}/check.txt?plain=1",
+            f"{pinned}/check.txt#L3-9",
+            f"{pinned}/check.txt#L",
+            f"{pinned}/check.txt#L3-L9-L12",
+            f"{pinned}/check.txt#section",
+            f"{pinned}/check.txt#L" + chr(0x663),
+            f"{pinned}/check.txt#L3-L" + chr(0x663),
+            f"https://github.com/o/r/commit/{_SHA}",
+            f"https://github.com/o/r/raw/{_SHA}/check.txt",
+            f"https://github.com/o/r/blame/{_SHA}/check.txt",
+            "http://github.com/o/r/actions/runs/123",
+            "HTTPS://github.com/o/r/actions/runs/123",
+            "https://GitHub.com/o/r/actions/runs/123",
+            "https://www.github.com/o/r/actions/runs/123",
+            "https://github.com.evil.test/o/r/actions/runs/123",
+            "https://githubxcom/o/r/actions/runs/123",
+            "https://github.com/actions/runs/123",
+            "https://github.com/extra/o/r/actions/runs/123",
+            f"https://github.com/{'o' * 40}/r/actions/runs/123",
+            "https://github.com/-o/r/actions/runs/123",
+            "https://github.com/o-/r/actions/runs/123",
+            "https://github.com/o.o/r/actions/runs/123",
+            "https://github.com/_o/r/actions/runs/123",
+            "https://github.com/o_o/r/actions/runs/123",
+            "https://github.com/o_/r/actions/runs/123",
+            f"https://github.com/o{chr(0xE9)}o/r/actions/runs/123",
+            "https://github.com/o/r~/actions/runs/123",
+            f"https://github.com/o/r{chr(0xE9)}/actions/runs/123",
+            f"https://github.com/o/{'r' * 101}/actions/runs/123",
+        ]
+        for url in refused:
+            with self.subTest(url=url):
+                _, stderr_text = self.run_cli(self.build_post_lean_check_argv(evidence_url=url), expected_exit_code=1)
+                self.assertIn(f"{url} is not a check evidence link", stderr_text)
+        self.assertEqual(self.sent, [])
+
+    def test_a_path_step_that_moves_the_link_is_refused_in_a_file_and_in_the_repository(self) -> None:
+        pinned = f"https://github.com/o/r/blob/{_SHA}"
+        refused = [
+            f"{pinned}/./check.txt",
+            f"{pinned}/%2E%2e/check.txt",
+            f"{pinned}/lib/.%2E#L3",
+            f"{pinned}/lib/..",
+            f"{pinned}/lib%2fcheck.txt",
+            f"{pinned}/lib\\check.txt",
+            "https://github.com/o/../actions/runs/123",
+            f"https://github.com/o/../blob/{_SHA}/check.txt",
+        ]
+        for url in refused:
+            with self.subTest(url=url):
+                _, stderr_text = self.run_cli(self.build_post_lean_check_argv(evidence_url=url), expected_exit_code=1)
+                self.assertIn(_MOVED_PATH_REASON, stderr_text)
+        self.assertEqual(self.sent, [])
+
+    def test_names_made_of_dots_stay_valid_in_a_check_evidence_link(self) -> None:
+        pinned = f"https://github.com/o/r/blob/{_SHA}"
+        for url in (f"{pinned}/.github/check.txt", f"{pinned}/a..b/...txt", f"{pinned}/%2e%2e%2e.txt"):
+            with self.subTest(url=url):
+                self.run_cli(self.build_post_lean_check_argv(evidence_url=url))
+                self.assertEqual(json.loads(self.sent[-1].data.decode())["evidenceUrl"], url)
+
+    def test_the_shape_pattern_refuses_whitespace_by_itself_like_the_server_pattern(self) -> None:
+        # The commands refuse whitespace before the pattern runs, so the pattern is checked on its own.
+        for link in (_CHECK_RUN_URL, _CHECK_FILE_URL):
+            self.assertIsNotNone(_cli._CHECK_EVIDENCE_URL_RE.fullmatch(link))
+            for url in (*_build_links_with_a_space(link), link[:-3] + chr(0xA0) + link[-3:], link + "\n"):
+                with self.subTest(url=url):
+                    self.assertIsNone(_cli._CHECK_EVIDENCE_URL_RE.fullmatch(url))
+
+
+class TestPostDiscussionInputs(_MathCliTestCase):
+    def read_post_body(self) -> dict:
+        return self.read_sent_body("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/posts")
+
+    def test_a_post_that_replies_to_nothing_sends_only_its_body(self) -> None:
+        self.run_cli(["post-discussion", _PROBLEM_ID, "--body", "Is $n = 7$ within reach?"])
+        self.assertEqual(self.read_post_body(), {"body": "Is $n = 7$ within reach?"})
+
+    def test_the_post_has_the_bounds_of_the_server_schema(self) -> None:
+        for body, is_accepted in (("", False), ("   ", False), ("n", True), ("n" * 10000, True), (" n ", True),
+                                  ("n" * 10001, False)):
+            with self.subTest(body_length=len(body)):
+                self.sent.clear()
+                argv = ["post-discussion", _PROBLEM_ID, "--body", body]
+                if is_accepted:
+                    self.run_cli(argv)
+                    self.assertEqual(self.read_post_body()["body"], body.strip())
+                else:
+                    self.run_cli(argv, expected_exit_code=1)
+                    self.assertEqual(self.sent, [])
+
+    def test_the_post_can_come_from_a_file(self) -> None:
+        body_path = self.scratch_dir / "post.txt"
+        body_path.write_text("Is $n = 7$ within reach?\n", encoding="utf-8")
+        self.run_cli(["post-discussion", _PROBLEM_ID, "--body-file", str(body_path), "--reply-to", _PROOF_ID])
+        self.assertEqual(self.read_post_body(), {"body": "Is $n = 7$ within reach?", "replyToPostId": _PROOF_ID})
+
+    def test_a_missing_post_file_is_refused_before_any_request(self) -> None:
+        _, stderr_text = self.run_cli(["post-discussion", _PROBLEM_ID, "--body-file", str(self.scratch_dir / "absent.txt")],
+                                      expected_exit_code=1)
+        self.assertIn("does not exist", stderr_text)
+        self.assertEqual(self.sent, [])
+
+
+# The lists that page: the command, the id its route holds, and the route.
+_PAGED_READ_COMMANDS = (
+    ("proofs", _PROBLEM_ID, f"/api/v1/math-problems/{_PROBLEM_ID}/proofs"),
+    ("lean-checks", _PROOF_ID, f"/api/v1/math-proofs/{_PROOF_ID}/lean-checks"),
+    ("discussion", _PROBLEM_ID, f"/api/v1/math-problems/{_PROBLEM_ID}/posts"),
+)
+
+
+class TestPagedReads(_MathCliTestCase):
+    def read_query(self) -> dict[str, list[str]]:
+        return urllib.parse.parse_qs(urllib.parse.urlparse(self.sent[-1].full_url).query)
+
+    def test_without_options_each_list_asks_for_the_first_page_of_the_default_size(self) -> None:
+        for command, path_id, route in _PAGED_READ_COMMANDS:
+            with self.subTest(command=command):
+                self.run_cli([command, path_id])
+                self.assertEqual(self.sent[-1].full_url, "https://api.test" + route)
+
+    def test_the_limit_and_the_cursor_join_the_query(self) -> None:
+        for command, path_id, route in _PAGED_READ_COMMANDS:
+            for options, query in ((["--limit", "5"], {"limit": ["5"]}),
+                                   (["--cursor", "c1"], {"cursor": ["c1"]}),
+                                   (["--limit", "5", "--cursor", "c1"], {"limit": ["5"], "cursor": ["c1"]})):
+                with self.subTest(command=command, options=options):
+                    self.run_cli([command, path_id, *options])
+                    self.assertEqual(urllib.parse.urlparse(self.sent[-1].full_url).path, route)
+                    self.assertEqual(self.read_query(), query)
+
+    def test_a_limit_of_zero_is_sent_for_the_server_to_judge(self) -> None:
+        for command, path_id, _ in _PAGED_READ_COMMANDS:
+            with self.subTest(command=command):
+                self.run_cli([command, path_id, "--limit", "0"])
+                self.assertEqual(self.read_query(), {"limit": ["0"]})
+
+    def test_an_empty_cursor_is_left_out(self) -> None:
+        for command, path_id, route in _PAGED_READ_COMMANDS:
+            with self.subTest(command=command):
+                self.run_cli([command, path_id, "--cursor", ""])
+                self.assertEqual(self.sent[-1].full_url, "https://api.test" + route)
+
+    def test_a_cursor_with_reserved_characters_is_encoded(self) -> None:
+        cursor = "a+b/c=d&e f?g#h"
+        for command, path_id, _ in _PAGED_READ_COMMANDS:
+            with self.subTest(command=command):
+                self.run_cli([command, path_id, "--cursor", cursor])
+                self.assertEqual(self.read_query(), {"cursor": [cursor]})
+
+
+# One valid command line for each new command that takes one id: the command, the HTTP method of its request, the
+# route with the id in {id}, and its other options. The id is only a path segment here, so one UUID serves every command.
+_ID_COMMANDS = (
+    ("post-proof", "POST", "/api/v1/math-problems/{id}/proofs",
+     ("--claim", "proves", "--summary", "p" * 120, "--writeup", "2601.12345v2")),
+    ("post-lean-check", "POST", "/api/v1/math-proofs/{id}/lean-checks",
+     ("--outcome", "pass", "--tool", "t", "--lean-toolchain", "v", "--evidence-url", _CHECK_RUN_URL)),
+    ("post-discussion", "POST", "/api/v1/math-problems/{id}/posts", ("--body", "Is $n = 7$ within reach?")),
+    ("proofs", "GET", "/api/v1/math-problems/{id}/proofs", ()),
+    ("proof", "GET", "/api/v1/math-proofs/{id}", ()),
+    ("lean-checks", "GET", "/api/v1/math-proofs/{id}/lean-checks", ()),
+    ("lean-check", "GET", "/api/v1/math-lean-checks/{id}", ()),
+    ("discussion", "GET", "/api/v1/math-problems/{id}/posts", ()),
+    ("discussion-post", "GET", "/api/v1/math-posts/{id}", ()),
+)
+
+
+class TestCommandsOnAnId(_MathCliTestCase):
+    def list_commands(self, method: str) -> list[tuple]:
+        return [row for row in _ID_COMMANDS if row[1] == method]
+
+    def test_each_write_reads_the_caller_state_once_and_then_posts(self) -> None:
+        for command, method, route, options in self.list_commands("POST"):
+            with self.subTest(command=command):
+                self.sent.clear()
+                self.run_cli([command, _PROBLEM_ID, *options])
+                self.assertEqual(self.list_sent_requests(),
+                                 [("GET", "/api/v1/me"), (method, route.format(id=_PROBLEM_ID))])
+
+    def test_without_an_orcid_each_write_stops_before_the_request_and_names_the_account_page(self) -> None:
+        self.me = {"displayName": "Ada", "orcidId": None}
+        for command, _, _, options in self.list_commands("POST"):
+            with self.subTest(command=command):
+                self.sent.clear()
+                _, stderr_text = self.run_cli([command, _PROBLEM_ID, *options], expected_exit_code=1)
+                self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me")])
+                self.assertIn("https://api.test/account", stderr_text)
+
+    def test_each_read_sends_one_request_and_needs_no_linked_id(self) -> None:
+        self.me = {"displayName": "Ada", "orcidId": None}
+        for command, method, route, options in self.list_commands("GET"):
+            with self.subTest(command=command):
+                self.sent.clear()
+                self.run_cli([command, _PROBLEM_ID, *options])
+                self.assertEqual(self.list_sent_requests(), [(method, route.format(id=_PROBLEM_ID))])
+
+    def test_each_command_prints_the_answer_of_the_server(self) -> None:
+        for command, method, route, options in _ID_COMMANDS:
+            with self.subTest(command=command):
+                answer = {"id": f"answer of {command}"}
+                self.answers[(method, route.format(id=_PROBLEM_ID))] = (201 if method == "POST" else 200, answer)
+                stdout_text, _ = self.run_cli([command, _PROBLEM_ID, *options])
+                self.assertEqual(json.loads(stdout_text), answer)
+
+    def test_an_id_with_path_characters_stays_one_encoded_segment(self) -> None:
+        for command, method, route, options in _ID_COMMANDS:
+            with self.subTest(command=command):
+                self.sent.clear()
+                self.run_cli([command, "../x?y", *options])
+                self.assertEqual(self.list_sent_requests()[-1], (method, route.format(id="..%2Fx%3Fy")))
+
+    def test_an_empty_or_dot_id_is_refused_before_any_request(self) -> None:
+        for unroutable_id in ("", ".", ".."):
+            for command, _, _, options in _ID_COMMANDS:
+                with self.subTest(command=command, unroutable_id=unroutable_id):
+                    _, stderr_text = self.run_cli([command, unroutable_id, *options], expected_exit_code=1)
+                    self.assertIn("is not an identifier exactory can read", stderr_text)
+        self.assertEqual(self.sent, [])
+
+
+class TestSubmitMathProblemInputs(_MathCliTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.answers[("POST", "/api/v1/verifications")] = (201, {"id": "v1"})
+
+    def test_three_problems_are_sent_in_the_order_given(self) -> None:
+        problem_ids = ["p-3", "p-1", "p-2"]
+        argv = ["submit", "--arxiv-id", "2601.12345v2"]
+        for problem_id in problem_ids:
+            argv += ["--math-problem", problem_id]
+        self.run_cli(argv)
+        self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me"), ("POST", "/api/v1/verifications")])
+        self.assertEqual(self.read_sent_body("POST", "/api/v1/verifications")["mathProblemIds"], problem_ids)
+
+    def test_four_problems_are_refused_with_the_count_and_one_remedy_per_sentence(self) -> None:
+        argv = ["submit", "--doi", "10.5281/zenodo.1"]
+        for problem_id in ("p-1", "p-2", "p-3", "p-4"):
+            argv += ["--math-problem", problem_id]
+        _, stderr_text = self.run_cli(argv, expected_exit_code=1)
+        self.assertIn("The command names 4 math problems. The limit is 3. Remove some.", stderr_text)
+        self.assertEqual(self.sent, [])
+
+    def test_without_an_orcid_the_submission_stops_before_the_request_and_names_the_account_page(self) -> None:
+        self.me = {"displayName": "Ada", "orcidId": None}
+        _, stderr_text = self.run_cli(["submit", "--arxiv-id", "2601.12345v2", "--math-problem", _PROBLEM_ID],
+                                      expected_exit_code=1)
+        self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me")])
+        self.assertIn("https://api.test/account", stderr_text)
+
+    def test_problems_and_challenges_join_the_same_body(self) -> None:
+        self.run_cli(["submit", "--doi", "10.5281/zenodo.1", "--challenge", "c-1", "--math-problem", "p-1"])
+        self.assertEqual(self.read_sent_body("POST", "/api/v1/verifications"),
+                         {"doi": "10.5281/zenodo.1", "grandChallengeIds": ["c-1"], "mathProblemIds": ["p-1"]})
+
+
+class TestNewCommandParsers(unittest.TestCase):
+    def test_the_parser_refuses_a_command_line_that_misses_a_required_option(self) -> None:
+        valid = [
+            ["post-proof", _PROBLEM_ID, "--claim", "proves", "--summary", "s"],
+            ["post-proof", _PROBLEM_ID, "--claim", "disproves", "--summary-file", "summary.tex"],
+            ["post-lean-check", _PROOF_ID, "--outcome", "fail", "--tool", "t", "--lean-toolchain", "v",
+             "--evidence-url", _CHECK_RUN_URL],
+            ["post-discussion", _PROBLEM_ID, "--body", "b"],
+            ["post-discussion", _PROBLEM_ID, "--body-file", "post.txt"],
+            ["proofs", _PROBLEM_ID, "--limit", "5", "--cursor", "c"],
+            ["proof", _PROOF_ID],
+            ["lean-checks", _PROOF_ID],
+            ["lean-check", _PROOF_ID],
+            ["discussion", _PROBLEM_ID],
+            ["discussion-post", _PROOF_ID],
+            ["submit", "--arxiv-id", "2601.12345v2", "--math-problem", _PROBLEM_ID],
+        ]
+        for argv in valid:
+            _cli._build_parser().parse_args(argv)
+        check_options = ["--outcome", "pass", "--tool", "t", "--lean-toolchain", "v", "--evidence-url", _CHECK_RUN_URL]
+        refused = [
+            ["post-proof", _PROBLEM_ID, "--summary", "s"],
+            ["post-proof", _PROBLEM_ID, "--claim", "proves"],
+            ["post-proof", _PROBLEM_ID, "--claim", "shows", "--summary", "s"],
+            ["post-proof", _PROBLEM_ID, "--claim", "proves", "--summary", "s", "--summary-file", "summary.tex"],
+            ["post-proof", _PROBLEM_ID, "--claim", "proves", "--summary", "s", "--formal-statement-version", "one"],
+            ["post-proof", "--claim", "proves", "--summary", "s"],
+            ["post-lean-check", _PROOF_ID, *check_options[2:]],
+            ["post-lean-check", _PROOF_ID, "--outcome", "maybe", *check_options[2:]],
+            ["post-lean-check", _PROOF_ID, *check_options[:2], *check_options[4:]],
+            ["post-lean-check", _PROOF_ID, *check_options[:4], *check_options[6:]],
+            ["post-lean-check", _PROOF_ID, *check_options[:6]],
+            ["post-lean-check", *check_options],
+            ["post-discussion", _PROBLEM_ID],
+            ["post-discussion", _PROBLEM_ID, "--body", "b", "--body-file", "post.txt"],
+            ["post-discussion", "--body", "b"],
+            ["proofs", _PROBLEM_ID, "--limit", "many"],
+            ["lean-checks", _PROOF_ID, "--limit", "many"],
+            ["discussion", _PROBLEM_ID, "--limit", "many"],
+            ["proofs"],
+            ["proof"],
+            ["lean-checks"],
+            ["lean-check"],
+            ["discussion"],
+            ["discussion-post"],
+        ]
+        for argv in refused:
+            with self.subTest(argv=argv):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    with self.assertRaises(SystemExit) as caught:
+                        _cli._build_parser().parse_args(argv)
+                self.assertEqual(caught.exception.code, 2)
+
+    def test_the_help_of_every_new_command_and_of_submit_renders(self) -> None:
+        for command in ("post-proof", "proofs", "proof", "post-lean-check", "lean-checks", "lean-check",
+                        "post-discussion", "discussion", "discussion-post", "submit"):
+            with self.subTest(command=command):
+                help_text = io.StringIO()
+                with contextlib.redirect_stdout(help_text):
+                    with self.assertRaises(SystemExit) as caught:
+                        _cli._build_parser().parse_args([command, "--help"])
+                self.assertEqual(caught.exception.code, 0)
+                self.assertIn(f"exactory {command}", help_text.getvalue())
+
+    def test_the_help_description_says_that_the_client_also_serves_the_math_section(self) -> None:
+        self.assertIn("math section", _cli._build_parser().description.splitlines()[0])
 
 
 if __name__ == "__main__":
