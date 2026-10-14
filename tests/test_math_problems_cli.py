@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import errno
 import importlib.machinery
 import importlib.util
 import io
@@ -27,6 +28,10 @@ _NON_TEXT_REASON = "a control character, an invisible character, or an unpaired 
 # The reason the link checks give for a space, or another character that Unicode counts as whitespace and
 # that is not a control character. A tab and a line feed are control characters and get the reason above.
 _WHITESPACE_REASON = "contains a space or a line break"
+# What argv holds for the byte 0xFF, which is not UTF-8 text: Python decodes it to a lone surrogate.
+_ARGUMENT_FROM_BYTE_FF = chr(0xDCFF)
+# The message for a command argument that has no UTF-8 encoding.
+_NOT_UTF8_ERR_MSG = "A command argument is not valid UTF-8 text. Give every argument as UTF-8 text."
 
 
 def _load_exactory():
@@ -552,8 +557,8 @@ _PROBLEM_WRITE_COMMANDS = (
 )
 
 
-def _build_target_options(flag: str, count: int) -> list[str]:
-    return [arg for i in range(count) for arg in (flag, f"target_{i}")]
+def _build_repeated_options(flag: str, count: int) -> list[str]:
+    return [arg for i in range(count) for arg in (flag, f"value_{i}")]
 
 
 class TestWritesToAProblem(_MathCliTestCase):
@@ -679,14 +684,14 @@ class TestFormalStatementInputs(_MathCliTestCase):
 
     def test_twenty_targets_of_each_kind_are_accepted(self) -> None:
         self.run_cli(self.build_add_formal_statement_argv(
-            *_build_target_options("--proof-target", 20), *_build_target_options("--disproof-target", 20)))
+            *_build_repeated_options("--proof-target", 20), *_build_repeated_options("--disproof-target", 20)))
         body = self.read_formal_statement_body()
         self.assertEqual((len(body["proofTargets"]), len(body["disproofTargets"])), (20, 20))
 
     def test_twenty_one_targets_of_either_kind_are_refused_with_the_count_and_one_remedy_per_sentence(self) -> None:
         for extra_args, counted in (
-                (_build_target_options("--proof-target", 21), "21 proof targets"),
-                ([*_build_target_options("--proof-target", 1), *_build_target_options("--disproof-target", 21)],
+                (_build_repeated_options("--proof-target", 21), "21 proof targets"),
+                ([*_build_repeated_options("--proof-target", 1), *_build_repeated_options("--disproof-target", 21)],
                  "21 disproof targets")):
             with self.subTest(counted=counted):
                 _, stderr_text = self.run_cli(self.build_add_formal_statement_argv(*extra_args), expected_exit_code=1)
@@ -814,7 +819,11 @@ class TestDeclareStatusInputs(_MathCliTestCase):
                 (["declare-status", _PROBLEM_ID, "--status", "disproved", "--note", "x"],
                  "A proved or disproved declaration names its resolving proof. Add --resolving-proof <proof-id>."),
                 (["declare-status", _PROBLEM_ID, "--status", "open", "--resolving-proof", _PROOF_ID, "--note", "x"],
-                 "An open declaration names no resolving proof. Remove --resolving-proof.")):
+                 "An open declaration names no resolving proof. Remove --resolving-proof."),
+                (["declare-status", _PROBLEM_ID, "--status", "open", "--resolving-proof", "", "--note", "x"],
+                 "An open declaration names no resolving proof. Remove --resolving-proof."),
+                (["declare-status", _PROBLEM_ID, "--status", "proved", "--resolving-proof", "", "--note", "x"],
+                 "A proved or disproved declaration names its resolving proof. Add --resolving-proof <proof-id>.")):
             with self.subTest(argv=argv):
                 _, stderr_text = self.run_cli(argv, expected_exit_code=1)
                 self.assertIn(remedy, stderr_text)
@@ -927,7 +936,6 @@ class TestWhitespaceInALink(_MathCliTestCase):
                     self.assertIn(f"The {kind} contains {_NON_TEXT_REASON}.", stderr_text)
                     self.assertNotIn(_WHITESPACE_REASON, stderr_text)
         self.assertEqual(self.sent, [])
-
 
 
 class TestLinkPatternsOnAHostilePath(unittest.TestCase):
@@ -1054,10 +1062,6 @@ class TestSubmitWithMathProblems(_MathCliTestCase):
 _LEAN_SOLUTION_URL = f"https://github.com/o/r/tree/{_SHA}/Solution"
 
 
-def _build_axiom_options(count: int) -> list[str]:
-    return [arg for i in range(count) for arg in ("--axiom", f"axiom_{i}")]
-
-
 class TestPostProofInputs(_MathCliTestCase):
     def build_post_proof_argv(self, *extra: str) -> list[str]:
         return ["post-proof", _PROBLEM_ID, "--claim", "proves", "--summary", "p" * 120, *extra]
@@ -1156,6 +1160,10 @@ class TestPostProofInputs(_MathCliTestCase):
         self.assertIn("full 40-character commit SHA", stderr_text)
         self.assertEqual(self.sent, [])
 
+    def test_an_empty_revision_id_is_sent_for_the_server_to_judge(self) -> None:
+        self.run_cli(self.build_post_proof_argv("--writeup", "2601.12345v2", "--supersedes", ""))
+        self.assertEqual(self.read_proof_body()["supersedesProofId"], "")
+
 
 class TestLeanCheckInputs(_MathCliTestCase):
     def build_post_lean_check_argv(self, *extra: str, outcome: str = "pass", evidence_url: str = _CHECK_RUN_URL) -> list[str]:
@@ -1179,11 +1187,11 @@ class TestLeanCheckInputs(_MathCliTestCase):
         self.assertEqual(self.read_report_body()["axioms"], ["Quot.sound", "propext"])
 
     def test_twenty_axioms_are_accepted(self) -> None:
-        self.run_cli(self.build_post_lean_check_argv(*_build_axiom_options(20)))
+        self.run_cli(self.build_post_lean_check_argv(*_build_repeated_options("--axiom", 20)))
         self.assertEqual(len(self.read_report_body()["axioms"]), 20)
 
     def test_twenty_one_axioms_are_refused_with_the_count_and_one_remedy_per_sentence(self) -> None:
-        _, stderr_text = self.run_cli(self.build_post_lean_check_argv(*_build_axiom_options(21)), expected_exit_code=1)
+        _, stderr_text = self.run_cli(self.build_post_lean_check_argv(*_build_repeated_options("--axiom", 21)), expected_exit_code=1)
         self.assertIn("The command names 21 axioms. The limit is 20. Remove some.", stderr_text)
         self.assertEqual(self.sent, [])
 
@@ -1221,6 +1229,22 @@ class TestLeanCheckInputs(_MathCliTestCase):
             self.build_post_lean_check_argv("--output-excerpt-file", str(self.scratch_dir / "absent.txt")),
             expected_exit_code=1)
         self.assertIn("does not exist", stderr_text)
+        self.assertEqual(self.sent, [])
+
+    def test_an_empty_excerpt_file_name_is_refused_before_any_request(self) -> None:
+        _, stderr_text = self.run_cli(self.build_post_lean_check_argv("--output-excerpt-file", ""), expected_exit_code=1)
+        self.assertIn("does not exist", stderr_text)
+        self.assertEqual(self.sent, [])
+
+    def test_the_refusal_of_a_link_gives_an_example_of_each_form_and_names_the_links_it_refuses(self) -> None:
+        for url in ("https://example.org/log.txt", "https://github.com/o/r/blob/main/check.txt",
+                    f"https://github.com/o/r/tree/{_SHA}/logs"):
+            with self.subTest(url=url):
+                _, stderr_text = self.run_cli(self.build_post_lean_check_argv(evidence_url=url), expected_exit_code=1)
+                self.assertIn("Give a GitHub Actions run, for example https://github.com/<owner>/<repo>/actions/runs/<id>."
+                              " Or give a file at a full 40-character commit SHA, for example"
+                              " https://github.com/<owner>/<repo>/blob/<sha>/<path>.", stderr_text)
+                self.assertIn("A branch link or a tree link is refused.", stderr_text)
         self.assertEqual(self.sent, [])
 
     def test_links_in_every_shape_the_server_accepts_are_sent_as_given(self) -> None:
@@ -1387,6 +1411,10 @@ class TestPostDiscussionInputs(_MathCliTestCase):
                                       expected_exit_code=1)
         self.assertIn("does not exist", stderr_text)
         self.assertEqual(self.sent, [])
+
+    def test_an_empty_reply_target_is_sent_for_the_server_to_judge(self) -> None:
+        self.run_cli(["post-discussion", _PROBLEM_ID, "--body", "Is $n = 7$ within reach?", "--reply-to", ""])
+        self.assertEqual(self.read_post_body()["replyToPostId"], "")
 
 
 # The lists that page: the command, the id its route holds, and the route.
@@ -1608,6 +1636,215 @@ class TestNewCommandParsers(unittest.TestCase):
 
     def test_the_help_description_says_that_the_client_also_serves_the_math_section(self) -> None:
         self.assertIn("math section", _cli._build_parser().description.splitlines()[0])
+
+    def test_the_limit_of_every_math_list_command_has_a_help_text(self) -> None:
+        server_default = "How many entries one page holds. The server sets the default."
+        for command, expected in (("proofs", server_default), ("lean-checks", server_default),
+                                  ("discussion", server_default),
+                                  ("problems", "How many entries one page holds. Default: 25."),
+                                  ("problem-history", "How many entries one page holds. Default: 50.")):
+            with self.subTest(command=command):
+                help_text = io.StringIO()
+                with contextlib.redirect_stdout(help_text):
+                    with self.assertRaises(SystemExit):
+                        _cli._build_parser().parse_args([command, "--help"])
+                self.assertIn(expected, " ".join(help_text.getvalue().split()))
+
+
+# The classes below cover the fixes of the first review round: a file or an argument that cannot be read ends the
+# command with one message and never with a traceback, every over-limit message has one shape, and the patterns
+# that mirror the server read ASCII digits only.
+
+# One valid command line for each option that reads a text file: the option, and the command line before it. The
+# first three are the file options of the proof, check, and discussion commands, which share one reader. The
+# citations file and the verdict file of verify have a reader each.
+_TEXT_FILE_OPTION_COMMANDS = (
+    ("--summary-file", ["post-proof", _PROBLEM_ID, "--claim", "proves", "--writeup", "2601.12345v2"]),
+    ("--output-excerpt-file", ["post-lean-check", _PROOF_ID, "--outcome", "pass", "--tool", "t",
+                               "--lean-toolchain", "v", "--evidence-url", _CHECK_RUN_URL]),
+    ("--body-file", ["post-discussion", _PROBLEM_ID]),
+    ("--citations-file", ["post-problem", "--title", "Dittert conjecture for n = 7", "--area", "math.CO",
+                          "--statement", "s" * 60, "--motivation", "m" * 120, "--current-state", "c" * 120,
+                          "--resolution-criteria", "r" * 60]),
+    ("--file", ["verify", _PROBLEM_ID]),
+)
+
+
+class TestTextFilesThatCannotBeRead(_MathCliTestCase):
+    def check_each_option_refuses(self, path: str, expected_message: str) -> None:
+        for option, command_line in _TEXT_FILE_OPTION_COMMANDS:
+            with self.subTest(option=option):
+                _, stderr_text = self.run_cli([*command_line, option, path], expected_exit_code=1)
+                self.assertEqual(stderr_text, expected_message + "\n")
+        self.assertEqual(self.sent, [])
+
+    def test_a_missing_file_is_refused_with_its_remedy(self) -> None:
+        path = str(self.scratch_dir / "absent.txt")
+        self.check_each_option_refuses(path, f"The file {path} does not exist. Give the path of an existing file.")
+
+    def test_a_directory_is_refused_with_its_remedy(self) -> None:
+        directory = self.scratch_dir / "a-directory"
+        directory.mkdir()
+        self.check_each_option_refuses(str(directory), f"The file {directory} is a directory. Give the path of a file.")
+
+    def test_a_file_that_is_not_utf8_text_is_refused_with_its_remedy(self) -> None:
+        binary_file = self.scratch_dir / "binary.dat"
+        binary_file.write_bytes(b"\xff\xfe\x80 not text")
+        self.check_each_option_refuses(str(binary_file), f"The file {binary_file} is not UTF-8 text. Save it as UTF-8.")
+
+    def test_a_path_through_a_file_is_refused_with_the_cause_from_the_system(self) -> None:
+        plain_file = self.scratch_dir / "plain.txt"
+        plain_file.write_text("plain", encoding="utf-8")
+        path = str(plain_file / "child")
+        self.check_each_option_refuses(path, f"The file {path} cannot be read: {os.strerror(errno.ENOTDIR)}."
+                                             " Check the path and the permissions of the file.")
+
+
+# The commands that put an id in a path, with the options that follow the id: the commands of the math section,
+# and the older commands whose paths come from the same two builders.
+_ID_IN_PATH_COMMAND_LINES = (
+    ("problem",), ("problem-history",), ("vote-problem", "--value", "1"),
+    *((command, *options) for command, _, _, options in _PROBLEM_WRITE_COMMANDS),
+    *((command, *options) for command, _, _, options in _ID_COMMANDS),
+    ("status",), ("challenge",), ("task",), ("paper",),
+)
+
+# The commands that put a value in a query, with the option that carries it.
+_VALUE_IN_QUERY_COMMAND_LINES = (
+    ("proofs", _PROBLEM_ID, "--cursor"), ("lean-checks", _PROOF_ID, "--cursor"),
+    ("discussion", _PROBLEM_ID, "--cursor"), ("problem-history", _PROBLEM_ID, "--cursor"),
+    ("problems", "--cursor"), ("problems", "--query"), ("problems", "--area"),
+    ("tasks", "--cursor"), ("tasks", "--query"), ("challenges", "--field"), ("challenges", "--cursor"),
+)
+
+
+class TestArgumentsThatAreNotUtf8Text(_MathCliTestCase):
+    """argv decodes a byte that is not UTF-8 text to a lone surrogate, which has no percent-encoding. Such an
+    argument in a path or in a query ends the command with one message and no request."""
+
+    def test_an_id_in_a_path_is_refused_before_any_request(self) -> None:
+        for command, *options in _ID_IN_PATH_COMMAND_LINES:
+            with self.subTest(command=command):
+                _, stderr_text = self.run_cli([command, _ARGUMENT_FROM_BYTE_FF, *options], expected_exit_code=1)
+                self.assertEqual(stderr_text, _NOT_UTF8_ERR_MSG + "\n")
+        self.assertEqual(self.sent, [])
+
+    def test_a_value_in_a_query_is_refused_before_any_request(self) -> None:
+        for command_line in _VALUE_IN_QUERY_COMMAND_LINES:
+            with self.subTest(command_line=command_line):
+                _, stderr_text = self.run_cli([*command_line, _ARGUMENT_FROM_BYTE_FF], expected_exit_code=1)
+                self.assertEqual(stderr_text, _NOT_UTF8_ERR_MSG + "\n")
+        self.assertEqual(self.sent, [])
+
+    def test_valid_text_outside_ascii_is_sent_encoded(self) -> None:
+        text = chr(0xE9) + chr(0x1F600)
+        self.run_cli(["proof", text])
+        self.run_cli(["proofs", _PROBLEM_ID, "--cursor", text])
+        self.assertEqual(self.list_sent_requests()[0], ("GET", "/api/v1/math-proofs/%C3%A9%F0%9F%98%80"))
+        self.assertEqual(urllib.parse.parse_qs(urllib.parse.urlparse(self.sent[1].full_url).query), {"cursor": [text]})
+
+
+class TestOverLimitMessages(_MathCliTestCase):
+    """Every command that names more items than its limit allows ends with one message of one shape. The cases pin
+    the whole text of each command, so the code that builds the message cannot drift from them."""
+
+    def build_post_challenge_argv(self, *extra: str) -> list[str]:
+        return ["post-challenge", "--title", "An open question", "--field", "cs.LG", "--problem-statement", "p" * 200,
+                "--current-state", "c" * 100, "--resolution-criteria", "r" * 50,
+                "--citations-file", self.write_citations(), *extra]
+
+    def test_each_command_names_the_count_the_limit_and_the_remedy(self) -> None:
+        add_formal_statement = ["add-formal-statement", _PROBLEM_ID, "--lean-url", _LEAN_SOURCE_URL]
+        cases = (
+            (["submit", "--doi", "10.5281/zenodo.1", *_build_repeated_options("--challenge", 4)],
+             "The command names 4 challenges. The limit is 3. Remove some."),
+            (["submit", "--doi", "10.5281/zenodo.1", *_build_repeated_options("--math-problem", 4)],
+             "The command names 4 math problems. The limit is 3. Remove some."),
+            (self.build_post_challenge_argv(*_build_repeated_options("--paper-doi", 21)),
+             "The command names 21 papers. The limit is 20. Remove some."),
+            (self.build_post_problem_argv(*_build_paper_options(11)),
+             "The command names 11 papers. The limit is 10. Remove some. Attach the rest with link-problem-paper."),
+            (self.build_post_problem_argv(*_build_github_link_options(11)),
+             "The command names 11 context links. The limit is 10. Remove some."
+             " Attach the rest with link-problem-github."),
+            ([*add_formal_statement, *_build_repeated_options("--proof-target", 21)],
+             "The command names 21 proof targets. The limit is 20. Remove some."),
+            ([*add_formal_statement, "--proof-target", "t", *_build_repeated_options("--disproof-target", 21)],
+             "The command names 21 disproof targets. The limit is 20. Remove some."),
+            (["post-lean-check", _PROOF_ID, "--outcome", "pass", "--tool", "t", "--lean-toolchain", "v",
+              "--evidence-url", _CHECK_RUN_URL, *_build_repeated_options("--axiom", 21)],
+             "The command names 21 axioms. The limit is 20. Remove some."),
+        )
+        for argv, message in cases:
+            with self.subTest(command=argv[0], message=message):
+                _, stderr_text = self.run_cli(argv, expected_exit_code=1)
+                self.assertEqual(stderr_text, message + "\n")
+        self.assertEqual(self.sent, [])
+
+    def read_option_help(self, command: str, option: str) -> str:
+        """The help of one option of a command: its metavar and its text, up to the next option."""
+        help_text = io.StringIO()
+        with contextlib.redirect_stdout(help_text):
+            with self.assertRaises(SystemExit):
+                _cli._build_parser().parse_args([command, "--help"])
+        return " ".join(help_text.getvalue().split()).rsplit(f" {option} ", 1)[1].split(" --", 1)[0]
+
+    def test_the_help_of_each_option_gives_the_limit_that_the_command_enforces(self) -> None:
+        for command, option, limit_text in (
+                ("submit", "--challenge", "at most 3."), ("submit", "--math-problem", "at most 3."),
+                ("post-challenge", "--paper-doi", "at most 20."), ("post-problem", "--paper", "at most 10."),
+                ("post-problem", "--github-link", "at most 10."), ("post-lean-check", "--axiom", "at most 20."),
+                ("add-formal-statement", "--proof-target", "1-20."),
+                ("add-formal-statement", "--disproof-target", "0-20.")):
+            with self.subTest(command=command, option=option):
+                self.assertIn(limit_text, self.read_option_help(command, option))
+
+    def test_a_command_that_names_exactly_the_limit_is_accepted(self) -> None:
+        self.answers[("POST", "/api/v1/verifications")] = (201, {"id": "v1"})
+        self.run_cli(["submit", "--doi", "10.5281/zenodo.1", *_build_repeated_options("--challenge", 3)])
+        self.assertEqual(len(self.read_sent_body("POST", "/api/v1/verifications")["grandChallengeIds"]), 3)
+        self.run_cli(self.build_post_challenge_argv(*_build_repeated_options("--paper-doi", 20)))
+        self.assertEqual(len(self.read_sent_body("POST", "/api/v1/grand-challenges")["paperDois"]), 20)
+
+
+class TestAsciiDigitsInIdentifierPatterns(_MathCliTestCase):
+    """The server's patterns read ASCII digits only, and Python's \\d also reads the digits of other scripts."""
+
+    def build_post_problem_argv_with_locator(self, locator: str) -> list[str]:
+        citations_path = self.scratch_dir / "locator-citations.json"
+        citations_path.write_text(json.dumps([{"citation": "H. Minc, Permanents, 1978, chapter 2.", "locator": locator}]),
+                                  encoding="utf-8")
+        argv = self.build_post_problem_argv()
+        argv[argv.index("--citations-file") + 1] = str(citations_path)
+        return argv
+
+    def test_a_locator_is_a_doi_or_an_arxiv_id_in_ascii_digits_or_an_https_url(self) -> None:
+        for locator in ("10.1017/cbo9781107340688", "arXiv:2301.00001", "arxiv:2301.00001v12", "hep-th/9901001v3",
+                        "math.GT/0309136", "https://example.org/x"):
+            with self.subTest(locator=locator):
+                self.sent.clear()
+                self.run_cli(self.build_post_problem_argv_with_locator(locator))
+                self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me"), ("POST", "/api/v1/math-problems")])
+
+    def test_a_locator_with_digits_of_another_script_is_refused_before_any_request(self) -> None:
+        arabic_three, fullwidth_two = chr(0x663), chr(0xFF12)
+        for locator in (f"10.{arabic_three * 4}/x", f"2301.0000{arabic_three}", f"arXiv:{fullwidth_two}301.00001",
+                        f"hep-th/990100{arabic_three}", f"2301.00001v{arabic_three}"):
+            with self.subTest(locator=locator):
+                _, stderr_text = self.run_cli(self.build_post_problem_argv_with_locator(locator), expected_exit_code=1)
+                self.assertIn("The locator of entry 1 is not a DOI, an arXiv id, or an https URL. Correct it.", stderr_text)
+        self.assertEqual(self.sent, [])
+
+    def test_a_bare_arxiv_id_in_digits_of_another_script_is_not_mapped_to_a_doi(self) -> None:
+        arabic_three = chr(0x663)
+        self.run_cli(["paper", "2301.00001v2"])
+        self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/papers/10.48550/arxiv.2301.00001")])
+        for identifier in (arabic_three * 4 + ".00001", "2301." + arabic_three * 5, "2301.00001v" + arabic_three):
+            with self.subTest(identifier=identifier):
+                self.sent.clear()
+                self.run_cli(["paper", identifier])
+                self.assertEqual(self.list_sent_requests(),
+                                 [("GET", "/api/v1/papers/" + urllib.parse.quote(identifier, safe=""))])
 
 
 if __name__ == "__main__":
