@@ -76,7 +76,7 @@ class _MathCliTestCase(unittest.TestCase):
         self.answers: dict[tuple[str, str], tuple[int, dict]] = {}
         self.addCleanup(setattr, urllib.request, "urlopen", urllib.request.urlopen)
 
-        def fake_urlopen(request: urllib.request.Request, timeout: float | None = None) -> _FakeResponse:
+        def answer_request(request: urllib.request.Request, timeout: float | None = None) -> _FakeResponse:
             self.sent.append(request)
             path = urllib.parse.urlparse(request.full_url).path
             if (request.get_method(), path) == ("GET", "/api/v1/me"):
@@ -86,7 +86,7 @@ class _MathCliTestCase(unittest.TestCase):
                 raise urllib.error.HTTPError(request.full_url, status, "refused", {}, io.BytesIO(json.dumps(body).encode()))
             return _FakeResponse(json.dumps(body).encode(), status)
 
-        urllib.request.urlopen = fake_urlopen
+        urllib.request.urlopen = answer_request
 
     def run_cli(self, argv: list[str], expected_exit_code: int | None = None) -> tuple[str, str]:
         args = _cli._build_parser().parse_args(argv)
@@ -100,10 +100,10 @@ class _MathCliTestCase(unittest.TestCase):
                 self.assertEqual(caught.exception.code, expected_exit_code)
         return out.getvalue(), err.getvalue()
 
-    def requested(self) -> list[tuple[str, str]]:
+    def list_sent_requests(self) -> list[tuple[str, str]]:
         return [(request.get_method(), urllib.parse.urlparse(request.full_url).path) for request in self.sent]
 
-    def body_of(self, method: str, path: str) -> dict:
+    def read_sent_body(self, method: str, path: str) -> dict:
         for request in self.sent:
             if request.get_method() == method and urllib.parse.urlparse(request.full_url).path == path:
                 return json.loads(request.data.decode())
@@ -114,7 +114,7 @@ class _MathCliTestCase(unittest.TestCase):
         path.write_text(json.dumps([{"citation": "H. Minc, Permanents, 1978, chapter 2.", "locator": "10.1017/cbo9781107340688"}]))
         return str(path)
 
-    def post_problem_argv(self, *extra: str) -> list[str]:
+    def build_post_problem_argv(self, *extra: str) -> list[str]:
         return [
             "post-problem",
             "--title", "Dittert conjecture for n = 7",
@@ -148,7 +148,7 @@ class TestProblemReads(_MathCliTestCase):
     def test_problem_and_history_read_by_id(self) -> None:
         self.run_cli(["problem", _PROBLEM_ID])
         self.run_cli(["problem-history", _PROBLEM_ID, "--limit", "5"])
-        self.assertEqual(self.requested(), [
+        self.assertEqual(self.list_sent_requests(), [
             ("GET", f"/api/v1/math-problems/{_PROBLEM_ID}"),
             ("GET", f"/api/v1/math-problems/{_PROBLEM_ID}/status-events"),
         ])
@@ -157,10 +157,10 @@ class TestProblemReads(_MathCliTestCase):
 class TestPostProblem(_MathCliTestCase):
     def test_it_posts_the_fields_the_links_and_the_citations(self) -> None:
         self.answers[("POST", "/api/v1/math-problems")] = (201, {"id": _PROBLEM_ID})
-        self.run_cli(self.post_problem_argv(
+        self.run_cli(self.build_post_problem_argv(
             "--paper", "2609.92001", "--github-link", "https://github.com/o/r/issues/1", "Tracking issue"))
-        self.assertEqual(self.requested(), [("GET", "/api/v1/me"), ("POST", "/api/v1/math-problems")])
-        self.assertEqual(self.body_of("POST", "/api/v1/math-problems"), {
+        self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me"), ("POST", "/api/v1/math-problems")])
+        self.assertEqual(self.read_sent_body("POST", "/api/v1/math-problems"), {
             "title": "Dittert conjecture for n = 7",
             "area": "math.CO",
             "statement": "s" * 60,
@@ -174,14 +174,14 @@ class TestPostProblem(_MathCliTestCase):
 
     def test_without_an_orcid_it_stops_before_the_write_and_names_the_account_page(self) -> None:
         self.me = {"displayName": "Ada", "orcidId": None}
-        _, stderr_text = self.run_cli(self.post_problem_argv(), expected_exit_code=1)
-        self.assertEqual(self.requested(), [("GET", "/api/v1/me")])
+        _, stderr_text = self.run_cli(self.build_post_problem_argv(), expected_exit_code=1)
+        self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me")])
         self.assertIn("https://api.test/account", stderr_text)
 
     def test_local_bounds_refuse_before_any_request(self) -> None:
         papers = [arg for i in range(11) for arg in ("--paper", f"2609.9{i:04d}")]
-        self.run_cli(self.post_problem_argv(*papers), expected_exit_code=1)
-        self.run_cli([*self.post_problem_argv()[:3], "--area", "cs.LG", *self.post_problem_argv()[5:]], expected_exit_code=1)
+        self.run_cli(self.build_post_problem_argv(*papers), expected_exit_code=1)
+        self.run_cli([*self.build_post_problem_argv()[:3], "--area", "cs.LG", *self.build_post_problem_argv()[5:]], expected_exit_code=1)
         self.assertEqual(self.sent, [])
 
     def test_context_links_meet_the_link_rules_before_any_request(self) -> None:
@@ -196,14 +196,14 @@ class TestPostProblem(_MathCliTestCase):
         ]
         for url, reason in unprinted:
             with self.subTest(url=url):
-                _, stderr_text = self.run_cli(self.post_problem_argv("--github-link", url, "Label"), expected_exit_code=1)
+                _, stderr_text = self.run_cli(self.build_post_problem_argv("--github-link", url, "Label"), expected_exit_code=1)
                 self.assertIn(reason, stderr_text)
                 self.assertNotIn(url, stderr_text)
         for url in ("HTTPS://github.com/o/r", "https://GitHub.com/o/r", "http://github.com/o/r", "https://github.com",
                     "https://github.com/", "https://github.com/?tab=repositories", "https://github.com/#start",
                     "https://github.com/o/r tracking"):
             with self.subTest(url=url):
-                _, stderr_text = self.run_cli(self.post_problem_argv("--github-link", url, "Label"), expected_exit_code=1)
+                _, stderr_text = self.run_cli(self.build_post_problem_argv("--github-link", url, "Label"), expected_exit_code=1)
                 self.assertIn(f"{url} is not a context link", stderr_text)
         self.assertEqual(self.sent, [])
 
@@ -215,13 +215,13 @@ class TestVotesAndReportsNeedNoOrcid(_MathCliTestCase):
         self.run_cli(["vote-problem", _PROBLEM_ID, "--value", "1"])
         self.run_cli(["vote-problem", _PROBLEM_ID, "--value", "0"])
         self.run_cli(["report-math", "math_post", _PROOF_ID, "--note", "Advertising."])
-        self.assertEqual(self.requested(), [
+        self.assertEqual(self.list_sent_requests(), [
             ("PUT", f"/api/v1/math-problems/{_PROBLEM_ID}/vote"),
             ("DELETE", f"/api/v1/math-problems/{_PROBLEM_ID}/vote"),
             ("POST", "/api/v1/reports"),
         ])
-        self.assertEqual(self.body_of("PUT", f"/api/v1/math-problems/{_PROBLEM_ID}/vote"), {"value": 1})
-        self.assertEqual(self.body_of("POST", "/api/v1/reports"),
+        self.assertEqual(self.read_sent_body("PUT", f"/api/v1/math-problems/{_PROBLEM_ID}/vote"), {"value": 1})
+        self.assertEqual(self.read_sent_body("POST", "/api/v1/reports"),
                          {"subjectKind": "math_post", "subjectId": _PROOF_ID, "note": "Advertising."})
 
     def test_an_unknown_report_kind_is_refused_by_the_parser(self) -> None:
@@ -263,16 +263,36 @@ class TestProblemReadRequests(_MathCliTestCase):
         self.assertEqual(self.read_query(0), {"cursor": ["c2"], "limit": ["5"]})
         self.assertEqual(self.read_query(1), {"limit": ["50"]})
 
+class TestIdsStayInTheirRoute(_MathCliTestCase):
+    """An id is one segment of its route: percent-encoding keeps a slash or a question mark inside
+    it, and the empty id and the two dot ids are refused, because a URL parser would resolve them."""
+
     def test_an_id_with_path_characters_stays_one_encoded_segment(self) -> None:
         hostile_id = "../x?y"
         self.run_cli(["problem", hostile_id])
         self.run_cli(["problem-history", hostile_id])
         self.run_cli(["vote-problem", hostile_id, "--value", "1"])
-        self.assertEqual(self.requested(), [
+        self.assertEqual(self.list_sent_requests(), [
             ("GET", "/api/v1/math-problems/..%2Fx%3Fy"),
             ("GET", "/api/v1/math-problems/..%2Fx%3Fy/status-events"),
             ("PUT", "/api/v1/math-problems/..%2Fx%3Fy/vote"),
         ])
+
+    def test_an_empty_or_dot_id_is_refused_before_any_request(self) -> None:
+        for unroutable_id in ("", ".", ".."):
+            for argv in (["problem", unroutable_id], ["problem-history", unroutable_id],
+                         ["vote-problem", unroutable_id, "--value", "1"],
+                         ["vote-problem", unroutable_id, "--value", "0"]):
+                with self.subTest(argv=argv):
+                    _, stderr_text = self.run_cli(argv, expected_exit_code=1)
+                    self.assertIn("is not an identifier exactory can read", stderr_text)
+        self.assertEqual(self.list_sent_requests(), [])
+
+    def test_an_id_that_holds_dots_among_other_characters_is_kept(self) -> None:
+        kept_ids = ("...", "a..b", ".x", "x.")
+        for kept_id in kept_ids:
+            self.run_cli(["problem", kept_id])
+        self.assertEqual(self.list_sent_requests(), [("GET", f"/api/v1/math-problems/{kept_id}") for kept_id in kept_ids])
 
 
 class TestPostProblemInputs(_MathCliTestCase):
@@ -285,7 +305,7 @@ class TestPostProblemInputs(_MathCliTestCase):
             path.write_text(text + "\n", encoding="utf-8")
             argv += [f"--{flag}-file", str(path)]
         self.run_cli(argv)
-        body = self.body_of("POST", "/api/v1/math-problems")
+        body = self.read_sent_body("POST", "/api/v1/math-problems")
         self.assertEqual(
             {key: body[key] for key in ("statement", "motivation", "currentState", "resolutionCriteria")},
             {"statement": "s" * 60, "motivation": "m" * 120, "currentState": "c" * 120, "resolutionCriteria": "r" * 60})
@@ -299,38 +319,41 @@ class TestPostProblemInputs(_MathCliTestCase):
             for length, is_accepted in ((minimum - 1, False), (minimum, True), (maximum, True), (maximum + 1, False)):
                 with self.subTest(flag=flag, length=length):
                     self.sent.clear()
-                    argv = self.post_problem_argv()
+                    argv = self.build_post_problem_argv()
                     argv[argv.index(flag) + 1] = "x" * length
                     if is_accepted:
                         self.run_cli(argv)
-                        self.assertEqual(self.requested(), [("GET", "/api/v1/me"), ("POST", "/api/v1/math-problems")])
+                        self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me"), ("POST", "/api/v1/math-problems")])
                     else:
                         self.run_cli(argv, expected_exit_code=1)
                         self.assertEqual(self.sent, [])
 
     def test_a_post_may_carry_ten_papers_and_ten_context_links(self) -> None:
-        self.run_cli(self.post_problem_argv(*_build_paper_options(10), *_build_github_link_options(10)))
-        body = self.body_of("POST", "/api/v1/math-problems")
+        self.run_cli(self.build_post_problem_argv(*_build_paper_options(10), *_build_github_link_options(10)))
+        body = self.read_sent_body("POST", "/api/v1/math-problems")
         self.assertEqual(len(body["paperIdentifiers"]), 10)
         self.assertEqual(len(body["githubLinks"]), 10)
 
-    def test_eleven_papers_or_eleven_context_links_are_refused_with_the_count(self) -> None:
-        for extra_args, counted in ((_build_paper_options(11), "11 papers"), (_build_github_link_options(11), "11 context links")):
+    def test_eleven_papers_or_eleven_context_links_are_refused_with_the_count_and_one_remedy_per_sentence(self) -> None:
+        for extra_args, counted, remedy in (
+                (_build_paper_options(11), "11 papers", "Remove some. Attach the rest with link-problem-paper."),
+                (_build_github_link_options(11), "11 context links", "Remove some. Attach the rest with link-problem-github.")):
             with self.subTest(counted=counted):
-                _, stderr_text = self.run_cli(self.post_problem_argv(*extra_args), expected_exit_code=1)
+                _, stderr_text = self.run_cli(self.build_post_problem_argv(*extra_args), expected_exit_code=1)
                 self.assertIn(counted, stderr_text)
+                self.assertIn(remedy, stderr_text)
         self.assertEqual(self.sent, [])
 
     def test_a_context_link_of_exactly_five_hundred_code_units_is_accepted(self) -> None:
         url = "https://github.com/o/r/" + "a" * 477
-        self.run_cli(self.post_problem_argv("--github-link", url, "Label"))
-        self.assertEqual(self.body_of("POST", "/api/v1/math-problems")["githubLinks"], [{"url": url, "label": "Label"}])
+        self.run_cli(self.build_post_problem_argv("--github-link", url, "Label"))
+        self.assertEqual(self.read_sent_body("POST", "/api/v1/math-problems")["githubLinks"], [{"url": url, "label": "Label"}])
 
     def test_the_link_length_counts_utf16_code_units_not_code_points(self) -> None:
         # 239 characters beyond the basic plane are 478 code units, so this link has 501 units
         # although it holds only 262 code points.
         url = "https://github.com/o/r/" + chr(0x1F600) * 239
-        _, stderr_text = self.run_cli(self.post_problem_argv("--github-link", url, "Label"), expected_exit_code=1)
+        _, stderr_text = self.run_cli(self.build_post_problem_argv("--github-link", url, "Label"), expected_exit_code=1)
         self.assertIn("is 501 characters long", stderr_text)
         self.assertNotIn(url, stderr_text)
         self.assertEqual(self.sent, [])
@@ -338,20 +361,23 @@ class TestPostProblemInputs(_MathCliTestCase):
     def test_a_link_label_of_no_characters_or_over_one_hundred_is_refused(self) -> None:
         for label in ("", "   ", "l" * 101):
             with self.subTest(label_length=len(label)):
-                self.run_cli(self.post_problem_argv("--github-link", "https://github.com/o/r", label),
+                self.run_cli(self.build_post_problem_argv("--github-link", "https://github.com/o/r", label),
                              expected_exit_code=1)
         self.assertEqual(self.sent, [])
 
-    def test_the_casing_of_an_area_is_left_to_the_server(self) -> None:
-        argv = self.post_problem_argv()
-        argv[argv.index("--area") + 1] = "MATH.co"
-        self.run_cli(argv)
-        self.assertEqual(self.body_of("POST", "/api/v1/math-problems")["area"], "MATH.co")
-
-    def test_an_area_must_be_a_math_subject_class_with_no_surrounding_space(self) -> None:
-        for area in ("cs.LG", "math", " math.CO", "math.CO "):
+    def test_an_area_is_sent_as_given_because_the_server_trims_it_and_ignores_its_case(self) -> None:
+        for area in ("MATH.co", " math.CO", "math.CO ", "  Math.nt  "):
             with self.subTest(area=area):
-                argv = self.post_problem_argv()
+                self.sent.clear()
+                argv = self.build_post_problem_argv()
+                argv[argv.index("--area") + 1] = area
+                self.run_cli(argv)
+                self.assertEqual(self.read_sent_body("POST", "/api/v1/math-problems")["area"], area)
+
+    def test_an_area_that_is_not_a_math_subject_class_is_refused_before_any_request(self) -> None:
+        for area in ("cs.LG", "math", "mathematics", "math-ph", "", "  "):
+            with self.subTest(area=area):
+                argv = self.build_post_problem_argv()
                 argv[argv.index("--area") + 1] = area
                 _, stderr_text = self.run_cli(argv, expected_exit_code=1)
                 self.assertIn("is not a math.* subject class", stderr_text)
@@ -361,16 +387,15 @@ class TestPostProblemInputs(_MathCliTestCase):
 class TestVoteProblem(_MathCliTestCase):
     def test_a_downvote_sends_the_negative_value(self) -> None:
         self.run_cli(["vote-problem", _PROBLEM_ID, "--value", "-1"])
-        self.assertEqual(self.body_of("PUT", f"/api/v1/math-problems/{_PROBLEM_ID}/vote"), {"value": -1})
+        self.assertEqual(self.read_sent_body("PUT", f"/api/v1/math-problems/{_PROBLEM_ID}/vote"), {"value": -1})
 
-    def test_a_value_outside_the_three_choices_never_reaches_the_server(self) -> None:
+    def test_the_parser_refuses_a_vote_value_outside_the_three_choices(self) -> None:
         for value in ("1", "-1", "0"):
             self.assertEqual(_cli._build_parser().parse_args(["vote-problem", _PROBLEM_ID, "--value", value]).value, int(value))
         with contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit) as caught:
                 _cli._build_parser().parse_args(["vote-problem", _PROBLEM_ID, "--value", "2"])
         self.assertEqual(caught.exception.code, 2)
-        self.assertEqual(self.sent, [])
 
 
 class TestReportMath(_MathCliTestCase):
@@ -380,7 +405,7 @@ class TestReportMath(_MathCliTestCase):
 
     def test_a_new_report_without_a_note_sends_no_note_and_prints_no_notice(self) -> None:
         stdout_text, stderr_text = self.run_cli(["report-math", "math_proof", _PROOF_ID])
-        self.assertEqual(self.body_of("POST", "/api/v1/reports"), {"subjectKind": "math_proof", "subjectId": _PROOF_ID})
+        self.assertEqual(self.read_sent_body("POST", "/api/v1/reports"), {"subjectKind": "math_proof", "subjectId": _PROOF_ID})
         self.assertEqual(json.loads(stdout_text), {"id": "r1", "status": "pending"})
         self.assertEqual(stderr_text, "")
 
@@ -388,25 +413,17 @@ class TestReportMath(_MathCliTestCase):
         self.answers[("POST", "/api/v1/reports")] = (200, {"id": "r1", "status": "pending"})
         stdout_text, stderr_text = self.run_cli(["report-math", "math_proof", _PROOF_ID])
         self.assertEqual(json.loads(stdout_text), {"id": "r1", "status": "pending"})
-        self.assertIn("existing report", stderr_text)
+        self.assertEqual(stderr_text, "The server returned the existing report for this content.\n")
 
     def test_a_note_of_exactly_one_thousand_characters_joins_the_body(self) -> None:
         self.run_cli(["report-math", "math_proof", _PROOF_ID, "--note", "n" * 1000])
-        self.assertEqual(self.body_of("POST", "/api/v1/reports")["note"], "n" * 1000)
+        self.assertEqual(self.read_sent_body("POST", "/api/v1/reports")["note"], "n" * 1000)
 
     def test_a_note_with_no_text_or_over_one_thousand_characters_is_refused_before_any_request(self) -> None:
         for note in ("", "   ", "n" * 1001):
             with self.subTest(note_length=len(note)):
                 self.run_cli(["report-math", "math_proof", _PROOF_ID, "--note", note], expected_exit_code=1)
         self.assertEqual(self.sent, [])
-
-    def test_the_parser_accepts_a_math_kind_and_refuses_the_challenge_kind(self) -> None:
-        self.assertEqual(_cli._build_parser().parse_args(["report-math", "math_lean_check", _PROOF_ID]).subject_kind,
-                         "math_lean_check")
-        with contextlib.redirect_stderr(io.StringIO()):
-            with self.assertRaises(SystemExit) as caught:
-                _cli._build_parser().parse_args(["report-math", "grand_challenge", _PROBLEM_ID])
-        self.assertEqual(caught.exception.code, 2)
 
 
 if __name__ == "__main__":

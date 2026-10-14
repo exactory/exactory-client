@@ -198,8 +198,17 @@ def _print_json(payload: dict) -> None:
     print()
 
 
+# Segments that no id can be, because each one changes the route of a request: the empty segment
+# (a doubled slash) and the two dot segments, which a URL parser resolves.
+_UNROUTABLE_PATH_SEGMENTS = ("", ".", "..")
+
+
 def _build_api_path(*segments: str) -> str:
-    """An /api/v1 path whose every segment is percent-encoded, ids included."""
+    """An /api/v1 path whose every segment is percent-encoded, ids included. An empty or dot
+    segment is refused, so each id stays inside its own segment of the route."""
+    for segment in segments:
+        if segment in _UNROUTABLE_PATH_SEGMENTS:
+            _exit_with_error(f"{segment!r} is not an identifier exactory can read.")
     return "/api/v1/" + "/".join(urllib.parse.quote(segment, safe="") for segment in segments)
 
 
@@ -212,6 +221,27 @@ def _require_linked_orcid() -> None:
         _exit_with_error("This operation needs an ORCID iD linked to your exactory account."
                          f" Link one at {_read_api_base_url()}{_ACCOUNT_PAGE_PATH}."
                          " Then run the command again.")
+
+
+def _send_vote(path: str, value: int) -> None:
+    """Cast a vote on the content at path, or clear it when the value is 0, and print the answer."""
+    if value == 0:
+        payload, _ = _send_request("DELETE", path)
+    else:
+        payload, _ = _send_request("PUT", path, {"value": value})
+    _print_json(payload)
+
+
+def _send_report(subject_kind: str, subject_id: str, note: str | None, existing_report_notice: str) -> None:
+    """File a report on one piece of content and print the answer. The server answers 200, not
+    201, when this account already reported the content, and the notice then goes to stderr."""
+    body = {"subjectKind": subject_kind, "subjectId": subject_id}
+    if note is not None:
+        body["note"] = _require_utf16_bounds("note", note, 1, 1000)
+    payload, status = _send_request("POST", "/api/v1/reports", body)
+    if status == 200:
+        print(existing_report_notice, file=sys.stderr)
+    _print_json(payload)
 
 
 def _run_submit(args: argparse.Namespace) -> None:
@@ -258,10 +288,7 @@ def _run_submit(args: argparse.Namespace) -> None:
 
 
 def _run_status(args: argparse.Namespace) -> None:
-    payload, _ = _send_request(
-        "GET",
-        "/api/v1/verifications/" + urllib.parse.quote(args.verification_id, safe=""),
-    )
+    payload, _ = _send_request("GET", _build_api_path("verifications", args.verification_id))
     _print_json(payload)
 
 
@@ -300,19 +327,13 @@ def _quote_identifier_path(identifier: str) -> str:
     character is encoded. An empty or dot segment is refused: neither names a paper, and
     both would walk the request out of its route."""
     segments = identifier.split("/")
-    if any(segment in ("", ".", "..") for segment in segments):
+    if any(segment in _UNROUTABLE_PATH_SEGMENTS for segment in segments):
         _exit_with_error(f"{identifier} is not an identifier exactory can read.")
     return "/".join(urllib.parse.quote(segment, safe="") for segment in segments)
 
 
 def _run_vote(args: argparse.Namespace) -> None:
-    path = ("/api/v1/verdicts/"
-            + urllib.parse.quote(args.verdict_id, safe="") + "/vote")
-    if args.value == 0:
-        payload, _ = _send_request("DELETE", path)
-    else:
-        payload, _ = _send_request("PUT", path, {"value": args.value})
-    _print_json(payload)
+    _send_vote(_build_api_path("verdicts", args.verdict_id, "vote"), args.value)
 
 
 _UUID_RE = re.compile(
@@ -515,10 +536,7 @@ def _run_challenges(args: argparse.Namespace) -> None:
 
 
 def _run_challenge(args: argparse.Namespace) -> None:
-    payload, _ = _send_request(
-        "GET",
-        "/api/v1/grand-challenges/" + urllib.parse.quote(args.challenge_id, safe=""),
-    )
+    payload, _ = _send_request("GET", _build_api_path("grand-challenges", args.challenge_id))
     _print_json(payload)
 
 
@@ -554,13 +572,7 @@ def _run_post_challenge(args: argparse.Namespace) -> None:
 
 
 def _run_vote_challenge(args: argparse.Namespace) -> None:
-    path = ("/api/v1/grand-challenges/"
-            + urllib.parse.quote(args.challenge_id, safe="") + "/vote")
-    if args.value == 0:
-        payload, _ = _send_request("DELETE", path)
-    else:
-        payload, _ = _send_request("PUT", path, {"value": args.value})
-    _print_json(payload)
+    _send_vote(_build_api_path("grand-challenges", args.challenge_id, "vote"), args.value)
 
 
 def _run_solve_challenge(args: argparse.Namespace) -> None:
@@ -570,28 +582,19 @@ def _run_solve_challenge(args: argparse.Namespace) -> None:
         body = {"status": "solved",
                 "resolutionNote": _require_utf16_bounds("resolution note",
                                                         args.note, 10, 5000)}
-    payload, _ = _send_request(
-        "PATCH",
-        "/api/v1/grand-challenges/" + urllib.parse.quote(args.challenge_id, safe=""),
-        body,
-    )
+    payload, _ = _send_request("PATCH", _build_api_path("grand-challenges", args.challenge_id), body)
     _print_json(payload)
 
 
 def _run_report_challenge(args: argparse.Namespace) -> None:
-    body = {"subjectKind": "grand_challenge", "subjectId": args.challenge_id}
-    if args.note is not None:
-        body["note"] = _require_utf16_bounds("note", args.note, 1, 1000)
-    payload, status = _send_request("POST", "/api/v1/reports", body)
-    if status == 200:
-        print("The server returned the existing report for this challenge.",
-              file=sys.stderr)
-    _print_json(payload)
+    _send_report("grand_challenge", args.challenge_id, args.note,
+                 "The server returned the existing report for this challenge.")
 
 
 def _require_math_area(area: str) -> str:
-    """The area is one math.* subject class; the server checks the exact code and its casing."""
-    if not area.lower().startswith("math.") or area.strip() != area:
+    """The area is one math.* subject class. The server trims the code, ignores its case, and
+    checks it against the subject classes, so the value goes out as given."""
+    if not area.strip().lower().startswith("math."):
         _exit_with_error(f"The area {area} is not a math.* subject class. Give one such as math.NT or math.CO.")
     return area
 
@@ -612,8 +615,9 @@ def _require_github_context_url(url: str) -> str:
     2026-10-12 §12, decision 14). It needs the literal prefix, no whitespace, and a path after the
     host."""
     _require_posted_link("context link", url)
-    if not url.startswith(_GITHUB_PAGE_URL_PREFIX) or re.search(r"\s", url) \
-            or url[len(_GITHUB_PAGE_URL_PREFIX):][:1] in ("", "?", "#"):
+    path_after_host = url[len(_GITHUB_PAGE_URL_PREFIX):]
+    if (not url.startswith(_GITHUB_PAGE_URL_PREFIX) or re.search(r"\s", url)
+            or not path_after_host or path_after_host.startswith(("?", "#"))):
         _exit_with_error(f"{url} is not a context link. Give an https://github.com/ URL that names a page.")
     return url
 
@@ -669,12 +673,12 @@ def _run_post_problem(args: argparse.Namespace) -> None:
     if args.paper:
         if len(args.paper) > _MAX_CREATION_PAPERS:
             _exit_with_error(f"The command names {len(args.paper)} papers. The limit is"
-                             f" {_MAX_CREATION_PAPERS}. Remove some, and attach the rest with link-problem-paper.")
+                             f" {_MAX_CREATION_PAPERS}. Remove some. Attach the rest with link-problem-paper.")
         body["paperIdentifiers"] = args.paper
     if args.github_link:
         if len(args.github_link) > _MAX_CREATION_GITHUB_LINKS:
             _exit_with_error(f"The command names {len(args.github_link)} context links. The limit is"
-                             f" {_MAX_CREATION_GITHUB_LINKS}. Remove some, and attach the rest with link-problem-github.")
+                             f" {_MAX_CREATION_GITHUB_LINKS}. Remove some. Attach the rest with link-problem-github.")
         body["githubLinks"] = [
             {"url": _require_github_context_url(url), "label": _require_utf16_bounds("link label", label, 1, 100)}
             for url, label in args.github_link
@@ -685,22 +689,12 @@ def _run_post_problem(args: argparse.Namespace) -> None:
 
 
 def _run_vote_problem(args: argparse.Namespace) -> None:
-    path = _build_api_path("math-problems", args.problem_id, "vote")
-    if args.value == 0:
-        payload, _ = _send_request("DELETE", path)
-    else:
-        payload, _ = _send_request("PUT", path, {"value": args.value})
-    _print_json(payload)
+    _send_vote(_build_api_path("math-problems", args.problem_id, "vote"), args.value)
 
 
 def _run_report_math(args: argparse.Namespace) -> None:
-    body = {"subjectKind": args.subject_kind, "subjectId": args.subject_id}
-    if args.note is not None:
-        body["note"] = _require_utf16_bounds("note", args.note, 1, 1000)
-    payload, status = _send_request("POST", "/api/v1/reports", body)
-    if status == 200:
-        print("The server returned the existing report for this content.", file=sys.stderr)
-    _print_json(payload)
+    _send_report(args.subject_kind, args.subject_id, args.note,
+                 "The server returned the existing report for this content.")
 
 
 def _run_login(args: argparse.Namespace) -> None:

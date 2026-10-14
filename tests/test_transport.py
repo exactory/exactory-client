@@ -265,6 +265,16 @@ class TestPathEncoding(_TransportTestCase):
             self.requested_paths, ["/api/v1/verdicts/..%2Ftasks%3Fx%3D1/vote"]
         )
 
+    def test_a_command_with_an_id_in_its_path_refuses_an_empty_or_dot_id_before_any_request(self) -> None:
+        for unroutable_id in ("", ".", ".."):
+            for argv in (["status", unroutable_id], ["vote", unroutable_id, "--value", "1"],
+                         ["challenge", unroutable_id], ["vote-challenge", unroutable_id, "--value", "0"],
+                         ["solve-challenge", unroutable_id, "--reopen"]):
+                with self.subTest(argv=argv):
+                    _, stderr_text = self._run(argv, expected_exit_code=1)
+                    self.assertIn("is not an identifier", stderr_text)
+        self.assertEqual(self.requested_paths, [])
+
 
 class TestSubmitRepeatNotice(_TransportTestCase):
     def test_a_200_response_notes_the_existing_open_request_on_stderr(self) -> None:
@@ -979,6 +989,11 @@ class TestReportChallengeSubcommand(_UrlopenTransportTestCase):
         stdout_text, stderr_text = self._run(["report-challenge", "chal-1"])
         self.assertIn("existing report", stderr_text)
         json.loads(stdout_text)
+
+    def test_the_notice_for_an_existing_report_names_the_challenge(self) -> None:
+        self.response_status = 200
+        _, stderr_text = self._run(["report-challenge", "chal-1"])
+        self.assertEqual(stderr_text, "The server returned the existing report for this challenge.\n")
 
 
 class TestSubmitChallengeDeclaration(_UrlopenTransportTestCase):
