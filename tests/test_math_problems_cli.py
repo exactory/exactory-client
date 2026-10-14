@@ -23,6 +23,9 @@ _ORCID_ID = "0000-0002-1825-0097"
 # The reason the link checks give for a control character, an invisible character, or an
 # unpaired surrogate. The tests build those characters with chr(), so no source line holds one.
 _NON_TEXT_REASON = "a control character, an invisible character, or an unpaired surrogate"
+# The reason the link checks give for a space, or another character that Unicode counts as whitespace and
+# that is not a control character. A tab and a line feed are control characters and get the reason above.
+_WHITESPACE_REASON = "contains a space or a line break"
 
 
 def _load_exactory():
@@ -193,6 +196,7 @@ class TestPostProblem(_MathCliTestCase):
             (page + chr(0x07), _NON_TEXT_REASON),
             (page + chr(0x200B) + "issues", _NON_TEXT_REASON),
             (page + chr(0xD800), _NON_TEXT_REASON),
+            ("https://github.com/o/r tracking", _WHITESPACE_REASON),
         ]
         for url, reason in unprinted:
             with self.subTest(url=url):
@@ -200,8 +204,7 @@ class TestPostProblem(_MathCliTestCase):
                 self.assertIn(reason, stderr_text)
                 self.assertNotIn(url, stderr_text)
         for url in ("HTTPS://github.com/o/r", "https://GitHub.com/o/r", "http://github.com/o/r", "https://github.com",
-                    "https://github.com/", "https://github.com/?tab=repositories", "https://github.com/#start",
-                    "https://github.com/o/r tracking"):
+                    "https://github.com/", "https://github.com/?tab=repositories", "https://github.com/#start"):
             with self.subTest(url=url):
                 _, stderr_text = self.run_cli(self.build_post_problem_argv("--github-link", url, "Label"), expected_exit_code=1)
                 self.assertIn(f"{url} is not a context link", stderr_text)
@@ -616,6 +619,16 @@ class TestWriteCommandParsers(unittest.TestCase):
                         _cli._build_parser().parse_args(argv)
                 self.assertEqual(caught.exception.code, 2)
 
+    def test_declare_status_and_problems_take_the_same_three_statuses_and_only_problems_takes_all(self) -> None:
+        for status in ("open", "proved", "disproved"):
+            _cli._build_parser().parse_args(["problems", "--status", status])
+            _cli._build_parser().parse_args(["declare-status", _PROBLEM_ID, "--status", status, "--note", "x"])
+        _cli._build_parser().parse_args(["problems", "--status", "all"])
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as caught:
+                _cli._build_parser().parse_args(["declare-status", _PROBLEM_ID, "--status", "all", "--note", "x"])
+        self.assertEqual(caught.exception.code, 2)
+
 
 class TestFormalStatementInputs(_MathCliTestCase):
     def build_add_formal_statement_argv(self, *extra: str, lean_url: str = _LEAN_SOURCE_URL) -> list[str]:
@@ -647,17 +660,18 @@ class TestFormalStatementInputs(_MathCliTestCase):
         self.assertIn("does not exist", stderr_text)
         self.assertEqual(self.sent, [])
 
-    def test_the_note_has_the_bounds_of_the_server_schema(self) -> None:
-        for note, is_accepted in (("", False), ("   ", False), ("n", True), ("n" * 2000, True), ("n" * 2001, False)):
+    def test_the_note_is_trimmed_may_be_blank_and_holds_at_most_two_thousand_characters(self) -> None:
+        # The server trims the note, stores none for a blank one, and counts the 2000 after the trim.
+        for note, sent_note in (("", ""), ("   ", ""), ("  Lean v4.22.0  ", "Lean v4.22.0"), ("n", "n"),
+                                ("n" * 2000, "n" * 2000), (" " + "n" * 2000 + " ", "n" * 2000)):
             with self.subTest(note_length=len(note)):
                 self.sent.clear()
-                argv = self.build_add_formal_statement_argv("--proof-target", "statement", "--note", note)
-                if is_accepted:
-                    self.run_cli(argv)
-                    self.assertEqual(self.read_formal_statement_body()["note"], note)
-                else:
-                    self.run_cli(argv, expected_exit_code=1)
-                    self.assertEqual(self.sent, [])
+                self.run_cli(self.build_add_formal_statement_argv("--proof-target", "statement", "--note", note))
+                self.assertEqual(self.read_formal_statement_body()["note"], sent_note)
+        self.sent.clear()
+        self.run_cli(self.build_add_formal_statement_argv("--proof-target", "statement", "--note", "n" * 2001),
+                     expected_exit_code=1)
+        self.assertEqual(self.sent, [])
 
     def test_twenty_targets_of_each_kind_are_accepted(self) -> None:
         self.run_cli(self.build_add_formal_statement_argv(
@@ -706,6 +720,7 @@ class TestFormalStatementInputs(_MathCliTestCase):
             f"https://github.com/o/r/blob/{_SHA[:39]}/Challenge.lean",
             f"https://github.com/o/r/blob/{_SHA}0/Challenge.lean",
             f"https://github.com/o/r/blob/{_SHA.upper()}/Challenge.lean",
+            f"https://github.com/o/r/blob/{_SHA[:39]}g/Challenge.lean",
             "https://github.com/o/r/blob/HEAD/Challenge.lean",
             f"{pinned}/Challenge.lean?plain=1",
             f"{pinned}/Challenge.lean#L3-9",
@@ -713,11 +728,9 @@ class TestFormalStatementInputs(_MathCliTestCase):
             f"{pinned}/Challenge.lean#L3-L9-L12",
             f"{pinned}/Challenge.lean#section",
             f"{pinned}/Challenge.lean#L" + chr(0x663),
+            f"{pinned}/Challenge.lean#L3-L" + chr(0x663),
             f"{pinned}/",
             f"{pinned}//Challenge.lean",
-            f"{pinned}/Challenge .lean",
-            " " + pinned,
-            pinned + " ",
             f"https://github.com/o/r/commit/{_SHA}",
             f"https://github.com/o/r/raw/{_SHA}/Challenge.lean",
             f"https://github.com/o/r/blame/{_SHA}/Challenge.lean",
@@ -734,6 +747,12 @@ class TestFormalStatementInputs(_MathCliTestCase):
             f"https://github.com/-o/r/blob/{_SHA}/Challenge.lean",
             f"https://github.com/o-/r/blob/{_SHA}/Challenge.lean",
             f"https://github.com/o.o/r/blob/{_SHA}/Challenge.lean",
+            f"https://github.com/_o/r/blob/{_SHA}/Challenge.lean",
+            f"https://github.com/o_o/r/blob/{_SHA}/Challenge.lean",
+            f"https://github.com/o_/r/blob/{_SHA}/Challenge.lean",
+            f"https://github.com/o{chr(0xE9)}o/r/blob/{_SHA}/Challenge.lean",
+            f"https://github.com/o/r~/blob/{_SHA}/Challenge.lean",
+            f"https://github.com/o/r{chr(0xE9)}/blob/{_SHA}/Challenge.lean",
             f"https://github.com/o/{'r' * 101}/blob/{_SHA}/Challenge.lean",
             "https://github.com/o/r/actions/runs/123456789",
         ]
@@ -808,8 +827,7 @@ class TestLinkInputs(_MathCliTestCase):
                                  {"identifier": identifier})
 
     def test_a_context_link_that_is_not_a_github_page_is_refused_before_any_request(self) -> None:
-        for url in ("http://github.com/o/r", "https://gitlab.com/o/r", "https://github.com/",
-                    "https://github.com/o/r tracking"):
+        for url in ("http://github.com/o/r", "https://gitlab.com/o/r", "https://github.com/"):
             with self.subTest(url=url):
                 _, stderr_text = self.run_cli(["link-problem-github", _PROBLEM_ID, "--url", url, "--label", "Code"],
                                               expected_exit_code=1)
@@ -830,6 +848,75 @@ class TestLinkInputs(_MathCliTestCase):
                 self.run_cli(["link-problem-github", _PROBLEM_ID, "--url", "https://github.com/o/r", "--label", label])
                 body = self.read_sent_body("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/github-links")
                 self.assertEqual(body["label"], sent_label)
+
+
+def _build_links_with_a_space(link: str) -> list[str]:
+    """The link with a space before it, after it, and inside it."""
+    return [" " + link, link + " ", link[:-3] + " " + link[-3:]]
+
+
+class TestWhitespaceInALink(_MathCliTestCase):
+    """Every kind of link refuses whitespace with one message that names it, whatever else is wrong with the link."""
+
+    def build_lean_source_argv(self, url: str) -> list[str]:
+        return ["add-formal-statement", _PROBLEM_ID, "--lean-url", url, "--proof-target", "statement"]
+
+    def build_context_link_argv(self, url: str) -> list[str]:
+        return ["link-problem-github", _PROBLEM_ID, "--url", url, "--label", "Code"]
+
+    def list_link_kinds(self) -> tuple:
+        """For each kind of link: its name in the messages, a valid link, and the command line that posts a link."""
+        return (
+            ("Lean source link", _LEAN_SOURCE_URL, self.build_lean_source_argv),
+            ("context link", "https://github.com/o/r/issues/1", self.build_context_link_argv),
+        )
+
+    def test_a_space_before_after_or_inside_a_link_is_named_as_the_cause(self) -> None:
+        for kind, link, build_argv in self.list_link_kinds():
+            for url in _build_links_with_a_space(link):
+                with self.subTest(kind=kind, url=url):
+                    _, stderr_text = self.run_cli(build_argv(url), expected_exit_code=1)
+                    self.assertIn(f"The {kind} {_WHITESPACE_REASON}. Give the link without them.", stderr_text)
+                    self.assertNotIn(url, stderr_text)
+        self.assertEqual(self.sent, [])
+
+    def test_a_space_is_named_before_the_shape_of_the_link_is_judged(self) -> None:
+        for kind, url, build_argv in (
+                ("Lean source link", "https://github.com/o/r/blob/main/Chall enge.lean", self.build_lean_source_argv),
+                ("context link", "http://github.com/o/r tracking", self.build_context_link_argv)):
+            with self.subTest(kind=kind):
+                _, stderr_text = self.run_cli(build_argv(url), expected_exit_code=1)
+                self.assertIn(f"The {kind} {_WHITESPACE_REASON}.", stderr_text)
+        self.assertEqual(self.sent, [])
+
+    def test_every_other_space_character_and_the_line_and_paragraph_separators_are_named_too(self) -> None:
+        for character in (chr(0xA0), chr(0x1680), chr(0x2000), chr(0x2003), chr(0x200A), chr(0x2028), chr(0x2029),
+                          chr(0x202F), chr(0x205F), chr(0x3000)):
+            for kind, link, build_argv in self.list_link_kinds():
+                with self.subTest(kind=kind, character=hex(ord(character))):
+                    _, stderr_text = self.run_cli(build_argv(link[:-3] + character + link[-3:]), expected_exit_code=1)
+                    self.assertIn(f"The {kind} {_WHITESPACE_REASON}.", stderr_text)
+        self.assertEqual(self.sent, [])
+
+    def test_the_shape_pattern_refuses_whitespace_by_itself_like_the_server_pattern(self) -> None:
+        # The commands refuse whitespace before the pattern runs, so the pattern is checked on its own.
+        self.assertIsNotNone(_cli._LEAN_SOURCE_URL_RE.fullmatch(_LEAN_SOURCE_URL))
+        for url in (*_build_links_with_a_space(_LEAN_SOURCE_URL),
+                    _LEAN_SOURCE_URL[:-3] + chr(0xA0) + _LEAN_SOURCE_URL[-3:]):
+            with self.subTest(url=url):
+                self.assertIsNone(_cli._LEAN_SOURCE_URL_RE.fullmatch(url))
+
+    def test_the_length_and_the_characters_are_judged_before_whitespace(self) -> None:
+        for kind, link, build_argv in self.list_link_kinds():
+            with self.subTest(kind=kind, rule="length"):
+                _, stderr_text = self.run_cli(build_argv(link + " " + "a" * (500 - len(link))), expected_exit_code=1)
+                self.assertIn(f"The {kind} is 501 characters long.", stderr_text)
+            for character in (chr(0x09), chr(0x0A), chr(0x0D)):
+                with self.subTest(kind=kind, character=hex(ord(character))):
+                    _, stderr_text = self.run_cli(build_argv(link + character), expected_exit_code=1)
+                    self.assertIn(f"The {kind} contains {_NON_TEXT_REASON}.", stderr_text)
+                    self.assertNotIn(_WHITESPACE_REASON, stderr_text)
+        self.assertEqual(self.sent, [])
 
 
 if __name__ == "__main__":

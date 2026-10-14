@@ -51,10 +51,13 @@ _ACCOUNT_PAGE_PATH = "/account"
 # The report kinds of the section (design 2026-10-12 §19); the server owns the vocabulary.
 _MATH_REPORT_KINDS = ("math_problem", "math_status_event", "math_formal_statement", "math_proof",
                       "math_lean_check", "math_post", "math_problem_paper", "math_github_link")
+# The statuses of a problem (design 2026-10-12 §4); the server owns the vocabulary.
+_MATH_PROBLEM_STATUSES = ("open", "proved", "disproved")
 # Every posted link mirrors the server's link rules (design 2026-10-12 §12): at most 500 UTF-16
 # code units, checked first, and no character of the Unicode categories Cc, Cf, or Cs (control
-# characters, invisible characters, unpaired surrogates). The server stays the authority; an
-# older Python knows a few late-added format characters fewer than the server does.
+# characters, invisible characters, unpaired surrogates). The pattern of every link kind refuses
+# whitespace, so the client refuses it here, last, with a message that names it. The server stays
+# the authority; an older Python knows a few late-added format characters fewer than the server does.
 _MAX_LINK_UTF16_UNITS = 500
 _NON_TEXT_CHARACTER_CATEGORIES = ("Cc", "Cf", "Cs")
 _GITHUB_PAGE_URL_PREFIX = "https://github.com/"
@@ -609,24 +612,25 @@ def _require_math_area(area: str) -> str:
 
 
 def _require_posted_link(kind: str, url: str) -> None:
-    """The rules every link kind meets before its own check. The message names the kind and never
-    prints the value, which can be long or hold control characters."""
+    """The rules every link kind meets before its own check: the length, the characters, and
+    whitespace, in that order. The message names the kind and never prints the value, which can be
+    long or hold control characters."""
     units = _count_utf16_units(url)
     if units > _MAX_LINK_UTF16_UNITS:
         _exit_with_error(f"The {kind} is {units} characters long. The limit is {_MAX_LINK_UTF16_UNITS}.")
     if any(unicodedata.category(character) in _NON_TEXT_CHARACTER_CATEGORIES for character in url):
         _exit_with_error(f"The {kind} contains a control character, an invisible character, or an unpaired"
                          " surrogate. Give the link as plain text.")
+    if re.search(r"\s", url):
+        _exit_with_error(f"The {kind} contains a space or a line break. Give the link without them.")
 
 
 def _require_github_context_url(url: str) -> str:
     """A context link is an https://github.com/ page; the poster gives the exact URL (design
-    2026-10-12 §12, decision 14). It needs the literal prefix, no whitespace, and a path after the
-    host."""
+    2026-10-12 §12, decision 14). It needs the literal prefix and a path after the host."""
     _require_posted_link("context link", url)
     path_after_host = url[len(_GITHUB_PAGE_URL_PREFIX):]
-    if (not url.startswith(_GITHUB_PAGE_URL_PREFIX) or re.search(r"\s", url)
-            or not path_after_host or path_after_host.startswith(("?", "#"))):
+    if not url.startswith(_GITHUB_PAGE_URL_PREFIX) or not path_after_host or path_after_host.startswith(("?", "#")):
         _exit_with_error(f"{url} is not a context link. Give an https://github.com/ URL that names a page.")
     return url
 
@@ -634,9 +638,12 @@ def _require_github_context_url(url: str) -> str:
 # Mirrors leanSourceUrlSchema (design 2026-10-12 §5): a file or a directory at a full commit,
 # an optional line anchor, no query. The URL is sent exactly as given. The anchor uses [0-9], not
 # \d: the server's \d matches ASCII digits only, and Python's \d matches other Unicode digits too.
-_GITHUB_OWNER_REPO = r"https://github\.com/[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/[A-Za-z0-9._-]{1,100}"
+# The path segment keeps the server's \s, although _require_posted_link refuses whitespace first,
+# so that the pattern stays an exact copy of the server's.
+_GITHUB_REPOSITORY_URL_PATTERN_FRAGMENT = (
+    r"https://github\.com/[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/[A-Za-z0-9._-]{1,100}")
 _LEAN_SOURCE_URL_RE = re.compile(
-    _GITHUB_OWNER_REPO + r"/(?:blob|tree)/[0-9a-f]{40}(?:/[^\s?#/]+)*(?:#L[0-9]+(?:-L[0-9]+)?)?")
+    _GITHUB_REPOSITORY_URL_PATTERN_FRAGMENT + r"/(?:blob|tree)/[0-9a-f]{40}(?:/[^\s?#/]+)*(?:#L[0-9]+(?:-L[0-9]+)?)?")
 # Mirrors the server's path rule for Lean source and check evidence links: no "." or ".." path
 # step, each dot also written %2e in any case, no encoded slash in any case, and no backslash. A
 # URL parser resolves each of them, so a link pinned to a commit could name a branch (design
@@ -746,7 +753,7 @@ def _run_add_formal_statement(args: argparse.Namespace) -> None:
     body = {"leanUrl": _require_lean_source_url(args.lean_url), "proofTargets": args.proof_target,
             "disproofTargets": disproof_targets}
     if args.note is not None or args.note_file is not None:
-        body["note"] = _require_utf16_bounds("note", _read_inline_or_file_text(args.note, args.note_file), 1, 2000)
+        body["note"] = _require_utf16_bounds("note", _read_inline_or_file_text(args.note, args.note_file), 0, 2000)
     _send_math_write("POST", _build_api_path("math-problems", args.problem_id, "formal-statements"), body)
 
 
@@ -1070,7 +1077,7 @@ def _build_parser() -> argparse.ArgumentParser:
     problems = commands.add_parser("problems", allow_abbrev=False,
                                    help="List and search the open mathematical problems.")
     problems.add_argument("--query", help="Full-text search over title, statement, motivation, and current state.")
-    problems.add_argument("--status", choices=["open", "proved", "disproved", "all"],
+    problems.add_argument("--status", choices=[*_MATH_PROBLEM_STATUSES, "all"],
                           help="Only problems with this status. The server default is open.")
     problems.add_argument("--area", help="Only problems in this math.* subject class, for example math.NT.")
     problems.add_argument("--has-formal-statement", action="store_true", dest="has_formal_statement",
@@ -1158,7 +1165,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Declare a problem proved, disproved, or open again. Only the author or an admin."
              " Needs a linked ORCID iD.")
     declare_status.add_argument("problem_id")
-    declare_status.add_argument("--status", required=True, choices=["open", "proved", "disproved"])
+    declare_status.add_argument("--status", required=True, choices=_MATH_PROBLEM_STATUSES)
     declare_status.add_argument("--resolving-proof", dest="resolving_proof",
                                 help="The proof that resolves the problem; its claim matches the status.")
     declaration_note = declare_status.add_mutually_exclusive_group(required=True)
