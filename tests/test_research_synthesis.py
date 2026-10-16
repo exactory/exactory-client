@@ -13,14 +13,14 @@ class SynthesisCase(LiteratureCase):
     def api(self, name="synthesis"):
         return importlib.import_module("research_harness." + name)
 
-    def configured(self, profile="research"):
+    def configured(self, profile="research", *, preparation_policy="exhaustive-v1"):
         api = self.api("principles")
         work = self.metadata()
         target = {"kind": "objective", "id": "full-objective", "statement": "Establish finite bounds for all bounded input sequences."}
         if profile == "verification":
             capture = self.capture(work)
             target = {"kind": "work", "id": work, "source_id": capture["source_id"], "sha256": capture["original"]["sha256"]}
-        self.mutate(api.initialize_research, {"profile": profile, "target": target, "preparation_policy": "exhaustive-v1"})
+        self.mutate(api.initialize_research, {"profile": profile, "target": target, "preparation_policy": preparation_policy})
         self.scope([work], profile=profile, **({"target": target} if profile == "verification" else {}))
         return work
 
@@ -125,6 +125,126 @@ class SynthesisCase(LiteratureCase):
 
     def synthesis_codes(self, profile="research"):
         return {x["code"] for x in self.api().synthesis_report(self.store, profile)["obligations"]}
+
+
+class ExhaustiveInnovationDepthTests(SynthesisCase):
+    preparation_policy = "exhaustive-v1"
+
+    def prepare_cases(self, external_count):
+        self.configured(preparation_policy=self.preparation_policy)
+        links = [self.read_source(n) for n in range(1, external_count + 2)]
+        return [self.case(links[0], 0, "within_field")] + [self.case(link, n) for n, link in enumerate(links[1:], 1)]
+
+    def record_plan(self, cases, identifier):
+        return self.mutate(self.api("depth").record_depth, {"id": identifier,
+            "values": {"innovation_candidates": cases, "innovation_cases": cases},
+            "reason": "Match the number of external comparisons needed by this study."})
+
+    def test_one_case_depth_retains_the_ten_case_ceiling_without_candidate_requirements(self):
+        cases = self.prepare_cases(11)
+        api = self.api()
+        for count, code in ((0, "external_cases_insufficient"), (1, None), (10, None), (11, "external_cases_excess")):
+            with self.subTest(external_cases=count):
+                payload = self.innovation(cases[:count + 1], "one-case-" + str(count))
+                payload["depth"] = {"innovation_candidates": 1, "innovation_cases": 1}
+                result = self.mutate(api.record_innovation, payload)["result"]
+                self.assertEqual(result["ready"], code is None)
+                self.assertEqual(result["counts"]["external_papers"], count)
+                self.assertEqual([item["code"] for item in result["obligations"]], [code] if code else [])
+                if code:
+                    bound = {"minimum": 1} if count == 0 else {"maximum": 10}
+                    self.assertEqual({key: result["obligations"][0][key] for key in bound}, bound)
+                saved = self.store.snapshot()["records"]["synthesis"][payload["id"]]
+                self.assertEqual(saved["depth"], {"innovation_candidates": 1, "innovation_cases": 1})
+
+    def test_twelve_case_depth_requires_twelve_distinct_external_cases(self):
+        cases = self.prepare_cases(13)
+        api = self.api()
+        repeated = cases[:12] + [dict(cases[1], id="repeated-external")]
+        selections = (("eleven", cases[:12], 11, "external_cases_insufficient"),
+                      ("twelve", cases[:13], 12, None),
+                      ("thirteen", cases, 13, "external_cases_excess"),
+                      ("repeated", repeated, 11, "external_cases_insufficient"))
+        for identifier, chosen, count, code in selections:
+            with self.subTest(selection=identifier):
+                payload = self.innovation(chosen, "twelve-case-" + identifier)
+                payload["depth"] = {"innovation_candidates": 12, "innovation_cases": 12}
+                result = self.mutate(api.record_innovation, payload)["result"]
+                self.assertEqual(result["ready"], code is None)
+                self.assertEqual(result["counts"]["external_papers"], count)
+                self.assertEqual([item["code"] for item in result["obligations"]], [code] if code else [])
+                if code:
+                    key = "maximum" if count == 13 else "minimum"
+                    self.assertEqual(result["obligations"][0][key], 12)
+
+    def test_default_depth_preserves_the_five_to_ten_case_rule(self):
+        cases = self.prepare_cases(11)
+        api = self.api()
+        for count, code in ((4, "external_cases_insufficient"), (5, None), (10, None), (11, "external_cases_excess")):
+            with self.subTest(external_cases=count):
+                payload = self.innovation(cases[:count + 1], "default-" + str(count))
+                result = self.mutate(api.record_innovation, payload)["result"]
+                self.assertEqual(result["ready"], code is None)
+                self.assertEqual(result["counts"]["external_papers"], count)
+                self.assertEqual(result["obligations"], self.describe_legacy_obligations(count))
+                saved = self.store.snapshot()["records"]["synthesis"][payload["id"]]
+                self.assertEqual(saved["depth"], {"innovation_candidates": 10, "innovation_cases": 5})
+
+    def describe_legacy_obligations(self, count):
+        if count < 5:
+            return [{"code": "external_cases_insufficient",
+                     "explanation": "Analyze five to ten distinct full-read external original papers.",
+                     "count": count, "minimum": 5}]
+        if count > 10:
+            return [{"code": "external_cases_excess",
+                     "explanation": "Select five to ten external original papers for this assessment; keep additional works in the corpus.",
+                     "count": count, "maximum": 10}]
+        return []
+
+    def test_historical_sections_without_stored_depth_preserve_reports_after_a_plan_change(self):
+        cases = self.prepare_cases(12)
+        api = self.api()
+        historical = []
+        for count in (1, 5, 10, 12):
+            payload = self.innovation(cases[:count + 1], "historical-" + str(count))
+            self.mutate(api.record_innovation, payload)
+            records = self.store.snapshot()["records"]
+            records["synthesis"][payload["id"]].pop("depth")
+            report = api.synthesis_state(records, self.artifacts, "research")
+            section = report["sections"]["innovation"]
+            self.assertEqual(section["ready"], count in (5, 10))
+            self.assertEqual(section["obligations"], self.describe_legacy_obligations(count))
+            historical.append((records, report))
+        self.record_plan(1, "shallower")
+        current = self.store.snapshot()["records"]
+        for records, report in historical:
+            records["depth_plan"] = current["depth_plan"]
+            records["depth_plan_selection"] = current["depth_plan_selection"]
+            before = copy.deepcopy(records)
+            self.assertEqual(api.synthesis_state(records, self.artifacts, "research"), report)
+            self.assertEqual(records, before)
+
+    def test_reassessment_uses_saved_effective_depth_after_the_plan_changes(self):
+        cases = self.prepare_cases(12)
+        api = self.api()
+        self.record_plan(1, "one-case-plan")
+        for count, later in ((1, 12), (12, 1)):
+            with self.subTest(recorded_cases=count, current_cases=later):
+                payload = self.innovation(cases[:count + 1], "saved-" + str(count))
+                result = self.mutate(api.record_innovation, payload)["result"]
+                self.assertTrue(result["ready"], result["obligations"])
+                saved = self.store.snapshot()["records"]["synthesis"][payload["id"]]
+                self.assertEqual(saved["depth"], {"innovation_candidates": count, "innovation_cases": count})
+                before = api.synthesis_report(self.store, "research")
+                self.record_plan(later, "later-" + str(later))
+                after = api.synthesis_report(self.store, "research")
+                self.assertEqual(after, before)
+                self.assertEqual(after["sections"]["innovation"]["counts"]["external_papers"], count)
+                self.assertEqual(self.store.snapshot()["records"]["synthesis"][payload["id"]], saved)
+
+
+class ScreenedInnovationDepthTests(ExhaustiveInnovationDepthTests):
+    preparation_policy = "screened-v1"
 
 
 class SynthesisTests(SynthesisCase):

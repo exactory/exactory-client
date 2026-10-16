@@ -692,7 +692,9 @@ def _foundation_state(evaluation, profile):
         for search in current:
             for response in search["responses"]:
                 _search_response(records, artifacts, response, search["scope"])
-            pending = find_search_integrity_errors(search) if "integrity_errors" in search else search["pending"]
+            pending = search["pending"]
+            if profile == "research" and "integrity_errors" in search:
+                pending = find_search_integrity_errors(search)
             if pending:
                 obligations.append(obligation("search_pending", "Complete the captured search enumeration or parser obligations.",
                                               purpose=purpose, search_id=search["id"], pending=pending))

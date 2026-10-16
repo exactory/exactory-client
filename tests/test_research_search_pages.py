@@ -70,14 +70,17 @@ class SearchPageTests(LiteratureCase):
         self.assert_error("invalid_search", lambda: self.search([pages[0]], coverage=[{"kind": "top_k"}]))
 
     def test_raw_rows_and_inspected_work_counts_remain_distinct_on_parser_failures(self):
-        page = self.page("crossref", {"message": {"total-results": 2, "items": [
+        page = self.page("crossref", {"message": {"total-results": 4, "items": [
             {"DOI": "10.1234/valid", "title": ["Valid authored result"]}, {"title": ["Missing identifier"]}]}},
             {"query": "bounded", "rows": "2", "sort": "relevance"})
         search = self.find_recorded_search(self.search([page], hits_per_query=2))
         self.assertEqual(search["coverage"][0]["returned_count"], 2)
         self.assertEqual(search["coverage"][0]["inspected_count"], 1)
         self.assertEqual(search["coverage"][0]["kind"], "bounded_unordered")
-        self.assertTrue(search["integrity_errors"])
+        self.assertEqual([item["code"] for item in search["pending"]], ["invalid_work", "search_response_incomplete"])
+        pending = [item for item in self.store_obligations() if item["code"] == "search_pending"]
+        self.assertEqual(len(pending), 1)
+        self.assertEqual([item["code"] for item in pending[0]["pending"]], ["invalid_work"])
 
     def test_legacy_coverage_uses_saved_complete_or_ordered_receipts_without_rewriting_reports(self):
         from research_harness.literature import find_search_coverage
@@ -301,6 +304,30 @@ class SearchPageTests(LiteratureCase):
         self.store.mutate("legacy-search", {}, lambda tx: tx.put("literature_search", search["id"], legacy),
                           expected_revision=self.store.revision, request_id="legacy-bounded")
         self.assertIn("search_pending", self.codes())
+
+    def test_verification_bounded_search_keeps_enumeration_pending_with_or_without_coverage(self):
+        target = self.verification_target()
+        self.scope([target["id"]], profile="verification", target=target)
+        page = self.page("crossref", {"message": {"total-results": 100, "next-cursor": "second", "items": [
+            {"DOI": "10.1234/verification." + str(i), "title": ["Authored verification result"]} for i in range(10)]}},
+            {"query": "bounded", "rows": "10", "cursor": "*", "sort": "relevance"})
+        search = self.find_recorded_search(self.search([page], profile="verification"))
+        expected_coverage = [{"query": "bounded", "requested_k": 10, "returned_count": 10,
+            "inspected_count": 10, "page_positions": ["*"], "provider": "crossref",
+            "ordering": {"sort": "relevance"}, "kind": "top_k"}]
+        self.assertEqual(search["coverage"], expected_coverage)
+        self.assertEqual(search["integrity_errors"], [])
+        legacy = {key: value for key, value in search.items() if key not in ("coverage", "integrity_errors", "hits_per_query")}
+        for shape, record in (("legacy", legacy), ("new", search)):
+            with self.subTest(shape=shape):
+                self.store.mutate("search-shape-fixture", {}, lambda tx: tx.put("literature_search", search["id"], record),
+                                  expected_revision=self.store.revision, request_id="verification-" + shape)
+                pending = [item for item in self.store_obligations("verification") if item["code"] == "search_pending"]
+                self.assertEqual(len(pending), 1)
+                self.assertEqual(pending[0]["search_id"], search["id"])
+                self.assertEqual([item["code"] for item in pending[0]["pending"]], ["search_response_incomplete"])
+                self.assertEqual(pending[0]["pending"], search["pending"])
+        self.assertEqual(self.find_recorded_search(search)["coverage"], expected_coverage)
 
     def test_duplicate_results_changed_counts_and_missing_middle_page_stay_pending(self):
         cases = [([1, 2], [2, 3], 4, "second"), ([1, 2], [3], 3, "second"), ([1, 2], [3, 4], 4, "third")]
