@@ -8,29 +8,31 @@ any other request, within the origin too. Every request goes through an opener o
 rule changes no state of the process, and no other caller can take it away. bin/exactory (the
 exactory API key) and bin/exactory-draft (the Zenodo token) share this module, so the rule has
 one definition. The facts that both commands judge the end of a request by live here too: which
-requests are reads, what urllib raises when a request did not go out, what it raises when a request
-went out and its answer did not arrive in full, and what a message quotes of an error answer.
+requests are reads, which failures prove that no request byte was sent, which leave the outcome
+unknown, and what a message quotes of an error answer.
 """
 
 import http.client
+import socket
+import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
 
 # A read sends no body, so a followed redirect cannot turn its answer into the answer to a write.
 _READ_METHODS = ("GET", "HEAD")
-# What urllib raises before the request is sent in full, so the server has no request to apply: a
-# failure to find the host, to connect, or to send (urllib.error.URLError, which wraps the error of
-# the connection), and an address that http.client refuses before it connects, such as a port that
-# is not a number or a space in the path (http.client.InvalidURL). urllib.error.HTTPError is a
-# URLError too, and it carries an answer, so a caller catches HTTPError in an earlier except clause.
-UNSENT_REQUEST_ERROR_TYPES = (urllib.error.URLError, http.client.InvalidURL)
+# urllib wraps every OSError from HTTPConnection.request(), including send failures, in URLError.
+# Only these causes prove that no request byte was written: DNS resolution, connection refusal,
+# certificate verification in the TLS handshake, and http.client's address check before sending.
+# A timeout, reset, broken pipe, or other TLS/OSError leaves the outcome unknown.
+_UNSENT_REQUEST_CAUSE_TYPES = (socket.gaierror, ConnectionRefusedError,
+                              ssl.SSLCertVerificationError, http.client.InvalidURL)
 # What urllib raises once a request went out and its answer did not arrive in full: a timeout or a
 # dropped connection while the client waits for the answer or reads it (socket.timeout, which is
 # TimeoutError from Python 3.10 on, and ConnectionResetError, both OSError), and an answer that
 # breaks off (http.client.HTTPException, which includes RemoteDisconnected and IncompleteRead).
-# URLError is an OSError and InvalidURL is an HTTPException, so a caller catches
-# UNSENT_REQUEST_ERROR_TYPES in an earlier except clause.
+# URLError is an OSError and InvalidURL is an HTTPException. Both may also arise before sending;
+# request_was_not_sent distinguishes those cases. Catch HTTPError first: it carries an answer.
 INCOMPLETE_ANSWER_ERROR_TYPES = (OSError, http.client.HTTPException)
 # How much of the body of an error answer a message quotes.
 _MAX_ERROR_DETAIL_CHARACTERS = 2000
@@ -43,9 +45,14 @@ def is_read_method(method: str) -> bool:
     return method in _READ_METHODS
 
 
-def describe_unsent_request_cause(error: Exception) -> str:
-    """The cause that a message names for a request that did not go out: the error of the
-    connection that a URLError wraps, or the text of the error that http.client raised."""
+def request_was_not_sent(error: Exception) -> bool:
+    """Whether the failure proves that no request byte was sent."""
+    cause = error.reason if isinstance(error, urllib.error.URLError) else error
+    return isinstance(cause, _UNSENT_REQUEST_CAUSE_TYPES)
+
+
+def describe_request_error_cause(error: Exception) -> str:
+    """The cause of a request failure, unwrapping urllib's connection or send error."""
     return str(error.reason) if isinstance(error, urllib.error.URLError) else str(error)
 
 

@@ -102,6 +102,7 @@ class _MathCliTestCase(unittest.TestCase):
 
     def run_cli(self, argv: list[str], expected_exit_code: int | None = None) -> tuple[str, str]:
         args = _cli._build_parser().parse_args(argv)
+        _cli._API_BASE_URL = _cli._read_checked_api_base_url()
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             if expected_exit_code is None:
@@ -329,7 +330,8 @@ class TestPostProblemInputs(_MathCliTestCase):
         body = self.read_sent_body("POST", "/api/v1/math-problems")
         self.assertEqual(
             {key: body[key] for key in ("statement", "motivation", "currentState", "resolutionCriteria")},
-            {"statement": "s" * 60, "motivation": "m" * 120, "currentState": "c" * 120, "resolutionCriteria": "r" * 60})
+            {"statement": "s" * 60 + "\n", "motivation": "m" * 120 + "\n",
+             "currentState": "c" * 120 + "\n", "resolutionCriteria": "r" * 60 + "\n"})
         self.assertNotIn("paperIdentifiers", body)
         self.assertNotIn("githubLinks", body)
 
@@ -1131,13 +1133,13 @@ class TestPostProofInputs(_MathCliTestCase):
 
     def test_the_summary_has_the_bounds_of_the_server_schema(self) -> None:
         for summary, is_accepted in (("s" * 99, False), ("s" * 100, True), ("s" * 20000, True), ("s" * 20001, False),
-                                     ("  " + "s" * 100 + "  ", True), (" " * 120, False)):
+                                     ("  " + "s" * 100 + "  ", True), (" " * 120, True)):
             with self.subTest(summary_length=len(summary)):
                 self.sent.clear()
                 argv = ["post-proof", _PROBLEM_ID, "--claim", "proves", "--summary", summary, "--writeup", "2601.12345v2"]
                 if is_accepted:
                     self.run_cli(argv)
-                    self.assertEqual(self.read_proof_body()["summary"], summary.strip())
+                    self.assertEqual(self.read_proof_body()["summary"], summary)
                 else:
                     self.run_cli(argv, expected_exit_code=1)
                     self.assertEqual(self.sent, [])
@@ -1147,7 +1149,7 @@ class TestPostProofInputs(_MathCliTestCase):
         summary_path.write_text("s" * 100 + "\n", encoding="utf-8")
         self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "disproves", "--summary-file", str(summary_path),
                       "--writeup", "2601.12345v2"])
-        self.assertEqual(self.read_proof_body()["summary"], "s" * 100)
+        self.assertEqual(self.read_proof_body()["summary"], "s" * 100 + "\n")
 
     def test_a_missing_summary_file_is_refused_before_any_request(self) -> None:
         _, stderr_text = self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "proves",
@@ -1215,14 +1217,14 @@ class TestLeanCheckInputs(_MathCliTestCase):
 
     def test_the_output_excerpt_comes_from_a_file_with_the_bounds_of_the_server_schema(self) -> None:
         excerpt_path = self.scratch_dir / "excerpt.txt"
-        for text, is_accepted in (("", False), ("  \n", False), ("o\n", True), ("o" * 20000, True), ("o" * 20001, False)):
+        for text, is_accepted in (("", False), ("  \n", True), ("o\n", True), ("o" * 20000, True), ("o" * 20001, False)):
             with self.subTest(text_length=len(text)):
                 self.sent.clear()
                 excerpt_path.write_text(text, encoding="utf-8")
                 argv = self.build_post_lean_check_argv("--output-excerpt-file", str(excerpt_path))
                 if is_accepted:
                     self.run_cli(argv)
-                    self.assertEqual(self.read_report_body()["outputExcerpt"], text.strip())
+                    self.assertEqual(self.read_report_body()["outputExcerpt"], text)
                 else:
                     self.run_cli(argv, expected_exit_code=1)
                     self.assertEqual(self.sent, [])

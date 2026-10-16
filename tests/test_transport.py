@@ -89,13 +89,17 @@ def _invoke_cli(test_case: unittest.TestCase, argv: list[str],
                 expected_exit_code: int | None = None) -> tuple[str, str]:
     """Parse argv with the real parser and run its handler, capturing both streams."""
     args = _transport._build_parser().parse_args(argv)
+    def invoke():
+        # Each invocation stands for a process, whose configuration is checked once at boot.
+        _transport._API_BASE_URL = _transport._read_checked_api_base_url()
+        args.handler(args)
     stdout_sink, stderr_sink = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(stdout_sink), contextlib.redirect_stderr(stderr_sink):
         if expected_exit_code is None:
-            args.handler(args)
+            invoke()
         else:
             with test_case.assertRaises(SystemExit) as caught:
-                args.handler(args)
+                invoke()
             test_case.assertEqual(caught.exception.code, expected_exit_code)
     return stdout_sink.getvalue(), stderr_sink.getvalue()
 
@@ -189,6 +193,7 @@ class _OpenUrlTransportTestCase(unittest.TestCase):
         self.addCleanup(_restore_env)
         os.environ["EXACTORY_API_KEY"] = "test-key"
         os.environ["EXACTORY_API_URL"] = "https://api.test"
+        _transport._API_BASE_URL = _transport._read_checked_api_base_url()
 
         self.sent_requests: list[urllib.request.Request] = []
         self.response_status = 200
@@ -816,9 +821,9 @@ class TestPostChallengeSubcommand(_OpenUrlTransportTestCase):
             "--citations-file", str(self.citations_path),
         ])
         body = json.loads(self._single_request().data.decode())
-        self.assertEqual(body["problemStatement"], "p" * 200)
-        self.assertEqual(body["currentState"], "c" * 100)
-        self.assertEqual(body["resolutionCriteria"], "r" * 50)
+        self.assertEqual(body["problemStatement"], "p" * 200 + "\n")
+        self.assertEqual(body["currentState"], "c" * 100 + "\n")
+        self.assertEqual(body["resolutionCriteria"], "r" * 50 + "\n")
 
     def test_parent_and_paper_links_are_forwarded(self) -> None:
         self._run(self._post_argv() + [
@@ -1139,8 +1144,7 @@ class TestAnswersThatDidNotArriveInFull(_OpenUrlTransportTestCase):
                 self.assertTrue(http_error.closed)
 
     def test_a_failure_before_the_request_went_out_keeps_its_message(self) -> None:
-        # urllib raises a failure to connect or to send as URLError, and http.client refuses an address before it
-        # connects with InvalidURL. Neither request went out, so neither may have been applied.
+        # Connection refusal and InvalidURL both prove that no request byte was sent.
         for cause, error in (("[Errno 61] Connection refused",
                               urllib.error.URLError(ConnectionRefusedError(61, "Connection refused"))),
                              ("nonnumeric port: 'abc'", http.client.InvalidURL("nonnumeric port: 'abc'"))):
@@ -1447,7 +1451,7 @@ class TestLoginSubcommand(_OpenUrlTransportTestCase):
         stdout, stderr = self._run(["logout"])
         self.assertFalse(path.exists())
         self.assertEqual(json.loads(stdout), {"removed": str(path)})
-        self.assertIn("exactory.ai/keys", stderr)
+        self.assertIn("https://api.test/keys", stderr)
         self.assertEqual(self.sent_requests, [])
 
     def test_logout_with_no_file_reports_nothing_removed(self) -> None:

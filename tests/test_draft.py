@@ -98,6 +98,9 @@ class _FakeZenodoApi:
                     "html": f"{base_url}/deposit/4242",
                 },
             }
+        if method == "GET" and url.endswith("/deposit/depositions/4242"):
+            return {"id": 4242, "submitted": False,
+                    "links": {"bucket": f"{base_url}/files/bucket-1", "html": f"{base_url}/deposit/4242"}}
         if method == "PUT" and "/files/bucket-1/" in url:
             return {}
         if method == "GET" and url.endswith("/records/4242/draft"):
@@ -118,6 +121,7 @@ class _FakeZenodoApi:
         if method == "GET" and url.endswith("/deposit/depositions/4343"):
             return {
                 "id": 4343,
+                "submitted": False,
                 "links": {
                     "bucket": f"{base_url}/files/bucket-2",
                     "html": f"{base_url}/deposit/4343",
@@ -256,8 +260,7 @@ _REQUEST_FAILURES = (
 def _build_fresh_draft_advice(deposition_id: int, draft_url: str) -> str:
     """The advice after a failure that leaves the draft of a direct deposit for no problem, created by this run."""
     return (f"Deposition {deposition_id} of this run stays a draft on Zenodo: {draft_url}. A second run creates another"
-            " draft. Before you run the command again, delete this draft with the Delete button on its page. Or,"
-            " instead of a second run, finish this draft on Zenodo and publish it there.")
+            " draft. Before you run the command again, delete this draft with the Delete button on its page.")
 
 
 class _PublishedRecordZenodoApi(_FakeZenodoApi):
@@ -1341,7 +1344,7 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
         self.assertIn("Deposition 4242 may be published already. Open"
                       " https://sandbox.zenodo.org/api/deposit/4242 and read its state.",
                       stderr_text)
-        self.assertIn("a second run publishes a second permanent record", stderr_text)
+        self.assertIn("a second plain run publishes a second permanent record", stderr_text)
         self.assertNotIn("Then run the command again", stderr_text)
 
     def test_a_lost_create_response_names_the_draft_that_may_exist(self) -> None:
@@ -1359,7 +1362,7 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
                          [("POST", "https://sandbox.zenodo.org/api/deposit/depositions")])
 
     def test_a_creation_that_did_not_go_out_keeps_the_advice_to_run_the_command_again(self) -> None:
-        # urllib raises a failure to connect or to send as URLError: Zenodo received nothing, so no draft exists.
+        # A connection refusal proves that Zenodo received no request, so no draft exists.
         self.fake_api = _FailingRequestZenodoApi("POST", "/deposit/depositions", lambda request: urllib.error.URLError(
             ConnectionRefusedError(61, "Connection refused")))
         _draft._open_url = self.fake_api
@@ -1468,11 +1471,12 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
                                                         expected_exit_code=1)
 
         self.assertTrue(stderr_text.endswith(
-            "Deposition 4343 of this run stays a draft on Zenodo: https://sandbox.zenodo.org/api/deposit/4343. It is a"
-            " new version draft, and Zenodo opens no other new version while this one is a draft, so a second run with"
-            " --new-version continues with it.\n"), stderr_text)
+            "Deposition 4343 of this run stays a draft on Zenodo: https://sandbox.zenodo.org/api/deposit/4343. Run the"
+            " same command again with --new-version. It reads the workspace's record first. If that record has no"
+            " DOI, it reads deposition 4343 back first. It continues with this draft while it is unpublished, and"
+            " never publishes a second record.\n"), stderr_text)
 
-    def test_a_refused_publish_of_a_new_version_says_that_a_second_run_stops_at_its_draft(self) -> None:
+    def test_a_refused_publish_of_a_new_version_says_that_a_second_run_reads_back_its_draft(self) -> None:
         self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"])
         self.fake_api = _FailingRequestZenodoApi("POST", "/deposit/depositions/4343/actions/publish", lambda request:
                                                  urllib.error.HTTPError(request.full_url, 400, "Bad Request", {},
@@ -1483,16 +1487,18 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
             ["--new-version", "--publish", "--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
 
         self.assertTrue(stderr_text.endswith(
-            "Deposition 4343 of this run stays a draft on Zenodo: https://sandbox.zenodo.org/api/deposit/4343. A second"
-            " run with --new-version stops, because .exactory/deposit.json now records this deposition with no DOI."
-            " Publish this draft on Zenodo with the Publish button on its page.\n"), stderr_text)
+            "Deposition 4343 of this run stays a draft on Zenodo: https://sandbox.zenodo.org/api/deposit/4343. Run the"
+            " same command again with --new-version. It reads deposition 4343 back first, continues with it while it"
+            " is a draft, and never publishes a second record.\n"), stderr_text)
         # What the advice says a second run does is what it does.
-        output = self._deposit(["--new-version", "--publish", "--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
-        self.assertIn("The prior deposit, deposition 4343, has no recorded DOI.", output)
+        self.fake_api = _FakeZenodoApi()
+        _draft._open_url = self.fake_api
+        self._deposit(["--new-version", "--publish", "--creator", "Shiroshita, Ryosuke"])
+        self.assertEqual(self.requested()[0], ("GET", "https://sandbox.zenodo.org/api/deposit/depositions/4343"))
+        self.assertFalse(any(url.endswith("/actions/newversion") for _, url in self.requested()))
 
-    def test_a_lost_publish_response_of_a_new_version_says_that_a_second_run_stops_at_its_record(self) -> None:
-        # The deposit records the new version before its publish call, so a second run with --new-version meets a
-        # record with no DOI, and it publishes no second record.
+    def test_a_lost_publish_response_of_a_new_version_says_that_a_second_run_reads_back_its_record(self) -> None:
+        # The next --new-version reads the recorded deposition back before writing.
         self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"])
         self.fake_api = _FailingRequestZenodoApi("POST", "/deposit/depositions/4343/actions/publish",
                                                  lambda request: OSError("connection reset by peer"))
@@ -1503,11 +1509,13 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
 
         self.assertTrue(stderr_text.endswith(
             "The client cannot read the answer of the Zenodo API. Cause: connection reset by peer. Deposition 4343 may"
-            " be published already. Open https://sandbox.zenodo.org/api/deposit/4343 and read its state. A second run"
-            " with --new-version stops, because .exactory/deposit.json now records this deposition with no DOI. If"
-            " the deposition is still a draft, publish it with the Publish button on its page.\n"), stderr_text)
-        output = self._deposit(["--new-version", "--publish", "--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
-        self.assertIn("The prior deposit, deposition 4343, has no recorded DOI.", output)
+            " be published already. Open https://sandbox.zenodo.org/api/deposit/4343 and read its state. Run the same"
+            " command again with --new-version. It reads deposition 4343 back first, continues with it while it is a"
+            " draft, and never publishes a second record.\n"), stderr_text)
+        self.fake_api = _FakeZenodoApi()
+        _draft._open_url = self.fake_api
+        self._deposit(["--new-version", "--publish", "--creator", "Shiroshita, Ryosuke"])
+        self.assertEqual(self.requested()[0], ("GET", "https://sandbox.zenodo.org/api/deposit/depositions/4343"))
 
     def test_a_new_version_without_a_stored_deposition_id_is_an_error(self) -> None:
         (self.workspace_dir / ".exactory" / "deposit.json").write_text(
@@ -1609,16 +1617,17 @@ class TestZenodoAnswersThatCannotBeRead(unittest.TestCase):
                                                           f" answer did not arrive in full. Cause: {broken_off}.\n"
                                                           f"{advice_line}\n")
 
-    def test_a_request_that_did_not_go_out_says_that_the_api_is_not_reachable(self) -> None:
-        # urllib raises a failure to connect or to send as URLError, and http.client refuses an address that it cannot
-        # send, such as a link with a space from an answer of Zenodo, with InvalidURL before it connects.
-        for cause, error in (("[Errno 61] Connection refused",
-                              urllib.error.URLError(ConnectionRefusedError(61, "Connection refused"))),
-                             ("URL can't contain control characters.",
-                              http.client.InvalidURL("URL can't contain control characters."))):
+    def test_a_request_that_did_not_go_out_names_its_cause_and_remedy(self) -> None:
+        # Connection refusal proves an unsent request. InvalidURL also occurs before sending,
+        # but a malformed address from Zenodo needs an address remedy instead of network advice.
+        for cause, error, lead_msg, remedy_msg in (
+                ("[Errno 61] Connection refused", urllib.error.URLError(ConnectionRefusedError(61, "Connection refused")),
+                 "The client cannot reach the Zenodo API.", "Make sure that the network is available."),
+                ("URL can't contain control characters", http.client.InvalidURL("URL can't contain control characters"),
+                 "The client cannot use an address from a Zenodo answer.",
+                 "Open the deposition on Zenodo and check its links.")):
             with self.subTest(error=type(error).__name__):
-                self.assertEqual(self.call_zenodo(error), f"The client cannot reach the Zenodo API. Cause: {cause}."
-                                                          " Make sure that the network is available. Send it again.\n")
+                self.assertEqual(self.call_zenodo(error), f"{lead_msg} Cause: {cause}. {remedy_msg} Send it again.\n")
 
 
 class TestCorruptStoreDeposit(_PlainWorkspaceDepositTestCase):

@@ -8,6 +8,7 @@ import http.server
 import io
 import json
 import os
+import socket
 import subprocess
 import sys
 import threading
@@ -681,18 +682,23 @@ class TestManagedDepositForAProblem(_PendingAttachmentTests, _DepositTestCase):
         self.assertEqual(self.fake_api.requests, [])
         self.assertEqual(self.exactory.calls, [])
 
-    def test_new_version_refuses_a_prior_draft_that_has_no_doi_and_names_it(self) -> None:
+    def test_new_version_reads_back_and_continues_a_prior_draft_that_has_no_doi(self) -> None:
         self._deposit(["--creator", "Shiroshita, Ryosuke"])
         self.fake_api.requests.clear()
 
-        output = self._deposit(["--new-version", "--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
+        output = self._deposit(["--new-version", "--creator", "Shiroshita, Ryosuke"])
 
-        # The managed check refuses first, and the direct path meets the same rule in its file.
+        # The managed check refuses a prior with no DOI; the direct path then reads that prior back.
         self.assertIn("Managed record skipped (publication_prior_required): The prior deposit, deposition 4242,"
                       " has no recorded DOI. Open https://sandbox.zenodo.org/api/deposit/4242 and check its state.",
                       output)
         self.assertNotIn("not a published record", output)
-        self.assertEqual(self.fake_api.requests, [])
+        self.assertIn("Continuing with draft deposition 4242", output)
+        self.assertEqual((self.fake_api.requests[0].get_method(), self.fake_api.requests[0].full_url),
+                         ("GET", "https://sandbox.zenodo.org/api/deposit/depositions/4242"))
+        self.assertFalse(any(request.get_method() == "POST" for request in self.fake_api.requests))
+        state = json.loads((self.workspace_dir / ".exactory/deposit.json").read_text())
+        self.assertEqual(state["deposition_id"], 4242)
 
 
     def test_after_the_retry_the_same_manuscript_resumes_the_same_completed_deposit(self) -> None:
@@ -798,9 +804,8 @@ class TestDirectDepositForAProblem(_PendingAttachmentTests, _PlainWorkspaceDepos
         self.fake_api = fake_api
         _draft._open_url = fake_api
 
-    def test_a_failure_before_the_journal_names_the_draft_and_how_to_attach_a_record_published_on_zenodo(self) -> None:
-        # Before the publish request the deposit keeps no journal, so a second run creates another draft. A record that
-        # the user publishes on Zenodo instead is attached to the problem by hand.
+    def test_a_failure_before_the_journal_names_the_draft_and_its_deletion_before_retry(self) -> None:
+        # Before the publish request the deposit keeps no journal, so the draft is deleted before a second run.
         self._answer_with(_FailingRequestZenodoApi("PUT", "/files/bucket-1/paper.pdf", lambda request: OSError("reset")))
 
         _, stderr_text = self._deposit_on_split_streams(_PROBLEM_DEPOSIT, expected_exit_code=1)
@@ -808,15 +813,13 @@ class TestDirectDepositForAProblem(_PendingAttachmentTests, _PlainWorkspaceDepos
         self.assertTrue(stderr_text.endswith(
             "Deposition 4242 of this run stays a draft on Zenodo: https://zenodo.org/api/deposit/4242. A second run"
             " creates another draft. Before you run the command again, delete this draft with the Delete button on its"
-            " page. Or, instead of a second run, finish this draft on Zenodo, publish it there, and attach the record"
-            f" to the problem with exactory link-problem-paper {_PROBLEM_ID} --identifier <the record's DOI>.\n"),
+            " page.\n"),
             stderr_text)
         self.assertFalse((self.workspace_dir / ".exactory" / "problem-deposit.json").exists())
         self.assertEqual(self.exactory.links(), [])
 
     def test_a_failure_before_the_journal_of_a_sandbox_deposit_names_no_attachment(self) -> None:
-        # Only a published production record is attached to a problem, so the way to finish a sandbox draft by hand
-        # names no attachment.
+        # A sandbox draft is also deleted before a second run, with no attachment step.
         self._answer_with(_FailingRequestZenodoApi("PUT", "/files/bucket-1/paper.pdf", lambda request: OSError("reset")))
 
         _, stderr_text = self._deposit_on_split_streams(["--publish", "--creator", "Shiroshita, Ryosuke",
@@ -825,7 +828,7 @@ class TestDirectDepositForAProblem(_PendingAttachmentTests, _PlainWorkspaceDepos
         self.assertTrue(stderr_text.endswith(
             "Deposition 4242 of this run stays a draft on Zenodo: https://sandbox.zenodo.org/api/deposit/4242. A second"
             " run creates another draft. Before you run the command again, delete this draft with the Delete button on"
-            " its page. Or, instead of a second run, finish this draft on Zenodo and publish it there.\n"), stderr_text)
+            " its page.\n"), stderr_text)
 
     def test_the_journal_and_the_deposit_record_are_kept_before_the_publish_call(self) -> None:
         exactory_dir = self.workspace_dir / ".exactory"
@@ -1919,21 +1922,22 @@ class TestProblemDepositJournalStates(_PlainWorkspaceDepositTestCase):
         self.assertEqual(output.count("Managed record skipped (store_busy)"), 1)
         self.assertEqual(self.read_deposit_state()["doi"], "10.5281/zenodo.4242")
 
-    def test_new_version_refuses_a_prior_deposit_whose_publish_was_refused_and_names_it(self) -> None:
+    def test_new_version_reads_back_a_prior_deposit_whose_publish_was_refused(self) -> None:
         self._answer_with(_StatusErrorZenodoApi("/actions/publish", 400))
         self._deposit(_PRODUCTION_PUBLISH, expected_exit_code=1)
         # The refused publish left the deposition in the record of the workspace, with no DOI.
         self.assertNotIn("doi", self.read_deposit_state())
         self._answer_with(_FakeZenodoApi())
 
-        output = self._deposit(["--production", "--new-version", "--creator", "Shiroshita, Ryosuke"],
-                               expected_exit_code=1)
+        output = self._deposit(["--production", "--new-version", "--creator", "Shiroshita, Ryosuke"])
 
-        self.assertIn("publication_prior_required", output)
-        self.assertIn("The prior deposit, deposition 4242, has no recorded DOI. Open"
-                      " https://zenodo.org/api/deposit/4242 and check its state.", output)
+        self.assertIn("Continuing with draft deposition 4242", output)
         self.assertNotIn("not a published record", output)
-        self.assertEqual(self.fake_api.requests, [])
+        self.assertEqual((self.fake_api.requests[0].get_method(), self.fake_api.requests[0].full_url),
+                         ("GET", "https://zenodo.org/api/deposit/depositions/4242"))
+        self.assertFalse(any(request.get_method() == "POST" for request in self.fake_api.requests))
+        self.assertEqual(self.read_deposit_state()["deposition_id"], 4242)
+        self.assertNotIn("doi", self.read_deposit_state())
 
 
 class TestExplainUnsettledJournal(_PlainWorkspaceDepositTestCase):
@@ -2592,11 +2596,50 @@ class TestExactoryRequestRedirects(unittest.TestCase):
         self.exactory = _load_bin_module("exactory", "exactory_for_the_redirect_tests")
         self.other_url, self.other_received = _serve_on_loopback(self, lambda method, path: (200, _JSON_HEADERS, b"{}"))
 
+    def test_a_closed_loopback_port_proves_that_no_request_was_sent(self) -> None:
+        # A port that was bound and then closed refuses a connection at once. A bound port that does not listen
+        # is not enough: macOS drops the connection attempt, and the client then meets a timeout, which leaves the
+        # outcome unknown.
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.bind(("127.0.0.1", 0))
+            closed_port = probe.getsockname()[1]
+        origin = f"http://127.0.0.1:{closed_port}"
+        os.environ["EXACTORY_API_URL"] = origin
+        self.exactory._API_BASE_URL = self.exactory._read_checked_api_base_url()
+        for method in ("POST", "GET"):
+            with self.subTest(client="exactory", method=method):
+                sink = io.StringIO()
+                with contextlib.redirect_stderr(sink), self.assertRaises(SystemExit) as stopped:
+                    self.exactory._send_request(method, "/test")
+                self.assertEqual(stopped.exception.code, 1)
+                self.assertIn("Then send the request again.", sink.getvalue())
+                self.assertNotIn("may have applied", sink.getvalue())
+
+        creation_advice = _draft._FailureAdvice(uncertain_msg="An uncertain creation must be checked first.")
+        publish_advice = _draft._build_publish_request_advice_set(
+            4242, f"{origin}/deposit/4242", None, is_new_version=False)
+        with unittest.mock.patch.dict(_draft._ZENODO_API_URLS, {"sandbox": f"{origin}/api"}), \
+                unittest.mock.patch.object(_draft, "_open_url", _OPEN_URL_OF_THE_COMMAND):
+            for step, advice in (("creation", creation_advice), ("publication", publish_advice)):
+                with self.subTest(client="zenodo", step=step):
+                    sink = io.StringIO()
+                    with contextlib.redirect_stderr(sink), self.assertRaises(SystemExit) as stopped:
+                        _draft._call_zenodo("POST", f"{origin}/api/test", "sandbox-token", json_body={},
+                                            failure_advice=advice, environment="sandbox")
+                    self.assertEqual(stopped.exception.code, 1)
+                    self.assertIn("cannot reach the Zenodo API", sink.getvalue())
+                    self.assertIn("stays a draft" if step == "publication" else "Then run the command again.",
+                                  sink.getvalue())
+                    self.assertNotIn("uncertain creation", sink.getvalue())
+                    self.assertNotIn("may be published already", sink.getvalue())
+
     def test_a_redirect_to_another_origin_fails_the_request_and_the_other_origin_receives_nothing(self) -> None:
         url, received = _serve_on_loopback(
             self, lambda method, path: (302, {"Location": f"{self.other_url}{path}"}, b""))
         os.environ["EXACTORY_API_URL"] = url
         sink = io.StringIO()
+
+        self.exactory._API_BASE_URL = self.exactory._read_checked_api_base_url()
 
         with contextlib.redirect_stderr(sink), self.assertRaises(SystemExit) as stopped:
             self.exactory._send_request("POST", "/api/v1/reports", {"kind": "x"})
@@ -2625,6 +2668,7 @@ class TestExactoryRequestRedirects(unittest.TestCase):
                 url, received = _serve_on_loopback(self, respond)
                 os.environ["EXACTORY_API_URL"] = url
                 args = self.exactory._build_parser().parse_args(["post-discussion", _PROBLEM_ID, "--body", "A post."])
+                self.exactory._API_BASE_URL = self.exactory._read_checked_api_base_url()
                 sink = io.StringIO()
 
                 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(sink), \
@@ -2649,6 +2693,7 @@ class TestExactoryRequestRedirects(unittest.TestCase):
                         (status, {"Location": "/api/v1/moved"}, b"") if path == "/api/v1/target"
                         else (200, _JSON_HEADERS, b"{}")))
                     os.environ["EXACTORY_API_URL"] = url
+                    self.exactory._API_BASE_URL = self.exactory._read_checked_api_base_url()
                     sink = io.StringIO()
 
                     with contextlib.redirect_stderr(sink), self.assertRaises(SystemExit) as stopped:
@@ -2665,6 +2710,8 @@ class TestExactoryRequestRedirects(unittest.TestCase):
             self, lambda method, path: (302, {"Location": f"{self.other_url}{path}"}, b""))
         os.environ["EXACTORY_API_URL"] = url
 
+        self.exactory._API_BASE_URL = self.exactory._read_checked_api_base_url()
+
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as stopped:
             self.exactory._send_request("POST", "/api/v1/email-codes", {"email": "a@test.local"}, authenticated=False)
 
@@ -2679,6 +2726,8 @@ class TestExactoryRequestRedirects(unittest.TestCase):
             return 200, _JSON_HEADERS, b'{"orcidId": "0000-0002-1825-0097"}'
         url, received = _serve_on_loopback(self, respond)
         os.environ["EXACTORY_API_URL"] = url
+
+        self.exactory._API_BASE_URL = self.exactory._read_checked_api_base_url()
 
         self.assertEqual(self.exactory._send_request("GET", "/api/v1/old"),
                          ({"orcidId": "0000-0002-1825-0097"}, 200))
