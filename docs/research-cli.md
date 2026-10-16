@@ -799,6 +799,79 @@ Under `sampled-v1` `bind-verdict` also checks the verdict body's prediction agai
 
 The task endpoint may reveal only an own-verdict ID after a lost POST response; it cannot establish the exact body that was accepted. Such an intent remains pending even when that ID exists, and the managed path does not repeat the POST; `exactory verify` prints the `Managed record skipped` line and sends the verdict directly. A verification-level owner serializes the complete verdict decision and write, including distinct assessment IDs. Other verification targets retain independent owners. Known-success receipts and explicitly bound revisions remain supported. A stale task response cannot erase a locally confirmed prior verdict or permit a revision that omits the latest known predecessor. The server's `requestedByViewer` means the request opener, not the paper author, and supplies no authorship proof.
 
+### Deposit for a math problem
+
+`exactory-draft deposit --math-problem <problem-id>` deposits a write-up for a problem.
+The command checks that the problem stands and the account has a linked ORCID iD before the first Zenodo write.
+The metadata includes `related_identifiers` with `identifier: "<EXACTORY_API_URL>/math/<problem-id>"` and `relation: "references"`.
+A published production record attaches to the problem as a related paper.
+Sandbox records stay unattached.
+A production publish needs the user's approval and `--confirm-publish`, because a published DOI is permanent.
+
+Before the publish request, the command writes `.exactory/problem-deposit.json` in the workspace root.
+The journal records the problem, application origin, Zenodo environment, and operation.
+On the managed path, it names the saved intent. On the direct path, it names the deposition and its page.
+After publication, it records the DOI and marks publication settled before it attaches the record.
+After attachment, it marks the journal attached.
+
+If attachment fails after publication, the record stays published and the journal keeps the pending attachment.
+The command prints: `Resolve that cause. Then run exactory-draft attach-problem. It attaches the recorded record and publishes nothing.`
+A publishing deposit for the same problem also retries that attachment and publishes nothing new.
+It uses the recorded record even if the manuscript changed.
+A publishing deposit for another problem stops until the attachment succeeds or the user discards its journal.
+
+If the user decides to discard that attachment, the command gives this rule:
+`If you decide not to attach the record, remove .exactory/problem-deposit.json.`
+This rule applies to a settled, published record. It does not authorize removal of an uncertain publication.
+
+If the publish response was lost, run the same deposit command again.
+After the problem id check, the command settles the journal before it reads the manuscript or other deposit options.
+It reads the recorded deposition back from Zenodo.
+If Zenodo shows it published, the command records and attaches it.
+If Zenodo shows it unpublished, the deposit command publishes that same deposition and creates no second record.
+
+On the managed path, publication still needs the manuscript and reviews that the saved intent names.
+Otherwise it stops with `readiness_required`: `The current manuscript and dual reviews must match the saved publication intent`.
+Restore that manuscript and its reviews before the next deposit run.
+If the user wants the changed manuscript published instead, stop and ask the user how to proceed.
+No command abandons a recorded deposition.
+
+The attachment uses the recorded application origin.
+If `EXACTORY_API_URL` names another origin, the command stops before attachment and leaves the journal intact.
+If the recorded origin is yours, set `EXACTORY_API_URL` to it before retrying.
+Run one `deposit`, `attach-problem`, or `reconcile` at a time in a workspace.
+An overlap stops with `remote_operation_owned` and sends nothing:
+`Another exactory-draft run owns the deposits of this workspace. Wait for that run to end. Then run this command again.`
+
+### Attach a recorded problem deposit
+
+Run `exactory-draft attach-problem` from the workspace root after an attachment failure or a lost publish response.
+It reads `.exactory/problem-deposit.json` for the problem and operation, regardless of the current manuscript.
+It never publishes.
+If the journal is absent, it stops with:
+`.exactory/problem-deposit.json does not exist here. Run attach-problem from the workspace root of a deposit made with --math-problem.`
+
+| Journal state | What `attach-problem` does |
+| --- | --- |
+| Unsettled publication | Record a confirmed publication, then attach a production record. Leave an unpublished deposition or unclaimed managed operation for `deposit`. |
+| Settled production record, attachment pending | Attach the recorded DOI. Read no Zenodo token and send no Zenodo request. |
+| Attached record | Report that it is already attached. Change nothing. |
+| Settled sandbox record | Report that only a published production record attaches. Change nothing. |
+| Settled managed operation with no published record | Report that there is nothing to attach. Change nothing. |
+
+If a direct deposition reads back unpublished, the command stops with:
+`Deposition <id> is not published. Run exactory-draft deposit to publish it. That command publishes this deposition and creates no other.`
+On the managed path, that stop is `publication_unconfirmed`:
+`The record of this deposit is not published. Run exactory-draft deposit to finish it.`
+If a managed operation never sent its publish request, `attach-problem` stops with:
+`The recorded deposit never sent its publish request, so there is no record to attach. Run exactory-draft deposit to deposit the paper.`
+The next deposit run releases that unclaimed journal before it starts a new deposit.
+For a claimed publication, it keeps the operation bound to its recorded deposition.
+
+`reconcile` uses the same workspace lock.
+After it reconciles the journal's operation, a pending attachment still needs `attach-problem`.
+Never publish the paper a second time by another route.
+
 ## Development rounds
 
 A development round is one pass of the paper-level loop: a goal that the current
