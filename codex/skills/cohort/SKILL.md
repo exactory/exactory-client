@@ -1,6 +1,6 @@
 ---
 name: cohort
-description: Build and enumerate a study's cohort, read the member abstracts its preparation policy requires, and extract source-grounded field doctrine and open problems. Use at the start of a study, before literature synthesis and ideation, and when field conventions need refresh.
+description: Use at any stage to enumerate a population, sample or screen members, read abstracts, or refresh field doctrine, with caller-stated depth and budget and recorded coverage.
 ---
 
 # Exactory: cohort

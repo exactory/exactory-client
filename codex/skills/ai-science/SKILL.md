@@ -1,6 +1,6 @@
 ---
 name: ai-science
-description: Use when the user asks for AI Science or a managed research study from a topic or question through scientific results, a paper, or an authorized publication endpoint.
+description: Use when the user asks for AI Science or a managed study through direction, investigation, result, manuscript and authorized publication milestones, choosing research tools at any stage.
 ---
 
 # Exactory: ai-science

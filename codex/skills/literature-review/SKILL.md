@@ -1,6 +1,6 @@
 ---
 name: literature-review
-description: Use after cohort collection, before ideation or native admission, for exact-paper preparation, or when changed sources, scope or synthesis require a current literature foundation.
+description: Use at any stage to search, read, expand or synthesize literature, stating how many works to survey, read at abstract depth only and read in full, with budget and recorded coverage.
 ---
 
 # Exactory: literature-review

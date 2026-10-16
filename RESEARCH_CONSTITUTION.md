@@ -1,11 +1,43 @@
 # Research constitution
 
-Version: 6
+Version: 7
 
 This is the common research-policy document for this plugin. System, host, and
 user constraints continue to govern. A managed study records this document's
-version and SHA-256. Changing either the policy or a decision's relevant evidence
-requires explicit current assessment. Historical decisions remain available.
+version and SHA-256. A claim remains current while its relevant dependencies
+remain unchanged. Assess changed evidence at the next dependent commitment.
+Historical decisions and their recorded policy remain available.
+
+## Tools and gates
+
+Tools perform research actions. Orchestrations organize milestones toward a
+deliverable and hold the gates those milestones must pass. Every tool is
+available at every stage. The order and depth of tool use are free; each call
+states its depth and budget and records its arguments, effective amounts, actual
+work, coverage, stopping reason and cost. Tool records grant no approval by
+themselves.
+
+A gate belongs to a claim or milestone. It requires the claim's evidence and
+independent assessment when the claim is made. Independent assessment is a
+condition of a claim. A claim's required depth is a fixed minimum for its claim
+type plus that assessment. Assessors judge adequacy for the field and can require
+further sources. Numeric floors alone establish only mechanical prerequisites.
+An unavailable source remains a gap.
+
+A probe is an exploratory computation, available before a direction is chosen
+and throughout the study. Record its exact question, program, inputs, outputs,
+outcome and resource use. Its observations retain exploratory provenance through
+later references and imports. Preserve the supported standing of existing
+imported evidence. Independent support assessment determines the additional
+validation a claim requires; repeat an execution when that validation requires
+it, preserving earlier observations and their chronology.
+
+Claim currency depends on the objective, scope, assumptions, plan, executions,
+supporting evidence and its source records, inheritance, validations, strategy
+failures and authorizations. Keep full dependency maps for audit. Unrelated
+preparation, configuration, constitution, foundation inventory and synthesis
+changes alone leave a claim current. Declare relevant source changes through
+the decision's source-impact assessment.
 
 ## Purpose and scientific value
 
@@ -25,22 +57,31 @@ delivery does not certify that the broader scientific objective was achieved.
 
 ## Direction by Grand Challenge
 
-A study is directed at the challenges ahead of its research: the ultimate
-goal its field is trying to reach and, where useful, the nearer large goals
+An ai-science study is directed at the challenges ahead of its research: the
+ultimate goal its field is trying to reach and, where useful, the nearer large goals
 on the way, each with criteria that would show it reached. The author records
-them before ideation and keeps them for the whole study; they are investigated
-again only when evidence changes them. Contribution is judged by how far the
+them as part of the direction claim minimum and keeps them for the whole study.
+Investigate them again when evidence changes them. Contribution is judged by how far the
 research moves the community working on these challenges toward them. Each
 inference needs evidence with matching assumptions and scope. A new hypothesis
 may follow from a failed approach, a tested assumption or the shared objective;
 it need not be a deduction from an earlier positive claim. Preserve the earlier
 evidence and explain why relevant failures do not defeat the new route.
 
+A mathematical objective specified by the user follows math-solver's openness,
+independent proof review and requested formal-verification gates. A Grand
+Challenge record and a separate assessment of the value of solving that
+proposition are out of scope for that objective.
+
 In managed author research, assess the proposed objective and approach before
 committing them. Two independent assessors first state worthwhile consequences
 from the user's aim and verified field context before receiving the author's
-candidate slate. Compare credible alternatives and the option of not pursuing
-the branch. At the result decision, each assessor judges scientific support
+candidate slate. The direction bar states the field, Q1 venues considered,
+acceptable advance over the closest prior work, required evidence and conditions
+that would make a result unpublishable there. Assess potential at a direction
+decision and realized supported advance at a result decision. Compare credible
+alternatives and the option of not pursuing the branch. At the result decision,
+each assessor judges scientific support
 before realized consequence in one combined assessment. A truthful contribution
 statement, favorable score or completed form alone cannot authorize development.
 Expected theorems, decisive negative results and important narrow theory remain
@@ -89,10 +130,11 @@ that a finished paper follows every convention.
 ## Ambition and transferable innovation
 
 Demonstrate ambition through explicit claims, fair comparisons, and tests of
-important limitations. Study the lineage the research continues, and exactly
-five external original papers in full, chosen from ten candidates by their
-abstracts, for a research foundation. Versions, aliases, captures, and multiple
-case labels do not multiply paper-family coverage.
+important limitations. Study the lineage the research continues and external
+original papers for transferable mechanisms. The default research depth plan
+selects five full-read external cases from ten abstract-read candidates. Record
+the effective amounts and the reason for a change. Versions, aliases, captures
+and multiple case labels do not multiply paper-family coverage.
 
 Each study must analyze the original bottleneck, prior constraint, conceptual
 change, evidence, and scope. Map the proposed transfer to the current objective,
@@ -112,7 +154,13 @@ have achieved social adoption. State unevidenced later links as scoped gaps.
 
 Inventory the complete population that defines the field comparison and retain
 it with its identities, exclusions and collection completeness. A recorded,
-versioned preparation policy decides which members receive structured reading.
+versioned preparation policy supplies a preset of the study's depth plan,
+including which members receive structured reading. Research studies may change
+tool amounts with a recorded reason and may state overrides for individual
+calls. Each call records the effective amounts; completed records retain their
+recorded policy values when defaults later change. Amounts allocate work, while
+claim minimums and independent assessment determine claim readiness. Verification
+keeps its fixed preparation contract until its orchestration is converted.
 Under the exhaustive policy every member is read. Under a screened policy a
 screen selects the preparation set, and a screen is never a reading: papers that
 may establish prior art, contradict a claim, define an assumption or method,
@@ -122,7 +170,7 @@ its reason; excluded members are audited by reading a sample; a failed audit
 reopens the screen. Under the lineage policy (lineage-v1, the author default)
 the population is enumerated as metadata, the parent's lineage and the classics
 it rests on are read in full and cited, a bounded loop over the five search
-purposes reads at most one hundred abstracts, and no other member owes a
+purposes defaults to at most one hundred abstracts, and no other member owes a
 reading. Under the sampled policy (sampled-v1, the verification default) the
 population is enumerated as metadata and a stratified random sample of at most
 one hundred members, drawn per verification from a recorded seed, is read at
@@ -200,9 +248,18 @@ counted as new scientific knowledge. Manuscript scores remain measurements and
 author stopping conditions, never instructions to reviewers.
 
 Existing historical decisions and completed manuscripts retain their recorded
-status. Adopting this policy requires explicit current assessment at the next
-substantial commitment; it does not fabricate earlier strategic reviews or rerun
-every old cycle. An already admitted cycle may finish and retain its evidence.
+status. A study may retain its adopted Version 6 policy and byte-identical
+configuration, foundation and synthesis reports. A research study may explicitly
+adopt Version 7 without changing a claim through policy adoption alone. Apply new
+direction and Q1 obligations at the next relevant commitment using retained
+evidence. Validate historical digests against their recorded inputs and compare
+their claim dependencies with current ones. Reconstruct every historical input
+from recorded evidence when necessary and verify the original digest; an
+unrecoverable input requires reassessment. Preserve earlier review subjects and
+scientific work. Pending executions reconcile once under their frozen authority.
+An already admitted cycle may finish and retain its evidence. Verification
+workspaces retain Version 6; their adoption of Version 7 is out of scope for this
+release.
 Native mathematical search, standalone evaluation and verification retain their
 own decision contracts. Sharing source infrastructure does not make them managed
 author research; the common integrity and reviewer-context requirements still

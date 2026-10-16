@@ -1,5 +1,5 @@
 ---
-description: Use when a managed author study needs a hypothesis, comparison of research directions, or a next investigation tranche before experiment admission.
+description: Use at any stage to generate and compare candidate questions, prepare an ai-science direction decision against the Q1 bar, or plan a bounded investigation and prospective admission.
 ---
 
 # Ideate
@@ -7,11 +7,40 @@ description: Use when a managed author study needs a hypothesis, comparison of r
 Read the [research constitution](../../RESEARCH_CONSTITUTION.md) and follow the
 [managed research workflow](../../docs/research-workflow.md) and
 [scientific contribution decisions](../../docs/research-decisions.md). Start with current
-`exactory-research status --summary`, `next --summary`, and `gate preparation`.
-The Grand Challenge record, the complete original objective, closed five-purpose
-loop, field synthesis, and the five innovation cases are established in
-[literature review](../literature-review/SKILL.md) before this stage. If
-preparation is pending, complete its named obligations first.
+`exactory-research status --summary` and `next --summary`. Ideation is a
+[tool](../../docs/research-tools.md) usable at every stage. State its question,
+candidate count, alternatives, evidence depth and resource allowance. Record
+effective amounts, actual comparisons, gaps, stopping reason and cost. Search,
+read, cohort and probe tools may inform it in any order. Tentative candidates
+grant no direction approval. Managed preparation is advisory; the orchestration
+holds the direction and investigation gates.
+
+## Direction minimum and Q1 assessment
+
+Before recording a version-2 `investigate` or `pivot` decision, complete the
+direction minimum: a valid `direct` search bound to current scope, with bounded
+or complete coverage and accounted results; full readings of every relevant or
+contradictory hit and root; selected applicable `standards` with valid own
+sources; and a current Grand Challenge record. Parser and capture failures
+remain integrity gaps. A deferred decisive source remains a missing reading.
+The [decision contract](../../docs/research-decisions.md#before-target-commitment)
+lists each obligation code.
+
+Two independent assessors first state the field and Q1 venues considered,
+acceptable advance over closest prior work for the intent, evidence standard
+and disqualifying conditions with the candidate withheld. Persist both bars
+before slate delivery. Both observed review packets, or observed bound
+supplements, must cover the decisive evidence and claim. At recording, the
+decision carries `gate_version: 2` and `direction_evidence_digest`; new decisive
+readings require a new decision with reviews that saw them. Target commitment
+applies the same minimum and review-coverage rule.
+
+For `investigate`, `pivot` and `develop_manuscript`, both reviews pass
+`q1_venue`: potential under the planned method and success criterion at the
+slate, realized supported advance at results. Previous prompt assignments keep
+their original assurance set, while a new commitment needs its required findings.
+Historical decisions and approved tranches retain their standing.
+`deliver_requested` keeps its stop checks, actual authority and quality conditions.
 
 ## Develop the next question
 
@@ -30,8 +59,9 @@ methods or intermediate questions within that scope. Record evidence when only
 one candidate is feasible. Obtain two independent consequence bars before
 delivering the candidate slate, then separate objective-adequacy and
 approach-adequacy findings under the verified reviewer protocol. Author advocacy
-does not establish the bar. A strategic approval neither completes preparation
-nor admits execution.
+does not establish the bar. The `direction` gate combines configuration readiness
+and the selected decision's obligations at the `cycle` boundary. Execution uses
+its own prospective admission.
 
 After each bar or slate `review-run`, inspect the observed output artifact for
 `source_requests`. Use the
@@ -52,11 +82,14 @@ In a development round, read the admitted goal in the saved `round-admit` output
 Every hypothesis of the round names the success criterion it serves. A successor
 cycle may inherit a checkpoint of an earlier round. When the round widened the
 objective, objective lineage keeps the earlier objective as an ancestor, so that
-checkpoint can still be inherited. Its assessment is stale once the round changes
-the objective or the preparation, and the round's literature stage changes the
-preparation. To inherit the result as `validated_result`, assess that cycle again
-under the current objective and preparation, checkpoint the new assessment, and
-inherit that checkpoint (`inherited_result_stale` otherwise). The inheritance entry
+checkpoint can still be inherited. Currency follows the result's claim
+dependencies. Unrelated reading, search, synthesis, configuration or constitution
+changes leave the assessment current. An actual changed objective, assumption,
+supporting artifact or material source impact requires affected reassessment.
+When that changes the inherited result, assess it under the current claim,
+checkpoint the assessment and inherit that checkpoint (`inherited_result_stale`
+otherwise). Preserve historical digests and compare projections from recorded
+inputs rather than current global preparation. The inheritance entry
 retains the assumptions under which the result was assessed
 (`inheritance_assumptions_missing` otherwise), and its deduction explains how the
 result contributes to the round's objective.
@@ -70,8 +103,9 @@ sources outside earlier bindings. Record
 with actual sources, scope, and unresolved gaps. Reframe a scooped claim or test a
 contradiction explicitly. Keep basic science eligible when applications are unknown.
 
-Every hypothesis advances at least one criterion of the study's Grand Challenge
-record (`status` reports the current record). Name those criterion ids and the
+At an ai-science direction commitment, relate each selected hypothesis to a
+criterion of the study's Grand Challenge record (`status` reports the current
+record). Name those criterion ids and the
 established results the hypothesis follows from in `idea/idea.md`. Prefer the
 hypothesis that moves the community furthest toward those challenges over the one
 that is easiest to finish, when its assumptions and tests can be made precise.
@@ -112,7 +146,11 @@ unattempted work as adopted, deferred or `next_round` supplies no evidence. If t
 consequence has shrunk, explicitly reconsider whether it would justify starting
 the study now, using current alternatives and without credit for sunk effort.
 
-Create the managed `cycle` under that current decision before running code. Pin its actual program and inputs
+Planning and admitting a managed cycle require configuration readiness and the
+current cycle decision. The complete synthesis report remains advisory. A quick
+exploratory calculation can use the experiment tool's probe before commitment
+or during planning; its evidence stays exploratory. Create the managed `cycle`
+under the current decision before running its prospective test. Pin its actual program and inputs
 with `artifact`, `admit` the exact plan with the resource reservation, then
 `bind-run` its backend, seed, timeout, input paths, and expected outputs. Follow the
 executable recipe in the workflow. Changes to these choices require a current

@@ -1,6 +1,6 @@
 # Research CLI
 
-## Scientific contribution decisions in 0.50.0
+## Scientific contribution decisions
 
 Managed studies and drafts now use one phase-specific decision at objective,
 cycle, writing, publication and round boundaries. Read the full
@@ -9,6 +9,43 @@ changes, stable work items, migration and reviewer-context limits. A bare shared
 research profile used by native mathematics does not activate these strategic
 gates. Historical records remain readable and supply no fabricated current
 independence.
+
+The [shared tools](research-tools.md) are available at every stage with explicit
+depth and budget. Each call records actual work; the orchestration holds gates
+for direction, investigation, result, manuscript and publication claims.
+
+### Direction gate
+
+`gate direction` requires current configuration and a selected research
+decision with no obligations at the `cycle` boundary, the same authority used
+for cycle planning and admission. It governs completing `literature` and
+entering `ideate` in managed research. Its report carries the configuration
+and decision obligations. Other stores receive their preparation report.
+
+New decisions carry `gate_version: 2`. Recording `investigate` or `pivot`
+requires a scoped valid direct search with bounded or complete coverage and all
+captured results accounted; full readings of relevant/contradictory hits and
+roots; selected standards with valid own sources and resolved applicability;
+and a current Grand Challenge record. Missing evidence returns
+`direction_minimum_unmet`. The [decision contract](research-decisions.md#before-target-commitment)
+lists `direction_search_missing`, `direction_search_incomplete`,
+`direction_reading_missing`, `direction_root_reading_missing`,
+`direction_standards_missing`, `direction_standards_unresolved` and
+`grand_challenge_missing`.
+
+Both observed review packets, or observed bound supplements, must cover the
+decisive evidence and claim before recording the decision. The decision stores
+`direction_evidence_digest`; changed decisive evidence reports
+`direction_evidence_unassessed` and requires a new decision with reviews that
+saw it. Target commitment applies that same minimum and review-coverage rule.
+
+For version-2 `investigate`, `pivot` and `develop_manuscript`, both reviews
+pass `q1_venue`. Missing findings report `q1_venue_missing`; a failed or
+unresolved finding reports `research_assurance_pending`. The bar defines
+field/intent standards, slate reviews judge potential, and result reviews judge
+realized supported advance. Previous prompt assignments retain their original
+assurance set; historical decisions keep their standing. `deliver_requested`
+keeps its stop checks, authority and explicit quality conditions.
 
 All new mutations use the normal `--file`, `--expected-revision` and
 `--request-id` contract. `example OPERATION` provides their complete schemas.
@@ -179,7 +216,7 @@ A media type that declares JSON requires strict JSON: finite numbers, no duplica
 `exactory-research` exposes the shared research store through Python 3.9 or later and the standard library. `exactory-lab`, `exactory-draft`, `exactory`, and the native math controller consume its current evidence at their own authoritative boundaries. A download, marker file, process exit code, old receipt, or stage name does not establish scientific readiness.
 
 Follow the [managed research workflow](research-workflow.md) for the executable
-stage order, evidence interpretation, independent review, and continuation rules.
+tool use, milestone gates, evidence interpretation, independent review and continuation.
 
 ## Inputs and receipts
 
@@ -231,19 +268,52 @@ The recurring types are:
 
 Use `artifact` to pin authored program files, original review JSON, assessor provenance, or other local bytes and obtain an `ArtifactRef`. It accepts `{id, path, media_type}` and explicitly returns `scientific_validation: false`. It does not import a publication source or turn a local note into a reading. Acquire publication sources through `acquire`, `fulltext`, or `import-response`.
 
-## Preparation order
+## Milestone transitions and preparation presets
 
-1. Initialize the author workspace with `exactory-lab init --slug STUDY [--preparation-policy exhaustive-v1|screened-v1|lineage-v1]`, or initialize only the common store with `init` and `{ "profile": "research", "target": null }`. A draft initialized by `exactory-draft init` also receives a pending current contract. Use a separate verification workspace for an external paper. There are four preparation policies. `lineage-v1` belongs to the `research` profile and `sampled-v1` to the `verification` profile, and either one named on the other profile is refused with `policy_inapplicable`; `exhaustive-v1` and `screened-v1` are available to both profiles. `exactory-lab init` records the research default `lineage-v1` when `--preparation-policy` is absent, `exactory-draft init` always records it, and an `init` payload without `preparation_policy` records the profile's default: `lineage-v1` for `research`, `sampled-v1` for `verification`. A configuration recorded before this field existed stays `exhaustive-v1`.
-2. Enter `cohort`, collect its frozen population, and record actual complete abstract readings. `cohort -> literature` checks enumeration and the selected cohort's abstract reading coverage. It does not require literature work that is still being prepared.
-3. In `literature`, acquire one to five exact root paper families, expand captured citation references, inventory source bundles, read the required units, and record the five search purposes the recorded policy requires: `direct`, `originals`, `theory`, `adjacent`, and `recent` under `exhaustive-v1`, `screened-v1` and `lineage-v1`, which captures them as stage 1 of its bounded loop. Under `sampled-v1` the five are optional, because its searches are targeted: a purpose with no recorded search owes nothing, and a search that was recorded still owes the current literature scope. The cohort abstract coverage the recorded preparation policy requires remains required: every member under `exhaustive-v1`, the screened preparation set under `screened-v1`, every sampled member under `sampled-v1`, and no member under `lineage-v1`, which closes the bounded five-purpose loop with `loop-close` instead. An incomplete bibliography or unread critical source remains pending.
-4. Record `grand-challenge`, the challenges ahead of the study. In managed studies, record the actual `intent`, a comparative prospective `strategy`, two observed independent bars followed by two slate assessments, and the canonical `research-decision` before setting the complete objective with `target`. The commitment consumes that exact approved objective and source-impact declaration. Then record `standards`, `rationale`, `innovation`, and `context`. The Grand Challenge record stays current until a new record replaces it. These commands are available while preparing literature. `literature -> ideate` requires the applicable complete synthesis; it does not require entering ideate before setting the objective. Once fixed, the complete objective cannot be replaced with a special case. It changes only with the user's recorded instruction, passed to `target` as `authorization` (see the `target` row).
-5. Record a prospective `cycle` linked to the selected candidate and bounded decision in a managed study, pin the program and inputs, `admit` it, then `bind-run` with its exact backend and output contract. `ideate -> experiment` requires a current admitted cycle. The launch checks its dependencies again before releasing a process.
-6. Observe the run, assess result and validity evidence separately, preserve a `checkpoint`, and deliver its candidate to an independent reviewer. For a managed study, record the combined support/value responses with `value-review` and the resulting canonical decision; each response also creates its native support assessment atomically. The bare native preparation route retains `review`. Evaluate current whole `readiness`. An individual passed assessment or historical review receipt is insufficient.
-7. Prepare the exact `manuscript`, deliver its actual bytes to independent blind assessors, and record their unchanged review JSON through `manuscript-review`. Measure that bundle with three blind reviews and their `manuscript-prediction` records, record its `contribution-analysis`, and make the canonical post-measurement decision for a managed study. The round commands consume that same decision without another independent approval layer. Legacy non-strategic work retains its independent `round-review` (see "Development rounds"). Entering `deposit` from `evaluate` requires the current bundle, two accepting reviews and its authorized publication disposition; an unconditional requested delivery may retain an unmet scientific goal. Submission requires the production publication receipt of that bundle.
+Initialize an author workspace with `exactory-lab init --slug STUDY` and an
+optional `--preparation-policy`, or initialize the common store with
+`init` and `{"profile": "research", "target": null}`. Author initialization
+defaults to `lineage-v1`; verification defaults to `sampled-v1`.
+`exhaustive-v1` and `screened-v1` remain available to both profiles.
+A configuration predating this field retains `exhaustive-v1`. Each bounded
+preset belongs to its profile and returns `policy_inapplicable` on the other.
+The [catalog](research-tools.md) describes depth and budget arguments. Research
+presets supply default amounts; verification retains its fixed contract.
 
-`exactory-lab state set` validates all requested fields together before changing any state. The stages are `initiate`, `cohort`, `literature`, `ideate`, `experiment`, `write`, `evaluate`, `deposit`, `submit`, and `complete`. Forward edges are adjacent only; both source completion and target prerequisites apply. Any proposed `done` status also checks the target stage's completion requirement, including a status inherited from the previous stage. To enter unfinished work after a completed stage, include `--status pending`. Waiting, paused, or operational status changes do not certify readiness.
+`exactory-lab state set` validates requested fields together. Stages remain
+`initiate`, `cohort`, `literature`, `ideate`, `experiment`, `write`,
+`evaluate`, `deposit`, `submit` and `complete`. They describe milestone
+progress. For managed research:
 
-Explicit returns to `literature` are available from `ideate`, `experiment`, `write`, `deposit`, and `submit`, and from `evaluate` only while the round opened by `round-admit` has no assessment (`readiness_required` otherwise). Explicit returns are also available from `experiment` to `ideate` after an assessment, and from `evaluate` to `experiment` or `write`. A return cannot also assert `done`. All histories, observations, objective identity, and original resource accounts remain retained.
+| Move or completion | Gate |
+| --- | --- |
+| `initiate` to `literature` | Intake permits this direct move; `cohort` is optional. |
+| Leaving `cohort` | No source completion gate. |
+| Completing `literature` or entering `ideate` | `direction`: current configuration and cycle decision. |
+| Entering `experiment` | `execution`: a valid pending admission, without preparation obligations. |
+| Entering `write` | The current result decision and `readiness`, or selected `manuscript-readiness`. |
+| Entering `evaluate` | The exact `manuscript` gate. |
+| Entering `deposit` | Current `publication` and `round` gates. |
+| Entering `submit` or `complete` | The applicable `deposited` or `submitted` receipt gate. |
+
+Planning and admitting a cycle require configuration readiness and the current
+cycle decision. Tools can supply evidence at any milestone. The complete
+preparation report is advisory for managed research.
+
+Forward edges otherwise remain adjacent. Source completion and destination
+prerequisites both apply. A proposed `done` status also checks destination
+completion. Enter unfinished work with `--status pending`. Operational status
+and waiting changes preserve research obligations.
+
+Explicit returns to `literature` remain available from `ideate`,
+`experiment`, `write`, `deposit` and `submit`. In managed research,
+`evaluate` may return to `literature` when the canonical round decision is
+ready with action `investigate` or `pivot`. Other stores retain the active,
+unassessed admitted-round condition. `experiment` can return to `ideate`
+after assessment, and `evaluate` can return to `experiment` or `write`.
+A return retains histories, objective identity and original accounts and enters
+unfinished work. Nonmanaged stores and verification keep their existing
+preparation and transition gates.
 
 For a fresh verification directory, begin with an acquisition mutation. `acquire`, `collect`, and `import-response` can create an unconfigured Store when no managed workspace exists. This does not select the research profile or certify preparation. Existing legacy markers require explicit adoption, and an existing hot Store still requires `recover`.
 
@@ -269,10 +339,10 @@ The example for each operation contains all its required keys and shows the comp
 | Operation | Required payload fields | Optional fields and variants |
 | --- | --- | --- |
 | `init` | `profile`, `target` | `preparation_policy`: `lineage-v1` (the `research` default; the lineage and the classics in full, a bounded five-purpose loop of at most 100 abstracts, and no cohort member reading), `sampled-v1` (the `verification` default; a stratified random sample of at most 100 members, each read with a placement; see `sample`), `exhaustive-v1` (every cohort member and Tier 3 reference owes an abstract reading) or `screened-v1` (a recorded screen selects the preparation set; see `screen-batch`). Profiles are `research` and `verification`; `lineage-v1` and `sampled-v1` each belong to one profile (`policy_inapplicable` on the other). Without this field the profile's default is recorded. Acquire exact metadata before initializing a verification target. A configuration recorded before this field existed is `exhaustive-v1`. |
-| `policy` | `previous`, `policy`, `reason` | Changes the preparation policy; `previous` must name the recorded policy (`policy_conflict` otherwise). Synthesis sections and plans bind the configuration, so they need current reassessment afterwards. |
+| `policy` | `previous`, `policy`, `reason` | Changes the preparation policy; `previous` must name the recorded policy (`policy_conflict` otherwise). Synthesis reports retain their configuration binding. Managed claim currency follows the claim projection below; a policy change alone leaves a scientific claim current. Other stores retain their existing dependency checks. |
 | `adopt` | `id`, `profile`, `target`, `files: string[]`, `reason` | Archive selected legacy bytes; no implicit completed readings or new execution credit. |
-| `target` | `target`, `reason` | Optional `authorization`. Verification repinning is explicit and requires matching subsequent roots. A fixed research objective changes only with `authorization`: the `id` of an `artifact` pin whose path is under `context/` and whose bytes hold the user's explicit instruction (`objective_locked` without it or when an earlier change used the same bytes; `invalid_target` for an unknown pin, a pin outside `context/`, an empty file, or `authorization` on a first or unchanged target). The harness checks the pin and its bytes, not who wrote them: save only the user's own words, never an instruction you wrote. The new objective needs a new `id` and a statement that differs after casefolding and whitespace collapsing (`objective_locked` otherwise). The direction of the change is not checked; the reason states it. The earlier objective stays in `research_objective`, and `objective_lineage/{new id}` records `{id, predecessor, relation: "user_authorized", reason, authorization: {id, path, artifact, text}, round_id: null}`, so earlier checkpoints stay inheritable. The readiness candidate and the round review packet carry these changes as `objective_changes`. The change alters the configuration that the synthesis and every assessment bind: `standards`, `rationale`, `context` and `innovation` report `synthesis_dependencies_stale` until recorded again, an assessment made under the earlier objective is stale (`inherited_result_stale` for a successor), and an earlier result is inherited only through a new assessment with `inheritance_refresh`. A math-solver search bound to the workspace refuses the changed objective (`research_objective_mismatch`), as after a widening. |
-| `constitution` | `previous_sha256`, `reason` | Adopts the current distributed policy; dependent decisions need explicit reassessment. |
+| `target` | `target`, `reason` | Optional `authorization`. Verification repinning is explicit and requires matching subsequent roots. A fixed research objective changes only with `authorization`: the `id` of an `artifact` pin whose path is under `context/` and whose bytes hold the user's explicit instruction (`objective_locked` without it or when an earlier change used the same bytes; `invalid_target` for an unknown pin, a pin outside `context/`, an empty file, or `authorization` on a first or unchanged target). The harness checks the pin and its bytes, not who wrote them: save only the user's own words, never an instruction you wrote. The new objective needs a new `id` and a statement that differs after casefolding and whitespace collapsing (`objective_locked` otherwise). The direction of the change is not checked; the reason states it. The earlier objective stays in `research_objective`, and `objective_lineage/{new id}` records `{id, predecessor, relation: "user_authorized", reason, authorization: {id, path, artifact, text}, round_id: null}`, so earlier checkpoints stay inheritable. The readiness candidate and the round review packet carry these changes as `objective_changes`. The changed objective reaches dependent claims through their objective and scope. Reassess affected evidence (`inherited_result_stale` for a stale successor) and use `inheritance_refresh` when replacing an inherited assessment. Synthesis reports retain their own configuration dependencies; unrelated global preparation changes alone leave managed claims current. A math-solver search bound to the workspace refuses the changed objective (`research_objective_mismatch`), as after a widening. |
+| `constitution` | `previous_sha256`, `reason` | Adopts the current distributed policy. Research adoption of Version 7 alone leaves claims current. An adopted Version 6 can remain in use without revalidation; verification retains Version 6 in this release. |
 | `artifact` | `id`, `path`, `media_type` | The local path must remain inside the workspace without traversing symlinks. |
 | `collect` | `definition: {corpus, primaryCategory, windowStart, windowEnd}` | `max_requests`, `page_size`; current corpus is `arxiv`. Dates are ISO calendar dates. |
 | `resume` | `collection_id` | `max_requests`; resumes retained collection/page evidence. |
@@ -300,7 +370,7 @@ The example for each operation contains all its required keys and shows the comp
 | `rationale` | `id`, `profile`, `scope`, `and`, `but`, `therefore`, `value` | Research only. The established context in `and` must be supported as scoped; a proposed or refuted context is retained but pending. |
 | `innovation` | `id`, `profile`, `scope`, `cases` | Research only. Optional `origin_collection: {id, version}`. Cases separately describe original constraint, conceptual change, validation, adoption, and tested transfer limits. |
 | `context` | `id`, `profile`, `scope`, `current`, `historical`, `beneficiaries`, `capabilities`, `barriers`, `uncertainties`, `speculative_links` | Research only. Basic science does not require an invented immediate application. |
-| `grand-challenge` | `id`, `reason`, `challenges` | Research only (`configuration_missing` without a research configuration, `profile_inapplicable` in a verification workspace). Records the challenges ahead of the study before the objective is written: each challenge is `{id, horizon: ultimate|near_term, statement, state, criteria: [{id, statement}], evidence}`, at least one is `ultimate`, and criterion ids are unique across the record (`invalid_grand_challenge`). Evidence is a source read in full or an execution result, validated as in `round` (`invalid_development` for a malformed item, `reading_missing` for a source without a full reading). The preparation gate owes `grand_challenge_missing` until the first record exists. The latest record is current for the whole study; a new record with a reason replaces it. It is outside the preparation digest, so recording it never makes a pinned bundle stale. `status` reports the current record. |
+| `grand-challenge` | `id`, `reason`, `challenges` | Research only (`configuration_missing` without a research configuration, `profile_inapplicable` in a verification workspace). Records the challenges ahead of the ai-science study as part of the direction minimum: each challenge is `{id, horizon: ultimate|near_term, statement, state, criteria: [{id, statement}], evidence}`, at least one is `ultimate`, and criterion ids are unique across the record (`invalid_grand_challenge`). Evidence is a source read in full or an execution result, validated as in `round` (`invalid_development` for a malformed item, `reading_missing` for a source without a full reading). The managed direction minimum owes `grand_challenge_missing` until the first record exists. A user-specified mathematical objective follows its own gates. The latest record is current for the whole study; a new record with a reason replaces it. It is outside the preparation digest, so recording it never makes a pinned bundle stale. `status` reports the current record. |
 | `cycle` | `id`, `author`, `objective`, `scope`, `hypothesis`, `question`, `strategy`, `predecessor`, `inheritance`, `reopening`, `distinguishing_test`, `expected_outcomes`, `failure_signals`, `evidence_requirements`, `literature`, `resource_limits` | The full nested example includes a first cycle. Successors retain checkpoint lineage and account limits. |
 | `admit` | `id`, `cycle_id`, `plan_digest`, `command`, `reserved_units` | Command has `argv`, `program`, `inputs`, `versions`, `seed`, `seed_reason`. This reserves resources; it does not launch. |
 | `bind-run` | `admission_id`, `script`, `backend`, `timeout_seconds`, `inputs`, `outputs`, `usage_unit` | Backend is `local` or `colab`; usage is planned `execution` or `wall_seconds`. Inputs map each admitted artifact to a relative path. |
@@ -679,9 +749,43 @@ Setting an assessment's `disposition` to `failed` does not by itself establish
 that the underlying result is invalid, and setting it to `complete` does not
 establish readiness. Inspect the resulting obligations and current whole gate.
 
+## Claim-scoped currency
+
+For managed research, plans, admissions, assessments, checkpoints, candidates,
+readiness reviews and scoped publication contracts use one claim-dependency
+projection. It includes objective, scope and assumptions, plan, executions,
+evidence and its cited source records, inheritance, validations, strategy
+failures and authorizations. Full dependency maps remain recorded for audit.
+Global preparation, configuration and constitution digests, foundation inventory
+and synthesis sections stay outside the projection. Synthesis obligations stay
+outside result assessment and writing readiness.
+
+An unrelated reading, search judgment, synthesis edit or policy adoption leaves
+the claim current. Plan literature and novelty comparisons still require exact
+scope, resolved gaps and valid cited full-read sources. A later tool result
+reaches a claim when used as evidence or when a source change must be declared
+through `source-impact`. Changed supporting bytes, scope, assumptions or
+authorization require affected reassessment.
+
+Validate historical digests against their recorded inputs, then compare the
+projection of those inputs with the current projection, transitively through
+checkpoints, inheritance, candidates, reviews and scoped contracts. Reconstruct
+every field of an opaque legacy composition from recorded evidence, snapshots
+or packets, including branch, strategy-account and source-record identities.
+Verify the reconstruction against the original digest before comparing
+projections. Missing historical inputs require reassessment.
+
+Studies may retain adopted Version 6 with byte-identical configuration,
+foundation and synthesis reports. Research adoption of Version 7 alone changes
+no claim. Apply new direction and Q1 obligations at the next relevant commitment
+and reconcile pending executions once under their frozen authority. Verification
+Version 7 adoption is out of scope for this release; verification retains
+Version 6 and its fixed contract.
+
 ## Refreshing inherited assessment dependencies
 
-A source or preparation change can make an inherited assessment stale. Reassess
+A changed claim dependency can make an inherited assessment stale. Unrelated
+preparation, synthesis or constitution changes leave managed inheritance current. Reassess
 the ancestor's actual retained execution first and save a new checkpoint. Its
 old checkpoint remains historical. A descendant's original plan still names
 that old checkpoint; the harness never substitutes the latest one implicitly.
@@ -758,8 +862,9 @@ The original plan, admissions, executions, outputs, checkpoints and resource
 counters are unchanged. Prior failure observations remain; reassessing an
 observed signal appends it under the new assessment ID, preserving the ordinary
 changed-evidence reopening requirements. The new assessment records the
-explicit refresh in its dependency digest. Later preparation or parent-assessment changes
-make it stale again. Normal revision CAS, request replay, fresh checkpoints and
+explicit refresh in its dependency digest. Later changes to its relied-on evidence
+or parent assessment require affected reassessment. Other stores retain their
+existing preparation dependency checks. Normal revision CAS, request replay, fresh checkpoints and
 independent readiness review remain required. A refresh never authorizes a run.
 
 ## Review, publication, and verification
@@ -801,6 +906,11 @@ The task endpoint may reveal only an own-verdict ID after a lost POST response; 
 
 ## Development rounds
 
+Managed studies use the compact canonical adapters described above. The detailed
+full-payload contract below also describes historical and nonmanaged round
+records. Managed currency follows the claim projection rather than the global
+preparation report.
+
 A development round is one pass of the paper-level loop: a goal that the current
 paper does not yet meet, the literature, cycles and manuscript that pursue it, and
 an assessment against that goal. Every record binds the exact current publication
@@ -809,9 +919,9 @@ bundle; the loop is bounded by records and it ends only through a recorded exit.
 Each complete measurement of a bundle is followed by its `contribution-analysis`: a small
 investigation kept as captured responses, the paper's position against the study's current
 Grand Challenge record, a disposition of every contribution change the measurement reviewers
-named, and the steps toward the challenges. The investigation is not a `search`: a search needs
-its capture imported, the import changes the record of every held work the capture returns, and
-that makes the measured bundle stale. `manuscript` refuses to pin the next bundle while the
+named, and the steps toward the challenges. Retain its original captures and record a scoped search when its scientific
+question needs one. A later search affects a managed bundle through claim evidence
+or declared source impact; an unrelated capture alone leaves it current. `manuscript` refuses to pin the next bundle while the
 selected bundle has a complete measurement and no analysis (`contribution_analysis_missing`),
 and `round` reads the analysis of the bundle it decides on. A step that is not pursued is
 `deferred` unless the evidence rejects it: a candidate that an approved decision rejected never
@@ -1025,11 +1135,15 @@ Complete retained run/journal reconciliation before an amendment. Recovery, paus
 
 ## Status, projections, and recovery
 
-`status` and `next` expose the current revision, study, preparation, actionable obligations, pending admissions, remote intents/observations, retained adoptions, the `round` (number, active, assessed, decision, whether the selected bundle has its contribution analysis, the count of round gate obligations, progress counts, the measurement's medians and spreads, the admitted round's limits, the `development` budget line and the usage since admission), and the `runtime` that produced the report (plugin version, source commit, dirty flag, package digest, constitution digest). `status` also carries `grand_challenge`, the payload of the current Grand Challenge record; `status --summary` reduces it to the record id, the number of `ultimate` and `near_term` challenges, the first six criterion ids and a count of the rest, each id cut at 32 characters. `next` is the highest-priority current obligation in preparation order (configuration, collection, cohort abstracts, roots, critical full text, bundles and units, searches, Tier 3 abstracts, the Grand Challenge record, the objective, synthesis); at the cohort stage it is the next unread cohort abstract. At the `evaluate` stage the status obligations also carry the publication gate's and the round gate's obligations, publication first, so the study finishes the manuscript measurement before the round decision.
+`status` and `next` expose the current revision, study, preparation, actionable obligations, pending admissions, remote intents/observations, retained adoptions, the `round` (number, active, assessed, decision, whether the selected bundle has its contribution analysis, the count of round gate obligations, progress counts, the measurement's medians and spreads, the admitted round's limits, the `development` budget line and the usage since admission), and the `runtime` that produced the report (plugin version, source commit, dirty flag, package digest, constitution digest). `status` also carries `grand_challenge`, the payload of the current Grand Challenge record; `status --summary` reduces it to the record id, the number of `ultimate` and `near_term` challenges, the first six criterion ids and a count of the rest, each id cut at 32 characters. `next` in managed research is the current milestone's first missing condition:
+at `cohort` and `literature` it follows `direction`, and at `ideate`
+it follows `execution`. The preparation report stays under `preparation`
+with `advisory: true`; its backlog is available for useful tool work. Other
+stores retain preparation ordering and the next unread cohort abstract. At the `evaluate` stage the status obligations also carry the publication gate's and the round gate's obligations, publication first, so the study finishes the manuscript measurement before the round decision.
 
 `status` also carries `limits`, the counts of the recorded policy against its own bounds: `{policy, loop, sample, innovation_candidates, search_readings, core_papers}`. Under `lineage-v1`, `loop` is `{readings, limit, covered}`, the registered loop readings, the 100-reading limit and the purposes already covered, and `innovation_candidates` is `{families, required}`. Under `sampled-v1`, `sample` is `{n, placed, unplaced, percentile, band, widen_required}` once a sample is drawn and null before that, `search_readings` is `{readings, limit}` against 20, and `core_papers` is `{requirements, limit}` against 10. A field that the recorded policy does not bound stays null. The verifier reads the percentile and the band it files from `limits.sample`.
 
-The optional `--summary` flag on `status` and `next` returns a bounded advisory view. It runs the same current-state evaluation as the default command. It does not change research obligations, authorize a transition, or reduce required reading. `status --summary` is limited to 16 KiB and `next --summary` to 4 KiB of UTF-8 JSON. Counts distinguish displayed and omitted obligations. Hints may omit or truncate details and must not be used directly as mutation payloads. `status --summary` also reports `evaluation` counters (objects verified, readings assessed, graph builds, elapsed seconds); they describe this invocation and are never stored. The default `status` and `next` responses are unchanged.
+The optional `--summary` flag on `status` and `next` returns a bounded advisory view. It runs the same current-state evaluation as the default command. It does not change research obligations, authorize a transition, or reduce required reading. `status --summary` is limited to 16 KiB and `next --summary` to 4 KiB of UTF-8 JSON. Counts distinguish displayed and omitted obligations. Hints may omit or truncate details and must not be used directly as mutation payloads. `status --summary` also reports `evaluation` counters (objects verified, readings assessed, graph builds, elapsed seconds); they describe this invocation and are never stored. Full reports retain the exact current data; summaries remain advisory views.
 
 `batches --depth abstract --size N --destination DIR [--profile PROFILE] [--screen]` writes the current unread abstracts (cohort members first, then Tier 3 references) as `batch-NNN.json` files with each version's selected complete abstract text, the exact link, and a `README.json` naming the notes shape that `read-batch` accepts. `--profile` defaults to the configured profile. It reads the store and writes only under the new destination directory (`review_destination_exists` when it exists; `migration_required` without a configuration); a reader agent works from one file and returns one notes file, and a single coordinator submits it with `read-batch`. With `--screen` it writes `screen-NNN.json` files of the unscreened members for `screen-batch`, under `screened-v1` only (`policy_inapplicable` otherwise). The `README.json` names the shape of the export's own mode: the screening shape with `--screen`, the loop shape with `--loop`, the placement shape under `sampled-v1`, and the plain notes shape otherwise.
 
@@ -1043,9 +1157,9 @@ Under `sampled-v1` the cohort gate requires a current sample of the scoped colle
 
 `policy-report [--policy POLICY] [--reference FILE]` is read-only. It reports each collection's members, readings, unscreened count, dispositions, audit sample and selected preparation set under the recorded or a hypothetical policy, whether a saturation checkpoint covers, and, with a reference file `{"prior_art": [...], "contradictions": [...], "methods": [...], "doctrine": [...]}` of family ids, the recall of the selected set per category with the missed families listed. `--policy` takes any of the four policies. For `lineage-v1` and `sampled-v1` the report is `{revision, policy, recorded_policy, limits, mechanical_only}`, because a bounded policy prepares a loop or a sample rather than a selection out of the population; `limits` holds the same counts as `status.limits`, read from the recorded workspace, so naming a hypothetical bounded policy does not recompute the counts under it.
 
-`obligations --code CODE [--limit N] [--cursor CURSOR]` returns one page of the current obligations that carry `CODE`, ordered by exact version. The current obligations are the ones `next` follows: the cohort stage's while it has any, otherwise the readiness obligations. A page carries `total`, `offset`, `returned`, and `next_cursor`. A cursor is `REVISION:OFFSET`; a cursor whose revision differs from the current store fails with `stale_cursor`, so a listing never mixes revisions. On resume, read `status --summary`, then `next --summary`, then the `obligations` page for the code you are working on; run the default detailed command only when the full nested report is needed.
+`obligations --code CODE [--limit N] [--cursor CURSOR]` returns one page of the current obligations that carry `CODE`, ordered by exact version. The current obligations are the ones `next` follows: the managed milestone's gate, or the existing cohort/readiness ordering in other stores. A page carries `total`, `offset`, `returned`, and `next_cursor`. A cursor is `REVISION:OFFSET`; a cursor whose revision differs from the current store fails with `stale_cursor`, so a listing never mixes revisions. On resume, read `status --summary`, then `next --summary`, then the `obligations` page for the code you are working on; run the default detailed command only when the full nested report is needed.
 
-`gate ACTION` supports `cohort`, `foundation`, `preparation`, `readiness`, `execution`, `verification`, `manuscript`, `publication`, `deposited`, `submitted`, and `round` and exits nonzero for unmet obligations.
+`gate ACTION` supports `cohort`, `foundation`, `preparation`, `direction`, `readiness`, `manuscript-readiness`, `execution`, `verification`, `manuscript`, `publication`, `deposited`, `submitted`, and `round` and exits nonzero for unmet obligations.
 
 SQLite is authoritative. Workspace JSON, decision logs, and familiar result views are projections. Editing them cannot authorize work. `export --kind workspace` rebuilds workspace projections from current history; run reconciliation repairs execution projections. `exactory-lab decide` retains immutable decisions with revision/request identity and preserves any old decision-log bytes. Explicit `adopt` archives selected legacy paths and exposes pending obligations without rewriting their old scientific claims.
 

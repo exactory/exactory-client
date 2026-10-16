@@ -1,6 +1,6 @@
 ---
 name: literature-review
-description: Use after cohort collection, before ideation or native admission, for exact-paper preparation, or when changed sources, scope or synthesis require a current literature foundation.
+description: Use at any stage to search, read, expand or synthesize literature, stating how many works to survey, read at abstract depth only and read in full, with budget and recorded coverage.
 ---
 
 # Literature review and synthesis
@@ -12,11 +12,28 @@ actual acquisition, reading, synthesis, gate, and continuation commands; the
 Start with `exactory-research status --summary` and `next --summary`, and retain the current profile,
 complete objective or exact target, original source versions, and resource limits.
 
-## Establish the foundation
+## State the tool call
 
-Complete the frozen cohort enumeration and the readings the recorded preparation
-policy requires. Select one to five distinct exact root paper families and read
-them in full with their complete bibliographies. Choose the few papers that the
+Use this tool at any stage. Before work, state the question and scope, how many
+distinct works to survey, how many to read at abstract depth only and how many
+to read in full. Also state hits per query, source providers, expansion direction
+and levels, required units and resource allowance. Explain the selection and
+stopping rule. Record the effective amounts, actual completed counts, captured
+coverage, gaps, stopping reason and cost. The caller can revise depth within its
+authorized budget; a research default change uses `depth` with a reason and
+consuming calls accept applicable overrides.
+
+The [tool catalog](../../docs/research-tools.md) gives the shared contracts.
+Preparation policies supply presets. Tool records grant no approval; a claim's
+fixed minimum and independent assessment determine sufficiency. Managed
+`status` marks preparation `advisory: true` and `next` names the current
+milestone's missing condition. Verification retains its fixed contract.
+
+## Search, read and expand
+
+Population work can supply candidates whenever useful. Select one to five
+exact root families when establishing a literature scope; a dependent direction
+claim requires them read in full with their complete bibliographies. Choose the few papers that the
 claims actually rest on. Under `lineage-v1` and `sampled-v1` the foundation
 rests on three kinds of sources, and the references of a full-read paper are
 inventoried for identity without owing an abstract reading.
@@ -54,8 +71,9 @@ acquisition; a source-linked reading records the actual inspection. A reading
 stays current while its bundle's units are unchanged; parsed bibliography entries
 do not require re-reading. Record critical missing sources as pending.
 
-Run all five distinct search purposes: `direct`, `originals`, `theory`, `adjacent`,
-and `recent`. Save original queries, responses, complete enumeration, versions,
+The five-purpose preparation preset covers `direct`, `originals`, `theory`, `adjacent`,
+and `recent`. Choose the purposes the question needs, retaining original
+queries, every captured response, bounded or complete coverage, versions,
 dates, scope, judgments, and gaps. Judge every found work with a disposition
 (relevant, contradictory, potentially relevant, out of scope, duplicate,
 unresolved) and a reason; a later search for the same purpose carries its
@@ -64,17 +82,22 @@ judgment is reassessed when its scope, the content of the works it rests on, or
 the citation frontier changes, not when an unrelated reference gains a version.
 Retain a captured empty result when a search finds nothing. Distinguish earlier original results from later validation,
 improvement, or use; a later paper is not evidence that its content existed earlier.
-Under `lineage-v1` and `sampled-v1` a captured query keeps its top 10 hits,
-counted across every response of that query (`invalid_search` above that). A
-native registry capture must also enumerate completely, because a page that
-returns fewer records than its reported total is `search_response_incomplete`
-and leaves the search a `search_pending` obligation on the foundation: write a
-native query that returns at most ten results in total, or import the results as
-a mapped capture and acquire each kept hit with `acquire` before it is read.
-Under `lineage-v1` these five captures are stage 1 of the bounded loop at the end
-of this section. Under `sampled-v1` the five purposes are optional: record a search
-for a finding that needs prior-art or contradiction evidence, and a recorded
-search still owes the current literature scope.
+Under the bounded presets, research uses the call's effective hit count
+(default 10). Save requested, returned and inspected counts per query, captured
+page positions, provider and request ordering, and completeness evidence.
+`complete` requires enumeration evidence, `top_k` ordering evidence, and
+`bounded_unordered` describes inspection without that ordering. Author labels
+supply neither. Bounded inspection leaves results beyond it unknown; parser or
+capture errors remain integrity gaps. Legacy captures retain established
+coverage and use `unspecified` only when ambiguous. See the
+[coverage contract](../../docs/research-tools.md#search-coverage).
+
+A search may state a provisional `question` before roots exist, retaining
+`scope_digest: null` and `provisional: true`. It appears in status and
+remains exploratory. A later scoped search can reuse those captured responses
+through a recorded binding. Claim minimums count searches bound to current scope.
+Under `sampled-v1`, the five purposes remain optional; verification uses
+targeted searches and its existing fixed amounts.
 
 In a development round, inspect what the next scientific decision needs from the
 four consequence purposes: `downstream` (whose bottleneck remains), `next_step`
@@ -87,9 +110,8 @@ A scooped or contradicted goal returns to the canonical research decision with
 its original evidence retained.
 
 When an exemplar is scientifically needed, read its primary source in full and
-analyze the transferable mechanism as an innovation case. Preserve the recorded
-preparation policy's family counts: an external exemplar replaces an older
-external case where necessary, rather than silently increasing the allowed count.
+analyze the transferable mechanism as an innovation case. State the effective candidate and case amounts and preserve each section's
+recorded counts. A new amount changes the call's depth; it grants no claim approval.
 Refresh affected rationale, context, innovation and dependent judgments with
 explicit carried findings. The [decision lifecycle](../../docs/research-decisions.md)
 keeps those source judgments distinct from independent support/value approval.
@@ -115,62 +137,49 @@ judged `relevant` or `contradictory` answers its question, or when two distinct
 captured queries for that purpose returned no relevant hit. For each uncovered
 purpose, capture a new query and read up to 20 more abstracts. The loop stops
 when every purpose is covered, when a round adds no `relevant` or
-`contradictory` paper to any uncovered purpose, or at the store's limit of 100
-registered loop readings per study (`loop_limit_reached`, and 40 while a
-development round is open, `round_loop_limit_reached`). `status` reports the
+`contradictory` paper to any uncovered purpose, or at the call's effective study limit (default 100, `loop_limit_reached`)
+or development-round limit (default 40, `round_loop_limit_reached`). `status` reports the
 registered readings, the limit and the covered purposes under `limits.loop`.
 
 Close the loop with `exactory-research loop-close`, which records all five
 purposes at once, each `covered` or `gap` with a note, and keeps the queries
-each purpose tried; the uncovered purposes are the study's recorded gaps. A loop
+each purpose tried and its effective limit; uncovered purposes are recorded gaps.
+Later defaults leave a saved closure's recorded amount unchanged. A loop
 reading or search recorded after the closure reports `loop_closure_stale`, and
 no closure at all reports `loop_closure_missing`. Promote a paper that a claim
 rests on out of the loop with `require-fulltext`.
 
-## Synthesize before ideation
+## Synthesis notes and direction evidence
 
-For a research profile, first investigate the challenges ahead of the research:
-the ultimate goal the field is trying to reach and, where useful, nearer large
-goals on the way. Read the field's lineage, reviews and stated open problems,
-and the open Grand Challenges of the cohort's field on exactory as one input.
-Record them with `grand-challenge` before ideation: each challenge with its
-horizon, its state, criteria that would show it reached, and evidence read in
-full. The record stays current for the whole study. Record a new one, with the
-reason, only when the direction changes; an unchanged direction is not
-investigated again.
+Record challenges ahead with `grand-challenge`: ultimate and nearer goals,
+advance criteria and full-read source evidence. Retain the current record until
+evidence changes the direction. Read field lineage, reviews, open problems and
+posted Grand Challenges as source material when useful.
 
-For managed author research, follow the
-[prospective decision contract](../../docs/research-decisions.md#before-target-commitment)
-before locking an author-chosen objective. Record the actual user intent and a
-proposed-content dossier comparing objective and first approach, credible
-alternatives and available discrepancy leads. Two assessors first receive the
-original aim, resources and verified field context, including held-source identities
-and reading status, without the proposed objective, method, author recommendation
-or prior scores. Resolve observed bar `source_requests` through the
-[native continuation contract](../../docs/research-decisions.md#reviewer-delivery-and-disagreement),
-retaining unavailable or unaffordable requests as unresolved. Source inventory
-metadata does not grant reading credit. Persist both final independent
-worthwhile-consequence bars before
-reconciliation and slate delivery. Assess objective adequacy and approach adequacy
-separately. A fixed user problem stays fixed; compare methods within its scope.
+Ai-science's direction minimum requires a scoped valid `direct` search with
+explicit bounded or complete coverage, accounted dispositions and resolved
+integrity gaps; full readings of every relevant or contradictory hit and root;
+selected standards with valid own sources and resolved applicability; and a
+current Grand Challenge record. A deferral leaves a decisive reading missing.
+The complete preparation report remains advisory.
 
-Commit the exact approved statement/scope with `target` while still in
-`literature`. A native ID is not required for the prospective binding and assigning
-it does not stale approval. Record every relevant source/preparation change since
-approval, including a new source absent from old dependencies. If the impact on
-nearest work, scope, transfer or the bar is material or unresolved, refresh the
-affected findings before commitment. Unrelated metadata leaves unchanged findings
-usable. The first result assessment checks that source-delta declaration.
-Prospective strategic approval does not discharge unread sources, preparation or
-cycle admission. Native mathematical preparation and external verification retain
-their own target/admission rules and do not acquire this author decision gate.
+Use the [direction decision contract](../../docs/research-decisions.md#before-target-commitment)
+when the orchestration commits a direction. Two assessors establish the Q1 bar
+before receiving the slate. Recording a version-2 investigate/pivot decision and
+committing a target require the minimum and packets covering the decisive
+evidence. The decision binds `direction_evidence_digest`; newly read decisive
+evidence needs a new decision with reviews that saw it. `q1_venue` assesses
+potential in slate reviews and realized supported advance at results.
+Target commitment retains its exact approved content and source-impact declaration.
+Native mathematical objectives and external verification hold their own gates.
 
 Record source-grounded field standards and cohort doctrine, And/But/Therefore
 rationale, innovation studies, and scientific context. Under
-`lineage-v1` the innovation study reads ten candidate papers at abstract depth,
-five of them in full: register each candidate with `innovation_candidate: true`
-in its abstract reading (`innovation_candidates_missing` until ten are read), and
-choose exactly five external cases among them
+`lineage-v1` the default innovation depth is ten abstract-read candidates and
+five full-read cases. State effective amounts for the call and record them.
+Register each candidate with `innovation_candidate: true`
+in its abstract reading (`innovation_candidates_missing` until the effective
+count is read), and choose the effective number of external cases among them
 (`innovation_case_not_candidate`, `external_cases_insufficient`,
 `external_cases_excess`); the lineage supplies the within-field case. Under
 `exhaustive-v1` and `screened-v1`, study within-field innovations plus five to
@@ -196,14 +205,18 @@ beyond that). Respect the historical cutoff for prior-art judgments. Judge the
 paper independently of author ambitions and prior verdicts; author innovation and
 impact goals are not verifier requirements.
 
-## Exit and resume
+## Return and resume
 
-Run `exactory-research gate preparation` against current evidence. In an author
-study, log the decision and enter `ideate` with `--status pending` only after it
-passes. Native math work next exports the actual foundation for reviewed admission.
-External verification next binds the task and its exact independent verdict.
+Return the completed work, actual coverage and remaining gaps to the caller.
+The orchestration evaluates its current gate. In managed research
+`gate direction` governs completing literature and entering investigation planning;
+`gate execution` governs admission to experiment. `gate preparation` remains
+an advisory preparation report there. Native mathematical research can use an
+optional common foundation; verification retains its required preparation.
 
-When sources, policy, objective-relevant scope, or synthesis change, revisit the
-affected records and current gate. Resume retained collection IDs at eligible
-retry times and preserve all failed access and reading gaps. A pause, availability
+When relevant sources or claim scope change, revisit affected evidence and its
+gate. Unrelated reading, synthesis or constitution changes leave a claim current.
+Preserve full dependency maps and historical inputs for audit and compatibility.
+Resume retained collection IDs at eligible retry times and preserve failed access
+and reading gaps. A pause, availability
 qualification, old receipt, or completed form does not discharge current work.

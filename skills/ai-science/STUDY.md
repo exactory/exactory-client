@@ -4,7 +4,9 @@ Read the [research constitution](../../RESEARCH_CONSTITUTION.md) and the
 [managed research workflow](../../docs/research-workflow.md).
 `exactory-lab init` creates the study layer; `exactory-draft init` can add the
 draft layout when the title and category exist. Creating either layout leaves
-research preparation pending. Every path is relative to the workspace root.
+milestone gates pending. AI Science uses the
+[shared tools](../../docs/research-tools.md) at any point; stage labels describe
+milestone progress. Every path is relative to the workspace root.
 
 ```text
 <workspace>/
@@ -26,6 +28,7 @@ research preparation pending. Every path is relative to the workspace root.
 ├── evidence/claims.json   scoped claims with actual evidence and quantities
 ├── research/
 │   ├── sources/objects/   immutable captured and pinned bytes
+│   ├── probes/            exploratory programs, inputs, outputs and outcomes
 │   └── literature.md      cumulative human survey narrative
 ├── reviews/               exact deliveries, original reviews and score history
 │   └── round-00N/admission.json   saved round-admit output: the admitted goal
@@ -34,8 +37,9 @@ research preparation pending. Every path is relative to the workspace root.
 
 SQLite records configuration, source collections, versions, readings, the Grand
 Challenge record, synthesis, cycles, admissions, execution observations,
-assessments, checkpoints, reviews, contribution analyses, round decisions, round
-reviews, round admissions, round assessments, cohort predictions, and remote
+assessments, checkpoints, depth plans, exploratory probes, reviews, contribution
+analyses, round decisions, round reviews, round admissions, round assessments,
+cohort predictions and remote
 intents. Read `exactory-research status --summary` and
 `next --summary` for current obligations; `status` reports `round` with the
 current round number, whether it is active or assessed, its decision, the number
@@ -67,9 +71,13 @@ The CLI exports a version-2 study projection:
 ```
 
 Stages are `initiate`, `cohort`, `literature`, `ideate`, `experiment`,
-`write`, `evaluate`, `deposit`, `submit`, and `complete`. The workflow
-describes adjacent forward transitions and explicit returns. Both source
-completion and target prerequisites apply. Enter unfinished work with
+`write`, `evaluate`, `deposit`, `submit`, and `complete`. The workflow describes
+milestone transitions and explicit returns. Managed
+research can move from `initiate` directly to `literature`, leaving `cohort`
+without a gate. Completing `literature` and entering `ideate` require
+`direction`; entering `experiment` requires a current pending admission
+through `execution`. An approved canonical round `investigate` or `pivot`
+permits `evaluate` to return to `literature`. Enter unfinished work with
 `--status pending`; a proposed `done` status checks the destination too.
 
 Change state with `exactory-lab state set`, and preserve actual decisions with
@@ -87,15 +95,45 @@ measurement limits and user pacing; they do not replace research cycle accounts.
 `exactory-cohort freeze` defines the cohort; managed collection enumerates it.
 Actual `read` records and source inspections establish coverage. Any local
 cohort inventory is a human view, not a ledger of authored completion booleans.
-Keep the entire cohort's abstract obligations, root/reference tiers, required
+State each population call's depth and budget. Record the preset and effective
+amounts, actual inspections, coverage, stopping reason and cost. Keep the selected
+cohort abstract obligations, root/reference tiers, required
 full readings, source units, dates, and availability gaps in the common records.
 
-Preserve `cohort/doctrine.md` and notes as source-grounded synthesis. Record all
-five search purposes and research standards, rationale, innovation studies, and
-context with the supported mutations. The human survey log points to those
-records and original evidence; it does not substitute for them.
+Preserve `cohort/doctrine.md` and notes as source-grounded synthesis. Record
+searches and synthesis with the supported mutations at the depth the
+current question needs. The preparation report is advisory in managed status;
+`next` follows the current milestone. The direction minimum includes the
+scoped direct search, full readings of relevant/contradictory hits and roots,
+applicable source-valid standards and a Grand Challenge record. Its decision
+binds decisive evidence seen by both reviewers and the passed `q1_venue`
+assurances. Other synthesis notes remain available throughout. The human survey
+log points to those records and original evidence; it does not substitute for them.
+
+## Depth plans and claim currency
+
+The preparation policy is a preset of the research depth plan. `depth` records
+changed defaults and their reason; consuming calls can state overrides and retain
+their effective amounts. Saved work uses its recorded amounts. Research studies
+can keep Version 6 or adopt Version 7 without changing a claim through adoption
+alone. Verification retains Version 6 and its fixed contract; its adoption is
+out of scope for this release.
+
+Keep full dependency maps for audit. Claim currency follows objective, scope,
+assumptions, plan, executions, supporting evidence and cited sources, inheritance,
+validations, failures and authorizations. Unrelated global preparation,
+configuration, constitution, foundation inventory and synthesis changes leave
+the claim current. Validate historical digests against recorded inputs before
+comparing claim projections; unrecoverable inputs require reassessment.
+Reconcile pending executions once under their frozen authority.
 
 ## Experiments, branches, and claims
+
+A probe records exploratory calculations before or during any milestone. Its
+pinned program, inputs, outputs, elapsed time and observations retain exploratory
+provenance through later references or imports. Admitted runs supply prospective
+test evidence under their exact contract. Independent support assessment decides
+what further validation a claim needs.
 
 Each prospective cycle names the complete objective and exact branch scope,
 predecessor checkpoint, hypothesis, distinguishing test, failure signals,

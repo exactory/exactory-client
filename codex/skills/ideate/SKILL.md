@@ -1,6 +1,6 @@
 ---
 name: ideate
-description: Use when a managed author study needs a hypothesis, comparison of research directions, or a next investigation tranche before experiment admission.
+description: Use at any stage to generate and compare candidate questions, prepare an ai-science direction decision against the Q1 bar, or plan a bounded investigation and prospective admission.
 ---
 
 # Exactory: ideate
