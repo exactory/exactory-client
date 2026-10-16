@@ -155,6 +155,10 @@ class TestProbe(_InsideWorkspaceTestCase):
         self.assertEqual(ArtifactStore(self.workspace).read(saved["stdout"]), b"started\n")
         self.assertLess(saved["elapsed_seconds"], 5)
 
+    def test_large_finite_timeout_does_not_overflow_supervisor_readiness(self):
+        saved = self.run_probe('print("finished")\n', timeout="1e100")["result"]
+        self.assertEqual(saved["exit_status"], 0)
+
     def test_probe_id_and_output_directory_cannot_escape_the_run(self):
         for extra in (("--id", "../escape"), ("--output-dir", "../escape"), ("--output-dir", str(self.workspace / "escape"))):
             with self.subTest(extra=extra):
@@ -509,6 +513,183 @@ class TestProbeLifecycle(_InsideWorkspaceTestCase):
         self.assertEqual(result["result"]["exit_status"], "interrupted")
         from research_harness.artifacts import ArtifactStore
         self.assertEqual(ArtifactStore(self.workspace).read(result["result"]["stdout"]), b"partial\n")
+
+    def test_lost_worker_timeout_terminates_surviving_program_and_charges_before_replay(self):
+        self.check_lost_worker_timeout()
+
+    def test_lost_timeout_recovery_preserves_measured_usage_without_charging_replay_delay(self):
+        self.check_lost_worker_timeout(interrupt_recovery=True)
+
+    def check_lost_worker_timeout(self, interrupt_recovery=False):
+        from research_harness.artifacts import ArtifactStore
+        from research_harness.probe import hold_probe_owner
+        from research_harness.resources import account_report
+        from research_harness.storage import Store
+        marker = self.workspace / "surviving-program"
+        command = self.build_command("worker-timeout", 'from pathlib import Path\nimport os, time\nos.closerange(3, 256)\nPath('
+            + repr(str(marker)) + ').write_text(str(os.getpid()))\nprint("partial", flush=True)\n'
+              'while True: time.sleep(0.01)\n', timeout="2")
+        owner = subprocess.Popen(command, cwd=self.workspace, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.addCleanup(lambda: owner.kill() if owner.poll() is None else None)
+        self.wait_for_file(marker)
+        program_pid = int(marker.read_text())
+        program_group = os.getpgid(program_pid)
+        def terminate_program():
+            try:
+                os.killpg(program_group, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        self.addCleanup(terminate_program)
+        launch = Store(self.workspace).snapshot()["records"]["probe_launch"]["worker-timeout"]
+        directory = self.workspace / launch["directory"]
+        os.kill(json.loads((directory / "worker.json").read_text())["pid"], signal.SIGKILL)
+        stdout, stderr = owner.communicate(timeout=5)
+        self.assertEqual(owner.returncode, 0, stderr)
+        self.assertEqual(json.loads(stdout)["status"], "pending")
+        before = Store(self.workspace).snapshot()
+        retry = subprocess.run(command, cwd=self.workspace, capture_output=True, timeout=5)
+        self.assertEqual(retry.returncode, 0, retry.stderr)
+        self.assertEqual(json.loads(retry.stdout)["status"], "pending")
+        self.assertEqual(Store(self.workspace).snapshot(), before)
+        self.assertEqual(account_report(before["records"], "research")["experiment"]["wall_seconds"]["reserved"], 2)
+        time.sleep(2)
+        from research_harness import probe
+        supervision = json.loads((directory / "supervision.json").read_text())
+        changed_identity = dict(supervision["program"], start_identity=["reused-pid"])
+        with unittest.mock.patch.object(probe, "find_probe_process_identity", side_effect=(None, changed_identity)):
+            with unittest.mock.patch.object(probe.os, "killpg") as terminate:
+                pending = probe.launch_probe(Store(self.workspace), identifier="worker-timeout", question="Lifecycle check?",
+                                             script="missing.py", timeout=2)
+        terminate.assert_not_called()
+        self.assertEqual(pending["status"], "pending", "A reused process ID cannot authorize termination")
+        self.assertEqual(Store(self.workspace).snapshot(), before)
+        if interrupt_recovery:
+            original_kill = os.killpg
+            def terminate_then_lose_recovery(group, sig):
+                original_kill(group, sig)
+                concurrent = subprocess.run(command, cwd=self.workspace, capture_output=True, timeout=5)
+                self.assertEqual(concurrent.returncode, 0, concurrent.stderr)
+                self.assertEqual(json.loads(concurrent.stdout)["status"], "pending")
+                self.assertEqual(Store(self.workspace).snapshot(), before)
+                raise ResearchError("response_lost", "Recovery disappeared after signalling the original group")
+            with unittest.mock.patch.object(probe.os, "killpg", side_effect=terminate_then_lose_recovery):
+                with self.assertRaises(ResearchError) as lost:
+                    probe.launch_probe(Store(self.workspace), identifier="worker-timeout", question="Lifecycle check?",
+                                       script="missing.py", timeout=2)
+            self.assertEqual(lost.exception.code, "response_lost")
+            time.sleep(0.2)
+        retry = subprocess.run(command, cwd=self.workspace, capture_output=True, timeout=5)
+        self.assertEqual(retry.returncode, 0, retry.stderr)
+        receipt = json.loads(retry.stdout)
+        self.assertIn("result", receipt, "An expired surviving program must be terminated and reconciled")
+        saved = receipt["result"]
+        self.assertEqual(saved["exit_status"], "timed_out")
+        self.assertGreaterEqual(saved["elapsed_seconds"], 2)
+        self.assertEqual(ArtifactStore(self.workspace).read(saved["stdout"]), b"partial\n")
+        with hold_probe_owner(self.workspace, "worker-timeout") as descriptor:
+            self.assertIsNotNone(descriptor, "The original process group must release ownership before its reservation")
+        usage = account_report(Store(self.workspace).snapshot()["records"], "research")["experiment"]["wall_seconds"]
+        self.assertEqual((usage["reserved"], usage["unknown"]), (0, int(interrupt_recovery)))
+        self.assertEqual(usage["charged"], saved["elapsed_seconds"])
+        if interrupt_recovery:
+            termination = json.loads((directory / "termination.json").read_text())
+            self.assertEqual(saved["elapsed_seconds"], termination["elapsed_seconds"])
+        replay = subprocess.run(command, cwd=self.workspace, capture_output=True, timeout=5)
+        self.assertEqual(replay.returncode, 0, replay.stderr)
+        self.assertEqual(json.loads(replay.stdout), receipt)
+        self.assertEqual(int(marker.read_text()), program_pid, "A retry must never relaunch the program")
+
+    def test_program_starts_only_after_process_identity_and_deadline_are_durable(self):
+        from research_harness.integration import current_store
+        from research_harness.probe import launch_probe
+        command = self.build_command("supervised", 'from pathlib import Path\nimport json, os, time\n'
+            'directory = Path.cwd().parent\n'
+            'supervision = json.loads((directory / "supervision.json").read_text())\n'
+            'worker = json.loads((directory / "worker.json").read_text())\n'
+            'assert supervision["program"]["pid"] == os.getpgrp()\n'
+            'assert supervision["program"]["process_group"] == os.getpgrp()\n'
+            'assert supervision["program"]["start_identity"]\n'
+            'assert supervision["worker"] == worker["identity"]\n'
+            'assert supervision["deadline"] == supervision["execution_started"] + 5\n'
+            'assert supervision["started"] <= supervision["execution_started"] <= time.clock_gettime(time.CLOCK_MONOTONIC) < supervision["deadline"]\n'
+            'assert supervision["config_sha256"] == worker["config_sha256"]\n')
+        receipt = launch_probe(current_store(self.workspace), identifier="supervised", question="Lifecycle check?",
+                               script=command[-3], timeout=5)
+        self.assertEqual(receipt["result"]["exit_status"], 0)
+
+    def test_retry_after_deadline_keeps_a_live_worker_pending(self):
+        from research_harness.storage import Store
+        marker = self.workspace / "live-worker"
+        command = self.build_command("stopped-worker", 'from pathlib import Path\nimport time\nPath('
+            + repr(str(marker)) + ').write_text("started")\ntime.sleep(10)\n', timeout="1")
+        owner = subprocess.Popen(command, cwd=self.workspace, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.addCleanup(lambda: owner.kill() if owner.poll() is None else None)
+        self.wait_for_file(marker)
+        launch = Store(self.workspace).snapshot()["records"]["probe_launch"]["stopped-worker"]
+        directory = self.workspace / launch["directory"]
+        worker_pid = json.loads((directory / "worker.json").read_text())["pid"]
+        os.kill(worker_pid, signal.SIGSTOP)
+        try:
+            owner.kill()
+            owner.communicate(timeout=5)
+            time.sleep(1)
+            before = Store(self.workspace).snapshot()
+            retry = subprocess.run(command, cwd=self.workspace, capture_output=True, timeout=5)
+            self.assertEqual(retry.returncode, 0, retry.stderr)
+            self.assertEqual(json.loads(retry.stdout)["status"], "pending")
+            self.assertEqual(Store(self.workspace).snapshot(), before)
+        finally:
+            os.kill(worker_pid, signal.SIGCONT)
+        self.wait_for_file(directory / "outcome.json")
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            retry = subprocess.run(command, cwd=self.workspace, capture_output=True, timeout=5)
+            self.assertEqual(retry.returncode, 0, retry.stderr)
+            result = json.loads(retry.stdout)
+            if result.get("status") != "pending":
+                break
+            time.sleep(0.01)
+        self.assertEqual(result["result"]["exit_status"], "timed_out")
+
+    def test_lost_worker_cleans_up_descendants_when_the_script_exits(self):
+        from research_harness.probe import hold_probe_owner
+        from research_harness.probe_supervision import find_probe_process_identity
+        from research_harness.resources import account_report
+        from research_harness.storage import Store
+        marker, release = self.workspace / "descendant", self.workspace / "finish-parent"
+        command = self.build_command("lost-parent", 'from pathlib import Path\nimport os, time\n'
+            'if os.fork() == 0:\n'
+            '    Path(' + repr(str(marker)) + ').write_text(str(os.getpid()))\n'
+            '    while True: time.sleep(0.01)\n'
+            'while not Path(' + repr(str(release)) + ').exists(): time.sleep(0.01)\n', timeout="5")
+        owner = subprocess.Popen(command, cwd=self.workspace, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.addCleanup(lambda: owner.kill() if owner.poll() is None else None)
+        self.wait_for_file(marker)
+        child_pid = int(marker.read_text())
+        group = os.getpgid(child_pid)
+        def terminate_group():
+            try:
+                os.killpg(group, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        self.addCleanup(terminate_group)
+        launch = Store(self.workspace).snapshot()["records"]["probe_launch"]["lost-parent"]
+        directory = self.workspace / launch["directory"]
+        os.kill(json.loads((directory / "worker.json").read_text())["pid"], signal.SIGKILL)
+        stdout, stderr = owner.communicate(timeout=5)
+        self.assertEqual(owner.returncode, 0, stderr)
+        self.assertEqual(json.loads(stdout)["status"], "pending")
+        release.write_text("finish")
+        deadline = time.monotonic() + 2
+        while find_probe_process_identity(child_pid) is not None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertIsNone(find_probe_process_identity(child_pid), "A script exit must not strand its same-group descendants")
+        with hold_probe_owner(self.workspace, "lost-parent") as descriptor:
+            self.assertIsNotNone(descriptor)
+        retry = subprocess.run(command, cwd=self.workspace, capture_output=True, timeout=5)
+        self.assertEqual(retry.returncode, 0, retry.stderr)
+        self.assertEqual(json.loads(retry.stdout)["result"]["exit_status"], "interrupted")
+        self.assertEqual(account_report(Store(self.workspace).snapshot()["records"], "research")["experiment"]["wall_seconds"]["reserved"], 0)
 
 
 class TestInit(_WorkspaceTestCase):

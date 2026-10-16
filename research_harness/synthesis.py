@@ -271,10 +271,18 @@ def _innovation(state, value, depth=None):
             state.obligations.append(obligation("external_cases_excess", "Select exactly " + str(cases) + " external original papers; keep additional works in the corpus." if depth else
                                                 "Select exactly five external original papers; keep additional works in the corpus.", count=len(external), maximum=cases))
     else:
-        if len(external) < 5:
-            state.obligations.append(obligation("external_cases_insufficient", "Analyze five to ten distinct full-read external original papers.", count=len(external), minimum=5))
-        if len(external) > 10:
-            state.obligations.append(obligation("external_cases_excess", "Select five to ten external original papers for this assessment; keep additional works in the corpus.", count=len(external), maximum=10))
+        minimum = depth["innovation_cases"] if depth else 5
+        maximum = max(10, minimum)
+        if len(external) < minimum:
+            state.obligations.append(obligation("external_cases_insufficient",
+                "Analyze five to ten distinct full-read external original papers." if minimum == 5 else
+                "Analyze at least " + str(minimum) + " distinct full-read external original papers.",
+                count=len(external), minimum=minimum))
+        if len(external) > maximum:
+            state.obligations.append(obligation("external_cases_excess",
+                "Select five to ten external original papers for this assessment; keep additional works in the corpus." if minimum == 5 else
+                "Select at most " + str(maximum) + " external original papers for this assessment; keep additional works in the corpus.",
+                count=len(external), maximum=maximum))
         if not within:
             state.obligations.append(obligation("within_field_case_missing", "Analyze at least one full-read within-field original case."))
     return {"cases": len(value["cases"]), "external_papers": len(external), "within_field_papers": len(within)}

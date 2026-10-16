@@ -4,6 +4,7 @@ import hashlib
 import mimetypes
 import os
 from pathlib import Path
+import select
 import signal
 import stat
 import subprocess
@@ -13,10 +14,12 @@ import time
 from .artifacts import describe_artifact
 from .errors import ResearchError
 from .probe_provenance import pin_probe_artifact, record_probe_artifact_origin
+from .probe_supervision import find_probe_process_identity, read_probe_clock
 from .workspace import checked_parent, json_projection, read_file, strict_json
 
 
 STREAM_LIMIT = 32 * 1024 * 1024
+SUPERVISOR_START_TIMEOUT = 60
 
 
 def read_probe_log(root, relative):
@@ -47,28 +50,57 @@ def find_probe_stream_origins(root, launch):
     return [{"probe_id": launch["id"], "sha256": sha256, "roles": roles} for sha256, roles in sorted(origins.items())]
 
 
-def run_probe_process(root, config, owner):
+def run_probe_process(root, config, owner, worker_identity, config_sha256):
     directory = root / config["directory"]
-    started = time.monotonic()
+    started = read_probe_clock()
     exit_status = "failed"
     with (directory / "stdout").open("xb") as stdout, (directory / "stderr").open("xb") as stderr:
-        env = os.environ.copy()
-        env.pop("PYTHONPATH", None)
-        process = subprocess.Popen(config["argv"], cwd=directory / "work", env=env, stdin=subprocess.DEVNULL,
-                                   stdout=stdout, stderr=stderr, start_new_session=True, pass_fds=(owner,))
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1]))
+        gate, release = os.pipe()
+        ready, announce = os.pipe()
         try:
+            process = subprocess.Popen([sys.executable, str(Path(__file__).with_name("probe_supervision.py")),
+                                        str(gate), str(announce), str(owner), str(root), config["directory"], config_sha256, *config["argv"]],
+                                       cwd=directory / "work", env=env, stdin=subprocess.DEVNULL,
+                                       stdout=stdout, stderr=stderr, start_new_session=True, pass_fds=(owner, gate, announce))
+        except OSError:
+            os.close(release)
+            os.close(ready)
+            raise
+        finally:
+            os.close(gate)
+            os.close(announce)
+        try:
+            try:
+                try:
+                    available, _, _ = select.select([ready], [], [], SUPERVISOR_START_TIMEOUT)
+                    if not available or os.read(ready, 1) != b"1":
+                        raise OSError("Probe supervisor did not become ready for its launch gate")
+                finally:
+                    os.close(ready)
+                identity = find_probe_process_identity(process.pid)
+                if identity is None:
+                    raise OSError("Probe program disappeared before its launch gate opened")
+                execution_started = read_probe_clock()
+                deadline = execution_started + config["timeout_seconds"]
+                json_projection(root, config["directory"] + "/supervision.json", {
+                    "config_sha256": config_sha256, "program": identity, "worker": worker_identity,
+                    "started": started, "execution_started": execution_started, "deadline": deadline})
+                os.write(release, b"1")
+            finally:
+                os.close(release)
             while process.poll() is None:
-                elapsed = time.monotonic() - started
+                elapsed = read_probe_clock() - started
                 json_projection(root, config["directory"] + "/usage.json", {"elapsed_seconds": elapsed})
                 if max(os.fstat(stdout.fileno()).st_size, os.fstat(stderr.fileno()).st_size) > STREAM_LIMIT:
                     exit_status = "output_bound"
                     break
-                if elapsed >= config["timeout_seconds"]:
+                if read_probe_clock() >= deadline:
                     exit_status = "timed_out"
                     break
                 time.sleep(0.01)
             else:
-                exit_status = process.returncode
+                exit_status = read_probe_process_exit(root, config, config_sha256, process.returncode)
         finally:
             try:
                 os.killpg(process.pid, signal.SIGKILL)
@@ -80,7 +112,20 @@ def run_probe_process(root, config, owner):
             process.wait()
         if max(os.fstat(stdout.fileno()).st_size, os.fstat(stderr.fileno()).st_size) > STREAM_LIMIT:
             exit_status = "output_bound"
-    return {"exit_status": exit_status, "elapsed_seconds": time.monotonic() - started}
+    return {"exit_status": exit_status, "elapsed_seconds": read_probe_clock() - started}
+
+
+def read_probe_process_exit(root, config, config_sha256, fallback):
+    try:
+        execution = strict_json(read_file(root, config["directory"] + "/program-exit.json"))
+    except ResearchError as error:
+        if error.code not in ("artifact_missing", "invalid_json"):
+            raise
+        return fallback
+    if (isinstance(execution, dict) and execution.get("config_sha256") == config_sha256
+            and type(execution.get("returncode")) is int):
+        return execution["returncode"]
+    return fallback
 
 
 def capture_probe_outcome(root, launch, terminal):
@@ -129,10 +174,11 @@ def run_probe_worker(root, directory, config_sha256, owner):
     if hashlib.sha256(data).hexdigest() != config_sha256:
         raise ResearchError("probe_evidence_mismatch", "Probe configuration differs from its immutable launch")
     config = strict_json(data)
-    json_projection(root, directory + "/worker.json", {"pid": os.getpid(), "config_sha256": config_sha256})
+    identity = find_probe_process_identity(os.getpid())
+    json_projection(root, directory + "/worker.json", {"pid": os.getpid(), "identity": identity, "config_sha256": config_sha256})
     started = time.monotonic()
     try:
-        terminal = run_probe_process(root, config, owner)
+        terminal = run_probe_process(root, config, owner, identity, config_sha256)
     except (ResearchError, OSError) as error:
         terminal = {"exit_status": "failed", "elapsed_seconds": time.monotonic() - started,
                     "error": error.as_dict() if isinstance(error, ResearchError) else {"message": str(error)}}

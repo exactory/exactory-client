@@ -1,5 +1,13 @@
 """Probe intent, reservation, ownership and reconciliation contracts."""
 
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import time
+import unittest
+
 from literature_fixtures import LiteratureCase
 from research_harness import cli, resources
 from research_harness.principles import initialize_research
@@ -119,3 +127,61 @@ class ProbeConfigurationTests(LiteratureCase):
     def test_intent_requires_configuration(self):
         self.assertIn("probe-intent", cli.OPERATIONS)
         self.assert_error("configuration_missing", lambda: self.mutate(cli.OPERATIONS["probe-intent"], build_probe_intent(self.artifacts)))
+
+
+class ProbeSupervisionTests(unittest.TestCase):
+    def test_supervisor_startup_leaves_the_requested_time_for_the_program(self):
+        from unittest import mock
+        from research_harness import probe_worker
+        from research_harness.probe_supervision import find_probe_process_identity
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            work = root / "run/work"
+            work.mkdir(parents=True)
+            (work / "program.py").write_text('import time\nprint("started", flush=True)\ntime.sleep(10)\n')
+            config = {"directory": "run", "argv": [sys.executable, "program.py"], "timeout_seconds": 0.2}
+            spawn = subprocess.Popen
+            def launch_after_preparation(*args, **kwargs):
+                time.sleep(0.3)
+                return spawn(*args, **kwargs)
+            with (root / "owner.lock").open("wb") as owner:
+                with mock.patch.object(probe_worker.subprocess, "Popen", side_effect=launch_after_preparation):
+                    terminal = probe_worker.run_probe_process(root, config, owner.fileno(), find_probe_process_identity(os.getpid()), "fixture")
+            self.assertEqual(terminal["exit_status"], "timed_out")
+            self.assertEqual((root / "run/stdout").read_bytes(), b"started\n")
+            self.assertGreaterEqual(terminal["elapsed_seconds"], 0.5)
+
+    def test_deadline_clock_uses_the_shared_kernel_origin_on_python_39(self):
+        from research_harness.probe_supervision import read_probe_clock
+        before = time.clock_gettime(time.CLOCK_MONOTONIC)
+        observed = read_probe_clock()
+        self.assertLessEqual(before, observed)
+        self.assertLessEqual(observed, time.clock_gettime(time.CLOCK_MONOTONIC))
+
+    def test_process_identity_is_stable_and_names_the_current_group(self):
+        from research_harness.probe_supervision import find_probe_process_identity
+        identity = find_probe_process_identity(os.getpid())
+        self.assertEqual(identity, find_probe_process_identity(os.getpid()))
+        self.assertEqual(identity["pid"], os.getpid())
+        self.assertEqual(identity["process_group"], os.getpgrp())
+        self.assertTrue(identity["start_identity"])
+
+    def test_program_gate_does_not_execute_when_worker_disappears_before_release(self):
+        descriptor, release = os.pipe()
+        ready, announce = os.pipe()
+        try:
+            bootstrap = Path(__file__).resolve().parents[1] / "research_harness/probe_supervision.py"
+            child = subprocess.Popen([sys.executable, str(bootstrap), str(descriptor), str(announce), "0", ".", "unused", "unused", sys.executable,
+                                      "-c", 'print("must not execute")'],
+                                     pass_fds=(descriptor, announce), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        finally:
+            os.close(descriptor)
+            os.close(announce)
+        try:
+            self.assertEqual(os.read(ready, 1), b"1")
+        finally:
+            os.close(ready)
+            os.close(release)
+        stdout, stderr = child.communicate(timeout=5)
+        self.assertEqual(child.returncode, 0, stderr)
+        self.assertEqual(stdout, b"")

@@ -8,8 +8,10 @@ import os
 from pathlib import Path
 import re
 import shlex
+import signal
 import subprocess
 import sys
+import time
 import uuid
 
 from . import resources
@@ -18,6 +20,7 @@ from .errors import ResearchError
 from .operations import fields, immutable_record, is_finite_number, prepared_mutation, text
 from .probe_worker import capture_probe_outcome, find_probe_stream_origins
 from .probe_provenance import pin_probe_artifact
+from .probe_supervision import find_probe_process_identity, read_probe_clock
 from .workspace import checked_parent, json_projection, read_file, strict_json, write_projection
 
 
@@ -139,8 +142,8 @@ def build_probe_directory(identifier):
 
 
 @contextmanager
-def hold_probe_owner(root, identifier):
-    with checked_parent(root, build_probe_directory(identifier) + "/owner.lock", create=True) as (directory, name):
+def hold_probe_lock(root, identifier, filename):
+    with checked_parent(root, build_probe_directory(identifier) + "/" + filename, create=True) as (directory, name):
         descriptor = os.open(name, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600, dir_fd=directory)
     try:
         try:
@@ -151,6 +154,12 @@ def hold_probe_owner(root, identifier):
             yield descriptor
     finally:
         os.close(descriptor)
+
+
+@contextmanager
+def hold_probe_owner(root, identifier):
+    with hold_probe_lock(root, identifier, "owner.lock") as descriptor:
+        yield descriptor
 
 
 def read_probe_file(store, relative):
@@ -199,6 +208,11 @@ def find_probe_terminal(store, launch):
     return None
 
 
+def record_probe_recovery(store, payload, **identity):
+    return prepared_mutation(store, "research.probe_recovery", payload,
+        lambda records, value: ([immutable_record(records, "probe_recovery", value["id"], value)], value), **identity)
+
+
 def reconcile_probe(store, intent, launch):
     """The caller holds the free owner lock; a missing outcome alone is never recovery authority."""
     outcome = read_probe_outcome(store, launch) if launch else None
@@ -222,13 +236,71 @@ def reconcile_probe(store, intent, launch):
             outcome.update({role: pin_probe_artifact(store.root, intent["id"], b"", "text/plain", role)
                             for role in ("stdout", "stderr")})
         recovery = {"id": intent["id"], "usage_incomplete": True, "owner_lost": True}
-        def record_recovery(store, payload, **identity):
-            return prepared_mutation(store, "research.probe_recovery", payload,
-                lambda records, value: ([immutable_record(records, "probe_recovery", value["id"], value)], value), **identity)
-        commit_probe_mutation(store, record_recovery, recovery, "probe-recovery:" + intent["id"])
+        commit_probe_mutation(store, record_probe_recovery, recovery, "probe-recovery:" + intent["id"])
     if launch:
         json_projection(store.root, launch["directory"] + "/outcome.json", {"config_sha256": launch["config_artifact"]["sha256"], "outcome": outcome})
     return commit_probe_mutation(store, record_probe, outcome, "probe:" + intent["id"])
+
+
+def recover_expired_probe(store, intent, launch, owner):
+    """The caller serializes launch/recovery; an occupied owner lock retains the reservation."""
+    identifier = intent["id"]
+    pending = {"id": identifier, "status": "pending", "state": "running"}
+    if launch is None or owner is not None and (read_probe_outcome(store, launch) is not None or find_probe_terminal(store, launch) is not None):
+        return reconcile_probe(store, intent, launch) if owner is not None else pending
+    supervision = read_probe_file(store, launch["directory"] + "/supervision.json")
+    if (not isinstance(supervision, dict) or supervision.get("config_sha256") != launch["config_artifact"]["sha256"]
+            or not is_finite_number(supervision.get("started")) or not is_finite_number(supervision.get("deadline"))
+            or not is_finite_number(supervision.get("execution_started", supervision["started"]))
+            or supervision.get("execution_started", supervision["started"]) < supervision["started"]
+            or supervision["deadline"] != supervision.get("execution_started", supervision["started"]) + intent["timeout_seconds"]):
+        return reconcile_probe(store, intent, launch) if owner is not None else pending
+    worker, program = supervision.get("worker"), supervision.get("program")
+    if (not isinstance(worker, dict) or type(worker.get("pid")) is not int or worker["pid"] <= 0
+            or not isinstance(program, dict) or type(program.get("pid")) is not int or program["pid"] <= 0
+            or program.get("process_group") != program["pid"] or not program.get("start_identity")):
+        return pending
+    if find_probe_process_identity(worker["pid"]) == worker:
+        return pending
+    termination = {"config_sha256": launch["config_artifact"]["sha256"], "program": program,
+                   "started": supervision["started"], "deadline": supervision["deadline"]}
+    previous = read_probe_file(store, launch["directory"] + "/termination.json")
+    resuming = (isinstance(previous, dict) and {key: previous.get(key) for key in termination} == termination
+                and is_finite_number(previous.get("elapsed_seconds")) and previous["elapsed_seconds"] >= intent["timeout_seconds"])
+    current = find_probe_process_identity(program["pid"])
+    if current != program and not resuming:
+        return reconcile_probe(store, intent, launch) if owner is not None else pending
+    if read_probe_clock() < supervision["deadline"]:
+        return pending
+    elapsed = previous["elapsed_seconds"] if resuming and current != program else None
+    if current == program:
+        json_projection(store.root, launch["directory"] + "/termination.json",
+                        dict(termination, elapsed_seconds=read_probe_clock() - supervision["started"]))
+        try:
+            os.killpg(program["process_group"], signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    deadline = time.monotonic() + 2
+    while True:
+        if find_probe_process_identity(program["pid"]) != program:
+            if owner is not None:
+                return finish_probe_timeout(store, intent, launch, supervision, elapsed)
+            with hold_probe_owner(store.root, identifier) as available:
+                if available is not None:
+                    return finish_probe_timeout(store, intent, launch, supervision, elapsed)
+        if time.monotonic() >= deadline:
+            return pending
+        time.sleep(0.01)
+
+
+def finish_probe_timeout(store, intent, launch, supervision, elapsed):
+    if elapsed is not None:
+        recovery = {"id": intent["id"], "usage_incomplete": True, "owner_lost": True}
+        commit_probe_mutation(store, record_probe_recovery, recovery, "probe-recovery:" + intent["id"])
+    json_projection(store.root, launch["directory"] + "/terminal.json", {
+        "config_sha256": launch["config_artifact"]["sha256"], "exit_status": "timed_out",
+        "elapsed_seconds": elapsed if elapsed is not None else read_probe_clock() - supervision["started"]})
+    return reconcile_probe(store, intent, launch)
 
 
 def launch_probe(store, *, identifier, question, script, inputs=(), output_dir=".", timeout, observation=None):
@@ -247,16 +319,23 @@ def launch_probe(store, *, identifier, question, script, inputs=(), output_dir="
     previous = find_probe_receipt(store, identifier)
     if previous is not None:
         return previous
-    with hold_probe_owner(store.root, identifier) as owner:
-        if owner is None:
+    with hold_probe_lock(store.root, identifier, "recovery.lock") as recovery:
+        if recovery is None:
             return {"id": identifier, "status": "pending", "state": "running"}
+        return launch_owned_probe(store, identifier, question, script, inputs, relative_output, timeout, observation)
+
+
+def launch_owned_probe(store, identifier, question, script, inputs, relative_output, timeout, observation):
+    with hold_probe_owner(store.root, identifier) as owner:
         previous = find_probe_receipt(store, identifier)
         if previous is not None:
             return previous
         records = store.snapshot()["records"]
         existing = records.get("probe_intent", {}).get(identifier)
         if existing is not None:
-            return reconcile_probe(store, existing, records.get("probe_launch", {}).get(identifier))
+            return recover_expired_probe(store, existing, records.get("probe_launch", {}).get(identifier), owner)
+        if owner is None:
+            return {"id": identifier, "status": "pending", "state": "running"}
         artifacts = ArtifactStore(store.root)
         files = [("program/" + Path(script).name, Path(script).read_bytes(), "text/x-python")]
         files.extend(("inputs/" + str(index) + "/" + Path(path).name, Path(path).read_bytes(),
