@@ -268,6 +268,8 @@ def describe_direction_evidence(records, artifacts, direction, dossier):
     prepared = build_reading_passages(records, artifacts, readings)
     passages = [passage for passage, _ in prepared]
     contents = [(passage['excerpt'], data) for passage, data in prepared]
+    assets = {asset['artifact']['sha256']: asset['artifact']
+              for passage in passages for asset in passage.get('assets', [])}
     claim = {'dossier_id': dossier['id'], 'digest': dossier['digest'],
              **{key: dossier['payload'][key] for key in ('objective', 'candidates', 'claims', 'selected_candidate')}}
     value = {'binding': binding, 'claim': claim,
@@ -287,8 +289,13 @@ def describe_direction_evidence(records, artifacts, direction, dossier):
         value['source_passage_checks'] = [dict(_reference_templates(passage),
             content=(base64.b64encode(data).decode('ascii') if passage.get('source_original') else data.decode('utf-8')))
             for passage, data in prepared]
+        # Raw acquired asset references pass the existing public/private byte
+        # classification before their exact bytes are attached below.
+        value['source_asset_checks'] = list(assets.values())
         value, derived = project_delivery(records, artifacts, contract, scrub(value, ('author', 'authors', 'request_id', 'token')))
         value.pop('source_passage_checks')
+        if value.pop('source_asset_checks') != list(assets.values()):
+            raise ResearchError('private_mixed_artifact_required', 'Decisive visual bytes require an exact public source delivery')
         for path, data in derived.items():
             reference = describe_artifact(data, 'application/json')
             if reference['path'] != path:

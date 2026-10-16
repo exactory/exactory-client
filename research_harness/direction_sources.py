@@ -1,4 +1,4 @@
-"""Deliver and recognize checked source passages for decisive full readings."""
+"""Deliver and recognize complete inspected ranges and named visual bytes."""
 
 import base64
 import hashlib
@@ -12,7 +12,7 @@ from .reading import validate_read_evidence
 from .source_links import span_locator
 
 _PASSAGE_CHARACTERS = 2000
-# Match the existing scientific-delivery per-artifact bound for a visual PDF.
+# Match the existing scientific-delivery per-artifact bound for original visuals.
 _MAX_ORIGINAL_BYTES = 64 * 1024 * 1024
 _TEXT_KINDS = ('text', 'span')
 
@@ -34,63 +34,78 @@ def _compact_locator(locator):
     return dict(locator)
 
 
-def _build_passage(records, evaluation, link):
-    """Resolve checked passage bytes and provenance without storing a derivative."""
+def _find_visual_gaps(context):
+    visual = context['visual']
+    if visual is None:
+        return []
+    # A plain HTML text anchor can be outside a figure. With no visual
+    # resources, its complete captured markup is the inspected content.
+    return [item for item in visual['pending']
+            if item['code'] != 'visual_scope_unresolved' or visual['resources']]
+
+
+def _build_passages(records, evaluation, link):
+    """Resolve every inspected byte into bounded chunks without storing objects."""
     context = evaluation.link(link)
     locator = link['locator']
     kind = locator['kind']
-    media, flags = 'text/plain', {}
-    if kind in _TEXT_KINDS:
-        content = context['value']
-        start = locator['start'] + len(content) - len(content.lstrip())
-        end = min(locator['end'], start + _PASSAGE_CHARACTERS)
-        source = evaluation.read(link['artifact']).decode('utf-8')
-        location = span_locator(source, start, end)
-        inspection = validate_read_evidence(records, evaluation, dict(link, locator=location), depth='passage')
-        data = source[start:end].encode('utf-8')
-        flags['truncated'] = end < locator['end']
-    else:
-        inspection = validate_read_evidence(records, evaluation, link, depth='passage')
-        if kind == 'json':
-            content = _encode_value(context['value'])
-            data = content[:_PASSAGE_CHARACTERS].encode('utf-8')
+    inspection = validate_read_evidence(records, evaluation, link, depth='passage')
+    origin = {'source_id': link['source_id'], 'artifact_descriptor': bar_sources.descriptor(link['artifact'])}
+    if kind == 'pdf':
+        original = context['capture']['original']
+        if original['size'] > _MAX_ORIGINAL_BYTES:
+            raise ResearchError('review_evidence_too_large', 'The inspected PDF exceeds the scientific delivery artifact bound')
+        # Extraction has no region geometry. The exact original supplies every
+        # inspected page/region, including PDFs acquired as generic binary.
+        data = evaluation.read(original)
+        return [({'version_id': link['version_id'], 'inspection': inspection,
+                  'origin': dict(origin, locator=_compact_locator(locator)),
+                  'excerpt': describe_artifact(data, 'application/pdf'), 'source_original': True,
+                  'truncated': False, 'visuals_require_source_request': False,
+                  'scientific_truth_certified': False}, data)]
+    assets = locator.get('assets', []) if kind == 'html' else []
+    for asset in assets:
+        if asset['artifact']['size'] > _MAX_ORIGINAL_BYTES:
+            raise ResearchError('review_evidence_too_large', 'The inspected image exceeds the scientific delivery artifact bound')
+        # evaluation.link validated the exact work/original binding and container.
+        evaluation.read(asset['artifact'])
+    content = _encode_value(context['value'])
+    offset = locator['start'] if kind in _TEXT_KINDS else 0
+    source = evaluation.text(link['artifact']) if kind in _TEXT_KINDS else None
+    starts = list(range(0, len(content), _PASSAGE_CHARACTERS)) or [0]
+    result = []
+    for index, start in enumerate(starts):
+        end = min(len(content), start + _PASSAGE_CHARACTERS)
+        data, media = content[start:end].encode('utf-8'), 'text/plain'
+        chunk_origin = dict(origin)
+        if kind in _TEXT_KINDS:
+            location = span_locator(source, offset + start, offset + end, excerpt_length=0)
+        elif kind == 'json':
             location = {'kind': kind, 'pointer': locator['pointer'], 'sha256': hashlib.sha256(data).hexdigest()}
-            if not isinstance(context['value'], str) and len(content) <= _PASSAGE_CHARACTERS:
+            chunk_origin['character_range'] = {'start': start, 'end': end}
+            if len(starts) == 1 and not isinstance(context['value'], str):
                 media = 'application/json'
-            flags['truncated'] = len(content) > _PASSAGE_CHARACTERS
-        elif kind == 'pdf':
-            capture = context['capture']
-            # Page extraction has no region geometry and cannot supply an inspected
-            # figure. Keep the checked original under the transport's PDF type,
-            # including originals captured as generic binary.
-            if capture['original']['size'] > _MAX_ORIGINAL_BYTES:
-                raise ResearchError('review_evidence_too_large', 'The inspected PDF exceeds the scientific delivery artifact bound')
-            data, media = evaluation.read(capture['original']), 'application/pdf'
-            location = _compact_locator(locator)
-            flags.update(source_original=True, truncated=False, visuals_require_source_request=False)
         else:
-            # HTML inspections already have a checked anchor in the captured original.
-            content = context['value']
-            data = content[:_PASSAGE_CHARACTERS].encode('utf-8')
             location = _compact_locator(locator)
-            flags.update(truncated=len(content) > _PASSAGE_CHARACTERS, visuals_require_source_request=True)
-    origin = {'source_id': link['source_id'], 'artifact_descriptor': bar_sources.descriptor(link['artifact']),
-              'locator': location}
-    if kind == 'html' or kind == 'json' and flags['truncated']:
-        origin['character_range'] = {'start': 0, 'end': min(len(content), _PASSAGE_CHARACTERS)}
-    return ({'version_id': link['version_id'], 'inspection': inspection, 'origin': origin,
-             'excerpt': describe_artifact(data, media), 'scientific_truth_certified': False, **flags}, data)
+            chunk_origin['character_range'] = {'start': start, 'end': end}
+        chunk_origin['locator'] = location
+        passage = {'version_id': link['version_id'], 'inspection': inspection, 'origin': chunk_origin,
+                   'excerpt': describe_artifact(data, media), 'chunk_index': index, 'chunk_count': len(starts),
+                   'truncated': False, 'scientific_truth_certified': False}
+        if kind == 'html':
+            passage['visuals_require_source_request'] = bool(_find_visual_gaps(context))
+            if index == 0:
+                passage['assets'] = assets
+        result.append((passage, data))
+    return result
 
 
 def build_reading_passages(records, artifacts, readings):
-    """Return passage descriptors and bytes without writing or repeating reading."""
+    """Return complete passage descriptors and bytes without writing or rereading."""
     evaluation = Evaluation.of(records, artifacts)
-    result = []
-    for reading in readings:
-        for index, inspection in enumerate(reading['inspections']):
-            passage, data = _build_passage(records, evaluation, inspection['link'])
-            result.append((dict(passage, reading_id=reading['id'], inspection_index=index), data))
-    return result
+    return [(dict(passage, reading_id=reading['id'], inspection_index=index), data)
+            for reading in readings for index, inspection in enumerate(reading['inspections'])
+            for passage, data in _build_passages(records, evaluation, inspection['link'])]
 
 
 def _has_attachment(evaluation, packet, reference):
@@ -107,39 +122,9 @@ def _has_attachment(evaluation, packet, reference):
     return False
 
 
-def _covers_passage(evaluation, packet, supplied, expected, expected_data, link):
-    if (supplied.get('version_id') != expected['version_id']
-            or not _has_attachment(evaluation, packet, supplied.get('excerpt'))):
-        return False
-    origin, wanted = supplied.get('origin', {}), expected['origin']
-    if any(origin.get(key) != wanted[key] for key in ('source_id', 'artifact_descriptor')):
-        return False
-    data = evaluation.read(supplied['excerpt'])
-    if not data.strip():
-        return False
-    if origin == wanted and data == expected_data:
-        return True
-    location, target = origin.get('locator', {}), wanted['locator']
-    if location.get('kind') in _TEXT_KINDS and target['kind'] in _TEXT_KINDS:
-        start, end = location.get('start'), location.get('end')
-        source = evaluation.read(link['artifact']).decode('utf-8')
-        return (type(start) is int and type(end) is int and 0 <= start <= target['start'] < target['end'] <= end <= len(source)
-                and data == source[start:end].encode('utf-8') and location.get('sha256') == hashlib.sha256(data).hexdigest())
-    if location.get('kind') == target['kind'] == 'json' and location.get('pointer') == target['pointer']:
-        source = _encode_value(evaluation.link(link)['value'])
-        span = origin.get('character_range', {'start': 0, 'end': len(source)})
-        wanted_span = wanted.get('character_range', {'start': 0, 'end': len(source)})
-        start, end = span.get('start'), span.get('end')
-        return (type(start) is int and type(end) is int
-                and 0 <= start <= wanted_span['start'] < wanted_span['end'] <= end <= len(source)
-                and data == source[start:end].encode('utf-8') and location.get('sha256') == hashlib.sha256(data).hexdigest())
-    return False
-
-
 def _has_source_content(evaluation, packet, link):
-    # An observed D7 dossier may already attach the full native source without
-    # a source-request envelope. Match its exact inspected capture, not merely
-    # the version: a later capture of the same version can contain new content.
+    # D7 dossiers can already attach native source bytes without an envelope.
+    # A different capture of the same version does not supply this artifact.
     reference = link['artifact']
     deliveries = [item for item in packet.get('source_deliveries', []) if reference in item.get('evidence', [])]
     if deliveries and not any(item.get('status') == 'delivered' and item.get('request', {}).get('kind') == 'source'
@@ -149,18 +134,114 @@ def _has_source_content(evaluation, packet, link):
     return _has_attachment(evaluation, packet, reference)
 
 
+def _matches_span(source, location):
+    start, end = location.get('start'), location.get('end')
+    if type(start) is not int or type(end) is not int or not 0 <= start < end <= len(source):
+        return False
+    data = source[start:end].encode('utf-8')
+    if 'sha256' in location:
+        return hashlib.sha256(data).hexdigest() == location['sha256']
+    return location.get('kind') == 'text' and location.get('quote') == source[start:end]
+
+
+def _find_supplied_interval(evaluation, packet, supplied, expected, link):
+    if (supplied.get('version_id') != expected['version_id']
+            or not _has_attachment(evaluation, packet, supplied.get('excerpt'))):
+        return None
+    origin, wanted = supplied.get('origin', {}), expected['origin']
+    if any(origin.get(key) != wanted[key] for key in ('source_id', 'artifact_descriptor')):
+        return None
+    location = origin.get('locator', {})
+    data = evaluation.read(supplied['excerpt'])
+    if link['locator']['kind'] == 'json':
+        if location.get('kind') != 'json' or location.get('pointer') != link['locator']['pointer']:
+            return None
+        source = _encode_value(evaluation.link(link)['value'])
+        span = origin.get('character_range', {'start': 0, 'end': len(source)})
+        if location.get('sha256') != hashlib.sha256(data).hexdigest():
+            return None
+        start, end = span.get('start'), span.get('end')
+    else:
+        source = evaluation.text(link['artifact'])
+        if location.get('kind') in _TEXT_KINDS:
+            if not _matches_span(source, location):
+                return None
+            start, end = location['start'], location['end']
+        elif location.get('kind') == 'html':
+            anchor = location.get('anchor', {})
+            if not _matches_span(source, anchor):
+                return None
+            span = origin.get('character_range', {'start': 0, 'end': anchor['end'] - anchor['start']})
+            if type(span.get('start')) is not int or type(span.get('end')) is not int:
+                return None
+            if not 0 <= span['start'] <= span['end'] <= anchor['end'] - anchor['start']:
+                return None
+            start, end = anchor['start'] + span['start'], anchor['start'] + span['end']
+        else:
+            return None
+    if (type(start) is int and type(end) is int and 0 <= start <= end <= len(source)
+            and data == source[start:end].encode('utf-8')):
+        return start, end
+    return None
+
+
+def _covers_passage(evaluation, packets, expected, link, ranges):
+    if any(_has_source_content(evaluation, packet, link) for packet in packets):
+        return True
+    wanted = expected['origin']
+    location = wanted['locator']
+    if location['kind'] == 'pdf':
+        # The checked typed PDF has the native original's exact bytes.
+        return any(_has_source_content(evaluation, packet, dict(link, artifact=expected['excerpt'])) for packet in packets)
+    if location['kind'] == 'html':
+        span = wanted['character_range']
+        start, end = location['anchor']['start'] + span['start'], location['anchor']['start'] + span['end']
+    elif location['kind'] == 'json':
+        start, end = wanted['character_range']['start'], wanted['character_range']['end']
+    else:
+        start, end = location['start'], location['end']
+    # Validate and index the supplied ranges once per exact source/pointer in
+    # this review history, rather than rereading all chunks for each chunk.
+    family = (link['version_id'], link['source_id'], link['artifact']['sha256'],
+              'json' if location['kind'] == 'json' else 'text', location.get('pointer'))
+    if family not in ranges:
+        intervals = []
+        for packet in packets:
+            for supplied in packet.get('prior_context', []) + packet.get('direction_evidence', {}).get('passages', []):
+                interval = _find_supplied_interval(evaluation, packet, supplied, expected, link)
+                if interval is not None:
+                    intervals.append(interval)
+        ranges[family] = sorted(intervals)
+    intervals = ranges[family]
+    position = start
+    for first, last in intervals:
+        if first > position:
+            break
+        position = max(position, last)
+        if position >= end:
+            return True
+    return position >= end and bool(intervals)
+
+
+def _has_visual_content(evaluation, packets, inspection):
+    context = evaluation.link(inspection['link'])
+    if context['visual'] is None:
+        return True
+    return not _find_visual_gaps(context) and all(
+        any(_has_attachment(evaluation, packet, asset['artifact']) for packet in packets)
+        for asset in inspection['link']['locator'].get('assets', []))
+
+
 def find_delivered_readings(records, artifacts, readings, packets):
-    """Count actual exact-capture source text or checked inspected passages only."""
+    """Require all inspected ranges and visual bytes in the observed history."""
     evaluation = Evaluation.of(records, artifacts)
-    expected = build_reading_passages(records, evaluation, readings)
-    covered = set()
-    for reading in readings:
-        passages = [(item, data) for item, data in expected if item['reading_id'] == reading['id']]
-        if passages and all(any(
-                _has_source_content(evaluation, packet, reading['inspections'][passage['inspection_index']]['link'])
-                or any(_covers_passage(evaluation, packet, supplied, passage, data,
-                           reading['inspections'][passage['inspection_index']]['link'])
-                       for supplied in packet.get('prior_context', []) + packet.get('direction_evidence', {}).get('passages', []))
-                for packet in packets) for passage, data in passages):
+    eligible = [reading for reading in readings
+                if all(_has_visual_content(evaluation, packets, inspection) for inspection in reading['inspections'])]
+    expected = build_reading_passages(records, evaluation, eligible)
+    covered, ranges = set(), {}
+    for reading in eligible:
+        passages = [item for item, _ in expected if item['reading_id'] == reading['id']]
+        if passages and all(_covers_passage(evaluation, packets, passage,
+                reading['inspections'][passage['inspection_index']]['link'], ranges) for passage in passages):
             covered.add(reading['id'])
     return covered
