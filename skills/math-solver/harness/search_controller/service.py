@@ -39,6 +39,8 @@ class Controller:
                 invalidate_evidence(state, {"acceptance_ids": sorted(failures), "reason": "Evidence audit failed",
                                             "provenance": self.provenance("audit")})
         state["strategy_assessment"] = assessment_status(state)
+        from .proof import assess_openness
+        state["openness"] = assess_openness(state)
         return state
 
     @staticmethod
@@ -92,7 +94,8 @@ class Controller:
         def build(document, content):
             built.append(True)
             candidate = self._build(name, spec, target, identity, document, content, routing, hook_session, operation_locks)
-            from .reviewer import validate_submitted
+            from .reviewer import initialize_review_workspace, validate_submitted
+            initialize_review_workspace(self.root, candidate["operations"])
             validate_submitted(self, replay(document), spec, candidate, content, operation_locks)
             return candidate
         def check_recovery_commit():
@@ -287,7 +290,7 @@ class Controller:
                     emit("adoption_allowance_recorded", allowance)
                     record_allowance(state, allowance)
         elif name == "propose":
-            s.closed(spec, "proposal inputs")
+            s.closed(spec, "proposal inputs" + (" review_workspace" if "review_workspace" in spec else ""))
             proposal = spec["proposal"]
             s.validate_proposal(proposal)
             from .computation import require_new_proposal
@@ -298,6 +301,16 @@ class Controller:
             import_inputs(self.root, spec["inputs"], content)
             proposal_inputs(proposal, content)
             audit_foundation(self.root, state, proposal, proposal["foundation"], content)
+            from .reviewer import common_root
+            from .research import record_review_workspace
+            common = common_root(self.root, state, proposal)
+            if "review_workspace" in spec or proposal["foundation"] is None and state["service"].get("review_workspace") is None:
+                import os
+                association = {"workspace": spec.get("review_workspace", os.path.relpath(common, self.root))}
+                record_review_workspace(state, association)
+                common_root(self.root, state, proposal)
+                if replay(document)["service"].get("review_workspace") is None:
+                    emit("review_workspace_recorded", association)
             emit("proposal_recorded", {"proposal": proposal, "digest": content.put_blob(proposal)})
         elif name == "review":
             s.closed(spec, "proposal_id review inputs")
@@ -373,10 +386,13 @@ class Controller:
             audit_checkpoint(self.root, state, checkpoint, content, verify=False)
             emit("checkpoint_recorded", {"checkpoint": checkpoint, "digest": content.put_blob(checkpoint)})
         elif name == "accept":
-            s.closed(spec, "obligation_id outcome dependency_ids route_bindings review inputs")
+            s.closed(spec, "obligation_id outcome dependency_ids route_bindings review inputs" +
+                     (" claims_openness" if "claims_openness" in spec else ""))
             import_inputs(self.root, spec["inputs"], content)
             s.require(not audit_state(self.root, state, content), "Accepted dependency audit failed", "audit_failed")
             checkpoint = reference(state["checkpoints"], target, "checkpoint")
+            from .proof import validate_review
+            validate_review(spec["review"], s.digest(checkpoint), s.digest(checkpoint["claim"]), new=True)
             classification, standard = audit_checkpoint(self.root, state, checkpoint, content)
             for evidence_digest in checkpoint["evidence_digests"]:
                 conclusion = content.get_blob(evidence_digest)["conclusion"]
@@ -384,7 +400,8 @@ class Controller:
                           "Acceptance interpretation differs from the reviewed evidence conclusion", "claim_mismatch")
             content.put_blob(spec["review"])
             value = {key: copy.deepcopy(spec[key]) for key in ["obligation_id", "outcome", "dependency_ids", "route_bindings", "review"]}
-            value.update(schema_version=1, checkpoint_id=target, checkpoint_digest=s.digest(checkpoint),
+            value.update(schema_version=2, claims_openness=spec.get("claims_openness", False),
+                         checkpoint_id=target, checkpoint_digest=s.digest(checkpoint),
                          classification=classification, standard=standard,
                          audit={"subject_digest": s.digest(checkpoint), "dependency_ids": spec["dependency_ids"],
                                 "evidence_digests": checkpoint["evidence_digests"], "provenance": self.provenance("accept")})
@@ -395,6 +412,10 @@ class Controller:
             s.require(not audit_state(self.root, state, content), "Accepted proof audit failed", "audit_failed")
             subject = spec["subject"]
             s.closed(subject, "schema_version objective_id contract_digest outcome acceptance_ids evidence_digests local_deliveries deliverables")
+            s.require(subject["schema_version"] == 2,
+                      "New root closure requires a version 2 subject and resolved openness review", "openness_review_required")
+            from .proof import validate_closure_review
+            validate_closure_review(spec["review"], s.digest(subject), s.digest(state["contract"]["original_claim"]), new=True)
             for delivery in subject["deliverables"]:
                 s.require(bool(content.get_artifact(delivery["digest"]).strip()), "Required deliverable is empty")
             for delivery in subject["local_deliveries"]:
@@ -436,6 +457,10 @@ class Controller:
                                               "provenance": self.provenance("audit")})
         else:
             raise SearchError("invalid_command", "Unknown search command: " + name)
+        if name in {"adopt", "checkpoint", "accept", "complete", "begin", "run", "amend-computation", "reassess"}:
+            from .research import needs_review_workspace
+            if needs_review_workspace(state):
+                emit("review_workspace_recorded", {"workspace": "."})
         if name in {"checkpoint", "accept", "reconcile"}:
             from .model import EVENT_HANDLERS
             from .integration import observe_node

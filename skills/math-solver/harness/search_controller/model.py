@@ -25,7 +25,7 @@ def service_operation(state, payload):
     s.require(not state["service"]["native_intents"] or payload["command"] in {"reconcile", "pause", "focus", "hook-stop", "audit", "render"},
               "Native intent requires reconciliation", "recovery_required")
     allowed = {
-        "init": {"discovery_recorded", "strategy_policy_enabled"}, "render": set(), "propose": {"proposal_recorded"},
+        "init": {"discovery_recorded", "strategy_policy_enabled"}, "render": set(), "propose": {"proposal_recorded", "review_workspace_recorded"},
         "adopt": {"legacy_imported", "legacy_import_version_recorded", "adoption_allowance_recorded"},
         "review": {"review_recorded"}, "admit": {"proposal_admitted"},
         "checkpoint": {"checkpoint_recorded", "node_facts_recorded"}, "accept": {"result_accepted", "node_facts_recorded"},
@@ -41,6 +41,9 @@ def service_operation(state, payload):
         "legacy-native": {"native_intended"},
         "reconcile": {"journal_acknowledged", "node_facts_recorded", "run_finished", "native_acknowledged"},
     }
+    for command in ("adopt", "checkpoint", "accept", "complete", "begin", "run", "amend-computation", "reassess",
+                    "legacy-native", "execution-launch"):
+        allowed[command].add("review_workspace_recorded")
     s.choice(payload["command"], allowed)
     s.optional_text(payload["target"])
     s.digest_string(payload["spec_digest"])

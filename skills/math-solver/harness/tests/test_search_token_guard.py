@@ -69,7 +69,7 @@ class NativeTokenGuardTests(unittest.TestCase):
         self.root = Path(temporary.name).resolve() / "attack"
         self.root.mkdir()
         self.assertEqual(run(["init", "sample"], self.root)[0], 0)
-        self.controller = admit_workspace(self.root, computational=True)
+        self.controller = admit_workspace(self.root, computational=True, common=True)
         workspace = self.root / "sample"
         step = workspace / "deterministic/job"
         step.mkdir()
@@ -167,12 +167,10 @@ class NativeTokenGuardTests(unittest.TestCase):
         self.assertEqual(self.controller.store.read(), native_history)
         common = Store(self.root).snapshot()
         self.assertFalse(synthesis_state(common["records"], ArtifactStore(self.root), "research")["ready"])
-        with self.assertRaises(SearchError) as caught:
-            original(self.controller, self.controller.status(),
-                self.controller.status()["nodes"][self.reserved["node_id"]], self.controller.store)
-        self.assertEqual(caught.exception.code, "research_foundation_stale")
+        original(self.controller, self.controller.status(),
+            self.controller.status()["nodes"][self.reserved["node_id"]], self.controller.store)
 
-    def test_supported_mutation_before_final_audit_refuses_actual_token(self):
+    def test_preparation_mutation_before_final_audit_allows_research_token(self):
         original = integration.internal_operation
 
         def record_then_change(controller, command, request_id, build):
@@ -183,8 +181,9 @@ class NativeTokenGuardTests(unittest.TestCase):
 
         with patch.object(integration, "internal_operation", side_effect=record_then_change):
             self.observed_launch()
-        self.assertEqual(self.observations["launch_error"]["code"], "research_foundation_stale")
-        self.assert_no_token_or_producer()
+        self.assertNotIn("launch_error", self.observations)
+        self.assertTrue(self.observations["producer_started"])
+        self.assertEqual(self.observations["run"]["termination"], "exit")
         self.assertEqual(Store(self.root).revision, self.revision + 1)
 
     def test_interruption_after_final_audit_releases_common_ownership_for_retry(self):

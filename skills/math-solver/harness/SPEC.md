@@ -36,7 +36,7 @@ remain unchanged local facts. None is controller acceptance or root completion.
 | `problem.json` | agent (stage 2) | `check-problem`; `journal add` on every move |
 | `parent.json` | harness, through reviewed controller admission for managed work | `finish` on the parent refuses while the child is open |
 | `novelty.md` | agent (stage 3) | `finish` at the stage 3 exit requires it non-empty; `check-unit` requires a non-empty `novelty` field on each unit |
-| `study/problem.md`, `study/<strategy>.md` | agent (stage 3, and step 1 of each strategy) | `journal add` refuses a move under a strategy whose `study/<strategy>.md` is missing or empty; `plan` refuses to run without `study/problem.md` |
+| `study/problem.md`, `study/<strategy>.md` | agent (stage 3, and step 1 of each strategy) | `journal add` refuses a move under a strategy whose `study/<strategy>.md` is missing or empty; `plan` validates complete `problem.json` and preconditions directly without reading or requiring `study/problem.md`. Reviewed proposal study digests remain required admission evidence |
 | `preconditions.json` | agent (stage 4) | `plan`; `journal add` reads the verdicts |
 | `openings.json` | harness (`plan`) | |
 | `ranking.json` | agent (stage 4b) | `rank`; `journal add` on the opening move |

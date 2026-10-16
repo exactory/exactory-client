@@ -20,14 +20,22 @@ class CertifiedBridgeExecutionTests(WorkspaceTest):
         value = digest(json.loads(text)) if kind == "blob" else hashlib.sha256(text.encode()).hexdigest()
         return {"path": relative, "digest": value, "kind": kind}
 
-    def result_review(self, subject_digest, claim_digest):
-        return {"subject_digest": subject_digest, "claim_digest": claim_digest,
+    def result_review(self, subject_digest, claim_digest, *, openness_evidence=None):
+        value = {"subject_digest": subject_digest, "claim_digest": claim_digest,
             "reviewer": provenance("independent-mathematical-reviewer"), "decision": "approve", "findings": {
                 "statement": "The exact modular statement is established",
                 "assumptions": "The claims use only integer arithmetic and the accepted residue premise",
                 "scope": "All four residues are checked, and Euclidean division covers every integer",
                 "dependencies": "The shell builtins verify the complete table; the bridge names the certified premise",
                 "policy": "The certificate checker, its completeness argument, and the algebraic bridge have been reviewed"}}
+        if openness_evidence is not None:
+            value["schema_version"] = 2
+            value["findings"]["openness"] = {
+                "outcome": "already_solved", "statement_digest": claim_digest,
+                "evidence": list(dict.fromkeys(openness_evidence)), "searched_at": "2026-10-16",
+                "coverage": "Exact elementary modular statement and its recorded fixture study.",
+                "reason": "The supplied classical modular argument settles this fixture; no openness is claimed."}
+        return value
 
     def observed_policy_review(self, subject_digest, claim_digest):
         from tests.native_reviewer_support import observe_review
@@ -81,7 +89,8 @@ class CertifiedBridgeExecutionTests(WorkspaceTest):
         state = self.controller.status()
         checkpoint = list(state["checkpoints"].values())[-1]
         acceptance = dict(manifest["conclusion"], obligation_id=node["obligation_id"], inputs=[],
-                          review=self.result_review(digest(checkpoint), node["claim_digest"]))
+                          review=self.result_review(digest(checkpoint), node["claim_digest"],
+                                                    openness_evidence=[node["admission"]["studies"]["novelty"], manifest_input["digest"]]))
         invoke(self.controller, "accept", acceptance, checkpoint["id"])
         self.assertIsNone(self.controller.status()["control"]["node_facts"][node_id]["result_action"])
 

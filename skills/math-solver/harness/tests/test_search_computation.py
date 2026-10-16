@@ -136,10 +136,18 @@ class ComputationHistoricalTests(WorkspaceTest):
 
 
 def result_review(subject, claim):
-    return {"subject_digest": digest(subject), "claim_digest": digest(claim),
+    value = {"subject_digest": digest(subject), "claim_digest": digest(claim),
             "reviewer": provenance("independent-result-reviewer"), "decision": "approve",
             "findings": {key: "Checked the exact fixture deduction, scope, assumptions, and full encoding"
                          for key in ["statement", "assumptions", "scope", "dependencies", "policy"]}}
+    if "origin" in subject:
+        value["schema_version"] = 2
+        value["findings"]["openness"] = {
+            "outcome": "unresolved", "statement_digest": digest(claim),
+            "evidence": list(dict.fromkeys([subject["origin"]["study_digest"], subject["origin"]["source_digest"]])),
+            "searched_at": "2026-10-16", "coverage": "Exact synthetic computation-basis sources and study.",
+            "reason": "The fixture asserts a proof dependency, without any claim of openness."}
+    return value
 
 
 class ComputationBasisTests(WorkspaceTest):
@@ -162,9 +170,8 @@ class ComputationBasisTests(WorkspaceTest):
         return {"path": path, "kind": "artifact", "digest": hashlib.sha256(text.encode()).hexdigest()}
 
     def admit(self, candidate, inputs=None):
-        from tests.research_support import pin_research
         current_inputs = list(inputs or [])
-        pin_research(self.attack_root, candidate, current_inputs)
+        candidate.update(schema_version=3, computation=candidate.get("computation"), foundation=None)
         invoke(self.controller, "propose", {"proposal": candidate, "inputs": current_inputs}, None)
         pid = sorted(self.controller.status()["proposals"])[-1]
         invoke(self.controller, "review", {"proposal_id": pid, "review": review(candidate), "inputs": []}, None)

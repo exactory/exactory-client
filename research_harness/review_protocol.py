@@ -209,8 +209,8 @@ def canonical_prompt(role, *, legacy=False, repair=False):
     if role not in ROLES:
         raise ResearchError('invalid_review_role', 'Unknown reviewer role')
     if role == 'native_math':
-        from .native_review import PROMPT
-        prompt = _COMMON + PROMPT
+        from .native_review import PROMPT, LEGACY_PROMPT
+        prompt = _COMMON + (LEGACY_PROMPT if legacy else PROMPT)
     else:
         prompt = _COMMON + _ROLE_PROMPTS[role]
     if role in ('bar', 'slate', 'result'):
@@ -566,7 +566,7 @@ def route_state(records, artifacts, route_id):
 def _prompt_matches(assignment):
     repair = assignment.get('reassessment_required') is True
     candidates = [canonical_prompt(assignment['role'], repair=repair)]
-    if not repair and assignment['role'] in bar_sources.ROLES + ('adjudicator',):
+    if not repair and assignment['role'] in bar_sources.ROLES + ('adjudicator', 'native_math'):
         candidates.append(canonical_prompt(assignment['role'], legacy=True))
     return assignment['prompt'] in candidates
 

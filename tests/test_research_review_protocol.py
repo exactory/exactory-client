@@ -11,6 +11,25 @@ from research_harness.errors import ResearchError
 
 
 class ReviewProtocolTests(LiteratureCase):
+    def test_native_result_prompt_requires_versioned_openness_finding(self):
+        from research_harness.native_review import PROMPT
+        for required in ("schema_version:2", "openness", "supported_open", "already_solved", "unresolved",
+                         "statement_digest", "searched_at", "coverage", "settling source",
+                         "each neighbouring formulation", "every decisive prior or settling source",
+                         "root closure", "prove or disprove", "new observed review"):
+            self.assertIn(required, PROMPT)
+
+    def test_native_prompt_compatibility_accepts_only_exact_known_versions(self):
+        from research_harness.review_protocol import canonical_prompt, _prompt_matches
+        current = canonical_prompt("native_math")
+        legacy = canonical_prompt("native_math", legacy=True)
+        self.assertNotEqual(current, legacy)
+        for prompt in (current, legacy):
+            self.assertTrue(_prompt_matches({"role": "native_math", "prompt": prompt}))
+        altered = copy.deepcopy(legacy)
+        altered["text"] += " Author instructions."
+        self.assertFalse(_prompt_matches({"role": "native_math", "prompt": altered}))
+
     def protocol(self):
         self.assertIsNotNone(importlib.util.find_spec('research_harness.review_protocol'),
                              'The independent reviewer protocol is not implemented')

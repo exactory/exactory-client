@@ -53,8 +53,10 @@ and the [CLI reference](../docs/research-cli.md). Preserve failed branches,
 checkpoints, source changes, uncommitted user work, and all resource costs.
 
 For a fresh math-solver objective, use the shared workflow's reviewed controller
-path: `search init`, current common preparation, schema-3 `propose` with the
-actual exported foundation, independent `review`, and `admit`. Follow the
+path: `search init`, schema-3 `propose`, independent `review`, and `admit`.
+Research may use `foundation: null` with its stable common review-workspace
+association; retained foundations keep exact evidence audits without requiring
+current common preparation. Verification retains its required foundation. Follow the
 [native foundation delivery](../docs/research-cli.md#native-math-preparation)
 for new proposals and reviewed amendments to historical nodes. Every mutating
 controller command uses the current expected revision and a unique request ID;

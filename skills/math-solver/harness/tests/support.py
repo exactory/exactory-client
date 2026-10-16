@@ -98,8 +98,7 @@ def admit_existing_workspace(attack_root, slug="sample", problem=None):
         else:
             candidate["studies"]["strategies"].append({"method": name, "digest": value})
     controller.command("init", {"contract": original}, 0, "initialize")
-    from tests.research_support import pin_research
-    pin_research(attack_root, candidate, inputs)
+    candidate.update(schema_version=3, computation=None, foundation=None)
     controller.command("propose", {"proposal": candidate, "inputs": inputs}, 1, "proposal")
     from tests.native_reviewer_support import observe_review
     controller.command("review", {"proposal_id": "proposal-000001",

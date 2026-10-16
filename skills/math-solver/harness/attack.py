@@ -280,12 +280,12 @@ def check_choice(value, label, allowed):
 
 def run_plan(args):
     workspace = args.attack_root / args.slug
-    defects = find_study_defects(workspace, "problem", "the problem-level study", "plan")
+    problem = read_json(workspace / "problem.json")
+    defects = list(find_problem_defects(problem))
     if defects:
         raise ValidationError(defects)
     front_matters = load_strategies(args.strategies)
     requirements = load_question_requirements(args.strategies)
-    problem = read_json(workspace / "problem.json")
     preconditions = read_json(workspace / "preconditions.json")
     defects = list(find_precondition_defects(preconditions, front_matters, problem, requirements))
     if defects:

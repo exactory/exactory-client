@@ -5,6 +5,7 @@ This module checks their exact bindings; it never opens or verifies an artifact.
 """
 
 import copy
+from datetime import date
 
 from . import schema as s
 from .admission import allocate, reference, progress_identity
@@ -58,6 +59,14 @@ def record_checkpoint(state, payload):
     state["checkpoints"][identity] = dict(copy.deepcopy(cp), id=identity)
     from .strategy_refresh import note_evidence
     note_evidence(state, "checkpoint:" + identity)
+    closure = state["control"]["closure"]
+    if closure is not None and closure["subject"]["schema_version"] == 2:
+        # New native scientific evidence requires another final openness review.
+        # Retain the previous closure and accepted proofs as historical findings.
+        if state["proof_status"] in {"proved", "disproved"}:
+            state["proof_status"] = "open"
+        if state["execution_status"] == "resolved":
+            state["execution_status"] = "needs_replan"
 
 
 def policy_allows(acceptance, policy):
@@ -88,15 +97,57 @@ def acceptance_closure(state, identity, policy, visiting=None):
     return result
 
 
-def validate_review(value, subject_digest, claim_digest):
-    s.closed(value, "subject_digest claim_digest reviewer decision findings")
+def validate_review(value, subject_digest, claim_digest, *, new=False):
+    version = value.get("schema_version", 1) if isinstance(value, dict) else None
+    if new:
+        s.require(version == 2, "New acceptance requires a version 2 result review with an openness finding", "openness_review_required")
+    s.closed(value, "subject_digest claim_digest reviewer decision findings" + (" schema_version" if isinstance(value, dict) and "schema_version" in value else ""))
+    s.integer(version, 1, 2)
     s.require(value["subject_digest"] == subject_digest and value["claim_digest"] == claim_digest,
               "Result review is bound to different inputs", "digest_mismatch")
     s.validate_provenance(value["reviewer"])
     s.choice(value["decision"], {"approve"})
-    s.closed(value["findings"], "statement assumptions scope dependencies policy")
-    for finding in value["findings"].values():
-        s.text(finding)
+    s.closed(value["findings"], "statement assumptions scope dependencies policy" + (" openness" if version == 2 else ""))
+    for key in ("statement", "assumptions", "scope", "dependencies", "policy"):
+        s.text(value["findings"][key])
+    if version == 2:
+        openness = value["findings"]["openness"]
+        s.closed(openness, "outcome statement_digest evidence searched_at coverage reason")
+        s.choice(openness["outcome"], {"supported_open", "already_solved", "unresolved"})
+        s.require(openness["statement_digest"] == claim_digest,
+                  "Openness finding targets a different exact statement", "digest_mismatch")
+        s.strings(openness["evidence"], nonempty=True)
+        for evidence in openness["evidence"]:
+            s.digest_string(evidence)
+        for key in ("searched_at", "coverage", "reason"):
+            s.text(openness[key])
+        try:
+            s.require(date.fromisoformat(openness["searched_at"]).isoformat() == openness["searched_at"],
+                      "Openness search date must be YYYY-MM-DD")
+        except ValueError as error:
+            from .errors import SearchError
+            raise SearchError("invalid_record", "Openness search date must be YYYY-MM-DD") from error
+
+
+def validate_closure_review(value, subject_digest, claim_digest, *, new=False):
+    validate_review(value, subject_digest, claim_digest, new=new)
+    if new:
+        s.require(value["findings"]["openness"]["outcome"] in {"supported_open", "already_solved"},
+                  "Unresolved openness keeps every mathematical objective's root closure pending", "openness_unresolved")
+
+
+def assess_openness(state):
+    """Report the original objective's final openness milestone, apart from proof credit."""
+    result = {"status": "pending", "outcome": "unresolved",
+              "statement_digest": s.digest(state["contract"]["original_claim"]), "review_digest": None}
+    closure = state["control"]["closure"]
+    if closure is None or state["proof_status"] not in {"proved", "disproved"}:
+        return result
+    review = closure["review"]
+    if closure["subject"]["schema_version"] == 1:
+        return dict(result, status="historical", outcome=None, review_digest=s.digest(review))
+    return dict(result, status="accepted", outcome=review["findings"]["openness"]["outcome"],
+                review_digest=s.digest(review))
 
 
 def route_identity(route):
@@ -143,9 +194,10 @@ def scope_subset(child, parent):
 def accept_result(state, payload):
     s.closed(payload, "acceptance digest")
     value = payload["acceptance"]
-    s.closed(value, "schema_version checkpoint_id checkpoint_digest obligation_id outcome classification standard dependency_ids route_bindings review audit")
+    s.closed(value, "schema_version checkpoint_id checkpoint_digest obligation_id outcome classification standard dependency_ids route_bindings review audit" +
+             (" claims_openness" if isinstance(value, dict) and value.get("schema_version") == 2 else ""))
     s.require(s.digest(value) == payload["digest"], "Acceptance digest differs", "digest_mismatch")
-    s.integer(value["schema_version"], 1, 1)
+    s.integer(value["schema_version"], 1, 2)
     cp = reference(state["checkpoints"], value["checkpoint_id"], "checkpoint")
     s.require(s.digest(cp) == value["checkpoint_digest"], "Checkpoint differs", "digest_mismatch")
     s.require(cp["kind"] != "hypothesis", "Hypotheses grant no accepted progress")
@@ -164,7 +216,11 @@ def accept_result(state, payload):
         s.require(node["category"] == "standalone", "Null target requires standalone admission")
         claim = node["claim"]
     s.require(s.claim_identity(cp["claim"]) == s.claim_identity(claim), "Acceptance must target the exact claim, scope and assumptions")
-    validate_review(value["review"], s.digest(cp), s.digest(cp["claim"]))
+    validate_review(value["review"], s.digest(cp), s.digest(cp["claim"]), new=value["schema_version"] == 2)
+    if value["schema_version"] == 2:
+        s.require(type(value["claims_openness"]) is bool, "claims_openness must be boolean")
+        s.require(not value["claims_openness"] or value["review"]["findings"]["openness"]["outcome"] == "supported_open",
+                  "An acceptance claiming openness requires supported_open", "openness_not_supported")
     if cp["origin"]["kind"] == "journal_move":
         node = state["nodes"][cp["origin"]["node_id"]]
         author = state["proposals"][node["proposal_id"]]["record"]["author"]
@@ -393,7 +449,7 @@ def complete_objective(state, payload):
     s.require(s.digest(closure) == payload["digest"], "Closure digest differs", "digest_mismatch")
     subject = closure["subject"]
     s.closed(subject, "schema_version objective_id contract_digest outcome acceptance_ids evidence_digests local_deliveries deliverables")
-    s.integer(subject["schema_version"], 1, 1)
+    s.integer(subject["schema_version"], 1, 2)
     s.require(subject["objective_id"] == state["objective_id"] and subject["contract_digest"] == state["contract_digest"], "Closure targets another objective")
     s.choice(subject["outcome"], {"proof", "counterexample"})
     support = root_support(state)
@@ -410,7 +466,8 @@ def complete_objective(state, payload):
         if cp["origin"]["kind"] == "journal_move":
             producers.add(cp["origin"]["node_id"])
     s.require(set(subject["evidence_digests"]) == evidence, "Closure omits contributing evidence")
-    validate_review(closure["review"], s.digest(subject), s.digest(state["contract"]["original_claim"]))
+    validate_closure_review(closure["review"], s.digest(subject), s.digest(state["contract"]["original_claim"]),
+                            new=subject["schema_version"] == 2)
     reviewer = closure["review"]["reviewer"]
     for nid in producers:
         author = state["proposals"][state["nodes"][nid]["proposal_id"]]["record"]["author"]
