@@ -72,6 +72,9 @@ names. If the user asks to compose together, walk through the parts with the use
 7. **Citations** (1-50): a JSON file of `{"citation", "locator"}` objects. The locator is a
    DOI, an arXiv id, or an https URL.
 
+Text limits count UTF-16 code units. The command turns CRLF and lone CR into LF, so each line break counts once.
+It trims the problem's title and texts and a proof's summary before their limits.
+
 Write mathematics in TeX: `$...$` inline, `$$...$$` on its own line.
 
 Check every citation locator before posting, exactly as `/exactory:propose-grand-challenge` does:
@@ -137,7 +140,8 @@ A proof carries attributed statements: Lean check reports and verdicts on its ex
 version. A status declaration names the proof that the problem's author or an admin accepts
 as its resolution. Submit a write-up for verification with
 `exactory submit --arxiv-id <id>v<n> --math-problem <problem-id>`.
-The paper then appears among the problem's declared paper links. Submission does not change the problem's status.
+The paper then appears among the problem's linked papers, marked "declared at submission".
+Submission does not change the problem's status.
 
 ## Report a Lean check you ran elsewhere
 
@@ -172,9 +176,12 @@ guarantee and builds the solution in a sandbox.
   `exactory declare-status <problem-id> --status proved --resolving-proof <proof-id> --note "<how the resolution criteria are met>"`.
   For a disproof, use `--status disproved` with a proof whose claim is `disproves`.
   Reopen with `--status open --note "<why>"`. Check each resolution criterion against the evidence first.
-  The server refuses a declaration whose status equals the current status (HTTP 422, service outcome `invalid`).
+  The server refuses a declaration whose status equals the current status (HTTP 422).
   To name another resolving proof for a proved problem, first reopen it with `--status open`.
   Then declare `proved` with the new proof.
+
+If either link command receives HTTP 409, a moderator removed that link from the problem.
+The link cannot be attached again. The command changes nothing and exits with code 3.
 
 ## Deposit a write-up for a problem
 
@@ -184,8 +191,13 @@ A published production record attaches to the problem as a related paper.
 A production publish still needs the user's approval and
 `--confirm-publish`. A published DOI is permanent.
 
-A deposit for a problem keeps its operation in `.exactory/problem-deposit.json` before the publish request and after attachment.
-If attachment fails after publication, the record stays published.
+A deposit for a problem keeps its operation in `.exactory/problem-deposit.json` from before the publish request.
+When the record attaches, the command marks the journal attached.
+If a moderator removed the record's link from the problem, the attachment exits with code 3.
+The journal stays settled and unattached. The record stays published.
+The message explains how to remove that settled journal. Do not retry the removed link.
+
+For other attachment failures after publication, the record also stays published.
 Causes include an expired key, an unlinked iD, a removed problem, or a lost response.
 Run `exactory-draft attach-problem`, or the same deposit command again.
 Either one attaches the recorded record with the recorded application origin and publishes nothing.
@@ -208,6 +220,20 @@ The attachment uses the recorded application origin. If `EXACTORY_API_URL` names
 origin, the command stops before attachment. If the recorded origin is yours, set
 `EXACTORY_API_URL` to it and retry. A settled production record with a pending attachment
 blocks a publishing deposit for another problem in that workspace.
+
+A pending problem journal takes priority over `--new-version` recovery.
+Otherwise, a direct `--new-version` run reads a recorded deposition with no DOI before any other request.
+If it is published, the command records and prints it, then stops.
+If it is a new-version draft, identified by the recorded concept DOI, the command continues that draft.
+If a plain run recorded the fresh draft, the command stops before any write.
+Delete that draft with the Delete button on its Zenodo page. Then run the command again.
+
+If the deposition was deleted, the command uses the workspace store's newest published direct deposit in the same environment.
+If none exists, it stops and gives the first-deposit or published-version options.
+If it cannot read that history, resolve the store error before retrying.
+
+If a failure leaves a fresh draft without a problem journal, delete it with the Delete button before retrying.
+A plain retry creates another draft. Do not finish a draft by hand.
 
 Run one `exactory-draft deposit`, `attach-problem`, or `reconcile` at a time in a workspace.
 If another run owns the workspace, the new run stops with `remote_operation_owned` and sends

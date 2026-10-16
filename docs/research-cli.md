@@ -808,13 +808,24 @@ A published production record attaches to the problem as a related paper.
 Sandbox records stay unattached.
 A production publish needs the user's approval and `--confirm-publish`, because a published DOI is permanent.
 
+`exactory submit --math-problem <problem-id>` puts the paper among the problem's linked papers, marked "declared at submission".
+Submission does not change the problem's status.
+
 Before the publish request, the command writes `.exactory/problem-deposit.json` in the workspace root.
 The journal records the problem, application origin, Zenodo environment, and operation.
 On the managed path, it names the saved intent. On the direct path, it names the deposition and its page.
 After publication, it records the DOI and marks publication settled before it attaches the record.
 After attachment, it marks the journal attached.
 
-If attachment fails after publication, the record stays published and the journal keeps the pending attachment.
+If a moderator removed the record's link from the problem, attachment exits with code 3.
+It leaves the journal settled and unattached. The record stays published.
+HTTP 409 from `link-problem-paper` or `link-problem-github` means that the moderator removed that link.
+Those commands change nothing and exit with code 3. The removed link cannot be attached again.
+The deposit message includes:
+`A moderator removed the link of record <doi> from problem <problem-id>. The record stays published as <doi>.`
+It also gives the settled-journal removal rule below. Do not retry the removed link.
+
+If attachment fails for another reason after publication, the record stays published and the journal keeps the pending attachment.
 The command prints: `Resolve that cause. Then run exactory-draft attach-problem. It attaches the recorded record and publishes nothing.`
 A publishing deposit for the same problem also retries that attachment and publishes nothing new.
 It uses the recorded record even if the manuscript changed.
@@ -843,6 +854,33 @@ Run one `deposit`, `attach-problem`, or `reconcile` at a time in a workspace.
 An overlap stops with `remote_operation_owned` and sends nothing:
 `Another exactory-draft run owns the deposits of this workspace. Wait for that run to end. Then run this command again.`
 
+#### Read back a direct deposit before a new version
+
+A pending problem journal takes priority over direct-deposit recovery.
+Otherwise, `exactory-draft deposit --new-version` reads `.exactory/deposit.json` before any other request.
+If that record has no DOI, it reads the recorded deposition back from Zenodo first.
+
+| Read-back state | What the command does |
+| --- | --- |
+| Published deposition | Record its DOI and links, print the record, and stop with exit 0. A later `--new-version` run revises it. |
+| New-version draft, identified by its recorded concept DOI | Continue that same draft. Create no second record. |
+| Fresh draft recorded by a plain run | Stop before any write. Delete the draft with the Delete button on its Zenodo page, then run again. |
+| Deleted deposition | Continue from the store's newest published direct deposit in the same environment. If none exists, stop with recovery options. |
+| History cannot be read | Stop with the store error. Resolve that error before retrying. |
+
+For a published read-back, the command prints:
+`Deposition <id> of the earlier run is published. This run recorded its DOI. A second run with --new-version revises it.`
+If no published history exists after deletion, the command offers a plain first deposit or the published version's New version button.
+A version made on Zenodo does not reach the workspace's record.
+
+If a failure leaves a fresh draft without a problem journal, delete the draft before retrying.
+The command says:
+`A second run creates another draft. Before you run the command again, delete this draft with the Delete button on its page.`
+Do not finish a draft by hand.
+If the command cannot keep the local deposit record, the message includes:
+`A second plain run starts another deposition when no problem journal records this deposit.`
+Read the named record and its Zenodo state before retrying.
+
 ### Attach a recorded problem deposit
 
 Run `exactory-draft attach-problem` from the workspace root after an attachment failure or a lost publish response.
@@ -867,6 +905,10 @@ If a managed operation never sent its publish request, `attach-problem` stops wi
 `The recorded deposit never sent its publish request, so there is no record to attach. Run exactory-draft deposit to deposit the paper.`
 The next deposit run releases that unclaimed journal before it starts a new deposit.
 For a claimed publication, it keeps the operation bound to its recorded deposition.
+
+If a moderator removed the link, `attach-problem` exits with code 3 and leaves the journal settled and unattached.
+It reports that the record stays published and gives the same settled-journal removal rule.
+The link cannot be attached again. Nothing changed.
 
 `reconcile` uses the same workspace lock.
 After it reconciles the journal's operation, a pending attachment still needs `attach-problem`.

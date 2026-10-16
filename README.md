@@ -349,6 +349,10 @@ submission binds the concrete production record and its current publication rece
 
 `deposit --math-problem <problem-id>` names the problem in Zenodo's related identifiers and attaches a published production record to the problem.
 `attach-problem` reads `.exactory/problem-deposit.json` to settle the recorded deposit and attach its record, and never publishes.
+If a moderator removed the record's link, attachment exits with code 3 and leaves the record published and the journal unattached.
+A direct `--new-version` run reads a recorded deposition with no DOI before other requests.
+It records a published deposition, continues a recorded new-version draft, or stops before writing to a fresh draft from a plain run.
+After a failure leaves a fresh draft without a problem journal, delete it with the Delete button before retrying.
 
 **`exactory-lab`** owns an Exactory AI Science study. `init` creates the study
 workspace and its git repository, `keys` reports which credentials the
