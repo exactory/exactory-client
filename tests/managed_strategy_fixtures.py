@@ -13,7 +13,7 @@ from research_harness import research_decisions, review_protocol, strategy
 from research_harness.evidence import digest
 from research_harness.operations import prepared_mutation
 from reviewer_fixtures import response as provider_response
-from strategy_fixtures import StrategyCase
+from strategy_fixtures import StrategyCase, prepare_direction
 
 
 def managed(case):
@@ -100,6 +100,8 @@ class ManagedStrategy:
             dict(value, id=identifier, dossier_id=dossier['id'], assignment_id=assignment_id))
 
     def decide(self, *, phase='prospective', plan=None, bundle=None):
+        if phase == 'prospective':
+            prepare_direction(self.case)
         intent = self.ensure_intent()
         previous = strategy.current_dossier(self.records())
         serial = str(self.store.revision)
