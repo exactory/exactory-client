@@ -166,6 +166,31 @@ class ProbeSupervisionTests(unittest.TestCase):
         self.assertEqual(identity["process_group"], os.getpgrp())
         self.assertTrue(identity["start_identity"])
 
+    def test_group_members_include_the_current_process_identity(self):
+        from research_harness.probe_supervision import find_probe_group_members, find_probe_process_identity
+        self.assertIn(find_probe_process_identity(os.getpid()), find_probe_group_members(os.getpgrp()))
+
+    def test_retry_cleanup_retains_reservation_until_all_group_members_exit(self):
+        from types import SimpleNamespace
+        from unittest import mock
+        from research_harness import probe
+        program = {"pid": 10, "process_group": 10, "start_identity": [1]}
+        supervision = {"config_sha256": "frozen", "program": program,
+                       "worker": {"pid": 11, "start_identity": [2]}, "started": 0, "deadline": 1}
+        termination = {key: supervision[key] for key in ("config_sha256", "program", "started", "deadline")}
+        termination["elapsed_seconds"] = 2
+        documents = {"supervision.json": supervision, "termination.json": termination}
+        launch = {"directory": "run", "config_artifact": {"sha256": "frozen"}}
+        store = SimpleNamespace(root=Path("."))
+        with mock.patch.object(probe, "read_probe_file", side_effect=lambda store, path: documents.get(Path(path).name)):
+            with mock.patch.object(probe, "find_probe_process_identity", return_value=None):
+                with mock.patch.object(probe, "find_probe_group_members", return_value=[{"pid": 12}]):
+                    with mock.patch.object(probe, "read_probe_clock", return_value=3), mock.patch.object(probe.time, "monotonic", side_effect=(0, 3)):
+                        with mock.patch.object(probe, "finish_probe_timeout") as finish:
+                            result = probe.recover_expired_probe(store, {"id": "held", "timeout_seconds": 1}, launch, 3)
+        self.assertEqual(result["status"], "pending")
+        finish.assert_not_called()
+
     def test_program_gate_does_not_execute_when_worker_disappears_before_release(self):
         descriptor, release = os.pipe()
         ready, announce = os.pipe()

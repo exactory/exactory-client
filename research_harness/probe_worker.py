@@ -1,6 +1,7 @@
 """A probe owner survives a lost launcher and leaves durable terminal evidence."""
 
 import hashlib
+import json
 import mimetypes
 import os
 from pathlib import Path
@@ -83,10 +84,11 @@ def run_probe_process(root, config, owner, worker_identity, config_sha256):
                     raise OSError("Probe program disappeared before its launch gate opened")
                 execution_started = read_probe_clock()
                 deadline = execution_started + config["timeout_seconds"]
-                json_projection(root, config["directory"] + "/supervision.json", {
+                supervision = {
                     "config_sha256": config_sha256, "program": identity, "worker": worker_identity,
-                    "started": started, "execution_started": execution_started, "deadline": deadline})
-                os.write(release, b"1")
+                    "started": started, "execution_started": execution_started, "deadline": deadline}
+                json_projection(root, config["directory"] + "/supervision.json", supervision)
+                os.write(release, json.dumps(supervision).encode("utf-8"))
             finally:
                 os.close(release)
             while process.poll() is None:

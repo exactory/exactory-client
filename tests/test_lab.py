@@ -414,7 +414,7 @@ class TestProbeLifecycle(_InsideWorkspaceTestCase):
         from research_harness.resources import account_report
         marker, release = self.workspace / "started", self.workspace / "release"
         command = self.build_command("live", 'from pathlib import Path\nimport time\nPath(' + repr(str(marker))
-            + ').write_text("started")\ndeadline = time.monotonic() + 60\nwhile not Path(' + repr(str(release)) + ').exists() and time.monotonic() < deadline: time.sleep(0.01)\n')
+            + ').write_text("started")\ndeadline = time.monotonic() + 50\nwhile not Path(' + repr(str(release)) + ').exists() and time.monotonic() < deadline: time.sleep(0.01)\n')
         owner = subprocess.Popen(command, cwd=self.workspace, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.addCleanup(lambda: owner.kill() if owner.poll() is None else None)
         self.wait_for_file(marker)
@@ -434,7 +434,7 @@ class TestProbeLifecycle(_InsideWorkspaceTestCase):
         from research_harness.storage import Store
         marker, release = self.workspace / "started", self.workspace / "release"
         command = self.build_command("lost", 'from pathlib import Path\nimport time\nPath(' + repr(str(marker))
-            + ').write_text("started")\ndeadline = time.monotonic() + 60\nwhile not Path(' + repr(str(release)) + ').exists() and time.monotonic() < deadline: time.sleep(0.01)\nprint("finished")\n')
+            + ').write_text("started")\ndeadline = time.monotonic() + 50\nwhile not Path(' + repr(str(release)) + ').exists() and time.monotonic() < deadline: time.sleep(0.01)\nprint("finished")\n')
         owner = subprocess.Popen(command, cwd=self.workspace, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.addCleanup(lambda: owner.kill() if owner.poll() is None else None)
         self.wait_for_file(marker)
@@ -485,7 +485,7 @@ class TestProbeLifecycle(_InsideWorkspaceTestCase):
         from research_harness.resources import account_report
         marker, release = self.workspace / "started", self.workspace / "release"
         command = self.build_command("lost-worker", 'from pathlib import Path\nimport time\nPath(' + repr(str(marker))
-            + ').write_text("started")\nprint("partial", flush=True)\ndeadline = time.monotonic() + 60\nwhile not Path(' + repr(str(release)) + ').exists() and time.monotonic() < deadline: time.sleep(0.01)\n')
+            + ').write_text("started")\nprint("partial", flush=True)\ndeadline = time.monotonic() + 50\nwhile not Path(' + repr(str(release)) + ').exists() and time.monotonic() < deadline: time.sleep(0.01)\n')
         owner = subprocess.Popen(command, cwd=self.workspace, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.addCleanup(lambda: owner.kill() if owner.poll() is None else None)
         self.wait_for_file(marker)
@@ -517,6 +517,73 @@ class TestProbeLifecycle(_InsideWorkspaceTestCase):
     def test_lost_worker_timeout_terminates_surviving_program_and_charges_before_replay(self):
         self.check_lost_worker_timeout()
 
+    def test_lost_worker_deadline_stops_program_and_descendants_without_retry(self):
+        from research_harness.probe import hold_probe_owner
+        from research_harness.probe_supervision import find_probe_process_identity, read_probe_clock
+        from research_harness.resources import account_report
+        from research_harness.storage import Store
+        marker = self.workspace / "autonomous-program"
+        command = self.build_command("autonomous-timeout", 'from pathlib import Path\nimport os, time\n'
+            'child = os.fork()\n'
+            'if child:\n'
+            '    Path(' + repr(str(marker)) + ').write_text(str(os.getpid()) + "," + str(child))\n'
+            '    print("started", flush=True)\n'
+            'deadline = time.monotonic() + 50\n'
+            'while time.monotonic() < deadline: time.sleep(0.01)\n', timeout="2")
+        launcher = subprocess.Popen(command, cwd=self.workspace, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.addCleanup(lambda: launcher.kill() if launcher.poll() is None else None)
+        self.wait_for_file(marker)
+        program, child = map(int, marker.read_text().split(","))
+        group = os.getpgid(program)
+        def terminate_group():
+            try:
+                os.killpg(group, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        self.addCleanup(terminate_group)
+        store = Store(self.workspace)
+        launch = store.snapshot()["records"]["probe_launch"]["autonomous-timeout"]
+        directory = self.workspace / launch["directory"]
+        supervision = json.loads((directory / "supervision.json").read_text())
+        os.kill(json.loads((directory / "worker.json").read_text())["pid"], signal.SIGKILL)
+        stdout, stderr = launcher.communicate(timeout=5)
+        self.assertEqual(launcher.returncode, 0, stderr)
+        self.assertEqual(json.loads(stdout)["status"], "pending")
+        before = store.snapshot()
+        deadline = supervision["deadline"] + 3
+        while read_probe_clock() < deadline and any(find_probe_process_identity(pid) is not None for pid in (group, program, child)):
+            time.sleep(0.01)
+        self.assertTrue(all(find_probe_process_identity(pid) is None for pid in (group, program, child)),
+                        "The frozen deadline must terminate the complete group without another CLI call")
+        self.assertEqual(store.snapshot(), before)
+        self.assertNotIn("autonomous-timeout", before["records"].get("probe", {}))
+        self.assertEqual(account_report(before["records"], "research")["experiment"]["wall_seconds"]["reserved"], 2)
+        with hold_probe_owner(self.workspace, "autonomous-timeout") as owner:
+            self.assertIsNotNone(owner)
+        self.wait_for_file(directory / "supervisor-terminal.json")
+        terminal = json.loads((directory / "supervisor-terminal.json").read_text())
+        self.assertEqual(terminal["deadline"], supervision["deadline"])
+        self.assertEqual(terminal["program"], supervision["program"])
+        from research_harness import probe
+        with unittest.mock.patch.object(probe, "find_probe_group_members", return_value=[{"pid": child}]):
+            pending = probe.launch_probe(store, identifier="autonomous-timeout", question="Lifecycle check?",
+                                         script="missing.py", timeout=2)
+        self.assertEqual(pending["status"], "pending", "An unverified group must retain its reservation")
+        self.assertEqual(store.snapshot(), before)
+        time.sleep(0.2)
+        retry = subprocess.run(command, cwd=self.workspace, capture_output=True, timeout=5)
+        self.assertEqual(retry.returncode, 0, retry.stderr)
+        receipt = json.loads(retry.stdout)
+        self.assertEqual(receipt["result"]["exit_status"], "timed_out")
+        self.assertEqual(receipt["result"]["elapsed_seconds"], terminal["elapsed_seconds"])
+        usage = account_report(store.snapshot()["records"], "research")["experiment"]["wall_seconds"]
+        self.assertEqual((usage["reserved"], usage["unknown"]), (0, 0))
+        self.assertEqual(usage["charged"], terminal["elapsed_seconds"])
+        replay = subprocess.run(command, cwd=self.workspace, capture_output=True, timeout=5)
+        self.assertEqual(replay.returncode, 0, replay.stderr)
+        self.assertEqual(json.loads(replay.stdout), receipt)
+        self.assertEqual(marker.read_text(), str(program) + "," + str(child))
+
     def test_lost_timeout_recovery_preserves_measured_usage_without_charging_replay_delay(self):
         self.check_lost_worker_timeout(interrupt_recovery=True)
 
@@ -528,7 +595,7 @@ class TestProbeLifecycle(_InsideWorkspaceTestCase):
         marker = self.workspace / "surviving-program"
         command = self.build_command("worker-timeout", 'from pathlib import Path\nimport os, time\nos.closerange(3, 256)\nPath('
             + repr(str(marker)) + ').write_text(str(os.getpid()))\nprint("partial", flush=True)\n'
-              'for _ in range(6000): time.sleep(0.01)\n', timeout="2")
+              'deadline = time.monotonic() + 50\nwhile time.monotonic() < deadline: time.sleep(0.01)\n', timeout="2")
         owner = subprocess.Popen(command, cwd=self.workspace, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.addCleanup(lambda: owner.kill() if owner.poll() is None else None)
         self.wait_for_file(marker)
@@ -542,6 +609,9 @@ class TestProbeLifecycle(_InsideWorkspaceTestCase):
         self.addCleanup(terminate_program)
         launch = Store(self.workspace).snapshot()["records"]["probe_launch"]["worker-timeout"]
         directory = self.workspace / launch["directory"]
+        self.wait_for_file(directory / "watchdog.json")
+        # Also lose the autonomous watchdog so these tests retain coverage of retry cleanup and its crash windows.
+        os.kill(json.loads((directory / "watchdog.json").read_text())["identity"]["pid"], signal.SIGKILL)
         os.kill(json.loads((directory / "worker.json").read_text())["pid"], signal.SIGKILL)
         stdout, stderr = owner.communicate(timeout=5)
         self.assertEqual(owner.returncode, 0, stderr)
@@ -660,8 +730,10 @@ class TestProbeLifecycle(_InsideWorkspaceTestCase):
         command = self.build_command("lost-parent", 'from pathlib import Path\nimport os, time\n'
             'if os.fork() == 0:\n'
             '    Path(' + repr(str(marker)) + ').write_text(str(os.getpid()))\n'
-            '    for _ in range(6000): time.sleep(0.01)\n'
-            'deadline = time.monotonic() + 60\nwhile not Path(' + repr(str(release)) + ').exists() and time.monotonic() < deadline: time.sleep(0.01)\n', timeout="5")
+            '    deadline = time.monotonic() + 50\n'
+            '    while time.monotonic() < deadline: time.sleep(0.01)\n'
+            '    os._exit(0)\n'
+            'deadline = time.monotonic() + 50\nwhile not Path(' + repr(str(release)) + ').exists() and time.monotonic() < deadline: time.sleep(0.01)\n', timeout="5")
         owner = subprocess.Popen(command, cwd=self.workspace, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.addCleanup(lambda: owner.kill() if owner.poll() is None else None)
         self.wait_for_file(marker)

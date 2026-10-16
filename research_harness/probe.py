@@ -20,7 +20,7 @@ from .errors import ResearchError
 from .operations import fields, immutable_record, is_finite_number, prepared_mutation, text
 from .probe_worker import capture_probe_outcome, find_probe_stream_origins
 from .probe_provenance import pin_probe_artifact
-from .probe_supervision import find_probe_process_identity, read_probe_clock
+from .probe_supervision import find_probe_group_members, find_probe_process_identity, read_probe_clock
 from .workspace import checked_parent, json_projection, read_file, strict_json, write_projection
 
 
@@ -200,12 +200,33 @@ def record_probe_launch(store, payload, *, expected_revision, request_id):
 
 
 def find_probe_terminal(store, launch):
-    terminal = read_probe_file(store, launch["directory"] + "/terminal.json")
-    if (isinstance(terminal, dict) and terminal.get("config_sha256") == launch["config_artifact"]["sha256"]
-            and is_finite_number(terminal.get("elapsed_seconds")) and terminal["elapsed_seconds"] >= 0
-            and is_probe_exit_status(terminal.get("exit_status"))):
+    for name in ("terminal.json", "supervisor-terminal.json"):
+        terminal = read_probe_file(store, launch["directory"] + "/" + name)
+        if (not isinstance(terminal, dict) or terminal.get("config_sha256") != launch["config_artifact"]["sha256"]
+                or not is_finite_number(terminal.get("elapsed_seconds")) or terminal["elapsed_seconds"] < 0
+                or not is_probe_exit_status(terminal.get("exit_status"))):
+            continue
+        if name == "supervisor-terminal.json":
+            supervision = read_probe_file(store, launch["directory"] + "/supervision.json")
+            if (not isinstance(supervision, dict) or terminal.get("exit_status") != "timed_out"
+                    or any(terminal.get(key) != supervision.get(key) for key in ("program", "started", "deadline"))
+                    or not isinstance(terminal.get("program"), dict)
+                    or type(terminal["program"].get("process_group")) is not int
+                    or find_probe_group_members(terminal["program"]["process_group"])):
+                continue
         return terminal
     return None
+
+
+def find_supervisor_timeout(store, launch, supervision):
+    timeout = read_probe_file(store, launch["directory"] + "/supervisor-timeout.json")
+    if (not isinstance(timeout, dict)
+            or any(timeout.get(key) != supervision.get(key) for key in ("config_sha256", "program", "started", "deadline"))
+            or not is_finite_number(timeout.get("elapsed_seconds")) or timeout["elapsed_seconds"] < 0
+            or not isinstance(timeout.get("supervisor"), dict) or type(timeout["supervisor"].get("pid")) is not int
+            or timeout["supervisor"]["pid"] <= 0 or not timeout["supervisor"].get("start_identity")):
+        return None
+    return timeout
 
 
 def record_probe_recovery(store, payload, **identity):
@@ -215,6 +236,11 @@ def record_probe_recovery(store, payload, **identity):
 
 def reconcile_probe(store, intent, launch):
     """The caller holds the free owner lock; a missing outcome alone is never recovery authority."""
+    supervision = read_probe_file(store, launch["directory"] + "/supervision.json") if launch else None
+    program = supervision.get("program") if isinstance(supervision, dict) else None
+    if (isinstance(program, dict) and type(program.get("process_group")) is int and program["process_group"] > 0
+            and find_probe_group_members(program["process_group"])):
+        return {"id": intent["id"], "status": "pending", "state": "running"}
     outcome = read_probe_outcome(store, launch) if launch else None
     if outcome is None and launch:
         terminal = find_probe_terminal(store, launch)
@@ -262,6 +288,12 @@ def recover_expired_probe(store, intent, launch, owner):
         return pending
     if find_probe_process_identity(worker["pid"]) == worker:
         return pending
+    supervisor_timeout = find_supervisor_timeout(store, launch, supervision)
+    if supervisor_timeout is not None:
+        if (owner is None or find_probe_group_members(program["process_group"])
+                or find_probe_process_identity(supervisor_timeout["supervisor"]["pid"]) == supervisor_timeout["supervisor"]):
+            return pending
+        return finish_probe_timeout(store, intent, launch, supervision, supervisor_timeout["elapsed_seconds"])
     termination = {"config_sha256": launch["config_artifact"]["sha256"], "program": program,
                    "started": supervision["started"], "deadline": supervision["deadline"]}
     previous = read_probe_file(store, launch["directory"] + "/termination.json")
@@ -269,6 +301,8 @@ def recover_expired_probe(store, intent, launch, owner):
                 and is_finite_number(previous.get("elapsed_seconds")) and previous["elapsed_seconds"] >= intent["timeout_seconds"])
     current = find_probe_process_identity(program["pid"])
     if current != program and not resuming:
+        if find_probe_group_members(program["process_group"]):
+            return pending
         return reconcile_probe(store, intent, launch) if owner is not None else pending
     if read_probe_clock() < supervision["deadline"]:
         return pending
@@ -282,7 +316,7 @@ def recover_expired_probe(store, intent, launch, owner):
             pass
     deadline = time.monotonic() + 2
     while True:
-        if find_probe_process_identity(program["pid"]) != program:
+        if find_probe_process_identity(program["pid"]) != program and not find_probe_group_members(program["process_group"]):
             if owner is not None:
                 return finish_probe_timeout(store, intent, launch, supervision, elapsed)
             with hold_probe_owner(store.root, identifier) as available:
