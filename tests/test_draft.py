@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import http.client
 import importlib.machinery
 import importlib.util
 import io
@@ -22,6 +23,7 @@ from pathlib import Path
 from integration_fixtures import prepare_research, prepare_manuscript
 from research_harness.artifacts import ArtifactStore
 from research_harness.errors import ResearchError
+from research_harness.same_origin import RefusedRedirectError
 from research_harness.storage import Store
 
 _PLUGIN_ROOT = Path(__file__).resolve().parent.parent
@@ -187,6 +189,32 @@ class _StatusErrorZenodoApi(_FakeZenodoApi):
             raise urllib.error.HTTPError(request.full_url, self.status_code, "Zenodo error",
                                          {}, io.BytesIO(b"the gateway answered"))
         return super().__call__(request)
+
+
+class _CreatedBeforeItsAnswerZenodoApi(_FakeZenodoApi):
+    """Answer like the fake above, except that the request which creates a deposition creates draft 4242 and then
+    ends with the error that `build_error(request)` returns. The draft exists on Zenodo, and nothing the command
+    received shows it."""
+
+    def __init__(self, build_error) -> None:
+        super().__init__()
+        self.build_error = build_error
+        self.created_deposition_ids: list[int] = []
+
+    def __call__(self, request):
+        if request.get_method() == "POST" and request.full_url.endswith("/deposit/depositions"):
+            self.requests.append(request)
+            self.created_deposition_ids.append(4242)
+            raise self.build_error(request)
+        return super().__call__(request)
+
+
+def _build_uncertain_creation_advice(zenodo_site: str) -> str:
+    """The advice after the request that creates a direct deposition ends with an outcome that does not show whether
+    Zenodo created it: a draft may exist, and a second run creates another one."""
+    return ("Zenodo may have created a draft deposition already, and a second run creates another one. Before you run"
+            f" the command again, look at your drafts on {zenodo_site}. The My Uploads tab of My dashboard lists"
+            " them. The draft of this run has no title and no files.")
 
 
 class _PublishedRecordZenodoApi(_FakeZenodoApi):
@@ -879,6 +907,22 @@ class TestManagedDepositAfterALostPublishResponse(_DepositTestCase):
         self.assertEqual(next(iter(receipts.values()))["doi"], "10.5281/zenodo.4242")
 
 
+class TestManagedDepositAfterALostCreateResponse(_DepositTestCase):
+    """The managed path holds the deposit as one saved intent and writes the
+    intent's token into the notes of the deposition it creates. Its next run
+    finds that deposition by the token before it creates anything
+    (research_harness.zenodo), so its advice stays the plain one."""
+
+    def test_the_advice_is_to_run_the_same_command_again(self) -> None:
+        self.fake_api = _LostResponseZenodoApi("/deposit/depositions")
+        _draft._open_url = self.fake_api
+        output = self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"],
+                               expected_exit_code=1)
+        self.assertIn("The client cannot read the answer of the Zenodo API. Cause: connection reset by peer."
+                      " Then run the command again.", output)
+        self.assertNotIn("may have created a draft deposition", output)
+
+
 class TestProductionDepositCitationReport(_DepositTestCase):
     def test_a_failing_report_is_printed_and_the_managed_deposit_continues(self) -> None:
         (self.workspace_dir / ".exactory" / "citation-check.json").unlink()
@@ -1250,26 +1294,78 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
         stdout_text, stderr_text = self._deposit_on_split_streams(
             ["--publish", "--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
         self.assertIn("Deposition 4242 is open on Zenodo:", stdout_text)
-        self.assertIn("The client cannot reach the Zenodo API.", stderr_text)
+        self.assertIn("The client cannot read the answer of the Zenodo API.", stderr_text)
         self.assertIn("Deposition 4242 may be published already. Open"
                       " https://sandbox.zenodo.org/api/deposit/4242 and read its state.",
                       stderr_text)
         self.assertIn("a second run publishes a second permanent record", stderr_text)
         self.assertNotIn("Then run the command again", stderr_text)
 
-    def test_a_lost_create_response_keeps_the_advice_to_run_the_command_again(self) -> None:
-        # The publish is the last request of the deposit, so a run that ends at
-        # the create published nothing: the next run publishes the record for
-        # the first time, and the plain advice holds.
+    def test_a_lost_create_response_names_the_draft_that_may_exist(self) -> None:
+        # Zenodo can have created the draft before the answer was lost, and a
+        # second run creates another one, so the advice is to look at the
+        # drafts first.
         self.fake_api = _LostResponseZenodoApi("/deposit/depositions")
         _draft._open_url = self.fake_api
         output = self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"],
                                expected_exit_code=1)
-        self.assertIn("The client cannot reach the Zenodo API.", output)
-        self.assertIn("Then run the command again.", output)
-        self.assertNotIn("second permanent record", output)
+        self.assertIn("The client cannot read the answer of the Zenodo API. Cause: connection reset by peer."
+                      f" {_build_uncertain_creation_advice('https://sandbox.zenodo.org')}", output)
+        self.assertNotIn("Then run the command again", output)
         self.assertEqual(self.requested(),
                          [("POST", "https://sandbox.zenodo.org/api/deposit/depositions")])
+
+    def test_a_creation_that_zenodo_applied_before_a_redirect_names_the_draft_that_may_exist(self) -> None:
+        # Zenodo created draft 4242 and then answered 303. The command does not
+        # follow the redirect of a POST, and a plain second run would create and
+        # publish another record and leave 4242 unpublished.
+        self.fake_api = _CreatedBeforeItsAnswerZenodoApi(lambda request: RefusedRedirectError(
+            request.full_url, request.full_url + "/4242", "POST", is_cross_origin=False))
+        _draft._open_url = self.fake_api
+        stdout_text, stderr_text = self._deposit_on_split_streams(
+            ["--publish", "--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
+        self.assertIn("Zenodo answered the POST request with a redirect. The command does not follow a redirect of a"
+                      " POST request, so the result of the request is not confirmed."
+                      f" {_build_uncertain_creation_advice('https://sandbox.zenodo.org')}\n", stderr_text)
+        self.assertNotIn("Then run the command again", stderr_text)
+        self.assertEqual(stdout_text, "")
+        self.assertEqual(self.fake_api.created_deposition_ids, [4242])
+        self.assertEqual(self.requested(), [("POST", "https://sandbox.zenodo.org/api/deposit/depositions")])
+
+    def test_a_creation_that_zenodo_applied_before_a_server_error_names_the_draft_that_may_exist(self) -> None:
+        self.fake_api = _CreatedBeforeItsAnswerZenodoApi(lambda request: urllib.error.HTTPError(
+            request.full_url, 503, "Zenodo error", {}, io.BytesIO(b"the gateway answered")))
+        _draft._open_url = self.fake_api
+        output = self._deposit(["--production", "--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
+        self.assertIn("The Zenodo API returned HTTP 503.\nthe gateway answered\nThe server states no outcome for this"
+                      f" request. {_build_uncertain_creation_advice('https://zenodo.org')}\n", output)
+        self.assertNotIn("Then run the command again", output)
+        self.assertEqual(self.fake_api.created_deposition_ids, [4242])
+        self.assertEqual(self.requested(), [("POST", "https://zenodo.org/api/deposit/depositions")])
+
+    def test_a_creation_whose_answer_breaks_off_or_is_not_json_names_the_draft_that_may_exist(self) -> None:
+        # What the real _open_url raises for an answer that breaks off, and for a body that is not JSON.
+        for label, error, cause in (
+                ("an answer that breaks off", http.client.IncompleteRead(b'{"id": 42', 200),
+                 "IncompleteRead(9 bytes read, 200 more expected)"),
+                ("a body that is not JSON", json.JSONDecodeError("Expecting value", "<html>", 0),
+                 "the body of the answer is not JSON")):
+            with self.subTest(answer=label):
+                self.fake_api = _CreatedBeforeItsAnswerZenodoApi(lambda request, error=error: error)
+                _draft._open_url = self.fake_api
+                output = self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
+                self.assertIn(f"The client cannot read the answer of the Zenodo API. Cause: {cause}."
+                              f" {_build_uncertain_creation_advice('https://sandbox.zenodo.org')}\n", output)
+                self.assertEqual(self.fake_api.created_deposition_ids, [4242])
+
+    def test_a_refused_creation_states_the_status_without_advice(self) -> None:
+        # A 4xx is the server's decision on the request it read: it created nothing.
+        self.fake_api = _StatusErrorZenodoApi("/deposit/depositions", 400)
+        _draft._open_url = self.fake_api
+        output = self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
+        self.assertIn("The Zenodo API returned HTTP 400.\nthe gateway answered\n", output)
+        self.assertNotIn("may have created a draft deposition", output)
+        self.assertNotIn("Then run the command again", output)
 
     def test_a_lost_upload_response_keeps_the_advice_to_run_the_command_again(self) -> None:
         # Every other request of a direct deposit can be sent again, and the
@@ -1355,6 +1451,63 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
         self.assertNotIn("publication_receipt", store.snapshot()["records"])
         export_workspace(store)
         self.assertEqual(self.read_deposit_state(), written)
+
+
+class _AnswerThatBreaksOff(io.BytesIO):
+    """An answer whose body does not arrive: reading it raises `error`, as http.client raises it for a dropped
+    connection."""
+
+    def __init__(self, error: Exception) -> None:
+        super().__init__(b"")
+        self.error = error
+
+    def read(self, *args) -> bytes:
+        raise self.error
+
+
+class TestZenodoAnswersThatCannotBeRead(unittest.TestCase):
+    """_call_zenodo with the real _open_url. An answer that does not arrive in full, or whose body is not JSON, ends the
+    command with one message and the advice that the caller names for an uncertain outcome, never with a traceback.
+    A failure before the request went out keeps its own lead."""
+
+    def call_zenodo(self, answer_or_error) -> str:
+        """Send one creation request whose answer is `answer_or_error`: a response, or an error that the opener
+        raises. Returns what the command printed."""
+        sink = io.StringIO()
+        with unittest.mock.patch.object(_draft, "open_url_within_origin", side_effect=[answer_or_error]), \
+                contextlib.redirect_stderr(sink), self.assertRaises(SystemExit) as stopped:
+            _draft._call_zenodo("POST", "https://zenodo.org/api/deposit/depositions", "secret-token", json_body={},
+                                uncertain_outcome_advice_msg="Look at the depositions.", environment="production")
+        self.assertEqual(stopped.exception.code, 1)
+        self.assertNotIn("secret-token", sink.getvalue())
+        return sink.getvalue()
+
+    def test_a_body_that_is_not_json_or_breaks_off_ends_with_a_message_and_the_advice(self) -> None:
+        broken_off = http.client.IncompleteRead(b'{"id"', 20)
+        for label, answer_or_error, cause in (
+                ("a body that is not JSON", io.BytesIO(b"<html>not json</html>"), "the body of the answer is not JSON"),
+                ("a body that breaks off", _AnswerThatBreaksOff(broken_off), str(broken_off)),
+                ("no answer before the timeout", TimeoutError("timed out"), "timed out"),
+                ("a connection that drops", http.client.RemoteDisconnected("Remote end closed connection without"
+                                                                           " response"),
+                 "Remote end closed connection without response")):
+            with self.subTest(answer=label):
+                self.assertEqual(self.call_zenodo(answer_or_error), "The client cannot read the answer of the Zenodo"
+                                                                    f" API. Cause: {cause}. Look at the depositions.\n")
+
+    def test_an_error_answer_whose_body_breaks_off_ends_with_a_message_and_the_advice(self) -> None:
+        broken_off = http.client.IncompleteRead(b"gate", 50)
+        error = urllib.error.HTTPError("https://zenodo.org/api/deposit/depositions", 503, "Zenodo error", {},
+                                       _AnswerThatBreaksOff(broken_off))
+        self.addCleanup(error.close)
+        self.assertEqual(self.call_zenodo(error), "The client cannot read the answer of the Zenodo API."
+                                                  f" Cause: {broken_off}. Look at the depositions.\n")
+
+    def test_a_failure_before_the_request_went_out_says_that_the_api_is_not_reachable(self) -> None:
+        refused = urllib.error.URLError(ConnectionRefusedError(61, "Connection refused"))
+        self.assertEqual(self.call_zenodo(refused), "The client cannot reach the Zenodo API. Cause: [Errno 61]"
+                                                    " Connection refused. Make sure that the network is available."
+                                                    " Look at the depositions.\n")
 
 
 class TestCorruptStoreDeposit(_PlainWorkspaceDepositTestCase):

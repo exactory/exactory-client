@@ -43,7 +43,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from research_harness.errors import ResearchError
 from research_harness.exactory_api import UUID_RE, build_orcid_required_msg, read_api_base_url
 from research_harness.integration import command_identity, current_store, initialization_payload, initialize_workspace, record_direct_deposit
-from research_harness.same_origin import RefusedRedirectError, open_url_within_origin
+from research_harness.same_origin import (INCOMPLETE_ANSWER_ERROR_TYPES, RefusedRedirectError, get_origin,
+                                          open_url_within_origin)
 from research_harness.storage import Store
 from research_harness.workspace import find_workspace, json_projection, read_file, strict_json
 from research_harness.citation_report import report_citation_gate
@@ -130,16 +131,31 @@ _PROBLEM_RELATION = "references"
 # nothing to attach, and the next deposit for a problem replaces such a journal.
 _PROBLEM_DEPOSIT_JOURNAL_PATH = Path(".exactory/problem-deposit.json")
 
-# What an uncertain outcome earns the user: an unreachable API and a 5xx both
-# leave the request unsettled. Every request of this command can be sent again,
-# except the publish of a direct deposit for no problem: a managed deposit
-# resumes its saved intent, which settles each claimed step before it writes
-# again, and a direct deposit for a problem keeps a journal that makes its next
-# run read the deposition back. A direct deposit for no problem has neither, so
-# a second run of it publishes a second permanent record. The advice names that
-# record itself, because stderr carries it to a caller that reads none of the
-# lines on stdout.
+# What an uncertain outcome earns the user: an unreachable API, an answer that
+# did not arrive in full, and a 5xx all leave the request unsettled. A managed
+# deposit resumes its saved intent, which settles each claimed step before it
+# writes again, so the plain advice holds for each of its requests. A direct
+# deposit keeps no intent, so a second run of it starts with a new deposition.
+# The command prints the address of a deposition as soon as it exists, and two
+# requests of a direct deposit earn other advice. The request that creates the
+# deposition: when its outcome is uncertain, the user holds no address, so the
+# advice is to look at the drafts first. The publish of a direct deposit for no
+# problem: a direct deposit for a problem keeps a journal that makes its next
+# run read the deposition back, and one for no problem has none, so a second
+# run of it publishes a second permanent record. That advice names the record
+# itself, because stderr carries it to a caller that reads none of the lines on
+# stdout.
 _RETRY_ADVICE_MSG = "Then run the command again."
+# Zenodo lists the drafts of an account in the My Uploads tab of My dashboard
+# (https://help.zenodo.org/docs/deposit/manage-records/, checked 2026-10-16).
+# The direct deposit creates its deposition with an empty body, so the draft of
+# an uncertain creation has no title and no files.
+_UNCERTAIN_DIRECT_CREATION_ADVICE_TEMPLATE = (
+    "Zenodo may have created a draft deposition already, and a second run creates"
+    " another one. Before you run the command again, look at your drafts on"
+    " {zenodo_site}. The My Uploads tab of My dashboard lists them. The draft of"
+    " this run has no title and no files."
+)
 _UNCERTAIN_DIRECT_PUBLISH_ADVICE_TEMPLATE = (
     "Deposition {deposition_id} may be published already. Open {draft_url} and"
     " read its state. Do not run this command again: a second run publishes a"
@@ -212,7 +228,9 @@ def _call_zenodo(method: str, url: str, token: str,
     """Send one request to the Zenodo API and return its JSON body. Exits with
     Zenodo's own error message on failure, and never echoes the token. The
     caller names the advice an uncertain outcome earns, because only the caller
-    knows whether its request can be sent again. This is the one place that adds the
+    knows whether its request can be sent again: a refused redirect, a 5xx, a
+    request that may not have gone out, and an answer that did not arrive in full
+    or whose body is not JSON. This is the one place that adds the
     token to a request, and it adds it only for an address under the Zenodo API of
     the environment that the token belongs to: the URL of a saved response, an intent,
     or a journal is checked like any other. A redirect to another origin is not
@@ -241,7 +259,10 @@ def _call_zenodo(method: str, url: str, token: str,
                            f" a redirect of a {error.method} request, so the result of the request is not confirmed.")
         _exit_with_error(f"{refusal_msg} {uncertain_outcome_advice_msg}")
     except urllib.error.HTTPError as error:
-        detail = error.read().decode("utf-8", "replace")[:2000]
+        try:
+            detail = error.read().decode("utf-8", "replace")[:2000]
+        except INCOMPLETE_ANSWER_ERROR_TYPES as read_error:
+            _exit_with_error(_build_unreadable_answer_msg(str(read_error), uncertain_outcome_advice_msg))
         message = f"The Zenodo API returned HTTP {error.code}.\n{detail}"
         # A 5xx leaves this request as unsettled as a lost connection does: the
         # server states no outcome for it. A 4xx is the server's own decision,
@@ -249,10 +270,22 @@ def _call_zenodo(method: str, url: str, token: str,
         if error.code >= 500:
             message += f"\nThe server states no outcome for this request. {uncertain_outcome_advice_msg}"
         _exit_with_error(message)
-    except OSError as error:
-        _exit_with_error(f"The client cannot reach the Zenodo API. Cause: {error}."
+    except urllib.error.URLError as error:
+        _exit_with_error(f"The client cannot reach the Zenodo API. Cause: {error.reason}."
                          f" Make sure that the network is available. {uncertain_outcome_advice_msg}")
+    except INCOMPLETE_ANSWER_ERROR_TYPES as error:
+        _exit_with_error(_build_unreadable_answer_msg(str(error), uncertain_outcome_advice_msg))
+    except json.JSONDecodeError:
+        _exit_with_error(_build_unreadable_answer_msg("the body of the answer is not JSON",
+                                                      uncertain_outcome_advice_msg))
     raise AssertionError("unreachable")
+
+
+def _build_unreadable_answer_msg(cause: str, uncertain_outcome_advice_msg: str) -> str:
+    """The message for a request that went out and whose answer the command cannot read: the answer did not
+    arrive in full, or its body is not JSON. Zenodo may have acted on the request, so the advice of the caller
+    for an uncertain outcome follows."""
+    return f"The client cannot read the answer of the Zenodo API. Cause: {cause}. {uncertain_outcome_advice_msg}"
 
 
 def _read_zenodo_token(production: bool) -> str:
@@ -573,6 +606,8 @@ def _deposit_directly(store, store_open_error, args: argparse.Namespace, base_ur
         deposition = _open_new_version_draft(base_url, environment, token)
     else:
         deposition = _call_zenodo("POST", f"{base_url}/deposit/depositions", token, json_body={},
+                                  uncertain_outcome_advice_msg=_UNCERTAIN_DIRECT_CREATION_ADVICE_TEMPLATE.format(
+                                      zenodo_site=get_origin(base_url)),
                                   environment=environment)
     # The record exists from here on, and a publish cannot be made idempotent:
     # without a journal, a second run creates and publishes a second permanent
@@ -653,6 +688,9 @@ def _open_new_version_draft(base_url: str, environment: str, token: str) -> dict
     # A direct deposit keeps its local record before the publish call, so the file can name a
     # deposition that is not published. The managed path reads its prior through the same rule.
     require_published_prior(prior, environment)
+    # https://developers.zenodo.org states that calling the new version action again has no effect while the
+    # new version draft of the first call is not published or deleted (checked 2026-10-16). So a second run
+    # answers with the same draft, and an uncertain outcome of this request keeps the plain advice.
     created = _call_zenodo(
         "POST",
         f"{base_url}/deposit/depositions/{deposition_id}/actions/newversion",
@@ -859,6 +897,24 @@ def _build_journal_removal_advice(deposition_phrase: str) -> str:
             " is not published, or decide not to publish it. The command never removes it.")
 
 
+def _build_published_deposition_advice(journal: dict) -> str:
+    """What the user does when the deposition of a journal that no run can settle turns out to be published: the
+    journal of a managed deposit whose intent the store does not give. The user removes the journal and attaches
+    the record by hand (design 2026-10-12 §17). Only a production record is attached to a problem, and it is
+    attached at the origin that the journal records, which receives the API key, so a run at another origin names
+    that origin under the condition that it is the user's own."""
+    removal_msg = f"If you find it published, remove {_PROBLEM_DEPOSIT_JOURNAL_PATH}."
+    if journal["environment"] != "production":
+        return f"{removal_msg} A sandbox record is not attached to a problem."
+    problem_target = journal["math_problem"]
+    recorded_origin = problem_target["api_url"]
+    attach_command = f"exactory link-problem-paper {problem_target['problem_id']} --identifier <the record's DOI>"
+    if recorded_origin == read_api_base_url():
+        return f"{removal_msg} Then attach the record to the problem with {attach_command}."
+    return (f"{removal_msg} If {recorded_origin} is your own exactory origin, attach the record there. Run"
+            f" {attach_command} with EXACTORY_API_URL set to {recorded_origin}.")
+
+
 def _name_journal_deposition(journal: dict) -> str:
     """How the user finds the deposition a journal names on Zenodo. A direct journal holds the id.
     A managed deposit puts its intent in the notes of the deposition (research_harness.zenodo)."""
@@ -960,8 +1016,8 @@ def _require_current_origin(journal: dict) -> None:
     settled journal has no such exception, and its attachment checks the origin itself
     (_attach_recorded_record). A settle at the recorded origin stops at an intent that the store
     does not give, and it refuses an intent that describes another operation, so neither stop names
-    that origin as a way on: the first one names only the removal rule, and the second one is the
-    refusal that every origin gives."""
+    that origin as a place to settle from: the first one names the removal rule and, for a published
+    deposition, the attachment by hand, and the second one is the refusal that every origin gives."""
     if journal["math_problem"]["api_url"] == read_api_base_url() or not _is_attachment_outstanding(journal):
         return
     is_intent_unreadable = False
@@ -982,7 +1038,7 @@ def _build_other_origin_msg(journal: dict, *, is_intent_unreadable: bool = False
     for an unpublished deposition, and both stops say that the recorded origin would receive the API
     key. A managed journal whose intent the store does not give (`is_intent_unreadable`) is settled
     from no origin, because every run stops at that intent before any exactory request: its stop
-    names the removal rule alone, and no API key."""
+    names the removal rule, and for a published deposition the attachment by hand."""
     problem_target = journal["math_problem"]
     recorded_origin = problem_target["api_url"]
     lead_msg = (f"The recorded deposit for problem {problem_target['problem_id']} names the exactory origin"
@@ -991,7 +1047,8 @@ def _build_other_origin_msg(journal: dict, *, is_intent_unreadable: bool = False
     if is_intent_unreadable:
         return (f"{lead_msg} {stays_msg} The store of this workspace does not give the saved intent of this deposit,"
                 f" so a run that uses {recorded_origin} stops at that intent too."
-                f" {_build_journal_removal_advice(_name_journal_deposition(journal))}")
+                f" {_build_journal_removal_advice(_name_journal_deposition(journal))}"
+                f" {_build_published_deposition_advice(journal)}")
     if journal["settled"]:
         next_step_msg = (f"run exactory-draft attach-problem with EXACTORY_API_URL set to {recorded_origin}."
                          f" {_build_settled_removal_advice(journal['doi'])}")
@@ -1070,7 +1127,8 @@ def _build_unsettled_journal_note(journal: dict | None, root: Path | None = None
     operation, or records this one as settled, or cannot be read. When it knows, the note says what
     the next deposit run does: it releases the journal of an intent that never sent its publish
     request, and it reads any other deposition back from Zenodo. The next run of a managed journal
-    starts from its intent, so for an intent that the store does not give the note says neither."""
+    starts from its intent, so for an intent that the store does not give the note says neither,
+    and it says what to do when the deposition turns out to be published."""
     if journal is None:
         return ""
     root = Path.cwd() if root is None else root
@@ -1080,15 +1138,16 @@ def _build_unsettled_journal_note(journal: dict | None, root: Path | None = None
         return ""
     if recorded is None or recorded["operation_id"] != journal["operation_id"] or recorded["settled"]:
         return ""
+    stays_msg = f"{_PROBLEM_DEPOSIT_JOURNAL_PATH} stays as the recovery record of this deposit."
+    removal_msg = _build_journal_removal_advice(_name_journal_deposition(recorded))
     intent = _read_journal_intent(recorded, root) if recorded["path"] == "managed" else None
     if recorded["path"] == "managed" and intent is None:
-        next_run_msg = ""
-    elif intent is not None and not has_claimed_publish(intent):
-        next_run_msg = " The next deposit run releases it and deposits as usual."
+        return f"{stays_msg} {removal_msg} {_build_published_deposition_advice(recorded)}"
+    if intent is not None and not has_claimed_publish(intent):
+        next_run_msg = "The next deposit run releases it and deposits as usual."
     else:
-        next_run_msg = " The next deposit run reads the deposition back from Zenodo and settles it."
-    return (f"{_PROBLEM_DEPOSIT_JOURNAL_PATH} stays as the recovery record of this deposit.{next_run_msg}"
-            f" {_build_journal_removal_advice(_name_journal_deposition(recorded))}")
+        next_run_msg = "The next deposit run reads the deposition back from Zenodo and settles it."
+    return f"{stays_msg} {next_run_msg} {removal_msg}"
 
 
 @contextlib.contextmanager

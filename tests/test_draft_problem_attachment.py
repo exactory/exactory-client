@@ -1566,9 +1566,11 @@ class TestProblemDepositJournalStates(_PlainWorkspaceDepositTestCase):
                       " https://api.test. The recorded origin would receive your API key.", sink.getvalue())
         self.assertEqual(self.exactory.calls, [])
 
-    def test_a_managed_journal_whose_intent_the_store_does_not_give_names_only_the_removal_rule(self) -> None:
-        # A run that uses the recorded origin stops at that intent too, so the stop names no origin to switch to. It
-        # names no API key either, because no run gets as far as an exactory request.
+    def test_a_managed_journal_whose_intent_the_store_does_not_give_names_the_removal_rule_and_the_way_out(self) -> None:
+        # A run that uses the recorded origin stops at that intent too, so the stop names no origin to settle from, and
+        # no run gets as far as an exactory request. The removal rule covers a deposition that is not published. For a
+        # published one, the stop says to remove the journal and to attach the record by hand from the recorded
+        # origin, when that origin is the user's own.
         missing_intent_id = "f" * 32
         journal = _build_managed_journal(missing_intent_id, math_problem={"problem_id": _OTHER_PROBLEM_ID,
                                                                           "api_url": "https://recorded.test"})
@@ -1585,7 +1587,10 @@ class TestProblemDepositJournalStates(_PlainWorkspaceDepositTestCase):
                                          f" https://recorded.test stops at that intent too. {_REMOVAL_RULE_MSG} the"
                                          f' deposition whose notes read "Exactory publication intent {missing_intent_id}"'
                                          " is not published, or decide not to publish it. The command never removes"
-                                         " it.\n")
+                                         f" it. If you find it published, remove {_JOURNAL_PATH_TEXT}. If"
+                                         " https://recorded.test is your own exactory origin, attach the record there."
+                                         f" Run exactory link-problem-paper {_OTHER_PROBLEM_ID} --identifier <the record's"
+                                         " DOI> with EXACTORY_API_URL set to https://recorded.test.\n")
                 self.assertEqual((self.fake_api.requests, self.exactory.calls), ([], []))
                 self.assertEqual(_read_journal(self.workspace_dir), journal)
 
@@ -1972,10 +1977,43 @@ class TestExplainUnsettledJournal(_PlainWorkspaceDepositTestCase):
         missing_intent_id = "f" * 32
         missing = _build_managed_journal(missing_intent_id)
         self._record_journal(missing)
-        self.assertEqual(self._note_for(missing),
-                         f"{_JOURNAL_PATH_TEXT} stays as the recovery record of this deposit. {_REMOVAL_RULE_MSG} the"
-                         f' deposition whose notes read "Exactory publication intent {missing_intent_id}" is not'
-                         " published, or decide not to publish it. The command never removes it.")
+        note_msg = self._note_for(missing)
+        self.assertTrue(note_msg.startswith(
+            f"{_JOURNAL_PATH_TEXT} stays as the recovery record of this deposit. {_REMOVAL_RULE_MSG} the deposition"
+            f' whose notes read "Exactory publication intent {missing_intent_id}" is not published, or decide not to'
+            " publish it. The command never removes it."), note_msg)
+        self.assertNotIn(released_msg, note_msg)
+        self.assertNotIn(read_back_msg, note_msg)
+
+    def test_the_note_of_a_journal_whose_intent_the_store_does_not_give_says_what_to_do_with_a_published_record(
+            self) -> None:
+        # No run can settle such a journal, and the removal rule covers only a deposition that is not published. So
+        # the note also says what to do when the user finds the deposition published.
+        missing_intent_id = "f" * 32
+        removal_msg = (f"{_JOURNAL_PATH_TEXT} stays as the recovery record of this deposit. {_REMOVAL_RULE_MSG} the"
+                       f' deposition whose notes read "Exactory publication intent {missing_intent_id}" is not'
+                       " published, or decide not to publish it. The command never removes it.")
+        production = _build_managed_journal(missing_intent_id)
+        self._record_journal(production)
+        # This run uses the recorded origin.
+        os.environ["EXACTORY_API_URL"] = "https://api.test"
+        self.assertEqual(self._note_for(production),
+                         f"{removal_msg} If you find it published, remove {_JOURNAL_PATH_TEXT}. Then attach the record"
+                         f" to the problem with exactory link-problem-paper {_PROBLEM_ID} --identifier <the record's"
+                         " DOI>.")
+        # This run uses another origin, so the record is attached from the recorded one, which then receives the key.
+        os.environ["EXACTORY_API_URL"] = "https://elsewhere.test"
+        self.assertEqual(self._note_for(production),
+                         f"{removal_msg} If you find it published, remove {_JOURNAL_PATH_TEXT}. If https://api.test is"
+                         " your own exactory origin, attach the record there. Run exactory link-problem-paper"
+                         f" {_PROBLEM_ID} --identifier <the record's DOI> with EXACTORY_API_URL set to https://api.test.")
+        # Only a published production record is attached to a problem.
+        sandbox = _build_managed_journal(missing_intent_id, environment="sandbox",
+                                         base_url="https://sandbox.zenodo.org/api")
+        self._record_journal(sandbox)
+        self.assertEqual(self._note_for(sandbox),
+                         f"{removal_msg} If you find it published, remove {_JOURNAL_PATH_TEXT}. A sandbox record is not"
+                         " attached to a problem.")
 
     def test_a_deposit_that_names_no_problem_has_no_journal_and_nothing_changes(self) -> None:
         with self.assertRaises(ResearchError) as stopped:
@@ -2140,8 +2178,8 @@ _JSON_HEADERS = {"Content-Type": "application/json"}
 
 def _serve_on_loopback(test_case: unittest.TestCase, respond) -> tuple[str, list]:
     """Serve on a free loopback port until the test ends. `respond(method, path)` returns the status, the
-    headers, and the body of the answer. Returns the address and the list that gets one (method, path,
-    Authorization header) for every request that arrives."""
+    headers, and the body of the answer, or None to close the connection without an answer. Returns the
+    address and the list that gets one (method, path, Authorization header) for every request that arrives."""
     received = []
 
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -2150,7 +2188,12 @@ def _serve_on_loopback(test_case: unittest.TestCase, respond) -> tuple[str, list
             if length:
                 self.rfile.read(length)
             received.append((self.command, self.path, self.headers.get("Authorization")))
-            status, headers, body = respond(self.command, self.path)
+            answer = respond(self.command, self.path)
+            if answer is None:
+                # The handler writes nothing, and the server closes the connection after the request.
+                self.close_connection = True
+                return
+            status, headers, body = answer
             self.send_response(status)
             for name, value in headers.items():
                 self.send_header(name, value)
@@ -2627,6 +2670,50 @@ class TestPlantedSettledJournal(_PlainWorkspaceDepositTestCase):
                               f" {_build_settled_removal_rule(_EARLIER_DOI)}", output)
                 self.assertEqual((self.recorded_received, self.current_received), ([], []))
                 self.assertEqual(_read_journal(self.workspace_dir), self.journal)
+        self.assertEqual(self.fake_api.requests, [])
+
+
+class TestAttachmentWhoseAnswerDidNotArriveInFull(_PlainWorkspaceDepositTestCase):
+    """The real exactory command, as a child process, attaches a waiting record through a loopback server whose answer
+    to the attachment does not arrive in full. The command ends with its message instead of a traceback, and the
+    record stays pending for attach-problem, as after any other failure of the attachment."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        # The child process reads its key and its proxy rules from the environment.
+        os.environ["EXACTORY_API_KEY"] = "test-key"
+        os.environ["no_proxy"] = "127.0.0.1"
+        patcher = unittest.mock.patch.object(urllib.request, "getproxies", return_value={})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_the_record_stays_pending_and_the_message_asks_for_a_check_first(self) -> None:
+        papers_path = f"/api/v1/math-problems/{_PROBLEM_ID}/papers"
+        for label, papers_answer, cause in (
+                ("a connection that closes without an answer", None, "Remote end closed connection without response"),
+                ("a body that is not JSON", (200, {"Content-Type": "text/html"}, b"<html>not json</html>"),
+                 "the answer has HTTP 200 and a body that is not JSON")):
+            with self.subTest(answer=label):
+                def respond(method: str, path: str, papers_answer=papers_answer):
+                    if method == "POST" and path == papers_path:
+                        return papers_answer
+                    return _answer_like_exactory(method, path)
+                url, received = _serve_on_loopback(self, respond)
+                os.environ["EXACTORY_API_URL"] = url
+                journal = dict(_UNATTACHED_JOURNAL, math_problem={"problem_id": _PROBLEM_ID, "api_url": url})
+                (self.workspace_dir / ".exactory" / "problem-deposit.json").write_text(json.dumps(journal),
+                                                                                       encoding="utf-8")
+
+                output = _run_draft_command(["attach-problem"], 1, self)
+
+                self.assertIn(f"Record {_EARLIER_DOI} is published. Attaching it to problem {_PROBLEM_ID} failed:\n"
+                              f"The client cannot read the answer of the exactory server at {url} to the POST request."
+                              f" Cause: {cause}. {_build_unconfirmed_write_rule(url)}\nResolve that cause. Then run"
+                              " exactory-draft attach-problem. It attaches the recorded record and publishes nothing.",
+                              output)
+                self.assertEqual([(method, path) for method, path, _ in received],
+                                 [("GET", "/api/v1/me"), ("POST", papers_path)])
+                self.assertEqual(_read_journal(self.workspace_dir), journal)
         self.assertEqual(self.fake_api.requests, [])
 
 

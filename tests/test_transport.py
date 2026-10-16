@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import http.client
 import importlib.machinery
 import importlib.util
 import io
 import json
 import os
+import socket
 import tempfile
 import urllib.error
 import urllib.parse
@@ -134,6 +136,35 @@ class _FakeResponse(io.BytesIO):
 
     def getcode(self) -> int:
         return self._status
+
+
+class _BodyThatBreaksOff(io.BytesIO):
+    """A body that does not arrive: reading it raises `error`, as http.client raises it for a dropped connection."""
+
+    def __init__(self, error: Exception) -> None:
+        super().__init__(b"")
+        self.error = error
+
+    def read(self, *args) -> bytes:
+        raise self.error
+
+
+class _AnswerThatBreaksOff(_BodyThatBreaksOff):
+    """An answer whose status arrived and whose body does not."""
+
+    def __init__(self, error: Exception, status: int) -> None:
+        super().__init__(error)
+        self._status = status
+
+    def getcode(self) -> int:
+        return self._status
+
+
+def _build_unconfirmed_write_rule(origin: str) -> str:
+    """What a message says after a write whose result the command cannot confirm: the server may have applied it,
+    so the user checks before sending it again."""
+    return (f"The server at {origin} may have applied the request. Before you run the command again, check on"
+            f" {origin} whether the change is there.")
 
 
 class _OpenUrlTransportTestCase(unittest.TestCase):
@@ -847,15 +878,25 @@ class TestPostChallengeSubcommand(_OpenUrlTransportTestCase):
                 body = json.loads(self._single_request().data.decode())
                 self.assertEqual(body["citations"][0]["locator"], locator)
 
-    def test_a_lone_surrogate_in_a_citation_counts_as_one_utf16_unit(self) -> None:
-        # json.load turns a "\ud800" escape into a lone surrogate, and the
-        # server's zod bounds count it as one UTF-16 unit; the client mirror
-        # must count it the same way instead of raising UnicodeEncodeError.
+    def test_a_lone_surrogate_in_a_citation_is_refused_before_any_request(self) -> None:
+        # json.load turns a "\ud800" escape into a lone surrogate. The server
+        # builds the citation on plainTextSchema, which refuses an unpaired
+        # surrogate, so the client refuses it first.
         self.citations_path.write_text(
             '[{"citation": "0123456789\\ud800", "locator": "10.1234/exact.5678"}]')
-        self._run(self._post_argv())
+        _, stderr_text = self._run(self._post_argv(), expected_exit_code=1)
+        self.assertEqual(stderr_text, "The citation of entry 1 is not valid UTF-8 text. It contains U+D800 at"
+                                      " position 11. Give the text as UTF-8.\n")
+        self.assertEqual(self.sent_requests, [])
+
+    def test_a_lone_surrogate_in_the_title_counts_as_one_utf16_unit(self) -> None:
+        # argv turns a byte that is not UTF-8 into a lone surrogate. The server
+        # builds the title on z.string(), whose bounds count it as one UTF-16
+        # unit, so the client counts it the same way instead of raising
+        # UnicodeEncodeError, and sends a title of exactly eight units.
+        self._run(self._post_argv(title="Seven c\udcff"))
         body = json.loads(self._single_request().data.decode())
-        self.assertEqual(body["citations"][0]["citation"], "0123456789\ud800")
+        self.assertEqual(body["title"], "Seven c\udcff")
 
     def test_an_empty_citations_list_is_refused(self) -> None:
         self.citations_path.write_text("[]")
@@ -995,6 +1036,101 @@ class TestReportChallengeSubcommand(_OpenUrlTransportTestCase):
         self.response_status = 200
         _, stderr_text = self._run(["report-challenge", "chal-1"])
         self.assertEqual(stderr_text, "The server returned the existing report for this challenge.\n")
+
+
+class TestAnswersThatDidNotArriveInFull(_OpenUrlTransportTestCase):
+    """The request went out, and then its answer did not arrive in full: a timeout or a dropped connection while the
+    command waits for the answer or reads it, or a 2xx answer whose body is not JSON. The command ends with one message
+    that names the origin and the cause, and exits with code 1. A read changed nothing on the server, so the user runs
+    it again. A write may have been applied, so the user checks on the origin first."""
+
+    # A write and a read, each with the advice that its message ends with.
+    _REQUESTS = (("POST", ["report-challenge", "chal-1"], _build_unconfirmed_write_rule("https://api.test")),
+                 ("GET", ["challenge", "chal-1"], "Run the command again."))
+
+    @staticmethod
+    def _build_errors() -> tuple:
+        """What http.client raises for an answer that does not arrive in full. On Python 3.10 and later
+        socket.timeout is TimeoutError; on 3.9 they are two classes."""
+        return (socket.timeout("timed out"), TimeoutError("timed out"),
+                ConnectionResetError(54, "Connection reset by peer"),
+                http.client.RemoteDisconnected("Remote end closed connection without response"),
+                http.client.IncompleteRead(b'{"id"', 20))
+
+    @staticmethod
+    def _build_message(method: str, cause: str, advice: str) -> str:
+        return (f"The client cannot read the answer of the exactory server at https://api.test to the {method}"
+                f" request. Cause: {cause}. {advice}\n")
+
+    def test_an_answer_that_breaks_off_while_its_body_is_read_ends_with_a_message(self) -> None:
+        for method, argv, advice in self._REQUESTS:
+            for error in self._build_errors():
+                with self.subTest(method=method, error=type(error).__name__):
+                    def answer_then_break_off(request: urllib.request.Request, timeout: float | None = None,
+                                              error: Exception = error) -> _AnswerThatBreaksOff:
+                        self.sent_requests.append(request)
+                        return _AnswerThatBreaksOff(error, 200)
+                    _transport.open_url_within_origin = answer_then_break_off
+
+                    stdout_text, stderr_text = self._run(argv, expected_exit_code=1)
+
+                    self.assertEqual(stderr_text, self._build_message(method, str(error), advice))
+                    self.assertEqual(stdout_text, "")
+
+    def test_an_answer_that_does_not_come_while_the_command_waits_ends_with_a_message(self) -> None:
+        for method, argv, advice in self._REQUESTS:
+            for error in self._build_errors():
+                with self.subTest(method=method, error=type(error).__name__):
+                    def break_off_before_the_status(request: urllib.request.Request, timeout: float | None = None,
+                                                    error: Exception = error) -> _FakeResponse:
+                        self.sent_requests.append(request)
+                        raise error
+                    _transport.open_url_within_origin = break_off_before_the_status
+
+                    _, stderr_text = self._run(argv, expected_exit_code=1)
+
+                    self.assertEqual(stderr_text, self._build_message(method, str(error), advice))
+
+    def test_a_2xx_answer_whose_body_is_not_json_ends_with_a_message(self) -> None:
+        for method, argv, advice in self._REQUESTS:
+            for status in (200, 201):
+                with self.subTest(method=method, status=status):
+                    self.response_status, self.response_body = status, b"not json"
+
+                    _, stderr_text = self._run(argv, expected_exit_code=1)
+
+                    self.assertEqual(stderr_text, self._build_message(
+                        method, f"the answer has HTTP {status} and a body that is not JSON", advice))
+
+    def test_an_error_answer_whose_body_breaks_off_ends_with_a_message(self) -> None:
+        for method, argv, advice in self._REQUESTS:
+            with self.subTest(method=method):
+                error = http.client.IncompleteRead(b'{"err', 30)
+                http_error = urllib.error.HTTPError("https://api.test", 503, "unavailable", {}, _BodyThatBreaksOff(error))
+                self.addCleanup(http_error.close)
+
+                def answer_with_the_error(request: urllib.request.Request, timeout: float | None = None,
+                                          http_error: urllib.error.HTTPError = http_error) -> _FakeResponse:
+                    self.sent_requests.append(request)
+                    raise http_error
+                _transport.open_url_within_origin = answer_with_the_error
+
+                _, stderr_text = self._run(argv, expected_exit_code=1)
+
+                self.assertEqual(stderr_text, self._build_message(method, str(error), advice))
+                self.assertTrue(http_error.closed)
+
+    def test_a_failure_before_the_request_went_out_keeps_its_message(self) -> None:
+        def refuse_the_connection(request: urllib.request.Request, timeout: float | None = None) -> _FakeResponse:
+            raise urllib.error.URLError(ConnectionRefusedError(61, "Connection refused"))
+        _transport.open_url_within_origin = refuse_the_connection
+        for method, argv, _ in self._REQUESTS:
+            with self.subTest(method=method):
+                _, stderr_text = self._run(argv, expected_exit_code=1)
+
+                self.assertEqual(stderr_text, "The client cannot reach https://api.test. Cause: [Errno 61] Connection"
+                                              " refused. Make sure that the network and EXACTORY_API_URL are correct."
+                                              " Then send the request again.\n")
 
 
 class TestSubmitChallengeDeclaration(_OpenUrlTransportTestCase):
@@ -1159,6 +1295,19 @@ class TestLoginSubcommand(_OpenUrlTransportTestCase):
         _, stderr = self._run(["login", "--email", "a@test.local"], expected_exit_code=1)
         self.assertIn("Wait", stderr)
         self.assertTrue(error.closed)
+
+    def test_a_server_error_keeps_its_description_and_asks_for_a_check_before_another_request(self) -> None:
+        # Both login requests are writes: a server that sent a code or made a key before its error answered them.
+        for argv, status, description in (
+                (["login", "--email", "a@test.local"], 503, "exactory cannot send or check codes now."),
+                (["login", "--email", "a@test.local", "--code", "123456"], 503, "exactory cannot send or check codes now."),
+                (["login", "--email", "a@test.local"], 500, "The server returned HTTP 500.")):
+            with self.subTest(argv=argv, status=status):
+                error = self._fail_next_request(status, {"error": "unavailable"})
+                _, stderr = self._run(argv, expected_exit_code=1)
+                self.assertEqual(stderr, f"{description} {_build_unconfirmed_write_rule('https://api.test')}\n"
+                                         '{"error": "unavailable"}\n')
+                self.assertTrue(error.closed)
 
     def test_an_allowed_missing_response_is_closed(self) -> None:
         error = self._fail_next_request(404, {"error": "not_found"})

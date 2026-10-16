@@ -31,7 +31,8 @@ from research_harness.cli import add_identity, select_managed_path
 from research_harness.errors import ResearchError
 from research_harness.exactory_api import build_orcid_required_msg, read_api_base_url
 from research_harness.integration import command_identity, current_store
-from research_harness.same_origin import RefusedRedirectError, get_origin, open_url_within_origin
+from research_harness.same_origin import (INCOMPLETE_ANSWER_ERROR_TYPES, RefusedRedirectError, get_origin,
+                                          is_read_method, open_url_within_origin)
 from research_harness.submission import (check_submission_preconditions, check_verdict_preconditions,
                                          continue_submission, send_verdict, submit_managed)
 from research_harness.verification import record_task
@@ -69,6 +70,14 @@ _MATH_LEAN_CHECK_OUTCOMES = ("pass", "fail")
 # the authority; an older Python knows a few late-added format characters fewer than the server does.
 _MAX_LINK_UTF16_UNITS = 500
 _NON_TEXT_CHARACTER_CATEGORIES = ("Cc", "Cf", "Cs")
+# Mirrors plainTextSchema (apps/web/src/server/schemas/plain-text.ts in the exactory repository, design
+# 2026-10-12 §26.24), which the server applies to every free-text field: no control character except tab,
+# line feed, and carriage return, and no unpaired surrogate. Python holds a character beyond the basic plane
+# as one code point, and the json module joins an escaped surrogate pair into one, so every surrogate in the
+# text of an option is unpaired.
+_NON_PLAIN_TEXT_CHARACTER_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\ud800-\udfff]")
+# The character that starts a terminal color code.
+_ESCAPE_CHARACTER = "\x1b"
 _GITHUB_PAGE_URL_PREFIX = "https://github.com/"
 _CHECK_COMMAND_PATH = Path(__file__).with_name("exactory-check")
 
@@ -91,8 +100,21 @@ _HTTP_ERR_MSGS = {
     422: "The server rejected the request body. Correct the body. Then send it again.",
     429: "The hourly posting limit is reached. The Retry-After response header"
          " states the seconds to wait. Send the request again after that.",
-    503: "The paper source is not reachable now. Send the same request again later.",
+    # An answer of 500 to 599 does not show whether the server applied the request, so its message is a
+    # description, and _describe_http_error adds the advice that the method of the request earns.
+    503: "The paper source is not reachable now.",
 }
+# The advice after an answer of 500 to 599 to a read, which changed nothing on the server.
+_SEND_AGAIN_LATER_ADVICE_MSG = "Send the same request again later."
+# A read sends no body, so a 422 to a list is the server's refusal of its query. The server judges every
+# limit, so the message names the parts of the query and states no bound of its own.
+_LIST_QUERY_REFUSAL_TEMPLATE = "The server rejected the query ({query_parts}). Correct it. Then send the request again."
+# A page of a list sends its limit and its cursor (_build_page_query). The problem list sends its search
+# text and its filters too.
+_PAGE_QUERY_ERR_MSGS = {**_HTTP_ERR_MSGS,
+                        422: _LIST_QUERY_REFUSAL_TEMPLATE.format(query_parts="the limit or the cursor")}
+_PROBLEM_LIST_QUERY_ERR_MSGS = {**_HTTP_ERR_MSGS, 422: _LIST_QUERY_REFUSAL_TEMPLATE.format(
+    query_parts="the search text, a filter, the sort, the limit, or the cursor")}
 
 # The login routes carry no key, so their failures mean other things than the ones above.
 _LOGIN_ERR_MSGS = {
@@ -102,8 +124,7 @@ _LOGIN_ERR_MSGS = {
     422: "The server rejected the address or the code. Correct them. Then send the"
          " request again.",
     429: "Too many requests. Wait one minute. Then send the request again.",
-    503: "exactory cannot send or check codes now. Send the request again in a few"
-         " minutes.",
+    503: "exactory cannot send or check codes now.",
 }
 _TERMS_NOTICE = (
     "When you use the code, you agree to the Terms of Service"
@@ -162,7 +183,8 @@ def _send_request(method: str, path: str, body: dict | None = None, *,
     that adds the API key, and the request goes out under the rule of research_harness.same_origin:
     a redirect to another origin is refused, so the key stays with the origin that the user set, and
     every redirect of a request that is not a read is refused, so no other answer passes for the
-    answer to a write."""
+    answer to a write. Every other end of the request is one message too: an error answer, a request
+    that did not go out, and an answer that did not arrive in full or whose body is not JSON."""
     headers = {"Content-Type": "application/json", "User-Agent": _USER_AGENT}
     if authenticated:
         api_key = _read_api_key()
@@ -171,6 +193,7 @@ def _send_request(method: str, path: str, body: dict | None = None, *,
         headers["Authorization"] = f"Bearer {api_key}"
 
     base_url = read_api_base_url()
+    origin = get_origin(base_url)
     request = urllib.request.Request(
         base_url + path,
         method=method,
@@ -180,20 +203,30 @@ def _send_request(method: str, path: str, body: dict | None = None, *,
 
     try:
         with open_url_within_origin(request, timeout=_TIMEOUT_SECONDS) as response:
-            return json.load(response), response.getcode()
+            status, answer_bytes = response.getcode(), response.read()
     except RefusedRedirectError as error:
         _exit_with_error(_build_redirect_refusal_msg(error))
     except urllib.error.HTTPError as error:
         with error:
             if allow_missing and error.code == 404:
                 return {}, 404
-            detail = error.read().decode(errors="replace")[:2000]
-            message = _describe_http_error(error.code, detail, error_messages)
+            try:
+                detail = error.read().decode(errors="replace")[:2000]
+            except INCOMPLETE_ANSWER_ERROR_TYPES as read_error:
+                _exit_with_error(_build_unreadable_answer_msg(method, origin, str(read_error)))
+            message = _describe_http_error(method, origin, error.code, detail, error_messages)
             _exit_with_error(f"{message}\n{detail}")
     except urllib.error.URLError as error:
         _exit_with_error(f"The client cannot reach {base_url}. Cause: {error.reason}."
                          " Make sure that the network and EXACTORY_API_URL are correct."
                          " Then send the request again.")
+    except INCOMPLETE_ANSWER_ERROR_TYPES as error:
+        _exit_with_error(_build_unreadable_answer_msg(method, origin, str(error)))
+    try:
+        return json.loads(answer_bytes), status
+    except ValueError:
+        _exit_with_error(_build_unreadable_answer_msg(
+            method, origin, f"the answer has HTTP {status} and a body that is not JSON"))
     raise AssertionError("unreachable")
 
 
@@ -213,8 +246,22 @@ def _build_redirect_refusal_msg(error: RefusedRedirectError) -> str:
     else:
         refusal_msg = (f"The exactory server at {request_origin} answered the {error.method} request with a redirect."
                        f" The command does not follow a redirect of a {error.method} request.")
-    next_step_msg = "Then run the command again." if error.is_read else _build_unconfirmed_write_msg(request_origin)
+    next_step_msg = _build_unconfirmed_outcome_advice(error.method, request_origin, "Then run the command again.")
     return f"{refusal_msg} {next_step_msg}"
+
+
+def _build_unreadable_answer_msg(method: str, origin: str, cause: str) -> str:
+    """The message for a request that went out and whose answer the command cannot read: the answer
+    did not arrive in full, or its body is not JSON."""
+    return (f"The client cannot read the answer of the exactory server at {origin} to the {method} request."
+            f" Cause: {cause}. {_build_unconfirmed_outcome_advice(method, origin, 'Run the command again.')}")
+
+
+def _build_unconfirmed_outcome_advice(method: str, origin: str, read_advice_msg: str) -> str:
+    """The advice after an outcome that does not show whether the server applied the request. A read
+    changed nothing, so it gets `read_advice_msg`. Any other request may have taken effect, so it
+    gets the check-first advice."""
+    return read_advice_msg if is_read_method(method) else _build_unconfirmed_write_msg(origin)
 
 
 def _build_unconfirmed_write_msg(origin: str) -> str:
@@ -225,9 +272,12 @@ def _build_unconfirmed_write_msg(origin: str) -> str:
             f" {origin} whether the change is there.")
 
 
-def _describe_http_error(status: int, detail: str, error_messages: dict[int, str]) -> str:
+def _describe_http_error(method: str, origin: str, status: int, detail: str, error_messages: dict[int, str]) -> str:
     """The message for a failed request. A superseded verification names where the work went,
-    which no status-level message can: the requester moved it to a newer version of the paper."""
+    which no status-level message can: the requester moved it to a newer version of the paper. An
+    answer of 500 to 599 does not show that the server applied nothing, so its description ends
+    with the advice that the method of the request earns. A 4xx is refused before the write, and
+    its message keeps its own advice."""
     try:
         body = json.loads(detail)
     except ValueError:
@@ -235,7 +285,10 @@ def _describe_http_error(status: int, detail: str, error_messages: dict[int, str
     if isinstance(body, dict) and body.get("error") == "verification_superseded":
         return ("The requester moved this verification to a newer version of the paper."
                 f" Work on verification {body.get('successorId')} instead.")
-    return error_messages.get(status, f"The server returned HTTP {status}.")
+    description = error_messages.get(status, f"The server returned HTTP {status}.")
+    if 500 <= status <= 599:
+        return f"{description} {_build_unconfirmed_outcome_advice(method, origin, _SEND_AGAIN_LATER_ADVICE_MSG)}"
+    return description
 
 
 def _print_json(payload: dict) -> None:
@@ -311,7 +364,7 @@ def _send_report(subject_kind: str, subject_id: str, note: str | None, existing_
     201, when this account already reported the content, and the notice then goes to stderr."""
     body = {"subjectKind": subject_kind, "subjectId": subject_id}
     if note is not None:
-        body["note"] = _require_utf16_bounds("note", note, 1, 1000)
+        body["note"] = _require_plain_text_bounds("note", note, 1, 1000)
     payload, status = _send_request("POST", "/api/v1/reports", body)
     if status == 200:
         print(existing_report_notice, file=sys.stderr)
@@ -541,6 +594,34 @@ def _require_utf16_bounds(field_name: str, value: str,
     return value
 
 
+def _require_plain_text(field_name: str, text: str) -> str:
+    """Refuse a text that the server's plainTextSchema refuses, and return it otherwise. The message names the
+    field, the first refused character, and its position in the text as given, counted in characters from 1.
+    U+001B starts a terminal color code, and an unpaired surrogate is what Python makes of command-line bytes
+    that are not UTF-8, so each of the two names its own remedy."""
+    match = _NON_PLAIN_TEXT_CHARACTER_RE.search(text)
+    if match is None:
+        return text
+    character = match.group()
+    found_msg = f"U+{ord(character):04X} at position {match.start() + 1}"
+    if character == _ESCAPE_CHARACTER:
+        refusal_msg = (f"The {field_name} contains the control character {found_msg}. Terminal color codes start with"
+                       " this character. Copy the text without colors.")
+    elif unicodedata.category(character) == "Cs":
+        refusal_msg = f"The {field_name} is not valid UTF-8 text. It contains {found_msg}. Give the text as UTF-8."
+    else:
+        refusal_msg = (f"The {field_name} contains the control character {found_msg}. The server accepts no control"
+                       " character except tab, line feed, and carriage return. Remove the character.")
+    _exit_with_error(refusal_msg)
+    raise AssertionError("unreachable")
+
+
+def _require_plain_text_bounds(field_name: str, value: str, min_units: int, max_units: int) -> str:
+    """A free-text field that the server builds on plainTextSchema, checked in the order of that schema: the
+    characters of the text as given, then the bounds of the trimmed text."""
+    return _require_utf16_bounds(field_name, _require_plain_text(field_name, value), min_units, max_units)
+
+
 def _read_text_file(path: str) -> str:
     """The text of a file that the user named. A file that cannot be read as UTF-8 text ends the
     command with one message that gives the cause and the remedy."""
@@ -599,9 +680,9 @@ def _read_citations_file(path: str) -> list[dict]:
         if not isinstance(citation, str) or not isinstance(locator, str):
             _exit_with_error(f'Citation {index} is missing "citation" or "locator".'
                              " Write both as strings.")
-        citation = _require_utf16_bounds(f"citation of entry {index}",
-                                         citation, 10, 1000)
-        locator = locator.strip()
+        citation = _require_plain_text_bounds(f"citation of entry {index}",
+                                              citation, 10, 1000)
+        locator = _require_plain_text(f"locator of entry {index}", locator).strip()
         if _count_utf16_units(locator) > 500:
             _exit_with_error(f"The locator of entry {index} is over the limit of"
                              " 500 characters. Make it shorter.")
@@ -786,14 +867,17 @@ def _run_me(args: argparse.Namespace) -> None:
 
 def _run_problems(args: argparse.Namespace) -> None:
     query = _build_page_query(args)
-    for key, value in (("q", args.query), ("status", args.status), ("area", args.area), ("sort", args.sort)):
+    if args.query:
+        query["q"] = _require_plain_text("search text", args.query)
+    for key, value in (("status", args.status), ("area", args.area), ("sort", args.sort)):
         if value:
             query[key] = value
     for key, enabled in (("hasFormalStatement", args.has_formal_statement), ("hasProof", args.has_proof),
                          ("hasPassingLeanCheck", args.has_passing_lean_check)):
         if enabled:
             query[key] = "true"
-    payload, _ = _send_request("GET", "/api/v1/math-problems?" + _encode_query(query))
+    payload, _ = _send_request("GET", "/api/v1/math-problems?" + _encode_query(query),
+                               error_messages=_PROBLEM_LIST_QUERY_ERR_MSGS)
     _print_json(payload)
 
 
@@ -803,23 +887,20 @@ def _run_problem(args: argparse.Namespace) -> None:
 
 
 def _run_problem_history(args: argparse.Namespace) -> None:
-    query = _encode_query(_build_page_query(args))
-    payload, _ = _send_request(
-        "GET", _build_api_path("math-problems", args.problem_id, "status-events") + "?" + query)
-    _print_json(payload)
+    _print_page(_build_api_path("math-problems", args.problem_id, "status-events"), args)
 
 
 def _run_post_problem(args: argparse.Namespace) -> None:
     body = {
-        "title": _require_utf16_bounds("title", args.title, 8, 200),
+        "title": _require_plain_text_bounds("title", args.title, 8, 200),
         "area": _require_math_area(args.area),
-        "statement": _require_utf16_bounds(
+        "statement": _require_plain_text_bounds(
             "statement", _read_inline_or_file_text(args.statement, args.statement_file), 50, 20000),
-        "motivation": _require_utf16_bounds(
+        "motivation": _require_plain_text_bounds(
             "motivation", _read_inline_or_file_text(args.motivation, args.motivation_file), 100, 10000),
-        "currentState": _require_utf16_bounds(
+        "currentState": _require_plain_text_bounds(
             "current state", _read_inline_or_file_text(args.current_state, args.current_state_file), 100, 10000),
-        "resolutionCriteria": _require_utf16_bounds(
+        "resolutionCriteria": _require_plain_text_bounds(
             "resolution criteria",
             _read_inline_or_file_text(args.resolution_criteria, args.resolution_criteria_file), 50, 5000),
         "citations": _read_citations_file(args.citations_file),
@@ -831,7 +912,7 @@ def _run_post_problem(args: argparse.Namespace) -> None:
         _require_at_most(args.github_link, "context links", _MAX_CREATION_GITHUB_LINKS,
                          "Attach the rest with link-problem-github.")
         body["githubLinks"] = [
-            {"url": _require_github_context_url(url), "label": _require_utf16_bounds("link label", label, 1, 100)}
+            {"url": _require_github_context_url(url), "label": _require_plain_text_bounds("link label", label, 1, 100)}
             for url, label in args.github_link
         ]
     _send_math_write("POST", "/api/v1/math-problems", body)
@@ -853,7 +934,7 @@ def _run_add_formal_statement(args: argparse.Namespace) -> None:
     body = {"leanUrl": _require_lean_source_url(args.lean_url), "proofTargets": args.proof_target,
             "disproofTargets": disproof_targets}
     if args.note is not None or args.note_file is not None:
-        body["note"] = _require_utf16_bounds("note", _read_inline_or_file_text(args.note, args.note_file), 0, 2000)
+        body["note"] = _require_plain_text_bounds("note", _read_inline_or_file_text(args.note, args.note_file), 0, 2000)
     _send_math_write("POST", _build_api_path("math-problems", args.problem_id, "formal-statements"), body)
 
 
@@ -867,7 +948,7 @@ def _run_declare_status(args: argparse.Namespace) -> None:
     body = {"status": args.status}
     if is_resolution:
         body["resolvingProofId"] = args.resolving_proof
-    body["note"] = _require_utf16_bounds("note", _read_inline_or_file_text(args.note, args.note_file), 1, 5000)
+    body["note"] = _require_plain_text_bounds("note", _read_inline_or_file_text(args.note, args.note_file), 1, 5000)
     _send_math_write("PATCH", _build_api_path("math-problems", args.problem_id), body)
 
 
@@ -877,7 +958,8 @@ def _run_link_problem_paper(args: argparse.Namespace) -> None:
 
 
 def _run_link_problem_github(args: argparse.Namespace) -> None:
-    body = {"url": _require_github_context_url(args.url), "label": _require_utf16_bounds("label", args.label, 1, 100)}
+    body = {"url": _require_github_context_url(args.url),
+            "label": _require_plain_text_bounds("label", args.label, 1, 100)}
     _send_math_write("POST", _build_api_path("math-problems", args.problem_id, "github-links"), body)
 
 
@@ -891,7 +973,8 @@ _ARXIV_WITHOUT_VERSION_RE = re.compile(
 
 
 def _run_post_proof(args: argparse.Namespace) -> None:
-    summary = _require_utf16_bounds("summary", _read_inline_or_file_text(args.summary, args.summary_file), 100, 20000)
+    summary = _require_plain_text_bounds("summary", _read_inline_or_file_text(args.summary, args.summary_file),
+                                         100, 20000)
     if args.writeup is None and args.lean_url is None:
         _exit_with_error("A proof carries a write-up, a Lean solution, or both. Add --writeup, or --lean-url with"
                          " --formal-statement-version.")
@@ -929,13 +1012,13 @@ def _run_post_lean_check(args: argparse.Namespace) -> None:
     _require_at_most(axioms, "axioms", _MAX_LEAN_CHECK_AXIOMS)
     body = {
         "outcome": args.outcome,
-        "tool": _require_utf16_bounds("tool", args.tool, 1, 200),
-        "leanToolchain": _require_utf16_bounds("Lean toolchain", args.lean_toolchain, 1, 100),
+        "tool": _require_plain_text_bounds("tool", args.tool, 1, 200),
+        "leanToolchain": _require_plain_text_bounds("Lean toolchain", args.lean_toolchain, 1, 100),
         "axioms": axioms,
         "evidenceUrl": evidence_url,
     }
     if args.output_excerpt_file is not None:
-        body["outputExcerpt"] = _require_utf16_bounds(
+        body["outputExcerpt"] = _require_plain_text_bounds(
             "output excerpt", _read_inline_or_file_text(None, args.output_excerpt_file), 1, 20000)
     _send_math_write("POST", _build_api_path("math-proofs", args.proof_id, "lean-checks"), body)
 
@@ -950,7 +1033,7 @@ def _run_lean_check(args: argparse.Namespace) -> None:
 
 
 def _run_post_discussion(args: argparse.Namespace) -> None:
-    body = {"body": _require_utf16_bounds("post", _read_inline_or_file_text(args.body, args.body_file), 1, 10000)}
+    body = {"body": _require_plain_text_bounds("post", _read_inline_or_file_text(args.body, args.body_file), 1, 10000)}
     if args.reply_to is not None:
         body["replyToPostId"] = args.reply_to
     _send_math_write("POST", _build_api_path("math-problems", args.problem_id, "posts"), body)
@@ -968,7 +1051,8 @@ def _run_discussion_post(args: argparse.Namespace) -> None:
 def _print_page(path: str, args: argparse.Namespace) -> None:
     """One page of a paginated list, with the limit and the cursor that the command line gives."""
     query = _build_page_query(args)
-    payload, _ = _send_request("GET", path + ("?" + _encode_query(query) if query else ""))
+    payload, _ = _send_request("GET", path + ("?" + _encode_query(query) if query else ""),
+                               error_messages=_PAGE_QUERY_ERR_MSGS)
     _print_json(payload)
 
 

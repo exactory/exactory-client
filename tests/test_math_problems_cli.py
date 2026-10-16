@@ -1710,11 +1710,12 @@ _ID_IN_PATH_COMMAND_LINES = (
     ("status",), ("challenge",), ("task",), ("paper",),
 )
 
-# The commands that put a value in a query, with the option that carries it.
+# The commands that put a value in a query, with the option that carries it. The search text of problems is free text,
+# so the plain text check refuses it first, with a message that names it (TestPlainTextOfFreeTextFields).
 _VALUE_IN_QUERY_COMMAND_LINES = (
     ("proofs", _PROBLEM_ID, "--cursor"), ("lean-checks", _PROOF_ID, "--cursor"),
     ("discussion", _PROBLEM_ID, "--cursor"), ("problem-history", _PROBLEM_ID, "--cursor"),
-    ("problems", "--cursor"), ("problems", "--query"), ("problems", "--area"),
+    ("problems", "--cursor"), ("problems", "--area"),
     ("tasks", "--cursor"), ("tasks", "--query"), ("challenges", "--field"), ("challenges", "--cursor"),
 )
 
@@ -1846,6 +1847,341 @@ class TestAsciiDigitsInIdentifierPatterns(_MathCliTestCase):
                 self.run_cli(["paper", identifier])
                 self.assertEqual(self.list_sent_requests(),
                                  [("GET", "/api/v1/papers/" + urllib.parse.quote(identifier, safe=""))])
+
+
+# The classes below cover the character rule that the server applies to every free-text field (plainTextSchema, design
+# 2026-10-12 §26.24), the message for a refused list query, and the advice after an answer of 500 to 599 to a write.
+
+_BELL_CHARACTER = chr(0x07)
+_ESCAPE_CHARACTER = chr(0x1B)
+# What argv holds for the byte 0xFF, which is not UTF-8 text.
+_LONE_SURROGATE = chr(0xDCFF)
+
+
+def _build_control_character_refusal(field: str, code_point: int, position: int) -> str:
+    """The refusal of a free-text field that holds a control character other than tab, line feed, and carriage return."""
+    return (f"The {field} contains the control character U+{code_point:04X} at position {position}. The server"
+            " accepts no control character except tab, line feed, and carriage return. Remove the character.")
+
+
+def _build_color_code_refusal(field: str, position: int) -> str:
+    """The refusal of a free-text field that holds U+001B, the character that starts a terminal color code."""
+    return (f"The {field} contains the control character U+001B at position {position}. Terminal color codes start"
+            " with this character. Copy the text without colors.")
+
+
+def _build_not_utf8_text_refusal(field: str, code_point: int, position: int) -> str:
+    """The refusal of a free-text field that holds an unpaired surrogate."""
+    return (f"The {field} is not valid UTF-8 text. It contains U+{code_point:04X} at position {position}."
+            " Give the text as UTF-8.")
+
+
+def _build_unconfirmed_write_rule(origin: str) -> str:
+    """What a message says after a write whose result the command cannot confirm: the server may have applied it,
+    so the user checks before sending it again."""
+    return (f"The server at {origin} may have applied the request. Before you run the command again, check on"
+            f" {origin} whether the change is there.")
+
+
+class TestPlainTextOfFreeTextFields(_MathCliTestCase):
+    """The server refuses a control character other than tab, line feed, and carriage return, and an unpaired
+    surrogate, in every field that it builds on plainTextSchema (design 2026-10-12 §26.24). The command refuses the
+    same characters first, before the ORCID preflight and before any request, and names the field, the character,
+    and its position."""
+
+    def write_text_file(self, text: str) -> str:
+        path = self.scratch_dir / "text-field.txt"
+        path.write_text(text, encoding="utf-8")
+        return str(path)
+
+    def write_citations_file(self, citation: str, locator: str = "10.1017/cbo9781107340688") -> str:
+        path = self.scratch_dir / "text-field-citations.json"
+        path.write_text(json.dumps([{"citation": citation, "locator": locator}]), encoding="utf-8")
+        return str(path)
+
+    def build_post_challenge_argv(self, citations_path: str) -> list[str]:
+        return ["post-challenge", "--title", "An open question", "--field", "cs.LG", "--problem-statement", "p" * 200,
+                "--current-state", "c" * 100, "--resolution-criteria", "r" * 50, "--citations-file", citations_path]
+
+    def build_inline_post_argv(self, text: str) -> list[str]:
+        return ["post-discussion", _PROBLEM_ID, "--body", text]
+
+    def build_file_post_argv(self, text: str) -> list[str]:
+        return ["post-discussion", _PROBLEM_ID, "--body-file", self.write_text_file(text)]
+
+    def build_challenge_citation_argv(self, text: str) -> list[str]:
+        return self.build_post_challenge_argv(self.write_citations_file(text))
+
+    def list_free_text_fields(self) -> list[tuple]:
+        """Every option whose server field is built on plainTextSchema: the option, the name of its field in the
+        messages, the fewest characters that the field takes, and a function that builds a valid command line with
+        the given text in that field."""
+        def replace_option(argv: list[str], option: str, value: str, new_option: str | None = None) -> list[str]:
+            index = argv.index(option)
+            argv[index:index + 2] = [new_option or option, value]
+            return argv
+
+        add_formal_statement = ["add-formal-statement", _PROBLEM_ID, "--lean-url", _LEAN_SOURCE_URL, "--proof-target",
+                                "statement"]
+        declare_status = ["declare-status", _PROBLEM_ID, "--status", "open"]
+        post_proof = ["post-proof", _PROBLEM_ID, "--claim", "proves", "--writeup", "2601.12345v2"]
+        post_lean_check = ["post-lean-check", _PROOF_ID, "--outcome", "pass", "--tool", "t", "--lean-toolchain", "v",
+                           "--evidence-url", _CHECK_RUN_URL]
+        citation = "H. Minc, Permanents, 1978, chapter 2."
+        fields = [
+            ("post-problem --title", "title", 8,
+             lambda text: replace_option(self.build_post_problem_argv(), "--title", text)),
+            ("post-problem --citations-file, the citation", "citation of entry 1", 10,
+             lambda text: replace_option(self.build_post_problem_argv(), "--citations-file",
+                                         self.write_citations_file(text))),
+            ("post-problem --citations-file, the locator", "locator of entry 1", 1,
+             lambda text: replace_option(self.build_post_problem_argv(), "--citations-file",
+                                         self.write_citations_file(citation, text))),
+            ("post-problem --github-link, the label", "link label", 1,
+             lambda text: self.build_post_problem_argv("--github-link", "https://github.com/o/r", text)),
+            ("problems --query", "search text", 1, lambda text: ["problems", "--query", text]),
+            ("add-formal-statement --note", "note", 0, lambda text: [*add_formal_statement, "--note", text]),
+            ("add-formal-statement --note-file", "note", 0,
+             lambda text: [*add_formal_statement, "--note-file", self.write_text_file(text)]),
+            ("declare-status --note", "note", 1, lambda text: [*declare_status, "--note", text]),
+            ("declare-status --note-file", "note", 1,
+             lambda text: [*declare_status, "--note-file", self.write_text_file(text)]),
+            ("link-problem-github --label", "label", 1,
+             lambda text: ["link-problem-github", _PROBLEM_ID, "--url", "https://github.com/o/r", "--label", text]),
+            ("post-proof --summary", "summary", 100, lambda text: [*post_proof, "--summary", text]),
+            ("post-proof --summary-file", "summary", 100,
+             lambda text: [*post_proof, "--summary-file", self.write_text_file(text)]),
+            ("post-lean-check --tool", "tool", 1, lambda text: replace_option(list(post_lean_check), "--tool", text)),
+            ("post-lean-check --lean-toolchain", "Lean toolchain", 1,
+             lambda text: replace_option(list(post_lean_check), "--lean-toolchain", text)),
+            ("post-lean-check --output-excerpt-file", "output excerpt", 1,
+             lambda text: [*post_lean_check, "--output-excerpt-file", self.write_text_file(text)]),
+            ("post-discussion --body", "post", 1, self.build_inline_post_argv),
+            ("post-discussion --body-file", "post", 1, self.build_file_post_argv),
+            ("report-math --note", "note", 1, lambda text: ["report-math", "math_post", _PROOF_ID, "--note", text]),
+            ("report-challenge --note", "note", 1, lambda text: ["report-challenge", _PROBLEM_ID, "--note", text]),
+            ("post-challenge --citations-file, the citation", "citation of entry 1", 10,
+             self.build_challenge_citation_argv),
+            ("post-challenge --citations-file, the locator", "locator of entry 1", 1,
+             lambda text: self.build_post_challenge_argv(self.write_citations_file(citation, text))),
+        ]
+        for name, minimum in (("statement", 50), ("motivation", 100), ("current-state", 100),
+                              ("resolution-criteria", 50)):
+            field = name.replace("-", " ")
+            fields.append((f"post-problem --{name}", field, minimum,
+                           lambda text, name=name: replace_option(self.build_post_problem_argv(), f"--{name}", text)))
+            fields.append((f"post-problem --{name}-file", field, minimum,
+                           lambda text, name=name: replace_option(self.build_post_problem_argv(), f"--{name}",
+                                                                  self.write_text_file(text), f"--{name}-file")))
+        return fields
+
+    def test_each_kind_of_input_names_the_field_the_character_and_its_position_and_sends_nothing(self) -> None:
+        tail = ", Permanents, 1978, chapter 2."
+        for kind, field, build_argv in (("inline option", "post", self.build_inline_post_argv),
+                                        ("file option", "post", self.build_file_post_argv),
+                                        ("Grand Challenge citation", "citation of entry 1",
+                                         self.build_challenge_citation_argv)):
+            for text, message in (
+                    ("H. Minc" + _ESCAPE_CHARACTER + "[31m" + tail, _build_color_code_refusal(field, 8)),
+                    ("H. Minc" + _BELL_CHARACTER + tail, _build_control_character_refusal(field, 0x07, 8)),
+                    ("H. Minc" + chr(0x7F) + tail, _build_control_character_refusal(field, 0x7F, 8))):
+                with self.subTest(kind=kind, character=f"U+{ord(text[7]):04X}"):
+                    _, stderr_text = self.run_cli(build_argv(text), expected_exit_code=1)
+                    self.assertEqual(stderr_text, message + "\n")
+        # The ORCID preflight is a request too, and none went out.
+        self.assertEqual(self.sent, [])
+
+    def test_a_lone_surrogate_is_named_as_text_that_is_not_utf8(self) -> None:
+        text = "H. Minc" + _LONE_SURROGATE + ", Permanents, 1978, chapter 2."
+        _, stderr_text = self.run_cli(self.build_inline_post_argv(text), expected_exit_code=1)
+        self.assertEqual(stderr_text, _build_not_utf8_text_refusal("post", 0xDCFF, 8) + "\n")
+        # The json module turns the escape \udcff into a lone surrogate.
+        _, stderr_text = self.run_cli(self.build_challenge_citation_argv(text), expected_exit_code=1)
+        self.assertEqual(stderr_text, _build_not_utf8_text_refusal("citation of entry 1", 0xDCFF, 8) + "\n")
+        # A file is read as UTF-8 text, so the reader refuses the byte that argv turns into a lone surrogate.
+        path = self.scratch_dir / "post.txt"
+        path.write_bytes(b"H. Minc\xff, Permanents, 1978, chapter 2.")
+        _, stderr_text = self.run_cli(["post-discussion", _PROBLEM_ID, "--body-file", str(path)], expected_exit_code=1)
+        self.assertEqual(stderr_text, f"The file {path} is not UTF-8 text. Save it as UTF-8.\n")
+        _, stderr_text = self.run_cli(["problems", "--query", "perm" + _LONE_SURROGATE], expected_exit_code=1)
+        self.assertEqual(stderr_text, _build_not_utf8_text_refusal("search text", 0xDCFF, 5) + "\n")
+        self.assertEqual(self.sent, [])
+
+    def test_every_free_text_field_that_the_server_builds_on_plain_text_refuses_a_control_character(self) -> None:
+        for option, field, minimum, build_argv in self.list_free_text_fields():
+            with self.subTest(option=option):
+                text = "ab" + _BELL_CHARACTER + "c" * max(1, minimum)
+                _, stderr_text = self.run_cli(build_argv(text), expected_exit_code=1)
+                self.assertEqual(stderr_text, _build_control_character_refusal(field, 0x07, 3) + "\n")
+        self.assertEqual(self.sent, [])
+
+    def test_the_position_counts_the_characters_before_the_refused_one(self) -> None:
+        for text, position in ((_BELL_CHARACTER, 1), ("  " + _BELL_CHARACTER, 3), (chr(0x1F600) + _BELL_CHARACTER, 2),
+                               ("one\ntwo\t" + _BELL_CHARACTER + _ESCAPE_CHARACTER, 9)):
+            with self.subTest(text=text):
+                _, stderr_text = self.run_cli(self.build_inline_post_argv(text), expected_exit_code=1)
+                self.assertEqual(stderr_text, _build_control_character_refusal("post", 0x07, position) + "\n")
+        self.assertEqual(self.sent, [])
+
+    def test_the_characters_that_the_server_keeps_are_sent_unchanged(self) -> None:
+        # Tab, line feed, carriage return, the C1 controls, an invisible format character, the line separator, and a
+        # character beyond the basic plane, each between two letters.
+        kept = ("a\tb\nc\rd" + chr(0x80) + "e" + chr(0x85) + "f" + chr(0x9F) + "g" + chr(0x200B) + "h" + chr(0x2028)
+                + "i" + chr(0x1F600) + "j")
+        posts_path = f"/api/v1/math-problems/{_PROBLEM_ID}/posts"
+        self.run_cli(self.build_inline_post_argv(kept))
+        self.assertEqual(self.read_sent_body("POST", posts_path)["body"], kept)
+        # A text file is read with universal newlines, so a carriage return in it arrives as a line feed.
+        self.sent.clear()
+        self.run_cli(self.build_file_post_argv(kept.replace("\r", "")))
+        self.assertEqual(self.read_sent_body("POST", posts_path)["body"], kept.replace("\r", ""))
+        self.run_cli(self.build_challenge_citation_argv("H. Minc " + kept))
+        self.assertEqual(self.read_sent_body("POST", "/api/v1/grand-challenges")["citations"],
+                         [{"citation": "H. Minc " + kept, "locator": "10.1017/cbo9781107340688"}])
+        self.run_cli(["problems", "--query", kept])
+        self.assertEqual(urllib.parse.parse_qs(urllib.parse.urlparse(self.sent[-1].full_url).query)["q"], [kept])
+
+    def test_the_refused_characters_are_exactly_those_of_the_server_rule(self) -> None:
+        refused_code_points = [code_point for code_point in range(0x10000)
+                               if _cli._NON_PLAIN_TEXT_CHARACTER_RE.search(chr(code_point))]
+        self.assertEqual(refused_code_points,
+                         [*range(0x00, 0x09), 0x0B, 0x0C, *range(0x0E, 0x20), 0x7F, *range(0xD800, 0xE000)])
+        self.assertIsNone(_cli._NON_PLAIN_TEXT_CHARACTER_RE.search(chr(0x1F600)))
+
+    def test_the_grand_challenge_fields_that_the_server_does_not_build_on_plain_text_keep_their_checks(self) -> None:
+        # The server builds the title, the field, the problem statement, the current state, the resolution criteria,
+        # and the resolution note of a Grand Challenge on z.string(), so their text goes out as before.
+        argv = self.build_post_challenge_argv(self.write_citations_file("H. Minc, Permanents, 1978, chapter 2."))
+        argv[argv.index("--title") + 1] = "An open" + _BELL_CHARACTER + " question"
+        self.run_cli(argv)
+        self.assertEqual(self.read_sent_body("POST", "/api/v1/grand-challenges")["title"],
+                         "An open" + _BELL_CHARACTER + " question")
+        self.run_cli(["solve-challenge", _PROBLEM_ID, "--note", "Solved" + _BELL_CHARACTER + " by the cited proof."])
+        self.assertEqual(self.read_sent_body("PATCH", f"/api/v1/grand-challenges/{_PROBLEM_ID}")["resolutionNote"],
+                         "Solved" + _BELL_CHARACTER + " by the cited proof.")
+
+
+class TestRefusedListQueries(_MathCliTestCase):
+    """A read sends no body, so a 422 to a list is the server's refusal of the query. The message names the query and
+    asks for a correction, and the server's detail follows. The server judges every limit, so no bound is stated."""
+
+    _DETAIL_TEXT = '{"error": "invalid_request"}'
+
+    def test_a_refused_page_query_names_the_limit_and_the_cursor_and_keeps_the_detail(self) -> None:
+        history_route = f"/api/v1/math-problems/{_PROBLEM_ID}/status-events"
+        for command, path_id, route in (*_PAGED_READ_COMMANDS, ("problem-history", _PROBLEM_ID, history_route)):
+            with self.subTest(command=command):
+                self.sent.clear()
+                self.answers[("GET", route)] = (422, {"error": "invalid_request"})
+                _, stderr_text = self.run_cli([command, path_id, "--limit", "60"], expected_exit_code=1)
+                self.assertEqual(stderr_text, "The server rejected the query (the limit or the cursor). Correct it."
+                                              f" Then send the request again.\n{self._DETAIL_TEXT}\n")
+                self.assertEqual(self.list_sent_requests(), [("GET", route)])
+
+    def test_a_refused_problem_list_query_names_its_search_text_and_its_filters_too(self) -> None:
+        self.answers[("GET", "/api/v1/math-problems")] = (422, {"error": "invalid_request"})
+        _, stderr_text = self.run_cli(["problems", "--sort", "relevance", "--limit", "101"], expected_exit_code=1)
+        self.assertEqual(stderr_text, "The server rejected the query (the search text, a filter, the sort, the limit,"
+                                      " or the cursor). Correct it. Then send the request again."
+                                      f"\n{self._DETAIL_TEXT}\n")
+
+    def test_a_refused_write_keeps_the_message_about_its_body(self) -> None:
+        self.answers[("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/posts")] = (422, {"error": "invalid_request"})
+        _, stderr_text = self.run_cli(["post-discussion", _PROBLEM_ID, "--body", "A post."], expected_exit_code=1)
+        self.assertEqual(stderr_text, "The server rejected the request body. Correct the body. Then send it again."
+                                      f"\n{self._DETAIL_TEXT}\n")
+
+
+class TestServerErrorsAfterAWrite(_MathCliTestCase):
+    """An answer of 500 to 599 does not show that the server applied nothing. A server that stores a post and then
+    answers 503 leaves a post that a second run would post again, so the advice to a write is to check first. A read
+    changes nothing, and it keeps the advice to send it again."""
+
+    _DETAIL_TEXT = '{"error": "source_unavailable"}'
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.stored_posts: list[str] = []
+        posts_path = f"/api/v1/math-problems/{_PROBLEM_ID}/posts"
+        answer_other_requests = _cli.open_url_within_origin
+
+        def store_the_post_then_answer_503(request: urllib.request.Request,
+                                           timeout: float | None = None) -> _FakeResponse:
+            route = (request.get_method(), urllib.parse.urlparse(request.full_url).path)
+            if route == ("POST", posts_path):
+                self.sent.append(request)
+                # The server applies the write, and only then answers with the error.
+                self.stored_posts.append(json.loads(request.data.decode())["body"])
+                raise urllib.error.HTTPError(request.full_url, 503, "unavailable", {},
+                                             io.BytesIO(self._DETAIL_TEXT.encode()))
+            if route == ("GET", posts_path):
+                self.sent.append(request)
+                page = {"posts": [{"body": body} for body in self.stored_posts], "nextCursor": None}
+                return _FakeResponse(json.dumps(page).encode(), 200)
+            return answer_other_requests(request, timeout)
+
+        _cli.open_url_within_origin = store_the_post_then_answer_503
+
+    def test_a_post_that_the_server_stored_before_its_503_is_reported_as_possibly_applied(self) -> None:
+        _, stderr_text = self.run_cli(["post-discussion", _PROBLEM_ID, "--body", "A post."], expected_exit_code=1)
+
+        self.assertEqual(stderr_text, "The paper source is not reachable now."
+                                      f" {_build_unconfirmed_write_rule('https://api.test')}\n{self._DETAIL_TEXT}\n")
+        # A second run would post the same text again, so no sentence asks the user to send the request again.
+        self.assertNotIn("again later", stderr_text)
+        self.assertEqual(self.stored_posts, ["A post."])
+        # The check that the advice asks for finds the post.
+        stdout_text, _ = self.run_cli(["discussion", _PROBLEM_ID])
+        self.assertEqual(json.loads(stdout_text)["posts"], [{"body": "A post."}])
+
+    def test_every_write_method_gets_the_check_first_advice_for_every_server_error(self) -> None:
+        vote_route = f"/api/v1/math-problems/{_PROBLEM_ID}/vote"
+        writes = ((["vote-problem", _PROBLEM_ID, "--value", "1"], "PUT", vote_route),
+                  (["vote-problem", _PROBLEM_ID, "--value", "0"], "DELETE", vote_route),
+                  (["declare-status", _PROBLEM_ID, "--status", "open", "--note", "Reopened."], "PATCH",
+                   f"/api/v1/math-problems/{_PROBLEM_ID}"),
+                  (["link-problem-paper", _PROBLEM_ID, "--identifier", "2609.97001v3"], "POST",
+                   f"/api/v1/math-problems/{_PROBLEM_ID}/papers"))
+        for argv, method, route in writes:
+            for status in (500, 502, 503, 504, 599):
+                with self.subTest(command=argv[0], method=method, status=status):
+                    self.answers[(method, route)] = (status, {"error": "source_unavailable"})
+                    description = ("The paper source is not reachable now." if status == 503
+                                   else f"The server returned HTTP {status}.")
+                    _, stderr_text = self.run_cli(argv, expected_exit_code=1)
+                    self.assertEqual(stderr_text, f"{description} {_build_unconfirmed_write_rule('https://api.test')}"
+                                                  f"\n{self._DETAIL_TEXT}\n")
+
+    def test_a_read_keeps_the_advice_to_send_the_request_again(self) -> None:
+        for status in (500, 503, 504):
+            with self.subTest(status=status):
+                self.answers[("GET", f"/api/v1/math-problems/{_PROBLEM_ID}")] = (status,
+                                                                                 {"error": "source_unavailable"})
+                description = ("The paper source is not reachable now." if status == 503
+                               else f"The server returned HTTP {status}.")
+                _, stderr_text = self.run_cli(["problem", _PROBLEM_ID], expected_exit_code=1)
+                self.assertEqual(stderr_text,
+                                 f"{description} Send the same request again later.\n{self._DETAIL_TEXT}\n")
+
+    def test_the_preflight_read_of_a_write_keeps_the_advice_of_a_read(self) -> None:
+        def answer_503_to_the_preflight(request: urllib.request.Request, timeout: float | None = None) -> _FakeResponse:
+            self.sent.append(request)
+            raise urllib.error.HTTPError(request.full_url, 503, "unavailable", {},
+                                         io.BytesIO(self._DETAIL_TEXT.encode()))
+        _cli.open_url_within_origin = answer_503_to_the_preflight
+
+        _, stderr_text = self.run_cli(["post-discussion", _PROBLEM_ID, "--body", "A post."], expected_exit_code=1)
+
+        self.assertEqual(stderr_text, f"The paper source is not reachable now. Send the same request again later."
+                                      f"\n{self._DETAIL_TEXT}\n")
+        self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me")])
+
+    def test_a_refusal_of_a_write_keeps_its_advice(self) -> None:
+        self.answers[("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/papers")] = (409, {"error": "conflict"})
+        _, stderr_text = self.run_cli(["link-problem-paper", _PROBLEM_ID, "--identifier", "2609.97001v3"],
+                                      expected_exit_code=1)
+        self.assertEqual(stderr_text, "The resource is in a state that does not accept this operation. Run exactory"
+                                      ' status <verification-id> to see the current state.\n{"error": "conflict"}\n')
 
 
 if __name__ == "__main__":

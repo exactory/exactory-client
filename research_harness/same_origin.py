@@ -7,14 +7,30 @@ client therefore follows a redirect only of a GET or HEAD request, and refuses e
 any other request, within the origin too. Every request goes through an opener of its own, so the
 rule changes no state of the process, and no other caller can take it away. bin/exactory (the
 exactory API key) and bin/exactory-draft (the Zenodo token) share this module, so the rule has
-one definition.
+one definition. The two facts that both commands judge an outcome by live here too: which requests
+are reads, and what urllib raises when a request went out and its answer did not arrive in full.
 """
 
+import http.client
 import urllib.parse
 import urllib.request
 
 # A read sends no body, so a followed redirect cannot turn its answer into the answer to a write.
 _READ_METHODS = ("GET", "HEAD")
+# What urllib raises once a request went out and its answer did not arrive in full: a timeout or a
+# dropped connection while the client waits for the answer or reads it (socket.timeout, which is
+# TimeoutError from Python 3.10 on, and ConnectionResetError, both OSError), and an answer that
+# breaks off (http.client.HTTPException, which includes RemoteDisconnected and IncompleteRead).
+# urllib raises a failure before the request is sent as urllib.error.URLError, which is an OSError
+# too, so a caller catches URLError in an earlier except clause.
+INCOMPLETE_ANSWER_ERROR_TYPES = (OSError, http.client.HTTPException)
+
+
+def is_read_method(method: str) -> bool:
+    """Whether a request of this method is a read (GET or HEAD). A read changes nothing on the
+    server, so it can be sent again. Any other request may have changed something before its
+    answer, whatever that answer was."""
+    return method in _READ_METHODS
 
 
 class RefusedRedirectError(Exception):
@@ -27,12 +43,6 @@ class RefusedRedirectError(Exception):
         self.target_url = target_url
         self.method = method
         self.is_cross_origin = is_cross_origin
-
-    @property
-    def is_read(self) -> bool:
-        """Whether the refused request was a GET or HEAD. A read changes nothing on the server, so
-        it can be sent again. Any other request may have changed something before the redirect."""
-        return self.method in _READ_METHODS
 
 
 def get_origin(url: str) -> str:
@@ -48,7 +58,7 @@ class SameOriginRedirectHandler(urllib.request.HTTPRedirectHandler):
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         is_cross_origin = urllib.parse.urlsplit(newurl)[:2] != urllib.parse.urlsplit(req.full_url)[:2]
-        if is_cross_origin or req.get_method() not in _READ_METHODS:
+        if is_cross_origin or not is_read_method(req.get_method()):
             fp.close()
             raise RefusedRedirectError(req.full_url, newurl, req.get_method(), is_cross_origin=is_cross_origin)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
