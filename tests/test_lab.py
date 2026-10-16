@@ -414,7 +414,7 @@ class TestProbeLifecycle(_InsideWorkspaceTestCase):
         from research_harness.resources import account_report
         marker, release = self.workspace / "started", self.workspace / "release"
         command = self.build_command("live", 'from pathlib import Path\nimport time\nPath(' + repr(str(marker))
-            + ').write_text("started")\nwhile not Path(' + repr(str(release)) + ').exists(): time.sleep(0.01)\n')
+            + ').write_text("started")\ndeadline = time.monotonic() + 60\nwhile not Path(' + repr(str(release)) + ').exists() and time.monotonic() < deadline: time.sleep(0.01)\n')
         owner = subprocess.Popen(command, cwd=self.workspace, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.addCleanup(lambda: owner.kill() if owner.poll() is None else None)
         self.wait_for_file(marker)
@@ -434,7 +434,7 @@ class TestProbeLifecycle(_InsideWorkspaceTestCase):
         from research_harness.storage import Store
         marker, release = self.workspace / "started", self.workspace / "release"
         command = self.build_command("lost", 'from pathlib import Path\nimport time\nPath(' + repr(str(marker))
-            + ').write_text("started")\nwhile not Path(' + repr(str(release)) + ').exists(): time.sleep(0.01)\nprint("finished")\n')
+            + ').write_text("started")\ndeadline = time.monotonic() + 60\nwhile not Path(' + repr(str(release)) + ').exists() and time.monotonic() < deadline: time.sleep(0.01)\nprint("finished")\n')
         owner = subprocess.Popen(command, cwd=self.workspace, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.addCleanup(lambda: owner.kill() if owner.poll() is None else None)
         self.wait_for_file(marker)
@@ -485,7 +485,7 @@ class TestProbeLifecycle(_InsideWorkspaceTestCase):
         from research_harness.resources import account_report
         marker, release = self.workspace / "started", self.workspace / "release"
         command = self.build_command("lost-worker", 'from pathlib import Path\nimport time\nPath(' + repr(str(marker))
-            + ').write_text("started")\nprint("partial", flush=True)\nwhile not Path(' + repr(str(release)) + ').exists(): time.sleep(0.01)\n')
+            + ').write_text("started")\nprint("partial", flush=True)\ndeadline = time.monotonic() + 60\nwhile not Path(' + repr(str(release)) + ').exists() and time.monotonic() < deadline: time.sleep(0.01)\n')
         owner = subprocess.Popen(command, cwd=self.workspace, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.addCleanup(lambda: owner.kill() if owner.poll() is None else None)
         self.wait_for_file(marker)
@@ -528,7 +528,7 @@ class TestProbeLifecycle(_InsideWorkspaceTestCase):
         marker = self.workspace / "surviving-program"
         command = self.build_command("worker-timeout", 'from pathlib import Path\nimport os, time\nos.closerange(3, 256)\nPath('
             + repr(str(marker)) + ').write_text(str(os.getpid()))\nprint("partial", flush=True)\n'
-              'while True: time.sleep(0.01)\n', timeout="2")
+              'for _ in range(6000): time.sleep(0.01)\n', timeout="2")
         owner = subprocess.Popen(command, cwd=self.workspace, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.addCleanup(lambda: owner.kill() if owner.poll() is None else None)
         self.wait_for_file(marker)
@@ -660,8 +660,8 @@ class TestProbeLifecycle(_InsideWorkspaceTestCase):
         command = self.build_command("lost-parent", 'from pathlib import Path\nimport os, time\n'
             'if os.fork() == 0:\n'
             '    Path(' + repr(str(marker)) + ').write_text(str(os.getpid()))\n'
-            '    while True: time.sleep(0.01)\n'
-            'while not Path(' + repr(str(release)) + ').exists(): time.sleep(0.01)\n', timeout="5")
+            '    for _ in range(6000): time.sleep(0.01)\n'
+            'deadline = time.monotonic() + 60\nwhile not Path(' + repr(str(release)) + ').exists() and time.monotonic() < deadline: time.sleep(0.01)\n', timeout="5")
         owner = subprocess.Popen(command, cwd=self.workspace, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.addCleanup(lambda: owner.kill() if owner.poll() is None else None)
         self.wait_for_file(marker)
