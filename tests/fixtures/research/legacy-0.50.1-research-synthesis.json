@@ -1,0 +1,993 @@
+{
+  "configuration": {
+    "configuration": {
+      "constitution": {
+        "path": "RESEARCH_CONSTITUTION.md",
+        "sha256": "9017d65280d1362e82a3e7fd1a0ce27393251901c96bc25e685ccaf711f53ee3",
+        "version": "6"
+      },
+      "preparation_policy": {
+        "id": "lineage-v1"
+      },
+      "profile": "research",
+      "target": {
+        "id": "full-objective",
+        "kind": "objective",
+        "statement": "Establish finite bounds for all bounded input sequences."
+      }
+    },
+    "constitution": {
+      "path": "RESEARCH_CONSTITUTION.md",
+      "sha256": "9017d65280d1362e82a3e7fd1a0ce27393251901c96bc25e685ccaf711f53ee3",
+      "version": "6"
+    },
+    "counts": {
+      "obligations": 0
+    },
+    "digest": "0543cde4cab87bda53fd00e436f116121c1f737cbda9dc93714a973550000bb3",
+    "limits": "A current policy and target do not establish scientific readiness or revalidate historical decisions.",
+    "next": null,
+    "obligations": [],
+    "preparation_policy": "lineage-v1",
+    "profile": "research",
+    "ready": true,
+    "target": {
+      "id": "full-objective",
+      "kind": "objective",
+      "statement": "Establish finite bounds for all bounded input sequences."
+    }
+  },
+  "counts": {
+    "cases": 1,
+    "current_sections": 1,
+    "external_papers": 1,
+    "obligations": 17,
+    "sections": 4,
+    "within_field_papers": 0
+  },
+  "digest": "66c4daefb59233d6970ce155fbe39f34a4f707c676d416bf1a36535077adca7a",
+  "foundation": {
+    "availability_qualified": [],
+    "cohort": {
+      "collections": [],
+      "counts": {
+        "abstract_obligations": 0,
+        "abstracts_read": 0,
+        "cohort_families": 0,
+        "obligations": 1
+      },
+      "digest": "1c9b4e7e1910ef9377255b89a52f2afbdba84bd50f4c137a3b0cccda72a65c99",
+      "inventory": [],
+      "limits": "Mechanical source anchoring records inspection; it does not establish comprehension.",
+      "next": {
+        "code": "cohort_missing",
+        "explanation": "Select the complete frozen cohort collection."
+      },
+      "notices": [],
+      "obligations": [
+        {
+          "code": "cohort_missing",
+          "explanation": "Select the complete frozen cohort collection."
+        }
+      ],
+      "readings": {},
+      "ready": false
+    },
+    "collections": [],
+    "counts": {
+      "abstract_read": 0,
+      "cohort_families": 0,
+      "fulltext_read": 0,
+      "obligations": 11,
+      "reference_occurrences": 0,
+      "tier_1": 1,
+      "tier_2": 0,
+      "tier_3": 0,
+      "versions": 1,
+      "works": 1
+    },
+    "digest": "e17a08068f28d7ce461324aeec85dfc0a7012a1523ef2adb34d924d931daade5",
+    "frontier_digest": "74e8fdbd1674c301fa660ff9ca7ca20a3042508177a4280e1f2927b2e5514519",
+    "invalid_references": [],
+    "inventory": [
+      {
+        "abstract_read": false,
+        "body_coverage": {
+          "complete": false,
+          "missing": [
+            {
+              "bundle_id": null,
+              "original_sha256": null,
+              "paths": [],
+              "pending": [],
+              "source_id": null
+            }
+          ],
+          "readings": {}
+        },
+        "bundle_id": null,
+        "date_assertions": [
+          {
+            "source_id": "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34",
+            "values": {
+              "published": "2026-01-03T12:00:00Z",
+              "updated": "2026-02-01T10:00:00Z"
+            }
+          }
+        ],
+        "fulltext_read": false,
+        "historical_status": "not_requested",
+        "reasons": [
+          "tier_1"
+        ],
+        "required_depth": "fulltext",
+        "required_units": [],
+        "retrievals": [],
+        "source_paths": [
+          "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+          "research/sources/objects/b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5"
+        ],
+        "tier": 1,
+        "title": "An authored example",
+        "version_id": "arxiv:2601.00001v1",
+        "visual_assets": [],
+        "work_id": "arxiv:2601.00001"
+      }
+    ],
+    "judgments_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "limits": "Mechanical source and inspection validation does not establish comprehension, source entailment, scientific truth, or universal novelty.",
+    "next": {
+      "code": "fulltext_reading_missing",
+      "explanation": "Acquire/import and inspect every required unit of this exact source bundle.",
+      "paths": [
+        "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+        "research/sources/objects/b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5"
+      ],
+      "source_id": null,
+      "version_id": "arxiv:2601.00001v1"
+    },
+    "notices": [],
+    "obligations": [
+      {
+        "code": "bibliography_incomplete",
+        "explanation": "Import an evidence-linked complete article bibliography; registry counts are insufficient.",
+        "source_id": null,
+        "version_id": "arxiv:2601.00001v1"
+      },
+      {
+        "code": "cohort_missing",
+        "explanation": "Select the complete frozen cohort collection."
+      },
+      {
+        "code": "fulltext_reading_missing",
+        "explanation": "Acquire/import and inspect every required unit of this exact source bundle.",
+        "paths": [
+          "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+          "research/sources/objects/b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5"
+        ],
+        "source_id": null,
+        "version_id": "arxiv:2601.00001v1"
+      },
+      {
+        "code": "loop_closure_missing",
+        "explanation": "Run the five-purpose loop and close it with each purpose covered or recorded as a gap."
+      },
+      {
+        "code": "search_purpose_missing",
+        "explanation": "Record this purpose's saved search responses against the current literature scope.",
+        "purpose": "originals"
+      },
+      {
+        "code": "search_purpose_missing",
+        "explanation": "Record this purpose's saved search responses against the current literature scope.",
+        "purpose": "recent"
+      },
+      {
+        "code": "search_purpose_missing",
+        "explanation": "Record this purpose's saved search responses against the current literature scope.",
+        "purpose": "adjacent"
+      },
+      {
+        "code": "search_purpose_missing",
+        "explanation": "Record this purpose's saved search responses against the current literature scope.",
+        "purpose": "direct"
+      },
+      {
+        "code": "search_purpose_missing",
+        "explanation": "Record this purpose's saved search responses against the current literature scope.",
+        "purpose": "theory"
+      },
+      {
+        "code": "source_bundle_missing",
+        "explanation": "Import the boundaries and required units for this distinct original body.",
+        "paths": [
+          "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+          "research/sources/objects/b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5"
+        ],
+        "source_id": null,
+        "version_id": "arxiv:2601.00001v1"
+      },
+      {
+        "code": "source_bundle_missing",
+        "explanation": "Import the exact article boundaries and required source units.",
+        "paths": [
+          "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+          "research/sources/objects/b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5"
+        ],
+        "version_id": "arxiv:2601.00001v1"
+      }
+    ],
+    "passed": {
+      "cohort": false,
+      "graph": false,
+      "searches": false
+    },
+    "population_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "ready": false,
+    "requirements_digest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+    "search_history": [],
+    "searches": [],
+    "stable_digest": "955f75e7d90296e97cfec90a771302c8bf4d824739f72721565ae63be5b53365"
+  },
+  "history": [
+    {
+      "dependencies": {
+        "configuration": "0543cde4cab87bda53fd00e436f116121c1f737cbda9dc93714a973550000bb3",
+        "constitution": {
+          "path": "RESEARCH_CONSTITUTION.md",
+          "sha256": "9017d65280d1362e82a3e7fd1a0ce27393251901c96bc25e685ccaf711f53ee3",
+          "version": "6"
+        },
+        "evidence": "3a7438569348f7eff3b166666ad8cc5d18c762318b044495ef63f900d597e73b",
+        "foundation": "955f75e7d90296e97cfec90a771302c8bf4d824739f72721565ae63be5b53365",
+        "scope": "6e3bd29d881b3e7325dc8ea58af6dd725eca200243b8d981357459315fe58977"
+      },
+      "id": "standards",
+      "kind": "standards"
+    },
+    {
+      "dependencies": {
+        "configuration": "0543cde4cab87bda53fd00e436f116121c1f737cbda9dc93714a973550000bb3",
+        "constitution": {
+          "path": "RESEARCH_CONSTITUTION.md",
+          "sha256": "9017d65280d1362e82a3e7fd1a0ce27393251901c96bc25e685ccaf711f53ee3",
+          "version": "6"
+        },
+        "evidence": "3a7438569348f7eff3b166666ad8cc5d18c762318b044495ef63f900d597e73b",
+        "foundation": "955f75e7d90296e97cfec90a771302c8bf4d824739f72721565ae63be5b53365",
+        "scope": "6e3bd29d881b3e7325dc8ea58af6dd725eca200243b8d981357459315fe58977",
+        "standards": "3bdd43669852bfc631b622a9dda52185f1a4fa503c45352792cd25b166d05080"
+      },
+      "id": "innovation",
+      "kind": "innovation"
+    }
+  ],
+  "limits": "Mechanical source anchoring and documented inspection do not establish comprehension, entailment, scientific truth, historical priority, field-standard adherence, transfer validity or social benefit. Support and scientific-status labels are scoped analyst judgments. Quantitative scope and field applicability require substantive review; no natural-language classifier verifies their completeness. Verification soundness remains independent of authoring goals and other verdicts.",
+  "literature_digest": "2eb57b46650310db807a9a781044b58b2f99041d8c5677d1c06d032c927b4c71",
+  "mechanical_only": true,
+  "next": {
+    "code": "bibliography_incomplete",
+    "explanation": "Import an evidence-linked complete article bibliography; registry counts are insufficient.",
+    "source_id": null,
+    "version_id": "arxiv:2601.00001v1"
+  },
+  "obligations": [
+    {
+      "code": "bibliography_incomplete",
+      "explanation": "Import an evidence-linked complete article bibliography; registry counts are insufficient.",
+      "source_id": null,
+      "version_id": "arxiv:2601.00001v1"
+    },
+    {
+      "code": "cohort_missing",
+      "explanation": "Select the complete frozen cohort collection."
+    },
+    {
+      "code": "context_missing",
+      "explanation": "Record a current source-linked context assessment.",
+      "section": "context"
+    },
+    {
+      "code": "external_cases_insufficient",
+      "count": 1,
+      "explanation": "Analyze exactly five distinct full-read external original papers.",
+      "minimum": 5,
+      "section": "innovation"
+    },
+    {
+      "code": "fulltext_reading_missing",
+      "explanation": "Acquire/import and inspect every required unit of this exact source bundle.",
+      "paths": [
+        "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+        "research/sources/objects/b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5"
+      ],
+      "source_id": null,
+      "version_id": "arxiv:2601.00001v1"
+    },
+    {
+      "code": "grand_challenge_missing",
+      "explanation": "Record the challenges ahead of the study with grand-challenge before ideation."
+    },
+    {
+      "code": "innovation_candidates_missing",
+      "count": 0,
+      "explanation": "Read the abstracts of ten innovation candidates before choosing the five cases.",
+      "required": 10,
+      "section": "innovation"
+    },
+    {
+      "case_id": "case-1",
+      "code": "innovation_case_not_candidate",
+      "explanation": "Choose the five cases among the ten read candidates.",
+      "section": "innovation"
+    },
+    {
+      "code": "loop_closure_missing",
+      "explanation": "Run the five-purpose loop and close it with each purpose covered or recorded as a gap."
+    },
+    {
+      "code": "rationale_missing",
+      "explanation": "Record a current source-linked rationale assessment.",
+      "section": "rationale"
+    },
+    {
+      "code": "search_purpose_missing",
+      "explanation": "Record this purpose's saved search responses against the current literature scope.",
+      "purpose": "originals"
+    },
+    {
+      "code": "search_purpose_missing",
+      "explanation": "Record this purpose's saved search responses against the current literature scope.",
+      "purpose": "recent"
+    },
+    {
+      "code": "search_purpose_missing",
+      "explanation": "Record this purpose's saved search responses against the current literature scope.",
+      "purpose": "adjacent"
+    },
+    {
+      "code": "search_purpose_missing",
+      "explanation": "Record this purpose's saved search responses against the current literature scope.",
+      "purpose": "direct"
+    },
+    {
+      "code": "search_purpose_missing",
+      "explanation": "Record this purpose's saved search responses against the current literature scope.",
+      "purpose": "theory"
+    },
+    {
+      "code": "source_bundle_missing",
+      "explanation": "Import the boundaries and required units for this distinct original body.",
+      "paths": [
+        "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+        "research/sources/objects/b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5"
+      ],
+      "source_id": null,
+      "version_id": "arxiv:2601.00001v1"
+    },
+    {
+      "code": "source_bundle_missing",
+      "explanation": "Import the exact article boundaries and required source units.",
+      "paths": [
+        "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+        "research/sources/objects/b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5"
+      ],
+      "version_id": "arxiv:2601.00001v1"
+    }
+  ],
+  "preparation_digest": "2a13d7cfd020e4fb966213a92f7f81025fbffc992c2bda245a7cbb772e565fd9",
+  "profile": "research",
+  "ready": false,
+  "sections": {
+    "context": {
+      "counts": {
+        "obligations": 1
+      },
+      "obligations": [
+        {
+          "code": "context_missing",
+          "explanation": "Record a current source-linked context assessment."
+        }
+      ],
+      "ready": false
+    },
+    "innovation": {
+      "bound_dependencies": {
+        "configuration": "0543cde4cab87bda53fd00e436f116121c1f737cbda9dc93714a973550000bb3",
+        "constitution": {
+          "path": "RESEARCH_CONSTITUTION.md",
+          "sha256": "9017d65280d1362e82a3e7fd1a0ce27393251901c96bc25e685ccaf711f53ee3",
+          "version": "6"
+        },
+        "evidence": "3a7438569348f7eff3b166666ad8cc5d18c762318b044495ef63f900d597e73b",
+        "foundation": "955f75e7d90296e97cfec90a771302c8bf4d824739f72721565ae63be5b53365",
+        "scope": "6e3bd29d881b3e7325dc8ea58af6dd725eca200243b8d981357459315fe58977",
+        "standards": "3bdd43669852bfc631b622a9dda52185f1a4fa503c45352792cd25b166d05080"
+      },
+      "counts": {
+        "cases": 1,
+        "external_papers": 1,
+        "obligations": 3,
+        "within_field_papers": 0
+      },
+      "dependencies": {
+        "configuration": "0543cde4cab87bda53fd00e436f116121c1f737cbda9dc93714a973550000bb3",
+        "constitution": {
+          "path": "RESEARCH_CONSTITUTION.md",
+          "sha256": "9017d65280d1362e82a3e7fd1a0ce27393251901c96bc25e685ccaf711f53ee3",
+          "version": "6"
+        },
+        "evidence": "3a7438569348f7eff3b166666ad8cc5d18c762318b044495ef63f900d597e73b",
+        "foundation": "955f75e7d90296e97cfec90a771302c8bf4d824739f72721565ae63be5b53365",
+        "scope": "6e3bd29d881b3e7325dc8ea58af6dd725eca200243b8d981357459315fe58977",
+        "standards": "3bdd43669852bfc631b622a9dda52185f1a4fa503c45352792cd25b166d05080"
+      },
+      "digest": "c5d70371d4e69354b6e7b11464628a6b7678b88691ef15eb5bc6ac0ad5f8ac15",
+      "evidence": [
+        {
+          "aliases": {},
+          "captured_at": "2026-09-08T00:00:00+00:00",
+          "date_assertions": [
+            {
+              "source_id": "acq:fccb624f7c423216d3516e557a607f2664b4812e1c0f2896a9471b5ebc1621a1",
+              "values": {
+                "published": "2026-01-03T12:00:00Z",
+                "updated": "2026-02-01T10:00:00Z"
+              }
+            }
+          ],
+          "known_originals": [
+            "de4ff4c5b921ec61a6af5b7ca5752650899f8d5e1139332fa8cb7f2f702e0ed2"
+          ],
+          "link": {
+            "artifact": {
+              "media_type": "text/plain; charset=utf-8",
+              "path": "research/sources/objects/3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+              "sha256": "3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+              "size": 133
+            },
+            "locator": {
+              "end": 133,
+              "kind": "text",
+              "quote": "Source 2 studies bounded sequences and reports a finite example.\n\nThe finite example holds only for bounded inputs. References: none.",
+              "start": 0
+            },
+            "source_id": "acq:e43326cf5cf030c49eda0f7513bfd6b053d1d87b488d4e366b3753b5a42a6c69",
+            "version_id": "arxiv:2601.00002v1"
+          },
+          "metadata_sources": [
+            {
+              "artifact": {
+                "media_type": "application/atom+xml",
+                "path": "research/sources/objects/0c267f877bdb3abc164b24a7b54cf1cf45c974da4c91aabfb4f4de1c76e505ae",
+                "sha256": "0c267f877bdb3abc164b24a7b54cf1cf45c974da4c91aabfb4f4de1c76e505ae",
+                "size": 877
+              },
+              "captured_at": "2026-09-07T12:00:00Z",
+              "source_id": "acq:fccb624f7c423216d3516e557a607f2664b4812e1c0f2896a9471b5ebc1621a1",
+              "url": "https://export.arxiv.org/api/query?id_list=2601.00002v1"
+            }
+          ],
+          "original_sha256": "de4ff4c5b921ec61a6af5b7ca5752650899f8d5e1139332fa8cb7f2f702e0ed2",
+          "pending": [],
+          "reading": {
+            "depth": "fulltext",
+            "digest": "ad08675ad062a5f3818a14e29385d25589b99b05fa4981b1a8858a75e0b36d59",
+            "mechanical_only": true,
+            "reading_id": "reading-bundle-2-4"
+          },
+          "source_url": "https://arxiv.org/html/2601.00002v1",
+          "type_assertions": [
+            {
+              "assertion_id": "acq:ebbc3803cdffef3cba5cea798d7546cb087b6ac8e00cb6c80f02673a108b8f84",
+              "source_id": "acq:fccb624f7c423216d3516e557a607f2664b4812e1c0f2896a9471b5ebc1621a1",
+              "type": "paper"
+            }
+          ],
+          "work_assertions_digest": "16160f6c59d6d96624d8bfc11f75304f3b32d4487f947bf67c2e0c04add930d2",
+          "work_id": "arxiv:2601.00002"
+        }
+      ],
+      "id": "innovation",
+      "mechanical_only": true,
+      "obligations": [
+        {
+          "code": "external_cases_insufficient",
+          "count": 1,
+          "explanation": "Analyze exactly five distinct full-read external original papers.",
+          "minimum": 5
+        },
+        {
+          "code": "innovation_candidates_missing",
+          "count": 0,
+          "explanation": "Read the abstracts of ten innovation candidates before choosing the five cases.",
+          "required": 10
+        },
+        {
+          "case_id": "case-1",
+          "code": "innovation_case_not_candidate",
+          "explanation": "Choose the five cases among the ten read candidates."
+        }
+      ],
+      "payload": {
+        "cases": [
+          {
+            "adoption": {
+              "claims": [],
+              "gaps": [
+                {
+                  "next_evidence": "Study downstream constructions and barriers if a relevant use appears.",
+                  "reason": "No observed application was established in the source.",
+                  "scope": "Near-term non-scientific use."
+                }
+              ]
+            },
+            "bottleneck": {
+              "assumptions": [
+                "Inputs are bounded."
+              ],
+              "date": "2026-09-07",
+              "evidence": [
+                {
+                  "artifact": {
+                    "media_type": "text/plain; charset=utf-8",
+                    "path": "research/sources/objects/3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+                    "sha256": "3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+                    "size": 133
+                  },
+                  "locator": {
+                    "end": 133,
+                    "kind": "text",
+                    "quote": "Source 2 studies bounded sequences and reports a finite example.\n\nThe finite example holds only for bounded inputs. References: none.",
+                    "start": 0
+                  },
+                  "source_id": "acq:e43326cf5cf030c49eda0f7513bfd6b053d1d87b488d4e366b3753b5a42a6c69",
+                  "version_id": "arxiv:2601.00002v1"
+                }
+              ],
+              "evidence_timing": "current",
+              "scientific_status": "unresolved",
+              "scope": "Bounded sequences in the original study.",
+              "source_support": "supported_as_scoped",
+              "statement": "The source establishes a bound under finite input assumptions.",
+              "uncertainties": []
+            },
+            "conceptual_change": {
+              "assumptions": [
+                "Inputs are bounded."
+              ],
+              "date": "2026-09-07",
+              "evidence": [
+                {
+                  "artifact": {
+                    "media_type": "text/plain; charset=utf-8",
+                    "path": "research/sources/objects/3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+                    "sha256": "3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+                    "size": 133
+                  },
+                  "locator": {
+                    "end": 133,
+                    "kind": "text",
+                    "quote": "Source 2 studies bounded sequences and reports a finite example.\n\nThe finite example holds only for bounded inputs. References: none.",
+                    "start": 0
+                  },
+                  "source_id": "acq:e43326cf5cf030c49eda0f7513bfd6b053d1d87b488d4e366b3753b5a42a6c69",
+                  "version_id": "arxiv:2601.00002v1"
+                }
+              ],
+              "evidence_timing": "current",
+              "scientific_status": "unresolved",
+              "scope": "Bounded sequences in the original study.",
+              "source_support": "supported_as_scoped",
+              "statement": "The source establishes a bound under finite input assumptions.",
+              "uncertainties": []
+            },
+            "field": "Numerical analysis",
+            "id": "case-1",
+            "later_validation": {
+              "claims": [],
+              "gaps": [
+                {
+                  "next_evidence": "Study downstream constructions and barriers if a relevant use appears.",
+                  "reason": "No observed application was established in the source.",
+                  "scope": "Near-term non-scientific use."
+                }
+              ]
+            },
+            "original": {
+              "assumptions": [
+                "Inputs are bounded."
+              ],
+              "date": "2026-09-07",
+              "evidence": [
+                {
+                  "artifact": {
+                    "media_type": "text/plain; charset=utf-8",
+                    "path": "research/sources/objects/3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+                    "sha256": "3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+                    "size": 133
+                  },
+                  "locator": {
+                    "end": 133,
+                    "kind": "text",
+                    "quote": "Source 2 studies bounded sequences and reports a finite example.\n\nThe finite example holds only for bounded inputs. References: none.",
+                    "start": 0
+                  },
+                  "source_id": "acq:e43326cf5cf030c49eda0f7513bfd6b053d1d87b488d4e366b3753b5a42a6c69",
+                  "version_id": "arxiv:2601.00002v1"
+                }
+              ],
+              "evidence_timing": "current",
+              "scientific_status": "unresolved",
+              "scope": "Bounded sequences in the original study.",
+              "source_support": "supported_as_scoped",
+              "statement": "The source establishes a bound under finite input assumptions.",
+              "uncertainties": []
+            },
+            "prior_constraint": {
+              "assumptions": [
+                "Inputs are bounded."
+              ],
+              "date": "2026-09-07",
+              "evidence": [
+                {
+                  "artifact": {
+                    "media_type": "text/plain; charset=utf-8",
+                    "path": "research/sources/objects/3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+                    "sha256": "3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+                    "size": 133
+                  },
+                  "locator": {
+                    "end": 133,
+                    "kind": "text",
+                    "quote": "Source 2 studies bounded sequences and reports a finite example.\n\nThe finite example holds only for bounded inputs. References: none.",
+                    "start": 0
+                  },
+                  "source_id": "acq:e43326cf5cf030c49eda0f7513bfd6b053d1d87b488d4e366b3753b5a42a6c69",
+                  "version_id": "arxiv:2601.00002v1"
+                }
+              ],
+              "evidence_timing": "current",
+              "scientific_status": "unresolved",
+              "scope": "Bounded sequences in the original study.",
+              "source_support": "supported_as_scoped",
+              "statement": "The source establishes a bound under finite input assumptions.",
+              "uncertainties": []
+            },
+            "relation": "external",
+            "selection_reason": "This study can test the separation between existence and construction.",
+            "selection_signals": [
+              "High citation counts are a discovery signal only."
+            ],
+            "transfer": {
+              "assumptions": [
+                "The domain is bounded."
+              ],
+              "failure_conditions": [
+                "An admissible extremum violates the proposal."
+              ],
+              "limits": [
+                "The source supplies no unbounded-domain guarantee."
+              ],
+              "mapping": "Map the finite constraint to our sequence domain.",
+              "mechanism": {
+                "assumptions": [
+                  "Inputs are bounded."
+                ],
+                "date": "2026-09-07",
+                "evidence": [
+                  {
+                    "artifact": {
+                      "media_type": "text/plain; charset=utf-8",
+                      "path": "research/sources/objects/3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+                      "sha256": "3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+                      "size": 133
+                    },
+                    "locator": {
+                      "end": 133,
+                      "kind": "text",
+                      "quote": "Source 2 studies bounded sequences and reports a finite example.\n\nThe finite example holds only for bounded inputs. References: none.",
+                      "start": 0
+                    },
+                    "source_id": "acq:e43326cf5cf030c49eda0f7513bfd6b053d1d87b488d4e366b3753b5a42a6c69",
+                    "version_id": "arxiv:2601.00002v1"
+                  }
+                ],
+                "evidence_timing": "current",
+                "scientific_status": "unresolved",
+                "scope": "Bounded sequences in the original study.",
+                "source_support": "supported_as_scoped",
+                "statement": "The source establishes a bound under finite input assumptions.",
+                "uncertainties": []
+              },
+              "test": "Test the bound at extremal inputs."
+            },
+            "work_id": "arxiv:2601.00002v1"
+          }
+        ],
+        "id": "innovation",
+        "profile": "research",
+        "scope": "The finite-bound objective and its distinguishing test."
+      },
+      "ready": false
+    },
+    "rationale": {
+      "counts": {
+        "obligations": 1
+      },
+      "obligations": [
+        {
+          "code": "rationale_missing",
+          "explanation": "Record a current source-linked rationale assessment."
+        }
+      ],
+      "ready": false
+    },
+    "standards": {
+      "bound_dependencies": {
+        "configuration": "0543cde4cab87bda53fd00e436f116121c1f737cbda9dc93714a973550000bb3",
+        "constitution": {
+          "path": "RESEARCH_CONSTITUTION.md",
+          "sha256": "9017d65280d1362e82a3e7fd1a0ce27393251901c96bc25e685ccaf711f53ee3",
+          "version": "6"
+        },
+        "evidence": "3a7438569348f7eff3b166666ad8cc5d18c762318b044495ef63f900d597e73b",
+        "foundation": "955f75e7d90296e97cfec90a771302c8bf4d824739f72721565ae63be5b53365",
+        "scope": "6e3bd29d881b3e7325dc8ea58af6dd725eca200243b8d981357459315fe58977"
+      },
+      "counts": {
+        "obligations": 0
+      },
+      "dependencies": {
+        "configuration": "0543cde4cab87bda53fd00e436f116121c1f737cbda9dc93714a973550000bb3",
+        "constitution": {
+          "path": "RESEARCH_CONSTITUTION.md",
+          "sha256": "9017d65280d1362e82a3e7fd1a0ce27393251901c96bc25e685ccaf711f53ee3",
+          "version": "6"
+        },
+        "evidence": "3a7438569348f7eff3b166666ad8cc5d18c762318b044495ef63f900d597e73b",
+        "foundation": "955f75e7d90296e97cfec90a771302c8bf4d824739f72721565ae63be5b53365",
+        "scope": "6e3bd29d881b3e7325dc8ea58af6dd725eca200243b8d981357459315fe58977"
+      },
+      "digest": "024b0410171d7da626a57d9d76deaf33f4c68bcc18ffa11907331f88295c1762",
+      "evidence": [
+        {
+          "aliases": {},
+          "captured_at": "2026-09-08T00:00:00+00:00",
+          "date_assertions": [
+            {
+              "source_id": "acq:fccb624f7c423216d3516e557a607f2664b4812e1c0f2896a9471b5ebc1621a1",
+              "values": {
+                "published": "2026-01-03T12:00:00Z",
+                "updated": "2026-02-01T10:00:00Z"
+              }
+            }
+          ],
+          "known_originals": [
+            "de4ff4c5b921ec61a6af5b7ca5752650899f8d5e1139332fa8cb7f2f702e0ed2"
+          ],
+          "link": {
+            "artifact": {
+              "media_type": "text/plain; charset=utf-8",
+              "path": "research/sources/objects/3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+              "sha256": "3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+              "size": 133
+            },
+            "locator": {
+              "end": 133,
+              "kind": "text",
+              "quote": "Source 2 studies bounded sequences and reports a finite example.\n\nThe finite example holds only for bounded inputs. References: none.",
+              "start": 0
+            },
+            "source_id": "acq:e43326cf5cf030c49eda0f7513bfd6b053d1d87b488d4e366b3753b5a42a6c69",
+            "version_id": "arxiv:2601.00002v1"
+          },
+          "metadata_sources": [
+            {
+              "artifact": {
+                "media_type": "application/atom+xml",
+                "path": "research/sources/objects/0c267f877bdb3abc164b24a7b54cf1cf45c974da4c91aabfb4f4de1c76e505ae",
+                "sha256": "0c267f877bdb3abc164b24a7b54cf1cf45c974da4c91aabfb4f4de1c76e505ae",
+                "size": 877
+              },
+              "captured_at": "2026-09-07T12:00:00Z",
+              "source_id": "acq:fccb624f7c423216d3516e557a607f2664b4812e1c0f2896a9471b5ebc1621a1",
+              "url": "https://export.arxiv.org/api/query?id_list=2601.00002v1"
+            }
+          ],
+          "original_sha256": "de4ff4c5b921ec61a6af5b7ca5752650899f8d5e1139332fa8cb7f2f702e0ed2",
+          "pending": [],
+          "reading": {
+            "depth": "fulltext",
+            "digest": "ad08675ad062a5f3818a14e29385d25589b99b05fa4981b1a8858a75e0b36d59",
+            "mechanical_only": true,
+            "reading_id": "reading-bundle-2-4"
+          },
+          "source_url": "https://arxiv.org/html/2601.00002v1",
+          "type_assertions": [
+            {
+              "assertion_id": "acq:ebbc3803cdffef3cba5cea798d7546cb087b6ac8e00cb6c80f02673a108b8f84",
+              "source_id": "acq:fccb624f7c423216d3516e557a607f2664b4812e1c0f2896a9471b5ebc1621a1",
+              "type": "paper"
+            }
+          ],
+          "work_assertions_digest": "16160f6c59d6d96624d8bfc11f75304f3b32d4487f947bf67c2e0c04add930d2",
+          "work_id": "arxiv:2601.00002"
+        }
+      ],
+      "id": "standards",
+      "mechanical_only": true,
+      "obligations": [],
+      "payload": {
+        "applicability_questions": [],
+        "article_type": null,
+        "citation": [
+          {
+            "assumptions": [
+              "Inputs are bounded."
+            ],
+            "date": "2026-09-07",
+            "evidence": [
+              {
+                "artifact": {
+                  "media_type": "text/plain; charset=utf-8",
+                  "path": "research/sources/objects/3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+                  "sha256": "3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+                  "size": 133
+                },
+                "locator": {
+                  "end": 133,
+                  "kind": "text",
+                  "quote": "Source 2 studies bounded sequences and reports a finite example.\n\nThe finite example holds only for bounded inputs. References: none.",
+                  "start": 0
+                },
+                "source_id": "acq:e43326cf5cf030c49eda0f7513bfd6b053d1d87b488d4e366b3753b5a42a6c69",
+                "version_id": "arxiv:2601.00002v1"
+              }
+            ],
+            "evidence_timing": "current",
+            "scientific_status": "unresolved",
+            "scope": "Bounded sequences in the original study.",
+            "source_support": "supported_as_scoped",
+            "statement": "The source establishes a bound under finite input assumptions.",
+            "uncertainties": []
+          }
+        ],
+        "cohort_doctrine": [
+          {
+            "assumptions": [
+              "Inputs are bounded."
+            ],
+            "date": "2026-09-07",
+            "evidence": [
+              {
+                "artifact": {
+                  "media_type": "text/plain; charset=utf-8",
+                  "path": "research/sources/objects/3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+                  "sha256": "3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+                  "size": 133
+                },
+                "locator": {
+                  "end": 133,
+                  "kind": "text",
+                  "quote": "Source 2 studies bounded sequences and reports a finite example.\n\nThe finite example holds only for bounded inputs. References: none.",
+                  "start": 0
+                },
+                "source_id": "acq:e43326cf5cf030c49eda0f7513bfd6b053d1d87b488d4e366b3753b5a42a6c69",
+                "version_id": "arxiv:2601.00002v1"
+              }
+            ],
+            "evidence_timing": "current",
+            "scientific_status": "unresolved",
+            "scope": "Bounded sequences in the original study.",
+            "source_support": "supported_as_scoped",
+            "statement": "The cohort makes assumptions and bounded regimes explicit.",
+            "uncertainties": []
+          }
+        ],
+        "field": "Sequence theory",
+        "id": "standards",
+        "methodology": [
+          {
+            "assumptions": [
+              "Inputs are bounded."
+            ],
+            "date": "2026-09-07",
+            "evidence": [
+              {
+                "artifact": {
+                  "media_type": "text/plain; charset=utf-8",
+                  "path": "research/sources/objects/3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+                  "sha256": "3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+                  "size": 133
+                },
+                "locator": {
+                  "end": 133,
+                  "kind": "text",
+                  "quote": "Source 2 studies bounded sequences and reports a finite example.\n\nThe finite example holds only for bounded inputs. References: none.",
+                  "start": 0
+                },
+                "source_id": "acq:e43326cf5cf030c49eda0f7513bfd6b053d1d87b488d4e366b3753b5a42a6c69",
+                "version_id": "arxiv:2601.00002v1"
+              }
+            ],
+            "evidence_timing": "current",
+            "scientific_status": "unresolved",
+            "scope": "Bounded sequences in the original study.",
+            "source_support": "supported_as_scoped",
+            "statement": "The source establishes a bound under finite input assumptions.",
+            "uncertainties": []
+          }
+        ],
+        "presentation": [
+          {
+            "assumptions": [
+              "Inputs are bounded."
+            ],
+            "date": "2026-09-07",
+            "evidence": [
+              {
+                "artifact": {
+                  "media_type": "text/plain; charset=utf-8",
+                  "path": "research/sources/objects/3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+                  "sha256": "3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+                  "size": 133
+                },
+                "locator": {
+                  "end": 133,
+                  "kind": "text",
+                  "quote": "Source 2 studies bounded sequences and reports a finite example.\n\nThe finite example holds only for bounded inputs. References: none.",
+                  "start": 0
+                },
+                "source_id": "acq:e43326cf5cf030c49eda0f7513bfd6b053d1d87b488d4e366b3753b5a42a6c69",
+                "version_id": "arxiv:2601.00002v1"
+              }
+            ],
+            "evidence_timing": "current",
+            "scientific_status": "unresolved",
+            "scope": "Bounded sequences in the original study.",
+            "source_support": "supported_as_scoped",
+            "statement": "The source establishes a bound under finite input assumptions.",
+            "uncertainties": []
+          }
+        ],
+        "profile": "research",
+        "reporting": [
+          {
+            "assumptions": [
+              "Inputs are bounded."
+            ],
+            "date": "2026-09-07",
+            "evidence": [
+              {
+                "artifact": {
+                  "media_type": "text/plain; charset=utf-8",
+                  "path": "research/sources/objects/3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+                  "sha256": "3d8c0f11387b14d428c8b5ac8987b604fcf5feaa4385574cad1a34c8c4cdb3a2",
+                  "size": 133
+                },
+                "locator": {
+                  "end": 133,
+                  "kind": "text",
+                  "quote": "Source 2 studies bounded sequences and reports a finite example.\n\nThe finite example holds only for bounded inputs. References: none.",
+                  "start": 0
+                },
+                "source_id": "acq:e43326cf5cf030c49eda0f7513bfd6b053d1d87b488d4e366b3753b5a42a6c69",
+                "version_id": "arxiv:2601.00002v1"
+              }
+            ],
+            "evidence_timing": "current",
+            "scientific_status": "unresolved",
+            "scope": "Bounded sequences in the original study.",
+            "source_support": "supported_as_scoped",
+            "statement": "The source establishes a bound under finite input assumptions.",
+            "uncertainties": []
+          }
+        ],
+        "scope": "The current bounded-sequence study.",
+        "venue": null
+      },
+      "ready": true
+    }
+  }
+}

@@ -11,10 +11,24 @@ from unittest import mock
 
 from research_harness.storage import Store
 from development_fixtures import DevelopmentCase
+from literature_fixtures import LiteratureCase
 
 
 PLUGIN = Path(__file__).resolve().parents[1]
 RESEARCH_RUNS = Path(os.environ.get("EXACTORY_TEST_RESEARCH_RUNS", "/Users/ryshiro/exactory/exactory-research"))
+
+
+class ProvisionalStatusTests(LiteratureCase):
+    def test_provisional_search_appears_in_status_without_foundation_credit(self):
+        from research_harness.cli import status_report
+        from research_harness.literature import foundation_report, record_search
+        search = self.capture_search()
+        search["question"] = "What should be investigated before choosing roots?"
+        before = foundation_report(self.store, "research")
+        self.mutate(record_search, search)
+        report = status_report(self.store)
+        self.assertEqual(report["provisional_searches"], [{"id": search["id"], "question": search["question"], "profile": "research"}])
+        self.assertEqual(foundation_report(self.store, "research"), before)
 
 
 class ResearchCliTests(unittest.TestCase):
@@ -83,6 +97,20 @@ class ResearchCliTests(unittest.TestCase):
         records = Store(self.root).snapshot()["records"]
         self.assertEqual(records["configuration"]["research"]["profile"], "research")
         self.assertIsNone(records["configuration"]["research"]["target"])
+
+    def test_depth_and_probe_examples_and_depth_mutation(self):
+        self.init_lab()
+        for operation in ("depth", "probe-intent", "probe"):
+            result = self.run_cli("exactory-research", "example", operation)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("id", json.loads(result.stdout))
+        revision = Store(self.root).revision
+        changed = self.research_mutation("depth", {"id": "depth-cli", "values": {"hits_per_query": 15},
+                                                  "reason": "Keep more search hits."}, revision, "depth-cli")
+        self.assertEqual(changed.returncode, 0, changed.stderr)
+        status = json.loads(self.run_cli("exactory-research", "status").stdout)
+        self.assertEqual(status["limits"]["depth"]["values"]["hits_per_query"], 15)
+        self.assertNotIn("probes", status)
 
     def test_status_and_receipts_carry_runtime_provenance(self):
         self.init_lab()

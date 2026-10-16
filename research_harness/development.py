@@ -25,6 +25,7 @@ from .graph import obligation
 from .operations import fields, immutable_record, is_finite_number, prepared_mutation, strings, text, timestamp
 from .operations import normalized_text as _normalized
 from .principles import objective_changes
+from .probe_provenance import find_probe_artifact_origins
 from .reading import validate_read_evidence
 from .source_links import captured_source, original_identity, read_locator, validate_link
 from .synthesis import synthesis_state
@@ -196,6 +197,12 @@ class _Evidence:
             item = {"reference": value, "execution_digest": execution["digest"], "cycle_id": payload["cycle_id"],
                     "origin": payload["origin"], "status": payload["status"],
                     "requirement_id": output["requirement_id"], "requirement_kind": requirement["kind"]}
+            origins = [origin for origin in execution.get("probe_origins", [])
+                       if origin["sha256"] == value["artifact"]["sha256"]]
+            if origins:
+                item["probe_origins"] = origins
+                if payload["origin"]["kind"] == "managed":
+                    item["origin"] = dict(payload["origin"], kind="exploratory")
         else:
             raise ResearchError("invalid_development", "Evidence must identify an actual source Link or an execution output and locator")
         self.items[key] = item
@@ -645,7 +652,7 @@ def _checkpoint_record(records, artifacts, dependencies, identifier, cycle, asse
     return dict(content, artifact=artifact, digest=digest(content))
 
 
-def record_execution(store, payload, *, expected_revision, request_id):
+def record_execution(store, payload, *, expected_revision, request_id, _observation=None):
     """Retain the actual outcome of one admitted run, or explicitly imported history."""
     artifacts = ArtifactStore(store.root)
 
@@ -702,9 +709,16 @@ def record_execution(store, payload, *, expected_revision, request_id):
         # Completed output recording must work after policy/literature changes:
         # it preserves actual history, which a fresh assessment may revalidate.
         _execution_artifacts(artifacts, value)
+        probe_origins = find_probe_artifact_origins(records, [output["artifact"] for output in value["outputs"]])
+        if probe_origins and admission:
+            from .execution_evidence import validate_probe_execution_observation
+            if validate_probe_execution_observation(records, artifacts, value, _observation):
+                probe_origins = []
         record = {"id": value["id"], "payload": value, "plan_digest": plan["digest"],
                   "recorded_revision": expected_revision + 1, "request_id": request_id,
                   "admitted_revision": admission["admitted_revision"] if admission else None}
+        if probe_origins:
+            record["probe_origins"] = probe_origins
         record["digest"] = digest(record)
         cycle = records["cycle"][plan["id"]]
         changes = [immutable_record(records, "execution", value["id"], record)]

@@ -1,0 +1,179 @@
+{
+  "availability_qualified": [],
+  "cohort": {
+    "collections": [],
+    "counts": {
+      "abstract_obligations": 0,
+      "abstracts_read": 0,
+      "cohort_families": 0,
+      "obligations": 1,
+      "sample": {}
+    },
+    "digest": "04f491c93d4baf9875ab7a9fc2a35464774294c3c8f056db76ce6949dd24464f",
+    "inventory": [],
+    "limits": "Mechanical source anchoring records inspection; it does not establish comprehension.",
+    "next": {
+      "code": "cohort_missing",
+      "explanation": "Select the complete frozen cohort collection."
+    },
+    "notices": [],
+    "obligations": [
+      {
+        "code": "cohort_missing",
+        "explanation": "Select the complete frozen cohort collection."
+      }
+    ],
+    "readings": {},
+    "ready": false
+  },
+  "collections": [],
+  "counts": {
+    "abstract_read": 0,
+    "cohort_families": 0,
+    "fulltext_read": 0,
+    "obligations": 5,
+    "reference_occurrences": 0,
+    "tier_1": 1,
+    "tier_2": 0,
+    "tier_3": 0,
+    "versions": 1,
+    "works": 1
+  },
+  "digest": "d9629c373d08d52bb29caca25443123f9eb10c17fd6284b15f7cc402f1c3431a",
+  "frontier_digest": "74e8fdbd1674c301fa660ff9ca7ca20a3042508177a4280e1f2927b2e5514519",
+  "invalid_references": [],
+  "inventory": [
+    {
+      "abstract_read": false,
+      "body_coverage": {
+        "complete": false,
+        "missing": [
+          {
+            "bundle_id": null,
+            "original_sha256": "f2568de77fc1cba95547853710dd3930659ecbe58d7e8e5539cd71384fdf89e0",
+            "paths": [
+              "research/sources/objects/f2568de77fc1cba95547853710dd3930659ecbe58d7e8e5539cd71384fdf89e0",
+              "research/sources/objects/48930bd28e5500700813819026ea168b4d98061874e73a5500dc4e3a68d9a3b7"
+            ],
+            "pending": [],
+            "source_id": "acq:a8326f1a84a387b8cd8d4b90b8049210e989bc7469c4f78cffdea488cdcf8a9c"
+          }
+        ],
+        "readings": {}
+      },
+      "bundle_id": null,
+      "date_assertions": [
+        {
+          "source_id": "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34",
+          "values": {
+            "published": "2026-01-03T12:00:00Z",
+            "updated": "2026-02-01T10:00:00Z"
+          }
+        },
+        {
+          "source_id": "acq:d190bbd41f0aa9819ce12b5312190ce48e5ad207a59b3e41cf87e55df3479f24",
+          "values": {
+            "published": "2026-01-03T12:00:00Z",
+            "updated": "2026-02-01T10:00:00Z"
+          }
+        }
+      ],
+      "fulltext_read": false,
+      "historical_status": "not_requested",
+      "reasons": [
+        "tier_1"
+      ],
+      "required_depth": "fulltext",
+      "required_units": [],
+      "retrievals": [
+        {
+          "availability": "available",
+          "extraction_status": "extracted",
+          "next_eligible_at": null,
+          "source_id": "acq:a8326f1a84a387b8cd8d4b90b8049210e989bc7469c4f78cffdea488cdcf8a9c",
+          "url": "https://arxiv.org/html/2601.00001v1"
+        }
+      ],
+      "source_paths": [
+        "research/sources/objects/48930bd28e5500700813819026ea168b4d98061874e73a5500dc4e3a68d9a3b7",
+        "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+        "research/sources/objects/7dee247831372ed80a05c54e51be03200319efd405ab24f3401e4d051a5dfee8",
+        "research/sources/objects/b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5",
+        "research/sources/objects/f2568de77fc1cba95547853710dd3930659ecbe58d7e8e5539cd71384fdf89e0"
+      ],
+      "tier": 1,
+      "title": "An authored example",
+      "version_id": "arxiv:2601.00001v1",
+      "visual_assets": [],
+      "work_id": "arxiv:2601.00001"
+    }
+  ],
+  "judgments_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "limits": "Mechanical source and inspection validation does not establish comprehension, source entailment, scientific truth, or universal novelty.",
+  "next": {
+    "code": "fulltext_reading_missing",
+    "explanation": "Acquire/import and inspect every required unit of this exact source bundle.",
+    "paths": [
+      "research/sources/objects/f2568de77fc1cba95547853710dd3930659ecbe58d7e8e5539cd71384fdf89e0",
+      "research/sources/objects/48930bd28e5500700813819026ea168b4d98061874e73a5500dc4e3a68d9a3b7"
+    ],
+    "source_id": "acq:a8326f1a84a387b8cd8d4b90b8049210e989bc7469c4f78cffdea488cdcf8a9c",
+    "version_id": "arxiv:2601.00001v1"
+  },
+  "notices": [],
+  "obligations": [
+    {
+      "code": "bibliography_incomplete",
+      "explanation": "Import an evidence-linked complete article bibliography; registry counts are insufficient.",
+      "source_id": "acq:a8326f1a84a387b8cd8d4b90b8049210e989bc7469c4f78cffdea488cdcf8a9c",
+      "version_id": "arxiv:2601.00001v1"
+    },
+    {
+      "code": "cohort_missing",
+      "explanation": "Select the complete frozen cohort collection."
+    },
+    {
+      "code": "fulltext_reading_missing",
+      "explanation": "Acquire/import and inspect every required unit of this exact source bundle.",
+      "paths": [
+        "research/sources/objects/f2568de77fc1cba95547853710dd3930659ecbe58d7e8e5539cd71384fdf89e0",
+        "research/sources/objects/48930bd28e5500700813819026ea168b4d98061874e73a5500dc4e3a68d9a3b7"
+      ],
+      "source_id": "acq:a8326f1a84a387b8cd8d4b90b8049210e989bc7469c4f78cffdea488cdcf8a9c",
+      "version_id": "arxiv:2601.00001v1"
+    },
+    {
+      "code": "source_bundle_missing",
+      "explanation": "Import the boundaries and required units for this distinct original body.",
+      "paths": [
+        "research/sources/objects/f2568de77fc1cba95547853710dd3930659ecbe58d7e8e5539cd71384fdf89e0",
+        "research/sources/objects/48930bd28e5500700813819026ea168b4d98061874e73a5500dc4e3a68d9a3b7"
+      ],
+      "source_id": "acq:a8326f1a84a387b8cd8d4b90b8049210e989bc7469c4f78cffdea488cdcf8a9c",
+      "version_id": "arxiv:2601.00001v1"
+    },
+    {
+      "code": "source_bundle_missing",
+      "explanation": "Import the exact article boundaries and required source units.",
+      "paths": [
+        "research/sources/objects/48930bd28e5500700813819026ea168b4d98061874e73a5500dc4e3a68d9a3b7",
+        "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+        "research/sources/objects/7dee247831372ed80a05c54e51be03200319efd405ab24f3401e4d051a5dfee8",
+        "research/sources/objects/b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5",
+        "research/sources/objects/f2568de77fc1cba95547853710dd3930659ecbe58d7e8e5539cd71384fdf89e0"
+      ],
+      "version_id": "arxiv:2601.00001v1"
+    }
+  ],
+  "passed": {
+    "cohort": false,
+    "graph": false,
+    "searches": true
+  },
+  "population_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "ready": false,
+  "requirements_digest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "search_history": [],
+  "searches": [],
+  "stable_digest": "03f727208ca64308f3775b20ed35c4c259f627db4865f0cc8b944680519661bc"
+}

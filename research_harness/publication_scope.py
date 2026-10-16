@@ -13,7 +13,7 @@ from .development import _Context, _Evidence, _candidate, _REVIEW_CHECKS, _uniqu
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
-from .execution_evidence import _observed, author_readiness_state
+from .execution_evidence import author_readiness_state, validate_observed_execution
 from .graph import obligation
 from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .source_deferrals import assess_deferrals, build_source_gap_disclosure
@@ -353,7 +353,7 @@ def _load_scope_snapshot(records, artifacts):
     for identifier in sorted({e["execution_id"] for e in candidate["evidence"] if e["kind"] == "result"}):
         if records["execution"][identifier]["payload"]["origin"]["kind"] == "managed":
             try:
-                observations[identifier] = _observed(records, artifacts, identifier)
+                observations[identifier] = validate_observed_execution(records, artifacts, identifier)
             except ResearchError as error:
                 pending.append(obligation(error.code, error.message, execution_id=identifier))
     dependencies["observations"] = observations

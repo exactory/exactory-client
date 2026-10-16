@@ -4,15 +4,8 @@ from .challenge import find_current_challenge
 from .evaluation import Evaluation
 from .evidence import digest
 from .graph import format_search_requirement_id, obligation
-from .literature import foundation_state
+from .literature import find_search_integrity_errors, foundation_state
 from .synthesis import synthesis_state
-
-
-def _find_search_integrity_errors(search):
-    # S1 exports literature.find_search_integrity_errors with this same rule;
-    # replace this local helper with that public import when the slices merge.
-    return search.get("integrity_errors", [item for item in search.get("pending", [])
-                                            if item["code"] != "search_response_incomplete"])
 
 
 def describe_direction(records, artifacts):
@@ -28,9 +21,9 @@ def describe_direction(records, artifacts):
     if not current:
         obligations.append(obligation("direction_search_missing", "Select a direct research search against the current literature scope.",
                                       search_id=search_id, **({"coverage": search["coverage"]} if search and "coverage" in search else {})))
-    elif _find_search_integrity_errors(search) or "dispositions" not in search:
+    elif find_search_integrity_errors(search) or "dispositions" not in search:
         obligations.append(obligation("direction_search_incomplete", "Account for captured results and resolve direct-search integrity errors; bounded enumeration is allowed.",
-            search_id=search_id, integrity_errors=_find_search_integrity_errors(search),
+            search_id=search_id, integrity_errors=find_search_integrity_errors(search),
             **({"coverage": search["coverage"]} if "coverage" in search else {})))
     decisive = {item["work_id"] for item in search.get("dispositions", [])
                 if item["disposition"] in ("relevant", "contradictory")} if current else set()

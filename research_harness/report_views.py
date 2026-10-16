@@ -6,6 +6,7 @@ is a pointer to the detailed command, not an executable instruction.
 """
 
 from collections import Counter
+import json
 
 from .errors import ResearchError
 from .evidence import digest
@@ -106,6 +107,9 @@ def status_summary(report):
     result = next_summary(report)
     preparation = report.get("preparation") or {}
     study = report.get("study") or {}
+    limits = report.get("limits")
+    if limits is not None and limits.get("depth") is not None:
+        limits = dict(limits, depth=dict(limits["depth"], plan_id=_short(limits["depth"].get("plan_id"), 64)))
     result.update({"schema": "research-status-summary-v1", "runtime": report.get("runtime"),
                    "profile": _short(report.get("profile"), 24), "stage": _short(study.get("stage"), 32),
                    "status": _short(study.get("status"), 32), "waiting": _short(study.get("waiting"), 160),
@@ -113,11 +117,21 @@ def status_summary(report):
                    "obligations": _obligations(report.get("obligations", [])),
                    "preparation_obligations": _obligations(preparation.get("obligations", [])),
                    "counts": report.get("counts"), "resources": report.get("resources", {}),
-                   "limits": report.get("limits"),
+                   "limits": limits,
                    "round": report.get("round"), "evaluation": report.get("evaluation"),
                    "grand_challenge": _summarize_grand_challenge(report.get("grand_challenge"))})
     result["source_deferrals"] = dict(Counter(item["status"] for item in report.get("source_deferrals", [])))
     result["deferred_obligations"] = _obligations(report.get("deferred_obligations", []))
+    if "probes" in report:
+        result["probes"] = report["probes"]
+    if "provisional_searches" in report:
+        result["provisional_searches"] = {"count": len(report["provisional_searches"])}
+    # Keep depth amounts and counts visible when they take room previously available to optional criterion previews.
+    challenge = result["grand_challenge"]
+    while ((limits or {}).get("depth") or "probes" in report or "provisional_searches" in report) and (challenge and challenge["criterion_ids"]
+           and len(json.dumps(result, ensure_ascii=False, indent=2).encode("utf-8")) > 16 * 1024):
+        challenge["criterion_ids"].pop()
+        challenge["omitted_criterion_ids"] += 1
     return result
 
 

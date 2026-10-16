@@ -379,16 +379,18 @@ def _reconcile(store, payload, expected_revision, request_id):
                      "status": observed["status"], "exit_code": observed["exit_code"],
                      "usage": {"units": usage, "reason": "Observed foreground execution; unknown usage retains the full admitted reservation."},
                      "outputs": outputs, "notes": "Observed by the pinned managed launcher. Process completion supplies no scientific result validation."}
+        observation = {"admission_id": admission_id, "claim_digest": digest(claim), "binding_digest": binding["digest"],
+                       "execution": execution,
+                       "terminal": artifacts.put(_canonical(observed).encode(), "application/json"), "log": log_ref, "summary": summary,
+                       "files": [{"path": path, "artifact": artifacts.put(data, "application/octet-stream")} for path, data in files.items()]}
         outcome = records.get("execution_outcome", {}).get(admission_id)
         if outcome is not None:
             if records["execution"][outcome["execution_id"]]["payload"] != execution:
                 raise ResearchError("execution_identity_mismatch", "Recovered bytes differ from the already recorded actual outcome")
         else:
-            record_execution(store, execution, expected_revision=store.revision, request_id="launcher-outcome-" + digest(claim))
-        observation = {"admission_id": admission_id, "claim_digest": digest(claim), "binding_digest": binding["digest"],
-                       "execution": execution,
-                       "terminal": artifacts.put(_canonical(observed).encode(), "application/json"), "log": log_ref, "summary": summary,
-                       "files": [{"path": path, "artifact": artifacts.put(data, "application/octet-stream")} for path, data in files.items()]}
+            from .probe_provenance import find_probe_artifact_origins
+            observed_origin = {"_observation": observation} if find_probe_artifact_origins(records, [item["artifact"] for item in outputs]) else {}
+            record_execution(store, execution, expected_revision=store.revision, request_id="launcher-outcome-" + digest(claim), **observed_origin)
         prepared_mutation(store, "execution.observe", {"admission_id": admission_id},
             lambda current, value: ([immutable_record(current, "execution_observation", admission_id, observation)], observation),
             expected_revision=store.revision, request_id=request_id + ":observation")

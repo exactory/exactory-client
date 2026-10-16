@@ -52,6 +52,19 @@ def round_view():
 
 
 class ReportViewTests(unittest.TestCase):
+    def test_depth_plan_ids_remain_bounded_without_changing_full_status(self):
+        report = report_fixture()
+        values = {"loop_abstracts": 100, "round_loop_abstracts": 40, "hits_per_query": 10,
+                  "innovation_candidates": 10, "innovation_cases": 5, "sample_size": 100,
+                  "search_readings": 20, "core_fulltexts": 10}
+        report["limits"] = {"depth": {"plan_id": "\x01" * 10000, "values": values}}
+        before = copy.deepcopy(report)
+        view = status_summary(report)
+        self.assertEqual(view["limits"]["depth"]["plan_id"], "\x01" * 64)
+        self.assertEqual(view["limits"]["depth"]["values"], values)
+        self.assertLessEqual(encoded_size(view), 16 * 1024)
+        self.assertEqual(report, before)
+
     def test_views_preserve_state_and_exclude_source_bodies(self):
         report = report_fixture()
         before = copy.deepcopy(report)
@@ -88,9 +101,19 @@ class ReportViewTests(unittest.TestCase):
                                 "elapsed_seconds": 123456.789}
         report["round"] = round_view()
         report["grand_challenge"] = grand_challenge_view()
+        report["limits"] = {"policy": "lineage-v1", "loop": {"readings": 1000, "limit": 1000,
+            "covered": ["direct", "originals", "theory", "adjacent", "recent"]}, "sample": None,
+            "innovation_candidates": {"families": 100, "required": 100}, "search_readings": None, "core_papers": None,
+            "depth": {"plan_id": "\x01" * 10000, "values": {"loop_abstracts": 1000, "round_loop_abstracts": 400,
+                "hits_per_query": 100, "innovation_candidates": 100, "innovation_cases": 50, "sample_size": 1000,
+                "search_readings": 200, "core_fulltexts": 100}}}
+        report["probes"] = {"count": 10 ** 9, "elapsed_seconds": 10 ** 9 + 0.5}
         status, upcoming = status_summary(report), next_summary(report)
         self.assertLessEqual(encoded_size(status), 16 * 1024)
         self.assertLessEqual(encoded_size(upcoming), 4 * 1024)
+        challenge = status["grand_challenge"]
+        self.assertEqual(len(challenge["criterion_ids"]) + challenge["omitted_criterion_ids"], 100 * 100)
+        self.assertEqual(status["limits"]["depth"]["values"], report["limits"]["depth"]["values"])
         self.assertTrue(upcoming["next_hint"]["truncated_fields"])
         self.assertTrue(upcoming["next_hint"]["details_required"])
 
