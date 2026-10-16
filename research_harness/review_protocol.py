@@ -11,7 +11,7 @@ import copy
 import json
 import uuid
 
-from .artifacts import ArtifactStore
+from .artifacts import ArtifactStore, describe_artifact
 from .errors import ResearchError
 from .evidence import digest
 from .graph import obligation
@@ -259,10 +259,15 @@ def _bars(records, artifacts, intent_id):
     return selected
 
 
-def build_direction_evidence(records, artifacts, direction, dossier):
-    """Supply direction facts and exact reading identities in an observed packet."""
+def describe_direction_evidence(records, artifacts, direction, dossier):
+    """Describe direction facts and passage bytes without writing artifacts."""
+    from .direction_sources import build_reading_passages
     binding = direction['evidence']
     identifiers = {identifier for item in binding['roots'] + binding['decisive'] for identifier in item['reading_ids']}
+    readings = [records['reading'][identifier] for identifier in sorted(identifiers)]
+    prepared = build_reading_passages(records, artifacts, readings)
+    passages = [passage for passage, _ in prepared]
+    contents = [(passage['excerpt'], data) for passage, data in prepared]
     claim = {'dossier_id': dossier['id'], 'digest': dossier['digest'],
              **{key: dossier['payload'][key] for key in ('objective', 'candidates', 'claims', 'selected_candidate')}}
     value = {'binding': binding, 'claim': claim,
@@ -277,9 +282,30 @@ def build_direction_evidence(records, artifacts, direction, dossier):
     if contract is not None:
         from .review_packets import scrub
         from .scientific_delivery import project_delivery
+        # Check generated public-source excerpts against the same private-byte
+        # and output bounds as the rest of the scoped packet before attaching them.
+        value['source_passage_checks'] = [dict(_reference_templates(passage),
+            content=(base64.b64encode(data).decode('ascii') if passage.get('source_original') else data.decode('utf-8')))
+            for passage, data in prepared]
         value, derived = project_delivery(records, artifacts, contract, scrub(value, ('author', 'authors', 'request_id', 'token')))
-        _save_derivatives(artifacts, derived)
-    return _reference_templates(value)
+        value.pop('source_passage_checks')
+        for path, data in derived.items():
+            reference = describe_artifact(data, 'application/json')
+            if reference['path'] != path:
+                raise ResearchError('artifact_corrupt', 'The scientific derivative must retain its content-addressed identity')
+            contents.append((reference, data))
+    value = _reference_templates(value)
+    value['passages'] = passages
+    return value, contents
+
+
+def build_direction_evidence(records, artifacts, direction, dossier):
+    """Store the checked passages supplied by a new packet or supplement."""
+    value, contents = describe_direction_evidence(records, artifacts, direction, dossier)
+    for reference, data in contents:
+        if artifacts.put(data, reference['media_type']) != reference:
+            raise ResearchError('artifact_corrupt', 'The scientific derivative must retain its content-addressed identity')
+    return value
 
 
 def add_direction_evidence(records, artifacts, packet, dossier_id):
