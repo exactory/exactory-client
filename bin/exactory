@@ -31,8 +31,9 @@ from research_harness.cli import add_identity, select_managed_path
 from research_harness.errors import ResearchError
 from research_harness.exactory_api import build_orcid_required_msg, read_api_base_url
 from research_harness.integration import command_identity, current_store
-from research_harness.same_origin import (INCOMPLETE_ANSWER_ERROR_TYPES, RefusedRedirectError, get_origin,
-                                          is_read_method, open_url_within_origin)
+from research_harness.same_origin import (INCOMPLETE_ANSWER_ERROR_TYPES, UNSENT_REQUEST_ERROR_TYPES,
+                                          RefusedRedirectError, describe_unsent_request_cause, get_origin,
+                                          is_read_method, open_url_within_origin, read_error_detail)
 from research_harness.submission import (check_submission_preconditions, check_verdict_preconditions,
                                          continue_submission, send_verdict, submit_managed)
 from research_harness.verification import record_task
@@ -76,8 +77,20 @@ _NON_TEXT_CHARACTER_CATEGORIES = ("Cc", "Cf", "Cs")
 # as one code point, and the json module joins an escaped surrogate pair into one, so every surrogate in the
 # text of an option is unpaired.
 _NON_PLAIN_TEXT_CHARACTER_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\ud800-\udfff]")
+# The line breaks that plainTextSchema accepts: a carriage return and a line feed as a pair, and each of the two alone.
+_LINE_BREAK_RE = re.compile(r"\r\n|\r|\n")
 # The character that starts a terminal color code.
 _ESCAPE_CHARACTER = "\x1b"
+# The refusal of an unpaired surrogate names where it comes from. In a command argument, it is what Python makes of
+# bytes that are not UTF-8. A citations file is read as UTF-8, so there it comes from the escape of one half of a
+# surrogate pair, which the json module keeps as it is. `found` names the character and its place.
+_ARGUMENT_SURROGATE_REFUSAL_TEMPLATE = (
+    "The {field_name} is not valid UTF-8 text. It contains {found}. Give the text as UTF-8."
+)
+_ESCAPED_SURROGATE_REFUSAL_TEMPLATE = (
+    "The {field_name} contains {found}. A \\u{code_hex} escape in the citations file gives it, and it is half of a"
+    " surrogate pair. Write the character as UTF-8 text in the file, or write both escapes of the pair."
+)
 _GITHUB_PAGE_URL_PREFIX = "https://github.com/"
 _CHECK_COMMAND_PATH = Path(__file__).with_name("exactory-check")
 
@@ -109,12 +122,14 @@ _SEND_AGAIN_LATER_ADVICE_MSG = "Send the same request again later."
 # A read sends no body, so a 422 to a list is the server's refusal of its query. The server judges every
 # limit, so the message names the parts of the query and states no bound of its own.
 _LIST_QUERY_REFUSAL_TEMPLATE = "The server rejected the query ({query_parts}). Correct it. Then send the request again."
-# A page of a list sends its limit and its cursor (_build_page_query). The problem list sends its search
-# text and its filters too.
+# A page of a list sends its limit and its cursor (_build_page_query). The problem list and the task list send their
+# search text, their filters, and their sort too, and the Grand Challenge list sends its filters and its sort.
 _PAGE_QUERY_ERR_MSGS = {**_HTTP_ERR_MSGS,
                         422: _LIST_QUERY_REFUSAL_TEMPLATE.format(query_parts="the limit or the cursor")}
-_PROBLEM_LIST_QUERY_ERR_MSGS = {**_HTTP_ERR_MSGS, 422: _LIST_QUERY_REFUSAL_TEMPLATE.format(
+_SEARCH_AND_FILTER_QUERY_ERR_MSGS = {**_HTTP_ERR_MSGS, 422: _LIST_QUERY_REFUSAL_TEMPLATE.format(
     query_parts="the search text, a filter, the sort, the limit, or the cursor")}
+_FILTER_QUERY_ERR_MSGS = {**_HTTP_ERR_MSGS, 422: _LIST_QUERY_REFUSAL_TEMPLATE.format(
+    query_parts="a filter, the sort, the limit, or the cursor")}
 
 # The login routes carry no key, so their failures mean other things than the ones above.
 _LOGIN_ERR_MSGS = {
@@ -133,6 +148,17 @@ _TERMS_NOTICE = (
 )
 _NO_KEY_ERR_MSG = ("No API key found. Run: exactory login --email <your email>."
                    " Or set EXACTORY_API_KEY.")
+# What EXACTORY_API_URL must hold for urllib to send each request to the address that it names: an http or https URL
+# with a host, a port from 1 to 65535 if it names one, and no user name. Every character is printable ASCII, so no
+# space, control character, or character outside ASCII changes the address or stops http.client. The URL has no query
+# and no fragment, because the path that each request adds to the URL would become part of them.
+_NON_ADDRESS_CHARACTER_RE = re.compile(r"[^\x21-\x7e]|[?#]")
+_UNUSABLE_API_URL_ERR_MSG = ("EXACTORY_API_URL is not an address that the client can use. Set it to an http or https"
+                             " URL with a host, for example https://www.exactory.ai. Write a port, if any, as a number."
+                             " Leave out a user name, a query, a fragment, spaces, control characters, and characters"
+                             " outside ASCII. Or unset EXACTORY_API_URL to use https://www.exactory.ai.")
+# The page of the application that lists the API keys of the account and revokes them.
+_KEYS_PAGE_PATH = "/keys"
 # argv decodes a byte that is not UTF-8 text to a lone surrogate, which has no percent-encoding.
 _NOT_UTF8_ARGUMENT_ERR_MSG = ("A command argument is not valid UTF-8 text."
                               " Give every argument as UTF-8 text.")
@@ -175,16 +201,35 @@ def _save_api_key(api_key: str, email: str, label: str) -> Path:
     return path
 
 
+def _read_checked_api_base_url() -> str:
+    """The API base URL, checked where the command reads it, because configuration is a boundary. A value
+    that urllib cannot send a request to as given ends the command before any request, with a message that
+    names EXACTORY_API_URL and its remedy."""
+    base_url = read_api_base_url()
+    try:
+        parts = urllib.parse.urlsplit(base_url)
+        port = parts.port
+    except ValueError:
+        _exit_with_error(_UNUSABLE_API_URL_ERR_MSG, 2)
+    if (parts.scheme not in ("http", "https") or not parts.hostname or parts.username is not None or port == 0
+            or _NON_ADDRESS_CHARACTER_RE.search(base_url)):
+        _exit_with_error(_UNUSABLE_API_URL_ERR_MSG, 2)
+    return base_url
+
+
 def _send_request(method: str, path: str, body: dict | None = None, *,
                   authenticated: bool = True,
                   allow_missing: bool = False,
-                  error_messages: dict[int, str] = _HTTP_ERR_MSGS) -> tuple[dict, int]:
+                  error_messages: dict[int, str] = _HTTP_ERR_MSGS,
+                  unconfirmed_write_advice_msg: str | None = None) -> tuple[dict, int]:
     """Send one API request. Returns the parsed JSON body and the HTTP status. This is the one place
     that adds the API key, and the request goes out under the rule of research_harness.same_origin:
     a redirect to another origin is refused, so the key stays with the origin that the user set, and
     every redirect of a request that is not a read is refused, so no other answer passes for the
     answer to a write. Every other end of the request is one message too: an error answer, a request
-    that did not go out, and an answer that did not arrive in full or whose body is not JSON."""
+    that did not go out, and an answer that did not arrive in full or whose body is not JSON. A write
+    whose outcome the command cannot confirm ends with `unconfirmed_write_advice_msg`, which a request
+    with its own way to check names, and with the check-first advice of the origin otherwise."""
     headers = {"Content-Type": "application/json", "User-Agent": _USER_AGENT}
     if authenticated:
         api_key = _read_api_key()
@@ -192,8 +237,9 @@ def _send_request(method: str, path: str, body: dict | None = None, *,
             _exit_with_error(_NO_KEY_ERR_MSG, 2)
         headers["Authorization"] = f"Bearer {api_key}"
 
-    base_url = read_api_base_url()
+    base_url = _read_checked_api_base_url()
     origin = get_origin(base_url)
+    write_advice_msg = unconfirmed_write_advice_msg or _build_unconfirmed_write_msg(origin)
     request = urllib.request.Request(
         base_url + path,
         method=method,
@@ -205,39 +251,36 @@ def _send_request(method: str, path: str, body: dict | None = None, *,
         with open_url_within_origin(request, timeout=_TIMEOUT_SECONDS) as response:
             status, answer_bytes = response.getcode(), response.read()
     except RefusedRedirectError as error:
-        _exit_with_error(_build_redirect_refusal_msg(error))
+        _exit_with_error(_build_redirect_refusal_msg(error, write_advice_msg))
     except urllib.error.HTTPError as error:
         with error:
             if allow_missing and error.code == 404:
                 return {}, 404
-            try:
-                detail = error.read().decode(errors="replace")[:2000]
-            except INCOMPLETE_ANSWER_ERROR_TYPES as read_error:
-                _exit_with_error(_build_unreadable_answer_msg(method, origin, str(read_error)))
-            message = _describe_http_error(method, origin, error.code, detail, error_messages)
+            detail = read_error_detail(error)
+            message = _describe_http_error(method, write_advice_msg, error.code, detail, error_messages)
             _exit_with_error(f"{message}\n{detail}")
-    except urllib.error.URLError as error:
-        _exit_with_error(f"The client cannot reach {base_url}. Cause: {error.reason}."
+    except UNSENT_REQUEST_ERROR_TYPES as error:
+        _exit_with_error(f"The client cannot reach {base_url}. Cause: {describe_unsent_request_cause(error)}."
                          " Make sure that the network and EXACTORY_API_URL are correct."
                          " Then send the request again.")
     except INCOMPLETE_ANSWER_ERROR_TYPES as error:
-        _exit_with_error(_build_unreadable_answer_msg(method, origin, str(error)))
+        _exit_with_error(_build_unreadable_answer_msg(method, origin, str(error), write_advice_msg))
     try:
         return json.loads(answer_bytes), status
     except ValueError:
         _exit_with_error(_build_unreadable_answer_msg(
-            method, origin, f"the answer has HTTP {status} and a body that is not JSON"))
+            method, origin, f"the answer has HTTP {status} and a body that is not JSON", write_advice_msg))
     raise AssertionError("unreachable")
 
 
-def _build_redirect_refusal_msg(error: RefusedRedirectError) -> str:
+def _build_redirect_refusal_msg(error: RefusedRedirectError, write_advice_msg: str) -> str:
     """The message for a redirect that the command did not follow. A redirect to another origin is
     refused before anything is sent there, so the API key and the body stay with the configured
     origin, and the user checks EXACTORY_API_URL. A redirect of a request that is not a read is
     refused within the origin too. The configured origin received the request and may have applied
-    it before it answered, so the message of every refused write sends the user to check before
-    running the command again. A refused read changed nothing, and its message keeps the advice to
-    run the command again."""
+    it before it answered, so the message of every refused write ends with `write_advice_msg`, which
+    sends the user to check before running the command again. A refused read changed nothing, and its
+    message keeps the advice to run the command again."""
     request_origin = get_origin(error.request_url)
     if error.is_cross_origin:
         refusal_msg = (f"The exactory server at {request_origin} answered the {error.method} request with a redirect to"
@@ -246,22 +289,23 @@ def _build_redirect_refusal_msg(error: RefusedRedirectError) -> str:
     else:
         refusal_msg = (f"The exactory server at {request_origin} answered the {error.method} request with a redirect."
                        f" The command does not follow a redirect of a {error.method} request.")
-    next_step_msg = _build_unconfirmed_outcome_advice(error.method, request_origin, "Then run the command again.")
+    next_step_msg = _choose_unconfirmed_outcome_advice(error.method, write_advice_msg, "Then run the command again.")
     return f"{refusal_msg} {next_step_msg}"
 
 
-def _build_unreadable_answer_msg(method: str, origin: str, cause: str) -> str:
+def _build_unreadable_answer_msg(method: str, origin: str, cause: str, write_advice_msg: str) -> str:
     """The message for a request that went out and whose answer the command cannot read: the answer
     did not arrive in full, or its body is not JSON."""
+    next_step_msg = _choose_unconfirmed_outcome_advice(method, write_advice_msg, "Run the command again.")
     return (f"The client cannot read the answer of the exactory server at {origin} to the {method} request."
-            f" Cause: {cause}. {_build_unconfirmed_outcome_advice(method, origin, 'Run the command again.')}")
+            f" Cause: {cause}. {next_step_msg}")
 
 
-def _build_unconfirmed_outcome_advice(method: str, origin: str, read_advice_msg: str) -> str:
+def _choose_unconfirmed_outcome_advice(method: str, write_advice_msg: str, read_advice_msg: str) -> str:
     """The advice after an outcome that does not show whether the server applied the request. A read
     changed nothing, so it gets `read_advice_msg`. Any other request may have taken effect, so it
-    gets the check-first advice."""
-    return read_advice_msg if is_read_method(method) else _build_unconfirmed_write_msg(origin)
+    gets `write_advice_msg`, which sends the user to check first."""
+    return read_advice_msg if is_read_method(method) else write_advice_msg
 
 
 def _build_unconfirmed_write_msg(origin: str) -> str:
@@ -272,12 +316,13 @@ def _build_unconfirmed_write_msg(origin: str) -> str:
             f" {origin} whether the change is there.")
 
 
-def _describe_http_error(method: str, origin: str, status: int, detail: str, error_messages: dict[int, str]) -> str:
+def _describe_http_error(method: str, write_advice_msg: str, status: int, detail: str,
+                         error_messages: dict[int, str]) -> str:
     """The message for a failed request. A superseded verification names where the work went,
     which no status-level message can: the requester moved it to a newer version of the paper. An
     answer of 500 to 599 does not show that the server applied nothing, so its description ends
     with the advice that the method of the request earns. A 4xx is refused before the write, and
-    its message keeps its own advice."""
+    its message keeps its own advice, also when the detail of the answer broke off."""
     try:
         body = json.loads(detail)
     except ValueError:
@@ -287,7 +332,8 @@ def _describe_http_error(method: str, origin: str, status: int, detail: str, err
                 f" Work on verification {body.get('successorId')} instead.")
     description = error_messages.get(status, f"The server returned HTTP {status}.")
     if 500 <= status <= 599:
-        return f"{description} {_build_unconfirmed_outcome_advice(method, origin, _SEND_AGAIN_LATER_ADVICE_MSG)}"
+        next_step_msg = _choose_unconfirmed_outcome_advice(method, write_advice_msg, _SEND_AGAIN_LATER_ADVICE_MSG)
+        return f"{description} {next_step_msg}"
     return description
 
 
@@ -347,7 +393,7 @@ def _require_linked_orcid() -> None:
     links an iD, which the server's generic 403 cannot."""
     me, _ = _send_request("GET", "/api/v1/me")
     if not me.get("orcidId"):
-        _exit_with_error(build_orcid_required_msg("This operation", read_api_base_url()))
+        _exit_with_error(build_orcid_required_msg("This operation", _read_checked_api_base_url()))
 
 
 def _send_vote(path: str, value: int) -> None:
@@ -440,7 +486,8 @@ def _run_tasks(args: argparse.Namespace) -> None:
     for key, value in optional_params:
         if value:
             query[key] = value
-    payload, _ = _send_request("GET", "/api/v1/tasks?" + _encode_query(query))
+    payload, _ = _send_request("GET", "/api/v1/tasks?" + _encode_query(query),
+                               error_messages=_SEARCH_AND_FILTER_QUERY_ERR_MSGS)
     _print_json(payload)
 
 
@@ -594,21 +641,30 @@ def _require_utf16_bounds(field_name: str, value: str,
     return value
 
 
-def _require_plain_text(field_name: str, text: str) -> str:
+def _require_plain_text(field_name: str, text: str,
+                        surrogate_refusal_template: str = _ARGUMENT_SURROGATE_REFUSAL_TEMPLATE) -> str:
     """Refuse a text that the server's plainTextSchema refuses, and return it otherwise. The message names the
-    field, the first refused character, and its position in the text as given, counted in characters from 1.
-    U+001B starts a terminal color code, and an unpaired surrogate is what Python makes of command-line bytes
-    that are not UTF-8, so each of the two names its own remedy."""
+    field, the first refused character, and where it is in the text as given, counted in characters from 1: its
+    position in a text of one line, and its line and its column in a text of more lines. U+001B starts a terminal
+    color code, and an unpaired surrogate comes from where `surrogate_refusal_template` says, so each of the two
+    names its own remedy."""
     match = _NON_PLAIN_TEXT_CHARACTER_RE.search(text)
     if match is None:
         return text
     character = match.group()
-    found_msg = f"U+{ord(character):04X} at position {match.start() + 1}"
+    if _LINE_BREAK_RE.search(text) is None:
+        place = f"position {match.start() + 1}"
+    else:
+        line_breaks = list(_LINE_BREAK_RE.finditer(text, 0, match.start()))
+        line_start = line_breaks[-1].end() if line_breaks else 0
+        place = f"line {len(line_breaks) + 1}, column {match.start() - line_start + 1}"
+    found_msg = f"U+{ord(character):04X} at {place}"
     if character == _ESCAPE_CHARACTER:
         refusal_msg = (f"The {field_name} contains the control character {found_msg}. Terminal color codes start with"
                        " this character. Copy the text without colors.")
     elif unicodedata.category(character) == "Cs":
-        refusal_msg = f"The {field_name} is not valid UTF-8 text. It contains {found_msg}. Give the text as UTF-8."
+        refusal_msg = surrogate_refusal_template.format(field_name=field_name, found=found_msg,
+                                                        code_hex=f"{ord(character):04X}")
     else:
         refusal_msg = (f"The {field_name} contains the control character {found_msg}. The server accepts no control"
                        " character except tab, line feed, and carriage return. Remove the character.")
@@ -616,10 +672,12 @@ def _require_plain_text(field_name: str, text: str) -> str:
     raise AssertionError("unreachable")
 
 
-def _require_plain_text_bounds(field_name: str, value: str, min_units: int, max_units: int) -> str:
+def _require_plain_text_bounds(field_name: str, value: str, min_units: int, max_units: int,
+                               surrogate_refusal_template: str = _ARGUMENT_SURROGATE_REFUSAL_TEMPLATE) -> str:
     """A free-text field that the server builds on plainTextSchema, checked in the order of that schema: the
     characters of the text as given, then the bounds of the trimmed text."""
-    return _require_utf16_bounds(field_name, _require_plain_text(field_name, value), min_units, max_units)
+    return _require_utf16_bounds(field_name, _require_plain_text(field_name, value, surrogate_refusal_template),
+                                 min_units, max_units)
 
 
 def _read_text_file(path: str) -> str:
@@ -680,9 +738,9 @@ def _read_citations_file(path: str) -> list[dict]:
         if not isinstance(citation, str) or not isinstance(locator, str):
             _exit_with_error(f'Citation {index} is missing "citation" or "locator".'
                              " Write both as strings.")
-        citation = _require_plain_text_bounds(f"citation of entry {index}",
-                                              citation, 10, 1000)
-        locator = _require_plain_text(f"locator of entry {index}", locator).strip()
+        citation = _require_plain_text_bounds(f"citation of entry {index}", citation, 10, 1000,
+                                              _ESCAPED_SURROGATE_REFUSAL_TEMPLATE)
+        locator = _require_plain_text(f"locator of entry {index}", locator, _ESCAPED_SURROGATE_REFUSAL_TEMPLATE).strip()
         if _count_utf16_units(locator) > 500:
             _exit_with_error(f"The locator of entry {index} is over the limit of"
                              " 500 characters. Make it shorter.")
@@ -704,8 +762,8 @@ def _run_challenges(args: argparse.Namespace) -> None:
     for key, value in optional_params:
         if value:
             query[key] = value
-    payload, _ = _send_request(
-        "GET", "/api/v1/grand-challenges?" + _encode_query(query))
+    payload, _ = _send_request("GET", "/api/v1/grand-challenges?" + _encode_query(query),
+                               error_messages=_FILTER_QUERY_ERR_MSGS)
     _print_json(payload)
 
 
@@ -877,7 +935,7 @@ def _run_problems(args: argparse.Namespace) -> None:
         if enabled:
             query[key] = "true"
     payload, _ = _send_request("GET", "/api/v1/math-problems?" + _encode_query(query),
-                               error_messages=_PROBLEM_LIST_QUERY_ERR_MSGS)
+                               error_messages=_SEARCH_AND_FILTER_QUERY_ERR_MSGS)
     _print_json(payload)
 
 
@@ -1056,10 +1114,30 @@ def _print_page(path: str, args: argparse.Namespace) -> None:
     _print_json(payload)
 
 
+def _build_code_request_advice(email: str) -> str:
+    """The advice after a code request whose outcome the command cannot confirm. The server may have sent the
+    email, so the user looks for it before requesting another code."""
+    return (f"If the request worked, an email with a sign-in code is on its way to {email}. Then run: exactory login"
+            f" --email {email} --code <the code>. If no email arrives within a few minutes, request a new code:"
+            f" exactory login --email {email}")
+
+
+def _build_code_check_advice(email: str, label: str) -> str:
+    """The advice after a code check whose outcome the command cannot confirm. The server may have made a key with
+    this label, and it shows the plaintext of a key once, in its answer, so the user sees and revokes such a key on
+    the keys page. Then the user runs the command again with the same code, and requests a new code if the server
+    does not take that one."""
+    return (f'The server may have made a key labeled "{label}" for your account. The page'
+            f" {_read_checked_api_base_url()}{_KEYS_PAGE_PATH} lists your keys, and its Revoke button revokes one."
+            " Run the command again with the same code. If the server answers that the code is wrong, expired, or"
+            f" already used, request a new code: exactory login --email {email}")
+
+
 def _run_login(args: argparse.Namespace) -> None:
     if args.code is None:
         payload, _ = _send_request("POST", "/api/v1/email-codes", {"email": args.email},
-                                   authenticated=False, error_messages=_LOGIN_ERR_MSGS)
+                                   authenticated=False, error_messages=_LOGIN_ERR_MSGS,
+                                   unconfirmed_write_advice_msg=_build_code_request_advice(args.email))
         email = payload["email"]
         print(f"A sign-in code is on its way to {email}.", file=sys.stderr)
         print(_TERMS_NOTICE, file=sys.stderr)
@@ -1070,7 +1148,8 @@ def _run_login(args: argparse.Namespace) -> None:
     label = args.label or f"plugin on {socket.gethostname()}"
     payload, _ = _send_request("POST", "/api/v1/api-keys",
                                {"email": args.email, "code": args.code, "label": label},
-                               authenticated=False, error_messages=_LOGIN_ERR_MSGS)
+                               authenticated=False, error_messages=_LOGIN_ERR_MSGS,
+                               unconfirmed_write_advice_msg=_build_code_check_advice(args.email, label))
     # The key goes to the file and nowhere else: stdout is the chat transcript.
     path = _save_api_key(payload["apiKey"], args.email, payload["key"]["label"])
     _print_json({"email": args.email, "label": payload["key"]["label"], "saved_to": str(path)})
@@ -1095,7 +1174,7 @@ def _run_whoami(args: argparse.Namespace) -> None:
 
 
 def _run_open_signup(args: argparse.Namespace) -> None:
-    url = read_api_base_url() + "/signup"
+    url = _read_checked_api_base_url() + "/signup"
     try:
         opened = webbrowser.open(url)
     except webbrowser.Error:

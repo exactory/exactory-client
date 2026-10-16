@@ -7,23 +7,33 @@ client therefore follows a redirect only of a GET or HEAD request, and refuses e
 any other request, within the origin too. Every request goes through an opener of its own, so the
 rule changes no state of the process, and no other caller can take it away. bin/exactory (the
 exactory API key) and bin/exactory-draft (the Zenodo token) share this module, so the rule has
-one definition. The two facts that both commands judge an outcome by live here too: which requests
-are reads, and what urllib raises when a request went out and its answer did not arrive in full.
+one definition. The facts that both commands judge the end of a request by live here too: which
+requests are reads, what urllib raises when a request did not go out, what it raises when a request
+went out and its answer did not arrive in full, and what a message quotes of an error answer.
 """
 
 import http.client
+import urllib.error
 import urllib.parse
 import urllib.request
 
 # A read sends no body, so a followed redirect cannot turn its answer into the answer to a write.
 _READ_METHODS = ("GET", "HEAD")
+# What urllib raises before the request is sent in full, so the server has no request to apply: a
+# failure to find the host, to connect, or to send (urllib.error.URLError, which wraps the error of
+# the connection), and an address that http.client refuses before it connects, such as a port that
+# is not a number or a space in the path (http.client.InvalidURL). urllib.error.HTTPError is a
+# URLError too, and it carries an answer, so a caller catches HTTPError in an earlier except clause.
+UNSENT_REQUEST_ERROR_TYPES = (urllib.error.URLError, http.client.InvalidURL)
 # What urllib raises once a request went out and its answer did not arrive in full: a timeout or a
 # dropped connection while the client waits for the answer or reads it (socket.timeout, which is
 # TimeoutError from Python 3.10 on, and ConnectionResetError, both OSError), and an answer that
 # breaks off (http.client.HTTPException, which includes RemoteDisconnected and IncompleteRead).
-# urllib raises a failure before the request is sent as urllib.error.URLError, which is an OSError
-# too, so a caller catches URLError in an earlier except clause.
+# URLError is an OSError and InvalidURL is an HTTPException, so a caller catches
+# UNSENT_REQUEST_ERROR_TYPES in an earlier except clause.
 INCOMPLETE_ANSWER_ERROR_TYPES = (OSError, http.client.HTTPException)
+# How much of the body of an error answer a message quotes.
+_MAX_ERROR_DETAIL_CHARACTERS = 2000
 
 
 def is_read_method(method: str) -> bool:
@@ -31,6 +41,22 @@ def is_read_method(method: str) -> bool:
     server, so it can be sent again. Any other request may have changed something before its
     answer, whatever that answer was."""
     return method in _READ_METHODS
+
+
+def describe_unsent_request_cause(error: Exception) -> str:
+    """The cause that a message names for a request that did not go out: the error of the
+    connection that a URLError wraps, or the text of the error that http.client raised."""
+    return str(error.reason) if isinstance(error, urllib.error.URLError) else str(error)
+
+
+def read_error_detail(error: urllib.error.HTTPError) -> str:
+    """What a message quotes of an error answer: the start of its body, or a sentence that says
+    that the body broke off. The status arrived before the body, so the message of the status
+    holds either way."""
+    try:
+        return error.read().decode("utf-8", "replace")[:_MAX_ERROR_DETAIL_CHARACTERS]
+    except INCOMPLETE_ANSWER_ERROR_TYPES as read_error:
+        return f"The detail of the answer did not arrive in full. Cause: {read_error}."
 
 
 class RefusedRedirectError(Exception):

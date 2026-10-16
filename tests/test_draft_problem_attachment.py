@@ -16,6 +16,7 @@ import unittest.mock
 import urllib.request
 from pathlib import Path
 
+from integration_fixtures import build_unconfirmed_write_msg
 from research_harness.errors import ResearchError
 from research_harness.exactory_api import UUID_RE, build_orcid_required_msg, read_api_base_url
 from research_harness.integration import export_workspace, record_direct_deposit
@@ -26,12 +27,14 @@ from research_harness.storage import Store
 from research_harness.zenodo import has_published_record, require_published_prior
 from test_draft import (
     _DepositTestCase,
+    _FailingRequestZenodoApi,
     _FakeZenodoApi,
     _LostResponseZenodoApi,
     _PlainWorkspaceDepositTestCase,
     _PublishedRecordZenodoApi,
     _StatusErrorZenodoApi,
     _UnpublishedRecordZenodoApi,
+    _build_uncertain_creation_advice,
     _draft,
     _load_bin_module,
     _read_request,
@@ -40,6 +43,9 @@ from test_draft import (
     _run_draft_command_on_split_streams,
 )
 
+# The deposit test cases replace _open_url in their setUp. This is the function of the command, for the tests that go
+# through the real transport.
+_OPEN_URL_OF_THE_COMMAND = _draft._open_url
 _PROBLEM_ID = "656c336e-e892-4c47-80d2-a71d022f4116"
 _OTHER_PROBLEM_ID = "11111111-2222-4333-8444-555555555555"
 _PROBLEM_TARGET = {"problem_id": _PROBLEM_ID, "api_url": "https://api.test"}
@@ -74,13 +80,6 @@ def _build_settled_removal_rule(doi: str) -> str:
     the attachment is given up by removing the file."""
     return (f"If you decide not to attach the record, remove {_JOURNAL_PATH_TEXT}. Removing it is safe,"
             f" because the record is published as {doi}. The command never removes it.")
-
-
-def _build_unconfirmed_write_rule(origin: str) -> str:
-    """What a message says after a write whose result the command cannot confirm: the server may have applied it,
-    so the user checks before sending it again."""
-    return (f"The server at {origin} may have applied the request. Before you run the command again, check on"
-            f" {origin} whether the change is there.")
 
 
 def _build_pending_refusal(doi: str, recorded_problem_id: str, recorded_origin: str, named_problem_id: str,
@@ -798,6 +797,35 @@ class TestDirectDepositForAProblem(_PendingAttachmentTests, _PlainWorkspaceDepos
     def _answer_with(self, fake_api) -> None:
         self.fake_api = fake_api
         _draft._open_url = fake_api
+
+    def test_a_failure_before_the_journal_names_the_draft_and_how_to_attach_a_record_published_on_zenodo(self) -> None:
+        # Before the publish request the deposit keeps no journal, so a second run creates another draft. A record that
+        # the user publishes on Zenodo instead is attached to the problem by hand.
+        self._answer_with(_FailingRequestZenodoApi("PUT", "/files/bucket-1/paper.pdf", lambda request: OSError("reset")))
+
+        _, stderr_text = self._deposit_on_split_streams(_PROBLEM_DEPOSIT, expected_exit_code=1)
+
+        self.assertTrue(stderr_text.endswith(
+            "Deposition 4242 of this run stays a draft on Zenodo: https://zenodo.org/api/deposit/4242. A second run"
+            " creates another draft. Before you run the command again, delete this draft with the Delete button on its"
+            " page. Or, instead of a second run, finish this draft on Zenodo, publish it there, and attach the record"
+            f" to the problem with exactory link-problem-paper {_PROBLEM_ID} --identifier <the record's DOI>.\n"),
+            stderr_text)
+        self.assertFalse((self.workspace_dir / ".exactory" / "problem-deposit.json").exists())
+        self.assertEqual(self.exactory.links(), [])
+
+    def test_a_failure_before_the_journal_of_a_sandbox_deposit_names_no_attachment(self) -> None:
+        # Only a published production record is attached to a problem, so the way to finish a sandbox draft by hand
+        # names no attachment.
+        self._answer_with(_FailingRequestZenodoApi("PUT", "/files/bucket-1/paper.pdf", lambda request: OSError("reset")))
+
+        _, stderr_text = self._deposit_on_split_streams(["--publish", "--creator", "Shiroshita, Ryosuke",
+                                                         "--math-problem", _PROBLEM_ID], expected_exit_code=1)
+
+        self.assertTrue(stderr_text.endswith(
+            "Deposition 4242 of this run stays a draft on Zenodo: https://sandbox.zenodo.org/api/deposit/4242. A second"
+            " run creates another draft. Before you run the command again, delete this draft with the Delete button on"
+            " its page. Or, instead of a second run, finish this draft on Zenodo and publish it there.\n"), stderr_text)
 
     def test_the_journal_and_the_deposit_record_are_kept_before_the_publish_call(self) -> None:
         exactory_dir = self.workspace_dir / ".exactory"
@@ -1587,10 +1615,11 @@ class TestProblemDepositJournalStates(_PlainWorkspaceDepositTestCase):
                                          f" https://recorded.test stops at that intent too. {_REMOVAL_RULE_MSG} the"
                                          f' deposition whose notes read "Exactory publication intent {missing_intent_id}"'
                                          " is not published, or decide not to publish it. The command never removes"
-                                         f" it. If you find it published, remove {_JOURNAL_PATH_TEXT}. If"
-                                         " https://recorded.test is your own exactory origin, attach the record there."
-                                         f" Run exactory link-problem-paper {_OTHER_PROBLEM_ID} --identifier <the record's"
-                                         " DOI> with EXACTORY_API_URL set to https://recorded.test.\n")
+                                         f" it. If you find the deposition published, remove {_JOURNAL_PATH_TEXT}. The"
+                                         " recorded origin would receive your API key. If https://recorded.test is your"
+                                         " own exactory origin, attach the record there: run exactory link-problem-paper"
+                                         f" {_OTHER_PROBLEM_ID} --identifier <the record's DOI> with EXACTORY_API_URL set"
+                                         " to https://recorded.test.\n")
                 self.assertEqual((self.fake_api.requests, self.exactory.calls), ([], []))
                 self.assertEqual(_read_journal(self.workspace_dir), journal)
 
@@ -1998,22 +2027,23 @@ class TestExplainUnsettledJournal(_PlainWorkspaceDepositTestCase):
         # This run uses the recorded origin.
         os.environ["EXACTORY_API_URL"] = "https://api.test"
         self.assertEqual(self._note_for(production),
-                         f"{removal_msg} If you find it published, remove {_JOURNAL_PATH_TEXT}. Then attach the record"
-                         f" to the problem with exactory link-problem-paper {_PROBLEM_ID} --identifier <the record's"
-                         " DOI>.")
+                         f"{removal_msg} If you find the deposition published, remove {_JOURNAL_PATH_TEXT}. Then attach"
+                         f" the record to the problem with exactory link-problem-paper {_PROBLEM_ID} --identifier <the"
+                         " record's DOI>.")
         # This run uses another origin, so the record is attached from the recorded one, which then receives the key.
         os.environ["EXACTORY_API_URL"] = "https://elsewhere.test"
         self.assertEqual(self._note_for(production),
-                         f"{removal_msg} If you find it published, remove {_JOURNAL_PATH_TEXT}. If https://api.test is"
-                         " your own exactory origin, attach the record there. Run exactory link-problem-paper"
-                         f" {_PROBLEM_ID} --identifier <the record's DOI> with EXACTORY_API_URL set to https://api.test.")
+                         f"{removal_msg} If you find the deposition published, remove {_JOURNAL_PATH_TEXT}. The recorded"
+                         " origin would receive your API key. If https://api.test is your own exactory origin, attach"
+                         f" the record there: run exactory link-problem-paper {_PROBLEM_ID} --identifier <the record's"
+                         " DOI> with EXACTORY_API_URL set to https://api.test.")
         # Only a published production record is attached to a problem.
         sandbox = _build_managed_journal(missing_intent_id, environment="sandbox",
                                          base_url="https://sandbox.zenodo.org/api")
         self._record_journal(sandbox)
         self.assertEqual(self._note_for(sandbox),
-                         f"{removal_msg} If you find it published, remove {_JOURNAL_PATH_TEXT}. A sandbox record is not"
-                         " attached to a problem.")
+                         f"{removal_msg} If you find the deposition published, remove {_JOURNAL_PATH_TEXT}. A sandbox"
+                         " record is not attached to a problem.")
 
     def test_a_deposit_that_names_no_problem_has_no_journal_and_nothing_changes(self) -> None:
         with self.assertRaises(ResearchError) as stopped:
@@ -2166,7 +2196,8 @@ class TestZenodoTokenOrigin(unittest.TestCase):
                 sink = io.StringIO()
                 with unittest.mock.patch.object(_draft, "_open_url", side_effect=refused), \
                         contextlib.redirect_stderr(sink), self.assertRaises(SystemExit) as stopped:
-                    _draft._call_zenodo("POST", url, "secret-token", uncertain_outcome_advice_msg="Check the deposition.",
+                    _draft._call_zenodo("POST", url, "secret-token",
+                                        failure_advice=_draft._FailureAdvice(uncertain_msg="Check the deposition."),
                                         environment="production")
 
                 self.assertEqual(stopped.exception.code, 1)
@@ -2384,6 +2415,42 @@ class TestSameOriginRedirects(unittest.TestCase):
         self.assertEqual(other_received, [])
 
 
+class TestDirectCreationThatZenodoAppliedBeforeARedirect(_PlainWorkspaceDepositTestCase):
+    """Codex P22 through the real transport: a loopback stand-in for the Zenodo API creates draft 4242 and answers the
+    creation request with 303. The redirect handler refuses a redirect of a POST, and the command says that a draft may
+    exist, so that the user looks at the drafts before a second run creates another one."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        # The requests go to the loopback address, whatever proxy the machine names.
+        proxies = unittest.mock.patch.object(urllib.request, "getproxies", return_value={})
+        proxies.start()
+        self.addCleanup(proxies.stop)
+
+    def test_the_command_refuses_the_redirect_and_says_that_a_draft_may_exist(self) -> None:
+        created_deposition_ids: list[int] = []
+
+        def respond(method: str, path: str) -> tuple[int, dict, bytes]:
+            if method == "POST" and path == "/api/deposit/depositions":
+                # The stand-in creates the draft, and only then answers the creation request.
+                created_deposition_ids.append(4242)
+                return 303, {"Location": "/api/deposit/depositions/4242"}, b""
+            return 404, _JSON_HEADERS, b'{"status": 404}'
+        url, received = _serve_on_loopback(self, respond)
+        _draft._open_url = _OPEN_URL_OF_THE_COMMAND
+
+        with unittest.mock.patch.dict(_draft._ZENODO_API_URLS, {"sandbox": f"{url}/api"}):
+            stdout_text, stderr_text = self._deposit_on_split_streams(["--publish", "--creator", "Shiroshita, Ryosuke"],
+                                                                      expected_exit_code=1)
+
+        self.assertTrue(stderr_text.endswith(
+            "Zenodo answered the POST request with a redirect. The command does not follow a redirect of a POST request,"
+            f" so the result of the request is not confirmed. {_build_uncertain_creation_advice(url)}\n"), stderr_text)
+        self.assertEqual(stdout_text, "")
+        self.assertEqual(received, [("POST", "/api/deposit/depositions", "Bearer sandbox-token")])
+        self.assertEqual(created_deposition_ids, [4242])
+
+
 class TestExactoryRedirects(_PlainWorkspaceDepositTestCase):
     """The exactory client adds the API key, so it follows no redirect to another origin. These tests run the
     real exactory command as a child process against two loopback servers: the exactory server, and the
@@ -2430,7 +2497,7 @@ class TestExactoryRedirects(_PlainWorkspaceDepositTestCase):
         """The refusal of a redirect of the attachment. The server may have applied it, so the user checks first."""
         return (f"The exactory server at {url} answered the POST request with a redirect to another origin,"
                 f" {self.other_url}. The command refused the redirect and sent nothing there. Make sure that"
-                f" EXACTORY_API_URL is correct. {_build_unconfirmed_write_rule(url)}")
+                f" EXACTORY_API_URL is correct. {build_unconfirmed_write_msg(url)}")
 
     def test_a_redirect_at_the_account_check_stops_attach_problem_and_the_record_stays_pending(self) -> None:
         url, received = self._serve_exactory(("GET", "/api/v1/me"))
@@ -2459,7 +2526,7 @@ class TestExactoryRedirects(_PlainWorkspaceDepositTestCase):
                 output = _run_draft_command(["attach-problem"], 1, self)
 
                 self.assertIn(f"The exactory server at {url} answered the POST request with a redirect. The command"
-                              f" does not follow a redirect of a POST request. {_build_unconfirmed_write_rule(url)}",
+                              f" does not follow a redirect of a POST request. {build_unconfirmed_write_msg(url)}",
                               output)
                 self.assertIn(f"Record {_EARLIER_DOI} is published. Attaching it to problem {_PROBLEM_ID} failed:", output)
                 self.assertEqual([(method, path) for method, path, _ in received],
@@ -2538,7 +2605,7 @@ class TestExactoryRequestRedirects(unittest.TestCase):
         self.assertEqual(sink.getvalue(), f"The exactory server at {url} answered the POST request with a redirect to"
                                           f" another origin, {self.other_url}. The command refused the redirect and"
                                           " sent nothing there. Make sure that EXACTORY_API_URL is correct."
-                                          f" {_build_unconfirmed_write_rule(url)}\n")
+                                          f" {build_unconfirmed_write_msg(url)}\n")
         self.assertEqual(received, [("POST", "/api/v1/reports", "Bearer test-key")])
         self.assertEqual(self.other_received, [])
 
@@ -2566,7 +2633,7 @@ class TestExactoryRequestRedirects(unittest.TestCase):
 
                 self.assertEqual(stopped.exception.code, 1)
                 # A second run would post the same text again, so the message sends the user to check first.
-                self.assertIn(_build_unconfirmed_write_rule(url), sink.getvalue())
+                self.assertIn(build_unconfirmed_write_msg(url), sink.getvalue())
                 self.assertNotIn("Then run the command again.", sink.getvalue())
                 self.assertEqual([(method, path) for method, path, _ in received],
                                  [("GET", "/api/v1/me"), ("POST", posts_path)])
@@ -2590,7 +2657,7 @@ class TestExactoryRequestRedirects(unittest.TestCase):
                     self.assertEqual(stopped.exception.code, 1)
                     self.assertEqual(sink.getvalue(), f"The exactory server at {url} answered the {method} request with"
                                                       f" a redirect. The command does not follow a redirect of a {method}"
-                                                      f" request. {_build_unconfirmed_write_rule(url)}\n")
+                                                      f" request. {build_unconfirmed_write_msg(url)}\n")
                     self.assertEqual(received, [(method, "/api/v1/target", "Bearer test-key")])
 
     def test_a_redirect_that_needs_no_key_is_refused_the_same_way(self) -> None:
@@ -2623,7 +2690,7 @@ class TestExactoryRequestRedirects(unittest.TestCase):
                                      "GET", is_cross_origin=True)
 
         # A read changes nothing on the server, so its refusal keeps the advice to run the command again.
-        self.assertEqual(self.exactory._build_redirect_refusal_msg(error),
+        self.assertEqual(self.exactory._build_redirect_refusal_msg(error, build_unconfirmed_write_msg("https://api.test")),
                          "The exactory server at https://api.test answered the GET request with a redirect to another"
                          " origin, https://elsewhere.test:8443. The command refused the redirect and sent nothing there."
                          " Make sure that EXACTORY_API_URL is correct. Then run the command again.")
@@ -2708,7 +2775,7 @@ class TestAttachmentWhoseAnswerDidNotArriveInFull(_PlainWorkspaceDepositTestCase
 
                 self.assertIn(f"Record {_EARLIER_DOI} is published. Attaching it to problem {_PROBLEM_ID} failed:\n"
                               f"The client cannot read the answer of the exactory server at {url} to the POST request."
-                              f" Cause: {cause}. {_build_unconfirmed_write_rule(url)}\nResolve that cause. Then run"
+                              f" Cause: {cause}. {build_unconfirmed_write_msg(url)}\nResolve that cause. Then run"
                               " exactory-draft attach-problem. It attaches the recorded record and publishes nothing.",
                               output)
                 self.assertEqual([(method, path) for method, path, _ in received],

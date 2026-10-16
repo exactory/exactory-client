@@ -38,13 +38,15 @@ import urllib.parse
 import urllib.request
 import uuid
 from pathlib import Path
+from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from research_harness.errors import ResearchError
 from research_harness.exactory_api import UUID_RE, build_orcid_required_msg, read_api_base_url
 from research_harness.integration import command_identity, current_store, initialization_payload, initialize_workspace, record_direct_deposit
-from research_harness.same_origin import (INCOMPLETE_ANSWER_ERROR_TYPES, RefusedRedirectError, get_origin,
-                                          open_url_within_origin)
+from research_harness.same_origin import (INCOMPLETE_ANSWER_ERROR_TYPES, UNSENT_REQUEST_ERROR_TYPES,
+                                          RefusedRedirectError, describe_unsent_request_cause, get_origin,
+                                          open_url_within_origin, read_error_detail)
 from research_harness.storage import Store
 from research_harness.workspace import find_workspace, json_projection, read_file, strict_json
 from research_harness.citation_report import report_citation_gate
@@ -131,36 +133,66 @@ _PROBLEM_RELATION = "references"
 # nothing to attach, and the next deposit for a problem replaces such a journal.
 _PROBLEM_DEPOSIT_JOURNAL_PATH = Path(".exactory/problem-deposit.json")
 
-# What an uncertain outcome earns the user: an unreachable API, an answer that
-# did not arrive in full, and a 5xx all leave the request unsettled. A managed
-# deposit resumes its saved intent, which settles each claimed step before it
-# writes again, so the plain advice holds for each of its requests. A direct
-# deposit keeps no intent, so a second run of it starts with a new deposition.
-# The command prints the address of a deposition as soon as it exists, and two
-# requests of a direct deposit earn other advice. The request that creates the
-# deposition: when its outcome is uncertain, the user holds no address, so the
-# advice is to look at the drafts first. The publish of a direct deposit for no
-# problem: a direct deposit for a problem keeps a journal that makes its next
-# run read the deposition back, and one for no problem has none, so a second
-# run of it publishes a second permanent record. That advice names the record
-# itself, because stderr carries it to a caller that reads none of the lines on
-# stdout.
+# What each end of a Zenodo request earns the user. research_harness.same_origin
+# tells the ends apart for both commands: a request that did not go out changed
+# nothing on Zenodo, a refusal (4xx) is Zenodo's decision on the request that it
+# read, and a refused redirect, a 5xx, and an answer that did not arrive in full
+# or whose body is not JSON leave the outcome unknown. A managed deposit resumes
+# its saved intent, which settles each claimed step before it writes again, so
+# the plain advice holds for every end of each of its requests. A direct deposit
+# keeps no intent, so a second run of it starts with a new deposition, and its
+# creation, the requests after it, and its publish earn their own advice. Each
+# advice goes to stderr, which carries it to a caller that reads none of the
+# lines on stdout. The creation: after an unknown outcome the user holds no
+# address, so the advice is to look at the drafts first. Every request after the
+# creation: the draft of this run exists whatever the failure is, so the advice
+# names it. The publish of a deposit for no problem: after an unknown outcome the
+# record may be published, and the advice names it. A deposit for a problem keeps
+# a journal that makes its next run read the deposition back, so its publish
+# keeps the plain advice for a request that did not go out.
 _RETRY_ADVICE_MSG = "Then run the command again."
 # Zenodo lists the drafts of an account in the My Uploads tab of My dashboard
-# (https://help.zenodo.org/docs/deposit/manage-records/, checked 2026-10-16).
+# (https://help.zenodo.org/docs/deposit/manage-records/, checked 2026-10-16), and
+# a draft is deleted before it is published with the Delete button of its page
+# (https://help.zenodo.org/docs/deposit/create-new-upload/, checked 2026-10-16).
 # The direct deposit creates its deposition with an empty body, so the draft of
 # an uncertain creation has no title and no files.
 _UNCERTAIN_DIRECT_CREATION_ADVICE_TEMPLATE = (
     "Zenodo may have created a draft deposition already, and a second run creates"
     " another one. Before you run the command again, look at your drafts on"
     " {zenodo_site}. The My Uploads tab of My dashboard lists them. The draft of"
-    " this run has no title and no files."
+    " this run has no title and no files. If you find it, delete it with the"
+    " Delete button on its page."
 )
-_UNCERTAIN_DIRECT_PUBLISH_ADVICE_TEMPLATE = (
-    "Deposition {deposition_id} may be published already. Open {draft_url} and"
-    " read its state. Do not run this command again: a second run publishes a"
-    " second permanent record."
+# https://developers.zenodo.org states that the new version action has no effect
+# while the new version draft of an earlier call is not published or deleted
+# (checked 2026-10-16), so a second run opens the same draft again.
+_NEW_VERSION_DRAFT_NEXT_STEP_MSG = (
+    "It is a new version draft, and Zenodo opens no other new version while this"
+    " one is a draft, so a second run with --new-version continues with it."
 )
+# A publishing direct deposit records its deposition in .exactory/deposit.json
+# before the publish call, with no DOI until the publish answers (design
+# 2026-10-12 §26.11), and --new-version refuses a prior record with no DOI
+# (research_harness.zenodo.require_published_prior).
+_RECORDED_NEW_VERSION_SECOND_RUN_MSG = (
+    "A second run with --new-version stops, because .exactory/deposit.json now"
+    " records this deposition with no DOI."
+)
+
+
+class _FailureAdvice(NamedTuple):
+    """The advice that each end of one Zenodo request earns: an outcome that the
+    command cannot know (`uncertain_msg`), a request that did not go out
+    (`unsent_msg`), and an error answer outside 500 to 599, which is a refusal
+    (`refused_msg`, and no advice when it is empty)."""
+
+    uncertain_msg: str = _RETRY_ADVICE_MSG
+    unsent_msg: str = _RETRY_ADVICE_MSG
+    refused_msg: str = ""
+
+
+_PLAIN_FAILURE_ADVICE = _FailureAdvice()
 
 
 def _exit_with_error(message: str, code: int = 1) -> None:
@@ -223,14 +255,15 @@ def _call_zenodo(method: str, url: str, token: str,
                  json_body: dict | list | None = None,
                  file_bytes: bytes | None = None,
                  accept: str | None = None,
-                 uncertain_outcome_advice_msg: str = _RETRY_ADVICE_MSG,
+                 failure_advice: _FailureAdvice = _PLAIN_FAILURE_ADVICE,
                  *, environment: str) -> dict:
     """Send one request to the Zenodo API and return its JSON body. Exits with
     Zenodo's own error message on failure, and never echoes the token. The
-    caller names the advice an uncertain outcome earns, because only the caller
-    knows whether its request can be sent again: a refused redirect, a 5xx, a
-    request that may not have gone out, and an answer that did not arrive in full
-    or whose body is not JSON. This is the one place that adds the
+    caller names the advice that each end of the request earns, because only the
+    caller knows what its request leaves behind: an outcome that the command
+    cannot know (a refused redirect, a 5xx, and an answer that did not arrive in
+    full or whose body is not JSON), a request that did not go out, and a
+    refusal. This is the one place that adds the
     token to a request, and it adds it only for an address under the Zenodo API of
     the environment that the token belongs to: the URL of a saved response, an intent,
     or a journal is checked like any other. A redirect to another origin is not
@@ -257,35 +290,34 @@ def _call_zenodo(method: str, url: str, token: str,
         else:
             refusal_msg = (f"Zenodo answered the {error.method} request with a redirect. The command does not follow"
                            f" a redirect of a {error.method} request, so the result of the request is not confirmed.")
-        _exit_with_error(f"{refusal_msg} {uncertain_outcome_advice_msg}")
+        _exit_with_error(f"{refusal_msg} {failure_advice.uncertain_msg}")
     except urllib.error.HTTPError as error:
-        try:
-            detail = error.read().decode("utf-8", "replace")[:2000]
-        except INCOMPLETE_ANSWER_ERROR_TYPES as read_error:
-            _exit_with_error(_build_unreadable_answer_msg(str(read_error), uncertain_outcome_advice_msg))
-        message = f"The Zenodo API returned HTTP {error.code}.\n{detail}"
+        message = f"The Zenodo API returned HTTP {error.code}.\n{read_error_detail(error)}"
         # A 5xx leaves this request as unsettled as a lost connection does: the
         # server states no outcome for it. A 4xx is the server's own decision,
-        # which the same request cannot change.
-        if error.code >= 500:
-            message += f"\nThe server states no outcome for this request. {uncertain_outcome_advice_msg}"
+        # which the same request cannot change. The status decides, also when the
+        # detail of the answer broke off.
+        if 500 <= error.code <= 599:
+            message += f"\nThe server states no outcome for this request. {failure_advice.uncertain_msg}"
+        elif failure_advice.refused_msg:
+            message += f"\n{failure_advice.refused_msg}"
         _exit_with_error(message)
-    except urllib.error.URLError as error:
-        _exit_with_error(f"The client cannot reach the Zenodo API. Cause: {error.reason}."
-                         f" Make sure that the network is available. {uncertain_outcome_advice_msg}")
+    except UNSENT_REQUEST_ERROR_TYPES as error:
+        _exit_with_error(f"The client cannot reach the Zenodo API. Cause: {describe_unsent_request_cause(error)}."
+                         f" Make sure that the network is available. {failure_advice.unsent_msg}")
     except INCOMPLETE_ANSWER_ERROR_TYPES as error:
-        _exit_with_error(_build_unreadable_answer_msg(str(error), uncertain_outcome_advice_msg))
+        _exit_with_error(_build_unreadable_answer_msg(str(error), failure_advice.uncertain_msg))
     except json.JSONDecodeError:
         _exit_with_error(_build_unreadable_answer_msg("the body of the answer is not JSON",
-                                                      uncertain_outcome_advice_msg))
+                                                      failure_advice.uncertain_msg))
     raise AssertionError("unreachable")
 
 
-def _build_unreadable_answer_msg(cause: str, uncertain_outcome_advice_msg: str) -> str:
+def _build_unreadable_answer_msg(cause: str, uncertain_msg: str) -> str:
     """The message for a request that went out and whose answer the command cannot read: the answer did not
     arrive in full, or its body is not JSON. Zenodo may have acted on the request, so the advice of the caller
     for an uncertain outcome follows."""
-    return f"The client cannot read the answer of the Zenodo API. Cause: {cause}. {uncertain_outcome_advice_msg}"
+    return f"The client cannot read the answer of the Zenodo API. Cause: {cause}. {uncertain_msg}"
 
 
 def _read_zenodo_token(production: bool) -> str:
@@ -297,11 +329,13 @@ def _read_zenodo_token(production: bool) -> str:
     return token
 
 
-def _build_zenodo_client(environment: str, token: str):
-    """The function that the managed deposit calls for every Zenodo request: the token of one
-    environment, which _call_zenodo sends only to the Zenodo API of that environment."""
+def _build_zenodo_client(environment: str, token: str, failure_advice: _FailureAdvice = _PLAIN_FAILURE_ADVICE):
+    """The function that a deposit calls for a series of Zenodo requests: the token of one
+    environment, which _call_zenodo sends only to the Zenodo API of that environment, and the
+    advice that each end of each request earns. The managed deposit sends every request through
+    one, and the direct deposit every request after its creation except the publish."""
     def call(method: str, url: str, **kwargs) -> dict:
-        return _call_zenodo(method, url, token, environment=environment, **kwargs)
+        return _call_zenodo(method, url, token, failure_advice=failure_advice, environment=environment, **kwargs)
     return call
 
 
@@ -604,25 +638,31 @@ def _deposit_directly(store, store_open_error, args: argparse.Namespace, base_ur
     sources_bytes = _read_upload_bytes(sources_path) if sources_path is not None else None
     if args.new_version:
         deposition = _open_new_version_draft(base_url, environment, token)
+        next_step_msg = _NEW_VERSION_DRAFT_NEXT_STEP_MSG
     else:
+        creation_advice = _FailureAdvice(uncertain_msg=_UNCERTAIN_DIRECT_CREATION_ADVICE_TEMPLATE.format(
+            zenodo_site=get_origin(base_url)))
         deposition = _call_zenodo("POST", f"{base_url}/deposit/depositions", token, json_body={},
-                                  uncertain_outcome_advice_msg=_UNCERTAIN_DIRECT_CREATION_ADVICE_TEMPLATE.format(
-                                      zenodo_site=get_origin(base_url)),
-                                  environment=environment)
+                                  failure_advice=creation_advice, environment=environment)
+        # Only a published production record is attached to a problem.
+        is_attachable = problem_target is not None and environment == "production"
+        next_step_msg = _build_fresh_draft_next_step_msg(problem_target["problem_id"] if is_attachable else None)
     # The record exists from here on, and a publish cannot be made idempotent:
     # without a journal, a second run creates and publishes a second permanent
     # record. The user reads the id and the draft link first, so a lost response
-    # leaves a record to open instead of a deposit to repeat.
+    # leaves a record to open instead of a deposit to repeat, and every failure
+    # from here on names the draft of this run.
     draft_url = deposition.get("links", {}).get("html", "")
     print(f"Deposition {deposition['id']} is open on Zenodo: {draft_url}")
+    draft_advice_msg = _build_draft_of_this_run_advice(deposition["id"], draft_url, next_step_msg)
+    call_draft = _build_zenodo_client(environment, token, _FailureAdvice(
+        uncertain_msg=draft_advice_msg, unsent_msg=draft_advice_msg, refused_msg=draft_advice_msg))
     bucket_url = deposition["links"]["bucket"]
-    _call_zenodo("PUT", f"{bucket_url}/{PAPER_UPLOAD_NAME}", token, file_bytes=pdf_bytes, environment=environment)
+    call_draft("PUT", f"{bucket_url}/{PAPER_UPLOAD_NAME}", file_bytes=pdf_bytes)
     if sources_path is not None:
-        _call_zenodo("PUT", f"{bucket_url}/{_name_sources_upload(sources_path)}", token,
-                     file_bytes=sources_bytes, environment=environment)
-    _call_zenodo("PUT", f"{base_url}/deposit/depositions/{deposition['id']}", token,
-                 json_body={"metadata": metadata}, environment=environment)
-    _mark_paper_as_preview(base_url, environment, deposition["id"], token)
+        call_draft("PUT", f"{bucket_url}/{_name_sources_upload(sources_path)}", file_bytes=sources_bytes)
+    call_draft("PUT", f"{base_url}/deposit/depositions/{deposition['id']}", json_body={"metadata": metadata})
+    _mark_paper_as_preview(call_draft, base_url, deposition["id"])
     state = {"environment": environment, "deposition_id": deposition["id"], "draft_url": draft_url}
     journal = None
     if args.publish and problem_target is not None:
@@ -642,8 +682,8 @@ def _deposit_directly(store, store_open_error, args: argparse.Namespace, base_ur
             # depositions; conceptdoi names the paper across all its versions.
             publish_response = _call_zenodo(
                 "POST", f"{base_url}/deposit/depositions/{deposition['id']}/actions/publish", token,
-                uncertain_outcome_advice_msg=_build_uncertain_publish_advice(deposition["id"], draft_url,
-                                                                             problem_target),
+                failure_advice=_build_publish_failure_advice(deposition["id"], draft_url, problem_target,
+                                                             is_new_version=args.new_version),
                 environment=environment)
             state["doi"] = publish_response.get("doi", "")
             state["concept_doi"] = publish_response.get("conceptdoi", "")
@@ -661,12 +701,33 @@ def _deposit_directly(store, store_open_error, args: argparse.Namespace, base_ur
         _attach_recorded_record(journal)
 
 
-def _mark_paper_as_preview(base_url: str, environment: str, record_id: int, token: str) -> None:
+def _build_draft_of_this_run_advice(deposition_id: int, draft_url: str, next_step_msg: str) -> str:
+    """The advice after a failure that leaves the draft that this run created or opened: the draft, its
+    page, and `next_step_msg`, which says what a second run does and what the user does with the draft."""
+    return f"Deposition {deposition_id} of this run stays a draft on Zenodo: {draft_url}. {next_step_msg}"
+
+
+def _build_fresh_draft_next_step_msg(attached_problem_id: str | None) -> str:
+    """What a second run does after a failure that leaves a draft that this run created, and what the user
+    does with that draft instead. A run without --new-version reads no record of an earlier draft, so a
+    second run creates another one. Zenodo deletes a draft with the Delete button of its page, and
+    publishes it with the Publish button (https://help.zenodo.org/docs/deposit/create-new-upload/, checked
+    2026-10-16). A record that the user publishes there for a problem, `attached_problem_id`, is attached
+    by hand."""
+    finish_msg = "finish this draft on Zenodo and publish it there"
+    if attached_problem_id is not None:
+        finish_msg = ("finish this draft on Zenodo, publish it there, and attach the record to the problem with"
+                      f" {_format_link_problem_paper_command(attached_problem_id)}")
+    return ("A second run creates another draft. Before you run the command again, delete this draft with the"
+            f" Delete button on its page. Or, instead of a second run, {finish_msg}.")
+
+
+def _mark_paper_as_preview(call_zenodo, base_url: str, record_id: int) -> None:
     """Make the paper the record's previewed file. research_harness.zenodo owns
     the draft-document contract this shares with the managed deposit."""
     draft_url = build_draft_document_url(base_url, record_id)
-    document = _call_zenodo("GET", draft_url, token, accept=RDM_JSON_MEDIA_TYPE, environment=environment)
-    _call_zenodo("PUT", draft_url, token, json_body=build_previewed_document(document), environment=environment)
+    document = call_zenodo("GET", draft_url, accept=RDM_JSON_MEDIA_TYPE)
+    call_zenodo("PUT", draft_url, json_body=build_previewed_document(document))
 
 
 def _open_new_version_draft(base_url: str, environment: str, token: str) -> dict:
@@ -780,15 +841,33 @@ def _run_reconcile(args: argparse.Namespace) -> None:
 # ---------------------------------------------------- Deposit for a math problem
 
 
-def _build_uncertain_publish_advice(deposition_id: int, draft_url: str, problem_target: dict | None) -> str:
-    """The advice a lost direct publish response earns. A deposit for a problem keeps a journal,
-    so its next run reads the deposition back instead of publishing a second record."""
-    if problem_target is None:
-        return _UNCERTAIN_DIRECT_PUBLISH_ADVICE_TEMPLATE.format(deposition_id=deposition_id, draft_url=draft_url)
-    return (f"Deposition {deposition_id} may be published already. Run the same command again, or run"
+def _build_publish_failure_advice(deposition_id: int, draft_url: str, problem_target: dict | None,
+                                  *, is_new_version: bool) -> _FailureAdvice:
+    """The advice that each end of the publish request of a direct deposit earns. A deposit for a problem
+    keeps a journal, so its next run reads the deposition back and settles it whatever the end was. A
+    deposit for no problem keeps only its record in .exactory/deposit.json. After an outcome that the
+    command cannot know, the deposition may be published, so the advice names it and says what a second
+    run does: a second plain run publishes a second permanent record, and a second run with --new-version
+    stops at the record. After a request that did not go out, or a refusal, the deposition stays a draft."""
+    if problem_target is not None:
+        return _FailureAdvice(uncertain_msg=(
+            f"Deposition {deposition_id} may be published already. Run the same command again, or run"
             f" exactory-draft attach-problem. Either one reads deposition {deposition_id} back from Zenodo"
             " and records it. A production record is also attached to the problem."
-            " Neither one publishes a second record.")
+            " Neither one publishes a second record."))
+    if is_new_version:
+        uncertain_next_step_msg = (f"{_RECORDED_NEW_VERSION_SECOND_RUN_MSG} If the deposition is still a draft,"
+                                   " publish it with the Publish button on its page.")
+        draft_next_step_msg = (f"{_RECORDED_NEW_VERSION_SECOND_RUN_MSG} Publish this draft on Zenodo with the Publish"
+                               " button on its page.")
+    else:
+        uncertain_next_step_msg = "Do not run this command again: a second run publishes a second permanent record."
+        draft_next_step_msg = _build_fresh_draft_next_step_msg(None)
+    draft_advice_msg = _build_draft_of_this_run_advice(deposition_id, draft_url, draft_next_step_msg)
+    return _FailureAdvice(
+        uncertain_msg=f"Deposition {deposition_id} may be published already. Open {draft_url} and read its state."
+                      f" {uncertain_next_step_msg}",
+        unsent_msg=draft_advice_msg, refused_msg=draft_advice_msg)
 
 
 def _record_pending_deposit(store, state: dict) -> None:
@@ -903,16 +982,22 @@ def _build_published_deposition_advice(journal: dict) -> str:
     the record by hand (design 2026-10-12 §17). Only a production record is attached to a problem, and it is
     attached at the origin that the journal records, which receives the API key, so a run at another origin names
     that origin under the condition that it is the user's own."""
-    removal_msg = f"If you find it published, remove {_PROBLEM_DEPOSIT_JOURNAL_PATH}."
+    removal_msg = f"If you find the deposition published, remove {_PROBLEM_DEPOSIT_JOURNAL_PATH}."
     if journal["environment"] != "production":
         return f"{removal_msg} A sandbox record is not attached to a problem."
     problem_target = journal["math_problem"]
     recorded_origin = problem_target["api_url"]
-    attach_command = f"exactory link-problem-paper {problem_target['problem_id']} --identifier <the record's DOI>"
+    attach_command = _format_link_problem_paper_command(problem_target["problem_id"])
     if recorded_origin == read_api_base_url():
         return f"{removal_msg} Then attach the record to the problem with {attach_command}."
-    return (f"{removal_msg} If {recorded_origin} is your own exactory origin, attach the record there. Run"
-            f" {attach_command} with EXACTORY_API_URL set to {recorded_origin}.")
+    return (f"{removal_msg} The recorded origin would receive your API key. If {recorded_origin} is your own"
+            f" exactory origin, attach the record there: run {attach_command} with EXACTORY_API_URL set to"
+            f" {recorded_origin}.")
+
+
+def _format_link_problem_paper_command(problem_id: str) -> str:
+    """The exactory command that attaches a record that the user published on Zenodo to a problem."""
+    return f"exactory link-problem-paper {problem_id} --identifier <the record's DOI>"
 
 
 def _name_journal_deposition(journal: dict) -> str:

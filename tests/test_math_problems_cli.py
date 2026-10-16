@@ -17,6 +17,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+from integration_fixtures import build_unconfirmed_write_msg
+
 _PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 _SHA = "3f2a9c1e4b5d6a7f8091a2b3c4d5e6f708192a3b"
 _PROBLEM_ID = "656c336e-e892-4c47-80d2-a71d022f4116"
@@ -1858,29 +1860,30 @@ _ESCAPE_CHARACTER = chr(0x1B)
 _LONE_SURROGATE = chr(0xDCFF)
 
 
-def _build_control_character_refusal(field: str, code_point: int, position: int) -> str:
-    """The refusal of a free-text field that holds a control character other than tab, line feed, and carriage return."""
-    return (f"The {field} contains the control character U+{code_point:04X} at position {position}. The server"
-            " accepts no control character except tab, line feed, and carriage return. Remove the character.")
+def _build_control_character_refusal(field: str, code_point: int, place: str) -> str:
+    """The refusal of a free-text field that holds a control character other than tab, line feed, and carriage return,
+    at `place`: "position 8" in a text of one line, "line 2, column 5" in a text of more lines."""
+    return (f"The {field} contains the control character U+{code_point:04X} at {place}. The server accepts no"
+            " control character except tab, line feed, and carriage return. Remove the character.")
 
 
-def _build_color_code_refusal(field: str, position: int) -> str:
+def _build_color_code_refusal(field: str, place: str) -> str:
     """The refusal of a free-text field that holds U+001B, the character that starts a terminal color code."""
-    return (f"The {field} contains the control character U+001B at position {position}. Terminal color codes start"
-            " with this character. Copy the text without colors.")
+    return (f"The {field} contains the control character U+001B at {place}. Terminal color codes start with this"
+            " character. Copy the text without colors.")
 
 
-def _build_not_utf8_text_refusal(field: str, code_point: int, position: int) -> str:
-    """The refusal of a free-text field that holds an unpaired surrogate."""
-    return (f"The {field} is not valid UTF-8 text. It contains U+{code_point:04X} at position {position}."
-            " Give the text as UTF-8.")
+def _build_not_utf8_text_refusal(field: str, code_point: int, place: str) -> str:
+    """The refusal of a free-text field that holds an unpaired surrogate, which argv makes of bytes that are not UTF-8."""
+    return f"The {field} is not valid UTF-8 text. It contains U+{code_point:04X} at {place}. Give the text as UTF-8."
 
 
-def _build_unconfirmed_write_rule(origin: str) -> str:
-    """What a message says after a write whose result the command cannot confirm: the server may have applied it,
-    so the user checks before sending it again."""
-    return (f"The server at {origin} may have applied the request. Before you run the command again, check on"
-            f" {origin} whether the change is there.")
+def _build_escaped_surrogate_refusal(field: str, code_point: int, place: str) -> str:
+    """The refusal of a field of a citations file that holds an unpaired surrogate, which the json module makes of an
+    escape of one half of a surrogate pair."""
+    return (f"The {field} contains U+{code_point:04X} at {place}. A \\u{code_point:04X} escape in the citations file"
+            " gives it, and it is half of a surrogate pair. Write the character as UTF-8 text in the file, or write"
+            " both escapes of the pair.")
 
 
 class TestPlainTextOfFreeTextFields(_MathCliTestCase):
@@ -1982,9 +1985,9 @@ class TestPlainTextOfFreeTextFields(_MathCliTestCase):
                                         ("Grand Challenge citation", "citation of entry 1",
                                          self.build_challenge_citation_argv)):
             for text, message in (
-                    ("H. Minc" + _ESCAPE_CHARACTER + "[31m" + tail, _build_color_code_refusal(field, 8)),
-                    ("H. Minc" + _BELL_CHARACTER + tail, _build_control_character_refusal(field, 0x07, 8)),
-                    ("H. Minc" + chr(0x7F) + tail, _build_control_character_refusal(field, 0x7F, 8))):
+                    ("H. Minc" + _ESCAPE_CHARACTER + "[31m" + tail, _build_color_code_refusal(field, "position 8")),
+                    ("H. Minc" + _BELL_CHARACTER + tail, _build_control_character_refusal(field, 0x07, "position 8")),
+                    ("H. Minc" + chr(0x7F) + tail, _build_control_character_refusal(field, 0x7F, "position 8"))):
                 with self.subTest(kind=kind, character=f"U+{ord(text[7]):04X}"):
                     _, stderr_text = self.run_cli(build_argv(text), expected_exit_code=1)
                     self.assertEqual(stderr_text, message + "\n")
@@ -1994,17 +1997,20 @@ class TestPlainTextOfFreeTextFields(_MathCliTestCase):
     def test_a_lone_surrogate_is_named_as_text_that_is_not_utf8(self) -> None:
         text = "H. Minc" + _LONE_SURROGATE + ", Permanents, 1978, chapter 2."
         _, stderr_text = self.run_cli(self.build_inline_post_argv(text), expected_exit_code=1)
-        self.assertEqual(stderr_text, _build_not_utf8_text_refusal("post", 0xDCFF, 8) + "\n")
-        # The json module turns the escape \udcff into a lone surrogate.
+        self.assertEqual(stderr_text, _build_not_utf8_text_refusal("post", 0xDCFF, "position 8") + "\n")
+        # The json module turns the escape \udcff into a lone surrogate, so the message names the escape.
         _, stderr_text = self.run_cli(self.build_challenge_citation_argv(text), expected_exit_code=1)
-        self.assertEqual(stderr_text, _build_not_utf8_text_refusal("citation of entry 1", 0xDCFF, 8) + "\n")
+        self.assertEqual(stderr_text, _build_escaped_surrogate_refusal("citation of entry 1", 0xDCFF, "position 8") + "\n")
+        _, stderr_text = self.run_cli(self.build_post_challenge_argv(self.write_citations_file(
+            "H. Minc, Permanents, 1978.", "10.1017/cbo" + chr(0xD800))), expected_exit_code=1)
+        self.assertEqual(stderr_text, _build_escaped_surrogate_refusal("locator of entry 1", 0xD800, "position 12") + "\n")
         # A file is read as UTF-8 text, so the reader refuses the byte that argv turns into a lone surrogate.
         path = self.scratch_dir / "post.txt"
         path.write_bytes(b"H. Minc\xff, Permanents, 1978, chapter 2.")
         _, stderr_text = self.run_cli(["post-discussion", _PROBLEM_ID, "--body-file", str(path)], expected_exit_code=1)
         self.assertEqual(stderr_text, f"The file {path} is not UTF-8 text. Save it as UTF-8.\n")
         _, stderr_text = self.run_cli(["problems", "--query", "perm" + _LONE_SURROGATE], expected_exit_code=1)
-        self.assertEqual(stderr_text, _build_not_utf8_text_refusal("search text", 0xDCFF, 5) + "\n")
+        self.assertEqual(stderr_text, _build_not_utf8_text_refusal("search text", 0xDCFF, "position 5") + "\n")
         self.assertEqual(self.sent, [])
 
     def test_every_free_text_field_that_the_server_builds_on_plain_text_refuses_a_control_character(self) -> None:
@@ -2012,15 +2018,25 @@ class TestPlainTextOfFreeTextFields(_MathCliTestCase):
             with self.subTest(option=option):
                 text = "ab" + _BELL_CHARACTER + "c" * max(1, minimum)
                 _, stderr_text = self.run_cli(build_argv(text), expected_exit_code=1)
-                self.assertEqual(stderr_text, _build_control_character_refusal(field, 0x07, 3) + "\n")
+                self.assertEqual(stderr_text, _build_control_character_refusal(field, 0x07, "position 3") + "\n")
         self.assertEqual(self.sent, [])
 
-    def test_the_position_counts_the_characters_before_the_refused_one(self) -> None:
-        for text, position in ((_BELL_CHARACTER, 1), ("  " + _BELL_CHARACTER, 3), (chr(0x1F600) + _BELL_CHARACTER, 2),
-                               ("one\ntwo\t" + _BELL_CHARACTER + _ESCAPE_CHARACTER, 9)):
+    def test_the_refusal_names_the_position_in_a_line_and_the_line_and_the_column_in_more_lines(self) -> None:
+        # Both count characters from 1. A line ends at a line feed, a carriage return, or both together.
+        for text, place in ((_BELL_CHARACTER, "position 1"), ("  " + _BELL_CHARACTER, "position 3"),
+                            (chr(0x1F600) + _BELL_CHARACTER, "position 2"),
+                            ("one\ntwo\t" + _BELL_CHARACTER + _ESCAPE_CHARACTER, "line 2, column 5"),
+                            ("one\r\ntwo" + _BELL_CHARACTER, "line 2, column 4"),
+                            ("one\rtwo" + _BELL_CHARACTER, "line 2, column 4"),
+                            (_BELL_CHARACTER + "\nsecond line", "line 1, column 1"),
+                            ("first\n\n" + chr(0x1F600) + _BELL_CHARACTER, "line 3, column 2")):
             with self.subTest(text=text):
                 _, stderr_text = self.run_cli(self.build_inline_post_argv(text), expected_exit_code=1)
-                self.assertEqual(stderr_text, _build_control_character_refusal("post", 0x07, position) + "\n")
+                self.assertEqual(stderr_text, _build_control_character_refusal("post", 0x07, place) + "\n")
+        # A file of more lines names the line too.
+        _, stderr_text = self.run_cli(self.build_file_post_argv("The first line.\nA " + _ESCAPE_CHARACTER + "[31mred word."),
+                                      expected_exit_code=1)
+        self.assertEqual(stderr_text, _build_color_code_refusal("post", "line 2, column 3") + "\n")
         self.assertEqual(self.sent, [])
 
     def test_the_characters_that_the_server_keeps_are_sent_unchanged(self) -> None:
@@ -2126,7 +2142,7 @@ class TestServerErrorsAfterAWrite(_MathCliTestCase):
         _, stderr_text = self.run_cli(["post-discussion", _PROBLEM_ID, "--body", "A post."], expected_exit_code=1)
 
         self.assertEqual(stderr_text, "The paper source is not reachable now."
-                                      f" {_build_unconfirmed_write_rule('https://api.test')}\n{self._DETAIL_TEXT}\n")
+                                      f" {build_unconfirmed_write_msg('https://api.test')}\n{self._DETAIL_TEXT}\n")
         # A second run would post the same text again, so no sentence asks the user to send the request again.
         self.assertNotIn("again later", stderr_text)
         self.assertEqual(self.stored_posts, ["A post."])
@@ -2149,7 +2165,7 @@ class TestServerErrorsAfterAWrite(_MathCliTestCase):
                     description = ("The paper source is not reachable now." if status == 503
                                    else f"The server returned HTTP {status}.")
                     _, stderr_text = self.run_cli(argv, expected_exit_code=1)
-                    self.assertEqual(stderr_text, f"{description} {_build_unconfirmed_write_rule('https://api.test')}"
+                    self.assertEqual(stderr_text, f"{description} {build_unconfirmed_write_msg('https://api.test')}"
                                                   f"\n{self._DETAIL_TEXT}\n")
 
     def test_a_read_keeps_the_advice_to_send_the_request_again(self) -> None:
