@@ -5,6 +5,32 @@ from research_harness.errors import ResearchError
 
 
 class CanonicalRoundAdapterTests(StrategyCase):
+    def test_evaluate_returns_to_literature_on_the_ready_canonical_investigation(self):
+        from research_harness.gates import validate_transition
+        self.mutate(self.module('principles').initialize_research, {'profile': 'research', 'target': None})
+        self.ready_decision()
+        records = self.store.snapshot()['records']
+        self.assertIsNone(self.module('rounds').active_round(records))
+        validate_transition(records, self.artifacts, {'stage': 'evaluate'},
+                            {'stage': 'literature', 'status': 'in_progress'})
+
+    def test_evaluate_returns_to_literature_on_the_ready_canonical_pivot(self):
+        from research_harness.gates import validate_transition
+        self.mutate(self.module('principles').initialize_research, {'profile': 'research', 'target': None})
+        self.reviewed_dossier()
+        self.mutate(self.module('research_decisions').record_research_decision, self.decision(action='pivot'))
+        validate_transition(self.store.snapshot()['records'], self.artifacts, {'stage': 'evaluate'},
+                            {'stage': 'literature', 'status': 'in_progress'})
+
+    def test_evaluate_cannot_return_on_an_unready_canonical_investigation(self):
+        from research_harness.gates import validate_transition
+        self.mutate(self.module('principles').initialize_research, {'profile': 'research', 'target': None})
+        response = self.review_response()
+        next(a for a in response['value']['assurances'] if a['kind'] == 'feasibility')['status'] = 'failed'
+        self.ready_decision(response_b=response)
+        self.error('readiness_required', lambda: validate_transition(self.store.snapshot()['records'], self.artifacts,
+            {'stage': 'evaluate'}, {'stage': 'literature', 'status': 'in_progress'}))
+
     def ready_decision(self, **kwargs):
         self.reviewed_dossier(**kwargs)
         return self.mutate(self.module('research_decisions').record_research_decision,self.decision())['result']

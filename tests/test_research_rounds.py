@@ -1011,13 +1011,16 @@ class RoundStatusTests(RoundsCase):
 
 
 class ConstitutionUpgradeTests(RoundsCase):
-    """Validation case R24: a study prepared under the 0.38.0 constitution (Version 2) is opened under Version 4.
+    """Legacy claim hashes retain their old standing; synthesis staleness is advisory.
 
-    The configuration digest covers the constitution, so the update stales every decision that binds it; adopting
-    Version 4 clears only the constitution obligation."""
+    This fixture's earlier contract has different bytes from the archived v6
+    compatibility contract. Adoption clears only its configuration obligation.
+    """
 
-    STALE = ["branch_resolution_unverified", "candidate_checkpoint_stale", "development_dependencies_stale",
-             "readiness_review_stale", "synthesis_dependencies_stale"]
+    def assert_advisory_synthesis(self):
+        preparation = status_report(self.store)["preparation"]
+        self.assertTrue(preparation["advisory"])
+        self.assertIn("synthesis_dependencies_stale", {o["code"] for o in preparation["obligations"]})
 
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
@@ -1043,22 +1046,26 @@ class ConstitutionUpgradeTests(RoundsCase):
         previous = self.store.snapshot()["records"]["configuration"]["research"]["constitution"]["sha256"]
         self.mutate(principles.revalidate_constitution, {"previous_sha256": previous, "reason": "Adopt Version 4."})
 
-    def test_a_study_before_evaluate_reports_the_staleness_of_its_recorded_decisions(self):
+    def test_a_study_before_evaluate_keeps_claims_current_across_constitution_adoption(self):
         self.set_stage("experiment")
         self.assertEqual(self.codes(), ["research_intent_missing"])
         self.upgrade()
-        self.assertEqual(self.codes(), sorted(self.STALE + ["constitution_revalidation_required", "research_intent_missing"]))
+        self.assertEqual(self.codes(), ["constitution_revalidation_required", "research_intent_missing"])
+        self.assert_advisory_synthesis()
         self.adopt()
-        self.assertEqual(self.codes(), sorted(self.STALE + ["research_intent_missing"]))
+        self.assertEqual(self.codes(), ["research_intent_missing"])
+        self.assert_advisory_synthesis()
 
-    def test_a_study_at_evaluate_decides_after_fresh_readiness_and_a_new_pinned_bundle(self):
+    def test_a_study_at_evaluate_keeps_its_pin_across_adoption_and_repins_changed_science(self):
         bundle = self.pin()
         self.set_stage("evaluate")
         self.assertEqual(self.codes(), ["research_intent_missing"])
         self.upgrade()
-        self.assertEqual(self.codes(), sorted(self.STALE + ["constitution_revalidation_required", "readiness_required", "research_intent_missing"]))
+        self.assertEqual(self.codes(), ["constitution_revalidation_required", "readiness_required", "research_intent_missing"])
+        self.assert_advisory_synthesis()
         self.adopt()
-        self.assertEqual(self.codes(), sorted(self.STALE + ["readiness_required", "research_intent_missing"]))
+        self.assertEqual(self.codes(), ["research_intent_missing"])
+        self.assert_advisory_synthesis()
         self.refresh_synthesis("v3")
         self.recandidate("v3", alternative="not_useful")
         self.assertEqual(self.codes(), ["publication_readiness_stale", "research_intent_missing"])

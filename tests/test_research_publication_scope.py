@@ -8,6 +8,52 @@ from research_harness.cli import OPERATIONS
 
 
 class PublicationScopeTests(SourceLimitedCase):
+    def test_managed_scope_and_its_review_survive_an_unrelated_reading(self):
+        from managed_strategy_fixtures import ManagedStrategy
+        self.store.mutate("fixture.managed", {}, lambda tx: tx.put("workspace", "study", {"stage": "literature"}),
+                          expected_revision=self.store.revision, request_id="managed")
+        self.prepare_source_limited()
+        ManagedStrategy(self).ensure_intent()
+        self.record_scope()
+        self.accept_scope()
+        before = self.manuscript_readiness()
+        self.assertTrue(before["manuscript_ready"], before["manuscript_obligations"])
+        self.read_source(2)
+        after = self.manuscript_readiness()
+        self.assertTrue(after["manuscript_ready"], after["manuscript_obligations"])
+        self.assertEqual(before["candidate_digest"], after["candidate_digest"])
+        self.assertEqual(before["scientific_target_digest"], after["scientific_target_digest"])
+
+    def test_managed_legacy_scope_and_review_survive_an_unrelated_reading(self):
+        from unittest.mock import patch
+        from managed_strategy_fixtures import ManagedStrategy
+        from research_harness import development
+        self.prepare_source_limited()
+        with patch.object(development, "uses_claim_dependencies", return_value=False):
+            self.record_scope()
+            self.accept_scope()
+            before = self.manuscript_readiness()
+            bundle = self.scoped_manuscript()
+        ManagedStrategy(self).ensure_intent()
+        self.assertTrue(before["manuscript_ready"], before["manuscript_obligations"])
+        after = self.manuscript_readiness()
+        self.assertTrue(after["manuscript_ready"], after["manuscript_obligations"])
+        selection = self.store.snapshot()["records"]["scoped_review_selection"]
+        review_id = next(iter(selection.values()))["id"]
+        repeated = copy.deepcopy(self.store.snapshot()["records"]["scoped_readiness_review"][review_id]["payload"])
+        repeated["id"] = "another-legacy-scoped-support"
+        self.mutate(self.scope_api().record_scoped_readiness_review, repeated)
+        repeated_report = self.manuscript_readiness()
+        self.assertTrue(repeated_report["manuscript_ready"], repeated_report["manuscript_obligations"])
+        self.mutate(self.scope_api().record_scoped_readiness_review,
+                    self.scope_review("projected-support", assessor="new-scoped-reviewer"))
+        from research_harness import publication
+        self.assertEqual(publication._bundle(self.store.snapshot()["records"], self.artifacts), bundle)
+        self.read_source(2)
+        current = self.manuscript_readiness()
+        self.assertTrue(current["manuscript_ready"], current["manuscript_obligations"])
+        self.assertEqual(publication._bundle(self.store.snapshot()["records"], self.artifacts), bundle)
+
     def test_new_support_on_the_same_scoped_science_preserves_the_pinned_manuscript(self):
         from research_harness import publication
         self.prepare_source_limited()

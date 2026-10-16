@@ -17,6 +17,7 @@ the native math controller's budgets, reservations or recovery authority.
 import json
 
 from .artifacts import ArtifactStore
+from .claim_dependencies import accept_claim_dependencies, project_claim_dependencies, uses_claim_dependencies
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
@@ -29,6 +30,7 @@ from .probe_provenance import find_probe_artifact_origins
 from .reading import validate_read_evidence
 from .source_links import captured_source, original_identity, read_locator, validate_link
 from .synthesis import synthesis_state
+from .workspace import strict_json
 
 
 STRATEGIES = ("generalization", "weaker_assumptions", "mechanism", "tightness_limits", "unification",
@@ -102,20 +104,38 @@ def _scope(value, objective):
 
 
 class _Context:
-    def __init__(self, records, artifacts):
-        self.records, self.artifacts = records, Evaluation.of(records, artifacts)
+    def __init__(self, records, artifacts, *, restore_inputs=None, project_claims=False):
+        self.artifacts = Evaluation.of(records, artifacts)
+        records = self.artifacts.records
+        self.records = records
+        # A study can have created its science before entering managed stages.
+        # Historical projection follows the current caller's claim semantics.
+        self.compatible = project_claims or restore_inputs is not None or uses_claim_dependencies(records)
+        self.restore_inputs = restore_inputs
+        self.managed = self.compatible and (restore_inputs is None or restore_inputs.get("project_claims", False))
         artifacts = self.artifacts
         config = records.get("configuration", {}).get("research")
         if config and config["profile"] != "research":
             raise ResearchError("profile_inapplicable", "Author development does not apply to the verification profile")
         # This shared helper assesses configuration and foundation on the same
         # supplied records/artifacts snapshot and returns both current reports.
-        self.synthesis = synthesis_state(records, artifacts, "research")
+        self.synthesis = artifacts.once(("development_synthesis",), lambda: synthesis_state(records, artifacts, "research"))
         self.configuration = self.synthesis["configuration"]
         self.foundation = self.synthesis["foundation"]
         self.objective = self.configuration["target"]
         self.assessments = {}
         self.assessing = set()
+        self.candidate_inputs = {}
+        if restore_inputs is not None:
+            dependencies = restore_inputs["dependencies"]
+            if "preparation" not in dependencies or "constitution" not in dependencies:
+                self.require_reassessment(restore_inputs["record_id"], "recorded preparation and constitution")
+            self.synthesis = dict(restore_inputs.get("synthesis", self.synthesis),
+                                  preparation_digest=dependencies["preparation"])
+            self.configuration = dict(self.synthesis["configuration"], constitution=dependencies["constitution"])
+            self.foundation = self.synthesis["foundation"]
+            self.objective = self.configuration["target"]
+
 
     def require_objective(self):
         if self.objective is None or not self.configuration["ready"]:
@@ -124,7 +144,7 @@ class _Context:
 
     def require_ready(self):
         self.require_objective()
-        if not self.synthesis["ready"]:
+        if not self.managed and not self.synthesis["ready"]:
             raise ResearchError("research_not_ready", "Complete the current foundation and synthesis before admitting prospective work",
                                 {"obligations": self.synthesis["obligations"]})
 
@@ -132,26 +152,302 @@ class _Context:
         return {"configuration": self.configuration["digest"], "constitution": self.configuration["constitution"],
                 "objective": self.objective, "preparation": self.synthesis["preparation_digest"]}
 
-    def assessment(self, identifier):
+    def project_dependencies(self, value, kind="dependencies"):
+        return project_claim_dependencies(value, managed=self.managed, kind=kind)
+
+    def accept_dependencies(self, recorded, current, **inputs):
+        return accept_claim_dependencies(recorded, current, managed=self.managed, **inputs)
+
+    def require_reassessment(self, record_id, missing):
+        raise ResearchError("claim_reassessment_required", "Reassess the record whose historical inputs cannot be authenticated.",
+                            {"record_id": record_id, "missing_input": missing})
+
+    def require_recorded_fields(self, value, required, record_id):
+        if not isinstance(value, dict) or not set(required) <= value.keys():
+            self.require_reassessment(record_id, "recorded " + ", ".join(required))
+
+    def read_snapshot(self, revision, record_id):
+        if (not hasattr(self.records, "read_snapshot") or type(revision) is not int
+                or not 0 <= revision <= self.records.read_revision()):
+            self.require_reassessment(record_id, "recorded input snapshot")
+        return self.artifacts.read_snapshot(revision)
+
+    def build_candidate(self):
+        """Share checked science, composing recorded audit inputs separately."""
+        if not self.compatible:
+            return _build_candidate(self)
+
+        def compute_claim():
+            context = self if self.managed and self.restore_inputs is None else _Context(
+                self.records, self.artifacts, project_claims=True)
+            candidate, pending = _build_candidate(context)
+            return candidate, pending, {name: getattr(context, name) for name in
+                ("branches", "sources", "prerequisites", "assessments") if hasattr(context, name)}
+
+        claimed = self.artifacts.once(("claim_candidate",), compute_claim)
+        selected = claimed
+        if not self.managed:
+            def compose_recorded():
+                branches = {}
+                for identifier, branch in claimed[2].get("branches", {}).items():
+                    assessment_id = branch["cycle"]["assessment_id"]
+                    report = self.assess_record(assessment_id) if assessment_id is not None else None
+                    branches[identifier] = dict(branch, assessment=None if report is None else {
+                        key: value for key, value in report.items() if key != "prerequisites"})
+                candidate, pending = _compose_candidate(self, branches=branches)
+                return candidate, pending, {name: getattr(self, name) for name in
+                    ("branches", "sources", "prerequisites", "assessments") if hasattr(self, name)}
+            signature = {key: value for key, value in self.restore_inputs.items() if key != "record_id"}
+            selected = self.artifacts.once(("recorded_candidate", digest(signature)), compose_recorded)
+        candidate, pending, state = selected
+        for name, value in state.items():
+            setattr(self, name, dict(value) if name == "assessments" else value)
+        if candidate is not None and self.managed:
+            candidate = dict(candidate, preparation_digest=self.synthesis["preparation_digest"],
+                             constitution=self.configuration["constitution"])
+        return candidate, pending
+
+    def verify_checkpoint(self, checkpoint):
+        if self.compatible:
+            self.require_recorded_fields(checkpoint, ("artifact", "digest", "dependencies", "assessment_id", "cycle_id"), checkpoint.get("id", "checkpoint"))
+        content = strict_json(self.artifacts.read(checkpoint["artifact"]))
+        if self.compatible:
+            inputs = {key: value for key, value in checkpoint.items() if key not in ("digest", "artifact")}
+            if content != inputs or not accept_claim_dependencies(checkpoint["digest"],
+                    project_claim_dependencies(inputs, managed=True, kind="record"),
+                    managed=True, recorded_inputs=inputs, kind="record"):
+                self.require_reassessment(checkpoint["id"], "authenticated checkpoint inputs")
+
+    def verify_plan_digest(self, plan):
+        if not self.compatible:
+            return
+        self.require_recorded_fields(plan, ("payload", "digest", "dependencies"), plan.get("id", "cycle_plan"))
+        inputs = {key: value for key, value in plan.items() if key != "digest"}
+        if not accept_claim_dependencies(plan["digest"],
+                project_claim_dependencies(inputs, managed=True, kind="record"),
+                managed=True, recorded_inputs=inputs, kind="record"):
+            self.require_reassessment(plan["id"], "authenticated recorded plan")
+
+    def verify_plan_dependencies(self, plan):
+        self.verify_plan_digest(plan)
+        current = self.project_dependencies(_plan_dependencies(self, plan["payload"]))
+        return self.accept_dependencies(plan["dependencies"], current)
+
+    def verify_assessment_digest(self, recorded, identifier):
+        report = self.assess_record(identifier)
+        if not self.managed:
+            return recorded == report["digest"]
+        saved = self.records["cycle_assessment"][identifier]
+        inputs = {"payload": saved["payload"], "dependencies": saved["dependencies"]}
+        current = self.project_dependencies({"payload": report["payload"], "dependencies": report["dependencies"]}, "record")
+        return self.accept_dependencies(recorded, current, recorded_inputs=inputs, kind="record")
+
+    def rebuild_candidate(self, saved, record_id):
+        selection = self.records.get("development_selection", {}).get("candidate")
+        checkpoint = self.records.get("checkpoint", {}).get((selection or {}).get("checkpoint_id"))
+        if checkpoint is None or checkpoint.get("assessment_id") is None:
+            self.require_reassessment(record_id, "bound checkpoint and assessment")
+        self.require_recorded_fields(checkpoint, ("dependencies",), checkpoint["id"])
+        assessment = self.records.get("cycle_assessment", {}).get(checkpoint["assessment_id"])
+        self.require_recorded_fields(assessment, ("dependencies", "payload", "assessment"), checkpoint["assessment_id"])
+        self.require_recorded_fields(checkpoint["dependencies"], (), checkpoint["id"])
+        self.require_recorded_fields(assessment["dependencies"], (), checkpoint["assessment_id"])
+        dependencies = dict(checkpoint["dependencies"], **assessment["dependencies"])
+        if saved is not None:
+            self.require_recorded_fields(saved, ("digest",), record_id)
+            # These values are themselves authenticated by the complete candidate hash.
+            dependencies.update(preparation=saved.get("preparation_digest"), constitution=saved.get("constitution"))
+        if dependencies.get("preparation") is None or dependencies.get("constitution") is None:
+            self.require_reassessment(record_id, "recorded preparation and constitution")
+        body = {key: value for key, value in (saved or {}).items() if key != "digest"}
+        if saved is not None and digest(body) != saved["digest"]:
+            if not accept_claim_dependencies(saved["digest"], digest(project_claim_dependencies(body, managed=True, kind="candidate")),
+                                             managed=True, recorded_inputs=body, kind="candidate"):
+                self.require_reassessment(record_id, "authenticated recorded candidate")
+            candidate, _ = self.build_candidate()
+            candidate = dict(candidate, preparation_digest=dependencies["preparation"], constitution=dependencies["constitution"])
+        else:
+            restored = _Context(self.records, self.artifacts,
+                                restore_inputs={"dependencies": dependencies, "record_id": record_id})
+            candidate, _ = restored.build_candidate()
+        if saved is not None and candidate != saved:
+            self.require_reassessment(record_id, "matching recorded candidate fields and component identities")
+        return candidate
+
+    def verify_assignment_candidate(self, identifier, recorded, scoped):
+        assignment = _get(self.records, "review_assignment", identifier, "unknown_review_assignment")
+        packet = strict_json(self.artifacts.read(assignment["packet"]))
+        self.require_recorded_fields(packet, ("role", "digest", "support_contract"), identifier)
+        contract = packet.get("support_contract", {})
+        self.require_recorded_fields(contract, ("candidate_digest", "target") if scoped else ("candidate_digest",), identifier)
+        self.require_recorded_fields(assignment, ("role", "packet_digest"), identifier)
+        target = None
+        if scoped:
+            from .publication_scope import find_publication_scope
+            selected = find_publication_scope(self.records)
+            target = {"kind": "source_limited_manuscript", "contract_id": selected["id"],
+                      "scientific_target_digest": selected["scientific_target_digest"]}
+        if (assignment["role"] != "result" or packet.get("role") != "result"
+                or packet.get("digest") != assignment["packet_digest"]
+                or digest({key: value for key, value in packet.items() if key != "digest"}) != assignment["packet_digest"]
+                or contract.get("candidate_digest") != recorded or contract.get("target") != target):
+            self.require_reassessment(identifier, "authenticated assignment candidate and exact target")
+        revision = assignment.get("recorded_revision")
+        return revision - 1 if type(revision) is int else None
+
+    def verify_saved_candidate(self, bound, kind):
+        saved = bound.get("candidate")
+        if saved is None:
+            if bound.get("candidate_inputs") is not None:
+                self.require_reassessment(bound["id"], "recorded reviewed candidate")
+            return
+        self.require_recorded_fields(saved, ("digest",), bound["id"])
+        inputs = {key: value for key, value in saved.items() if key != "digest"}
+        if not self.accept_dependencies(saved["digest"], self.project_dependencies(inputs, "candidate"),
+                                        recorded_inputs=inputs, kind="candidate"):
+            self.require_reassessment(bound["id"], "authenticated recorded candidate")
+        revision = bound.get("reviewed_revision")
+        if hasattr(self.records, "read_revision") and type(revision) is int and revision <= self.records.read_revision():
+            if not self.records.verify_record_version(kind, bound["id"], revision, digest(bound)):
+                self.require_reassessment(bound["id"], "matching recorded candidate and committed snapshot")
+
+    def verify_candidate_digest(self, recorded, candidate, *, scoped=False, record_id=None, assignment_id=None):
+        current = candidate if isinstance(candidate, str) else candidate["digest"]
+        if not self.managed:
+            return self.accept_dependencies(recorded, current)
+        kind = "scoped_readiness_review" if scoped else "readiness_review"
+        bindings = [saved for saved in self.records.get(kind, {}).values()
+                    if saved["payload"]["candidate_digest"] == recorded]
+        for bound in bindings:
+            self.verify_saved_candidate(bound, kind)
+        fallback = None
+        if recorded != current and not bindings and assignment_id is not None:
+            fallback = (assignment_id, self.verify_assignment_candidate(assignment_id, recorded, scoped))
+
+        def verify():
+            accepted = self._verify_candidate_digest(recorded, candidate, scoped=scoped,
+                record_id=record_id, assignment_id=assignment_id)
+            return accepted, self.candidate_inputs.get(recorded)
+
+        accepted, origin = self.artifacts.compute_once_in_root(("candidate_digest", recorded, current, scoped, fallback), verify)
+        if origin is not None:
+            self.candidate_inputs[recorded] = origin
+        return accepted
+
+    def _verify_candidate_digest(self, recorded, candidate, *, scoped=False, record_id=None, assignment_id=None):
+        current = candidate if isinstance(candidate, str) else candidate["digest"]
+        if not self.managed:
+            return self.accept_dependencies(recorded, current)
+        kind = "scoped_readiness_review" if scoped else "readiness_review"
+        bindings = [(saved, saved.get("reviewed_revision"), saved.get("candidate"))
+                    for saved in self.records.get(kind, {}).values()
+                    if saved["payload"]["candidate_digest"] == recorded]
+        if recorded == current:
+            for bound, _, _ in bindings:
+                self.verify_saved_candidate(bound, kind)
+            return True
+        if not bindings and assignment_id is not None:
+            bound = self.records["review_assignment"][assignment_id]
+            bindings = [(bound, None, None)]
+        if not bindings:
+            bindings = [(saved, saved.get("recorded_revision"), None)
+                        for saved in self.records.get("value_review", {}).values()
+                        if (saved["payload"].get("support") or {}).get("candidate_digest") == recorded]
+        if not bindings:
+            self.require_reassessment(record_id or recorded, "recorded candidate inputs")
+        accepted = False
+        for bound, revision, saved in bindings:
+            identifier = bound["id"]
+            origin = bound.get("candidate_inputs")
+            input_revision = revision - 1 if type(revision) is int else None
+            if origin is not None:
+                self.verify_saved_candidate(bound, kind)
+                self.require_recorded_fields(origin, ("revision", "candidate"), identifier)
+                input_revision, saved = origin["revision"], origin["candidate"]
+                if type(revision) is not int or type(input_revision) is not int or input_revision >= revision:
+                    self.require_reassessment(identifier, "candidate inputs preceding the review")
+            elif bound.get("role") == "result" or bound.get("assignment_id") is not None and saved is None:
+                input_revision = self.verify_assignment_candidate(bound.get("assignment_id", identifier), recorded, scoped)
+            evaluation = self.read_snapshot(input_revision, identifier)
+            snapshot = evaluation.records
+            historical = _Context(snapshot, evaluation, project_claims=True)
+            original = historical.rebuild_candidate(saved, identifier)
+            if scoped:
+                from .publication_scope import rebuild_scoped_dependencies
+                original_inputs = rebuild_scoped_dependencies(snapshot, self.artifacts, original)
+                projected_claim = rebuild_scoped_dependencies(snapshot, self.artifacts)
+            else:
+                original_inputs = {key: value for key, value in original.items() if key != "digest"}
+                projected, _ = historical.build_candidate()
+                projected_claim = historical.project_dependencies(projected, "candidate")
+                projected_claim = {key: value for key, value in projected_claim.items() if key != "digest"}
+            if not accept_claim_dependencies(recorded,
+                    project_claim_dependencies(original_inputs, managed=True, kind="candidate"),
+                    managed=True, recorded_inputs=original_inputs, kind="candidate"):
+                self.require_reassessment(identifier, "authenticated reconstructed candidate composition")
+            del historical, snapshot
+            if origin is not None:
+                evaluated = self.read_snapshot(revision - 1, identifier)
+                actual = evaluated.records
+                reviewed = _Context(actual, evaluated, project_claims=True)
+                checked = reviewed.rebuild_candidate(bound["candidate"], identifier)
+                if scoped:
+                    reviewed_claim = rebuild_scoped_dependencies(actual, self.artifacts)
+                else:
+                    reviewed_claim = reviewed.project_dependencies(checked, "candidate")
+                    reviewed_claim = {key: value for key, value in reviewed_claim.items() if key != "digest"}
+                if reviewed_claim != projected_claim:
+                    self.require_reassessment(identifier, "matching original and reviewed claim inputs")
+                del reviewed, actual
+            if not accept_claim_dependencies(recorded, current, managed=True, recorded_inputs=original_inputs,
+                                             recorded_claim=projected_claim, kind="candidate"):
+                return False
+            accepted = True
+            self.candidate_inputs[recorded] = {"revision": input_revision, "candidate": original}
+        return accepted
+
+    def assess_record(self, identifier):
         if identifier not in self.assessments:
             record = _get(self.records, "cycle_assessment", identifier, "unknown_assessment")
+            if self.compatible:
+                self.require_recorded_fields(record, ("payload", "dependencies", "assessment"), identifier)
+                self.require_recorded_fields(record["assessment"], ("id", "payload", "digest", "dependencies", "evidence",
+                    "obligations", "remaining_obligations", "complete", "validated_result"), identifier)
             if identifier in self.assessing:
                 raise ResearchError("lineage_cycle", "Development inheritance must follow earlier checkpoints")
             self.assessing.add(identifier)
             try:
-                report = _assess(self, record["payload"], historical=True)
-                if report["dependencies"] != record["dependencies"]:
+                restore_assessment = self.restore_inputs is not None and not self.managed
+                report = record["assessment"] if restore_assessment else _assess(self, record["payload"], historical=True)
+                inputs = {"payload": record["payload"], "dependencies": record["dependencies"]}
+                if restore_assessment:
+                    saved = record["assessment"]
+                    if not accept_claim_dependencies(saved["digest"],
+                            project_claim_dependencies(inputs, managed=True, kind="record"),
+                            managed=True, recorded_inputs=inputs, kind="record"):
+                        self.require_reassessment(identifier, "authenticated recorded assessment")
+                    report = dict(saved)
+                else:
+                    current = self.project_dependencies({"payload": report["payload"], "dependencies": report["dependencies"]}, "record")
+                    unchanged = (self.accept_dependencies(record["assessment"]["digest"], current,
+                                     recorded_inputs=inputs, kind="record") if self.managed
+                                 else report["dependencies"] == record["dependencies"])
+                if not restore_assessment and not unchanged:
                     stale = obligation("development_dependencies_stale",
                         "Reassess the result against current policy, literature, sources and executions.", assessment_id=identifier)
                     report["obligations"].append(stale)
                     report["prerequisites"]["validity"].append(stale)
                     report["validated_result"] = False
                     report["complete"] = False
+                elif self.managed:
+                    report["digest"] = record["assessment"]["digest"]
                 report["obligations"] = _unique(report["obligations"])
                 self.assessments[identifier] = report
             finally:
                 self.assessing.remove(identifier)
         return self.assessments[identifier]
+
+    assessment = assess_record
 
 
 class _Evidence:
@@ -234,7 +530,8 @@ def _literature(context, evidence, value, scope):
     _text(value["comparison"], "Claim-specific literature comparison")
     _strings(value["gaps"], "Literature gaps")
     evidence.many([{"kind": "source", "link": link} for link in _items(value["sources"], "Related full-read sources", True)], "Literature evidence")
-    if value["scope"] != scope or value.get("literature_digest") != context.synthesis["literature_digest"] or value["gaps"]:
+    if (value["scope"] != scope or value["gaps"]
+            or not context.managed and value.get("literature_digest") != context.synthesis["literature_digest"]):
         raise ResearchError("literature_comparison_stale", "Record the literature comparison for this exact claim/scope against the current literature_digest")
 
 
@@ -300,7 +597,7 @@ def _inheritance(context, evidence, value, stale=None):
     predecessor = value["predecessor"]
     if predecessor is not None:
         parent = _get(context.records, "checkpoint", predecessor, "unknown_checkpoint")
-        context.artifacts.read(parent["artifact"])
+        context.verify_checkpoint(parent)
         if parent["objective"] not in _objective_lineage(context):
             raise ResearchError("objective_mismatch", "A successor checkpoint must retain the complete objective or a recorded ancestor of it")
         if _normalized(value["question"]) == _normalized(context.records["cycle_plan"][parent["cycle_id"]]["payload"]["question"]):
@@ -309,7 +606,7 @@ def _inheritance(context, evidence, value, stale=None):
     for item in _items(value["inheritance"], "Inherited results and failures"):
         _fields(item, ("checkpoint_id", "assessment_id", "use", "evidence", "assumptions", "deduction"))
         checkpoint = _get(context.records, "checkpoint", item["checkpoint_id"], "unknown_checkpoint")
-        context.artifacts.read(checkpoint["artifact"])
+        context.verify_checkpoint(checkpoint)
         if checkpoint["objective"] not in _objective_lineage(context) or checkpoint["assessment_id"] != item["assessment_id"]:
             raise ResearchError("inheritance_mismatch", "Inherit the assessment actually preserved by the named checkpoint")
         _choice(item["use"], ("validated_result", "failure", "unresolved"), "Inherited evidence use")
@@ -318,7 +615,7 @@ def _inheritance(context, evidence, value, stale=None):
         linked = evidence.many(item["evidence"], "Inherited evidence")
         if not any(x.get("cycle_id") == checkpoint["cycle_id"] for x in linked) and not _unresolved_plan_sources(context, checkpoint, item):
             raise ResearchError("inheritance_mismatch", "Cite retained execution evidence, or authenticated unresolved plan sources when no output exists and no run is pending")
-        assessment = context.assessment(item["assessment_id"]) if item["assessment_id"] is not None else None
+        assessment = context.assess_record(item["assessment_id"]) if item["assessment_id"] is not None else None
         if assessment is not None and assessment.get("stale_ancestor"):
             _record_inheritance_staleness(stale, "inherited_result_stale",
                 "Explicitly refresh the stale assessed ancestor without replacing its historical evidence",
@@ -370,8 +667,8 @@ def _build_assessment_plan(context, plan, assessment, stale=None):
         seen.add(binding["previous_checkpoint_id"])
         old = _get(context.records, "checkpoint", previous["checkpoint_id"], "unknown_checkpoint")
         current = _get(context.records, "checkpoint", binding["checkpoint_id"], "unknown_checkpoint")
-        context.artifacts.read(old["artifact"])
-        context.artifacts.read(current["artifact"])
+        context.verify_checkpoint(old)
+        context.verify_checkpoint(current)
         if (old["assessment_id"] != binding["previous_assessment_id"]
                 or current["assessment_id"] != binding["assessment_id"]
                 or current["cycle_id"] != old["cycle_id"] or current["id"] == old["id"]
@@ -384,13 +681,13 @@ def _build_assessment_plan(context, plan, assessment, stale=None):
                 "The explicitly bound replacement must remain the ancestor's current assessment")
         if binding["evidence"] != previous["evidence"]:
             raise ResearchError("inheritance_refresh_evidence_changed", "Retain every originally relied-on evidence locator unchanged")
-        current_assessment = context.assessment(current["assessment_id"])
+        current_assessment = context.assess_record(current["assessment_id"])
         current_record = _get(context.records, "cycle_assessment", current["assessment_id"], "unknown_assessment")
-        if (current_assessment["dependencies"] != current_record["dependencies"]
+        if (not context.verify_assessment_digest(current_record["assessment"]["digest"], current["assessment_id"])
                 or previous["use"] == "validated_result" and not current_assessment["validated_result"]):
             _record_inheritance_staleness(stale, "inherited_result_stale",
                 "The replacement must be current and retain the original evidence credit")
-        if current["assessment_digest"] != current_assessment["digest"]:
+        if not context.verify_assessment_digest(current["assessment_digest"], current["assessment_id"]):
             _record_inheritance_staleness(stale, "inheritance_refresh_stale",
                 "Checkpoint the replacement's exact current assessment before refreshing inheritance")
         if previous["use"] != "validated_result":
@@ -503,11 +800,13 @@ def plan_cycle(store, payload, *, expected_revision, request_id):
         dependencies = _plan_dependencies(context, value)
         record = {"id": value["id"], "payload": value, "dependencies": dependencies, "strategy_key": key,
                   "planned_revision": expected_revision + 1, "request_id": request_id}
+        if context.managed:
+            record["claim_dependencies"] = context.project_dependencies(dependencies)
         if strategic.get("decision") is not None:
             from .research_decisions import validate_cycle_decision
             binding = validate_cycle_decision(records, artifacts, value, strategic["decision"])
             record["research_decision"] = {"id": strategic["decision"]["id"], "digest": strategic["decision"]["digest"], "binding": binding}
-        record["digest"] = digest(record)
+        record["digest"] = digest(context.project_dependencies(record, "record"))
         account = dict(account, cycles=account["cycles"] + [value["id"]])
         cycle = {"id": value["id"], "plan_digest": record["digest"], "status": "planned", "execution_ids": [],
                  "assessment_id": None, "remaining_obligations": value["scope"]["remaining_obligations"] or [context.objective["statement"]]}
@@ -565,7 +864,7 @@ that run. An idempotent admission response retains its original reservation.
         account = records["strategy_account"][plan["strategy_key"]]
         require_accounted_usage(records, artifacts, plan["strategy_key"])
         _validate_reopening(context, plan["payload"], account)
-        if _plan_dependencies(context, plan["payload"]) != plan["dependencies"]:
+        if not context.verify_plan_dependencies(plan):
             raise ResearchError("plan_dependencies_stale", "Plan a current development before running after a source, scope or policy change")
         _command(artifacts, value["command"])
         _number(value["reserved_units"], "Reserved resource units", positive=True)
@@ -583,7 +882,7 @@ that run. An idempotent admission response retains its original reservation.
             from .research_decisions import validate_cycle_decision
             binding = validate_cycle_decision(records, artifacts, plan["payload"], strategic["decision"], reserved_units=value["reserved_units"])
             record["research_decision"] = {"id": strategic["decision"]["id"], "digest": strategic["decision"]["digest"], "binding": binding}
-        record["digest"] = digest(record)
+        record["digest"] = digest(context.project_dependencies(record, "record"))
         account = dict(account, executions=account["executions"] + 1, charged_units=account["charged_units"] + value["reserved_units"])
         changes = [immutable_record(records, "execution_admission", value["id"], record),
                    ("strategy_account", plan["strategy_key"], account), ("cycle", cycle["id"], dict(cycle, status="running"))]
@@ -620,9 +919,10 @@ def validate_admitted_execution(records, artifacts, admission_id):
     account = records["strategy_account"][plan["strategy_key"]]
     require_accounted_usage(records, artifacts, plan["strategy_key"])
     _validate_reopening(context, plan["payload"], account)
-    if _plan_dependencies(context, plan["payload"]) != plan["dependencies"]:
+    if not context.verify_plan_dependencies(plan):
         raise ResearchError("plan_dependencies_stale", "Plan a current development before launching after a source, scope or policy change")
-    if admission["plan_digest"] != plan["digest"] or admission["dependencies"] != plan["dependencies"]:
+    if (admission["plan_digest"] != plan["digest"]
+            or admission["dependencies"] != plan["dependencies"]):
         raise ResearchError("plan_digest_mismatch", "Admission does not bind the current immutable plan")
     _command(artifacts, admission["command"])
     if admission_id in records.get("execution_outcome", {}):
@@ -649,7 +949,8 @@ def _checkpoint_record(records, artifacts, dependencies, identifier, cycle, asse
         content["failures"] = assessment["payload"]["failures"]
     artifact = artifacts.put(json.dumps(content, ensure_ascii=False, sort_keys=True, allow_nan=False,
                                          separators=(",", ":")).encode(), "application/json")
-    return dict(content, artifact=artifact, digest=digest(content))
+    return dict(content, artifact=artifact,
+                digest=digest(project_claim_dependencies(content, managed=uses_claim_dependencies(records), kind="record")))
 
 
 def record_execution(store, payload, *, expected_revision, request_id, _observation=None):
@@ -786,7 +1087,8 @@ def _development(context, evidence, value, scope, cycle_id):
     obligations = []
     if not any(x["reference"]["kind"] == "source" for x in linked):
         obligations.append(obligation("novelty_source_missing", "Compare the candidate with actual current full-read sources."))
-    if novelty["scope"] != scope or novelty.get("literature_digest") != context.synthesis["literature_digest"] or novelty["gaps"]:
+    if (novelty["scope"] != scope or novelty["gaps"]
+            or not context.managed and novelty.get("literature_digest") != context.synthesis["literature_digest"]):
         obligations.append(obligation("novelty_comparison_stale", "Refresh the novelty decision for this exact result claim/scope and current literature."))
     contribution = value["contribution"]
     _fields(contribution, ("and", "but", "therefore", "evidence"))
@@ -856,6 +1158,7 @@ def _assess(context, value, *, historical=False):
     for key in ("id", "author"):
         _text(value[key], "Assessment " + key)
     plan = _get(context.records, "cycle_plan", value["cycle_id"], "unknown_cycle")
+    context.verify_plan_digest(plan)
     cycle = context.records["cycle"][value["cycle_id"]]
     _scope(value["scope"], plan["payload"]["objective"])
     _strings(value["assumptions"], "Result assumptions")
@@ -966,7 +1269,7 @@ def _assess(context, value, *, historical=False):
     inherited = _inheritance(context, evidence, effective_plan, stale)
     if stale:
         valid_obligations.extend(stale)
-    workflow = list(context.synthesis["obligations"])
+    workflow = [] if context.managed else list(context.synthesis["obligations"])
     objective_progress = []
     remaining = list(dict.fromkeys(value["scope"]["remaining_obligations"] + value["remaining_obligations"]))
     # A refuted hypothesis can produce a valid negative result. Result
@@ -1019,7 +1322,7 @@ def _assess(context, value, *, historical=False):
     report = {"id": value["id"], "payload": value, "validated_result": not valid_obligations,
             "complete": not obligations, "obligations": obligations, "remaining_obligations": remaining,
             "evidence": evidence.summary(), "dependencies": dependencies, "prerequisites": prerequisites,
-            "digest": digest({"payload": value, "dependencies": dependencies}), "mechanical_only": True}
+            "digest": digest({"payload": value, "dependencies": context.project_dependencies(dependencies)}), "mechanical_only": True}
     if stale:
         report["stale_ancestor"] = dependencies["stale_ancestor"]
     return report
@@ -1041,6 +1344,8 @@ def assess_cycle(store, payload, *, expected_revision, request_id):
         cycle = dict(cycle, status=status, assessment_id=value["id"], remaining_obligations=report["remaining_obligations"])
         record = {"id": value["id"], "payload": value, "dependencies": report["dependencies"], "assessment": report,
                   "assessed_revision": expected_revision + 1, "request_id": request_id}
+        if context.managed:
+            record["claim_dependencies"] = context.project_dependencies(report["dependencies"])
         failures = account["failures"] + [{"assessment_id": value["id"], "signal_id": f["signal_id"]}
                                              for f in value["failures"] if f["status"] == "observed"]
         changes = [immutable_record(records, "cycle_assessment", value["id"], record),
@@ -1073,7 +1378,7 @@ def checkpoint(store, payload, *, expected_revision, request_id):
         cycle = _get(records, "cycle", value["cycle_id"], "unknown_cycle")
         if value["assessment_id"] != cycle["assessment_id"]:
             raise ResearchError("checkpoint_assessment_mismatch", "Checkpoint the current assessment without erasing its predecessors")
-        assessed = context.assessment(value["assessment_id"]) if value["assessment_id"] is not None else None
+        assessed = context.assess_record(value["assessment_id"]) if value["assessment_id"] is not None else None
         record = _checkpoint_record(records, artifacts, context.dependencies(), value["id"], cycle, assessed,
                                     value["reason"], value["next_hypothesis"], expected_revision + 1, request_id)
         changes = [immutable_record(records, "checkpoint", value["id"], record)]
@@ -1088,12 +1393,13 @@ def _branch_inputs(context):
     branches = {}
     for identifier, cycle in context.records.get("cycle", {}).items():
         plan = context.records["cycle_plan"][identifier]
+        context.verify_plan_digest(plan)
         executions = {i: context.records["execution"][i] for i in cycle["execution_ids"]}
         for execution in executions.values():
             _execution_artifacts(context.artifacts, execution["payload"])
         branches[identifier] = {"cycle": cycle, "plan": plan,
             "plan_evidence": _plan_evidence(_Evidence(context), plan["payload"]),
-            "executions": executions, "assessment": context.assessment(cycle["assessment_id"]) if cycle["assessment_id"] is not None else None,
+            "executions": executions, "assessment": context.assess_record(cycle["assessment_id"]) if cycle["assessment_id"] is not None else None,
             "admissions": {i: a for i, a in context.records.get("execution_admission", {}).items() if a["cycle_id"] == identifier},
             "checkpoints": {i: c for i, c in context.records.get("checkpoint", {}).items() if c["cycle_id"] == identifier}}
         if branches[identifier]["assessment"] is not None:
@@ -1104,9 +1410,10 @@ def _branch_inputs(context):
 
 def _source_inputs(context, evidence):
     identifiers = {e["reference"]["link"]["version_id"] for e in evidence if e["reference"]["kind"] == "source"}
-    identifiers.update(i["version_id"] for i in context.foundation["inventory"])
-    for section in context.synthesis["sections"].values():
-        identifiers.update(e["link"]["version_id"] for e in section.get("evidence", []))
+    if not context.managed:
+        identifiers.update(i["version_id"] for i in context.foundation["inventory"])
+        for section in context.synthesis["sections"].values():
+            identifiers.update(e["link"]["version_id"] for e in section.get("evidence", []))
     for branch in context.branches.values():
         identifiers.update(link["version_id"] for link in branch["plan"]["payload"]["literature"]["sources"])
     records = context.records
@@ -1131,24 +1438,30 @@ def _source_inputs(context, evidence):
                 collect(child)
 
     collect(selected)
-    collect(context.foundation)
+    if not context.managed:
+        collect(context.foundation)
     selected["source"] = {i: records["source"][i] for i in sorted(source_ids)}
     return selected
 
 
-def _candidate(context):
+def _build_candidate(context):
+    return _compose_candidate(context)
+
+
+def _compose_candidate(context, *, branches=None):
     selection = context.records.get("development_selection", {}).get("candidate")
     if selection is None:
         return None, [obligation("candidate_checkpoint_missing", "Select a durable assessed checkpoint for readiness.")]
     checkpoint = _get(context.records, "checkpoint", selection["checkpoint_id"], "unknown_checkpoint")
-    context.artifacts.read(checkpoint["artifact"])
+    context.verify_checkpoint(checkpoint)
     if checkpoint["assessment_id"] is None:
         return None, [obligation("development_assessment_missing", "Assess actual results before selecting a readiness candidate.")]
-    assessment = context.assessment(checkpoint["assessment_id"])
-    context.branches = _branch_inputs(context)
+    assessment = context.assess_record(checkpoint["assessment_id"])
+    context.branches = _branch_inputs(context) if branches is None else branches
     workflow = []
     cycle = context.records["cycle"][checkpoint["cycle_id"]]
-    if cycle["assessment_id"] != checkpoint["assessment_id"] or checkpoint["assessment_digest"] != assessment["digest"]:
+    if (cycle["assessment_id"] != checkpoint["assessment_id"]
+            or not context.verify_assessment_digest(checkpoint["assessment_digest"], checkpoint["assessment_id"])):
         workflow.append(obligation("candidate_checkpoint_stale", "Checkpoint the currently assessed candidate and its exact evidence."))
     branches = assessment["payload"]["development"]["branches"] if assessment["payload"]["development"] else []
     branch_ids = {b["cycle_id"] for b in branches}
@@ -1175,23 +1488,29 @@ def _candidate(context):
                  "assessment_id": assessment["id"], "assessment_digest": assessment["digest"],
                  "preparation_digest": context.synthesis["preparation_digest"],
                  "constitution": context.configuration["constitution"], "result_hashes": result_hashes,
-                 "evidence": [e["reference"] for e in evidence], "branches_digest": digest(context.branches),
-                 "strategy_accounts_digest": digest(context.records.get("strategy_account", {})),
+                 "evidence": [e["reference"] for e in evidence], "branches_digest": digest(context.project_dependencies(context.branches, "branches")),
+                 "strategy_accounts_digest": digest(dict(context.records.get("strategy_account", {}))),
                  "source_records_digest": digest(context.sources),
                  "authors": cycle_authors(context.records)}
     changes = objective_changes(context.records)
     if changes:
         candidate["objective_changes"] = changes
-    candidate["digest"] = digest(candidate)
-    context.prerequisites = dict(assessment["prerequisites"],
-                                workflow=_unique(assessment["prerequisites"]["workflow"] + workflow))
+    candidate["digest"] = digest(context.project_dependencies(candidate, "candidate"))
+    prerequisites = assessment.get("prerequisites")
+    if prerequisites is None:
+        if assessment["obligations"]:
+            context.require_reassessment(assessment["id"], "recorded assessment prerequisite categories")
+        prerequisites = {"validity": [], "workflow": [], "objective_progress": []}
+    context.require_recorded_fields(prerequisites, ("validity", "workflow", "objective_progress"), assessment["id"])
+    context.prerequisites = dict(prerequisites, workflow=_unique(prerequisites["workflow"] + workflow))
     return candidate, _unique(assessment["obligations"] + workflow)
 
 
-def _review(context, value, candidate):
+def _review(context, value, candidate, *, assignment_id=None):
     _fields(value, ("id", "candidate_digest", "assessor", "verdict", "checks", "limitations"))
     _text(value["id"], "Readiness review ID")
-    if value["candidate_digest"] != candidate["digest"]:
+    if not context.verify_candidate_digest(value["candidate_digest"], candidate,
+                                           record_id=value["id"], assignment_id=assignment_id):
         raise ResearchError("readiness_review_stale", "Assess the exact current candidate, objective, literature and result bytes")
     assessor = value["assessor"]
     _fields(assessor, ("id", "kind", "provenance", "relationship", "independence_basis"))
@@ -1224,11 +1543,11 @@ def _review(context, value, candidate):
     if value["verdict"] != "ready":
         obligations.append(obligation("independent_review_pending", "The independent assessor has not accepted this candidate.", verdict=value["verdict"]))
     return {"ready": not obligations, "obligations": _unique(obligations), "evidence": evidence.summary(),
-            "digest": digest({"payload": value, "candidate": candidate["digest"], "evidence": evidence.summary()}),
+            "digest": digest({"payload": value, "candidate": value["candidate_digest"], "evidence": evidence.summary()}),
             "mechanical_only": True}
 
 
-def prepare_combined_support(records, artifacts, payload, *, revision, request_id):
+def prepare_combined_support(records, artifacts, payload, *, revision, request_id, assignment_id=None):
     """Validate and prepare one response's support section without committing it.
 
     A strategic response commits these compatible readiness records with its
@@ -1237,14 +1556,16 @@ def prepare_combined_support(records, artifacts, payload, *, revision, request_i
     """
     context = _Context(records, artifacts)
     context.require_objective()
-    candidate, _ = _candidate(context)
+    candidate, _ = context.build_candidate()
     if candidate is None:
         raise ResearchError("candidate_checkpoint_missing", "Provide a current assessed candidate for independent review")
-    report = _review(context, payload, candidate)
+    report = _review(context, payload, candidate, assignment_id=assignment_id)
     artifact = artifacts.put(json.dumps(payload, ensure_ascii=False, sort_keys=True, allow_nan=False,
                                         separators=(",", ":")).encode(), "application/json")
     record = {"id": payload["id"], "payload": payload, "candidate": candidate, "assessment": report,
               "artifact": artifact, "reviewed_revision": revision, "request_id": request_id}
+    if payload["candidate_digest"] in context.candidate_inputs:
+        record["candidate_inputs"] = context.candidate_inputs[payload["candidate_digest"]]
     return [immutable_record(records, "readiness_review", payload["id"], record),
             ("development_selection", "review", {"review_id": payload["id"]})], report
 
@@ -1260,7 +1581,7 @@ def record_readiness_review(store, payload, *, expected_revision, request_id):
     return prepared_mutation(store, "development.readiness_review", payload, prepare, expected_revision=expected_revision, request_id=request_id)
 
 
-def readiness_state(records, artifacts):
+def assess_readiness(records, artifacts, *, restore_inputs=None):
     """Assess current author readiness on a consistent records/artifacts snapshot.
 
 The candidate and review_inputs are the independent review boundary. They bind
@@ -1268,16 +1589,18 @@ source locators/readings, objective/scope, policy, literature, result hashes,
 development and retained branch state. No global-revision or cycle-count quota
 substitutes for these requirements.
 """
+    artifacts = Evaluation.of(records, artifacts)
+    records = artifacts.records
     obligations, candidate, synthesis, reviews = [], None, None, None
     cycles = records.get("cycle", {})
     try:
-        context = _Context(records, artifacts)
+        context = _Context(records, artifacts, restore_inputs=restore_inputs)
         synthesis = context.synthesis
-        obligations.extend(synthesis["obligations"])
+        obligations.extend(context.configuration["obligations"] if context.managed else synthesis["obligations"])
         for identifier, cycle in cycles.items():
             if cycle["assessment_id"] is None:
                 obligations.append(obligation("development_assessment_missing", "Assess the actual execution and next development.", cycle_id=identifier))
-        candidate, pending = _candidate(context)
+        candidate, pending = context.build_candidate()
         obligations.extend(pending)
         if candidate is not None:
             selection = records.get("development_selection", {}).get("review")
@@ -1287,7 +1610,7 @@ substitutes for these requirements.
                 saved = _get(records, "readiness_review", selection["review_id"], "unknown_review")
                 artifacts.read(saved["artifact"])
                 reviews = _review(context, saved["payload"], candidate)
-                if reviews["digest"] != saved["assessment"]["digest"]:
+                if not context.accept_dependencies(saved["assessment"]["digest"], reviews["digest"]):
                     obligations.append(obligation("readiness_review_stale", "Reassess changed independent source/result evidence."))
                 obligations.extend(reviews["obligations"])
     except ResearchError as error:
@@ -1298,12 +1621,16 @@ substitutes for these requirements.
             "obligations": obligations, "counts": {"cycles": 0 if private_profile else len(cycles), "obligations": len(obligations)},
             "review": reviews, "next": obligations[0] if obligations else None,
             "review_inputs": None if candidate is None else {"candidate": candidate, "branches": context.branches, "sources": context.sources,
-                "synthesis": context.synthesis, "strategy_accounts": records.get("strategy_account", {}),
+                "synthesis": context.synthesis, "strategy_accounts": dict(records.get("strategy_account", {})),
                 "plan": records["cycle_plan"][records["checkpoint"][candidate["checkpoint_id"]]["cycle_id"]],
                 "assessment": records["cycle_assessment"][candidate["assessment_id"]],
                 "checkpoint": records["checkpoint"][candidate["checkpoint_id"]],
                 "source_and_result_references": candidate["evidence"]},
             "mechanical_only": True, "native_proof_acceptance": False, "limits": _LIMITS}
+
+
+# Preserve the existing report API for callers outside the plugin.
+readiness_state = assess_readiness
 
 
 def readiness_report(store):

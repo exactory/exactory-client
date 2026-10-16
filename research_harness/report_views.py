@@ -137,7 +137,10 @@ def status_summary(report):
 
 def current_obligations(report):
     """The obligations `next` follows: the preparation stage's while it has any, else readiness."""
-    return report.get("preparation", {}).get("obligations") or report["obligations"]
+    preparation = report.get("preparation", {})
+    if preparation.get("advisory"):
+        return report["obligations"]
+    return preparation.get("obligations") or report["obligations"]
 
 
 def obligations_page(report, code, *, limit, cursor):

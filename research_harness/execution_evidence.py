@@ -123,9 +123,10 @@ def validate_probe_recovery_observation(records, artifacts, execution, observati
     return False
 
 
-def author_readiness_state(records, artifacts):
+def author_readiness_state(records, artifacts, *, restore_inputs=None):
     artifacts = Evaluation.of(records, artifacts)
-    report = readiness_state(records, artifacts)
+    records = artifacts.records
+    report = readiness_state(records, artifacts, restore_inputs=restore_inputs)
     candidate = report["candidate"]
     observations = {}
     obligations = list(report["obligations"])
