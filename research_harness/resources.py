@@ -21,6 +21,8 @@ resource_budget_exhausted. The `development` purpose counts admitted
 development rounds in the `rounds` unit; `round-admit` charges one round.
 """
 
+from collections.abc import Mapping
+
 from .errors import ResearchError
 from .graph import obligation
 from .operations import fields, is_finite_number, prepared_mutation, profile_name, text
@@ -71,7 +73,7 @@ def set_budget(store, payload, *, expected_revision, request_id):
 
 
 def _lookup(source, kind, key):
-    if hasattr(source, "get") and not isinstance(source, dict):
+    if hasattr(source, "get") and not isinstance(source, Mapping):
         return source.get(kind, key)
     return source.get(kind, {}).get(key)
 

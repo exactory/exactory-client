@@ -4,6 +4,7 @@ import hashlib
 from pathlib import Path
 
 from .artifacts import ArtifactStore
+from .claim_dependencies import accept_claim_dependencies, project_claim_dependencies, uses_claim_dependencies
 from .citations import account_citations, find_citing_entry, read_bibliography
 from .execution_evidence import author_readiness_state
 from .errors import ResearchError
@@ -40,14 +41,50 @@ def _ready(records, artifacts, *, check_decision=True):
     return report
 
 
-def _scientific_readiness(report):
+def rebuild_pinned_readiness(records, artifacts, bundle):
+    evaluation = Evaluation.of(records, artifacts)
+    records = evaluation.records
+    key = ("pinned_readiness", bundle["id"], bundle.get("prepared_revision"), digest(bundle))
+    return evaluation.compute_once_in_root(key, lambda: _rebuild_pinned_readiness(records, evaluation, bundle))
+
+
+def _rebuild_pinned_readiness(records, artifacts, bundle):
+    """Recover pin-time science exclusively from its recorded input snapshot."""
+    from .development import _Context
+    from .publication_scope import assess_manuscript_readiness
+    context = _Context(records, artifacts)
+    identifier = bundle["id"]
+    evaluation = context.read_snapshot(bundle.get("prepared_revision"), identifier)
+    snapshot = evaluation.records
+    inputs = bundle.get("review_inputs")
+    context.require_recorded_fields(inputs, ("candidate", "synthesis", "branches"), identifier)
+    if not inputs or not inputs.get("synthesis") or not inputs.get("candidate"):
+        context.require_reassessment(identifier, "recorded manuscript readiness inputs")
+    context.require_recorded_fields(inputs["synthesis"], ("configuration", "foundation"), identifier)
+    context.require_recorded_fields(inputs["synthesis"]["configuration"], ("target", "constitution"), identifier)
+    candidate = inputs["candidate"]
+    historical = _Context(snapshot, evaluation, project_claims=True)
+    original = historical.rebuild_candidate(candidate, identifier)
+    restore = {"dependencies": {"preparation": original["preparation_digest"], "constitution": original["constitution"]},
+               "record_id": identifier, "synthesis": inputs["synthesis"]}
+    body = {key: value for key, value in original.items() if key != "digest"}
+    restore["project_claims"] = digest(body) != original["digest"]
+    evaluate = assess_manuscript_readiness if bundle.get("publication_scope") else author_readiness_state
+    original_report = evaluate(snapshot, evaluation, restore_inputs=restore)
+    if original_report["review_inputs"] != inputs:
+        context.require_reassessment(identifier, "matching recorded readiness inputs and snapshot")
+    return original_report, evaluate(snapshot, evaluation, restore_inputs=dict(restore, project_claims=True))
+
+
+def _scientific_readiness(report, records=None):
     """Bind unchanged science independently of a later support assessor's identity.
 
     The current support verdict is always checked by _ready before this binding.
     The full report digest and original review remain retained as pin-time history.
     """
-    return {"kind": "scientific-inputs-v1",
-            "digest": digest({key: value for key, value in report.items() if key != "review"})}
+    dependencies = {key: value for key, value in report.items() if key != "review"}
+    return {"kind": "scientific-inputs-v1", "digest": digest(project_claim_dependencies(
+        dependencies, managed=uses_claim_dependencies(records or {}), kind="readiness"))}
 
 
 def _claim_markers(claim):
@@ -134,7 +171,7 @@ def prepare_publication(store, payload, *, expected_revision, request_id):
                                        value.get("citation_accounting"))
         bundle = dict(value, files=saved, citation_accounting=accounting, candidate=candidate,
                       readiness_digest=digest(report), readiness_review=readiness_review,
-                      readiness_binding=_scientific_readiness(report),
+                      readiness_binding=_scientific_readiness(report, records),
                       review_inputs=report["review_inputs"], prepared_revision=expected_revision,
                       execution_observations=report["execution_observations"],
                       mechanical_only=True)
@@ -161,15 +198,24 @@ def _bundle(records, artifacts):
         raise ResearchError("publication_bundle_missing", "Prepare the exact PDF, abstract, bibliography and claims")
     report = _ready(records, artifacts, check_decision=False)
     binding = bundle.get("readiness_binding")
-    unchanged = (_scientific_readiness(report) == binding if binding is not None
-                 else digest(report) == bundle["readiness_digest"])
-    if not unchanged and binding is None and isinstance(bundle.get("readiness_review"), dict):
+    managed = uses_claim_dependencies(records)
+    if binding is not None:
+        unchanged = _scientific_readiness(report, records) == binding
+    else:
+        unchanged = digest(report) == bundle["readiness_digest"]
+    if not unchanged and managed:
+        original, projected = rebuild_pinned_readiness(records, artifacts, bundle)
+        raw = {key: value for key, value in original.items() if key != "review"} if binding is not None else original
+        recorded = binding["digest"] if binding is not None else bundle["readiness_digest"]
+        claim = project_claim_dependencies({key: value for key, value in projected.items() if key != "review"},
+                                           managed=True, kind="readiness")
+        current = _scientific_readiness(report, records)["digest"]
+        unchanged = accept_claim_dependencies(recorded, current, managed=True, recorded_inputs=raw,
+                                               recorded_claim=claim, kind="readiness")
+    if not unchanged and not managed and binding is None and isinstance(bundle.get("readiness_review"), dict):
         original_review = bundle["readiness_review"]
         if not bundle.get("publication_scope"):
             original_review = original_review.get("assessment")
-        # Reconstruct the old report using only its pinned reviewer finding.
-        # Every current scientific dependency must still match the old digest,
-        # and _ready has already checked that current support passes.
         if original_review is not None:
             unchanged = digest(dict(report, review=original_review)) == bundle["readiness_digest"]
     if not unchanged:

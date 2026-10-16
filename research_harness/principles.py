@@ -27,6 +27,7 @@ from .source_links import captured_source, exact_work
 
 
 CONSTITUTION_PATH = Path(__file__).resolve().parent.parent / "RESEARCH_CONSTITUTION.md"
+PREVIOUS_CONSTITUTION = {"version": "6", "sha256": "9017d65280d1362e82a3e7fd1a0ce27393251901c96bc25e685ccaf711f53ee3"}
 POLICIES = ("exhaustive-v1", "screened-v1", "lineage-v1", "sampled-v1")
 LEGACY_POLICY = "exhaustive-v1"
 POLICY_PROFILES = {"lineage-v1": "research", "sampled-v1": "verification"}
@@ -289,6 +290,16 @@ def _configuration_state(evaluation, profile):
     records, artifacts = evaluation.records, evaluation
     contract = constitution_contract()
     config = records.get("configuration", {}).get("research")
+    archived = None
+    if config is not None:
+        adopted = config["constitution"]
+        archived = records.get("constitution", {}).get(adopted["sha256"])
+        if (adopted == dict(PREVIOUS_CONSTITUTION, path="RESEARCH_CONSTITUTION.md")
+                and archived is not None and all(archived.get(key) == value for key, value in adopted.items())
+                and archived["artifact"]["sha256"] == adopted["sha256"]):
+            # Native audits compare complete frozen reports, including this
+            # digest and the reported contract. Keep the adopted v6 semantics.
+            contract = dict(contract, **adopted)
     obligations = []
     if config is None:
         obligations.append(obligation("configuration_missing", "Initialize the study profile, target and constitution."))
@@ -298,7 +309,6 @@ def _configuration_state(evaluation, profile):
         if config["constitution"] != contract:
             obligations.append(obligation("constitution_revalidation_required", "Explicitly review the current policy and reassess dependent decisions.",
                                           previous=config["constitution"], current=contract))
-        archived = records.get("constitution", {}).get(config["constitution"]["sha256"])
         if archived is None:
             obligations.append(obligation("constitution_archive_missing", "Restore the archived policy that the study actually adopted."))
         else:

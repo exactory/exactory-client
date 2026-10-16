@@ -9,6 +9,7 @@ import copy
 import json
 
 from .artifacts import ArtifactStore
+from .claim_dependencies import verify_record_dependency
 from .errors import ResearchError
 from .evidence import digest
 from .graph import obligation
@@ -191,11 +192,11 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                 raise ResearchError("research_support_scope_mismatch", "Review the currently selected exact manuscript scope without replacing the full scientific objective")
             if scoped:
                 changes, support = prepare_combined_scoped_support(records, artifacts, value["support"],
-                    revision=expected_revision + 1, request_id=request_id)
+                    revision=expected_revision + 1, request_id=request_id, assignment_id=value["assignment_id"])
             else:
                 from .development import prepare_combined_support
                 changes, support = prepare_combined_support(records, artifacts, value["support"],
-                    revision=expected_revision + 1, request_id=request_id)
+                    revision=expected_revision + 1, request_id=request_id, assignment_id=value["assignment_id"])
         elif value["support"] is not None:
             raise ResearchError("invalid_value_review", "The bar and proposed slate cannot fabricate a completed result review")
         record = {"id": value["id"], "payload": value, "digest": digest(value), "recorded_revision": expected_revision + 1,
@@ -304,6 +305,21 @@ def _all_objections(records, dossier, reviews):
     return found
 
 
+def _accept_support_digests(records, artifacts, values):
+    """Recognize old and projected names for the same current support subject."""
+    from .claim_dependencies import uses_claim_dependencies
+    if not uses_claim_dependencies(records):
+        return False
+    from .development import _Context
+    from .publication_scope import has_publication_scope, _load_scope_snapshot
+    if has_publication_scope(records):
+        context, candidate, _, current, _, _ = _load_scope_snapshot(records, artifacts)
+        return candidate is not None and all(context.verify_candidate_digest(value, current, scoped=True) for value in values)
+    context = _Context(records, artifacts)
+    candidate, _ = context.build_candidate()
+    return candidate is not None and all(context.verify_candidate_digest(value, candidate) for value in values)
+
+
 def _decision_structure(records, artifacts, value):
     fields(value, ("id", "dossier_id", "phase", "action", "artifact_disposition", "goal_status", "review_ids", "bar_review_ids",
                    "objections", "work_items", "source_impact", "reason", "remaining_objective", "next_action", "goal_evidence",
@@ -367,7 +383,8 @@ def _decision_structure(records, artifacts, value):
         raise ResearchError("invalid_research_decision", "A prospective decision cannot fabricate a completed result candidate")
     if value["phase"] != "prospective":
         text(value["support_candidate_digest"], "Exact result candidate digest")
-        if any(review["payload"]["support"]["candidate_digest"] != value["support_candidate_digest"] for review in reviews):
+        subjects = [value["support_candidate_digest"]] + [review["payload"]["support"]["candidate_digest"] for review in reviews]
+        if len(set(subjects)) != 1 and not _accept_support_digests(records, artifacts, subjects):
             raise ResearchError("research_support_mismatch", "Both support sections must assess the exact same result candidate")
     return dossier, intent, reviews, bars
 
@@ -441,14 +458,14 @@ def _support_obligations(records, artifacts, value, reviews):
     obligations = []
     if value["phase"] == "prospective":
         return obligations
-    from .development import _Context, _candidate, _review
+    from .development import _Context, _review
     try:
         from .publication_scope import has_publication_scope, assess_manuscript_readiness, _load_scope_snapshot, _validate_scoped_review
         if has_publication_scope(records):
             report = assess_manuscript_readiness(records, artifacts)
             obligations.extend(report["obligations"])
             context, candidate, contract, exact, _, _ = _load_scope_snapshot(records, artifacts)
-            if exact != value["support_candidate_digest"]:
+            if not context.verify_candidate_digest(value["support_candidate_digest"], exact, scoped=True, record_id=value["id"]):
                 obligations.append(obligation("research_support_stale", "The exact supported manuscript scope changed after its combined assessment."))
             for review in reviews:
                 _validate_scoped_review(context, review["payload"]["support"], candidate, contract, exact)
@@ -456,11 +473,11 @@ def _support_obligations(records, artifacts, value, reviews):
                 obligations.append(obligation("research_goal_not_achieved", "A supported scoped delivery retains the incomplete full scientific objective."))
             return obligations
         context = _Context(records, artifacts)
-        candidate, pending = _candidate(context)
+        candidate, pending = context.build_candidate()
         obligations.extend(pending)
         if candidate is None:
             return obligations
-        if candidate["digest"] != value["support_candidate_digest"]:
+        if not context.verify_candidate_digest(value["support_candidate_digest"], candidate, record_id=value["id"]):
             obligations.append(obligation("research_support_stale", "The result changed after its combined independent support/value assessment."))
         for review in reviews:
             report = _review(context, review["payload"]["support"], candidate)
@@ -481,11 +498,14 @@ def _decision_obligations(records, artifacts, decision, boundary, *, source_impa
             or current is None or current["id"] != dossier["id"]):
         obligations.append(obligation("research_dossier_stale", "Assess the current strategy dossier before a new commitment; earlier findings remain historical evidence."))
     for dependency in dossier["payload"]["dependencies"]:
-        held = records.get(dependency["kind"], {}).get(dependency["id"])
         if dependency["kind"] == "source":
             changed = strategy.source_snapshot(records).get(dependency["id"]) != dossier["source_snapshot"].get(dependency["id"])
         else:
-            changed = held is None or digest(held) != dependency["digest"]
+            try:
+                changed = not verify_record_dependency(records, dependency["kind"], dependency["id"], dependency["digest"])
+            except ResearchError as error:
+                obligations.append(obligation(error.code, error.message, **(error.details or {})))
+                continue
         if changed:
             obligations.append(obligation("research_dependency_stale", "A decisive bound source, comparison or result changed.", dependency=dependency))
     try:

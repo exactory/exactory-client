@@ -99,7 +99,7 @@ from .verification import bind_verdict
 OPERATIONS.update({"manuscript": prepare_publication, "manuscript-review": record_manuscript_review, "bind-verdict": bind_verdict})
 
 ACQUISITION = ("collect", "resume", "acquire", "expand", "fulltext", "import-response", "import-oai-cohort", "visual")
-GATES = ("cohort", "foundation", "preparation", "readiness", "manuscript-readiness", "execution", "verification", "manuscript", "publication", "deposited", "submitted", "round")
+GATES = ("cohort", "foundation", "preparation", "direction", "readiness", "manuscript-readiness", "execution", "verification", "manuscript", "publication", "deposited", "submitted", "round")
 
 
 def add_identity(parser, *, required=True):
@@ -300,10 +300,17 @@ def status_report(store, *, counters=False):
     # Before later gates are applicable, expose the actual next unread cohort
     # abstract instead of asking for a root or completed development too early.
     preparation = gate_state(records, evaluation, "cohort" if study and study["stage"] == "cohort" else "preparation", profile=profile)
+    from .claim_dependencies import uses_claim_dependencies
+    managed = uses_claim_dependencies(records)
+    if managed:
+        preparation = dict(preparation, advisory=True)
+        milestone = {"initiate": "direction", "cohort": "direction", "literature": "direction", "ideate": "execution"}.get((study or {}).get("stage"))
+        if milestone is not None:
+            report = gate_state(records, evaluation, milestone, profile=profile)
     diagnostics = {"evaluation": dict(evaluation.counters, elapsed_seconds=round(time.monotonic() - started, 3))} if counters else {}
     # The cohort inventory names the next unread abstract; every other stage
     # takes the highest-priority current obligation in preparation order.
-    upcoming = preparation.get("next") if study and study["stage"] == "cohort" else None
+    upcoming = preparation.get("next") if not managed and study and study["stage"] == "cohort" else None
     obligations = current_obligations({"obligations": report["obligations"], "preparation": preparation})
     current_challenge = challenge.find_current_challenge(records) if profile == "research" else None
     scope_status = {}

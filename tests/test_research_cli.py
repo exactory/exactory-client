@@ -464,15 +464,14 @@ class ResearchPreparationTests(DevelopmentCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
 
-    def test_null_objective_preparation_order_reaches_ideate_after_actual_reading(self):
+    def test_null_objective_reaches_literature_before_reading_and_ideate_after_direction(self):
         initialized = self.cli("exactory-lab", "init", "--slug", "ordered", "--preparation-policy", "exhaustive-v1")
         self.assertEqual(initialized.returncode, 0, initialized.stderr)
         self.assertIsNone(self.store.snapshot()["records"]["configuration"]["research"]["target"])
         self.assertEqual(self.cli("exactory-lab", "state", "set", "--stage", "cohort").returncode, 0)
         collection = self.cohort((1,))
         early = self.cli("exactory-lab", "state", "set", "--stage", "literature")
-        self.assertNotEqual(early.returncode, 0)
-        self.assertIn("cohort_abstract_reading_missing", early.stderr)
+        self.assertEqual(early.returncode, 0, early.stderr)
         self.json_command("read", self.abstract_note("arxiv:2601.00001v1"))
         entered = self.cli("exactory-lab", "state", "set", "--stage", "literature")
         self.assertEqual(entered.returncode, 0, entered.stderr)

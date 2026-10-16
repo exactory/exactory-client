@@ -1,9 +1,47 @@
 """One snapshot is evaluated once; bytes are verified once; results stay identical."""
 
+import weakref
+
 from literature_fixtures import LiteratureCase
 
 
 class EvaluationTests(LiteratureCase):
+    def test_historical_evaluations_are_shared_by_revision_and_keep_their_bounds(self):
+        from research_harness.evaluation import Evaluation
+        self.store.mutate("fixture.managed", {}, lambda tx: (
+            tx.put("configuration", "research", {"profile": "research"}),
+            tx.put("workspace", "study", {"stage": "evaluate"})),
+            expected_revision=self.store.revision, request_id="managed")
+        first_revision = self.store.revision
+        self.store.mutate("fixture.later", {}, lambda tx: tx.put("fixture", "later", {}),
+                          expected_revision=first_revision, request_id="later")
+        records = self.store.snapshot()["records"]
+        root = Evaluation(records, self.artifacts)
+        first = root.read_snapshot(first_revision)
+        self.assertIsInstance(first, Evaluation)
+        second = root.read_snapshot(first_revision + 1)
+        self.assertIs(first, root.read_snapshot(first_revision))
+        self.assertIs(first, first.read_snapshot(first_revision))
+        self.assertIs(Evaluation.of(first.records, root), first)
+        self.assertIs(second, Evaluation.of(second.records, first))
+        self.assert_error("claim_reassessment_required", lambda: first.read_snapshot(first_revision + 1))
+        fresh = Evaluation(records, root)
+        self.assertIsNot(fresh.read_snapshot(first_revision), first)
+        self.assertEqual(first.compute_once_in_root("proof", lambda: "first"), "first")
+        self.assertEqual(first.compute_once_in_root("proof", lambda: "repeated"), "first")
+        self.assertEqual(second.compute_once_in_root("proof", lambda: "second"), "second")
+        reference = self.artifacts.put(b"shared bytes", "text/plain")
+        self.assertEqual(first.read(reference), b"shared bytes")
+        self.assertIs(root.read(reference), first.read(reference))
+        self.assertIs(second.text(reference), root.text(reference))
+        self.assertEqual((first.counters["artifacts_verified"], root.counters["artifacts_verified"]), (1, 0))
+        records["fixture"]["later"] = {"uncommitted": True}
+        self.assertEqual(fresh.read_snapshot(first_revision + 1).records["fixture"]["later"], {})
+        retained = weakref.ref(root)
+        del root
+        self.assertIsNone(retained())
+        self.assert_error("claim_reassessment_required", lambda: Evaluation({}, self.artifacts).read_snapshot(0))
+
     def test_bytes_are_verified_once_per_evaluation_and_tampering_is_still_caught(self):
         from research_harness.evaluation import Evaluation
         from research_harness.reading import record_reading
