@@ -10,9 +10,33 @@ from pathlib import Path
 from unittest.mock import patch
 
 from research_harness.artifacts import ArtifactStore
+from research_harness.claim_minimums import assess_direction
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 from research_harness.storage import Store
+
+
+def prepare_direction(case):
+    """Record the direction minimum of the case unless the case already meets it."""
+    from test_research_synthesis import SynthesisCase
+    fixture = SynthesisCase()
+    fixture.root, fixture.store, fixture.artifacts = case.root, case.store, case.artifacts
+    fixture.sequence = max(case.store.revision, getattr(case, "sequence", 0))
+    records = case.store.snapshot()["records"]
+    if not assess_direction(records, case.artifacts):
+        return fixture
+    if "configuration" not in records:
+        fixture.mutate(fixture.api("principles").initialize_research, {"profile": "research", "target": None})
+    work = fixture.metadata(90001)
+    fixture.scope([work])
+    link = fixture.read_source(90001)
+    fixture.record_purpose("direct", "direction-direct")
+    fixture.mutate(fixture.api().record_standards, fixture.standards(link, identifier="direction-standards"))
+    fixture.mutate(fixture.api("challenge").record_grand_challenge,
+                   fixture.grand_challenge(link, identifier="direction-grand-challenge"))
+    if hasattr(case, "sequence"):
+        case.sequence = fixture.sequence
+    return fixture
 
 
 class StrategyCase(unittest.TestCase):
@@ -96,19 +120,7 @@ class StrategyCase(unittest.TestCase):
                 "recommendation": {"action": "investigate", "reason": "The deciding control is available."}, "bundle_digest": None}
 
     def prepare_direction(self):
-        from test_research_synthesis import SynthesisCase
-        fixture = SynthesisCase()
-        fixture.root, fixture.store, fixture.artifacts = self.root, self.store, self.artifacts
-        fixture.sequence = self.store.revision
-        if "configuration" not in self.store.snapshot()["records"]:
-            fixture.mutate(fixture.api("principles").initialize_research, {"profile": "research", "target": None})
-        work = fixture.metadata(90001)
-        fixture.scope([work])
-        link = fixture.read_source(90001)
-        fixture.record_purpose("direct", "direction-direct")
-        fixture.mutate(fixture.api().record_standards, fixture.standards(link, identifier="direction-standards"))
-        fixture.mutate(fixture.api("challenge").record_grand_challenge, fixture.grand_challenge(link))
-        self.direction_fixture = fixture
+        self.direction_fixture = prepare_direction(self)
 
     def setup_dossier(self):
         strategy = self.module("strategy")
