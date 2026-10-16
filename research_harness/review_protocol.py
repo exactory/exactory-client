@@ -215,8 +215,8 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=2):
     if role not in ROLES:
         raise ResearchError('invalid_review_role', 'Unknown reviewer role')
     if role == 'native_math':
-        from .native_review import PROMPT, LEGACY_PROMPT
-        prompt = _COMMON + (LEGACY_PROMPT if legacy else PROMPT)
+        from .native_review import PROMPT, LEGACY_PROMPT, OPENNESS_PROMPT
+        prompt = _COMMON + (LEGACY_PROMPT if legacy else OPENNESS_PROMPT if version == 1 else PROMPT)
     else:
         prompt = _COMMON + (_ROLE_PROMPTS_V1 if version == 1 else _ROLE_PROMPTS)[role]
     if role in ('bar', 'slate', 'result'):

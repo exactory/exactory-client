@@ -1214,7 +1214,7 @@ The novelty study uses shared search/read tools for the exact statement and each
 neighbouring formulation, recording each query's date, depth and top-k versus
 complete coverage. New acceptance requires native result review version 2 with
 `findings.openness`: `{outcome, statement_digest, evidence, searched_at, coverage,
-reason}`. Outcomes are `supported_open`, `already_solved` (citing the settling
+reason, minimum?}`. Outcomes are `supported_open`, `already_solved` (citing the settling
 source), and `unresolved`. The exact claim digest binds the statement; nonempty
 evidence digests cite the delivered novelty study and search/read records, the
 date is `YYYY-MM-DD`, and coverage and reason are nonempty text. Every decisive
@@ -1230,6 +1230,22 @@ review with `supported_open` or `already_solved`. A prior observed packet omitti
 newly recorded material evidence cannot authorize closure. Already solved preserves
 requested formal verification, proof policy and every other deliverable. Recorded
 version 1 acceptances and closures replay unchanged.
+Fresh resolved findings require `minimum: {schema_version: 1, statement,
+neighbours, searches: [{formulation, search_digest}], reading_digests,
+settling_work_id}`. `statement` is the exact claim; each declared formulation
+needs an actual common `literature_search` record with dated `captured_at` and
+per-query `coverage` of kind `complete`, `top_k` or `bounded_unordered`, including
+`inspected_count`. Every relevant or contradictory result needs fulltext coverage
+from the pinned common `reading` records. Unresolved or potentially relevant hits,
+unavailable required source units and active or stale deferrals remain gaps.
+`already_solved` binds its fully read settling result via `settling_work_id`;
+`supported_open` uses null. All search/reading hashes must be in both the finding's
+`evidence` and the observed packet. Export the declaration in the optional
+`openness` field of `search review-packet --spec FILE --json`; the reviewer echoes
+it as `findings.openness.minimum`. The exporter delivers records and captured
+source bytes from the associated common workspace. Other material searches for
+the same formulations must be included on fresh resolved review. The exact
+schemas and `openness_*` refusal codes are in the math-solver `SEARCH.md`.
 A new native checkpoint after version 2 closure reopens final openness and root
 closure review, retaining accepted proofs and the earlier closure record.
 
@@ -1240,6 +1256,13 @@ counterexample or acceptance relies on requires native admission, accounts,
 interpretation and review even when run in the common workspace. Every finite
 computation inside the controller, including diagnostics, keeps this contract.
 The cash-out inventory lists every used probe's id, question and elapsed time.
+Native imports retain original and canonical identities and resolve common probe
+origins again at fresh dependency and strategy commitments. Renaming output,
+nesting a digest in JSON, importing a canonical `blob`, or labelling an artifact
+`proof` in an `analytical` manifest cannot grant exploratory credit
+(`exploratory_evidence`). A probe-derived certificate or Lean proof needs native
+admission, its actual verification and candidate interpretation. Historical
+accepted imports replay unchanged.
 `plan` validates complete `problem.json` and precondition inputs directly; neither
 `plan` nor `begin` requires the local `study/problem.md` file. The reviewed proposal
 study digests remain required. The [remaining order table](../skills/math-solver/SKILL.md#remaining-order-conditions)

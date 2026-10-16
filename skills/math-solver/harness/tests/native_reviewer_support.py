@@ -29,9 +29,13 @@ def observe_review(controller, value, subject, *, inputs=(), alter_packet=None, 
     reviewed["reviewer"]["attestation_id"] = "review-assignment:" + identifier
     kind = "proposal" if "claim_digest" in reviewed and "unresolved_objections" in reviewed else (
         "result" if "claim_digest" in reviewed else "recovery")
-    exported = controller.command("review-packet", {"kind": kind, "subject": subject,
+    spec = {"kind": kind, "subject": subject,
         "claim_digest": reviewed.get("claim_digest"), "reviewer": reviewed["reviewer"],
-        "inputs": list(inputs)}, None, None)
+        "inputs": list(inputs)}
+    minimum = reviewed.get("findings", {}).get("openness", {}).get("minimum")
+    if minimum is not None:
+        spec["openness"] = minimum
+    exported = controller.command("review-packet", spec, None, None)
     store = Store(exported["workspace"])
     route_id = "native-fixture-route"
     if route_id not in store.snapshot()["records"].get("review_route", {}):

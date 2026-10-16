@@ -20,7 +20,7 @@ class CertifiedBridgeExecutionTests(WorkspaceTest):
         value = digest(json.loads(text)) if kind == "blob" else hashlib.sha256(text.encode()).hexdigest()
         return {"path": relative, "digest": value, "kind": kind}
 
-    def result_review(self, subject_digest, claim_digest, *, openness_evidence=None):
+    def result_review(self, subject_digest, claim_digest, *, openness_evidence=None, openness_subject=None):
         value = {"subject_digest": subject_digest, "claim_digest": claim_digest,
             "reviewer": provenance("independent-mathematical-reviewer"), "decision": "approve", "findings": {
                 "statement": "The exact modular statement is established",
@@ -35,6 +35,8 @@ class CertifiedBridgeExecutionTests(WorkspaceTest):
                 "evidence": list(dict.fromkeys(openness_evidence)), "searched_at": "2026-10-16",
                 "coverage": "Exact elementary modular statement and its recorded fixture study.",
                 "reason": "The supplied classical modular argument settles this fixture; no openness is claimed."}
+            from tests.openness_support import attach_minimum
+            value = attach_minimum(self.controller, value, subject=openness_subject)
         return value
 
     def observed_policy_review(self, subject_digest, claim_digest):
@@ -55,7 +57,12 @@ class CertifiedBridgeExecutionTests(WorkspaceTest):
                 candidate["studies"][name] = item["digest"]
         candidate["method"] = strategy
         from tests.research_support import pin_research
-        pin_research(self.attack_root, candidate, inputs)
+        recorded = next((row["record"].get("foundation") for row in self.controller.status()["proposals"].values()
+                         if row["record"].get("foundation") is not None), None)
+        if recorded is None:
+            pin_research(self.attack_root, candidate, inputs)
+        else:
+            candidate.update(schema_version=3, computation=candidate.get("computation"), foundation=recorded)
         invoke(self.controller, "propose", {"proposal": candidate, "inputs": inputs}, None)
         pid = "proposal-{:06d}".format(node_number)
         invoke(self.controller, "review", {"proposal_id": pid, "review": review(candidate), "inputs": []}, None)

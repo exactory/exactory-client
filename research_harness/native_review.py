@@ -31,7 +31,7 @@ LEGACY_PROMPT = (
     "that response is retained as an operational scientific assessment and cannot authorize the native transition. "
     "Do not invent evidence access, certify omitted dependencies, or transform an unsupported finding into approval."
 )
-PROMPT = LEGACY_PROMPT.replace(
+OPENNESS_PROMPT = LEGACY_PROMPT.replace(
     "For native.kind=result, an approval is exactly {subject_digest,claim_digest,reviewer,decision:approve,"
     "findings:{statement,assumptions,scope,dependencies,policy}}, with all five findings nonempty. ",
     "For native.kind=result, an approval is exactly {schema_version:2,subject_digest,claim_digest,reviewer,decision:approve,"
@@ -51,6 +51,20 @@ PROMPT = LEGACY_PROMPT.replace(
     "Material new settling evidence requires reassessment in a new observed review bound to that exact evidence before closure. "
 )
 
+
+PROMPT = OPENNESS_PROMPT.replace(
+    'openness is exactly {outcome:supported_open|already_solved|unresolved,statement_digest,evidence,searched_at,coverage,reason}. ',
+    'openness has '
+    '{outcome:supported_open|already_solved|unresolved,statement_digest,evidence,searched_at,coverage,reason}, '
+    'plus minimum when supplied in native.scientific_context.openness_minimum. minimum is exactly '
+    '{schema_version:1,statement,neighbours,searches:[{formulation,search_digest}],reading_digests,settling_work_id}. '
+    'Return that exact supplied minimum; do not invent search or reading records. Resolved outcomes require '
+    'it: each exact statement and declared neighbour needs a common literature_search with captured_at and '
+    'coverage, bound by search_digest in evidence; every relevant or contradictory result needs a bound '
+    'complete fulltext reading. already_solved also names its fully read settling work in settling_work_id. '
+    'Missing, unavailable or deferred sources, unspecified search coverage and integrity gaps permit only '
+    'unresolved. '
+)
 
 def _sha(value):
     if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:

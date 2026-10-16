@@ -63,6 +63,25 @@ workspace. A probe cannot substitute for it. Every finite computation inside the
 controller, including an exploratory diagnostic, uses this native contract.
 The cash-out inventory lists every used probe with its id, question and elapsed time.
 
+Native `inputs` imports resolve `outputs`, `stdout` and `stderr` through the
+associated common workspace's recorded probe origins. Renaming a file, importing
+JSON as a canonical `blob`, nesting its digest in another JSON artifact, or using
+an `analytical` manifest with role `proof` does not remove that provenance.
+`probe_origins_recorded` retains native `digest`, original `raw_digest` and known
+`origins` in append-only `bindings`; even an initially unknown raw identity is
+retained for later resolution. Fresh checkpoint, admission, strategy-decision,
+computation-basis, acceptance and closure audits refuse exploratory credit with
+`exploratory_evidence`. A `hypothesis` checkpoint can inventory the output without
+credit; a later decision relying on it must pass the same fresh audit. Native
+certificate or Lean evidence must have its actual admitted verification run and
+a `proof_candidate` or `counterexample_candidate` interpretation. Historical
+accepted imports and read-only audits retain their recorded meaning. Origin and
+dependency checks run again under the common read transaction at commitment.
+New moves and launches recheck the evidence of the strategy assessment they rely
+on, including exploratory origins recorded after the assessment. This follows
+both `checkpoint:` and `acceptance:` references, manifest
+`conclusion.dependency_ids`, and the accepted dependencies' complete proof graph.
+
 The computation field introduced in proposal version 2 remains required in
 version 3 alongside `foundation`. Analytical `task.kind: proof` uses
 `computation: null`. Versions 1 and 2, their reviews, admissions, reservations,
@@ -651,6 +670,7 @@ Supported events and exact payloads:
 | --- | --- |
 | `proposal_recorded` | `{"proposal": Proposal, "digest": SHA256(Proposal)}` |
 | `review_workspace_recorded` | `{workspace: "."}` or a canonical ancestor; the objective's stable shared review-store association |
+| `probe_origins_recorded` | `{bindings: [{digest: SHA256, raw_digest?: SHA256, origins: [{probe_id: Text, sha256: SHA256, roles: ["outputs"|"stdout"|"stderr"]}]}]}`; raw identities are retained even when `origins` is empty |
 | `review_recorded` | `{"proposal_id": ID, "review": Review, "digest": SHA256(Review)}` |
 | `proposal_admitted` | `{"proposal_id": ID}` |
 | `checkpoint_recorded` | `{"checkpoint": CheckpointInput, "digest": SHA256(CheckpointInput)}` |
@@ -924,7 +944,7 @@ review-packet --spec FILE:
  claim_digest: SHA256|null,
  reviewer: {source: "host", actor_id: ReviewerID,
             attestation_id: "review-assignment:ASSIGNMENT_ID"},
- inputs: [Input]}
+ inputs: [Input], openness?: OpennessMinimum}
 ```
 
 Use `proposal` for a proposal `Review`; use `result` for a `ResultReview`,
@@ -939,13 +959,21 @@ An adoption allowance whose subject contains `proposal_digest` and
 `snapshot_digest` needs those exact unpublished blobs and their referenced
 artifacts in `inputs`; a digest alone cannot supply their contents.
 
+For a resolved openness review, supply `openness: OpennessMinimum` below. The
+exporter delivers it as `scientific_context.openness_minimum`, together with the
+exact common search/reading records and their captured responses and source
+bundles. The reviewer returns that same declaration as `findings.openness.minimum`
+and binds its search and reading digests in `findings.openness.evidence`. The
+records must exist in this objective's associated common review store; copying a
+record from another workspace does not establish that association.
+
 ```sh
 exactory-math --attack-root attack search review-packet --spec native-review.json --json
 ```
 
 The result is `{workspace, native_packet, subject_digest, claim_digest}`.
-`workspace` is the existing native common-preparation workspace, or the native
-root when it has none. Use that returned path for the shared commands. Export
+`workspace` is the workspace derived from foundation references or recorded by
+`review_workspace` on a foundationless proposal. Use that returned path for the shared commands. Export
 writes immutable common evidence objects and does not append a native event.
 It needs no expected revision or request ID.
 
@@ -1210,7 +1238,13 @@ ResultReview = {
              dependencies: Text, policy: Text,
              openness: {outcome: "supported_open"|"already_solved"|"unresolved",
                         statement_digest: SHA256(Claim), evidence: [SHA256],
-                        searched_at: "YYYY-MM-DD", coverage: Text, reason: Text}}
+                        searched_at: "YYYY-MM-DD", coverage: Text, reason: Text,
+                        minimum?: OpennessMinimum}}
+}
+OpennessMinimum = {
+  schema_version: 1, statement: Text, neighbours: [Text],
+  searches: [{formulation: Text, search_digest: SHA256(LiteratureSearch)}],
+  reading_digests: [SHA256(Reading)], settling_work_id: WorkID|null
 }
 ResultAudit = {
   subject_digest: SHA256(StoredCheckpoint), dependency_ids: [AcceptanceID],
@@ -1231,17 +1265,43 @@ transitive immutable dependency closure, manifest completeness, actual proof
 policy checks, and the pinned review. It classifies computational claims from
 their actual evidence; callers cannot relabel a computation as analytical.
 
-All findings are nonempty. Openness evidence names the delivered novelty study
-and shared search/read records, including the settling source for `already_solved`.
-Include those exported records as `study` or `source` artifacts in the checkpoint's
-evidence manifests so their exact bytes reach the observed reviewer packet.
-Search the exact statement and each neighbouring formulation in first-tier sources,
-recording depth, date and top-k versus complete coverage for each search. Fully
-read every decisive prior or settling source. An unavailable decisive source
-remains a gap and keeps the outcome unresolved; it gives no reading credit.
-Independent review judges sufficiency and explains the finding. Record material
-new settling evidence as a native checkpoint with its exact source/search/read
-artifacts; a fresh observed final review must include that evidence before closure.
+All findings are nonempty. A fresh `supported_open` or `already_solved` finding,
+including the final root review, requires `minimum`. Its `statement` equals the
+exact claim statement; `neighbours` declares the distinct neighbouring formulations
+from the novelty study. Each formulation needs a bound common `literature_search`
+record. Its `question` or an exact `queries` entry must match the formulation.
+Every query needs recorded `coverage` of kind `complete`, `top_k` or
+`bounded_unordered` with `inspected_count`, and the search's `captured_at` date
+cannot follow `searched_at`. Integrity errors, unspecified coverage or search
+`gaps` prevent a resolved finding. Bounded coverage is explicit evidence, not a
+claim of exhaustive enumeration; the reviewer judges its scientific sufficiency.
+
+Every `relevant` or `contradictory` result needs complete `fulltext` coverage using
+the exact common `reading` records named in `reading_digests`. A settling source
+must be one of those results; `already_solved` names it in `settling_work_id`.
+`supported_open` sets that field to null. `potentially_relevant` and `unresolved`
+results, unavailable required source units and active or stale deferrals remain
+gaps. Every search/reading digest must occur in both `evidence` and the observed
+packet. The packet includes the records' captured source bytes, even if identical
+record bytes were imported as a native artifact. A proof manifest alone cannot
+meet this minimum.
+
+Fresh resolved findings must also bind any other material common search for the
+same declared formulations, including later relevant or contradictory results.
+An older search's unresolved or potentially relevant hit can be cleared by a
+bound, no-earlier search of the same queries with an explicit `resolved` entry and
+resolved disposition for that work, plus its pinned full reading. A later bound
+search with complete recorded coverage of those queries can replace an earlier
+coverage/integrity gap. Retain both records; a past gap does not permanently block
+completed research.
+Record material new settling evidence as a native checkpoint and obtain a new
+observed final review. This checks the statement's evidence without requiring
+unrelated common preparation. Missing requirements produce
+`openness_minimum_required`, `openness_statement_mismatch`,
+`openness_search_missing`, `openness_search_gap`, `openness_search_date`,
+`openness_reading_gap`, `openness_evidence_mismatch`, `openness_settling_source` or
+`openness_search_stale`. Independent review still judges relevance, completeness
+of the declared neighbours, and the mathematical reasoning.
 
 `search accept` optionally takes `claims_openness` (default false for a proof
 without an openness claim). When true, only `supported_open` can approve it.

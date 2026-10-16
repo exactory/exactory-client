@@ -12,11 +12,13 @@ from .computation import EVENT_HANDLERS as COMPUTATION_HANDLERS
 from .research import EVENT_HANDLERS as RESEARCH_HANDLERS
 from .discovery import record as record_discovery
 from .strategy_refresh import EVENT_HANDLERS as STRATEGY_HANDLERS
+from .provenance import EVENT_HANDLERS as PROVENANCE_HANDLERS
 
 
 EVENT_HANDLERS = dict(ADMISSION_HANDLERS, **PROOF_HANDLERS, **SCHEDULER_HANDLERS, **ADOPTION_HANDLERS, **EXECUTION_HANDLERS, **COMPUTATION_HANDLERS, **RESEARCH_HANDLERS)
 EVENT_HANDLERS["discovery_recorded"] = record_discovery
 EVENT_HANDLERS.update(STRATEGY_HANDLERS)
+EVENT_HANDLERS.update(PROVENANCE_HANDLERS)
 
 
 def service_operation(state, payload):
@@ -44,6 +46,8 @@ def service_operation(state, payload):
     for command in ("adopt", "checkpoint", "accept", "complete", "begin", "run", "amend-computation", "reassess",
                     "legacy-native", "execution-launch"):
         allowed[command].add("review_workspace_recorded")
+    for command in ("propose", "review", "checkpoint", "accept", "complete", "adopt", "amend-computation", "amend-foundation"):
+        allowed[command].add("probe_origins_recorded")
     s.choice(payload["command"], allowed)
     s.optional_text(payload["target"])
     s.digest_string(payload["spec_digest"])

@@ -16,15 +16,18 @@ class ReviewProtocolTests(LiteratureCase):
         for required in ("schema_version:2", "openness", "supported_open", "already_solved", "unresolved",
                          "statement_digest", "searched_at", "coverage", "settling source",
                          "each neighbouring formulation", "every decisive prior or settling source",
-                         "root closure", "prove or disprove", "new observed review"):
+                         "root closure", "prove or disprove", "new observed review", "minimum",
+                         "literature_search", "reading_digests", "captured_at", "settling_work_id"):
             self.assertIn(required, PROMPT)
 
     def test_native_prompt_compatibility_accepts_only_exact_known_versions(self):
         from research_harness.review_protocol import canonical_prompt, _prompt_matches
         current = canonical_prompt("native_math")
         legacy = canonical_prompt("native_math", legacy=True)
+        previous = canonical_prompt("native_math", version=1)
         self.assertNotEqual(current, legacy)
-        for prompt in (current, legacy):
+        self.assertNotEqual(current, previous)
+        for prompt in (current, previous, legacy):
             self.assertTrue(_prompt_matches({"role": "native_math", "prompt": prompt}))
         altered = copy.deepcopy(legacy)
         altered["text"] += " Author instructions."

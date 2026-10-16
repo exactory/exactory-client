@@ -47,7 +47,11 @@ class SharedToolsFoundationTests(SearchCLIWorkspace, unittest.TestCase):
         controller = Controller(self.root)
         prepared = self.prepared_proposal()
         before = controller.store.read()
-        with patch("research_harness.storage.Store", side_effect=ResearchError("store_busy", "Held by another writer.")):
+        def open_store(root, *, create=False):
+            if create:
+                raise ResearchError("store_busy", "Held by another writer.")
+            return CommonStore(root)
+        with patch("research_harness.storage.Store", side_effect=open_store):
             with self.assertRaises(SearchError) as caught:
                 controller.command("propose", prepared, 1, "initialize-review-store")
         self.assertEqual(caught.exception.code, "review_workspace_unavailable")
@@ -173,8 +177,12 @@ class OpennessAcceptanceTests(SearchCLIWorkspace, unittest.TestCase):
 
     def build_acceptance_spec(self, outcome="supported_open", claims_openness=False):
         cp = Controller(self.root).status()["checkpoints"]["checkpoint-000001"]
+        from tests.openness_support import attach_minimum
+        reviewed = build_openness_review(cp, cp["claim"], outcome)
+        if outcome != "unresolved":
+            reviewed = attach_minimum(Controller(self.root), reviewed)
         return {"obligation_id": "obligation-000001", "outcome": "proof", "dependency_ids": [],
-                "route_bindings": [], "review": build_openness_review(cp, cp["claim"], outcome), "inputs": [],
+                "route_bindings": [], "review": reviewed, "inputs": [],
                 "claims_openness": claims_openness}
 
     def test_new_acceptance_requires_v2_but_recorded_v1_replays(self):
