@@ -37,7 +37,8 @@ class ResearchProbePinTests(DevelopmentCase):
         script = self.root / "live-output.py"
         script.write_text("from pathlib import Path\nimport time\nPath('results').mkdir(exist_ok=True)\n"
             "Path('results/live.json').write_bytes(" + repr(RESULT) + ")\n"
-            "while not Path('release.txt').exists():\n    time.sleep(0.01)\n")
+            "deadline = time.monotonic() + 50\n"
+            "while not Path('release.txt').exists() and time.monotonic() < deadline:\n    time.sleep(0.01)\n")
         owner = ThreadPoolExecutor(max_workers=1)
         self.addCleanup(owner.shutdown, wait=True)
         pending = owner.submit(launch_probe, self.store, identifier="pending-probe", question="What do the live output bytes show?",
