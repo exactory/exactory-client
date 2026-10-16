@@ -76,6 +76,13 @@ def _build_settled_removal_rule(doi: str) -> str:
             f" because the record is published as {doi}. The command never removes it.")
 
 
+def _build_unconfirmed_write_rule(origin: str) -> str:
+    """What a message says after a write whose result the command cannot confirm: the server may have applied it,
+    so the user checks before sending it again."""
+    return (f"The server at {origin} may have applied the request. Before you run the command again, check on"
+            f" {origin} whether the change is there.")
+
+
 def _build_pending_refusal(doi: str, recorded_problem_id: str, recorded_origin: str, named_problem_id: str,
                            attach_instruction: str, closing_msg: str) -> str:
     """The refusal of a deposit for another problem while a record waits for its attachment."""
@@ -1460,14 +1467,12 @@ class TestProblemDepositJournalStates(_PlainWorkspaceDepositTestCase):
     def _at_another_origin(self, journal: dict, problem_id: str = _OTHER_PROBLEM_ID) -> dict:
         return dict(journal, math_problem={"problem_id": problem_id, "api_url": "https://recorded.test"})
 
-    def _assert_stopped_before_sending_anything(self, output: str, journal: dict, current_origin: str = "https://api.test",
-                                                *, is_key_at_risk: bool = True) -> None:
+    def _assert_stopped_before_sending_anything(self, output: str, journal: dict, current_origin: str = "https://api.test") -> None:
         problem_id = journal["math_problem"]["problem_id"]
-        key_msg = " The recorded origin would receive your API key." if is_key_at_risk else ""
         stop_msg = (f"The recorded deposit for problem {problem_id} names the exactory origin https://recorded.test. This"
-                    f" run uses the exactory origin {current_origin}.{key_msg} Nothing was sent, and {_JOURNAL_PATH_TEXT}"
-                    " stays as it is. If https://recorded.test is your own exactory origin, ")
-        self.assertEqual("would receive your API key" in output, is_key_at_risk)
+                    f" run uses the exactory origin {current_origin}. The recorded origin would receive your API key."
+                    f" Nothing was sent, and {_JOURNAL_PATH_TEXT} stays as it is. If https://recorded.test is your own"
+                    " exactory origin, ")
         if journal["settled"]:
             # The record is published: attach it from its own origin, or give the attachment up.
             self.assertIn(f"{stop_msg}run exactory-draft attach-problem with EXACTORY_API_URL set to https://recorded.test."
@@ -1561,27 +1566,52 @@ class TestProblemDepositJournalStates(_PlainWorkspaceDepositTestCase):
                       " https://api.test. The recorded origin would receive your API key.", sink.getvalue())
         self.assertEqual(self.exactory.calls, [])
 
-    def test_a_managed_journal_whose_intent_cannot_serve_a_settle_is_stopped_without_naming_the_api_key(self) -> None:
-        # A settle reads the intent and checks it against the journal before any exactory request. It stops there
-        # when the store does not give the intent, or when the intent describes another operation, so the recorded
-        # origin would receive nothing.
+    def test_a_managed_journal_whose_intent_the_store_does_not_give_names_only_the_removal_rule(self) -> None:
+        # A run that uses the recorded origin stops at that intent too, so the stop names no origin to switch to. It
+        # names no API key either, because no run gets as far as an exactory request.
+        missing_intent_id = "f" * 32
+        journal = _build_managed_journal(missing_intent_id, math_problem={"problem_id": _OTHER_PROBLEM_ID,
+                                                                          "api_url": "https://recorded.test"})
+        for argv in (["attach-problem"], ["deposit", "--abstract-file", "draft/abstract.txt", *_PRODUCTION_PUBLISH]):
+            with self.subTest(command=argv[0]):
+                self._record_journal(journal)
+
+                output = _run_draft_command(argv, 1, self)
+
+                self.assertEqual(output, f"The recorded deposit for problem {_OTHER_PROBLEM_ID} names the exactory origin"
+                                         " https://recorded.test. This run uses the exactory origin https://api.test."
+                                         f" Nothing was sent, and {_JOURNAL_PATH_TEXT} stays as it is. The store of this"
+                                         " workspace does not give the saved intent of this deposit, so a run that uses"
+                                         f" https://recorded.test stops at that intent too. {_REMOVAL_RULE_MSG} the"
+                                         f' deposition whose notes read "Exactory publication intent {missing_intent_id}"'
+                                         " is not published, or decide not to publish it. The command never removes"
+                                         " it.\n")
+                self.assertEqual((self.fake_api.requests, self.exactory.calls), ([], []))
+                self.assertEqual(_read_journal(self.workspace_dir), journal)
+
+    def test_a_managed_journal_whose_intent_describes_another_operation_is_refused_at_every_origin(self) -> None:
+        # A run that uses the recorded origin refuses such a journal as one that it cannot trust, so a run at another
+        # origin gives the same refusal and names no origin to switch to.
         store = Store(self.workspace_dir)
         another_operation_id = begin_intent(store, "deposit", _build_intent_binding(), expected_revision=store.revision,
                                             request_id="another-operation")["id"]
-        for label, operation_id in (("an intent that the store does not hold", "f" * 32),
-                                    ("an intent of another operation", another_operation_id)):
-            journal = _build_managed_journal(operation_id, math_problem={"problem_id": _OTHER_PROBLEM_ID,
-                                                                         "api_url": "https://recorded.test"})
-            for argv in (["attach-problem"], ["deposit", "--abstract-file", "draft/abstract.txt", *_PRODUCTION_PUBLISH]):
-                # The intent counts as claimed, so the release of an intent that never sent its publish request does
-                # not apply.
-                with self.subTest(intent=label, command=argv[0]), \
-                        unittest.mock.patch.object(_draft, "has_claimed_publish", return_value=True):
+        journal = _build_managed_journal(another_operation_id, math_problem={"problem_id": _OTHER_PROBLEM_ID,
+                                                                             "api_url": "https://recorded.test"})
+        for argv in (["attach-problem"], ["deposit", "--abstract-file", "draft/abstract.txt", *_PRODUCTION_PUBLISH]):
+            for is_claimed in (False, True):
+                with self.subTest(command=argv[0], is_claimed=is_claimed), \
+                        unittest.mock.patch.object(_draft, "has_claimed_publish", return_value=is_claimed):
                     self._record_journal(journal)
 
                     output = _run_draft_command(argv, 1, self)
 
-                    self._assert_stopped_before_sending_anything(output, journal, is_key_at_risk=False)
+                    self.assertIn(f"{_JOURNAL_PATH_TEXT} is not a journal this command can trust: the intent does not name"
+                                  f" the problem of the journal. {_REMOVAL_RULE_MSG} the deposition it names is not"
+                                  " published, or decide not to publish it. The command never removes it. Nothing was"
+                                  " sent.", output)
+                    self.assertNotIn("EXACTORY_API_URL set to", output)
+                    self.assertEqual((self.fake_api.requests, self.exactory.calls), ([], []))
+                    self.assertEqual(_read_journal(self.workspace_dir), journal)
 
     def test_the_attachment_itself_refuses_a_journal_at_another_origin_whatever_path_led_there(self) -> None:
         # Every attachment passes through this one function, so it checks the origin before the exactory request.
@@ -2347,10 +2377,17 @@ class TestExactoryRedirects(_PlainWorkspaceDepositTestCase):
         (self.workspace_dir / ".exactory" / "problem-deposit.json").write_text(json.dumps(journal), encoding="utf-8")
         return journal
 
-    def _build_refusal_msg(self, url: str) -> str:
-        return (f"The exactory server at {url} answered with a redirect to another origin, {self.other_url}. The"
-                " command refused the redirect and sent nothing there. Make sure that EXACTORY_API_URL is correct."
-                " Then run the command again.")
+    def _build_read_refusal_msg(self, url: str) -> str:
+        """The refusal of a redirect of the account check. A read changes nothing, so the advice is to run again."""
+        return (f"The exactory server at {url} answered the GET request with a redirect to another origin,"
+                f" {self.other_url}. The command refused the redirect and sent nothing there. Make sure that"
+                " EXACTORY_API_URL is correct. Then run the command again.")
+
+    def _build_write_refusal_msg(self, url: str) -> str:
+        """The refusal of a redirect of the attachment. The server may have applied it, so the user checks first."""
+        return (f"The exactory server at {url} answered the POST request with a redirect to another origin,"
+                f" {self.other_url}. The command refused the redirect and sent nothing there. Make sure that"
+                f" EXACTORY_API_URL is correct. {_build_unconfirmed_write_rule(url)}")
 
     def test_a_redirect_at_the_account_check_stops_attach_problem_and_the_record_stays_pending(self) -> None:
         url, received = self._serve_exactory(("GET", "/api/v1/me"))
@@ -2358,7 +2395,7 @@ class TestExactoryRedirects(_PlainWorkspaceDepositTestCase):
 
         output = _run_draft_command(["attach-problem"], 1, self)
 
-        self.assertIn(self._build_refusal_msg(url), output)
+        self.assertIn(self._build_read_refusal_msg(url), output)
         # With EXACTORY_API_URL set to the target of the redirect, the journal of this origin would stop the retry.
         self.assertNotIn(f"set EXACTORY_API_URL to {self.other_url}", output)
         self.assertNotIn("set EXACTORY_API_URL to it", output)
@@ -2379,8 +2416,7 @@ class TestExactoryRedirects(_PlainWorkspaceDepositTestCase):
                 output = _run_draft_command(["attach-problem"], 1, self)
 
                 self.assertIn(f"The exactory server at {url} answered the POST request with a redirect. The command"
-                              " does not follow a redirect of a POST request, so the result of the request is not"
-                              " confirmed. Make sure that EXACTORY_API_URL is correct. Then run the command again.",
+                              f" does not follow a redirect of a POST request. {_build_unconfirmed_write_rule(url)}",
                               output)
                 self.assertIn(f"Record {_EARLIER_DOI} is published. Attaching it to problem {_PROBLEM_ID} failed:", output)
                 self.assertEqual([(method, path) for method, path, _ in received],
@@ -2397,7 +2433,10 @@ class TestExactoryRedirects(_PlainWorkspaceDepositTestCase):
 
                 output = _run_draft_command(["attach-problem"], 1, self)
 
-                self.assertIn(self._build_refusal_msg(url), output)
+                self.assertIn(self._build_write_refusal_msg(url), output)
+                # Attaching again changes nothing, so the draft command keeps its own advice to retry the attachment.
+                self.assertIn("Resolve that cause. Then run exactory-draft attach-problem. It attaches the recorded record"
+                              " and publishes nothing.", output)
                 # The answer of the other origin would have looked like the answer to the write.
                 self.assertEqual([(method, path) for method, path, _ in received],
                                  [("GET", "/api/v1/me"), ("POST", papers_path)])
@@ -2411,7 +2450,7 @@ class TestExactoryRedirects(_PlainWorkspaceDepositTestCase):
 
         output = self._deposit(_PROBLEM_DEPOSIT, expected_exit_code=1)
 
-        self.assertIn(self._build_refusal_msg(url), output)
+        self.assertIn(self._build_write_refusal_msg(url), output)
         self.assertIn(f"Record {_EARLIER_DOI} belongs to the earlier deposit for this problem. This run published"
                       f" nothing. Attaching it to problem {_PROBLEM_ID} failed:", output)
         self.assertEqual(self.other_received, [])
@@ -2424,7 +2463,7 @@ class TestExactoryRedirects(_PlainWorkspaceDepositTestCase):
         output = self._deposit(_PROBLEM_DEPOSIT, expected_exit_code=1)
 
         self.assertIn("exactory me failed, so nothing was deposited:", output)
-        self.assertIn(self._build_refusal_msg(url), output)
+        self.assertIn(self._build_read_refusal_msg(url), output)
         self.assertEqual(self.other_received, [])
         self.assertEqual(self.fake_api.requests, [])
         self.assertFalse((self.workspace_dir / ".exactory" / "problem-deposit.json").exists())
@@ -2453,10 +2492,42 @@ class TestExactoryRequestRedirects(unittest.TestCase):
             self.exactory._send_request("POST", "/api/v1/reports", {"kind": "x"})
 
         self.assertEqual(stopped.exception.code, 1)
-        self.assertEqual(sink.getvalue(), f"The exactory server at {url} answered with a redirect to another origin,"
-                                          f" {self.other_url}. The command refused the redirect and sent nothing there."
-                                          " Make sure that EXACTORY_API_URL is correct. Then run the command again.\n")
+        self.assertEqual(sink.getvalue(), f"The exactory server at {url} answered the POST request with a redirect to"
+                                          f" another origin, {self.other_url}. The command refused the redirect and"
+                                          " sent nothing there. Make sure that EXACTORY_API_URL is correct."
+                                          f" {_build_unconfirmed_write_rule(url)}\n")
         self.assertEqual(received, [("POST", "/api/v1/reports", "Bearer test-key")])
+        self.assertEqual(self.other_received, [])
+
+    def test_a_post_that_the_server_stored_before_its_redirect_is_reported_as_possibly_applied(self) -> None:
+        posts_path = f"/api/v1/math-problems/{_PROBLEM_ID}/posts"
+        for label, location in (("within the origin", "/api/v1/math-posts/1"),
+                                ("to another origin", f"{self.other_url}/api/v1/math-posts/1")):
+            with self.subTest(redirect=label):
+                stored_posts = []
+
+                def respond(method: str, path: str, stored_posts=stored_posts, location=location) -> tuple[int, dict, bytes]:
+                    if method == "POST" and path == posts_path:
+                        # The server applies the write, and only then answers with the redirect.
+                        stored_posts.append(path)
+                        return 303, {"Location": location}, b""
+                    return _answer_like_exactory(method, path)
+                url, received = _serve_on_loopback(self, respond)
+                os.environ["EXACTORY_API_URL"] = url
+                args = self.exactory._build_parser().parse_args(["post-discussion", _PROBLEM_ID, "--body", "A post."])
+                sink = io.StringIO()
+
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(sink), \
+                        self.assertRaises(SystemExit) as stopped:
+                    args.handler(args)
+
+                self.assertEqual(stopped.exception.code, 1)
+                # A second run would post the same text again, so the message sends the user to check first.
+                self.assertIn(_build_unconfirmed_write_rule(url), sink.getvalue())
+                self.assertNotIn("Then run the command again.", sink.getvalue())
+                self.assertEqual([(method, path) for method, path, _ in received],
+                                 [("GET", "/api/v1/me"), ("POST", posts_path)])
+                self.assertEqual(stored_posts, [posts_path])
         self.assertEqual(self.other_received, [])
 
     def test_a_redirect_of_a_write_within_the_origin_fails_the_request_and_is_not_followed(self) -> None:
@@ -2476,9 +2547,7 @@ class TestExactoryRequestRedirects(unittest.TestCase):
                     self.assertEqual(stopped.exception.code, 1)
                     self.assertEqual(sink.getvalue(), f"The exactory server at {url} answered the {method} request with"
                                                       f" a redirect. The command does not follow a redirect of a {method}"
-                                                      " request, so the result of the request is not confirmed. Make"
-                                                      " sure that EXACTORY_API_URL is correct. Then run the command"
-                                                      " again.\n")
+                                                      f" request. {_build_unconfirmed_write_rule(url)}\n")
                     self.assertEqual(received, [(method, "/api/v1/target", "Bearer test-key")])
 
     def test_a_redirect_that_needs_no_key_is_refused_the_same_way(self) -> None:
@@ -2510,10 +2579,11 @@ class TestExactoryRequestRedirects(unittest.TestCase):
         error = RefusedRedirectError("https://api.test/api/v1/me", "https://user:secret@elsewhere.test:8443/x?token=1",
                                      "GET", is_cross_origin=True)
 
+        # A read changes nothing on the server, so its refusal keeps the advice to run the command again.
         self.assertEqual(self.exactory._build_redirect_refusal_msg(error),
-                         "The exactory server at https://api.test answered with a redirect to another origin,"
-                         " https://elsewhere.test:8443. The command refused the redirect and sent nothing there. Make"
-                         " sure that EXACTORY_API_URL is correct. Then run the command again.")
+                         "The exactory server at https://api.test answered the GET request with a redirect to another"
+                         " origin, https://elsewhere.test:8443. The command refused the redirect and sent nothing there."
+                         " Make sure that EXACTORY_API_URL is correct. Then run the command again.")
 
 
 class TestPlantedSettledJournal(_PlainWorkspaceDepositTestCase):

@@ -958,38 +958,47 @@ def _require_current_origin(journal: dict) -> None:
     a sandbox journal, which is never attached, and a managed journal whose intent never sent its
     publish request, which deposit releases and attach-problem leaves with nothing to attach. A
     settled journal has no such exception, and its attachment checks the origin itself
-    (_attach_recorded_record)."""
+    (_attach_recorded_record). A settle at the recorded origin stops at an intent that the store
+    does not give, and it refuses an intent that describes another operation, so neither stop names
+    that origin as a way on: the first one names only the removal rule, and the second one is the
+    refusal that every origin gives."""
     if journal["math_problem"]["api_url"] == read_api_base_url() or not _is_attachment_outstanding(journal):
         return
-    is_key_at_risk = True
+    is_intent_unreadable = False
     if not journal["settled"] and journal["path"] == "managed":
         intent = _read_journal_intent(journal, Path.cwd())
-        if intent is not None and not has_claimed_publish(intent):
-            return
-        # The settle reads the intent and checks it against the journal before any exactory request,
-        # so an intent that cannot be read, or that describes another operation, stops it there.
-        is_key_at_risk = intent is not None and _find_intent_flaw(intent, journal) is None
-    _exit_with_error(_build_other_origin_msg(journal, is_key_at_risk=is_key_at_risk))
+        if intent is not None:
+            _require_intent_of_journal(intent, journal)
+            if not has_claimed_publish(intent):
+                return
+        is_intent_unreadable = intent is None
+    _exit_with_error(_build_other_origin_msg(journal, is_intent_unreadable=is_intent_unreadable))
 
 
-def _build_other_origin_msg(journal: dict, *, is_key_at_risk: bool) -> str:
+def _build_other_origin_msg(journal: dict, *, is_intent_unreadable: bool = False) -> str:
     """The stop of a command whose journal records another exactory origin than this run uses. It
-    names both origins and says that the journal stays. It says that the recorded origin would
-    receive the API key only when `is_key_at_risk` holds, because the run would go on to an exactory
-    request there. A published record is attached from its own origin or given up, and an unsettled
-    deposit is settled from its own origin or removed by the rule for an unpublished deposition."""
+    names both origins and says that the journal stays. A published record is attached from its own
+    origin or given up, an unsettled deposit is settled from its own origin or removed by the rule
+    for an unpublished deposition, and both stops say that the recorded origin would receive the API
+    key. A managed journal whose intent the store does not give (`is_intent_unreadable`) is settled
+    from no origin, because every run stops at that intent before any exactory request: its stop
+    names the removal rule alone, and no API key."""
     problem_target = journal["math_problem"]
     recorded_origin = problem_target["api_url"]
+    lead_msg = (f"The recorded deposit for problem {problem_target['problem_id']} names the exactory origin"
+                f" {recorded_origin}. This run uses the exactory origin {read_api_base_url()}.")
+    stays_msg = f"Nothing was sent, and {_PROBLEM_DEPOSIT_JOURNAL_PATH} stays as it is."
+    if is_intent_unreadable:
+        return (f"{lead_msg} {stays_msg} The store of this workspace does not give the saved intent of this deposit,"
+                f" so a run that uses {recorded_origin} stops at that intent too."
+                f" {_build_journal_removal_advice(_name_journal_deposition(journal))}")
     if journal["settled"]:
         next_step_msg = (f"run exactory-draft attach-problem with EXACTORY_API_URL set to {recorded_origin}."
                          f" {_build_settled_removal_advice(journal['doi'])}")
     else:
         next_step_msg = (f"run the command again with EXACTORY_API_URL set to {recorded_origin}."
                          f" {_build_journal_removal_advice(_name_journal_deposition(journal))}")
-    key_msg = " The recorded origin would receive your API key." if is_key_at_risk else ""
-    return (f"The recorded deposit for problem {problem_target['problem_id']} names the exactory origin"
-            f" {recorded_origin}. This run uses the exactory origin {read_api_base_url()}.{key_msg}"
-            f" Nothing was sent, and {_PROBLEM_DEPOSIT_JOURNAL_PATH} stays as it is."
+    return (f"{lead_msg} The recorded origin would receive your API key. {stays_msg}"
             f" If {recorded_origin} is your own exactory origin, {next_step_msg}")
 
 
@@ -1170,7 +1179,7 @@ def _attach_recorded_record(journal: dict, *, is_retry: bool = False) -> None:
               file=sys.stderr)
         return
     if problem_target["api_url"] != read_api_base_url():
-        _exit_with_error(_build_other_origin_msg(journal, is_key_at_risk=True))
+        _exit_with_error(_build_other_origin_msg(journal))
     completed = _call_exactory(["link-problem-paper", problem_target["problem_id"], "--identifier", journal["doi"]],
                                problem_target["api_url"])
     if completed.returncode != 0:

@@ -200,18 +200,29 @@ def _send_request(method: str, path: str, body: dict | None = None, *,
 def _build_redirect_refusal_msg(error: RefusedRedirectError) -> str:
     """The message for a redirect that the command did not follow. A redirect to another origin is
     refused before anything is sent there, so the API key and the body stay with the configured
-    origin. A redirect of a request that is not a read is refused within the origin too, so the
-    result of that request is not confirmed. Neither redirect makes its target the origin to use,
-    so both messages send the user back to the configured origin."""
+    origin, and the user checks EXACTORY_API_URL. A redirect of a request that is not a read is
+    refused within the origin too. The configured origin received the request and may have applied
+    it before it answered, so the message of every refused write sends the user to check before
+    running the command again. A refused read changed nothing, and its message keeps the advice to
+    run the command again."""
     request_origin = get_origin(error.request_url)
     if error.is_cross_origin:
-        refusal_msg = (f"The exactory server at {request_origin} answered with a redirect to another origin,"
-                       f" {get_origin(error.target_url)}. The command refused the redirect and sent nothing there.")
+        refusal_msg = (f"The exactory server at {request_origin} answered the {error.method} request with a redirect to"
+                       f" another origin, {get_origin(error.target_url)}. The command refused the redirect and sent"
+                       " nothing there. Make sure that EXACTORY_API_URL is correct.")
     else:
         refusal_msg = (f"The exactory server at {request_origin} answered the {error.method} request with a redirect."
-                       f" The command does not follow a redirect of a {error.method} request, so the result of the"
-                       " request is not confirmed.")
-    return f"{refusal_msg} Make sure that EXACTORY_API_URL is correct. Then run the command again."
+                       f" The command does not follow a redirect of a {error.method} request.")
+    next_step_msg = "Then run the command again." if error.is_read else _build_unconfirmed_write_msg(request_origin)
+    return f"{refusal_msg} {next_step_msg}"
+
+
+def _build_unconfirmed_write_msg(origin: str) -> str:
+    """The advice after a write whose result the command cannot confirm. The server at `origin` may
+    have applied it, and a second run would apply it again, so the user checks first. Every outcome
+    in which a write may have taken effect ends with this advice."""
+    return (f"The server at {origin} may have applied the request. Before you run the command again, check on"
+            f" {origin} whether the change is there.")
 
 
 def _describe_http_error(status: int, detail: str, error_messages: dict[int, str]) -> str:

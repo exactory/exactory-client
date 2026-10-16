@@ -28,6 +28,12 @@ class RefusedRedirectError(Exception):
         self.method = method
         self.is_cross_origin = is_cross_origin
 
+    @property
+    def is_read(self) -> bool:
+        """Whether the refused request was a GET or HEAD. A read changes nothing on the server, so
+        it can be sent again. Any other request may have changed something before the redirect."""
+        return self.method in _READ_METHODS
+
 
 def get_origin(url: str) -> str:
     """The scheme, host, and port of a URL, which is what a message names. The user name of the
