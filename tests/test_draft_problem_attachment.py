@@ -124,6 +124,7 @@ class _ExactoryRecorder:
         self.calls: list[tuple[list[str], str]] = []
         self.orcid_id: str | None = "0000-0002-1825-0097"
         self.failing_links = 0
+        self.has_removed_links = False
 
     def __call__(self, argv: list[str], api_url: str) -> subprocess.CompletedProcess:
         self.calls.append((list(argv), api_url))
@@ -132,6 +133,8 @@ class _ExactoryRecorder:
         if argv[0] == "problem":
             return subprocess.CompletedProcess(argv, 0, json.dumps({"id": argv[1], "removed": False}), "")
         if argv[0] == "link-problem-paper":
+            if self.has_removed_links:
+                return subprocess.CompletedProcess(argv, 3, "", "A moderator removed this link. Nothing changed.")
             if self.failing_links > 0:
                 self.failing_links -= 1
                 return subprocess.CompletedProcess(argv, 1, "", "The server rejected the API key.")
@@ -496,6 +499,27 @@ class TestManagedDepositForAProblem(_PendingAttachmentTests, _DepositTestCase):
         self.assertEqual(len(self.fake_api.requests), requests_before_the_next_run)
         self.assertEqual(_count_publishes(self.fake_api), 0)
 
+    def test_a_removed_link_after_managed_read_back_names_the_earlier_deposit(self) -> None:
+        self._answer_with_the_published_record(self._lose_the_publish_response())
+        self.exactory.has_removed_links = True
+        output = self._deposit(_PROBLEM_DEPOSIT, expected_exit_code=3)
+        self.assertIn("belongs to the earlier deposit for this problem. This run published nothing.", output)
+        self.assertIn(f"A moderator removed the link of record 10.5281/zenodo.4242 from problem {_PROBLEM_ID}.", output)
+        self.assertIn(_build_settled_removal_rule("10.5281/zenodo.4242"), output)
+        self.assertEqual(self._requested(), [("GET", "https://zenodo.org/api/deposit/depositions/4242")])
+        journal = _read_journal(self.workspace_dir)
+        self.assertEqual((journal["settled"], journal["attached"]), (True, False))
+
+    def test_a_removed_link_after_managed_publication_does_not_claim_nothing_was_published(self) -> None:
+        self._find_the_deposition_unpublished_with_attach_problem(self._lose_the_publish_response())
+        self.exactory.has_removed_links = True
+        output = self._deposit(_PROBLEM_DEPOSIT, expected_exit_code=3)
+        self.assertNotIn("This run published nothing", output)
+        self.assertIn("The record stays published as 10.5281/zenodo.4242.", output)
+        self.assertEqual(self._requested(), [("POST", "https://zenodo.org/api/deposit/depositions/4242/actions/publish")])
+        journal = _read_journal(self.workspace_dir)
+        self.assertEqual((journal["settled"], journal["attached"]), (True, False))
+
     def test_a_rerun_settles_the_recorded_intent_whatever_the_draft_says(self) -> None:
         uploaded = self._lose_the_publish_response()
         # The draft changes. Without the journal, the changed draft sends the rerun down the direct
@@ -714,6 +738,21 @@ class TestManagedDepositForAProblem(_PendingAttachmentTests, _DepositTestCase):
         self.assertEqual(_count_publishes(self.fake_api), 1)
         journal = _read_journal(self.workspace_dir)
         self.assertEqual((journal["settled"], journal["attached"], journal["doi"]), (True, True, "10.5281/zenodo.4242"))
+
+    def test_a_removed_link_on_a_completed_managed_deposit_names_the_earlier_publication(self) -> None:
+        self._deposit(_PROBLEM_DEPOSIT)
+        requests_before = len(self.fake_api.requests)
+        self.exactory.has_removed_links = True
+
+        output = self._deposit(_PROBLEM_DEPOSIT, expected_exit_code=3)
+
+        self.assertIn("belongs to the earlier deposit for this problem. This run published nothing.", output)
+        self.assertIn(f"A moderator removed the link of record 10.5281/zenodo.4242 from problem {_PROBLEM_ID}.", output)
+        self.assertIn(_build_settled_removal_rule("10.5281/zenodo.4242"), output)
+        self.assertEqual(len(self.fake_api.requests), requests_before)
+        self.assertEqual(_count_publishes(self.fake_api), 1)
+        journal = _read_journal(self.workspace_dir)
+        self.assertEqual((journal["settled"], journal["attached"]), (True, False))
 
     def test_after_the_retry_a_new_version_publishes_another_record(self) -> None:
         self.exactory.failing_links = 1
@@ -1059,6 +1098,112 @@ class TestDirectDepositForAProblem(_PendingAttachmentTests, _PlainWorkspaceDepos
 
 # The cases below are the paths the deposit tests above do not reach: the real body of
 # _call_exactory, which they replace, and the refusals that stop a deposit for a problem.
+
+
+class TestRemovedProblemLinks(_PlainWorkspaceDepositTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.exactory = _install_exactory(self)
+        attach = _draft._attach_recorded_record
+
+        def attach_without_zenodo(journal, **kwargs):
+            with unittest.mock.patch.object(_draft, "_open_url", side_effect=AssertionError("unexpected Zenodo request")), \
+                    unittest.mock.patch.object(_draft, "_read_zenodo_token", side_effect=AssertionError("unexpected token read")):
+                return attach(journal, **kwargs)
+
+        patcher = unittest.mock.patch.object(_draft, "_attach_recorded_record", side_effect=attach_without_zenodo)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _record_journal(self, journal: dict) -> None:
+        (self.workspace_dir / _JOURNAL_PATH_TEXT).write_text(json.dumps(journal), encoding="utf-8")
+
+    def _assert_removed(self, output: str, doi: str, *, is_retry: bool) -> None:
+        self.assertIn(f"A moderator removed the link of record {doi} from problem {_PROBLEM_ID}.", output)
+        self.assertIn(f"The record stays published as {doi}.", output)
+        self.assertIn(_build_settled_removal_rule(doi), output)
+        self.assertNotIn("Resolve that cause", output)
+        self.assertNotIn("It attaches the recorded record", output)
+        if is_retry:
+            self.assertIn("belongs to the earlier deposit for this problem. This run published nothing.", output)
+        journal = _read_journal(self.workspace_dir)
+        self.assertEqual((journal["settled"], journal["attached"], journal["doi"]), (True, False, doi))
+
+    def test_a_standing_link_marks_the_journal_attached_without_a_zenodo_request(self) -> None:
+        self._record_journal(_UNATTACHED_JOURNAL)
+        with unittest.mock.patch.object(_draft, "_open_url", side_effect=AssertionError("unexpected Zenodo request")):
+            _run_draft_command(["attach-problem"], None, self)
+        self.assertTrue(_read_journal(self.workspace_dir)["attached"])
+        self.assertEqual(len(self.exactory.links()), 1)
+
+    def test_a_link_removed_before_the_first_attachment_keeps_the_published_record_unattached(self) -> None:
+        self.exactory.has_removed_links = True
+        output = self._deposit(_PROBLEM_DEPOSIT, expected_exit_code=3)
+        self._assert_removed(output, "10.5281/zenodo.4242", is_retry=False)
+        self.assertEqual(_count_publishes(self.fake_api), 1)
+        self.assertEqual(len(self.exactory.links()), 1)
+
+    def test_a_lost_attachment_mark_then_removal_is_reported_by_attach_problem(self) -> None:
+        refuse = _refuse_the_journal_write_when(_draft.json_projection, lambda value: value["attached"])
+        with unittest.mock.patch.object(_draft, "json_projection", refuse):
+            self._deposit(_PROBLEM_DEPOSIT, expected_exit_code=1)
+        self.exactory.has_removed_links = True
+        with unittest.mock.patch.object(_draft, "_open_url", side_effect=AssertionError("unexpected Zenodo request")):
+            output = _run_draft_command(["attach-problem"], 3, self)
+        self._assert_removed(output, "10.5281/zenodo.4242", is_retry=True)
+        self.assertEqual(_count_publishes(self.fake_api), 1)
+        self.assertEqual(len(self.exactory.links()), 2)
+
+    def test_a_deposit_retry_preserves_the_removal_exit_without_publishing(self) -> None:
+        self._record_journal(_UNATTACHED_JOURNAL)
+        self.exactory.has_removed_links = True
+        with unittest.mock.patch.object(_draft, "_open_url", side_effect=AssertionError("unexpected Zenodo request")):
+            output = self._deposit(_PROBLEM_DEPOSIT, expected_exit_code=3)
+        self._assert_removed(output, _EARLIER_DOI, is_retry=True)
+
+    def test_settling_a_prior_publish_reports_removal_without_another_publish(self) -> None:
+        fake = _LostResponseZenodoApi("/actions/publish")
+        self.fake_api = fake
+        _draft._open_url = fake
+        self._deposit(_PROBLEM_DEPOSIT, expected_exit_code=1)
+        self.exactory.has_removed_links = True
+        uploaded = _read_request(fake.requests, "PUT", "/files/bucket-1/paper.pdf").data
+        published = _PublishedRecordZenodoApi(uploaded)
+        _draft._open_url = published
+        output = _run_draft_command(["attach-problem"], 3, self)
+        self._assert_removed(output, "10.5281/zenodo.4242", is_retry=True)
+        self.assertEqual(_count_publishes(fake), 1)
+        self.assertEqual([(request.get_method(), request.full_url) for request in published.requests],
+                         [("GET", "https://zenodo.org/api/deposit/depositions/4242")])
+        self.assertEqual(len(self.exactory.links()), 1)
+
+    def test_a_deposit_that_reads_back_a_published_record_names_the_earlier_deposit_on_removal(self) -> None:
+        fake = _LostResponseZenodoApi("/actions/publish")
+        _draft._open_url = fake
+        self._deposit(_PROBLEM_DEPOSIT, expected_exit_code=1)
+        uploaded = _read_request(fake.requests, "PUT", "/files/bucket-1/paper.pdf").data
+        published = _PublishedRecordZenodoApi(uploaded)
+        _draft._open_url = published
+        self.exactory.has_removed_links = True
+        output = self._deposit(_PROBLEM_DEPOSIT, expected_exit_code=3)
+        self._assert_removed(output, "10.5281/zenodo.4242", is_retry=True)
+        self.assertEqual([(request.get_method(), request.full_url) for request in published.requests],
+                         [("GET", "https://zenodo.org/api/deposit/depositions/4242")])
+
+    def test_a_settlement_that_publishes_does_not_claim_this_run_published_nothing(self) -> None:
+        fake = _LostResponseZenodoApi("/actions/publish")
+        _draft._open_url = fake
+        self._deposit(_PROBLEM_DEPOSIT, expected_exit_code=1)
+        uploaded = _read_request(fake.requests, "PUT", "/files/bucket-1/paper.pdf").data
+        unpublished = _UnpublishedRecordZenodoApi(uploaded)
+        _draft._open_url = unpublished
+        self.exactory.has_removed_links = True
+        output = self._deposit(_PROBLEM_DEPOSIT, expected_exit_code=3)
+        self._assert_removed(output, "10.5281/zenodo.4242", is_retry=False)
+        self.assertNotIn("This run published nothing", output)
+        self.assertEqual([(request.get_method(), request.full_url) for request in unpublished.requests],
+                         [("GET", "https://zenodo.org/api/deposit/depositions/4242"),
+                          ("POST", "https://zenodo.org/api/deposit/depositions/4242/actions/publish")])
 
 
 class TestCallExactory(unittest.TestCase):
@@ -1721,7 +1866,7 @@ class TestProblemDepositJournalStates(_PlainWorkspaceDepositTestCase):
             output = self._deposit(_PROBLEM_DEPOSIT, expected_exit_code=1)
 
         self.assertIn(f"Record 10.5281/zenodo.4242 is attached, and the command cannot mark its recovery record"
-                      " attached. Run exactory-draft attach-problem. It attaches the record again, which changes"
+                      " attached. Run exactory-draft attach-problem. It retries only the attachment and publishes"
                       " nothing.", output)
         journal = _read_journal(self.workspace_dir)
         self.assertEqual((journal["settled"], journal["attached"]), (True, False))
@@ -2513,7 +2658,8 @@ class TestExactoryRedirects(_PlainWorkspaceDepositTestCase):
         # With EXACTORY_API_URL set to the target of the redirect, the journal of this origin would stop the retry.
         self.assertNotIn(f"set EXACTORY_API_URL to {self.other_url}", output)
         self.assertNotIn("set EXACTORY_API_URL to it", output)
-        self.assertIn(f"Record {_EARLIER_DOI} is published. Attaching it to problem {_PROBLEM_ID} failed:", output)
+        self.assertIn(f"Record {_EARLIER_DOI} belongs to the earlier deposit for this problem. This run published nothing."
+                      f" Attaching it to problem {_PROBLEM_ID} failed:", output)
         self.assertEqual([(method, path) for method, path, _ in received], [("GET", "/api/v1/me")])
         self.assertEqual(received[0][2], "Bearer test-key")
         self.assertEqual(self.other_received, [])
@@ -2532,7 +2678,8 @@ class TestExactoryRedirects(_PlainWorkspaceDepositTestCase):
                 self.assertIn(f"The exactory server at {url} answered the POST request with a redirect. The command"
                               f" does not follow a redirect of a POST request. {build_unconfirmed_write_msg(url)}",
                               output)
-                self.assertIn(f"Record {_EARLIER_DOI} is published. Attaching it to problem {_PROBLEM_ID} failed:", output)
+                self.assertIn(f"Record {_EARLIER_DOI} belongs to the earlier deposit for this problem. This run published nothing."
+                              f" Attaching it to problem {_PROBLEM_ID} failed:", output)
                 self.assertEqual([(method, path) for method, path, _ in received],
                                  [("GET", "/api/v1/me"), ("POST", papers_path)])
                 self.assertEqual(_read_journal(self.workspace_dir), journal)
@@ -2822,7 +2969,8 @@ class TestAttachmentWhoseAnswerDidNotArriveInFull(_PlainWorkspaceDepositTestCase
 
                 output = _run_draft_command(["attach-problem"], 1, self)
 
-                self.assertIn(f"Record {_EARLIER_DOI} is published. Attaching it to problem {_PROBLEM_ID} failed:\n"
+                self.assertIn(f"Record {_EARLIER_DOI} belongs to the earlier deposit for this problem. This run published nothing."
+                              f" Attaching it to problem {_PROBLEM_ID} failed:\n"
                               f"The client cannot read the answer of the exactory server at {url} to the POST request."
                               f" Cause: {cause}. {build_unconfirmed_write_msg(url)}\nResolve that cause. Then run"
                               " exactory-draft attach-problem. It attaches the recorded record and publishes nothing.",

@@ -141,6 +141,74 @@ class _MathCliTestCase(unittest.TestCase):
         ]
 
 
+class TestRemovedProblemLinks(_MathCliTestCase):
+    def test_a_removed_paper_or_context_link_has_its_own_exit_code_and_names_the_link(self) -> None:
+        for command, option, identifier, resource, extra in (
+                ("link-problem-paper", "--identifier", "2609.97001v3", "papers", []),
+                ("link-problem-github", "--url", "https://github.com/o/r/issues/1", "github-links",
+                 ["--label", "Context"])):
+            with self.subTest(command=command):
+                self.sent.clear()
+                path = f"/api/v1/math-problems/{_PROBLEM_ID}/{resource}"
+                self.answers[("POST", path)] = (409, {"error": "conflict"})
+                out, err = self.run_cli([command, _PROBLEM_ID, option, identifier, *extra], expected_exit_code=3)
+                self.assertEqual(out, "")
+                self.assertIn(_PROBLEM_ID, err)
+                self.assertIn(identifier, err)
+                self.assertIn("A moderator removed", err)
+                self.assertIn("cannot be attached again", err)
+                self.assertIn("Nothing changed.", err)
+                self.assertNotIn("run the command again", err)
+                self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me"), ("POST", path)])
+
+    def test_a_conflict_on_another_math_write_keeps_the_general_failure_code(self) -> None:
+        self.answers[("POST", "/api/v1/math-problems")] = (409, {"error": "conflict"})
+        _, err = self.run_cli(self.build_post_problem_argv(), expected_exit_code=1)
+        self.assertNotIn("moderator removed", err)
+
+
+class TestPlainTextLineBreaks(_MathCliTestCase):
+    def test_a_discussion_at_the_normalized_limit_is_sent_with_lf(self) -> None:
+        body = "xx\r\n" * 3333 + "x"
+        self.run_cli(["post-discussion", _PROBLEM_ID, "--body", body])
+        self.assertEqual(self.read_sent_body("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/posts")["body"],
+                         "xx\n" * 3333 + "x")
+
+    def test_a_lone_carriage_return_is_sent_as_lf(self) -> None:
+        self.run_cli(["post-discussion", _PROBLEM_ID, "--body", "first\rsecond"])
+        self.assertEqual(self.read_sent_body("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/posts")["body"],
+                         "first\nsecond")
+
+    def test_line_breaks_alone_are_empty_after_trimming_and_send_nothing(self) -> None:
+        _, err = self.run_cli(["post-discussion", _PROBLEM_ID, "--body", "\r\n"], expected_exit_code=1)
+        self.assertIn("0 characters long", err)
+        self.assertEqual(self.sent, [])
+
+    def test_citations_and_search_also_normalize_line_breaks(self) -> None:
+        argv = self.build_post_problem_argv()
+        citations = self.write_citations()
+        Path(citations).write_text(json.dumps([{"citation": "A citation\r\nwith\rlines", "locator": "https://example.org/a\rb"}]))
+        self.run_cli(argv)
+        self.assertEqual(self.read_sent_body("POST", "/api/v1/math-problems")["citations"],
+                         [{"citation": "A citation\nwith\nlines", "locator": "https://example.org/a\nb"}])
+        self.run_cli(["problems", "--query", "first\r\nsecond"])
+        self.assertEqual(urllib.parse.parse_qs(urllib.parse.urlparse(self.sent[-1].full_url).query)["q"], ["first\nsecond"])
+
+    def test_challenge_text_keeps_inline_and_file_line_breaks(self) -> None:
+        statement = "p" * 200 + "\r\ninside\rend"
+        path = self.scratch_dir / "statement.txt"
+        path.write_bytes(statement.encode())
+        for flag, value in (("--problem-statement", statement), ("--problem-statement-file", str(path))):
+            with self.subTest(flag=flag):
+                self.sent.clear()
+                self.run_cli(["post-challenge", "--title", "A title\r\ninside\rend", "--field", "math",
+                              flag, value, "--current-state", "c" * 100, "--resolution-criteria", "r" * 50,
+                              "--citations-file", self.write_citations()])
+                body = self.read_sent_body("POST", "/api/v1/grand-challenges")
+                self.assertEqual(body["title"], "A title\r\ninside\rend")
+                self.assertEqual(body["problemStatement"], statement)
+
+
 class TestCallerState(_MathCliTestCase):
     def test_me_prints_the_caller_state(self) -> None:
         stdout_text, _ = self.run_cli(["me"])
@@ -296,7 +364,9 @@ class TestIdsStayInTheirRoute(_MathCliTestCase):
         for unroutable_id in ("", ".", ".."):
             for argv in (["problem", unroutable_id], ["problem-history", unroutable_id],
                          ["vote-problem", unroutable_id, "--value", "1"],
-                         ["vote-problem", unroutable_id, "--value", "0"]):
+                         ["vote-problem", unroutable_id, "--value", "0"],
+                         ["link-problem-paper", unroutable_id, "--identifier", "10.5281/zenodo.4242"],
+                         ["link-problem-github", unroutable_id, "--url", "https://github.com/o/r", "--label", "Context"]):
                 with self.subTest(argv=argv):
                     _, stderr_text = self.run_cli(argv, expected_exit_code=1)
                     self.assertIn("is not an identifier exactory can read", stderr_text)
@@ -318,6 +388,28 @@ class TestIdsStayInTheirRoute(_MathCliTestCase):
 
 
 class TestPostProblemInputs(_MathCliTestCase):
+    def test_each_problem_text_field_counts_and_sends_trimmed_text(self) -> None:
+        for flag, field, minimum, maximum in (("--title", "title", 8, 200), ("--statement", "statement", 50, 20000),
+                ("--motivation", "motivation", 100, 10000), ("--current-state", "currentState", 100, 10000),
+                ("--resolution-criteria", "resolutionCriteria", 50, 5000)):
+            for length in (minimum - 1, minimum, maximum):
+                with self.subTest(flag=flag, length=length):
+                    self.sent.clear()
+                    argv = self.build_post_problem_argv()
+                    argv[argv.index(flag) + 1] = " \ufeff\r\n" + "x" * length + "\r\ufeff "
+                    if length < minimum:
+                        self.run_cli(argv, expected_exit_code=1)
+                        self.assertEqual(self.sent, [])
+                    else:
+                        self.run_cli(argv)
+                        self.assertEqual(self.read_sent_body("POST", "/api/v1/math-problems")[field], "x" * length)
+
+    def test_a_title_of_spaces_is_refused_before_any_request(self) -> None:
+        argv = self.build_post_problem_argv()
+        argv[argv.index("--title") + 1] = " " * 20
+        self.run_cli(argv, expected_exit_code=1)
+        self.assertEqual(self.sent, [])
+
     def test_the_text_fields_can_come_from_files_and_the_optional_lists_are_left_out(self) -> None:
         argv = ["post-problem", "--title", "Dittert conjecture for n = 7", "--area", "math.CO",
                 "--citations-file", self.write_citations()]
@@ -330,8 +422,8 @@ class TestPostProblemInputs(_MathCliTestCase):
         body = self.read_sent_body("POST", "/api/v1/math-problems")
         self.assertEqual(
             {key: body[key] for key in ("statement", "motivation", "currentState", "resolutionCriteria")},
-            {"statement": "s" * 60 + "\n", "motivation": "m" * 120 + "\n",
-             "currentState": "c" * 120 + "\n", "resolutionCriteria": "r" * 60 + "\n"})
+            {"statement": "s" * 60, "motivation": "m" * 120,
+             "currentState": "c" * 120, "resolutionCriteria": "r" * 60})
         self.assertNotIn("paperIdentifiers", body)
         self.assertNotIn("githubLinks", body)
 
@@ -1132,14 +1224,15 @@ class TestPostProofInputs(_MathCliTestCase):
                 self.assertEqual(self.read_proof_body()["writeup"], writeup)
 
     def test_the_summary_has_the_bounds_of_the_server_schema(self) -> None:
-        for summary, is_accepted in (("s" * 99, False), ("s" * 100, True), ("s" * 20000, True), ("s" * 20001, False),
-                                     ("  " + "s" * 100 + "  ", True), (" " * 120, True)):
+        for summary, expected in (("s" * 99, None), ("s" * 100, "s" * 100), ("s" * 20000, "s" * 20000),
+                                   ("s" * 20001, None), (" \ufeff" + "s" * 100 + "\ufeff ", "s" * 100),
+                                   (" \ufeff" + "s" * 20000 + "\ufeff ", "s" * 20000), (" " * 120, None)):
             with self.subTest(summary_length=len(summary)):
                 self.sent.clear()
                 argv = ["post-proof", _PROBLEM_ID, "--claim", "proves", "--summary", summary, "--writeup", "2601.12345v2"]
-                if is_accepted:
+                if expected is not None:
                     self.run_cli(argv)
-                    self.assertEqual(self.read_proof_body()["summary"], summary)
+                    self.assertEqual(self.read_proof_body()["summary"], expected)
                 else:
                     self.run_cli(argv, expected_exit_code=1)
                     self.assertEqual(self.sent, [])
@@ -1149,7 +1242,7 @@ class TestPostProofInputs(_MathCliTestCase):
         summary_path.write_text("s" * 100 + "\n", encoding="utf-8")
         self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "disproves", "--summary-file", str(summary_path),
                       "--writeup", "2601.12345v2"])
-        self.assertEqual(self.read_proof_body()["summary"], "s" * 100 + "\n")
+        self.assertEqual(self.read_proof_body()["summary"], "s" * 100)
 
     def test_a_missing_summary_file_is_refused_before_any_request(self) -> None:
         _, stderr_text = self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "proves",
@@ -1228,6 +1321,12 @@ class TestLeanCheckInputs(_MathCliTestCase):
                 else:
                     self.run_cli(argv, expected_exit_code=1)
                     self.assertEqual(self.sent, [])
+
+    def test_an_excerpt_normalizes_line_breaks_and_keeps_its_leading_spaces(self) -> None:
+        path = self.scratch_dir / "excerpt.txt"
+        path.write_bytes(b"  first\r\n  second\r")
+        self.run_cli(self.build_post_lean_check_argv("--output-excerpt-file", str(path)))
+        self.assertEqual(self.read_report_body()["outputExcerpt"], "  first\n  second\n")
 
     def test_a_missing_excerpt_file_is_refused_before_any_request(self) -> None:
         _, stderr_text = self.run_cli(
@@ -2041,29 +2140,31 @@ class TestPlainTextOfFreeTextFields(_MathCliTestCase):
         self.assertEqual(stderr_text, _build_color_code_refusal("post", "line 2, column 3") + "\n")
         self.assertEqual(self.sent, [])
 
-    def test_the_characters_that_the_server_keeps_are_sent_unchanged(self) -> None:
+    def test_the_characters_that_the_server_keeps_are_sent_with_lf_line_breaks(self) -> None:
         # Tab, line feed, carriage return, the C1 controls, an invisible format character, the line separator, and a
         # character beyond the basic plane, each between two letters.
         kept = ("a\tb\nc\rd" + chr(0x80) + "e" + chr(0x85) + "f" + chr(0x9F) + "g" + chr(0x200B) + "h" + chr(0x2028)
                 + "i" + chr(0x1F600) + "j")
+        normalized = ("a\tb\nc\nd" + chr(0x80) + "e" + chr(0x85) + "f" + chr(0x9F) + "g" + chr(0x200B) + "h"
+                      + chr(0x2028) + "i" + chr(0x1F600) + "j")
         posts_path = f"/api/v1/math-problems/{_PROBLEM_ID}/posts"
         self.run_cli(self.build_inline_post_argv(kept))
-        self.assertEqual(self.read_sent_body("POST", posts_path)["body"], kept)
-        # A text file is read with universal newlines, so a carriage return in it arrives as a line feed.
+        self.assertEqual(self.read_sent_body("POST", posts_path)["body"], normalized)
+        # The plain-text boundary normalizes file input by the same rule as inline text.
         self.sent.clear()
-        self.run_cli(self.build_file_post_argv(kept.replace("\r", "")))
-        self.assertEqual(self.read_sent_body("POST", posts_path)["body"], kept.replace("\r", ""))
+        self.run_cli(self.build_file_post_argv(kept))
+        self.assertEqual(self.read_sent_body("POST", posts_path)["body"], normalized)
         self.run_cli(self.build_challenge_citation_argv("H. Minc " + kept))
         self.assertEqual(self.read_sent_body("POST", "/api/v1/grand-challenges")["citations"],
-                         [{"citation": "H. Minc " + kept, "locator": "10.1017/cbo9781107340688"}])
+                         [{"citation": "H. Minc " + normalized, "locator": "10.1017/cbo9781107340688"}])
         self.run_cli(["problems", "--query", kept])
-        self.assertEqual(urllib.parse.parse_qs(urllib.parse.urlparse(self.sent[-1].full_url).query)["q"], [kept])
+        self.assertEqual(urllib.parse.parse_qs(urllib.parse.urlparse(self.sent[-1].full_url).query)["q"], [normalized])
 
-    def test_the_refused_characters_are_exactly_those_of_the_server_rule(self) -> None:
+    def test_the_post_normalization_character_rule_matches_the_server(self) -> None:
         refused_code_points = [code_point for code_point in range(0x10000)
                                if _cli._NON_PLAIN_TEXT_CHARACTER_RE.search(chr(code_point))]
         self.assertEqual(refused_code_points,
-                         [*range(0x00, 0x09), 0x0B, 0x0C, *range(0x0E, 0x20), 0x7F, *range(0xD800, 0xE000)])
+                         [*range(0x00, 0x09), *range(0x0B, 0x20), 0x7F, *range(0xD800, 0xE000)])
         self.assertIsNone(_cli._NON_PLAIN_TEXT_CHARACTER_RE.search(chr(0x1F600)))
 
     def test_the_grand_challenge_fields_that_the_server_does_not_build_on_plain_text_keep_their_checks(self) -> None:
@@ -2194,10 +2295,9 @@ class TestServerErrorsAfterAWrite(_MathCliTestCase):
                                       f"\n{self._DETAIL_TEXT}\n")
         self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me")])
 
-    def test_a_refusal_of_a_write_keeps_its_advice(self) -> None:
-        self.answers[("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/papers")] = (409, {"error": "conflict"})
-        _, stderr_text = self.run_cli(["link-problem-paper", _PROBLEM_ID, "--identifier", "2609.97001v3"],
-                                      expected_exit_code=1)
+    def test_a_conflict_on_another_write_keeps_its_advice(self) -> None:
+        self.answers[("POST", "/api/v1/math-problems")] = (409, {"error": "conflict"})
+        _, stderr_text = self.run_cli(self.build_post_problem_argv(), expected_exit_code=1)
         self.assertEqual(stderr_text, "The resource is in a state that does not accept this operation. Run exactory"
                                       ' status <verification-id> to see the current state.\n{"error": "conflict"}\n')
 

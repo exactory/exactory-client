@@ -28,7 +28,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from research_harness.citation_report import report_citation_gate
 from research_harness.cli import add_identity, select_managed_path
-from research_harness.errors import ResearchError
+from research_harness.errors import REMOVED_PROBLEM_LINK_EXIT_CODE, ResearchError
 from research_harness.exactory_api import _DEFAULT_API_URL, build_orcid_required_msg, read_api_base_url
 from research_harness.integration import command_identity, current_store
 from research_harness.same_origin import (INCOMPLETE_ANSWER_ERROR_TYPES, RefusedRedirectError,
@@ -78,10 +78,10 @@ _MAX_LINK_UTF16_UNITS = 500
 _NON_TEXT_CHARACTER_CATEGORIES = ("Cc", "Cf", "Cs")
 # Mirrors plainTextSchema (apps/web/src/server/schemas/plain-text.ts in the exactory repository, design
 # 2026-10-12 §26.24), which the server applies to every free-text field: no control character except tab,
-# line feed, and carriage return, and no unpaired surrogate. Python holds a character beyond the basic plane
+# line feed, and no unpaired surrogate, after CRLF and lone CR become LF. Python holds a character beyond the basic plane
 # as one code point, and the json module joins an escaped surrogate pair into one, so every surrogate in the
 # text of an option is unpaired.
-_NON_PLAIN_TEXT_CHARACTER_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\ud800-\udfff]")
+_NON_PLAIN_TEXT_CHARACTER_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f\ud800-\udfff]")
 # The line breaks that plainTextSchema accepts: a carriage return and a line feed as a pair, and each of the two alone.
 _LINE_BREAK_RE = re.compile(r"\r\n|\r|\n")
 # The character that starts a terminal color code.
@@ -229,6 +229,7 @@ def _send_request(method: str, path: str, body: dict | None = None, *,
                   authenticated: bool = True,
                   allow_missing: bool = False,
                   error_messages: dict[int, str] = _HTTP_ERR_MSGS,
+                  error_exit_codes: dict[int, int] | None = None,
                   unconfirmed_write_advice_msg: str | None = None) -> tuple[dict, int]:
     """Send one API request. Returns the parsed JSON body and the HTTP status. This is the one place
     that adds the API key, and the request goes out under the rule of research_harness.same_origin:
@@ -266,7 +267,7 @@ def _send_request(method: str, path: str, body: dict | None = None, *,
                 return {}, 404
             detail = read_error_detail(error)
             message = _describe_http_error(method, write_advice_msg, error.code, detail, error_messages)
-            _exit_with_error(f"{message}\n{detail}")
+            _exit_with_error(f"{message}\n{detail}", (error_exit_codes or {}).get(error.code, 1))
     except INCOMPLETE_ANSWER_ERROR_TYPES as error:
         cause = describe_request_error_cause(error)
         if request_was_not_sent(error):
@@ -652,13 +653,19 @@ def _require_utf16_bounds(field_name: str, value: str,
     return value
 
 
+def _normalize_plain_text_line_breaks(text: str) -> str:
+    """Mirror plainTextSchema: CRLF and lone CR become LF before every other check."""
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
 def _require_plain_text(field_name: str, text: str,
                         surrogate_refusal_template: str = _ARGUMENT_SURROGATE_REFUSAL_TEMPLATE) -> str:
     """Refuse a text that the server's plainTextSchema refuses, and return it otherwise. The message names the
-    field, the first refused character, and where it is in the text as given, counted in characters from 1: its
+    field, the first refused character, and where it is in the normalized text, counted in characters from 1: its
     position in a text of one line, and its line and its column in a text of more lines. U+001B starts a terminal
     color code, and an unpaired surrogate comes from where `surrogate_refusal_template` says, so each of the two
     names its own remedy."""
+    text = _normalize_plain_text_line_breaks(text)
     match = _NON_PLAIN_TEXT_CHARACTER_RE.search(text)
     if match is None:
         return text
@@ -687,7 +694,7 @@ def _require_plain_text_bounds(field_name: str, value: str, min_units: int, max_
                                surrogate_refusal_template: str = _ARGUMENT_SURROGATE_REFUSAL_TEMPLATE,
                                *, trim: bool = False) -> str:
     """A free-text field that the server builds on plainTextSchema, checked in the order of that schema: the
-    characters of the text as given, then the schema's optional trim, then its bounds."""
+    normalized line breaks, then its characters, then the field's optional trim, then its bounds."""
     return _require_utf16_bounds(field_name, _require_plain_text(field_name, value, surrogate_refusal_template),
                                  min_units, max_units, trim=trim)
 
@@ -696,7 +703,7 @@ def _read_text_file(path: str) -> str:
     """The text of a file that the user named. A file that cannot be read as UTF-8 text ends the
     command with one message that gives the cause and the remedy."""
     try:
-        with open(path, encoding="utf-8") as handle:
+        with open(path, encoding="utf-8", newline="") as handle:
             return handle.read()
     except FileNotFoundError:
         _exit_with_error(f"The file {path} does not exist. Give the path of an existing file.")
@@ -751,8 +758,9 @@ def _read_citations_file(path: str) -> list[dict]:
             _exit_with_error(f'Citation {index} is missing "citation" or "locator".'
                              " Write both as strings.")
         citation = _require_plain_text_bounds(f"citation of entry {index}", citation, 10, 1000,
-                                              _ESCAPED_SURROGATE_REFUSAL_TEMPLATE)
-        locator = _require_plain_text(f"locator of entry {index}", locator, _ESCAPED_SURROGATE_REFUSAL_TEMPLATE)
+                                              _ESCAPED_SURROGATE_REFUSAL_TEMPLATE, trim=True)
+        locator = _require_plain_text(f"locator of entry {index}", locator,
+                                      _ESCAPED_SURROGATE_REFUSAL_TEMPLATE).strip(_JAVASCRIPT_TRIM_CHARACTERS)
         if _count_utf16_units(locator) > 500:
             _exit_with_error(f"The locator of entry {index} is over the limit of"
                              " 500 characters. Make it shorter.")
@@ -786,22 +794,22 @@ def _run_challenge(args: argparse.Namespace) -> None:
 
 def _run_post_challenge(args: argparse.Namespace) -> None:
     body = {
-        "title": _require_utf16_bounds("title", args.title, 8, 200),
-        "field": _require_utf16_bounds("field", args.field, 2, 100),
+        "title": _require_utf16_bounds("title", args.title, 8, 200, trim=True),
+        "field": _require_utf16_bounds("field", args.field, 2, 100, trim=True),
         "problemStatement": _require_utf16_bounds(
             "problem statement",
             _read_inline_or_file_text(args.problem_statement,
                                       args.problem_statement_file),
-            200, 20000),
+            200, 20000, trim=True),
         "currentState": _require_utf16_bounds(
             "current state",
             _read_inline_or_file_text(args.current_state, args.current_state_file),
-            100, 10000),
+            100, 10000, trim=True),
         "resolutionCriteria": _require_utf16_bounds(
             "resolution criteria",
             _read_inline_or_file_text(args.resolution_criteria,
                                       args.resolution_criteria_file),
-            50, 5000),
+            50, 5000, trim=True),
         "citations": _read_citations_file(args.citations_file),
     }
     if args.parent_id:
@@ -962,17 +970,17 @@ def _run_problem_history(args: argparse.Namespace) -> None:
 
 def _run_post_problem(args: argparse.Namespace) -> None:
     body = {
-        "title": _require_plain_text_bounds("title", args.title, 8, 200),
+        "title": _require_plain_text_bounds("title", args.title, 8, 200, trim=True),
         "area": _require_math_area(args.area),
         "statement": _require_plain_text_bounds(
-            "statement", _read_inline_or_file_text(args.statement, args.statement_file), 50, 20000),
+            "statement", _read_inline_or_file_text(args.statement, args.statement_file), 50, 20000, trim=True),
         "motivation": _require_plain_text_bounds(
-            "motivation", _read_inline_or_file_text(args.motivation, args.motivation_file), 100, 10000),
+            "motivation", _read_inline_or_file_text(args.motivation, args.motivation_file), 100, 10000, trim=True),
         "currentState": _require_plain_text_bounds(
-            "current state", _read_inline_or_file_text(args.current_state, args.current_state_file), 100, 10000),
+            "current state", _read_inline_or_file_text(args.current_state, args.current_state_file), 100, 10000, trim=True),
         "resolutionCriteria": _require_plain_text_bounds(
             "resolution criteria",
-            _read_inline_or_file_text(args.resolution_criteria, args.resolution_criteria_file), 50, 5000),
+            _read_inline_or_file_text(args.resolution_criteria, args.resolution_criteria_file), 50, 5000, trim=True),
         "citations": _read_citations_file(args.citations_file),
     }
     if args.paper:
@@ -1026,14 +1034,25 @@ def _run_declare_status(args: argparse.Namespace) -> None:
 
 
 def _run_link_problem_paper(args: argparse.Namespace) -> None:
-    _send_math_write("POST", _build_api_path("math-problems", args.problem_id, "papers"),
-                     {"identifier": args.identifier})
+    _send_problem_link(args.problem_id, "papers", {"identifier": args.identifier}, args.identifier)
+
+
+def _send_problem_link(problem_id: str, resource: str, body: dict, identifier: str) -> None:
+    """A 201 means the link stands; a 409 means moderation removed it (design clarification 25)."""
+    path = _build_api_path("math-problems", problem_id, resource)
+    _require_linked_orcid()
+    removal_msg = (f"A moderator removed the link {identifier} from problem {problem_id}."
+                   " It cannot be attached again. Nothing changed.")
+    payload, _ = _send_request("POST", path, body,
+                               error_messages={**_HTTP_ERR_MSGS, 409: removal_msg},
+                               error_exit_codes={409: REMOVED_PROBLEM_LINK_EXIT_CODE})
+    _print_json(payload)
 
 
 def _run_link_problem_github(args: argparse.Namespace) -> None:
     body = {"url": _require_github_context_url(args.url),
             "label": _require_plain_text_bounds("label", args.label, 1, 100, trim=True)}
-    _send_math_write("POST", _build_api_path("math-problems", args.problem_id, "github-links"), body)
+    _send_problem_link(args.problem_id, "github-links", body, args.url)
 
 
 # An arXiv id without a version, written as a bare id, an arxiv.org abs URL, or an arXiv DOI. The
@@ -1047,7 +1066,7 @@ _ARXIV_WITHOUT_VERSION_RE = re.compile(
 
 def _run_post_proof(args: argparse.Namespace) -> None:
     summary = _require_plain_text_bounds("summary", _read_inline_or_file_text(args.summary, args.summary_file),
-                                         100, 20000)
+                                         100, 20000, trim=True)
     if args.writeup is None and args.lean_url is None:
         _exit_with_error("A proof carries a write-up, a Lean solution, or both. Add --writeup, or --lean-url with"
                          " --formal-statement-version.")

@@ -42,7 +42,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from research_harness.errors import ResearchError
+from research_harness.errors import REMOVED_PROBLEM_LINK_EXIT_CODE, ResearchError
 from research_harness.exactory_api import UUID_RE, build_orcid_required_msg, read_api_base_url
 from research_harness.integration import command_identity, current_store, initialization_payload, initialize_workspace, record_direct_deposit
 from research_harness.same_origin import (INCOMPLETE_ANSWER_ERROR_TYPES, RefusedRedirectError,
@@ -330,6 +330,23 @@ def _build_zenodo_client(environment: str, token: str, failure_advice: _FailureA
     def call(method: str, url: str, **kwargs) -> dict:
         return _call_zenodo(method, url, token, failure_advice=failure_advice, environment=environment, **kwargs)
     return call
+
+
+def _continue_deposit_and_track_publish(store: Store, identifier: str, client, *,
+                                        finish_only: bool = False) -> tuple[dict, bool]:
+    """Continue a managed intent and report whether this run sent publish. A completed intent or
+    a published read-back sends no publish, so its attachment retries an earlier publication."""
+    did_send_publish = False
+
+    def send_and_track_publish(method: str, url: str, **kwargs) -> dict:
+        nonlocal did_send_publish
+        if method == "POST" and url.endswith("/actions/publish"):
+            did_send_publish = True
+        return client(method, url, **kwargs)
+
+    record = continue_deposit(store, identifier, send_and_track_publish,
+                              reconcile=True, finish_only=finish_only)
+    return record, did_send_publish
 
 
 def _load_draft_state() -> dict:
@@ -620,12 +637,16 @@ def _deposit_managed(store, report: dict, args: argparse.Namespace, base_url: st
                                write_failure_advice_msg="A second run sends nothing to Zenodo until it can write a"
                                                         " recovery record, then continues its deposit intent.")
     with _explain_unsettled_journal(journal):
-        receipt = continue_deposit(store, intent["id"], _build_zenodo_client(environment, token), reconcile=True)
+        client = _build_zenodo_client(environment, token)
+        if journal is None:
+            receipt = continue_deposit(store, intent["id"], client, reconcile=True)
+        else:
+            receipt, did_send_publish = _continue_deposit_and_track_publish(store, intent["id"], client)
         print(json.dumps(receipt, indent=2))
         if journal is not None:
             journal = _mark_journal_settled(journal, receipt)
     if journal is not None:
-        _attach_recorded_record(journal)
+        _attach_recorded_record(journal, is_retry=not did_send_publish)
 
 
 def _deposit_directly(store, store_open_error, args: argparse.Namespace, base_url: str, environment: str,
@@ -1426,8 +1447,8 @@ def _attach_recorded_record(journal: dict, *, is_retry: bool = False) -> None:
     """After publication (design 2026-10-12 §17): a published production record attaches to its
     problem through the recorded origin, and the journal is marked attached. Every attachment comes
     here, so this is where the recorded origin must be the origin of this run, before the exactory
-    request and whatever path led here: the request carries the API key of the user. Attaching the
-    same paper again changes nothing (design 2026-10-12 §12), so a retry after a lost mark is safe.
+    request and whatever path led here: the request carries the API key of the user. A standing link
+    attaches idempotently, and a removed link answers with its own exit code (design clarification 25).
     A failed attachment leaves the journal settled and unattached, and attach-problem retries the
     attachment alone: it reads no Zenodo token and sends no Zenodo request. The failure of a retry
     says that the record belongs to the earlier deposit and that this run published nothing."""
@@ -1443,6 +1464,10 @@ def _attach_recorded_record(journal: dict, *, is_retry: bool = False) -> None:
     if completed.returncode != 0:
         lead_msg = (f"Record {journal['doi']} belongs to the earlier deposit for this problem. This run published nothing."
                     if is_retry else f"Record {journal['doi']} is published.")
+        if completed.returncode == REMOVED_PROBLEM_LINK_EXIT_CODE:
+            _exit_with_error(f"{lead_msg} A moderator removed the link of record {journal['doi']} from problem"
+                             f" {problem_target['problem_id']}. The record stays published as {journal['doi']}."
+                             f" {_build_settled_removal_advice(journal['doi'])}", REMOVED_PROBLEM_LINK_EXIT_CODE)
         _exit_with_error(f"{lead_msg} Attaching it to problem {problem_target['problem_id']}"
                          f" failed:\n{completed.stderr.strip()}\nResolve that cause. Then run exactory-draft"
                          " attach-problem. It attaches the recorded record and publishes nothing."
@@ -1451,8 +1476,8 @@ def _attach_recorded_record(journal: dict, *, is_retry: bool = False) -> None:
           file=sys.stderr)
     _write_problem_journal(dict(journal, attached=True),
                            f"Record {journal['doi']} is attached, and the command cannot mark its recovery record"
-                           " attached. Run exactory-draft attach-problem. It attaches the record again, which"
-                           " changes nothing.")
+                           " attached. Run exactory-draft attach-problem. It retries only the attachment and"
+                           " publishes nothing.")
 
 
 def _settle_problem_deposit(journal: dict, *, may_publish: bool) -> bool:
@@ -1464,30 +1489,31 @@ def _settle_problem_deposit(journal: dict, *, may_publish: bool) -> bool:
     _require_current_origin(journal)
     with _explain_unsettled_journal(journal):
         if journal["path"] == "managed":
-            record = _settle_managed_publication(journal, may_publish=may_publish)
+            record, did_send_publish = _settle_managed_publication(journal, may_publish=may_publish)
             if record is None:
                 _write_problem_journal(dict(journal, settled=True), "The recovery record could not be released."
                                                                     " Nothing was deposited.")
                 return False
             print(json.dumps(record, indent=2))
         else:
-            record = _settle_direct_publication(journal, may_publish=may_publish)
+            record, did_send_publish = _settle_direct_publication(journal, may_publish=may_publish)
             print(json.dumps(record, indent=2))
             store, _, store_open_error = select_managed_path(lambda workspace_store: True)
             _save_deposit_state(store, store_open_error, record)
         settled_journal = _mark_journal_settled(journal, record)
-    _attach_recorded_record(settled_journal)
+    _attach_recorded_record(settled_journal, is_retry=not did_send_publish)
     return True
 
 
-def _settle_managed_publication(journal: dict, *, may_publish: bool) -> dict | None:
+def _settle_managed_publication(journal: dict, *, may_publish: bool) -> tuple[dict | None, bool]:
     """The receipt of the managed intent the journal names, or None when that intent never
     claimed its publish step. A claimed publish binds the deposit to its own record whatever
     became of the claim: a claim that a remote read discarded after it found the record
     unpublished is finished on that record like a pending one, never released (design
     2026-10-12 §17). A confirmed publication is recorded whatever the current manuscript says;
     an unconfirmed one is sent again to that same record only when `may_publish` holds and the
-    intent's manuscript check passes, and otherwise the command stops with the journal kept."""
+    intent's manuscript check passes, and otherwise the command stops with the journal kept.
+    Return the record and whether this run sent publish, so attachment advice describes this run."""
     from research_harness.remote import get_intent
     store = current_store(find_workspace())
     intent = get_intent(store, journal["operation_id"])
@@ -1497,25 +1523,29 @@ def _settle_managed_publication(journal: dict, *, may_publish: bool) -> dict | N
             # The note on the journal follows this exit and says what that deposit run does with the journal.
             _exit_with_error("The recorded deposit never sent its publish request, so there is no record to"
                              " attach. Run exactory-draft deposit to deposit the paper.")
-        return None
+        return None, False
     token = _read_zenodo_token(journal["environment"] == "production")
-    return continue_deposit(store, journal["operation_id"], _build_zenodo_client(journal["environment"], token),
-                            reconcile=True, finish_only=not may_publish)
+    return _continue_deposit_and_track_publish(store, journal["operation_id"],
+                                               _build_zenodo_client(journal["environment"], token),
+                                               finish_only=not may_publish)
 
 
-def _settle_direct_publication(journal: dict, *, may_publish: bool) -> dict:
+def _settle_direct_publication(journal: dict, *, may_publish: bool) -> tuple[dict, bool]:
     """The published record of the deposition the journal names, read back from Zenodo first.
     A deposition that reads back unpublished is published only when `may_publish` holds, and
-    nothing here creates a deposition, so no second record is published."""
+    nothing here creates a deposition, so no second record is published. Return the record and
+    whether this run sent publish, so attachment advice describes this run."""
     token = _read_zenodo_token(journal["environment"] == "production")
     deposition_url = f"{journal['base_url']}/deposit/depositions/{journal['deposition_id']}"
     deposition = _call_zenodo("GET", deposition_url, token, environment=journal["environment"])
+    did_send_publish = False
     if deposition.get("submitted") is False:
         if not may_publish:
             _exit_with_error(f"Deposition {journal['deposition_id']} is not published. Run exactory-draft deposit"
                              " to publish it. That command publishes this deposition and creates no other.")
         deposition = _call_zenodo("POST", f"{deposition_url}/actions/publish", token,
                                   environment=journal["environment"])
+        did_send_publish = True
     if not deposition.get("doi"):
         _exit_with_error(f"Deposition {journal['deposition_id']} answers without a DOI. Open {journal['draft_url']}"
                          " and read its state. Then run the command again. It reads the deposition back and"
@@ -1523,7 +1553,7 @@ def _settle_direct_publication(journal: dict, *, may_publish: bool) -> dict:
     return {"environment": journal["environment"], "deposition_id": journal["deposition_id"],
             "draft_url": journal["draft_url"], "doi": deposition["doi"],
             "concept_doi": deposition.get("conceptdoi", ""),
-            "record_url": deposition.get("links", {}).get("record_html", "")}
+            "record_url": deposition.get("links", {}).get("record_html", "")}, did_send_publish
 
 
 def _build_nothing_to_attach_msg(journal: dict) -> str:
@@ -1551,7 +1581,7 @@ def _run_attach_problem(args: argparse.Namespace) -> None:
     if not journal["settled"]:
         _settle_problem_deposit(journal, may_publish=False)
     elif _is_attachment_pending(journal):
-        _attach_recorded_record(journal)
+        _attach_recorded_record(journal, is_retry=True)
     else:
         print(f"{_build_nothing_to_attach_msg(journal)} Nothing was changed.", file=sys.stderr)
 

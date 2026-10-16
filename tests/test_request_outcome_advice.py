@@ -23,8 +23,8 @@ from research_harness.storage import Store
 from test_draft import _FakeZenodoApi, _load_bin_module
 
 
-_cli = _load_bin_module("exactory", "f6_cli")
-_draft = _load_bin_module("exactory-draft", "f6_draft")
+_cli = _load_bin_module("exactory", "request_outcome_cli")
+_draft = _load_bin_module("exactory-draft", "request_outcome_draft")
 _BASE = "http://zenodo.test/api"
 _DRAFT_URL = _BASE + "/deposit/4242"
 
@@ -196,7 +196,7 @@ class TestJavascriptTrim(_OfflineTestCase):
                 self.assertEqual(_cli._require_utf16_bounds("field", char + "x" + char, 1, 1, trim=True), "x")
         self.assertEqual(_cli._require_utf16_bounds("field", "\x85x\x85", 3, 3), "\x85x\x85")
 
-    def test_untrimmed_problem_and_challenge_fields_are_sent_as_given(self):
+    def test_problem_and_challenge_fields_and_citations_are_sent_trimmed(self):
         citation = " \ufeffA citation of the source.\ufeff "
         Path("citations.json").write_text(json.dumps([{"citation": citation, "locator": "10.1234/source"}]))
         for command, statement_option, statement_field, minimum in (
@@ -216,19 +216,18 @@ class TestJavascriptTrim(_OfflineTestCase):
                 args = _cli._build_parser().parse_args(argv)
                 with patch.object(_cli, "_send_request", side_effect=send), contextlib.redirect_stdout(io.StringIO()):
                     args.handler(args)
-                self.assertEqual(sent[-1]["title"], title)
-                self.assertEqual(sent[-1][statement_field], statement)
-                self.assertEqual(sent[-1]["citations"][0]["citation"], citation)
+                self.assertEqual(sent[-1]["title"], "A padded title")
+                self.assertEqual(sent[-1][statement_field], "s" * minimum)
+                self.assertEqual(sent[-1]["citations"][0]["citation"], "A citation of the source.")
 
-    def test_citation_locators_are_not_trimmed_and_use_javascript_whitespace(self):
-        for locator in ("10.1234/source\x85", "10.1234/source\ufeff", " 10.1234/source "):
+    def test_citation_locators_are_trimmed_with_javascript_whitespace(self):
+        for locator, expected in (("10.1234/source\x85", "10.1234/source\x85"),
+                                  ("10.1234/source\ufeff", "10.1234/source"),
+                                  (" 10.1234/source ", "10.1234/source")):
             with self.subTest(locator=repr(locator)):
                 Path("citations.json").write_text(json.dumps([{"citation": "A citation of the source.", "locator": locator}]))
-                if locator.endswith("\x85"):
-                    result = _cli._read_citations_file("citations.json")
-                    self.assertEqual(result[0]["locator"], locator)
-                else:
-                    self.capture_exit(lambda: _cli._read_citations_file("citations.json"))
+                result = _cli._read_citations_file("citations.json")
+                self.assertEqual(result[0]["locator"], expected)
 
 
 class TestDirectReadBack(_OfflineTestCase):
@@ -567,7 +566,7 @@ class TestFailureAdvice(_OfflineTestCase):
 class TestConfiguration(_OfflineTestCase):
     def test_origin_is_read_and_checked_once_at_command_start(self):
         with patch("research_harness.exactory_api.read_api_base_url", return_value="http://api.test") as read:
-            module = _load_bin_module("exactory", "f6_boot")
+            module = _load_bin_module("exactory", "request_outcome_boot")
             class Response(io.BytesIO):
                 def getcode(self):
                     return 200
@@ -579,7 +578,7 @@ class TestConfiguration(_OfflineTestCase):
 
     def test_default_origin_in_address_advice_comes_from_shared_constant(self):
         with patch("research_harness.exactory_api._DEFAULT_API_URL", "https://default.test"):
-            module = _load_bin_module("exactory", "f6_default")
+            module = _load_bin_module("exactory", "request_outcome_default")
         self.assertIn("for example https://default.test", module._UNUSABLE_API_URL_ERR_MSG)
         self.assertIn("unset EXACTORY_API_URL to use https://default.test", module._UNUSABLE_API_URL_ERR_MSG)
 

@@ -821,9 +821,9 @@ class TestPostChallengeSubcommand(_OpenUrlTransportTestCase):
             "--citations-file", str(self.citations_path),
         ])
         body = json.loads(self._single_request().data.decode())
-        self.assertEqual(body["problemStatement"], "p" * 200 + "\n")
-        self.assertEqual(body["currentState"], "c" * 100 + "\n")
-        self.assertEqual(body["resolutionCriteria"], "r" * 50 + "\n")
+        self.assertEqual(body["problemStatement"], "p" * 200)
+        self.assertEqual(body["currentState"], "c" * 100)
+        self.assertEqual(body["resolutionCriteria"], "r" * 50)
 
     def test_parent_and_paper_links_are_forwarded(self) -> None:
         self._run(self._post_argv() + [
