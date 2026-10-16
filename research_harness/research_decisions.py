@@ -16,7 +16,8 @@ from .operations import fields, immutable_record, normalized_text, prepared_muta
 from . import strategy
 
 
-CONTINUE_CHECKS = ("impact", "demand", "novelty_risk", "feasibility", "distinctness", "continuity", "grand_challenge")
+CONTINUE_CHECKS_V1 = ("impact", "demand", "novelty_risk", "feasibility", "distinctness", "continuity", "grand_challenge")
+CONTINUE_CHECKS = CONTINUE_CHECKS_V1 + ("q1_venue",)
 STOP_CHECKS = ("stop", "demand")
 ALL_CHECKS = CONTINUE_CHECKS + ("stop",)
 BOUNDARIES = ("target", "cycle", "write", "publication", "round")
@@ -58,7 +59,7 @@ def _validate_checks(records, artifacts, values, expected):
         raise ResearchError("invalid_value_review", "Address all phase-required independent assurances", {"required": list(expected)})
 
 
-def _validate_value(records, artifacts, value, stage, dossier, historical=()):
+def _validate_value(records, artifacts, value, stage, dossier, historical=(), *, expected_checks=ALL_CHECKS):
     fields(value, ("status", "consequence", "bar_ids", "objective_adequacy", "method_adequacy", "reason", "evidence",
                    "work_items", "assurances", "objection_findings"), code="invalid_value_review")
     strategy.choice(value["status"], ("sufficient", "insufficient", "unresolved"), "Scientific consequence", "invalid_value_review")
@@ -73,7 +74,7 @@ def _validate_value(records, artifacts, value, stage, dossier, historical=()):
             raise ResearchError("invalid_value_review", "The initial bar cannot assess the withheld author proposal")
         expected = ()
     else:
-        expected = ALL_CHECKS
+        expected = expected_checks
         if len(value["bar_ids"]) < 2:
             raise ResearchError("review_bar_pending", "Assess the recorded independent bars before accepting the slate or result")
         for identifier in value["bar_ids"]:
@@ -159,7 +160,9 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                and normalized_text(saved["reviewer_id"]) == reviewer and saved["id"] not in inherited_ids
                for saved in records.get("value_review", {}).values()):
             raise ResearchError("value_review_duplicate", "A reviewer cannot replace its initial finding by another sample")
-        _validate_value(records, artifacts, value["value"], value["stage"], dossier, historical)
+        from .review_protocol import is_previous_prompt
+        expected_checks = CONTINUE_CHECKS_V1 + ("stop",) if is_previous_prompt(saved_assignment) else ALL_CHECKS
+        _validate_value(records, artifacts, value["value"], value["stage"], dossier, historical, expected_checks=expected_checks)
         strings(value["limitations"], "Independent assessment limitations", nonempty=True)
         objection_ids = set()
         for objection in strategy.items(value["objections"], "Material objections"):
@@ -510,9 +513,24 @@ def _decision_obligations(records, artifacts, decision, boundary, *, source_impa
             obligations.append(obligation("research_objective_unresolved", "Independently assess whether the objective addresses the user's aim."))
         if any(finding["method_adequacy"] != "adequate" for finding in values):
             obligations.append(obligation("research_method_unresolved", "Establish the method's ability to resolve the stated question or bounded adequacy probe."))
-    checks = CONTINUE_CHECKS if action in ("investigate", "pivot", "develop_manuscript") else STOP_CHECKS
+    version_two = decision.get("gate_version") == 2
+    if version_two and action in ("investigate", "pivot"):
+        from .claim_minimums import describe_direction
+        direction = describe_direction(records, artifacts)
+        obligations.extend(direction["obligations"])
+        if direction["obligations"] or decision.get("direction_evidence_digest") != direction["digest"]:
+            obligations.append(obligation("direction_evidence_unassessed", "Reassess the changed decisive evidence before authorizing this direction.",
+                decision_id=decision["id"], assessed_digest=decision.get("direction_evidence_digest"), current_digest=direction["digest"]))
+        else:
+            from .direction_reviews import assess_direction_reviews
+            obligations.extend(assess_direction_reviews(records, artifacts, dossier, reviews, direction))
+    continuing = action in ("investigate", "pivot", "develop_manuscript")
+    checks = (CONTINUE_CHECKS if version_two else CONTINUE_CHECKS_V1) if continuing else STOP_CHECKS
     for review in reviews:
-        for check in review["payload"]["value"]["assurances"]:
+        assurances = review["payload"]["value"]["assurances"]
+        if version_two and continuing and not any(check["kind"] == "q1_venue" for check in assurances):
+            obligations.append(obligation("q1_venue_missing", "Assess Q1 venue standards in both independent reviews.", review_id=review["id"]))
+        for check in assurances:
             if check["kind"] in checks and check["status"] != "passed":
                 obligations.append(obligation("research_assurance_pending", "Resolve the independent scientific assurance.", review_id=review["id"], check=check["kind"], status=check["status"]))
     objection_pending = _objection_obligations(records, artifacts, dossier, decision, reviews)
@@ -579,9 +597,19 @@ def record_research_decision(store, payload, *, expected_revision, request_id):
         if any(saved["fingerprint"] == fingerprint for saved in records.get("research_decision", {}).values()):
             raise ResearchError("research_decision_duplicate", "Reuse the existing decision findings for unchanged evidence and intent")
         record = {"id": value["id"], "payload": value, "digest": digest(value), "fingerprint": fingerprint,
-                  "recorded_revision": expected_revision + 1, "dossier_digest": dossier["digest"], "intent_digest": intent["digest"]}
-        # Rejected and unresolved scientific decisions remain inspectable. Only
-        # the current derived state, never this historical report, permits work.
+                  "recorded_revision": expected_revision + 1, "dossier_digest": dossier["digest"], "intent_digest": intent["digest"], "gate_version": 2}
+        if value["action"] in ("investigate", "pivot"):
+            from .claim_minimums import describe_direction
+            from .direction_reviews import assess_direction_reviews
+            direction = describe_direction(records, artifacts)
+            if direction["obligations"]:
+                raise ResearchError("direction_minimum_unmet", "The direction evidence must exist before the reviews that judge it", {"obligations": direction["obligations"]})
+            coverage = assess_direction_reviews(records, artifacts, dossier, reviews, direction)
+            if coverage:
+                raise ResearchError("direction_evidence_unassessed", "Both observed reviews must cover the decisive evidence and claim before accepting the direction", {"obligations": coverage})
+            record["direction_evidence_digest"] = direction["digest"]
+        # Other rejected and unresolved findings remain inspectable. Only the
+        # current derived state, never this historical report, permits work.
         record["assessment"] = _state(True, _decision_obligations(records, artifacts, record, "round"))
         return [immutable_record(records, "research_decision", value["id"], record),
                 ("strategy_selection", "decision", {"id": value["id"]})], record
@@ -623,11 +651,25 @@ def prepare_objective_commitment(records, artifacts, target, *, decision_id, sou
     proposal = dossier["objective_binding"]
     if (not isinstance(target, dict) or proposal["kind"] != "proposed" or target.get("statement") != proposal["statement"]):
         raise ResearchError("research_objective_commitment_mismatch", "Commit exactly the approved proposed statement and scope; a new native ID alone is harmless")
+    from .claim_minimums import assess_direction
+    minimum = assess_direction(records, artifacts)
+    if minimum:
+        raise ResearchError("direction_minimum_unmet", "Complete the direction evidence before objective commitment", {"obligations": minimum})
     impact = _current_impact(records, decision) if source_impact is None else source_impact
     validate_source_impact(records, artifacts, dossier, impact)
+    if decision.get("gate_version") != 2:
+        # Historical tranche authority is unchanged. A new target commitment
+        # still needs observed coverage of its current decisive evidence.
+        from .claim_minimums import describe_direction
+        from .direction_reviews import assess_direction_reviews
+        reviews = [strategy.get_record(records, "value_review", identifier) for identifier in decision["payload"]["review_ids"]]
+        coverage = assess_direction_reviews(records, artifacts, dossier, reviews, describe_direction(records, artifacts))
+        if coverage:
+            raise ResearchError("direction_evidence_unassessed", "Both observed reviews must cover the decisive evidence and claim before objective commitment", {"obligations": coverage})
     obligations = _decision_obligations(records, artifacts, decision, "target", source_impact=impact)
     if obligations:
-        raise ResearchError("research_decision_required", "Resolve the current prospective decision findings before objective commitment", {"obligations": obligations})
+        code = "direction_evidence_unassessed" if any(item["code"] == "direction_evidence_unassessed" for item in obligations) else "research_decision_required"
+        raise ResearchError(code, "Resolve the current prospective decision findings before objective commitment", {"obligations": obligations})
     earlier = [saved for saved in records.get("research_commitment", {}).values() if saved["proposal"]["id"] == proposal["id"]]
     if earlier:
         if earlier[0]["objective"] != target:

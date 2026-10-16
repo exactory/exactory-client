@@ -62,6 +62,65 @@ class ResearchStorageTests(unittest.TestCase):
             sys.set_int_max_str_digits(0)
         return limit
 
+    def test_find_record_revisions_binds_exact_historical_values_without_mutation(self):
+        store = Store(self.workspace, create=True)
+        self.add(store)
+        original = store.snapshot()["records"]["work"]["paper"]
+        self.add(store, title="Changed", revision=1, request="change")
+        before = store.snapshot()
+        self.assertEqual(store.find_record_revisions("work", {"paper": original}), {"paper": 1})
+        self.assertEqual(store.find_record_revisions("work", {"paper": {"title": "Changed"}}), {"paper": 2})
+        self.assertEqual(store.find_record_revisions("work", {"paper": {"title": "Unrecorded"}}), {})
+        self.assertEqual(store.snapshot(), before)
+
+    def test_find_record_revisions_matches_brute_force_without_replaying_unrelated_events(self):
+        from research_harness import storage
+        store = Store(self.workspace, create=True)
+        special = 'paper%_\\note"雪'
+        events = [
+            ("work", "unrelated", {"title": "An unrelated publication bundle",
+                "wildcard_decoys": ['paperXX_\\note"雪', 'paper%a\\note"雪']}),
+            ("reading", special, {"read": True}),
+            ("work", "ordinary", {"read": True}),
+            ("reading", "mention", {"text": "ordinary"}),
+            ("reading", "ordinary", {"read": False}),
+            ("reading", "ordinary", {"read": True}),
+            ("reading", "later-mention", {"text": special, "other": "ordinary"}),
+            ("reading", "missing-reference", {"text": "not-created"}),
+        ]
+        for revision, (kind, key, value) in enumerate(events, 1):
+            store.mutate("fixture.add", {}, lambda tx, kind=kind, key=key, value=value: tx.put(kind, key, value),
+                         expected_revision=revision - 1, request_id="event-" + str(revision))
+        before = store.snapshot()
+        wanted = {special: {"read": True}, "ordinary": {"read": True}, "not-created": {"read": True}}
+        with self.database_connection() as connection:
+            rows = list(connection.execute("SELECT revision, changes FROM events ORDER BY revision"))
+        brute_force = {}
+        for revision, encoded in rows:
+            for change in json.loads(encoded):
+                key = change["key"]
+                if change["kind"] == "reading" and key in wanted and change["value"] == wanted[key]:
+                    brute_force.setdefault(key, revision)
+        self.assertEqual(brute_force, {special: 2, "ordinary": 6})
+        parsed = {encoded: 0 for _, encoded in rows}
+        validations = []
+        original_load, original_validate = storage._load, storage._validate
+
+        def count_load(encoded, *args):
+            if encoded in parsed:
+                parsed[encoded] += 1
+            return original_load(encoded, *args)
+
+        def count_validate(connection, **kwargs):
+            validations.append(kwargs.get("replay", True))
+            return original_validate(connection, **kwargs)
+
+        with mock.patch.object(storage, "_load", count_load), mock.patch.object(storage, "_validate", count_validate):
+            self.assertEqual(store.find_record_revisions("reading", wanted), brute_force)
+        self.assertEqual(validations, [False])
+        self.assertEqual([parsed[encoded] for _, encoded in rows], [0, 1, 1, 1, 1, 1, 0, 1])
+        self.assertEqual(store.snapshot(), before)
+
     def test_callback_contract_returns_the_original_committed_envelope(self):
         store = Store(self.workspace, create=True)
         calls = []

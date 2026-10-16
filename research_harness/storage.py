@@ -525,6 +525,25 @@ class Store:
             finally:
                 guard._value = None
 
+    def find_record_revisions(self, kind: str, values: dict) -> dict:
+        """Find first exact record revisions after the caller validated its snapshot."""
+        _text(kind, "Record kind")
+        with self._connection() as connection:
+            _validate(connection, replay=False)
+            revisions = {}
+            for key, value in values.items():
+                if not isinstance(key, str):
+                    continue
+                encoded = _canonical(key).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                for row in connection.execute(
+                        "SELECT revision, changes FROM events WHERE changes LIKE ? ESCAPE '\\' ORDER BY revision",
+                        ("%" + encoded + "%",)):
+                    if any(change["kind"] == kind and change["key"] == key and change["value"] == value
+                           for change in _load(row["changes"], list)):
+                        revisions[key] = row["revision"]
+                        break
+            return revisions
+
     def committed_request(self, request_id: str) -> Optional[dict]:
         """Read a validated original request without retrying or changing it."""
         _text(request_id, "Request ID")

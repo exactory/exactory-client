@@ -161,4 +161,14 @@ class TargetCommitmentTests(StrategyCase):
         saved = self.store.snapshot()["records"]["research_commitment"]["native-target"]
         self.assertEqual(saved["source_impact"], impact)
         state = self.module("research_decisions").decision_state(self.store.snapshot()["records"], self.artifacts, "cycle")
-        self.assertTrue(state["ready"], state["obligations"])
+        self.assertEqual({item["code"] for item in state["obligations"]},
+                         {"direction_standards_unresolved", "direction_evidence_unassessed"})
+        # Target commitment changes configuration, which is a section dependency
+        # distinct from the advisory global foundation digest.
+        fixture = self.direction_fixture
+        saved_standards = self.store.snapshot()["records"]["synthesis"]["direction-standards"]["payload"]
+        refreshed = dict(saved_standards, id="committed-target-standards")
+        fixture.mutate(fixture.api().record_standards, refreshed)
+        state = self.module("research_decisions").decision_state(self.store.snapshot()["records"], self.artifacts, "cycle")
+        self.assertEqual({item["code"] for item in state["obligations"]}, {"direction_evidence_unassessed"})
+        self.assertFalse(state["ready"])

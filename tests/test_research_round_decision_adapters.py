@@ -53,10 +53,11 @@ class CanonicalRoundAdapterTests(StrategyCase):
     def test_round_adapter_does_not_create_a_new_tranche_or_resource_budget(self):
         self.ready_decision(); records=self.store.snapshot()['records']
         tranche=records['strategy_dossier']['dossier-1']['payload']['tranche']
+        accounts=records.get('resource_account',{})
         self.mutate(self.module('rounds').admit_round,{'id':'admission','research_decision_id':'decision-1','reason':'Execute the approved test.'})
         records=self.store.snapshot()['records']
         self.assertEqual(records['strategy_dossier']['dossier-1']['payload']['tranche'],tranche)
-        self.assertNotIn('resource_account',records)
+        self.assertEqual(records.get('resource_account',{}),accounts)
 
     def test_round_gate_and_direct_decision_have_identical_current_obligations(self):
         self.ready_decision()

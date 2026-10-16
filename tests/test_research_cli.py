@@ -14,7 +14,7 @@ from development_fixtures import DevelopmentCase
 
 
 PLUGIN = Path(__file__).resolve().parents[1]
-RESEARCH_RUNS = Path("/Users/ryshiro/exactory/exactory-research")
+RESEARCH_RUNS = Path(os.environ.get("EXACTORY_TEST_RESEARCH_RUNS", "/Users/ryshiro/exactory/exactory-research"))
 
 
 class ResearchCliTests(unittest.TestCase):
@@ -485,6 +485,9 @@ class ResearchPreparationTests(DevelopmentCase):
         # The challenges ahead are recorded before the objective is written against them.
         self.json_command("grand-challenge", self.grand_challenge(self.links[0]))
         self.objective = {"kind": "objective", "id": "ordered-objective", "statement": "Establish the complete finite bound."}
+        # The direction minimum is owed before target commitment; refresh its
+        # configuration binding again once the native target is committed.
+        self.json_command("standards", self.standards(self.links[0], identifier="direction-standards"))
         from managed_strategy_fixtures import target_decision
         decision = target_decision(self)
         self.json_command("target", {"target": self.objective,
