@@ -8,6 +8,44 @@ from strategy_fixtures import StrategyCase
 
 
 class DecisionContractTests(StrategyCase):
+    def prepare_visual_direction(self):
+        from test_research_direction_sources import DirectionSourceTests
+        self.prepare_direction()
+        fixture = DirectionSourceTests()
+        fixture.root, fixture.store, fixture.artifacts = self.root, self.store, self.artifacts
+        fixture.sequence = self.store.revision
+        version, asset = fixture.prepare_visual_reading()
+        fixture.mutate(self.module("literature").record_search, fixture.capture_search(found=[version]))
+        return asset
+
+    def test_new_review_packets_attach_decisive_visuals_and_authorize_the_direction(self):
+        asset = self.prepare_visual_direction()
+        self.reviewed_dossier()
+        for suffix in ("a", "b"):
+            assignment = self.store.snapshot()["records"]["review_assignment"]["assignment-slate-" + suffix]
+            packet = json.loads(self.artifacts.read(assignment["packet"]))
+            attachment = next(item for item in packet["evidence"] if item["artifact"] == asset["artifact"])
+            import base64
+            self.assertEqual(base64.b64decode(attachment["content"]), self.artifacts.read(asset["artifact"]))
+        self.mutate(self.module("research_decisions").record_research_decision, self.decision())
+        self.assertTrue(self.state()["ready"], self.state()["obligations"])
+
+    def test_an_omitted_decisive_visual_reports_direction_evidence_unassessed(self):
+        self.prepare_visual_direction()
+        protocol = self.module("review_protocol")
+        original = protocol.build_direction_evidence
+        def omit_assets(*args, **kwargs):
+            value = original(*args, **kwargs)
+            for passage in value["passages"]:
+                passage.pop("assets", None)
+            return value
+        with patch.object(protocol, "build_direction_evidence", side_effect=omit_assets):
+            self.reviewed_dossier()
+        error = self.error("direction_evidence_unassessed", lambda: self.mutate(
+            self.module("research_decisions").record_research_decision, self.decision()))
+        self.assertEqual({item["review_id"] for item in error.details["obligations"]}, {"slate-a", "slate-b"})
+        self.assertTrue(all("html-visual-reading" in item["reading_ids"] for item in error.details["obligations"]))
+
     def test_decision_state_leaves_source_objects_unchanged_without_artifact_writes(self):
         self.reviewed_dossier()
         self.mutate(self.module("research_decisions").record_research_decision, self.decision())

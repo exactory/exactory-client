@@ -27,12 +27,13 @@ class DirectionSourceTests(LiteratureCase):
         return [passage for passage, _ in prepared]
 
     def build_packet(self, passages):
+        references = [item["excerpt"] for item in passages] + [asset["artifact"] for item in passages for asset in item.get("assets", [])]
         return {"direction_evidence": {"passages": passages}, "evidence": [
-            {"artifact": item["excerpt"],
-             "content": (base64.b64encode(self.artifacts.read(item["excerpt"])).decode()
-                         if item["excerpt"]["media_type"] == "application/pdf" else self.artifacts.read(item["excerpt"]).decode()),
-             "encoding": "base64" if item["excerpt"]["media_type"] == "application/pdf" else "utf-8"}
-            for item in passages]}
+            {"artifact": reference,
+             "content": (base64.b64encode(self.artifacts.read(reference)).decode()
+                         if reference["media_type"] == "application/pdf" or reference["media_type"].startswith("image/") else self.artifacts.read(reference).decode()),
+             "encoding": "base64" if reference["media_type"] == "application/pdf" or reference["media_type"].startswith("image/") else "utf-8"}
+            for reference in references]}
 
     def find_covered_readings(self, packet):
         from research_harness.direction_sources import find_delivered_readings
@@ -106,22 +107,97 @@ class DirectionSourceTests(LiteratureCase):
             {"artifact": reference, "content": self.artifacts.read(reference).decode(), "encoding": "utf-8"}]}
         self.assertEqual(self.find_covered_readings(packet), {"full"})
 
-    def test_hash_span_passages_stay_bounded_and_keep_source_provenance(self):
+    def prepare_long_reading(self):
         version = self.metadata(2)
-        capture = self.capture(version, body="DECISIVE START. " + "bounded evidence " * 10000 + " References: none.")
+        capture = self.capture(version, body="  DECISIVE START. " + "bounded evidence " * 1000 + " DECISIVE END. References: none.  ")
         bundle = self.bundle(version, capture=capture, bundle_id="large")
         for unit in bundle["units"]:
             link = unit["link"]
             link["locator"] = self.span(link["artifact"], link["locator"]["quote"], kind="span")
         self.mutate(literature.import_bundle, bundle)
         self.mutate(reading.record_reading, self.full_note(bundle, note_id="large-reading"))
+        return version, capture, bundle
+
+    def test_long_inspected_range_is_delivered_in_consecutive_bounded_chunks(self):
+        version, capture, bundle = self.prepare_long_reading()
         passages = self.build_passages()
-        packet = self.build_packet(passages)
-        self.assertLess(len(json.dumps(packet)), 25000)
-        self.assertTrue(any(item.get("truncated") for item in passages if item["version_id"] == version))
-        self.assertTrue(all(len(self.artifacts.read(item["excerpt"]).decode()) <= 2000 for item in passages))
-        self.assertNotIn(capture["text"], [item["artifact"] for item in packet["evidence"]])
-        self.assertEqual(self.find_covered_readings(packet), {"full", "large-reading"})
+        chunks = [item for item in passages if item["version_id"] == version and item["inspection_index"] == 0]
+        self.assertGreater(len(chunks), 1)
+        source = self.artifacts.read(capture["text"]).decode()
+        position = bundle["units"][0]["link"]["locator"]["start"]
+        delivered = []
+        for chunk in chunks:
+            location = chunk["origin"]["locator"]
+            self.assertEqual(location["start"], position)
+            data = self.artifacts.read(chunk["excerpt"]).decode()
+            self.assertLessEqual(len(data), 2000)
+            self.assertEqual(data, source[location["start"]:location["end"]])
+            delivered.append(data)
+            position = location["end"]
+        self.assertEqual(position, bundle["units"][0]["link"]["locator"]["end"])
+        self.assertEqual("".join(delivered), source)
+        self.assertEqual(self.find_covered_readings(self.build_packet(passages)), {"full", "large-reading"})
+
+    def test_a_prefix_or_a_missing_middle_chunk_does_not_cover_the_inspection(self):
+        version, _, _ = self.prepare_long_reading()
+        passages = self.build_passages()
+        body = [item for item in passages if item["version_id"] == version and item["inspection_index"] == 0]
+        for keep in (body[:1], body[:1] + body[2:]):
+            with self.subTest(chunks=len(keep)):
+                supplied = [item for item in passages if item not in body] + keep
+                self.assertEqual(self.find_covered_readings(self.build_packet(supplied)), {"full"})
+
+    def test_chunk_coverage_is_the_union_across_bound_packets(self):
+        from research_harness.direction_sources import find_delivered_readings
+        _, _, _ = self.prepare_long_reading()
+        passages = self.build_passages()
+        packets = [self.build_packet(passages[::2]), self.build_packet(passages[1::2])]
+        records = self.store.snapshot()["records"]
+        self.assertEqual(find_delivered_readings(records, self.artifacts, self.find_readings(), packets), {"full", "large-reading"})
+
+    def test_historical_chunks_with_different_boundaries_cover_by_union(self):
+        from research_harness.bar_sources import prior_context
+        from research_harness.direction_sources import find_delivered_readings
+        version, capture, bundle = self.prepare_long_reading()
+        records = self.store.snapshot()["records"]
+        source = self.artifacts.read(capture["text"]).decode()
+        from research_harness.source_links import span_locator
+        link = bundle["units"][0]["link"]
+        links = [dict(link, locator=span_locator(source, start, min(len(source), start + 997)))
+                 for start in range(0, len(source), 997)]
+        legacy = prior_context(records, self.artifacts, links)
+        current = [item for item in self.build_passages() if item["version_id"] != version]
+        packets = [self.build_packet(current), self.build_packet(legacy)]
+        packets[1]["prior_context"] = packets[1].pop("direction_evidence")["passages"]
+        self.assertEqual(find_delivered_readings(records, self.artifacts, self.find_readings(), packets), {"full", "large-reading"})
+
+    def test_exact_source_delivery_fills_missing_range_chunks(self):
+        from research_harness.direction_sources import find_delivered_readings
+        version, capture, _ = self.prepare_long_reading()
+        passages = self.build_passages()
+        partial = [item for item in passages if item["version_id"] != version or item["inspection_index"] != 0 or item["chunk_index"] == 0]
+        packet = self.build_packet(partial)
+        self.assertEqual(self.find_covered_readings(packet), {"full"})
+        reference = capture["text"]
+        supplement = {"source_deliveries": [{"request": {"kind": "source", "version_id": version, "depth": "fulltext"},
+                    "status": "delivered", "evidence": [reference]}], "evidence": [
+                    {"artifact": reference, "content": self.artifacts.read(reference).decode(), "encoding": "utf-8"}]}
+        self.assertEqual(find_delivered_readings(self.store.snapshot()["records"], self.artifacts,
+            self.find_readings(), [packet, supplement]), {"full", "large-reading"})
+
+    def test_chunks_preserve_whitespace_and_unicode_through_the_end_of_the_range(self):
+        version = self.metadata(11)
+        content = "  " * 2500 + "終端の決定的証拠 " * 600 + " References: none.\f"
+        capture = self.capture(version, pdf_text=content)
+        bundle = self.bundle(version, capture=capture, bundle_id="whitespace")
+        self.mutate(literature.import_bundle, bundle)
+        self.mutate(reading.record_reading, self.full_note(bundle, note_id="whitespace-reading"))
+        passages = self.build_passages()
+        chunks = [item for item in passages if item["version_id"] == version and item["inspection_index"] == 0]
+        self.assertTrue(any(not self.artifacts.read(item["excerpt"]).strip() for item in chunks))
+        self.assertTrue(all(len(self.artifacts.read(item["excerpt"]).decode()) <= 2000 for item in chunks))
+        self.assertEqual(b"".join(self.artifacts.read(item["excerpt"]) for item in chunks), content.encode())
+        self.assertEqual(self.find_covered_readings(self.build_packet(passages)), {"full", "whitespace-reading"})
 
     def test_pdf_inspected_region_delivers_original_visual_content_and_provenance(self):
         version = self.metadata(3)
@@ -193,9 +269,10 @@ class DirectionSourceTests(LiteratureCase):
         self.mutate(literature.import_bundle, bundle)
         self.mutate(reading.record_reading, self.full_note(bundle, note_id="json-reading"))
         passages = self.build_passages()
-        structured = next(item for item in passages if item["origin"]["locator"]["kind"] == "json")
-        self.assertEqual(structured["origin"]["locator"]["pointer"], "/value")
-        self.assertEqual(self.artifacts.read(structured["excerpt"]), ("checked " * 250).encode())
+        structured = [item for item in passages if item["origin"]["locator"]["kind"] == "json"]
+        self.assertTrue(all(item["origin"]["locator"]["pointer"] == "/value" for item in structured))
+        self.assertTrue(all(item["excerpt"]["size"] <= 2000 for item in structured))
+        self.assertEqual(b"".join(self.artifacts.read(item["excerpt"]) for item in structured), ("checked " * 1000).encode())
         self.assertEqual(self.find_covered_readings(self.build_packet(passages)), {"full", "json-reading"})
 
     def test_html_inspection_delivers_the_checked_anchor_with_provenance(self):
@@ -226,7 +303,7 @@ class DirectionSourceTests(LiteratureCase):
         packet = {"evidence": [{"artifact": reference, "content": self.artifacts.read(reference).decode(), "encoding": "utf-8"}]}
         self.assertEqual(self.find_covered_readings(packet), set())
 
-    def test_large_html_anchor_keeps_only_bounded_content_and_compact_provenance(self):
+    def test_large_html_anchor_delivers_all_content_in_bounded_chunks_with_compact_provenance(self):
         version = self.metadata(7)
         capture = self.capture(version, body="HTML BOUNDARY " * 10000 + "References: none.")
         bundle = self.bundle(version, capture=capture, bundle_id="large-html")
@@ -239,12 +316,15 @@ class DirectionSourceTests(LiteratureCase):
         self.mutate(literature.import_bundle, bundle)
         self.mutate(reading.record_reading, self.full_note(bundle, note_id="large-html-reading"))
         passages = self.build_passages()
-        self.assertLess(len(json.dumps(self.build_packet(passages))), 30000)
-        markup = next(item for item in passages if item["origin"]["locator"]["kind"] == "html")
-        self.assertEqual(markup["origin"]["locator"]["anchor"]["kind"], "span")
+        markup = [item for item in passages if item["origin"]["locator"]["kind"] == "html"]
+        self.assertGreater(len(markup), 1)
+        self.assertTrue(all(len(self.artifacts.read(item["excerpt"]).decode()) <= 2000 for item in markup))
+        self.assertTrue(all(item["origin"]["locator"]["anchor"]["kind"] == "span" for item in markup))
+        self.assertTrue(all("quote" not in item["origin"]["locator"]["anchor"] for item in markup))
+        self.assertEqual(b"".join(self.artifacts.read(item["excerpt"]) for item in markup), self.artifacts.read(capture["original"]))
         self.assertEqual(self.find_covered_readings(self.build_packet(passages)), {"full", "large-html-reading"})
 
-    def test_html_visual_asset_provenance_does_not_attach_unrequested_asset_bytes(self):
+    def prepare_visual_reading(self, *, acquire=True):
         from research_fixtures import client
         from research_harness.visual_assets import acquire_visual_asset
         from test_research_source_contracts import SourceContractTests
@@ -252,18 +332,54 @@ class DirectionSourceTests(LiteratureCase):
         capture = self.capture(version, body='<figure><img src="/assets/required.png"><figcaption>CHECKED FIGURE.</figcaption></figure> References: none.')
         link = {"version_id": version, "source_id": capture["source_id"], "artifact": capture["original"],
                 "locator": {"kind": "html", "anchor": self.span(capture["original"], '<figcaption>CHECKED FIGURE.</figcaption>', kind="span")}}
-        http, _, _ = client([(200, {"Content-Type": "image/png"}, SourceContractTests.png(self))])
-        result = acquire_visual_asset(self.store, link, "https://arxiv.org/assets/required.png", http=http,
-            expected_revision=self.store.revision, request_id="direction-visual")
-        asset = result["asset_link"]
-        link["locator"]["assets"] = [asset]
+        asset = None
+        if acquire:
+            http, _, _ = client([(200, {"Content-Type": "image/png"}, SourceContractTests.png(self))])
+            result = acquire_visual_asset(self.store, link, "https://arxiv.org/assets/required.png", http=http,
+                expected_revision=self.store.revision, request_id="direction-visual")
+            asset = result["asset_link"]
+            link["locator"]["assets"] = [asset]
         bundle = self.bundle(version, capture=capture, bundle_id="html-visual")
         bundle["units"].append({"id": "figure", "kind": "figure", "required": True, "link": link})
         self.mutate(literature.import_bundle, bundle)
         self.mutate(reading.record_reading, self.full_note(bundle, note_id="html-visual-reading"))
+        return version, asset
+
+    def test_an_omitted_named_image_leaves_the_reading_uncovered(self):
+        _, asset = self.prepare_visual_reading()
+        packet = self.build_packet(self.build_passages())
+        packet["evidence"] = [item for item in packet["evidence"] if item["artifact"] != asset["artifact"]]
+        self.assertEqual(self.find_covered_readings(packet), {"full"})
+
+    def test_a_named_image_is_attached_with_checked_bytes_and_covers_the_reading(self):
+        _, asset = self.prepare_visual_reading()
         passages = self.build_passages()
-        markup = next(item for item in passages if item["origin"]["locator"]["kind"] == "html")
-        self.assertEqual(markup["origin"]["locator"]["assets"][0]["artifact_descriptor"]["sha256"], asset["artifact"]["sha256"])
         from research_harness import review_protocol
-        self.assertNotIn(asset["artifact"], list(review_protocol._refs(passages)))
-        self.assertEqual(self.find_covered_readings(self.build_packet(passages)), {"full", "html-visual-reading"})
+        evidence = review_protocol._evidence(self.artifacts, {"direction_evidence": {"passages": passages}})
+        attached = next((item for item in evidence if item["artifact"] == asset["artifact"]), None)
+        self.assertIsNotNone(attached)
+        self.assertEqual(base64.b64decode(attached["content"]), self.artifacts.read(asset["artifact"]))
+        packet = {"direction_evidence": {"passages": passages}, "evidence": evidence}
+        self.assertEqual(self.find_covered_readings(packet), {"full", "html-visual-reading"})
+        packet["evidence"] = [item for item in packet["evidence"] if item["artifact"] != asset["artifact"]]
+        self.assertEqual(self.find_covered_readings(packet), {"full"})
+        # An observed source continuation can supply the image independently.
+        supplement = {"evidence": [attached]}
+        from research_harness.direction_sources import find_delivered_readings
+        self.assertEqual(find_delivered_readings(self.store.snapshot()["records"], self.artifacts,
+            self.find_readings(), [packet, supplement]), {"full", "html-visual-reading"})
+
+    def test_an_unacquired_image_remains_a_coverage_gap(self):
+        packet = self.build_packet(self.build_passages())
+        self.prepare_visual_reading(acquire=False)
+        self.assertEqual(self.find_covered_readings(packet), {"full"})
+
+    def test_named_images_obey_the_existing_artifact_byte_bound(self):
+        from unittest.mock import patch
+        from research_harness.errors import ResearchError
+        from research_harness import direction_sources
+        _, asset = self.prepare_visual_reading()
+        with patch.object(direction_sources, "_MAX_ORIGINAL_BYTES", asset["artifact"]["size"] - 1):
+            with self.assertRaises(ResearchError) as caught:
+                self.build_passages()
+        self.assertEqual(caught.exception.code, "review_evidence_too_large")
