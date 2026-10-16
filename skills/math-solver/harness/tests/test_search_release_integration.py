@@ -275,7 +275,7 @@ class ReleaseWorkflowTests(WorkspaceTest):
             "evidence_digests": sorted({d for aid in expected_acceptances for d in state["checkpoints"][state["acceptances"][aid]["checkpoint_id"]]["evidence_digests"]}),
             "local_deliveries": [delivery], "deliverables": [{"requirement": original["required_deliverables"][0], "digest": final["digest"]}]}
         final_review = self.result_review(digest(subject), digest(root),
-            openness_evidence=subject["evidence_digests"] + [continuation["admission"]["studies"]["novelty"]])
+            openness_evidence=subject["evidence_digests"] + [continuation["admission"]["studies"]["novelty"]], openness_subject=subject)
         final_review["reviewer"] = provenance("fixture-final-auditor")
         invoke(self.controller, "complete", {"subject": subject, "review": final_review, "inputs": [final]}, None)
         state = self.controller.status()

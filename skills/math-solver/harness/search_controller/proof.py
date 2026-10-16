@@ -112,7 +112,11 @@ def validate_review(value, subject_digest, claim_digest, *, new=False):
         s.text(value["findings"][key])
     if version == 2:
         openness = value["findings"]["openness"]
-        s.closed(openness, "outcome statement_digest evidence searched_at coverage reason")
+        s.closed(openness, "outcome statement_digest evidence searched_at coverage reason" +
+                 (" minimum" if "minimum" in openness else ""))
+        if "minimum" in openness:
+            from .openness import validate_minimum
+            validate_minimum(openness["minimum"])
         s.choice(openness["outcome"], {"supported_open", "already_solved", "unresolved"})
         s.require(openness["statement_digest"] == claim_digest,
                   "Openness finding targets a different exact statement", "digest_mismatch")

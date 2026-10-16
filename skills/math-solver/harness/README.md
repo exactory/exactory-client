@@ -74,6 +74,26 @@ amendments, strategy assessments, input and result reviews, closure, adoption an
 recovery. It preserves native schemas and historical replay and adds no
 strategic-value gate. Declaring a host identity or a fresh agent is insufficient.
 
+Fresh resolved openness findings and root closure require `OpennessMinimum`
+(`../SEARCH.md`): exact `statement`, declared `neighbours`, bound common
+`literature_search` records with `coverage` and `captured_at`, and pinned complete
+`fulltext` readings for every relevant or contradictory result. Export the
+declaration as `openness` in `search review-packet`; the observed result review
+returns `findings.openness.minimum` and binds its digests in `evidence`. Unavailable
+or deferred sources remain gaps. `unresolved` may accompany proof-validity
+acceptance but keeps root closure pending. Material searches for the same
+formulations must be reassessed. `already_solved` still requires every requested
+formal verification and deliverable. Recorded version 1 acceptance/closure replays.
+
+Native imports retain raw and canonical identities and use the shared probe-origin
+resolver in the objective's associated common review store. Fresh dependencies
+and strategy decisions cannot gain credit from copied or JSON-wrapped exploratory
+output (`exploratory_evidence`). A probe-derived certificate or Lean proof needs
+its admitted native verification and candidate interpretation. Historical accepted
+imports retain their recorded audits. Exploratory `exactory-lab probe` runs stay
+in the common workspace, outside native execution, and appear in the cash-out
+inventory with `id`, `question` and actual `elapsed_seconds`.
+
 ## Test
 
 From the plugin root:

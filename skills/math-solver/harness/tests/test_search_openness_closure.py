@@ -36,8 +36,12 @@ class OpennessClosureTests(SearchCLIWorkspace, unittest.TestCase):
     def set_up_accepted_proof(self, outcome="unresolved"):
         self.setup_external()
         cp = Controller(self.root).status()["checkpoints"]["checkpoint-000001"]
+        from tests.openness_support import attach_minimum
+        reviewed = build_openness_review(cp, cp["claim"], outcome)
+        if outcome != "unresolved":
+            reviewed = attach_minimum(Controller(self.root), reviewed)
         self.search("accept", {"obligation_id": "obligation-000001", "outcome": "proof", "dependency_ids": [],
-                              "route_bindings": [], "review": build_openness_review(cp, cp["claim"], outcome),
+                              "route_bindings": [], "review": reviewed,
                               "inputs": []}, target=cp["id"], revision=2)
 
     def build_closure_spec(self, outcome="already_solved", version=2):
@@ -50,7 +54,11 @@ class OpennessClosureTests(SearchCLIWorkspace, unittest.TestCase):
                    "local_deliveries": [], "deliverables": [
                        {"requirement": requirement, "digest": output["digest"]}
                        for requirement in state["contract"]["required_deliverables"]]}
-        return {"subject": subject, "review": build_openness_review(subject, cp["claim"], outcome), "inputs": [output]}
+        reviewed = build_openness_review(subject, cp["claim"], outcome)
+        if outcome != "unresolved":
+            from tests.openness_support import attach_minimum
+            reviewed = attach_minimum(Controller(self.root), reviewed, subject=subject)
+        return {"subject": subject, "review": reviewed, "inputs": [output]}
 
     def test_unresolved_openness_keeps_a_prove_objective_pending_after_proof_acceptance(self):
         self.set_up_accepted_proof()

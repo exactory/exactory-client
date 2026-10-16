@@ -33,13 +33,18 @@ class EvidenceTests(SearchCLIWorkspace, unittest.TestCase):
     def result_review(self, subject, claim):
         origin = subject.get("origin", {})
         evidence = [origin["study_digest"], origin["source_digest"]] if "study_digest" in origin else subject["evidence_digests"]
-        return {"schema_version": 2, "subject_digest": digest(subject), "claim_digest": digest(claim), "reviewer": provenance("independent-result-reviewer"),
+        value = {"schema_version": 2, "subject_digest": digest(subject), "claim_digest": digest(claim), "reviewer": provenance("independent-result-reviewer"),
                 "decision": "approve", "findings": {key: "Inspected the exact original statement and all pinned proof inputs"
                 for key in ["statement", "assumptions", "scope", "dependencies", "policy"]} | {"openness": {
                     "outcome": "already_solved" if "acceptance_ids" in subject else "unresolved",
                     "statement_digest": digest(claim), "evidence": list(dict.fromkeys(evidence)),
                     "searched_at": "2026-10-16", "coverage": "The exact synthetic fixture sources were inspected.",
                     "reason": "The source proof settles the fixture at final closure; interim reviews assert only proof validity."}}}
+        if "acceptance_ids" in subject:
+            from tests.openness_support import attach_minimum
+            from search_controller.service import Controller
+            value = attach_minimum(Controller(self.root), value, subject=subject)
+        return value
 
     def accept_spec(self):
         cp = self.search("status")["checkpoints"]["checkpoint-000001"]

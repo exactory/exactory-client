@@ -83,6 +83,13 @@ including a computation run in the common workspace. A probe cannot substitute
 for that computation. Every finite computation inside the controller, including
 an exploratory diagnostic, keeps this native contract. At cash-out, inventory
 every probe the attack used, with its id, question and elapsed time (stage 7).
+Native evidence imports and fresh dependency audits resolve recorded probe
+origins in the associated common review store, including original JSON bytes
+before canonicalization and references inside JSON wrappers. A renamed `proof`
+artifact or an `analytical` manifest cannot supply computational proof,
+counterexample or strategy-decision credit (`exploratory_evidence`). A native
+certificate or Lean result must have its admitted verification run and candidate
+interpretation; historical accepted imports replay unchanged.
 
 ### Remaining order conditions
 
@@ -151,6 +158,20 @@ The problem-level study under `STUDY.md`, run against the sources in `references
 4. Write `study/problem.md` under the contract in `STUDY.md`: the queries, the hits worth reading, what was learned as constraints on the plan (a route already in print, a route that stopped and where, a settled range), and the stop reason (the queries ran dry, or the fixed count was reached). Copy each result found into `known` in `problem.json` and re-run `check-problem`. The plan checks these populated inputs directly, including explicit `unknown` where the evidence leaves a question open.
 5. A statement already solved in the literature ends the local research route on that statement. Record the exact source in `novelty.md`; `finish <slug>` may record the native stage 3 literature finish. Then return the result and every remaining deliverable to the controller objective. A literature hit does not create accepted proof evidence, change a requested formalization into optional work, or close the root. If the original request includes formal verification, propose and admit the exact missing formal bridge or verification node and continue it. A neighbouring open statement is a separately reviewed logical proposal that preserves the original objective; it is not an automatic native child or a substitute target.
 6. Repeat steps 1 to 3 for each unit at stage 7, with the unit's one-sentence statement as the query, before `check-unit` runs on it.
+
+For `supported_open` or `already_solved`, prepare the mechanical
+[`OpennessMinimum`](SEARCH.md#checkpoints-and-accepted-results) with the exact `statement`, declared
+`neighbours`, `searches` binding each formulation to its common
+`literature_search` digest, `reading_digests` and `settling_work_id` (null for
+`supported_open`). Use `openness` on `search review-packet --spec FILE --json`;
+the result review returns it as `findings.openness.minimum`. Each search needs
+`coverage` and `captured_at`; every `relevant` or `contradictory` result needs a
+complete bound `fulltext` reading. `potentially_relevant`, `unresolved`, unavailable
+or deferred sources remain gaps. Bind all search/reading digests in `evidence`.
+Fresh resolved reviews must include other material searches for the same
+formulations, including new settling evidence. The packet delivers the actual
+common records, captured responses and source bundles. A proof manifest alone
+cannot establish openness. See `SEARCH.md` for the exact fields and refusal codes.
 
 New result acceptance requires a version 2 native result review with an openness
 finding bound to the exact statement, novelty study, search/read evidence, date

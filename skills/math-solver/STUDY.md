@@ -67,6 +67,23 @@ decisive source remains a gap and keeps the outcome unresolved; it gives no read
 credit. The independent finding binds the statement digest,
 novelty study and search/read evidence, coverage, date and reasoning. It records
 `supported_open`, `already_solved` with its settling source, or `unresolved`.
+For a resolved finding, declare `OpennessMinimum` as documented in `SEARCH.md`:
+`schema_version: 1`, exact `statement`, distinct `neighbours`, `searches` entries
+with `formulation` and common `literature_search` `search_digest`, exact common
+`reading_digests`, and `settling_work_id` (null for `supported_open`). Export it
+through the `openness` field of `search review-packet --spec FILE --json`; the
+observed review returns it as `findings.openness.minimum`. Each query's `coverage`
+must record `complete`, `top_k` or `bounded_unordered` and `inspected_count`;
+`captured_at` must be no later than the finding's `searched_at` date. Bind the
+search/reading digests in `evidence`; the packet delivers their captured bytes.
+Every `relevant` or `contradictory` result needs complete `fulltext` reading.
+`potentially_relevant` or `unresolved` dispositions, unavailable source units and
+active or stale deferrals leave a gap. Include all material common searches for
+these formulations when reassessing, so an old empty search cannot hide a later
+settling source. Retain earlier gaps too: a later bound search's `resolved` entry,
+resolved disposition and full reading can clear an earlier uncertain hit; a later
+search covering the same queries can repair a coverage gap. The controller checks this minimum at fresh resolved findings
+and root closure; independent review judges scientific sufficiency.
 Unresolved cannot support a claim that the statement was open, but can support a
 proof that does not claim openness. For every user-specified objective here,
 including a request to prove or disprove, unresolved keeps the openness milestone
@@ -89,6 +106,12 @@ contract. At cash-out, inventory every used probe with its id, question and elap
 time. The [remaining order conditions](SKILL.md#remaining-order-conditions)
 table states why complete planning inputs, proposal study digests, strategy study, scan
 and ranking, computation admission, limits and closure remain required.
+Native import retains raw and canonical content identities and resolves the
+common probe origins again at fresh reliance. Copying probe output into a `proof`
+artifact, nesting a digest in JSON, or choosing an `analytical` manifest cannot
+grant credit (`exploratory_evidence`). A `hypothesis` checkpoint can retain an
+exploratory observation for inventory; a decision relying on it still needs
+admitted native evidence. Historical accepted imports replay unchanged.
 
 Before proposing finite execution, cite these saved facts in the version 2
 computation preflight from `SEARCH.md#computation-admission-and-mandatory-interpretation`.

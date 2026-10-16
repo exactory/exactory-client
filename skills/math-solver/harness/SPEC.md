@@ -27,6 +27,29 @@ verification commands route through the same frozen executor after an independen
 input review. Native journal bytes, `result.json`, unit stamps, and `FINISHED.json`
 remain unchanged local facts. None is controller acceptance or root completion.
 
+Fresh result acceptance uses native result review version 2. A resolved openness
+finding (`supported_open` or `already_solved`) needs the `OpennessMinimum` defined
+in `../SEARCH.md`: exact `statement`, declared `neighbours`, bound common searches
+with actual `coverage` and `captured_at`, pinned `reading_digests` establishing
+full reading for every relevant or contradictory result, and `settling_work_id`
+for `already_solved`. The observed packet delivers the common records and source
+bytes. Missing, unavailable or deferred required evidence leaves `unresolved`;
+proof validity may be accepted separately, while root closure stays pending.
+Fresh resolved findings must include other material searches of those formulations.
+This does not reinstate a common preparation gate for research. Requested formal
+verification and deliverables remain required after `already_solved`. Historical
+version 1 acceptances and closures replay under their recorded rules.
+
+Native evidence import records original and canonical content identities and
+resolves shared exploratory probe origins in the associated common store.
+Fresh checkpoint, admission, strategy, computation and acceptance dependency
+audits refuse exploratory proof, counterexample or decision credit regardless of
+artifact role, analytical classification or JSON wrapper. A probe-derived native
+certificate or Lean proof requires admitted verification and a candidate
+interpretation; historical accepted imports replay. Exploratory probes remain
+outside native runs and reservations, with no native credit. Their actual `id`,
+`question` and `elapsed_seconds` belong in `units/INVENTORY.md`.
+
 ## Workspace
 
 `attack/<slug>/` holds:

@@ -179,9 +179,11 @@ def _native_executables(seed, state, content):
     return {key: value for key, value in executables.items() if key not in scientific}, inventories
 
 
-def _closure(seed, state, content, artifacts, *, write):
+def _closure(seed, state, content, artifacts, *, write, common_records=None):
     from research_harness.artifacts import describe_artifact
-    index = {s.digest(record): record for record in objects([seed, state])}
+    index = {s.digest(record): record for record in objects([seed, state, common_records or {}])}
+    from research_harness.review_delivery import references
+    common_artifacts = {row["sha256"]: row for row in references(common_records or {})}
     pending, seen, found, unavailable = list(_digests(seed)), set(), {}, []
     executables, inventories = _native_executables(seed, state, content)
     provenance = {}
@@ -199,12 +201,15 @@ def _closure(seed, state, content, artifacts, *, write):
             raw = _read_optional(content, digest, "artifact")
             if raw is None and digest in index:
                 value = index[digest]
+            if raw is None and value is None and digest in common_artifacts:
+                raw = artifacts.read(common_artifacts[digest])
         if value is not None:
             raw, category = canonical_bytes(value), "blob"
             # The complete typed toolchain inventory is delivered as evidence;
             # its installed binaries are bound by native execution validation.
             if digest not in inventories:
                 pending.extend(_digests(value))
+            structured = value
         elif raw is not None:
             category = "artifact"
             try:
@@ -216,6 +221,11 @@ def _closure(seed, state, content, artifacts, *, write):
         else:
             unavailable.append(digest)
             continue
+        for row in objects(structured):
+            for field, namespace in (("source_id", "source"), ("bundle_id", "source_bundle"), ("version_id", "work")):
+                identity = row.get(field)
+                if isinstance(identity, str) and identity in (common_records or {}).get(namespace, {}):
+                    pending.append(s.digest(common_records[namespace][identity]))
         media = _media(raw, category == "blob")
         reference = artifacts.put(raw, media) if write else describe_artifact(raw, media)
         found[digest] = {"digest": digest, "kind": category, "artifact": reference}
@@ -223,12 +233,17 @@ def _closure(seed, state, content, artifacts, *, write):
             [provenance[key] for key in sorted(provenance)])
 
 
-def packet(root, state, content, subject, review_kind, claim_digest, reviewer, artifacts, *, write=False):
+def packet(root, state, content, subject, review_kind, claim_digest, reviewer, artifacts, *, write=False,
+           openness=None, common_records=None):
     from research_harness.native_review import PROTOCOL
     context = scientific_context(state, subject, review_kind)
+    if openness is not None:
+        from .openness import validate_minimum
+        validate_minimum(openness)
+        context["openness_minimum"] = copy.deepcopy(openness)
     seed = {"subject": subject, "contract": state["contract"], "scientific_context": context,
             "claim_digest": claim_digest}
-    evidence, unavailable, provenance = _closure(seed, state, content, artifacts, write=write)
+    evidence, unavailable, provenance = _closure(seed, state, content, artifacts, write=write, common_records=common_records)
     return {"protocol": PROTOCOL, "kind": review_kind, "root": str(Path(root).resolve()),
             "objective_id": state["objective_id"], "contract": copy.deepcopy(state["contract"]),
             "subject": copy.deepcopy(subject), "subject_digest": s.digest(subject), "claim_digest": claim_digest,
@@ -283,7 +298,7 @@ def export_packet(controller, spec):
     from research_harness.native_review import KINDS, load_packet
     from research_harness.storage import Store
     from .evidence import import_inputs
-    s.closed(spec, "kind subject claim_digest reviewer inputs")
+    s.closed(spec, "kind subject claim_digest reviewer inputs" + (" openness" if "openness" in spec else ""))
     s.choice(spec["kind"], KINDS)
     s.require(isinstance(spec["subject"], dict), "Native review subject must be a record")
     s.validate_provenance(spec["reviewer"])
@@ -294,10 +309,11 @@ def export_packet(controller, spec):
         prepare_subject(controller, state, content, spec["subject"])
         content.put_blob(spec["subject"])
         common = common_root(controller.root, state, spec["subject"])
-        Store(common, create=True)
+        records = Store(common, create=True).snapshot()["records"]
         artifacts = ArtifactStore(common)
         value = packet(controller.root, state, content, spec["subject"], spec["kind"],
-                       spec["claim_digest"], spec["reviewer"], artifacts, write=True)
+                       spec["claim_digest"], spec["reviewer"], artifacts, write=True,
+                       openness=spec.get("openness"), common_records=records if "openness" in spec else None)
         reference = artifacts.put(canonical_bytes(value), "application/json")
         load_packet(artifacts, reference, spec["reviewer"]["actor_id"])
         return {"workspace": str(common), "native_packet": reference,
@@ -343,7 +359,9 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
                       != normalized_text(value["reviewer"]["actor_id"]),
                       "The native proposal author cannot supply its independent review", "review_not_independent")
         if new:
-            expected = packet(root, state, content, subject, kind(value), value.get("claim_digest"), value["reviewer"], artifacts)
+            minimum = value.get("findings", {}).get("openness", {}).get("minimum")
+            expected = packet(root, state, content, subject, kind(value), value.get("claim_digest"), value["reviewer"], artifacts,
+                              openness=minimum, common_records=records if minimum is not None else None)
             s.require(supplied == expected, "The reviewer packet omits or changes required native scientific evidence", "review_packet_mismatch")
         for entry in supplied["evidence"]:
             artifacts.read(entry["artifact"])
@@ -351,6 +369,12 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
             delivered = {entry["digest"] for entry in supplied["evidence"]}
             s.require(set(value["findings"]["openness"]["evidence"]) <= delivered,
                       "Openness evidence must be delivered in the observed review packet", "review_packet_mismatch")
+            if new and value["findings"]["openness"]["outcome"] != "unresolved":
+                from .openness import audit_minimum
+                claim = next((row for row in objects([supplied["subject"], state])
+                              if s.digest(row) == value["claim_digest"]), None)
+                s.require(claim is not None, "The exact reviewed claim is unavailable", "claim_mismatch")
+                audit_minimum(value["findings"]["openness"], claim, records, artifacts, delivered)
         return current
     except ResearchError as error:
         raise SearchError("review_context_unverified", "Shared native review evidence could not be verified",
@@ -383,6 +407,8 @@ def node_reviews(root, state, content, node, *, common_guard=None):
     assessments = state["control"]["strategy_refresh"]["assessments"]
     if assessments and node["id"] in assessments[-1]["assessment"]["plan_bindings"]:
         values.append(assessments[-1]["review"])
+        from .provenance import audit_strategy_inputs
+        audit_strategy_inputs(root, state, assessments[-1]["assessment"], content, common_guard=common_guard)
     for allowance in state["service"]["adoption_allowances"]:
         if s.digest(allowance["proposal"]) == node["admission"]["proposal_digest"]:
             values.extend([allowance["review"], allowance["allowance_review"]])
@@ -393,6 +419,11 @@ def node_reviews(root, state, content, node, *, common_guard=None):
 def validate_submitted(controller, state, spec, candidate, content, locks):
     """Hold the common snapshot through native commit for ingress and use."""
     from .evidence import audit_state, manifest_closure
+    state = copy.deepcopy(state)
+    from .provenance import record_probe_origins
+    for operation in candidate["operations"]:
+        if operation["kind"] == "probe_origins_recorded":
+            record_probe_origins(state, operation["payload"])
     incoming = list(reviews(spec))
     for operation in candidate["operations"]:
         if operation["kind"] == "checkpoint_recorded":
@@ -401,7 +432,7 @@ def validate_submitted(controller, state, spec, candidate, content, locks):
                 if manifest.get("verification") is not None:
                     incoming.extend(reviews(manifest["verification"].get("policy_review", {})))
     command, target = candidate["command"], candidate["target"]
-    consuming = command in {"admit", "begin", "run", "accept", "complete", "reassess"}
+    consuming = command in {"admit", "begin", "run", "checkpoint", "accept", "complete", "reassess"}
     if not incoming and not consuming:
         return
     for value in incoming:
@@ -418,7 +449,7 @@ def validate_submitted(controller, state, spec, candidate, content, locks):
         if new_review:
             prepare_subject(controller, state, content, subject)
         require_review(controller.root, state, content, value, subject=subject,
-                       new=new_review or command == "complete", common_guard=guard)
+                       new=new_review or command in {"accept", "complete"}, common_guard=guard)
     if command == "admit":
         from .evidence import audit_admission
         audit_admission(controller.root, state, state["proposals"][target]["record"], content, common_guard=guard)
@@ -426,6 +457,11 @@ def validate_submitted(controller, state, spec, candidate, content, locks):
     elif command in {"begin", "run"}:
         from .integration import audit_work
         audit_work(controller, state, state["nodes"][target], content, common_guard=guard)
+    elif command == "checkpoint":
+        from .evidence import audit_checkpoint
+        checkpoint = spec["checkpoint"]
+        audit_checkpoint(controller.root, state, checkpoint, content, verify=False, common_guard=guard,
+                         fresh=checkpoint["kind"] != "hypothesis")
     elif command == "adopt":
         from .adoption import record_import, record_import_version, record_allowance
         from .evidence import audit_admission
@@ -449,5 +485,11 @@ def validate_submitted(controller, state, spec, candidate, content, locks):
             from .computation_io import audit_computation
             audit_computation(controller.root, state, proposal, spec["computation"], content, common_guard=guard)
     elif command in {"accept", "complete", "reassess"}:
-        s.require(not audit_state(controller.root, state, content, common_guard=guard),
+        if command == "accept":
+            from .evidence import audit_checkpoint
+            audit_checkpoint(controller.root, state, state["checkpoints"][target], content, common_guard=guard, fresh=True)
+        if command == "reassess":
+            from .provenance import audit_strategy_inputs
+            audit_strategy_inputs(controller.root, state, spec["assessment"], content, common_guard=guard)
+        s.require(not audit_state(controller.root, state, content, common_guard=guard, fresh=True),
                   "A currently relied-on independent review or proof dependency is unavailable", "audit_failed")
