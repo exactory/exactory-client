@@ -24,6 +24,8 @@ from .source_deferrals import defer_source, resume_source, assess_deferrals
 from .publication_scope import record_publication_scope, select_publication_scope, record_scoped_readiness_review
 from .workspace import find_workspace, strict_json
 from . import research_decisions, review_protocol, strategy
+from .depth import record_depth
+from .probe import record_probe_intent, record_probe, summarize_probes
 
 
 OPERATIONS = {
@@ -33,6 +35,9 @@ OPERATIONS = {
     "target": principles.set_target,
     "constitution": principles.revalidate_constitution,
     "policy": principles.change_policy,
+    "depth": record_depth,
+    "probe": record_probe,
+    "probe-intent": record_probe_intent,
     "roots": graph.set_roots,
     "bundle": literature.import_bundle,
     "read": reading.record_reading,
@@ -306,6 +311,13 @@ def status_report(store, *, counters=False):
     upcoming = preparation.get("next") if study and study["stage"] == "cohort" else None
     obligations = current_obligations({"obligations": report["obligations"], "preparation": preparation})
     current_challenge = challenge.find_current_challenge(records) if profile == "research" else None
+    tool_status = {}
+    if records.get("probe_intent") or records.get("probe"):
+        tool_status["probes"] = summarize_probes(records)
+    provisional = [search for search in records.get("literature_search", {}).values() if search.get("provisional")]
+    if provisional:
+        tool_status["provisional_searches"] = [{"id": search["id"], "question": search["question"], "profile": search["profile"]}
+                                                for search in provisional]
     scope_status = {}
     if scoped_report is not None:
         scope_status = {key: scoped_report[key] for key in ("manuscript_ready", "manuscript_obligations", "objective_complete",
@@ -322,7 +334,7 @@ def status_report(store, *, counters=False):
                 source_deferrals=assess_deferrals(records, evaluation, profile),
                 deferred_obligations=literature.foundation_state(records, evaluation, profile).get("deferred_obligations", []),
                 study=study, preparation=preparation, resources=resources.account_report(records, profile),
-                limits=limits_report(records), **diagnostics, **scope_status,
+                limits=limits_report(records), **tool_status, **diagnostics, **scope_status,
                 round=round_summary(round_report) if round_report else None,
                 grand_challenge=current_challenge["payload"] if current_challenge else None,
                 next=upcoming or (order_obligations(obligations)[0] if obligations else None),

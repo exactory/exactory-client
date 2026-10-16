@@ -1,5 +1,172 @@
 # Research CLI
 
+## Depth plan (`depth`)
+
+Record `{id, values, reason}` as an immutable `depth_plan` and select it as current.
+The ID and reason are required nonempty text. Values may contain any subset of:
+
+| Key | Default |
+| --- | ---: |
+| `loop_abstracts` | 100 |
+| `round_loop_abstracts` | 40 |
+| `hits_per_query` | 10 |
+| `innovation_candidates` | 10 |
+| `innovation_cases` | 5 |
+| `sample_size` | 100 |
+| `search_readings` | 20 |
+| `core_fulltexts` | 10 |
+
+Amounts are positive integers with no fixed upper ceiling. Omitted keys retain
+their current values, and merged `innovation_cases` cannot exceed
+`innovation_candidates`. Budgets still bound cost. Verification keeps its fixed
+contract and refuses plans or explicit overrides with `profile_inapplicable`.
+Research depth needs no particular constitution version or revalidation.
+
+```json
+{"id":"depth-1","values":{"loop_abstracts":150,"hits_per_query":15},"reason":"Broaden the next comparison."}
+```
+
+```sh
+exactory-research depth --file depth.json --expected-revision REV --request-id depth-1
+```
+
+The plan records all eight effective defaults and its revision. Search, sample,
+`require-fulltext` with purpose `core`, innovation, and loop-close accept an
+optional `depth` object with their relevant keys. For loop or search-hit
+`read-batch`, `depth: {"loop_abstracts":150,"round_loop_abstracts":60}` means an
+abstract batch with those amounts; legacy `depth: "abstract"` remains supported.
+A search can also supply `hits_per_query` directly, which takes precedence over
+`depth.hits_per_query`. Transport batch limits remain unchanged.
+
+Each call records resolved amounts: searches store `hits_per_query`; reading
+batches store `effective_depth`; samples and core requirements store `depth`;
+innovation stores its candidate and case counts; loop closures store their loop
+limit in `depth.loop_abstracts`. Historical records lacking these fields retain
+their original policy values. Saved sections are reassessed against their saved
+counts. Defaults and overrides change work amounts, never claim minimums.
+
+Depth stays outside configuration and dependency digests. With a selected plan,
+status includes `limits.depth: {plan_id, values}`; old stores keep their report
+shape. Summary plan IDs are truncated to 64 characters. Invalid keys, types,
+nonpositive values or case relationships produce `invalid_input`; immutable ID,
+revision and request conflicts use the normal mutation errors.
+
+## Exploratory computation (`probe-intent`, `probe`)
+
+Run a local computation at any stage, including before a target or cycle exists:
+
+```sh
+exactory-lab probe --id finite-check-1 --question "Does the finite example fit?" \
+  --script check.py --input data.json --output-dir results --timeout 30
+```
+
+The launcher pins the script and repeated `--input` files, records a managed
+intent, and reserves the timeout against the experiment wall-time budget before
+launch. It requires an initialized configuration, with no target, stage or
+readiness check. The intent payload is:
+
+```text
+{id, question, interpreter, program, inputs, timeout_seconds}
+```
+
+Question and interpreter are nonempty text; program is a pinned artifact
+descriptor and inputs is an array of them. `timeout_seconds` is finite and
+positive. A different payload under an existing ID is refused. Record one with
+`exactory-research probe-intent --file intent.json --expected-revision REV
+--request-id probe-intent:ID`.
+
+The script receives `[current_python, copied_script, copied_input, ...]`, with
+closed stdin and a fresh cwd under `research/probes/ID/`. `--output-dir` is
+relative to that cwd and defaults to `.`. Every new or modified file there is
+pinned, including modified copies of original inputs; the intent retains their
+original bytes. Outputs, stdout and stderr retain exploratory provenance through
+later result imports. They supply no managed prospective execution credit.
+Unrelated imported history keeps its existing standing. A separate, actually
+observed admitted execution may validate the same result independently.
+
+The outcome payload is:
+
+```text
+{id, command, outputs, stdout, stderr, exit_status, elapsed_seconds, observation}
+```
+
+Command and observation are required text. Outputs is an array of pinned
+descriptors; stdout and stderr are pinned descriptors. Elapsed seconds is finite
+and nonnegative. Exit status is an integer code, `timed_out`, `failed`,
+`output_bound` or `interrupted`. Nonzero exits, timeout cleanup, launch failures
+and output-bound outcomes retain actual usage. Recording the outcome charges it
+even if the actual cost exhausts the budget, and releases the intent's hold.
+`--observation TEXT` overrides the factual default. Manual recording uses
+`exactory-research probe --file outcome.json --expected-revision REV
+--request-id probe:ID`; a locally claimed launch must retain its terminal evidence.
+
+A worker retains exclusive ownership independently of its launcher. A retry
+during a live run prints `{"id":"ID","status":"pending","state":"running"}`
+and changes neither the revision nor the reservation. A terminal ID prints its
+original receipt, even if the newly supplied script path no longer exists; it
+never executes again. An intent without an outcome is reconciled only after its
+owner lock is free, or valid terminal evidence establishes completion. Complete
+files recover the original result; otherwise the outcome is `interrupted`.
+Partial artifacts remain pinned. Last measured elapsed time is charged and any
+unmeasured remainder is explicitly counted as unknown resource usage. Absence of
+an outcome alone never releases a hold. Use a new ID for a new execution.
+
+Each captured stream is bounded at 32 MiB. Exceeding that bound terminates the
+process group and records `output_bound`; the bounded prefix is pinned, the raw
+file remains, and its full SHA identity retains exploratory provenance. Unsafe
+output paths produce a charged failed capture without admitting unsafe artifacts.
+The launcher prints JSON receipts successfully for recorded failures and timeouts.
+Its managed request IDs are `probe-intent:ID`, `probe-launch:ID` and `probe:ID`.
+
+Errors include `configuration_missing`, `resource_budget_exhausted` before launch,
+`probe_intent_missing` for an outcome without an intent, `invalid_input`,
+`artifact_missing`, `artifact_corrupt`, `unsafe_path`, and normal immutable/revision/
+request conflicts. Status adds `probes: {count, elapsed_seconds}` when probe
+history exists. Probes alone never form a result candidate.
+
+## Search depth, coverage and provisional questions (`search`)
+
+A search records its resolved `hits_per_query`, optional per-call `depth`, and one
+coverage object per query:
+
+```text
+{query, requested_k, returned_count, inspected_count, page_positions,
+ provider, ordering, kind}
+```
+
+`returned_count` counts captured result rows; `inspected_count` counts distinct
+captured works accounted by a disposition, without granting reading credit.
+Positions preserve unique captured page starts in receipt order. Provider is a
+name or a list for a mixed-provider query; ordering contains explicit captured
+request sort parameters, or null. `complete` requires the existing native
+enumeration evidence with no pending pages. `top_k` requires an intact ordered
+prefix of at least requested k. Otherwise new coverage is `bounded_unordered`.
+An author's label cannot establish completeness or ordering. All captured
+responses remain in the record. Legacy coverage is derived from saved evidence,
+with `unspecified` only where that evidence is ambiguous; nothing is recaptured.
+
+New `integrity_errors` contains the search's pending items except
+`search_response_incomplete`. Bounded enumeration is coverage, not an integrity
+error. `find_search_integrity_errors(search)` supplies the same interpretation
+for historical records without changing their reports.
+
+Before roots exist, add required text `question` to the normal search payload:
+
+```json
+{"id":"early-search","profile":"research","purpose":"direct","question":"Does this direction already have a solution?","queries":["bounded sequences"],"responses":[{"source_id":"CAPTURE_ID","query":"bounded sequences","query_locator":{"kind":"json","pointer":"/query","value":"bounded sequences"},"results_pointer":"/results"}],"captured_at":"2026-10-16T12:00:00Z","found_work_ids":[],"cited_work_ids":[],"verdict":"nothing-new","impact":"No matching result appeared in this captured response.","gaps":[],"dispositions":[],"scope":"exploratory"}
+```
+
+Replace `CAPTURE_ID` with the matching captured receipt, set its actual capture
+time, and account for every returned work as in a normal search. The record has
+`scope_digest: null` and `provisional: true`, appears in status, and grants no
+purpose selection, loop coverage, claim minimum or foundation credit. Once roots
+exist, a new scoped search may reuse the exact responses and queries with
+`binding: {"provisional_search_id":"early-search","reason":"These unchanged receipts address the chosen roots."}`.
+The binding validates matching profile/purpose and records the current scope.
+Roots never force recapturing unchanged evidence. Invalid receipts, substitutions
+or unsupported depth produce the normal `invalid_search`/`invalid_input` errors;
+missing scope without a question still produces `roots_missing`.
+
 ## Scientific contribution decisions in 0.50.0
 
 Managed studies and drafts now use one phase-specific decision at objective,

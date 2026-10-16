@@ -37,15 +37,25 @@ def current_store(root):
 
 def pin_artifact(store, payload, *, expected_revision, request_id):
     """Save authored program, review or provenance bytes without result credit."""
+    from .probe_provenance import find_probe_path_bindings, pin_probe_local_artifact, should_stage_probe_artifact_pin
+    if should_stage_probe_artifact_pin(store.snapshot()["records"], payload, request_id):
+        return pin_probe_local_artifact(store, payload, expected_revision=expected_revision, request_id=request_id)
     artifacts = ArtifactStore(store.root)
     def prepare(records, value):
         fields(value, ("id", "path", "media_type"))
         text(value["id"], "Local artifact ID")
+        if find_probe_path_bindings(records, value["path"]):
+            raise ResearchError("probe_artifact_pin_required", "Freeze this probe path before publishing its captured bytes")
         artifact = artifacts.put(read_file(store.root, value["path"]), value["media_type"])
         record = dict(value, artifact=artifact, scientific_validation=False)
         return [immutable_record(records, "local_artifact", value["id"], record)], record
-    return prepared_mutation(store, "workspace.artifact", payload, prepare,
-                             expected_revision=expected_revision, request_id=request_id)
+    try:
+        return prepared_mutation(store, "workspace.artifact", payload, prepare,
+                                 expected_revision=expected_revision, request_id=request_id)
+    except ResearchError as error:
+        if error.code != "probe_artifact_pin_required":
+            raise
+        return pin_probe_local_artifact(store, payload, expected_revision=expected_revision, request_id=request_id)
 
 
 def initialization_payload(store, kind, state, request_id, *, preparation_policy=None):

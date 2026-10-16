@@ -4326,5 +4326,46 @@
       }
     ],
     "correction_admissible": null
+  },
+  "depth": {
+    "id": "depth-1",
+    "values": {
+      "loop_abstracts": 150,
+      "hits_per_query": 15
+    },
+    "reason": "Broaden the next comparison."
+  },
+  "probe-intent": {
+    "id": "finite-check-1",
+    "question": "Does the finite example fit?",
+    "interpreter": "python3",
+    "program": {
+      "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 0,
+      "media_type": "text/x-python"
+    },
+    "inputs": [],
+    "timeout_seconds": 30
+  },
+  "probe": {
+    "id": "finite-check-1",
+    "command": "python3 check.py",
+    "outputs": [],
+    "stdout": {
+      "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 0,
+      "media_type": "text/plain"
+    },
+    "stderr": {
+      "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 0,
+      "media_type": "text/plain"
+    },
+    "exit_status": 0,
+    "elapsed_seconds": 0.25,
+    "observation": "The finite example fit; this remains exploratory."
   }
 }

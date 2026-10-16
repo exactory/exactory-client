@@ -746,6 +746,67 @@ class SectionDependencyTests(SynthesisCase):
 
 
 class LineageInnovationTests(SynthesisCase):
+    def test_innovation_override_is_recorded_and_reassessed_with_its_effective_counts(self):
+        from research_harness.depth import record_depth
+        self.configured()
+        link = self.read_source(2)
+        self.candidate(link)
+        self.mutate(self.api().record_standards, self.standards(link))
+        payload = dict(self.innovation([self.case(link, 1)]), depth={"innovation_candidates": 1, "innovation_cases": 1})
+        result = self.mutate(self.api().record_innovation, payload)["result"]
+        self.assertTrue(result["ready"], result)
+        saved = self.store.snapshot()["records"]["synthesis"]["innovation"]
+        self.assertEqual(saved["depth"], {"innovation_candidates": 1, "innovation_cases": 1})
+        before = self.api().synthesis_report(self.store, "research")["sections"]["innovation"]
+        self.mutate(record_depth, {"id": "later", "values": {"innovation_candidates": 30, "innovation_cases": 20},
+                                  "reason": "Broaden future comparisons."})
+        self.assertEqual(self.api().synthesis_report(self.store, "research")["sections"]["innovation"], before)
+
+    def test_legacy_innovation_uses_original_counts_and_literal_obligations(self):
+        from research_harness.depth import record_depth
+        self.configured()
+        link = self.read_source(2)
+        self.mutate(self.api().record_standards, self.standards(link))
+        self.mutate(self.api().record_innovation, self.innovation([self.case(link, 1)]))
+        records = self.store.snapshot()["records"]
+        records["synthesis"]["innovation"].pop("depth", None)
+        before = self.api().synthesis_state(records, self.artifacts, "research")["sections"]["innovation"]
+        obligations = {item["code"]: item for item in before["obligations"]}
+        self.assertEqual(obligations["innovation_candidates_missing"]["explanation"],
+                         "Read the abstracts of ten innovation candidates before choosing the five cases.")
+        self.assertEqual(obligations["external_cases_insufficient"]["explanation"],
+                         "Analyze exactly five distinct full-read external original papers.")
+        self.mutate(record_depth, {"id": "smaller", "values": {"innovation_candidates": 1, "innovation_cases": 1},
+                                  "reason": "One future case."})
+        later = self.store.snapshot()["records"]
+        later["synthesis"]["innovation"].pop("depth", None)
+        after = self.api().synthesis_state(later, self.artifacts, "research")["sections"]["innovation"]
+        self.assertEqual(after, before)
+
+    def test_depth_changes_apply_to_new_innovation_without_invalidating_old_sections(self):
+        from research_harness.cli import OPERATIONS
+        self.configured()
+        links = [self.read_source(n) for n in (2, 3)]
+        self.mutate(self.api().record_standards, self.standards(links[0]))
+        for link in links:
+            self.candidate(link)
+        self.assertIn("depth", OPERATIONS)
+        self.mutate(OPERATIONS["depth"], {"id": "small", "values": {"innovation_candidates": 2, "innovation_cases": 1},
+                                          "reason": "Start with a small comparison."})
+        self.mutate(self.api().record_innovation, self.innovation([self.case(links[0], 1)], "small-innovation"))
+        before = self.api().synthesis_report(self.store, "research")
+        self.assertTrue(before["sections"]["innovation"]["ready"])
+        self.mutate(OPERATIONS["depth"], {"id": "larger", "values": {"innovation_candidates": 3, "innovation_cases": 2},
+                                          "reason": "Deepen the next comparison."})
+        after = self.api().synthesis_report(self.store, "research")
+        self.assertEqual(before["sections"], after["sections"])
+        self.assertEqual(before["preparation_digest"], after["preparation_digest"])
+        result = self.mutate(self.api().record_innovation,
+                             self.innovation([self.case(links[0], 1)], "new-innovation"))["result"]
+        codes = {item["code"] for item in result["obligations"]}
+        self.assertIn("innovation_candidates_missing", codes)
+        self.assertIn("external_cases_insufficient", codes)
+
     def configured(self, profile="research"):
         api = self.api("principles")
         work = self.metadata()

@@ -1,0 +1,183 @@
+{
+  "availability_qualified": [],
+  "cohort": {
+    "collections": [],
+    "counts": {
+      "abstract_obligations": 0,
+      "abstracts_read": 0,
+      "cohort_families": 0,
+      "obligations": 1
+    },
+    "digest": "1c9b4e7e1910ef9377255b89a52f2afbdba84bd50f4c137a3b0cccda72a65c99",
+    "inventory": [],
+    "limits": "Mechanical source anchoring records inspection; it does not establish comprehension.",
+    "next": {
+      "code": "cohort_missing",
+      "explanation": "Select the complete frozen cohort collection."
+    },
+    "notices": [],
+    "obligations": [
+      {
+        "code": "cohort_missing",
+        "explanation": "Select the complete frozen cohort collection."
+      }
+    ],
+    "readings": {},
+    "ready": false
+  },
+  "collections": [],
+  "counts": {
+    "abstract_read": 0,
+    "cohort_families": 0,
+    "fulltext_read": 0,
+    "obligations": 11,
+    "reference_occurrences": 0,
+    "tier_1": 1,
+    "tier_2": 0,
+    "tier_3": 0,
+    "versions": 1,
+    "works": 1
+  },
+  "digest": "e17a08068f28d7ce461324aeec85dfc0a7012a1523ef2adb34d924d931daade5",
+  "frontier_digest": "74e8fdbd1674c301fa660ff9ca7ca20a3042508177a4280e1f2927b2e5514519",
+  "invalid_references": [],
+  "inventory": [
+    {
+      "abstract_read": false,
+      "body_coverage": {
+        "complete": false,
+        "missing": [
+          {
+            "bundle_id": null,
+            "original_sha256": null,
+            "paths": [],
+            "pending": [],
+            "source_id": null
+          }
+        ],
+        "readings": {}
+      },
+      "bundle_id": null,
+      "date_assertions": [
+        {
+          "source_id": "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34",
+          "values": {
+            "published": "2026-01-03T12:00:00Z",
+            "updated": "2026-02-01T10:00:00Z"
+          }
+        }
+      ],
+      "fulltext_read": false,
+      "historical_status": "not_requested",
+      "reasons": [
+        "tier_1"
+      ],
+      "required_depth": "fulltext",
+      "required_units": [],
+      "retrievals": [],
+      "source_paths": [
+        "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+        "research/sources/objects/b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5"
+      ],
+      "tier": 1,
+      "title": "An authored example",
+      "version_id": "arxiv:2601.00001v1",
+      "visual_assets": [],
+      "work_id": "arxiv:2601.00001"
+    }
+  ],
+  "judgments_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "limits": "Mechanical source and inspection validation does not establish comprehension, source entailment, scientific truth, or universal novelty.",
+  "next": {
+    "code": "fulltext_reading_missing",
+    "explanation": "Acquire/import and inspect every required unit of this exact source bundle.",
+    "paths": [
+      "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+      "research/sources/objects/b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5"
+    ],
+    "source_id": null,
+    "version_id": "arxiv:2601.00001v1"
+  },
+  "notices": [],
+  "obligations": [
+    {
+      "code": "bibliography_incomplete",
+      "explanation": "Import an evidence-linked complete article bibliography; registry counts are insufficient.",
+      "source_id": null,
+      "version_id": "arxiv:2601.00001v1"
+    },
+    {
+      "code": "cohort_missing",
+      "explanation": "Select the complete frozen cohort collection."
+    },
+    {
+      "code": "fulltext_reading_missing",
+      "explanation": "Acquire/import and inspect every required unit of this exact source bundle.",
+      "paths": [
+        "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+        "research/sources/objects/b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5"
+      ],
+      "source_id": null,
+      "version_id": "arxiv:2601.00001v1"
+    },
+    {
+      "code": "loop_closure_missing",
+      "explanation": "Run the five-purpose loop and close it with each purpose covered or recorded as a gap."
+    },
+    {
+      "code": "search_purpose_missing",
+      "explanation": "Record this purpose's saved search responses against the current literature scope.",
+      "purpose": "originals"
+    },
+    {
+      "code": "search_purpose_missing",
+      "explanation": "Record this purpose's saved search responses against the current literature scope.",
+      "purpose": "recent"
+    },
+    {
+      "code": "search_purpose_missing",
+      "explanation": "Record this purpose's saved search responses against the current literature scope.",
+      "purpose": "adjacent"
+    },
+    {
+      "code": "search_purpose_missing",
+      "explanation": "Record this purpose's saved search responses against the current literature scope.",
+      "purpose": "direct"
+    },
+    {
+      "code": "search_purpose_missing",
+      "explanation": "Record this purpose's saved search responses against the current literature scope.",
+      "purpose": "theory"
+    },
+    {
+      "code": "source_bundle_missing",
+      "explanation": "Import the boundaries and required units for this distinct original body.",
+      "paths": [
+        "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+        "research/sources/objects/b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5"
+      ],
+      "source_id": null,
+      "version_id": "arxiv:2601.00001v1"
+    },
+    {
+      "code": "source_bundle_missing",
+      "explanation": "Import the exact article boundaries and required source units.",
+      "paths": [
+        "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+        "research/sources/objects/b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5"
+      ],
+      "version_id": "arxiv:2601.00001v1"
+    }
+  ],
+  "passed": {
+    "cohort": false,
+    "graph": false,
+    "searches": false
+  },
+  "population_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "ready": false,
+  "requirements_digest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "search_history": [],
+  "searches": [],
+  "stable_digest": "955f75e7d90296e97cfec90a771302c8bf4d824739f72721565ae63be5b53365"
+}

@@ -889,7 +889,7 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assertEqual(self.store.snapshot()["records"]["execution_binding"]["lab-run"]["outputs"], accepted)
 
     def test_declared_json_validation_output_supplies_the_metric_of_a_differently_named_program(self):
-        from research_harness.execution_evidence import _observed
+        from research_harness.execution_evidence import validate_observed_execution
         body = ("import json\nfrom pathlib import Path\nvalues = [n * n for n in range(4)]\n"
                 "Path('results/result.json').write_text(json.dumps({'values': values}))\n"
                 "Path('results/notes.txt').write_text('Every square is at most 9.')\n"
@@ -905,10 +905,10 @@ class ResearchExecutionTests(DevelopmentCase):
         records = self.store.snapshot()["records"]
         self.assertEqual(records["execution_claim"][admission["id"]]["config"]["metric_output"], "work/results/run_cycle.json")
         # Author readiness recomputes the metric from the recorded config and the sealed bytes.
-        _observed(records, self.artifacts, records["execution_outcome"][admission["id"]]["execution_id"])
+        validate_observed_execution(records, self.artifacts, records["execution_outcome"][admission["id"]]["execution_id"])
 
     def test_launched_run_records_no_metric_that_a_later_python_cannot_read_back(self):
-        from research_harness.execution_evidence import _observed
+        from research_harness.execution_evidence import validate_observed_execution
         # The program writes an integer of 4301 digits as text, so it runs under any Python.
         body = ("from pathlib import Path\n"
                 "Path('results/result.json').write_text('{\"values\": [0, 1, 4, 9]}')\n"
@@ -928,7 +928,7 @@ class ResearchExecutionTests(DevelopmentCase):
             # Read the store as Python 3.11 and later do.
             sys.set_int_max_str_digits(limit)
         records = self.store.snapshot()["records"]
-        _observed(records, self.artifacts, records["execution_outcome"][admission["id"]]["execution_id"])
+        validate_observed_execution(records, self.artifacts, records["execution_outcome"][admission["id"]]["execution_id"])
 
     def claim_as_earlier_release(self):
         """Patch the claim config to the one of exactory-client 0.47.0, which has no metric_output and so no metric

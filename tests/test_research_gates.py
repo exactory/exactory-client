@@ -127,11 +127,11 @@ class ResearchGateTests(DevelopmentCase):
 
     def test_worker_seal_consumer_rejects_an_otherwise_matching_outcome(self):
         from integration_fixtures import observed_candidate
-        from research_harness.execution_evidence import _observed
+        from research_harness.execution_evidence import validate_observed_execution
         self.prepared_study()
         payload = observed_candidate(self)
         original = self.store.snapshot()
-        accepted = _observed(original["records"], self.artifacts, payload["id"])
+        accepted = validate_observed_execution(original["records"], self.artifacts, payload["id"])
         self.assertEqual(accepted["observation"]["execution"], payload)
         records = copy.deepcopy(original["records"])
         execution = records["execution"][payload["id"]]["payload"]
@@ -140,5 +140,5 @@ class ResearchGateTests(DevelopmentCase):
         observation["execution"] = copy.deepcopy(execution)
         self.assertEqual(observation["execution"], execution)
         self.assertEqual(observation["terminal"], accepted["observation"]["terminal"])
-        self.assert_error("execution_output_mismatch", lambda: _observed(records, self.artifacts, payload["id"]))
+        self.assert_error("execution_output_mismatch", lambda: validate_observed_execution(records, self.artifacts, payload["id"]))
         self.assertEqual(self.store.snapshot(), original)

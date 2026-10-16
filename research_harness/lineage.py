@@ -3,6 +3,7 @@
 import re
 
 from .artifacts import ArtifactStore
+from .depth import resolve_depth_value, resolve_depth_values
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
@@ -21,6 +22,26 @@ INNOVATION_CANDIDATES = 10
 INNOVATION_CASES = 5
 LOOP_SOURCES = ("search", "population", "citing", "author")
 COVERING = ("relevant", "contradictory")
+
+
+def resolve_loop_limit(records):
+    return resolve_depth_value(records, "loop_abstracts", LOOP_LIMIT)
+
+
+def resolve_round_loop_limit(records):
+    return resolve_depth_value(records, "round_loop_abstracts", ROUND_LOOP_LIMIT)
+
+
+def resolve_hits_per_query(records):
+    return resolve_depth_value(records, "hits_per_query", HITS_PER_QUERY)
+
+
+def resolve_innovation_candidates(records):
+    return resolve_depth_value(records, "innovation_candidates", INNOVATION_CANDIDATES)
+
+
+def resolve_innovation_cases(records):
+    return resolve_depth_value(records, "innovation_cases", INNOVATION_CASES)
 
 
 def loop_readings(records):
@@ -51,7 +72,7 @@ def loop_state(records, profile="research"):
     strings tried, and whether the purpose is covered."""
     readings = loop_readings(records)
     searches = [s for s in records.get("literature_search", {}).values()
-                if s["profile"] == profile and s["purpose"] in SEARCH_PURPOSES]
+                if s["profile"] == profile and s["purpose"] in SEARCH_PURPOSES and not s.get("provisional")]
     purposes = {}
     for purpose in SEARCH_PURPOSES:
         hits = [r for r in readings if purpose in r["batch"]["loop"]["purposes"]]
@@ -81,7 +102,7 @@ def loop_state(records, profile="research"):
                                                        for s in own for d in s.get("dispositions", []))
         purposes[purpose] = {"readings": len(hits), "relevant": len(relevant), "queries": len(captured_queries),
                              "queries_tried": sorted(queries), "covered": bool(relevant) or empty}
-    return {"readings": len(readings), "limit": LOOP_LIMIT, "purposes": purposes,
+    return {"readings": len(readings), "limit": resolve_loop_limit(records), "purposes": purposes,
             "digest": digest([sorted(r["id"] for r in readings), sorted(s["id"] for s in searches)])}
 
 
@@ -90,11 +111,12 @@ def record_loop_closure(store, payload, *, expected_revision, request_id):
 
     Each closed purpose keeps the queries tried, so a recorded gap names the searches it rests on."""
     def prepare(records, value):
-        fields(value, ("id", "purposes"))
+        fields(value, ("id", "purposes"), ("depth",))
         text(value["id"], "Closure ID")
         if preparation_policy(records) != LINEAGE:
             raise ResearchError("policy_inapplicable", "Loop closures belong to the lineage-v1 policy", {"policy": preparation_policy(records)})
         state = loop_state(records)
+        depth = resolve_depth_values(records, value.get("depth"), keys=("loop_abstracts",))
         if not isinstance(value["purposes"], dict) or set(value["purposes"]) != set(SEARCH_PURPOSES):
             raise ResearchError("invalid_input", "Close every one of the five purposes exactly once")
         closed = {}
@@ -108,11 +130,11 @@ def record_loop_closure(store, payload, *, expected_revision, request_id):
                 raise ResearchError("invalid_input", "A covered purpose needs a covering reading or two empty queries", {"purpose": purpose})
             if item["status"] == "gap" and current["covered"]:
                 raise ResearchError("invalid_input", "A covered purpose is not a gap", {"purpose": purpose})
-            if item["status"] == "gap" and current["queries"] < 2 and state["readings"] < LOOP_LIMIT:
+            if item["status"] == "gap" and current["queries"] < 2 and state["readings"] < depth["loop_abstracts"]:
                 raise ResearchError("invalid_input", "A gap needs two distinct queries tried or the loop at its limit", {"purpose": purpose})
             closed[purpose] = dict(item, queries_tried=current["queries_tried"])
         record = {"id": value["id"], "purposes": closed, "loop_digest": state["digest"], "readings": state["readings"],
-                  "revision": expected_revision + 1}
+                  "revision": expected_revision + 1, "depth": depth}
         return [immutable_record(records, "loop_closure", value["id"], record), ("loop_closure_selection", "current", {"id": value["id"]})], record
 
     return prepared_mutation(store, "literature.loop_closure", payload, prepare, expected_revision=expected_revision, request_id=request_id)
@@ -135,9 +157,9 @@ def loop_obligations(records, profile="research"):
 def population_query(store, terms, *, limit=30):
     """Rank the enumerated population's stored abstracts by how many of the terms they contain (read-only)."""
     strings(terms, "Query terms", nonempty=True)
-    if type(limit) is not int or not 1 <= limit <= LOOP_LIMIT:
-        raise ResearchError("invalid_input", "The limit is between 1 and " + str(LOOP_LIMIT))
     records = store.snapshot()["records"]
+    if type(limit) is not int or not 1 <= limit <= resolve_loop_limit(records):
+        raise ResearchError("invalid_input", "The limit is between 1 and " + str(resolve_loop_limit(records)))
     evaluation = Evaluation(records, ArtifactStore(store.root))
     patterns = {t: re.compile(r"\b" + re.escape(t) + r"\w*", re.IGNORECASE) for t in terms}
     matches = []

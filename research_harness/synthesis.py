@@ -7,8 +7,8 @@ standards bind the cohort population, while rationale, innovation and context
 bind the citation frontier and the selected search judgments. Under lineage-v1
 and sampled-v1, every section binds the stable foundation digest instead: the
 study scope, the full-text requirements, the loop closure and the cohort sample.
-Under lineage-v1 the innovation assessment analyzes exactly five external cases,
-each chosen from the ten read innovation candidates. Every section binds its own
+Under lineage-v1 the innovation assessment uses the recorded depth amounts
+(default five external cases chosen from ten read candidates). Every section binds its own
 evidence, the scope, the configuration and the constitution. preparation_digest
 summarizes the current preparation for plans, admissions, assessments,
 checkpoints and candidates. A new assessment needs a new ID; old records and
@@ -190,7 +190,7 @@ def _selected(records, profile, kind):
     return records.get("synthesis", {}).get(identifier)
 
 
-def _innovation(state, value):
+def _innovation(state, value, depth=None):
     families = {"external": set(), "within_field": set()}
     seen, eligible = set(), []
     standards = _selected(state.records, value["profile"], "standards")
@@ -251,17 +251,25 @@ def _innovation(state, value):
     within = {family for relation, family in eligible if relation == "within_field" and family not in overlap}
     from .lineage import INNOVATION_CANDIDATES, INNOVATION_CASES, LINEAGE, candidate_families
     if preparation_policy(state.records) == LINEAGE:
+        required = depth["innovation_candidates"] if depth else INNOVATION_CANDIDATES
+        cases = depth["innovation_cases"] if depth else INNOVATION_CASES
         candidates = candidate_families(state.records)
-        if len(candidates) < INNOVATION_CANDIDATES:
-            state.obligations.append(obligation("innovation_candidates_missing", "Read the abstracts of ten innovation candidates before choosing the five cases.",
-                                                count=len(candidates), required=INNOVATION_CANDIDATES))
+        if len(candidates) < required:
+            state.obligations.append(obligation("innovation_candidates_missing", "Read the abstracts of " + str(required)
+                                                + " innovation candidates before choosing the " + str(cases) + " cases." if depth else
+                                                "Read the abstracts of ten innovation candidates before choosing the five cases.",
+                                                count=len(candidates), required=required))
         for case in value["cases"]:
             if case["relation"] == "external" and resolve_family(state.records, case["work_id"]) not in candidates:
-                state.obligations.append(obligation("innovation_case_not_candidate", "Choose the five cases among the ten read candidates.", case_id=case["id"]))
-        if len(external) < INNOVATION_CASES:
-            state.obligations.append(obligation("external_cases_insufficient", "Analyze exactly five distinct full-read external original papers.", count=len(external), minimum=INNOVATION_CASES))
-        if len(external) > INNOVATION_CASES:
-            state.obligations.append(obligation("external_cases_excess", "Select exactly five external original papers; keep additional works in the corpus.", count=len(external), maximum=INNOVATION_CASES))
+                state.obligations.append(obligation("innovation_case_not_candidate", "Choose the " + str(cases) + " cases among the "
+                                                    + str(required) + " read candidates." if depth else
+                                                    "Choose the five cases among the ten read candidates.", case_id=case["id"]))
+        if len(external) < cases:
+            state.obligations.append(obligation("external_cases_insufficient", "Analyze exactly " + str(cases) + " distinct full-read external original papers." if depth else
+                                                "Analyze exactly five distinct full-read external original papers.", count=len(external), minimum=cases))
+        if len(external) > cases:
+            state.obligations.append(obligation("external_cases_excess", "Select exactly " + str(cases) + " external original papers; keep additional works in the corpus." if depth else
+                                                "Select exactly five external original papers; keep additional works in the corpus.", count=len(external), maximum=cases))
     else:
         if len(external) < 5:
             state.obligations.append(obligation("external_cases_insufficient", "Analyze five to ten distinct full-read external original papers.", count=len(external), minimum=5))
@@ -272,14 +280,14 @@ def _innovation(state, value):
     return {"cases": len(value["cases"]), "external_papers": len(external), "within_field_papers": len(within)}
 
 
-def _assess(records, artifacts, kind, value, configuration, foundation):
+def _assess(records, artifacts, kind, value, configuration, foundation, *, depth=None):
     required = {
         "standards": ("field", "article_type", "venue", "cohort_doctrine", "methodology", "reporting", "citation", "presentation", "applicability_questions"),
         "rationale": ("and", "but", "therefore", "value"),
         "innovation": ("cases",),
         "context": ("current", "historical", "beneficiaries", "capabilities", "barriers", "uncertainties", "speculative_links"),
     }
-    fields(value, ("id", "profile", "scope") + required[kind], ("origin_collection",) if kind == "innovation" else (), code="invalid_synthesis")
+    fields(value, ("id", "profile", "scope") + required[kind], ("origin_collection", "depth") if kind == "innovation" else (), code="invalid_synthesis")
     _text(value["id"], "Assessment ID")
     _text(value["scope"], "Study-specific assessment scope")
     profile_name(value["profile"])
@@ -310,7 +318,7 @@ def _assess(records, artifacts, kind, value, configuration, foundation):
         _strings(value["therefore"]["failure_conditions"], "Response failure conditions")
         _value(value["value"])
     elif kind == "innovation":
-        counts = _innovation(state, value)
+        counts = _innovation(state, value, depth)
     else:
         state.claims(value["current"], "current")
         state.claims(value["historical"], "historical")
@@ -353,9 +361,15 @@ def _record(store, kind, payload, *, expected_revision, request_id):
             if item["code"] in ("configuration_missing", "profile_mismatch", "constitution_revalidation_required", "objective_mismatch"):
                 raise ResearchError(item["code"], item["explanation"])
         foundation = foundation_state(records, artifacts, profile)
-        assessment = _assess(records, artifacts, kind, value, configuration, foundation)
+        depth = None
+        if kind == "innovation":
+            from .depth import resolve_depth_values
+            depth = resolve_depth_values(records, value.get("depth"), keys=("innovation_candidates", "innovation_cases"))
+        assessment = _assess(records, artifacts, kind, value, configuration, foundation, depth=depth)
         record = {"id": value["id"], "kind": kind, "profile": profile, "payload": value,
                   "dependencies": assessment["dependencies"], "assessment": assessment}
+        if kind == "innovation":
+            record["depth"] = depth
         changes = [immutable_record(records, "synthesis", value["id"], record),
                    ("synthesis_selection", profile + ":" + kind, {"id": value["id"]})]
         return changes, dict(id=value["id"], kind=kind, **assessment)
@@ -399,7 +413,10 @@ def _synthesis_state(evaluation, profile):
             section = {"ready": False, "obligations": [obligation(kind + "_missing", "Record a current source-linked " + kind + " assessment.")]}
         else:
             try:
-                section = _assess(records, artifacts, kind, record["payload"], configuration, foundation)
+                # Depth governs new tool calls. Retained assessments use the amounts they were recorded under;
+                # older records used the defaults. Neither the plan nor its amounts enter dependencies.
+                section = _assess(records, artifacts, kind, record["payload"], configuration, foundation,
+                                  depth=record.get("depth") if kind == "innovation" else None)
             except ResearchError as error:
                 section = {"ready": False, "obligations": [obligation(error.code, error.message, **(error.details or {}))]}
             if section.get("dependencies") != record["dependencies"]:

@@ -1,12 +1,13 @@
 """Captured query pagination uses authored provider responses, without network."""
 
+import copy
 import json
 from urllib.parse import urlencode
 
 from literature_fixtures import LiteratureCase
 from research_fixtures import atom, entry
 from research_harness.acquisition import import_response
-from research_harness.literature import record_search
+from research_harness.literature import foundation_report, record_search
 
 
 class SearchPageTests(LiteratureCase):
@@ -22,14 +23,97 @@ class SearchPageTests(LiteratureCase):
             source_url=endpoint + "?" + urlencode(parameters), captured_at="2026-09-07T12:00:00Z",
             expected_revision=self.store.revision, request_id="native-" + str(self.sequence))
 
-    def search(self, pages):
-        return self.mutate(record_search, {"id": "search-" + str(self.sequence), "profile": "research", "purpose": "direct",
+    def search(self, pages, **overrides):
+        payload = {"id": "search-" + str(self.sequence), "profile": "research", "purpose": "direct",
             "queries": ["bounded"], "responses": [{"source_id": p["source_ids"][0], "query": "bounded"} for p in pages],
             "captured_at": "2026-09-07T12:00:00Z", "scope": "All results of the specified authored query and filters.",
             "found_work_ids": sorted({w for p in pages for w in p["work_ids"]}), "verdict": "nothing-new", "cited_work_ids": [],
             "dispositions": [{"work_id": w, "disposition": "out_of_scope", "reason": "Authored result outside the objective."}
                              for w in sorted({w for p in pages for w in p["work_ids"]})],
-            "impact": "This judgment covers only the saved query scope.", "gaps": []})["result"]
+            "impact": "This judgment covers only the saved query scope.", "gaps": []}
+        payload.update(overrides)
+        return self.mutate(record_search, payload)["result"]
+
+    def find_recorded_search(self, result):
+        return self.store.snapshot()["records"]["literature_search"][result["id"]]
+
+    def test_complete_coverage_has_exact_per_query_fields_and_keeps_every_receipt(self):
+        pages = [self.crossref([1, 2]), self.crossref([3, 4], cursor="second", next_cursor="third")]
+        search = self.find_recorded_search(self.search(pages + [pages[0]]))
+        self.assertEqual(search["coverage"], [{"query": "bounded", "requested_k": 10, "returned_count": 4,
+            "inspected_count": 4, "page_positions": ["*", "second"], "provider": "crossref", "ordering": None,
+            "kind": "complete"}])
+        self.assertEqual(len(search["responses"]), 3)
+        self.assertEqual(search["integrity_errors"], [])
+
+    def test_first_k_requires_a_captured_order_and_a_contiguous_prefix_of_k_hits(self):
+        ordered = self.find_recorded_search(self.search([self.crossref([1, 2], sort="relevance", order="desc")],
+                                                       hits_per_query=2))
+        self.assertEqual(ordered["coverage"][0], {"query": "bounded", "requested_k": 2, "returned_count": 2,
+            "inspected_count": 2, "page_positions": ["*"], "provider": "crossref",
+            "ordering": {"sort": "relevance", "order": "desc"}, "kind": "top_k"})
+        unordered = self.find_recorded_search(self.search([self.crossref([3, 4])], hits_per_query=2))
+        self.assertEqual(unordered["coverage"][0]["kind"], "bounded_unordered")
+        terminal = self.find_recorded_search(self.search([
+            self.crossref([5, 6], cursor="second", sort="relevance")], hits_per_query=2))
+        self.assertEqual(terminal["coverage"][0]["returned_count"], 2)
+        self.assertEqual(terminal["coverage"][0]["kind"], "bounded_unordered")
+        short = self.find_recorded_search(self.search([self.crossref([7, 8], sort="relevance")], hits_per_query=3))
+        self.assertEqual(short["coverage"][0]["kind"], "bounded_unordered")
+
+    def test_altered_capture_order_and_author_labels_cannot_establish_first_k(self):
+        pages = [self.crossref([1, 2], sort="published"),
+                 self.crossref([3, 4], cursor="second", sort="relevance")]
+        search = self.find_recorded_search(self.search(pages, hits_per_query=2))
+        self.assertEqual(search["coverage"][0]["kind"], "bounded_unordered")
+        self.assertIsNone(search["coverage"][0]["ordering"])
+        self.assert_error("invalid_search", lambda: self.search([pages[0]], coverage=[{"kind": "top_k"}]))
+
+    def test_raw_rows_and_inspected_work_counts_remain_distinct_on_parser_failures(self):
+        page = self.page("crossref", {"message": {"total-results": 2, "items": [
+            {"DOI": "10.1234/valid", "title": ["Valid authored result"]}, {"title": ["Missing identifier"]}]}},
+            {"query": "bounded", "rows": "2", "sort": "relevance"})
+        search = self.find_recorded_search(self.search([page], hits_per_query=2))
+        self.assertEqual(search["coverage"][0]["returned_count"], 2)
+        self.assertEqual(search["coverage"][0]["inspected_count"], 1)
+        self.assertEqual(search["coverage"][0]["kind"], "bounded_unordered")
+        self.assertTrue(search["integrity_errors"])
+
+    def test_legacy_coverage_uses_saved_complete_or_ordered_receipts_without_rewriting_reports(self):
+        from research_harness.literature import find_search_coverage
+        ranked = self.page("crossref", {"message": {"total-results": 20, "items": [
+            {"DOI": "10.1234/ranked." + str(i), "title": ["Ranked authored result"]} for i in range(10)]}},
+            {"query": "bounded", "rows": "10", "sort": "relevance"})
+        for pages, amount, expected in (([self.crossref([1, 2], total=2)], 10, "complete"),
+                                        ([ranked], 10, "top_k")):
+            search = self.find_recorded_search(self.search(pages, hits_per_query=amount))
+            legacy = {k: v for k, v in search.items() if k not in ("coverage", "integrity_errors", "hits_per_query")}
+            self.store.mutate("legacy-search", {}, lambda tx: tx.put("literature_search", legacy["id"], legacy),
+                              expected_revision=self.store.revision, request_id="legacy-" + legacy["id"])
+            before = foundation_report(self.store, "research")
+            records = self.store.snapshot()["records"]
+            self.assertEqual(find_search_coverage(legacy, records, self.artifacts)[0]["kind"], expected)
+            self.assertEqual(find_search_coverage(legacy)[0]["kind"], expected)
+            self.assertEqual(before, foundation_report(self.store, "research"))
+            self.assertNotIn("coverage", before["searches"][0])
+        ambiguous = {"queries": ["unknown"], "responses": [], "found_work_ids": [], "pending": []}
+        self.assertEqual(find_search_coverage(ambiguous)[0]["kind"], "unspecified")
+
+    def test_legacy_fallback_keeps_integrity_failures_with_their_query(self):
+        from research_harness.literature import find_search_coverage
+        legacy = {"queries": ["bad", "ranked"], "found_work_ids": [],
+                  "responses": [{"source_id": query + "-source", "query": query} for query in ("bad", "ranked")],
+                  "page_groups": [{"id": query + "-group", "query": query, "provider": "crossref",
+                                   "source_ids": [query + "-source"], "parameters": [["sort", "relevance"]],
+                                   "returned_count": 10, "complete": False} for query in ("bad", "ranked")]}
+        for provenance in ({"group_id": "bad-group"}, {"source_id": "bad-source"}, {}):
+            with self.subTest(provenance=provenance):
+                legacy["pending"] = [{"code": "search_page_metadata_mismatch", **provenance}]
+                before = copy.deepcopy(legacy)
+                coverage = {row["query"]: row["kind"] for row in find_search_coverage(legacy)}
+                self.assertEqual(coverage["bad"], "bounded_unordered")
+                self.assertEqual(coverage["ranked"], "top_k" if provenance else "bounded_unordered")
+                self.assertEqual(legacy, before)
 
     def crossref(self, numbers, total=4, cursor="*", next_cursor="second", **extra):
         data = {"message": {"total-results": total, "next-cursor": next_cursor,
@@ -209,7 +293,13 @@ class SearchPageTests(LiteratureCase):
         self.assertFalse(self.mutate(record_search, build_citing_judgment("cites:W123"))["result"]["pending"])
 
     def test_search_report_preserves_native_missing_pages(self):
-        self.search([self.crossref([1, 2])])
+        search = self.find_recorded_search(self.search([self.crossref([1, 2])]))
+        self.assertEqual([p["code"] for p in search["pending"]], ["search_response_incomplete"])
+        self.assertEqual(search["integrity_errors"], [])
+        self.assertNotIn("search_pending", self.codes())
+        legacy = {k: v for k, v in search.items() if k not in ("coverage", "integrity_errors", "hits_per_query")}
+        self.store.mutate("legacy-search", {}, lambda tx: tx.put("literature_search", search["id"], legacy),
+                          expected_revision=self.store.revision, request_id="legacy-bounded")
         self.assertIn("search_pending", self.codes())
 
     def test_duplicate_results_changed_counts_and_missing_middle_page_stay_pending(self):
