@@ -54,10 +54,14 @@ def gate_state(records, artifacts, action, *, profile=None):
     if action == "direction":
         if not managed:
             return synthesis_state(records, artifacts, profile)
+        from .claim_minimums import assess_direction
         from .research_decisions import decision_state
         configuration = configuration_state(records, artifacts, profile)
         decision = decision_state(records, artifacts, "cycle")
-        return _report(configuration["obligations"] + decision["obligations"],
+        # Before the cycle decision exists, the gate lists the direction minimum
+        # itself; a recorded decision carries the minimum in its own obligations.
+        minimum = assess_direction(records, artifacts) if decision["decision"] is None else []
+        return _report(configuration["obligations"] + decision["obligations"] + minimum,
                        configuration=configuration, research_decision=decision)
     if action == "manuscript-readiness":
         from .publication_scope import assess_manuscript_readiness

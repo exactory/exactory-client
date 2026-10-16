@@ -33,17 +33,21 @@ class ResearchGateTests(DevelopmentCase):
 
     def test_direction_requires_configuration_and_the_cycle_decision(self):
         from managed_strategy_fixtures import bind_plan
+        from research_harness.claim_minimums import assess_direction
         from research_harness.gates import gate_state, validate_transition
         from research_harness.research_decisions import decision_state
         records = self.build_managed_records()
         report = gate_state(records, self.artifacts, "direction")
         self.assertFalse(report["ready"])
-        self.assertEqual(report["obligations"], decision_state(records, self.artifacts, "cycle")["obligations"])
+        self.assertEqual(report["obligations"], decision_state(records, self.artifacts, "cycle")["obligations"]
+                         + assess_direction(records, self.artifacts))
         self.assert_error("readiness_required", lambda: validate_transition(records, self.artifacts,
             {"stage": "literature"}, {"stage": "ideate", "status": "in_progress"}))
         bind_plan(self, self.plan())
         records = self.store.snapshot()["records"]
-        records["synthesis_selection"] = {}
+        # The standards section is part of the direction minimum; the other sections are not.
+        records["synthesis_selection"] = {key: value for key, value in records["synthesis_selection"].items()
+                                          if key == "research:standards"}
         self.assertTrue(gate_state(records, self.artifacts, "direction")["ready"])
         validate_transition(records, self.artifacts, {"stage": "literature"},
                             {"stage": "ideate", "status": "in_progress"})
@@ -57,7 +61,8 @@ class ResearchGateTests(DevelopmentCase):
         self.mutate(self.development().plan_cycle, bind_plan(self, self.plan()))
         self.admit()
         records = self.store.snapshot()["records"]
-        records["synthesis_selection"] = {}
+        records["synthesis_selection"] = {key: value for key, value in records["synthesis_selection"].items()
+                                          if key == "research:standards"}
         report = gate_state(records, self.artifacts, "execution")
         self.assertTrue(report["ready"], report["obligations"])
 
@@ -80,6 +85,18 @@ class ResearchGateTests(DevelopmentCase):
             self.assertEqual(current_obligations(report), report["obligations"])
             self.assertLess(len(json.dumps(next_summary(report)).encode()), 2048)
             self.assertLess(len(json.dumps(status_summary(report)).encode()), 16384)
+
+    def test_managed_next_names_direction_evidence_before_a_decision_exists(self):
+        from research_harness.claim_minimums import assess_direction
+        from research_harness.gates import gate_state
+        from research_harness.report_views import order_obligations
+        records = self.build_managed_records()
+        records["search_selection"] = {key: value for key, value in records["search_selection"].items()
+                                       if key != "research:direct"}
+        self.assertEqual([item["code"] for item in assess_direction(records, self.artifacts)], ["direction_search_missing"])
+        codes = [item["code"] for item in order_obligations(gate_state(records, self.artifacts, "direction")["obligations"])]
+        self.assertEqual(codes[0], "direction_search_missing")
+        self.assertIn("strategy_dossier_missing", codes)
 
     def test_direction_is_the_unchanged_preparation_report_for_other_stores(self):
         from research_harness.gates import gate_state
