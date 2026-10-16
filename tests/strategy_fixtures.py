@@ -167,11 +167,11 @@ class StrategyCase(unittest.TestCase):
                                                        "evidence": [self.evidence]} for kind in kinds]},
             "objections": [] if objections is None else objections, "limitations": ["Synthetic scientific judgments test software contracts only."]}
 
-    def record_response(self, identifier, reviewer, response, *, dossier_id="dossier-1", previous_prompt=False):
+    def record_response(self, identifier, reviewer, response, *, dossier_id="dossier-1", previous_prompt=False, context=None):
         protocol, decisions = self.module("review_protocol"), self.module("research_decisions")
         assignment = "assignment-" + identifier
         payload = {"id": assignment, "route_id": "route", "dossier_id": dossier_id,
-                   "role": response["stage"], "reviewer_id": reviewer, "author_id": "author", "context": {}}
+                   "role": response["stage"], "reviewer_id": reviewer, "author_id": "author", "context": {} if context is None else context}
         if previous_prompt:
             canonical = protocol.canonical_prompt
             with patch.object(protocol, "canonical_prompt", side_effect=lambda role, **kw: canonical(role, **dict(kw, version=1))):

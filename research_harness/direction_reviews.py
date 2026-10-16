@@ -2,11 +2,10 @@
 
 import json
 
-from .bar_sources import validate_inventory
+from .direction_sources import find_delivered_readings
 from .evaluation import Evaluation
 from .graph import obligation
-from .review_protocol import assignment_state, build_direction_evidence
-from .storage import Store
+from .review_protocol import assignment_state, describe_direction_evidence
 
 
 def collect_observed_packets(records, artifacts, assignment_id):
@@ -30,36 +29,28 @@ def collect_observed_packets(records, artifacts, assignment_id):
         repair = assignment.get("context", {}).get("context_repair")
         if isinstance(repair, dict) and repair.get("assignment_id") is not None:
             pending.append(repair["assignment_id"])
+        elif parent is None and assignment["role"] == "slate" and assignment.get("session_id") != identifier:
+            pending.append(assignment.get("session_id"))
     return packets
 
 
 def assess_direction_reviews(records, artifacts, dossier, reviews, direction):
     """Require both observed reviewers to cover the same decisive evidence and claim."""
     evaluation = Evaluation.of(records, artifacts)
-    expected = build_direction_evidence(records, evaluation, direction, dossier)
+    expected, _ = describe_direction_evidence(records, evaluation, direction, dossier)
     readings = {item["id"]: item for item in expected["readings"]}
     obligations = []
     for review in reviews:
-        covered, missing_readings = set(), set(readings)
+        covered = set()
         packets = collect_observed_packets(records, evaluation, review["assignment_id"])
-        explicit = {item["id"] for _, packet in packets for item in packet.get("direction_evidence", {}).get("readings", [])}
+        delivered = find_delivered_readings(records, evaluation, [records["reading"][identifier] for identifier in readings],
+                                            [packet for _, packet in packets])
+        missing_readings = set(readings) - delivered
         for assignment, packet in packets:
             supplied = packet.get("direction_evidence", {})
             for key in ("claim", "search", "standards", "grand_challenge"):
                 if expected[key] is not None and supplied.get(key) == expected[key]:
                     covered.add(key)
-            for item in supplied.get("readings", []):
-                if readings.get(item.get("id")) == item:
-                    missing_readings.discard(item["id"])
-            if missing_readings and "source_inventory" in packet:
-                versions = {item["id"] for item in validate_inventory(evaluation, packet["source_inventory"])}
-                values = {identifier: records["reading"][identifier] for identifier in readings}
-                revisions = evaluation.once(("direction_reading_revisions", tuple(sorted(readings))),
-                    lambda: Store(evaluation.root).find_record_revisions("reading", values))
-                for identifier in list(missing_readings):
-                    if (identifier not in explicit and readings[identifier]["version_id"] in versions and identifier in revisions
-                            and assignment["recorded_revision"] > revisions[identifier]):
-                        missing_readings.discard(identifier)
         missing = sorted({"claim", "search", "standards", "grand_challenge"} - covered)
         if missing or missing_readings:
             obligations.append(obligation("direction_evidence_unassessed", "Obtain an observed assessment or bound supplement covering the decisive direction evidence and claim.",

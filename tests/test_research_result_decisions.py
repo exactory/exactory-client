@@ -113,6 +113,15 @@ class ResultDecisionTests(DevelopmentCase):
         self.assertEqual(records["research_support"]["result-b"]["readiness_review_id"], "support-result-b")
         self.assertEqual(records["value_review"]["result-b"]["payload"]["value"]["consequence"], consequence)
         self.assertEqual(payload["goal_status"], "open")
+        for suffix in ("a", "b"):
+            assignment = records["review_assignment"]["assignment-result-" + suffix]
+            packet = json.loads(self.artifacts.read(assignment["packet"]))
+            direction = packet["direction_evidence"]
+            self.assertTrue(direction["readings"])
+            self.assertEqual({item["id"] for item in direction["readings"]},
+                             {item["reading_id"] for item in direction["passages"]})
+            attached = {item["artifact"]["sha256"] for item in packet["evidence"]}
+            self.assertTrue(all(item["excerpt"]["sha256"] in attached for item in direction["passages"]))
 
     def test_decisive_negative_result_excludes_the_proposed_stronger_bound(self):
         consequence = "The attained value 9 excludes every method requiring a uniform upper bound of 8 on this same domain."
