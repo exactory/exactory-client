@@ -17,6 +17,11 @@ def computation_inputs(value, content):
 def audit_computation(root, state, proposal, value, content, *, common_guard=None):
     validate_basis(state, proposal, value)
     computation_inputs(value, content)
+    from .provenance import audit_probe_credit
+    required = [value["basis"]["deduction_digest"]] + value["preflight"]["inspected_evidence"]
+    if value["domain"]["kind"] == "bounded_encoding":
+        required.append(value["domain"]["encoding_digest"])
+    audit_probe_credit(root, state, required, common_guard=common_guard, content=content)
     checked = set()
     for item in value["basis"]["dependencies"]:
         closure = acceptance_closure(state, item["acceptance_id"], proposal["claim"]["proof_policy"])
@@ -25,7 +30,7 @@ def audit_computation(root, state, proposal, value, content, *, common_guard=Non
             s.require(content.get_blob(s.digest(accepted["review"])) == accepted["review"],
                       "Computation basis review changed", "digest_mismatch")
             checkpoint = state["checkpoints"][accepted["checkpoint_id"]]
-            audit_checkpoint(root, state, checkpoint, content, common_guard=common_guard)
+            audit_checkpoint(root, state, checkpoint, content, common_guard=common_guard, fresh=True)
             from .reviewer import require_review
             require_review(root, state, content, accepted["review"], subject=checkpoint, common_guard=common_guard)
             checked.add(identity)

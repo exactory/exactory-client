@@ -16,6 +16,95 @@ PLUGIN = Path(__file__).resolve().parents[1]
 
 
 class ResearchGateTests(DevelopmentCase):
+    def build_managed_records(self):
+        from managed_strategy_fixtures import ManagedStrategy
+        self.prepared_study()
+        ManagedStrategy(self).ensure_intent()
+        return self.store.snapshot()["records"]
+
+    def test_managed_initiate_can_enter_literature_and_cohort_can_be_left_without_a_gate(self):
+        from research_harness.gates import validate_transition
+        records = self.build_managed_records()
+        records["reading"] = {}
+        for source in ("initiate", "cohort"):
+            with self.subTest(source=source):
+                validate_transition(records, self.artifacts, {"stage": source},
+                                    {"stage": "literature", "status": "in_progress"})
+
+    def test_direction_requires_configuration_and_the_cycle_decision(self):
+        from managed_strategy_fixtures import bind_plan
+        from research_harness.claim_minimums import assess_direction
+        from research_harness.gates import gate_state, validate_transition
+        from research_harness.research_decisions import decision_state
+        records = self.build_managed_records()
+        report = gate_state(records, self.artifacts, "direction")
+        self.assertFalse(report["ready"])
+        self.assertEqual(report["obligations"], decision_state(records, self.artifacts, "cycle")["obligations"]
+                         + assess_direction(records, self.artifacts))
+        self.assert_error("readiness_required", lambda: validate_transition(records, self.artifacts,
+            {"stage": "literature"}, {"stage": "ideate", "status": "in_progress"}))
+        bind_plan(self, self.plan())
+        records = self.store.snapshot()["records"]
+        # The standards section is part of the direction minimum; the other sections are not.
+        records["synthesis_selection"] = {key: value for key, value in records["synthesis_selection"].items()
+                                          if key == "research:standards"}
+        self.assertTrue(gate_state(records, self.artifacts, "direction")["ready"])
+        validate_transition(records, self.artifacts, {"stage": "literature"},
+                            {"stage": "ideate", "status": "in_progress"})
+        records["configuration"]["research"]["target"] = None
+        self.assertIn("objective_missing", {o["code"] for o in gate_state(records, self.artifacts, "direction")["obligations"]})
+
+    def test_managed_execution_gate_does_not_add_preparation_obligations(self):
+        from managed_strategy_fixtures import bind_plan
+        from research_harness.gates import gate_state
+        self.build_managed_records()
+        self.mutate(self.development().plan_cycle, bind_plan(self, self.plan()))
+        self.admit()
+        records = self.store.snapshot()["records"]
+        records["synthesis_selection"] = {key: value for key, value in records["synthesis_selection"].items()
+                                          if key == "research:standards"}
+        report = gate_state(records, self.artifacts, "execution")
+        self.assertTrue(report["ready"], report["obligations"])
+
+    def test_managed_next_follows_the_current_milestone_with_advisory_preparation(self):
+        from research_harness.cli import status_report
+        from research_harness.gates import gate_state
+        from research_harness.report_views import current_obligations, next_summary, status_summary
+        self.build_managed_records()
+        for stage in ("initiate", "cohort", "literature", "ideate"):
+            self.store.mutate("fixture.stage", {"stage": stage},
+                lambda tx: tx.put("workspace", "study", {"stage": stage, "status": "in_progress"}),
+                expected_revision=self.store.revision, request_id="stage-" + stage)
+            report = status_report(self.store)
+            action = "execution" if stage == "ideate" else "direction"
+            expected = gate_state(self.store.snapshot()["records"], self.artifacts, action)["obligations"]
+            self.assertEqual(report["obligations"], expected)
+            self.assertTrue(report["preparation"]["advisory"])
+            self.assertIn(report["next"], expected)
+            self.assertNotEqual(report["next"]["code"], "candidate_checkpoint_missing")
+            self.assertEqual(current_obligations(report), report["obligations"])
+            self.assertLess(len(json.dumps(next_summary(report)).encode()), 2048)
+            self.assertLess(len(json.dumps(status_summary(report)).encode()), 16384)
+
+    def test_managed_next_names_direction_evidence_before_a_decision_exists(self):
+        from research_harness.claim_minimums import assess_direction
+        from research_harness.gates import gate_state
+        from research_harness.report_views import order_obligations
+        records = self.build_managed_records()
+        records["search_selection"] = {key: value for key, value in records["search_selection"].items()
+                                       if key != "research:direct"}
+        self.assertEqual([item["code"] for item in assess_direction(records, self.artifacts)], ["direction_search_missing"])
+        codes = [item["code"] for item in order_obligations(gate_state(records, self.artifacts, "direction")["obligations"])]
+        self.assertEqual(codes[0], "direction_search_missing")
+        self.assertIn("strategy_dossier_missing", codes)
+
+    def test_direction_is_the_unchanged_preparation_report_for_other_stores(self):
+        from research_harness.gates import gate_state
+        self.prepared_study()
+        records = self.store.snapshot()["records"]
+        self.assertEqual(gate_state(records, self.artifacts, "direction"),
+                         gate_state(records, self.artifacts, "preparation"))
+
     def test_experiment_stage_requires_an_admission_for_current_preparation(self):
         from integration_fixtures import admit_lab
         from research_harness.gates import gate_report
@@ -127,11 +216,11 @@ class ResearchGateTests(DevelopmentCase):
 
     def test_worker_seal_consumer_rejects_an_otherwise_matching_outcome(self):
         from integration_fixtures import observed_candidate
-        from research_harness.execution_evidence import _observed
+        from research_harness.execution_evidence import validate_observed_execution
         self.prepared_study()
         payload = observed_candidate(self)
         original = self.store.snapshot()
-        accepted = _observed(original["records"], self.artifacts, payload["id"])
+        accepted = validate_observed_execution(original["records"], self.artifacts, payload["id"])
         self.assertEqual(accepted["observation"]["execution"], payload)
         records = copy.deepcopy(original["records"])
         execution = records["execution"][payload["id"]]["payload"]
@@ -140,5 +229,5 @@ class ResearchGateTests(DevelopmentCase):
         observation["execution"] = copy.deepcopy(execution)
         self.assertEqual(observation["execution"], execution)
         self.assertEqual(observation["terminal"], accepted["observation"]["terminal"])
-        self.assert_error("execution_output_mismatch", lambda: _observed(records, self.artifacts, payload["id"]))
+        self.assert_error("execution_output_mismatch", lambda: validate_observed_execution(records, self.artifacts, payload["id"]))
         self.assertEqual(self.store.snapshot(), original)

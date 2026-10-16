@@ -1,5 +1,172 @@
 # Research CLI
 
+## Depth plan (`depth`)
+
+Record `{id, values, reason}` as an immutable `depth_plan` and select it as current.
+The ID and reason are required nonempty text. Values may contain any subset of:
+
+| Key | Default |
+| --- | ---: |
+| `loop_abstracts` | 100 |
+| `round_loop_abstracts` | 40 |
+| `hits_per_query` | 10 |
+| `innovation_candidates` | 10 |
+| `innovation_cases` | 5 |
+| `sample_size` | 100 |
+| `search_readings` | 20 |
+| `core_fulltexts` | 10 |
+
+Amounts are positive integers with no fixed upper ceiling. Omitted keys retain
+their current values, and merged `innovation_cases` cannot exceed
+`innovation_candidates`. Budgets still bound cost. Verification keeps its fixed
+contract and refuses plans or explicit overrides with `profile_inapplicable`.
+Research depth needs no particular constitution version or revalidation.
+
+```json
+{"id":"depth-1","values":{"loop_abstracts":150,"hits_per_query":15},"reason":"Broaden the next comparison."}
+```
+
+```sh
+exactory-research depth --file depth.json --expected-revision REV --request-id depth-1
+```
+
+The plan records all eight effective defaults and its revision. Search, sample,
+`require-fulltext` with purpose `core`, innovation, and loop-close accept an
+optional `depth` object with their relevant keys. For loop or search-hit
+`read-batch`, `depth: {"loop_abstracts":150,"round_loop_abstracts":60}` means an
+abstract batch with those amounts; legacy `depth: "abstract"` remains supported.
+A search can also supply `hits_per_query` directly, which takes precedence over
+`depth.hits_per_query`. Transport batch limits remain unchanged.
+
+Each call records resolved amounts: searches store `hits_per_query`; reading
+batches store `effective_depth`; samples and core requirements store `depth`;
+innovation stores its candidate and case counts; loop closures store their loop
+limit in `depth.loop_abstracts`. Historical records lacking these fields retain
+their original policy values. Saved sections are reassessed against their saved
+counts. Defaults and overrides change work amounts, never claim minimums.
+
+Depth stays outside configuration and dependency digests. With a selected plan,
+status includes `limits.depth: {plan_id, values}`; old stores keep their report
+shape. Summary plan IDs are truncated to 64 characters. Invalid keys, types,
+nonpositive values or case relationships produce `invalid_input`; immutable ID,
+revision and request conflicts use the normal mutation errors.
+
+## Exploratory computation (`probe-intent`, `probe`)
+
+Run a local computation at any stage, including before a target or cycle exists:
+
+```sh
+exactory-lab probe --id finite-check-1 --question "Does the finite example fit?" \
+  --script check.py --input data.json --output-dir results --timeout 30
+```
+
+The launcher pins the script and repeated `--input` files, records a managed
+intent, and reserves the timeout against the experiment wall-time budget before
+launch. It requires an initialized configuration, with no target, stage or
+readiness check. The intent payload is:
+
+```text
+{id, question, interpreter, program, inputs, timeout_seconds}
+```
+
+Question and interpreter are nonempty text; program is a pinned artifact
+descriptor and inputs is an array of them. `timeout_seconds` is finite and
+positive. A different payload under an existing ID is refused. Record one with
+`exactory-research probe-intent --file intent.json --expected-revision REV
+--request-id probe-intent:ID`.
+
+The script receives `[current_python, copied_script, copied_input, ...]`, with
+closed stdin and a fresh cwd under `research/probes/ID/`. `--output-dir` is
+relative to that cwd and defaults to `.`. Every new or modified file there is
+pinned, including modified copies of original inputs; the intent retains their
+original bytes. Outputs, stdout and stderr retain exploratory provenance through
+later result imports. They supply no managed prospective execution credit.
+Unrelated imported history keeps its existing standing. A separate, actually
+observed admitted execution may validate the same result independently.
+
+The outcome payload is:
+
+```text
+{id, command, outputs, stdout, stderr, exit_status, elapsed_seconds, observation}
+```
+
+Command and observation are required text. Outputs is an array of pinned
+descriptors; stdout and stderr are pinned descriptors. Elapsed seconds is finite
+and nonnegative. Exit status is an integer code, `timed_out`, `failed`,
+`output_bound` or `interrupted`. Nonzero exits, timeout cleanup, launch failures
+and output-bound outcomes retain actual usage. Recording the outcome charges it
+even if the actual cost exhausts the budget, and releases the intent's hold.
+`--observation TEXT` overrides the factual default. Manual recording uses
+`exactory-research probe --file outcome.json --expected-revision REV
+--request-id probe:ID`; a locally claimed launch must retain its terminal evidence.
+
+A worker retains exclusive ownership independently of its launcher. A retry
+during a live run prints `{"id":"ID","status":"pending","state":"running"}`
+and changes neither the revision nor the reservation. A terminal ID prints its
+original receipt, even if the newly supplied script path no longer exists; it
+never executes again. An intent without an outcome is reconciled only after its
+owner lock is free, or valid terminal evidence establishes completion. Complete
+files recover the original result; otherwise the outcome is `interrupted`.
+Partial artifacts remain pinned. Last measured elapsed time is charged and any
+unmeasured remainder is explicitly counted as unknown resource usage. Absence of
+an outcome alone never releases a hold. Use a new ID for a new execution.
+
+Each captured stream is bounded at 32 MiB. Exceeding that bound terminates the
+process group and records `output_bound`; the bounded prefix is pinned, the raw
+file remains, and its full SHA identity retains exploratory provenance. Unsafe
+output paths produce a charged failed capture without admitting unsafe artifacts.
+The launcher prints JSON receipts successfully for recorded failures and timeouts.
+Its managed request IDs are `probe-intent:ID`, `probe-launch:ID` and `probe:ID`.
+
+Errors include `configuration_missing`, `resource_budget_exhausted` before launch,
+`probe_intent_missing` for an outcome without an intent, `invalid_input`,
+`artifact_missing`, `artifact_corrupt`, `unsafe_path`, and normal immutable/revision/
+request conflicts. Status adds `probes: {count, elapsed_seconds}` when probe
+history exists. Probes alone never form a result candidate.
+
+## Search depth, coverage and provisional questions (`search`)
+
+A search records its resolved `hits_per_query`, optional per-call `depth`, and one
+coverage object per query:
+
+```text
+{query, requested_k, returned_count, inspected_count, page_positions,
+ provider, ordering, kind}
+```
+
+`returned_count` counts captured result rows; `inspected_count` counts distinct
+captured works accounted by a disposition, without granting reading credit.
+Positions preserve unique captured page starts in receipt order. Provider is a
+name or a list for a mixed-provider query; ordering contains explicit captured
+request sort parameters, or null. `complete` requires the existing native
+enumeration evidence with no pending pages. `top_k` requires an intact ordered
+prefix of at least requested k. Otherwise new coverage is `bounded_unordered`.
+An author's label cannot establish completeness or ordering. All captured
+responses remain in the record. Legacy coverage is derived from saved evidence,
+with `unspecified` only where that evidence is ambiguous; nothing is recaptured.
+
+New `integrity_errors` contains the search's pending items except
+`search_response_incomplete`. Bounded enumeration is coverage, not an integrity
+error. `find_search_integrity_errors(search)` supplies the same interpretation
+for historical records without changing their reports.
+
+Before roots exist, add required text `question` to the normal search payload:
+
+```json
+{"id":"early-search","profile":"research","purpose":"direct","question":"Does this direction already have a solution?","queries":["bounded sequences"],"responses":[{"source_id":"CAPTURE_ID","query":"bounded sequences","query_locator":{"kind":"json","pointer":"/query","value":"bounded sequences"},"results_pointer":"/results"}],"captured_at":"2026-10-16T12:00:00Z","found_work_ids":[],"cited_work_ids":[],"verdict":"nothing-new","impact":"No matching result appeared in this captured response.","gaps":[],"dispositions":[],"scope":"exploratory"}
+```
+
+Replace `CAPTURE_ID` with the matching captured receipt, set its actual capture
+time, and account for every returned work as in a normal search. The record has
+`scope_digest: null` and `provisional: true`, appears in status, and grants no
+purpose selection, loop coverage, claim minimum or foundation credit. Once roots
+exist, a new scoped search may reuse the exact responses and queries with
+`binding: {"provisional_search_id":"early-search","reason":"These unchanged receipts address the chosen roots."}`.
+The binding validates matching profile/purpose and records the current scope.
+Roots never force recapturing unchanged evidence. Invalid receipts, substitutions
+or unsupported depth produce the normal `invalid_search`/`invalid_input` errors;
+missing scope without a question still produces `roots_missing`.
+
 ## Scientific contribution decisions
 
 Managed studies and drafts now use one phase-specific decision at objective,
@@ -1097,16 +1264,36 @@ actual source bytes and an `inputs.json` manifest.
 
 ## Native math preparation
 
-New native proposals use schema version 3 with the existing computation field and a `foundation` reference. Export current complete preparation before independent proposal review:
+Math-solver is an orchestration over shared tools. Its gates preserve the contract,
+openness, independent result review, requested formal verification and closure.
+A user-specified proposition has no value gate; problem value belongs to
+`math-conjecturer`. Native research requires no Grand Challenge record.
+
+New native proposals use schema version 3 with the existing computation field.
+For `role: "research"`, common preparation is optional and `foundation: null` is
+valid. In the proposal delivery (`{proposal, inputs}`), optionally include
+`review_workspace: "."` or a canonical ancestor such as `".."`. The first proposal
+without a foundation records that stable common review-store association as an
+append-only event; omitted workspace defaults to the existing foundation ancestor
+or `.`. Observed shared review assignments use that store. Conflicting associations
+and later foundations naming another workspace are refused. Existing objectives
+continue deriving the common store from their foundation references.
+
+Historical work and external checkpoints without a foundation record the default
+`.` on the first fresh scientific mutation, including reviewed adoption and native plan or launch
+intents. Read-only status and packet export remain free of native events.
+
+To include an optional research foundation, or supply the required verification
+foundation, export current complete common preparation before independent review:
 
 ```sh
 exactory-research export --workspace /study --kind native --attack-root /study/attack \
   --destination /study/attack/research/native-inputs/review-001
 ```
 
-The manifest returns `foundation` and native `inputs`. Add both to the proposal's existing reviewed delivery. The reference contains `schema_version`, `workspace`, `profile`, `revision`, `snapshot_digest`, `preparation_digest`, and `claim_binding`. Its workspace is `.` or an ancestor expressed with `..`; the delivery remains inside the attack root. The immutable native store imports the snapshot blob and actual source artifacts. A later unrelated common revision does not invalidate unchanged preparation, but changed required sources, policy, scope, or synthesis require a new reviewed amendment before fresh work.
+The manifest returns `foundation` and native `inputs`. Add both to the proposal's existing reviewed delivery. The reference contains `schema_version`, `workspace`, `profile`, `revision`, `snapshot_digest`, `preparation_digest`, and `claim_binding`. Its workspace is `.` or an ancestor expressed with `..`; the delivery remains inside the attack root. The immutable native store imports the snapshot blob and actual source artifacts. Research validates the recorded snapshot and preparation digests, exact pinned sources, original-objective correspondence and observed review provenance without rerunning the historical preparation evaluator or requiring equality with current common preparation. Changed common preparation alone requires no research amendment; corrupted pinned bytes still refuse fresh work. Verification retains the current preparation checks and requires a reviewed amendment when those dependencies change.
 
-Common author research preparation supports native research and an author's native verification of the same full original objective. It is complete only with a current Grand Challenge record (`grand_challenge_missing` otherwise), like every research-profile preparation since 0.42.0: record `grand-challenge` for the objective before the export. Common external verification preparation supports only native `role: "verification"`. The latter additionally exports `--claim-binding binding.json` with this exact reviewed correspondence:
+Common author preparation can be retained for native research and an author's verification of the same full objective. The optional common research export still evaluates common preparation, including its Grand Challenge condition; research can use `foundation: null` instead. Verification using a research-profile foundation retains that profile's current preparation audit, including this condition, as required by its unchanged contract. Common external verification preparation supports only native `role: "verification"` and has no Grand Challenge condition. The latter additionally exports `--claim-binding binding.json` with this exact reviewed correspondence:
 
 ```json
 {
@@ -1129,9 +1316,69 @@ Common author research preparation supports native research and an author's nati
 
 Replace the illustrative IDs, hashes, and passage with the actual exact-target `Link`. Both native claim digests and the configured exact original target reading must match. This is a reviewed source correspondence, not automatic semantic entailment.
 
-Historical proposal versions 1 and 2 and old terminal runs continue to replay under their original schemas. Before fresh work, use `search amend-foundation NODE --file FILE` with the ordinary revision/request arguments. Its input is `{subject, review, inputs}`. The subject is `{node_id, proposal_digest, previous_snapshot_digest, foundation, reason}`; the previous snapshot is null only when none was previously selected. The independent review uses the existing native proof-review schema, with subject and exact claim digests. The amendment is an append-only native event and cannot alter the claim, budget, accounts, or prior proof acceptance.
+Historical proposal versions 1 and 2 and old terminal runs continue to replay under their original schemas. Research may continue without a foundation amendment. Verification without its required current foundation must use `search amend-foundation NODE --file FILE` with the ordinary revision/request arguments. Its input is `{subject, review, inputs}`. The subject is `{node_id, proposal_digest, previous_snapshot_digest, foundation, reason}`; the previous snapshot is null only when none was previously selected. The independent review uses the versioned native result-review schema, with subject and exact claim digests. The amendment is an append-only native event and cannot alter the claim, budget, accounts, or prior proof acceptance.
 
-Complete retained run/journal reconciliation before an amendment. Recovery, pause, existing journal completion, historical audit, and proof/account replay remain available without pretending new preparation was already done. Admission, new planning/ranking, begin, run, and actual token release check their applicable current frozen foundation under the native writer lock followed by a common-store read. At final launch, the validated common read transaction and native lock remain held through the actual token write and flush. Common mutations cannot commit during that interval; a busy request can be retried unchanged after release. Both locks are released before waiting for the worker or reconciling results. Common mutations never acquire the native lock. Current source-byte checks and the receiver's check before each command remain required. Native proof acceptance and account rules remain separate authorities.
+Complete retained run/journal reconciliation before an amendment. Recovery, pause, existing journal completion, historical audit, and proof/account replay remain available. Admission, planning/ranking, begin, run and token release preserve the pinned foundation evidence audits described above; verification additionally checks current preparation. At final launch the common review-store read transaction and native writer lock remain held through the token write and flush. Common mutations cannot commit during that interval; both locks are released before waiting for the worker or reconciling results. Common mutations never acquire the native lock. Source-byte checks and the receiver's check before each command remain required.
+
+The novelty study uses shared search/read tools for the exact statement and each
+neighbouring formulation, recording each query's date, depth and top-k versus
+complete coverage. New acceptance requires native result review version 2 with
+`findings.openness`: `{outcome, statement_digest, evidence, searched_at, coverage,
+reason, minimum?}`. Outcomes are `supported_open`, `already_solved` (citing the settling
+source), and `unresolved`. The exact claim digest binds the statement; nonempty
+evidence digests cite the delivered novelty study and search/read records, the
+date is `YYYY-MM-DD`, and coverage and reason are nonempty text. Every decisive
+prior or settling source must be fully read; an unavailable decisive source stays
+a gap and keeps the finding unresolved. Material new settling evidence must be
+recorded as a native checkpoint with exact source/search/read artifacts and
+reassessed in a new observed final review that includes them. `accept` may set `claims_openness: true`, requiring
+`supported_open`; otherwise it defaults to false and `unresolved` may approve proof
+support without claiming openness. For every math-solver objective, including a
+request to prove or disprove, unresolved keeps the openness milestone and root
+closure pending. Fresh `complete` requires a version 2 closure subject and result
+review with `supported_open` or `already_solved`. A prior observed packet omitting
+newly recorded material evidence cannot authorize closure. Already solved preserves
+requested formal verification, proof policy and every other deliverable. Recorded
+version 1 acceptances and closures replay unchanged.
+Fresh resolved findings require `minimum: {schema_version: 1, statement,
+neighbours, searches: [{formulation, search_digest}], reading_digests,
+settling_work_id}`. `statement` is the exact claim; each declared formulation
+needs an actual common `literature_search` record with dated `captured_at` and
+per-query `coverage` of kind `complete`, `top_k` or `bounded_unordered`, including
+`inspected_count`. Every relevant or contradictory result needs fulltext coverage
+from the pinned common `reading` records. Unresolved or potentially relevant hits,
+unavailable required source units and active or stale deferrals remain gaps.
+`already_solved` binds its fully read settling result via `settling_work_id`;
+`supported_open` uses null. All search/reading hashes must be in both the finding's
+`evidence` and the observed packet. Export the declaration in the optional
+`openness` field of `search review-packet --spec FILE --json`; the reviewer echoes
+it as `findings.openness.minimum`. The exporter delivers records and captured
+source bytes from the associated common workspace. Other material searches for
+the same formulations must be included on fresh resolved review. The exact
+schemas and `openness_*` refusal codes are in the math-solver `SEARCH.md`.
+A new native checkpoint after version 2 closure reopens final openness and root
+closure review, retaining accepted proofs and the earlier closure record.
+
+Exploratory `exactory-lab probe` runs in the common workspace under the common budget
+and exploratory provenance, outside managed math execution, with no native credit.
+Any computation whose result a recorded strategy decision, proof, finite check,
+counterexample or acceptance relies on requires native admission, accounts,
+interpretation and review even when run in the common workspace. Every finite
+computation inside the controller, including diagnostics, keeps this contract.
+The cash-out inventory lists every used probe's id, question and elapsed time.
+Native imports retain original and canonical identities and resolve common probe
+origins again at fresh dependency and strategy commitments. Renaming output,
+nesting a digest in JSON, importing a canonical `blob`, or labelling an artifact
+`proof` in an `analytical` manifest cannot grant exploratory credit
+(`exploratory_evidence`). A probe-derived certificate or Lean proof needs native
+admission, its actual verification and candidate interpretation. Historical
+accepted imports replay unchanged.
+`plan` validates complete `problem.json` and precondition inputs directly; neither
+`plan` nor `begin` requires the local `study/problem.md` file. The reviewed proposal
+study digests remain required. The [remaining order table](../skills/math-solver/SKILL.md#remaining-order-conditions)
+justifies complete planning inputs, proposal study digests, strategy study
+before moves, precondition scan and ranking, computation admission, move/pass
+limits and closure as claim, execution-authority or proof-dependency conditions.
 
 ## Status, projections, and recovery
 

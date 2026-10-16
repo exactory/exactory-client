@@ -52,7 +52,7 @@ class ResultDecisionTests(DevelopmentCase):
             self.mutate(review_protocol.invoke_assignment, {"id": "attempt-" + identifier, "assignment_id": assignment_id}, credential="fixture-only")
         return self.mutate(research_decisions.record_value_review, dict(response, id=identifier, dossier_id=dossier_id, assignment_id=assignment_id))["result"]
 
-    def prepare_result(self, *, sufficient=True, invalid=False, work=None, condition=None, consequence=None, claim=None, relation="direct", intent_payload=None):
+    def prepare_result(self, *, sufficient=True, invalid=False, work=None, condition=None, consequence=None, claim=None, relation="direct", intent_payload=None, q1_failed=False):
         intent = self.intent() if intent_payload is None else copy.deepcopy(intent_payload)
         intent["publication"]["quality_condition"] = condition
         self.mutate(strategy.record_intent, intent)
@@ -75,6 +75,8 @@ class ResultDecisionTests(DevelopmentCase):
             response = self.review_response("result", status="sufficient" if sufficient else "insufficient")
             if consequence is not None:
                 response["value"].update(consequence=consequence, reason="The complete finite enumeration supports this exact consequence; the broader objective remains open.")
+            if q1_failed and suffix == "b":
+                next(item for item in response["value"]["assurances"] if item["kind"] == "q1_venue")["status"] = "failed"
             response["support"] = "invalid" if invalid and suffix == "b" else None
             if work is not None:
                 response["value"]["work_items"] = [{"id": work["id"], "classification": work["classification"], "status": "accepted",
@@ -93,6 +95,14 @@ class ResultDecisionTests(DevelopmentCase):
     def codes(self):
         return {item["code"] for item in self.state()["obligations"]}
 
+    def test_failed_q1_blocks_manuscript_development_but_keeps_requested_delivery(self):
+        payload = self.prepare_result(q1_failed=True)
+        self.mutate(research_decisions.record_research_decision, payload)
+        self.assertEqual(self.codes(), {"research_assurance_pending"})
+        payload.update(id="requested-delivery", action="deliver_requested", artifact_disposition="deliver_under_instruction")
+        self.mutate(research_decisions.record_research_decision, payload)
+        self.assertTrue(self.state()["ready"], self.state()["obligations"])
+
     def test_expected_theorem_can_remove_an_assumption_without_an_ordinal_score(self):
         consequence = "The expected bound holds by exhaustive enumeration, removing the formerly unproved monotonicity assumption on this finite domain."
         payload = self.prepare_result(consequence=consequence)
@@ -103,6 +113,15 @@ class ResultDecisionTests(DevelopmentCase):
         self.assertEqual(records["research_support"]["result-b"]["readiness_review_id"], "support-result-b")
         self.assertEqual(records["value_review"]["result-b"]["payload"]["value"]["consequence"], consequence)
         self.assertEqual(payload["goal_status"], "open")
+        for suffix in ("a", "b"):
+            assignment = records["review_assignment"]["assignment-result-" + suffix]
+            packet = json.loads(self.artifacts.read(assignment["packet"]))
+            direction = packet["direction_evidence"]
+            self.assertTrue(direction["readings"])
+            self.assertEqual({item["id"] for item in direction["readings"]},
+                             {item["reading_id"] for item in direction["passages"]})
+            attached = {item["artifact"]["sha256"] for item in packet["evidence"]}
+            self.assertTrue(all(item["excerpt"]["sha256"] in attached for item in direction["passages"]))
 
     def test_decisive_negative_result_excludes_the_proposed_stronger_bound(self):
         consequence = "The attained value 9 excludes every method requiring a uniform upper bound of 8 on this same domain."

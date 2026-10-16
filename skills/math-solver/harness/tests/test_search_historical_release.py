@@ -51,11 +51,13 @@ class HistoricalReleaseTests(WorkspaceTest):
         invoke(controller, "amend-computation", amendment)
         self.assertEqual(controller.status()["accounts"], before["accounts"])
         self.assertEqual(controller.status()["runs"]["run-000001"], old_run)
-        with self.assertRaises(SearchError) as foundation_error:
+        self.assertEqual(controller.status()["service"].get("review_workspace"), ".")
+        with self.assertRaises(SearchError) as current_gate:
             invoke(controller, "run", spec)
-        self.assertEqual(foundation_error.exception.code, "research_foundation_amendment_required")
+        self.assertEqual(current_gate.exception.code, "strategy_reassessment_required")
         # The archived run is terminal, but its move still needs its truthful
-        # journal. Recovery remains available before fresh preparation exists.
+        # journal. Common research preparation is no longer required to recover
+        # it or continue under the separate computation and strategy authority.
         invoke(controller, "reconcile", {}, None)
         self.assertEqual(controller.status()["runs"]["run-000001"], old_run)
         self.assertEqual(controller.status()["accounts"], before["accounts"])

@@ -10,12 +10,38 @@ accounts.
 
 Read the [research constitution](../../RESEARCH_CONSTITUTION.md) and the
 [managed research workflow](../../docs/research-workflow.md). New proposals use
-schema version 3 and a reviewed current `foundation` reference. Complete common
-preparation before proposing, then export actual source bytes and native inputs
-for independent review. The [native foundation contract](../../docs/research-cli.md#native-math-preparation)
-defines the exact reference, export, external-verification claim binding, current
-checks, and append-only `search amend-foundation` for historical nodes. Common
-preparation is separate from native proof acceptance and resource accounting.
+schema version 3. Research proposals may use `foundation: null`; common preparation
+is optional. The proposal delivery may specify `review_workspace: "."` or a
+canonical ancestor (for example `".."`). For a foundationless objective the first
+proposal records this association once as `review_workspace_recorded`, defaulting
+to the common root derived from existing foundations or `.`. All subsequent
+foundation references and explicit associations must agree. Observed native
+assignments live in this stable common store. Existing objectives continue to
+derive it from their foundations.
+
+Historical work without a foundation and external checkpoints without a proposal
+record the historical default `.` once on their first fresh scientific mutation,
+including reviewed adoption.
+Read-only status and packet export do not add native events. Native plan intents
+and launch records use the same association rule; none of these records grant
+proof credit or resources.
+Recording a new association initializes only its shared review store; it does not
+configure common preparation.
+
+An optional foundation retains snapshot integrity, exact source bytes, original
+objective correspondence and observed review provenance without recomputing an old
+preparation report or comparing it with current research preparation. Verification
+still requires a foundation and keeps the existing current preparation and exact
+source claim-binding audits. The [native foundation contract](../../docs/research-cli.md#native-math-preparation)
+defines the export and append-only `search amend-foundation`.
+
+This orchestration gates the contract, openness, independent accepted results,
+requested formal verification and closure. A user-specified proposition has no
+value gate; problem value belongs to `math-conjecturer`. Native research objectives
+require no Grand Challenge record. The shared search and read tools record depth
+and coverage for the novelty study and its independent openness finding. See the
+[remaining order conditions](SKILL.md#remaining-order-conditions) for the claim,
+execution-authority and proof-dependency reasons for retained native ordering.
 
 The current interface documented here includes reviewed admission, durable
 pause and explicit resume, controlled deadlines, frozen input/result/delivery
@@ -28,11 +54,40 @@ journal `closes` flag are recorded facts, not root acceptance.
 
 ## Computation admission and mandatory interpretation
 
+`exactory-lab probe` is exploratory work in the common workspace under the common
+budget and exploratory provenance, outside managed math execution, with no native
+credit. Every computation whose result a recorded strategy decision, proof,
+finite check, counterexample or acceptance relies on requires the native contract,
+admission, accounting, interpretation and review below, even when run in the common
+workspace. A probe cannot substitute for it. Every finite computation inside the
+controller, including an exploratory diagnostic, uses this native contract.
+The cash-out inventory lists every used probe with its id, question and elapsed time.
+
+Native `inputs` imports resolve `outputs`, `stdout` and `stderr` through the
+associated common workspace's recorded probe origins. Renaming a file, importing
+JSON as a canonical `blob`, nesting its digest in another JSON artifact, or using
+an `analytical` manifest with role `proof` does not remove that provenance.
+`probe_origins_recorded` retains native `digest`, original `raw_digest` and known
+`origins` in append-only `bindings`; even an initially unknown raw identity is
+retained for later resolution. Fresh checkpoint, admission, strategy-decision,
+computation-basis, acceptance and closure audits refuse exploratory credit with
+`exploratory_evidence`. A `hypothesis` checkpoint can inventory the output without
+credit; a later decision relying on it must pass the same fresh audit. Native
+certificate or Lean evidence must have its actual admitted verification run and
+a `proof_candidate` or `counterexample_candidate` interpretation. Historical
+accepted imports and read-only audits retain their recorded meaning. Origin and
+dependency checks run again under the common read transaction at commitment.
+New moves and launches recheck the evidence of the strategy assessment they rely
+on, including exploratory origins recorded after the assessment. This follows
+both `checkpoint:` and `acceptance:` references, manifest
+`conclusion.dependency_ids`, and the accepted dependencies' complete proof graph.
+
 The computation field introduced in proposal version 2 remains required in
 version 3 alongside `foundation`. Analytical `task.kind: proof` uses
 `computation: null`. Versions 1 and 2, their reviews, admissions, reservations,
 and accepted results remain readable during replay. Fresh work requires the
-applicable current reviewed amendments; historical replay grants no fresh
+applicable computation and strategy amendments; research foundations need no
+amendment merely because common preparation changed. Historical replay grants no fresh
 execution permission. New run reservations include `computation_digest`,
 which is null only for analytical tasks. Historical reservations without that field
 are accepted only for original version 1 admissions without amendments. This is
@@ -614,6 +669,8 @@ Supported events and exact payloads:
 | Event | Payload |
 | --- | --- |
 | `proposal_recorded` | `{"proposal": Proposal, "digest": SHA256(Proposal)}` |
+| `review_workspace_recorded` | `{workspace: "."}` or a canonical ancestor; the objective's stable shared review-store association |
+| `probe_origins_recorded` | `{bindings: [{digest: SHA256, raw_digest?: SHA256, origins: [{probe_id: Text, sha256: SHA256, roles: ["outputs"|"stdout"|"stderr"]}]}]}`; raw identities are retained even when `origins` is empty |
 | `review_recorded` | `{"proposal_id": ID, "review": Review, "digest": SHA256(Review)}` |
 | `proposal_admitted` | `{"proposal_id": ID}` |
 | `checkpoint_recorded` | `{"checkpoint": CheckpointInput, "digest": SHA256(CheckpointInput)}` |
@@ -722,7 +779,7 @@ task: {
   purpose: Text, input_domain: Text
 }
 computation: ComputationContract | null  (required in versions 2 and 3; absent in version 1)
-foundation: FoundationReference  (required in version 3; defined in the linked native foundation contract)
+foundation: FoundationReference | null  (required field in version 3; null only for research)
 limits: {
   max_moves: Integer[1,24], max_runs: PositiveInteger,
   timeout_seconds: PositiveInteger, workers: PositiveInteger
@@ -870,7 +927,8 @@ new bound reviews; it cannot be hidden by adding an optimistic review.
 
 ### Observed native review delivery
 
-The native `Review`, `ResultReview` and recovery-review shapes remain unchanged.
+Proposal `Review` and recovery-review shapes remain unchanged. `ResultReview`
+version 2 adds the openness finding; new acceptance requires this version.
 New approvals use `source: "host"`, the actual shared reviewer ID as `actor_id`,
 and `attestation_id: "review-assignment:ASSIGNMENT_ID"`. Choose the assignment ID
 before exporting the packet. The service binds that exact assignment's observed
@@ -886,7 +944,7 @@ review-packet --spec FILE:
  claim_digest: SHA256|null,
  reviewer: {source: "host", actor_id: ReviewerID,
             attestation_id: "review-assignment:ASSIGNMENT_ID"},
- inputs: [Input]}
+ inputs: [Input], openness?: OpennessMinimum}
 ```
 
 Use `proposal` for a proposal `Review`; use `result` for a `ResultReview`,
@@ -901,13 +959,21 @@ An adoption allowance whose subject contains `proposal_digest` and
 `snapshot_digest` needs those exact unpublished blobs and their referenced
 artifacts in `inputs`; a digest alone cannot supply their contents.
 
+For a resolved openness review, supply `openness: OpennessMinimum` below. The
+exporter delivers it as `scientific_context.openness_minimum`, together with the
+exact common search/reading records and their captured responses and source
+bundles. The reviewer returns that same declaration as `findings.openness.minimum`
+and binds its search and reading digests in `findings.openness.evidence`. The
+records must exist in this objective's associated common review store; copying a
+record from another workspace does not establish that association.
+
 ```sh
 exactory-math --attack-root attack search review-packet --spec native-review.json --json
 ```
 
 The result is `{workspace, native_packet, subject_digest, claim_digest}`.
-`workspace` is the existing native common-preparation workspace, or the native
-root when it has none. Use that returned path for the shared commands. Export
+`workspace` is the workspace derived from foundation references or recorded by
+`review_workspace` on a foundationless proposal. Use that returned path for the shared commands. Export
 writes immutable common evidence objects and does not append a native event.
 It needs no expected revision or request ID.
 
@@ -1136,10 +1202,10 @@ pinned journal prefix really belongs to this producer, the move was properly
 reserved and journalled, and the admitted milestone corresponds to the actual
 result snapshot. A matching integer move number alone is not that check.
 
-`AcceptanceInput` has exactly:
+New `AcceptanceInput` has exactly (recorded version 1 omits `claims_openness`):
 
 ```text
-schema_version: 1
+schema_version: 2
 checkpoint_id: CheckpointID
 checkpoint_digest: SHA256(StoredCheckpoint)
 obligation_id: ObligationID | null
@@ -1150,6 +1216,7 @@ dependency_ids: [AcceptanceID]
 route_bindings: [RouteBinding]
 review: ResultReview
 audit: ResultAudit
+claims_openness: Boolean
 ```
 
 The target claim, quantifiers, scope, proof policy, and assumption context must
@@ -1164,10 +1231,20 @@ label by itself does not imply its conclusion.
 
 ```text
 ResultReview = {
+  schema_version: 2,
   subject_digest: SHA256(StoredCheckpoint), claim_digest: SHA256(Claim),
   reviewer: Provenance, decision: "approve",
   findings: {statement: Text, assumptions: Text, scope: Text,
-             dependencies: Text, policy: Text}
+             dependencies: Text, policy: Text,
+             openness: {outcome: "supported_open"|"already_solved"|"unresolved",
+                        statement_digest: SHA256(Claim), evidence: [SHA256],
+                        searched_at: "YYYY-MM-DD", coverage: Text, reason: Text,
+                        minimum?: OpennessMinimum}}
+}
+OpennessMinimum = {
+  schema_version: 1, statement: Text, neighbours: [Text],
+  searches: [{formulation: Text, search_digest: SHA256(LiteratureSearch)}],
+  reading_digests: [SHA256(Reading)], settling_work_id: WorkID|null
 }
 ResultAudit = {
   subject_digest: SHA256(StoredCheckpoint), dependency_ids: [AcceptanceID],
@@ -1187,6 +1264,55 @@ The service supplies an audit only after checking freshness of the complete
 transitive immutable dependency closure, manifest completeness, actual proof
 policy checks, and the pinned review. It classifies computational claims from
 their actual evidence; callers cannot relabel a computation as analytical.
+
+All findings are nonempty. A fresh `supported_open` or `already_solved` finding,
+including the final root review, requires `minimum`. Its `statement` equals the
+exact claim statement; `neighbours` declares the distinct neighbouring formulations
+from the novelty study. Each formulation needs a bound common `literature_search`
+record. Its `question` or an exact `queries` entry must match the formulation.
+Every query needs recorded `coverage` of kind `complete`, `top_k` or
+`bounded_unordered` with `inspected_count`, and the search's `captured_at` date
+cannot follow `searched_at`. Integrity errors, unspecified coverage or search
+`gaps` prevent a resolved finding. Bounded coverage is explicit evidence, not a
+claim of exhaustive enumeration; the reviewer judges its scientific sufficiency.
+
+Every `relevant` or `contradictory` result needs complete `fulltext` coverage using
+the exact common `reading` records named in `reading_digests`. A settling source
+must be one of those results; `already_solved` names it in `settling_work_id`.
+`supported_open` sets that field to null. `potentially_relevant` and `unresolved`
+results, unavailable required source units and active or stale deferrals remain
+gaps. Every search/reading digest must occur in both `evidence` and the observed
+packet. The packet includes the records' captured source bytes, even if identical
+record bytes were imported as a native artifact. A proof manifest alone cannot
+meet this minimum.
+
+Fresh resolved findings must also bind any other material common search for the
+same declared formulations, including later relevant or contradictory results.
+An older search's unresolved or potentially relevant hit can be cleared by a
+bound, no-earlier search of the same queries with an explicit `resolved` entry and
+resolved disposition for that work, plus its pinned full reading. A later bound
+search with complete recorded coverage of those queries can replace an earlier
+coverage/integrity gap. Retain both records; a past gap does not permanently block
+completed research.
+Record material new settling evidence as a native checkpoint and obtain a new
+observed final review. This checks the statement's evidence without requiring
+unrelated common preparation. Missing requirements produce
+`openness_minimum_required`, `openness_statement_mismatch`,
+`openness_search_missing`, `openness_search_gap`, `openness_search_date`,
+`openness_reading_gap`, `openness_evidence_mismatch`, `openness_settling_source` or
+`openness_search_stale`. Independent review still judges relevance, completeness
+of the declared neighbours, and the mathematical reasoning.
+
+`search accept` optionally takes `claims_openness` (default false for a proof
+without an openness claim). When true, only `supported_open` can approve it.
+`unresolved` can approve a proof that does not claim the statement was open.
+It leaves the objective's openness milestone and root closure pending for every
+user-specified objective activated by math-solver, including requests to prove or
+disprove the proposition. `claims_openness: false` does not waive this final gate.
+`already_solved` records the settling source and preserves requested formal
+verification and every other deliverable. Recorded acceptances using the original
+unversioned five-finding result review (version 1) replay unchanged. Other review
+uses can still read that original form; proposal and recovery records are unchanged.
 
 Analytical reviewed bridges can satisfy certificate policy. Every computational
 claim in their dependency closure must meet certificate policy. Lean-kernel
@@ -1278,7 +1404,7 @@ is the original claim digest. Its reviewer is independent of every local produce
 
 ```text
 ClosureSubject = {
-  schema_version: 1, objective_id: ID, contract_digest: SHA256,
+  schema_version: 2, objective_id: ID, contract_digest: SHA256,
   outcome: "proof" | "counterexample", acceptance_ids: [AcceptanceID],
   evidence_digests: [SHA256], local_deliveries: [LocalDelivery],
   deliverables: [{requirement: Text, digest: SHA256}]
@@ -1301,6 +1427,26 @@ of its evidence digests. Every local producer in that transitive support needs
 one delivery; unrelated nodes cannot be included. Required deliverables match
 the frozen contract exactly. Pending moves/runs, pause, unresolved state errors,
 and ambiguous focus prevent completion.
+
+Fresh `search complete` requires subject version 2 and a version 2 result review
+whose openness finding for the original claim is `supported_open` or
+`already_solved`. An accepted proof with `unresolved` openness can await this final
+review, but cannot close any math-solver objective, including a prove or disprove
+request. Already solved leaves the requested proof policy, formal verification and
+all deliverables required. The final review packet includes the objective's
+recorded scientific evidence; a previously observed review that omits a newly
+recorded material source cannot authorize closure. Record that evidence as a
+checkpoint and obtain a fresh observed review; earlier proof acceptance remains a
+separate validity finding. A new native checkpoint after version 2 closure reopens
+the final openness milestone and root closure, retaining accepted proofs and the
+previous closure bytes. This conservatively requires reassessment for new native
+scientific evidence without making current common preparation a currency gate.
+Recorded version 1 closures replay unchanged.
+
+`search status` derives `openness` without appending an event: `status` is `pending`
+until the final review and closure, `accepted` after version 2 closure, or
+`historical` for a replayed version 1 closure. Its `outcome`, `statement_digest` and
+`review_digest` identify the final finding without manufacturing historical credit.
 
 The service validates the actual stage 7/8 triggers, inventory, applicable checked
 units, consolidation, drafts, evaluations and handoff, including applicability of
@@ -1539,7 +1685,7 @@ Public command specs are closed records:
 | Command | Spec |
 | --- | --- |
 | init | `{contract: Contract}` |
-| propose | `{proposal: Proposal, inputs: [Input]}` |
+| propose | `{proposal: Proposal, inputs: [Input]}`, optionally `review_workspace: "."` or a canonical ancestor |
 | review | `{proposal_id: ID, review: Review, inputs: [Input]}` |
 | review-packet | Exact export record under [Observed native review delivery](#observed-native-review-delivery); no native event |
 | admit ID | `{}`; `--spec` may be omitted |
@@ -1549,7 +1695,7 @@ Public command specs are closed records:
 | amend-computation ID | The amendment record under [Computation admission and mandatory interpretation](#computation-admission-and-mandatory-interpretation) |
 | interpret ID | The interpretation record under [Computation admission and mandatory interpretation](#computation-admission-and-mandatory-interpretation) |
 | checkpoint [ID] | `{checkpoint: PublicCheckpoint, inputs: [Input]}` |
-| accept ID | `{obligation_id: ID|null, outcome: Outcome, dependency_ids: [ID], route_bindings: [RouteBinding], review: ResultReview, inputs: [Input]}` |
+| accept ID | `{obligation_id: ID|null, outcome: Outcome, dependency_ids: [ID], route_bindings: [RouteBinding], review: ResultReview, inputs: [Input]}`, optionally `claims_openness: Boolean` |
 | complete | `{subject: ClosureSubject, review: ResultReview, inputs: [Input]}` |
 | adopt | `{mappings: [ImportMapping], inputs: [Input]}` |
 | retreat ID | `Retreat` without `node_id` |

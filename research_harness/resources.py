@@ -21,6 +21,8 @@ resource_budget_exhausted. The `development` purpose counts admitted
 development rounds in the `rounds` unit; `round-admit` charges one round.
 """
 
+from collections.abc import Mapping
+
 from .errors import ResearchError
 from .graph import obligation
 from .operations import fields, is_finite_number, prepared_mutation, profile_name, text
@@ -71,7 +73,7 @@ def set_budget(store, payload, *, expected_revision, request_id):
 
 
 def _lookup(source, kind, key):
-    if hasattr(source, "get") and not isinstance(source, dict):
+    if hasattr(source, "get") and not isinstance(source, Mapping):
         return source.get(kind, key)
     return source.get(kind, {}).get(key)
 
@@ -91,12 +93,17 @@ def _records(source, kind):
 
 
 def held(source, purpose):
-    """Amounts reserved by admitted acquisition operations; only literature acquisition reserves."""
+    """Allowances retained by admitted acquisition operations and unresolved probe intents."""
     reserved = {unit: 0 for unit in UNITS}
     if purpose == "literature":
         for operation in _records(source, "acquisition_operation").values():
             if operation["state"] == "admitted":
                 reserved["network_requests"] += operation["payload"].get("max_requests") or 0
+    if purpose == "experiment":
+        outcomes = _records(source, "probe")
+        for identifier, intent in _records(source, "probe_intent").items():
+            if identifier not in outcomes:
+                reserved["wall_seconds"] += intent["timeout_seconds"]
     return reserved
 
 
@@ -159,10 +166,11 @@ def account_report(records, profile):
     for purpose in PURPOSES:
         key = profile + ":" + purpose
         budget = _lookup(records, _BUDGET, key)
-        if budget is None and _lookup(records, _ACCOUNT, key) is None:
+        reserved = held(records, purpose)
+        if (budget is None and _lookup(records, _ACCOUNT, key) is None
+                and not (purpose == "experiment" and reserved["wall_seconds"])):
             continue
         account = _account(records, key)
-        reserved = held(records, purpose)
         report[purpose] = {unit: {"limit": (budget or {}).get("limits", {}).get(unit), "charged": account["charged"][unit],
                                   "reserved": reserved[unit], "unknown": account["unknown"][unit]} for unit in UNITS}
     return report

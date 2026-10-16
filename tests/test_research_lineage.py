@@ -50,6 +50,16 @@ class LineageCase(LiteratureCase):
 
 
 class TierAndStalenessTests(LineageCase):
+    def test_current_depth_controls_hits_per_query(self):
+        from research_harness.cli import OPERATIONS
+        self.scope([self.metadata(1)])
+        hits = [self.metadata(n) for n in range(2, 13)]
+        self.assertIn("depth", OPERATIONS)
+        self.mutate(OPERATIONS["depth"], {"id": "wider", "values": {"hits_per_query": 11}, "reason": "Broaden captured hits."})
+        self.mutate(record_search, self.search("direct", hits))
+        self.mutate(OPERATIONS["depth"], {"id": "narrower", "values": {"hits_per_query": 1}, "reason": "Narrow the next search."})
+        self.assert_error("invalid_search", lambda: self.mutate(record_search, self.search("theory", hits[:2])))
+
     def test_tier_three_references_owe_no_abstract_reading(self):
         root = self.metadata(1, references=[{"id": "arxiv:2601.00002v1"}])
         self.metadata(2)
@@ -99,6 +109,52 @@ class TierAndStalenessTests(LineageCase):
 
 
 class LoopTests(LineageCase):
+    def record_provisional_queries(self):
+        for query in ("bounded sequence first", "bounded sequence second"):
+            payload = self.search("direct", [], query=query)
+            payload["question"] = "Does the tentative direction already have a solution?"
+            self.mutate(record_search, payload)
+
+    def test_provisional_queries_leave_loop_and_whole_foundation_unchanged_without_coverage(self):
+        from research_harness.literature import foundation_report
+        root = self.metadata(1)
+        before = foundation_report(self.store, "research")
+        state = lineage.loop_state(self.store.snapshot()["records"])
+        self.record_provisional_queries()
+        self.assertEqual(lineage.loop_state(self.store.snapshot()["records"]), state)
+        self.assertEqual(foundation_report(self.store, "research"), before)
+        self.scope([root])
+        records = self.store.snapshot()["records"]
+        self.assertFalse(lineage.loop_state(records)["purposes"]["direct"]["covered"])
+        self.assertEqual(foundation_report(self.store, "research")["search_history"], [])
+        purposes = {p: {"status": "gap", "note": "No scoped queries have been tried."} for p in lineage.SEARCH_PURPOSES}
+        purposes["direct"] = {"status": "covered", "note": "The provisional queries returned nothing."}
+        self.assert_error("invalid_input", lambda: self.mutate(lineage.record_loop_closure, {"id": "unbound", "purposes": purposes}))
+
+    def test_provisional_queries_do_not_stale_an_existing_closure_or_change_its_foundation(self):
+        from research_harness.literature import foundation_report
+        root = self.metadata(1)
+        self.loop_read([root], "direct", "out_of_scope")
+        purposes = {p: {"status": "gap", "note": "The requested one-reading limit was reached."} for p in lineage.SEARCH_PURPOSES}
+        self.mutate(lineage.record_loop_closure, {"id": "before-provisional", "purposes": purposes, "depth": {"loop_abstracts": 1}})
+        before = foundation_report(self.store, "research")
+        state = lineage.loop_state(self.store.snapshot()["records"])
+        self.record_provisional_queries()
+        records = self.store.snapshot()["records"]
+        self.assertEqual(lineage.loop_state(records), state)
+        self.assertEqual(lineage.loop_obligations(records), [])
+        self.assertEqual(foundation_report(self.store, "research"), before)
+        self.scope([root])
+        self.assertEqual(lineage.loop_obligations(self.store.snapshot()["records"]), [])
+
+    def test_depth_limit_allows_gap_closure_at_the_current_limit(self):
+        from research_harness.cli import OPERATIONS
+        self.assertIn("depth", OPERATIONS)
+        self.mutate(OPERATIONS["depth"], {"id": "one", "values": {"loop_abstracts": 1}, "reason": "Bound the exploration."})
+        self.loop_read([self.metadata(1)], "direct", "out_of_scope")
+        purposes = {p: {"status": "gap", "note": "The chosen loop limit was reached."} for p in lineage.SEARCH_PURPOSES}
+        self.mutate(lineage.record_loop_closure, {"id": "at-limit", "purposes": purposes})
+
     def test_coverage_closure_and_gaps(self):
         root = self.metadata(1)
         self.scope([root])

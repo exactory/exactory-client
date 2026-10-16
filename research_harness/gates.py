@@ -2,6 +2,7 @@
 
 from .artifacts import ArtifactStore
 from .cohort_evidence import cohort_report
+from .claim_dependencies import uses_claim_dependencies
 from .development import validate_admitted_execution
 from .evaluation import Evaluation
 from .execution_evidence import author_readiness_state
@@ -9,6 +10,7 @@ from .errors import ResearchError
 from .evidence import digest
 from .graph import obligation
 from .literature import foundation_state
+from .principles import configuration_state
 from .synthesis import synthesis_state
 
 
@@ -37,6 +39,7 @@ def gate_state(records, artifacts, action, *, profile=None):
     if config is None:
         return _report([obligation("migration_required", "Initialize or explicitly adopt the current research contract.")])
     profile = profile or config["profile"]
+    managed = uses_claim_dependencies(records)
     if profile != config["profile"]:
         return _report([obligation("profile_mismatch", "Use a separate workspace with the applicable profile.")])
     if action == "cohort":
@@ -48,6 +51,18 @@ def gate_state(records, artifacts, action, *, profile=None):
         if action == "verification" and profile != "verification":
             return _report([obligation("profile_mismatch", "Verdicts require an independent verification workspace.")])
         return synthesis_state(records, artifacts, profile)
+    if action == "direction":
+        if not managed:
+            return synthesis_state(records, artifacts, profile)
+        from .claim_minimums import assess_direction
+        from .research_decisions import decision_state
+        configuration = configuration_state(records, artifacts, profile)
+        decision = decision_state(records, artifacts, "cycle")
+        # Before the cycle decision exists, the gate lists the direction minimum
+        # itself; a recorded decision carries the minimum in its own obligations.
+        minimum = assess_direction(records, artifacts) if decision["decision"] is None else []
+        return _report(configuration["obligations"] + decision["obligations"] + minimum,
+                       configuration=configuration, research_decision=decision)
     if action == "manuscript-readiness":
         from .publication_scope import assess_manuscript_readiness
         from .decision_integration import with_decision
@@ -59,7 +74,7 @@ def gate_state(records, artifacts, action, *, profile=None):
         preparation = synthesis_state(records, artifacts, profile)
         pending = [a for key, a in records.get("execution_admission", {}).items()
                    if key not in records.get("execution_outcome", {})]
-        obligations = list(preparation["obligations"])
+        obligations = [] if managed else list(preparation["obligations"])
         for admission in pending:
             try:
                 validate_admitted_execution(records, artifacts, admission["id"])
@@ -90,9 +105,12 @@ def gate_report(store, action, *, profile=None):
 def validate_transition(records, artifacts, previous, proposed):
     artifacts = Evaluation.of(records, artifacts)
     source, target = previous["stage"], proposed["stage"]
+    managed = uses_claim_dependencies(records)
     if source not in STAGES or target not in STAGES:
         raise ResearchError("invalid_stage", "Unsupported study stage")
-    if target != source and (source, target) not in BACKWARD and STAGES.index(target) != STAGES.index(source) + 1:
+    if (target != source and (source, target) not in BACKWARD
+            and STAGES.index(target) != STAGES.index(source) + 1
+            and not (managed and (source, target) == ("initiate", "literature"))):
         raise ResearchError("readiness_transition", "Research readiness does not permit a direct stage jump",
                             {"from": source, "to": target, "next": "exactory-research next"})
     if (source, target) in BACKWARD:
@@ -101,6 +119,12 @@ def validate_transition(records, artifacts, previous, proposed):
         if proposed["status"] == "done":
             raise ResearchError("readiness_required", "A return for more work cannot assert that work is done")
         if (source, target) == ("evaluate", "literature"):
+            if managed:
+                from .research_decisions import decision_state
+                report = require_ready(decision_state(records, artifacts, "round"), "entering a development round")
+                if report["decision"]["payload"]["action"] not in ("investigate", "pivot"):
+                    raise ResearchError("readiness_required", "A return to literature requires an approved investigate or pivot decision")
+                return
             # The round entry: round-admit opened the next round, which is then active until its assessment.
             from .rounds import active_round, round_state
             if active_round(records) is None:
@@ -116,17 +140,22 @@ def validate_transition(records, artifacts, previous, proposed):
         "ideate": "execution", "experiment": "readiness", "write": "manuscript",
         "evaluate": "publication", "deposit": "deposited", "submit": "submitted", "complete": "submitted",
     }
+    if managed:
+        completed["literature"] = "direction"
     from .publication_scope import has_publication_scope
     scoped = has_publication_scope(records)
     if scoped:
         completed["experiment"] = "manuscript-readiness"
-    require_ready(gate_state(records, artifacts, completed[source]), source + " completion")
+    if not (managed and source == "cohort" and target != source):
+        require_ready(gate_state(records, artifacts, completed[source]), source + " completion")
     if (source, target) == ("evaluate", "deposit"):
         from .rounds import round_state
         # A ready round gate is an approved stop: an active round owes its assessment, and an approved continue owes its admission.
         require_ready(round_state(records, artifacts), "entering deposit")
     prerequisites = {"ideate": "preparation", "experiment": "execution", "write": "readiness",
                      "evaluate": "manuscript", "deposit": "publication", "submit": "deposited", "complete": "submitted"}
+    if managed:
+        prerequisites["ideate"] = "direction"
     if scoped:
         prerequisites["write"] = "manuscript-readiness"
     if target in prerequisites:

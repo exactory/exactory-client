@@ -14,6 +14,121 @@ class LiteratureTests(LiteratureCase):
     def search(self, *args, **kwargs):
         return self.capture_search(*args, **kwargs)
 
+    def freeze_legacy_searches(self):
+        """Build the search record shape used to compute the pinned historical hashes."""
+        records = self.store.snapshot()["records"]
+
+        def write_legacy(transaction):
+            for identifier, search in records.get("literature_search", {}).items():
+                transaction.put("literature_search", identifier, {key: value for key, value in search.items()
+                    if key not in ("hits_per_query", "coverage", "integrity_errors")})
+
+        self.sequence += 1
+        self.store.mutate("legacy-search-fixture", {}, write_legacy, expected_revision=self.store.revision,
+                          request_id="legacy-search-fixture-" + str(self.sequence))
+
+    def test_search_integrity_adapter_preserves_stored_errors_and_filters_only_incomplete_enumeration(self):
+        from research_harness.literature import find_search_integrity_errors
+        integrity = {"code": "search_results_duplicate", "source_id": "saved"}
+        pending = [{"code": "search_response_incomplete"}, integrity]
+        self.assertEqual(find_search_integrity_errors({"pending": pending}), [integrity])
+        self.assertEqual(find_search_integrity_errors({"pending": pending, "integrity_errors": []}), [])
+        self.assertEqual(find_search_integrity_errors({}), [])
+
+    def test_provisional_search_requires_a_question_and_leaves_the_whole_foundation_unchanged(self):
+        search = self.search("direct", ["arxiv:2602.00009v1"])
+        search["cited_work_ids"] = search["found_work_ids"]
+        self.assert_error("roots_missing", lambda: self.mutate(record_search, search))
+        search["question"] = "Could bounded sequences support this contribution?"
+        before = foundation_report(self.store, "research")
+        self.mutate(record_search, search)
+        self.assertEqual(before, foundation_report(self.store, "research"))
+        records = self.store.snapshot()["records"]
+        recorded = records["literature_search"][search["id"]]
+        self.assertTrue(recorded["provisional"])
+        self.assertIsNone(recorded["scope_digest"])
+        self.assertNotIn("search_selection", records)
+        self.assertNotIn("fulltext_requirement", records)
+        self.assertEqual(recorded["coverage"][0]["kind"], "bounded_unordered")
+
+    def test_provisional_question_can_supply_the_search_scope_and_must_be_text(self):
+        search = self.search()
+        del search["scope"]
+        search["question"] = "Does this direction already have a solution?"
+        self.mutate(record_search, search)
+        recorded = self.store.snapshot()["records"]["literature_search"][search["id"]]
+        self.assertEqual(recorded["scope"], search["question"])
+        invalid = dict(search, id="invalid-question", question=" ")
+        self.assert_error("invalid_search", lambda: self.mutate(record_search, invalid))
+
+    def test_scoped_binding_reuses_a_provisional_capture_and_records_its_current_scope(self):
+        search = self.search("direct", ["arxiv:2602.00009v1"])
+        search["question"] = "Which sources settle the bounded-sequence question?"
+        self.mutate(record_search, search)
+        original = self.store.snapshot()["records"]["literature_search"][search["id"]]
+        self.scope([self.metadata()])
+        before = foundation_report(self.store, "research")
+        self.assertEqual(before["search_history"], [])
+        bound = dict(search, id="scoped", binding={"provisional_search_id": search["id"],
+                                                 "reason": "These unchanged receipts address the chosen roots."})
+        bound["cited_work_ids"] = bound["found_work_ids"]
+        self.mutate(record_search, bound)
+        records = self.store.snapshot()["records"]
+        self.assertEqual(records["literature_search"][search["id"]], original)
+        self.assertEqual(records["search_selection"]["research:direct"], {"search_id": "scoped"})
+        self.assertEqual(records["literature_search"]["scoped"]["responses"], original["responses"])
+        self.assertEqual(records["search_binding"]["scoped"]["scope_digest"], digest(records["literature_scope"]["research"]))
+        self.assertEqual(records["search_binding"]["scoped"]["provisional_search_id"], search["id"])
+        self.assertEqual([s["id"] for s in foundation_report(self.store, "research")["search_history"]], ["scoped"])
+
+    def test_scoped_binding_rejects_missing_nonprovisional_or_changed_receipts(self):
+        search = self.search()
+        search["question"] = "Which direction is supported?"
+        self.mutate(record_search, search)
+        self.scope([self.metadata()])
+        bound = dict(search, id="scoped", binding={"provisional_search_id": "missing", "reason": "Reuse unchanged evidence."})
+        self.assert_error("invalid_search", lambda: self.mutate(record_search, bound))
+        bound["binding"]["provisional_search_id"] = search["id"]
+        changed = self.search("direct")
+        changed.update(id="changed", binding=bound["binding"])
+        self.assert_error("invalid_search", lambda: self.mutate(record_search, changed))
+        changed = copy.deepcopy(bound)
+        changed["responses"][0]["query_locator"]["value"] = "another query"
+        self.assert_error("invalid_search", lambda: self.mutate(record_search, changed))
+        self.mutate(record_search, bound)
+        another = dict(bound, id="another", binding={"provisional_search_id": "scoped", "reason": "Use a scoped search."})
+        self.assert_error("invalid_search", lambda: self.mutate(record_search, another))
+
+    def test_search_records_effective_hit_amount_and_later_depth_changes_do_not_reassess_it(self):
+        from research_harness.depth import record_depth
+        self.scope([self.metadata()])
+        self.mutate(record_depth, {"id": "large", "values": {"hits_per_query": 31}, "reason": "Inspect more hits."})
+        self.mutate(record_search, self.search("direct"))
+        direct = self.store.snapshot()["records"]["literature_search"]["direct"]
+        self.assertEqual(direct["hits_per_query"], 31)
+        self.assertEqual(direct["coverage"][0]["requested_k"], 31)
+        before = foundation_report(self.store, "research")
+        self.mutate(record_depth, {"id": "small", "values": {"hits_per_query": 2}, "reason": "A narrow next search."})
+        self.assertEqual(before, foundation_report(self.store, "research"))
+        override = dict(self.search("theory"), depth={"hits_per_query": 7}, hits_per_query=5)
+        self.mutate(record_search, override)
+        self.assertEqual(self.store.snapshot()["records"]["literature_search"]["theory"]["hits_per_query"], 5)
+        override = dict(self.search("adjacent"), depth={"hits_per_query": 7})
+        self.mutate(record_search, override)
+        self.assertEqual(self.store.snapshot()["records"]["literature_search"]["adjacent"]["coverage"][0]["requested_k"], 7)
+
+    def test_verification_searches_keep_the_fixed_contract_even_with_a_research_plan(self):
+        from research_harness.depth import record_depth
+        self.mutate(record_depth, {"id": "research-depth", "values": {"hits_per_query": 31}, "reason": "A deeper research search."})
+        target = self.verification_target()
+        self.scope([target["id"]], profile="verification", target=target)
+        search = dict(self.search(), profile="verification")
+        self.mutate(record_search, search)
+        recorded = self.store.snapshot()["records"]["literature_search"][search["id"]]
+        self.assertEqual(recorded["hits_per_query"], 10)
+        override = dict(self.search("theory"), profile="verification", depth={"hits_per_query": 2})
+        self.assert_error("profile_inapplicable", lambda: self.mutate(record_search, override))
+
     def test_graph_reading_does_not_discharge_all_cohort_abstracts(self):
         collection = self.cohort()
         a = "arxiv:2601.00001v1"
@@ -194,6 +309,7 @@ class LiteratureTests(LiteratureCase):
             search = self.search(purpose, cited_version_ids)
             search["cited_work_ids"] = cited_version_ids
             self.mutate(record_search, search)
+        self.freeze_legacy_searches()
         report = foundation_report(self.store, "research")
         results = {name: report[name] for name in ("digest", "requirements_digest", "stable_digest", "frontier_digest")}
         results["graph"] = digest(citation_graph(self.store.snapshot()["records"], "research"))
@@ -219,6 +335,7 @@ class LiteratureTests(LiteratureCase):
             search = self.search(purpose, [b, c])
             search["id"], search["cited_work_ids"] = identifier, cited_version_ids
             self.mutate(record_search, search)
+        self.freeze_legacy_searches()
         report = foundation_report(self.store, "research")
         results = {name: report[name] for name in ("digest", "requirements_digest", "stable_digest", "frontier_digest")}
         results["graph"] = digest(citation_graph(self.store.snapshot()["records"], "research"))

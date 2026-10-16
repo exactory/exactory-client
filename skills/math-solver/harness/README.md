@@ -74,6 +74,26 @@ amendments, strategy assessments, input and result reviews, closure, adoption an
 recovery. It preserves native schemas and historical replay and adds no
 strategic-value gate. Declaring a host identity or a fresh agent is insufficient.
 
+Fresh resolved openness findings and root closure require `OpennessMinimum`
+(`../SEARCH.md`): exact `statement`, declared `neighbours`, bound common
+`literature_search` records with `coverage` and `captured_at`, and pinned complete
+`fulltext` readings for every relevant or contradictory result. Export the
+declaration as `openness` in `search review-packet`; the observed result review
+returns `findings.openness.minimum` and binds its digests in `evidence`. Unavailable
+or deferred sources remain gaps. `unresolved` may accompany proof-validity
+acceptance but keeps root closure pending. Material searches for the same
+formulations must be reassessed. `already_solved` still requires every requested
+formal verification and deliverable. Recorded version 1 acceptance/closure replays.
+
+Native imports retain raw and canonical identities and use the shared probe-origin
+resolver in the objective's associated common review store. Fresh dependencies
+and strategy decisions cannot gain credit from copied or JSON-wrapped exploratory
+output (`exploratory_evidence`). A probe-derived certificate or Lean proof needs
+its admitted native verification and candidate interpretation. Historical accepted
+imports retain their recorded audits. Exploratory `exactory-lab probe` runs stay
+in the common workspace, outside native execution, and appear in the cash-out
+inventory with `id`, `question` and actual `elapsed_seconds`.
+
 ## Test
 
 From the plugin root:
@@ -101,7 +121,7 @@ found.
 |---|---|
 | `init <slug> [--from <parent>]` | creates an unmanaged historical-style workspace. Managed workspaces and approved native children are created by reviewed `search admit`; legacy `init --from` refuses inside a managed root with migration guidance |
 | `check-problem <slug>` | validates `problem.json`: every key present, no empty strings, `direction` and `mode` from the allowed sets; prints `problem.json: ok` |
-| `plan <slug>` | validates `preconditions.json` against the strategy files and `problem.json`, writes `openings.json` with every strategy whose verdict is not `no` (yes before unknown, name order within, each with its component and declared costs), prints them; refuses to run while `study/problem.md` is missing or empty |
+| `plan <slug>` | validates the complete `problem.json`, then `preconditions.json` against the strategy files and cited problem fields; writes `openings.json` with every strategy whose verdict is not `no` (yes before unknown, name order within, each with its component and declared costs), and prints them. It does not read or require `study/problem.md` |
 | `rank <slug>` | validates `ranking.json` against the openings (every one exactly once, each row citing a `problem.json` field or a cost the strategy declares) and prints the order the solver chose |
 | `journal add <slug> --json '<move>' [--problem-before PATH]` | validates and appends the native move under shared journal ownership. Managed work first reserves its exact strategy, entry, pass, triggers and citations with `search begin`; the controller acknowledges the exact appended prefix and any validated problem transition. The optional path supplies an older reservation's exact original problem value |
 | `budget <slug>` | prints moves used in this pass and overall, passes used, and whether a stall is due |

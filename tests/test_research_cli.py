@@ -11,10 +11,24 @@ from unittest import mock
 
 from research_harness.storage import Store
 from development_fixtures import DevelopmentCase
+from literature_fixtures import LiteratureCase
 
 
 PLUGIN = Path(__file__).resolve().parents[1]
-RESEARCH_RUNS = Path("/Users/ryshiro/exactory/exactory-research")
+RESEARCH_RUNS = Path(os.environ.get("EXACTORY_TEST_RESEARCH_RUNS", "/Users/ryshiro/exactory/exactory-research"))
+
+
+class ProvisionalStatusTests(LiteratureCase):
+    def test_provisional_search_appears_in_status_without_foundation_credit(self):
+        from research_harness.cli import status_report
+        from research_harness.literature import foundation_report, record_search
+        search = self.capture_search()
+        search["question"] = "What should be investigated before choosing roots?"
+        before = foundation_report(self.store, "research")
+        self.mutate(record_search, search)
+        report = status_report(self.store)
+        self.assertEqual(report["provisional_searches"], [{"id": search["id"], "question": search["question"], "profile": "research"}])
+        self.assertEqual(foundation_report(self.store, "research"), before)
 
 
 class ResearchCliTests(unittest.TestCase):
@@ -83,6 +97,20 @@ class ResearchCliTests(unittest.TestCase):
         records = Store(self.root).snapshot()["records"]
         self.assertEqual(records["configuration"]["research"]["profile"], "research")
         self.assertIsNone(records["configuration"]["research"]["target"])
+
+    def test_depth_and_probe_examples_and_depth_mutation(self):
+        self.init_lab()
+        for operation in ("depth", "probe-intent", "probe"):
+            result = self.run_cli("exactory-research", "example", operation)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("id", json.loads(result.stdout))
+        revision = Store(self.root).revision
+        changed = self.research_mutation("depth", {"id": "depth-cli", "values": {"hits_per_query": 15},
+                                                  "reason": "Keep more search hits."}, revision, "depth-cli")
+        self.assertEqual(changed.returncode, 0, changed.stderr)
+        status = json.loads(self.run_cli("exactory-research", "status").stdout)
+        self.assertEqual(status["limits"]["depth"]["values"]["hits_per_query"], 15)
+        self.assertNotIn("probes", status)
 
     def test_status_and_receipts_carry_runtime_provenance(self):
         self.init_lab()
@@ -464,15 +492,14 @@ class ResearchPreparationTests(DevelopmentCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
 
-    def test_null_objective_preparation_order_reaches_ideate_after_actual_reading(self):
+    def test_null_objective_reaches_literature_before_reading_and_ideate_after_direction(self):
         initialized = self.cli("exactory-lab", "init", "--slug", "ordered", "--preparation-policy", "exhaustive-v1")
         self.assertEqual(initialized.returncode, 0, initialized.stderr)
         self.assertIsNone(self.store.snapshot()["records"]["configuration"]["research"]["target"])
         self.assertEqual(self.cli("exactory-lab", "state", "set", "--stage", "cohort").returncode, 0)
         collection = self.cohort((1,))
         early = self.cli("exactory-lab", "state", "set", "--stage", "literature")
-        self.assertNotEqual(early.returncode, 0)
-        self.assertIn("cohort_abstract_reading_missing", early.stderr)
+        self.assertEqual(early.returncode, 0, early.stderr)
         self.json_command("read", self.abstract_note("arxiv:2601.00001v1"))
         entered = self.cli("exactory-lab", "state", "set", "--stage", "literature")
         self.assertEqual(entered.returncode, 0, entered.stderr)
@@ -485,6 +512,9 @@ class ResearchPreparationTests(DevelopmentCase):
         # The challenges ahead are recorded before the objective is written against them.
         self.json_command("grand-challenge", self.grand_challenge(self.links[0]))
         self.objective = {"kind": "objective", "id": "ordered-objective", "statement": "Establish the complete finite bound."}
+        # The direction minimum is owed before target commitment; refresh its
+        # configuration binding again once the native target is committed.
+        self.json_command("standards", self.standards(self.links[0], identifier="direction-standards"))
         from managed_strategy_fixtures import target_decision
         decision = target_decision(self)
         self.json_command("target", {"target": self.objective,

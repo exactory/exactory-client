@@ -10,9 +10,33 @@ from pathlib import Path
 from unittest.mock import patch
 
 from research_harness.artifacts import ArtifactStore
+from research_harness.claim_minimums import assess_direction
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 from research_harness.storage import Store
+
+
+def prepare_direction(case):
+    """Record the direction minimum of the case unless the case already meets it."""
+    from test_research_synthesis import SynthesisCase
+    fixture = SynthesisCase()
+    fixture.root, fixture.store, fixture.artifacts = case.root, case.store, case.artifacts
+    fixture.sequence = max(case.store.revision, getattr(case, "sequence", 0))
+    records = case.store.snapshot()["records"]
+    if not assess_direction(records, case.artifacts):
+        return fixture
+    if "configuration" not in records:
+        fixture.mutate(fixture.api("principles").initialize_research, {"profile": "research", "target": None})
+    work = fixture.metadata(90001)
+    fixture.scope([work])
+    link = fixture.read_source(90001)
+    fixture.record_purpose("direct", "direction-direct")
+    fixture.mutate(fixture.api().record_standards, fixture.standards(link, identifier="direction-standards"))
+    fixture.mutate(fixture.api("challenge").record_grand_challenge,
+                   fixture.grand_challenge(link, identifier="direction-grand-challenge"))
+    if hasattr(case, "sequence"):
+        case.sequence = fixture.sequence
+    return fixture
 
 
 class StrategyCase(unittest.TestCase):
@@ -95,6 +119,9 @@ class StrategyCase(unittest.TestCase):
                             "predecessor": None, "previous_outcome": None},
                 "recommendation": {"action": "investigate", "reason": "The deciding control is available."}, "bundle_digest": None}
 
+    def prepare_direction(self):
+        self.direction_fixture = prepare_direction(self)
+
     def setup_dossier(self):
         strategy = self.module("strategy")
         self.mutate(strategy.record_intent, self.intent())
@@ -128,7 +155,7 @@ class StrategyCase(unittest.TestCase):
                                  expected_revision=self.store.revision, request_id="probe-route")
 
     def review_response(self, stage="slate", *, status="sufficient", objections=None):
-        kinds = ("impact", "demand", "novelty_risk", "feasibility", "distinctness", "continuity", "grand_challenge", "stop")
+        kinds = ("impact", "demand", "novelty_risk", "feasibility", "distinctness", "continuity", "grand_challenge", "q1_venue", "stop")
         return {"stage": stage, "support": None, "value": {
             "status": status, "consequence": "Resolve the deciding inference at its stated scope.",
             "bar_ids": [] if stage == "bar" else ["bar-a", "bar-b"],
@@ -140,28 +167,34 @@ class StrategyCase(unittest.TestCase):
                                                        "evidence": [self.evidence]} for kind in kinds]},
             "objections": [] if objections is None else objections, "limitations": ["Synthetic scientific judgments test software contracts only."]}
 
-    def record_response(self, identifier, reviewer, response, *, dossier_id="dossier-1"):
+    def record_response(self, identifier, reviewer, response, *, dossier_id="dossier-1", previous_prompt=False, context=None):
         protocol, decisions = self.module("review_protocol"), self.module("research_decisions")
         assignment = "assignment-" + identifier
-        self.mutate(protocol.record_assignment, {"id": assignment, "route_id": "route", "dossier_id": dossier_id,
-                    "role": response["stage"], "reviewer_id": reviewer, "author_id": "author", "context": {}})
+        payload = {"id": assignment, "route_id": "route", "dossier_id": dossier_id,
+                   "role": response["stage"], "reviewer_id": reviewer, "author_id": "author", "context": {} if context is None else context}
+        if previous_prompt:
+            canonical = protocol.canonical_prompt
+            with patch.object(protocol, "canonical_prompt", side_effect=lambda role, **kw: canonical(role, **dict(kw, version=1))):
+                self.mutate(protocol.record_assignment, payload)
+        else:
+            self.mutate(protocol.record_assignment, payload)
         with patch("research_harness.review_transport.send_request", return_value=self.provider_response(response)):
             protocol.invoke_assignment(self.store, {"id": "attempt-" + identifier, "assignment_id": assignment},
                                        expected_revision=self.store.revision, request_id="invoke-" + identifier, credential="fixture-only")
         return self.mutate(decisions.record_value_review, dict(response, id=identifier, dossier_id=dossier_id, assignment_id=assignment))["result"]
 
-    def reviewed_dossier(self, *, response_a=None, response_b=None, dossier_payload=None):
+    def reviewed_dossier(self, *, response_a=None, response_b=None, dossier_payload=None, previous_prompts=False):
+        self.prepare_direction()
         if dossier_payload is None:
             dossier = self.setup_dossier()
         else:
             self.mutate(self.module("strategy").record_intent, self.intent())
             dossier = self.mutate(self.module("strategy").record_strategy, dossier_payload)["result"]
-        self.put("work", "prior-source", {"id": "prior-source", "title": "Synthetic primary comparator", "abstract": self.evidence})
         self.route()
-        self.record_response("bar-a", "reviewer-a", self.review_response("bar"))
-        self.record_response("bar-b", "reviewer-b", self.review_response("bar"))
-        self.record_response("slate-a", "reviewer-a", self.review_response() if response_a is None else response_a)
-        self.record_response("slate-b", "reviewer-b", self.review_response() if response_b is None else response_b)
+        self.record_response("bar-a", "reviewer-a", self.review_response("bar"), previous_prompt=previous_prompts)
+        self.record_response("bar-b", "reviewer-b", self.review_response("bar"), previous_prompt=previous_prompts)
+        self.record_response("slate-a", "reviewer-a", self.review_response() if response_a is None else response_a, previous_prompt=previous_prompts)
+        self.record_response("slate-b", "reviewer-b", self.review_response() if response_b is None else response_b, previous_prompt=previous_prompts)
         return dossier
 
     def decision(self, identifier="decision-1", *, action="investigate"):

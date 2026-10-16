@@ -53,18 +53,41 @@ class PlanTest(AdmittedWorkspaceTest):
         status, out, err = self.plan(record)
         self.assertEqual((status, err), (1, "ladder-the-parameter: unknown key optional_answers\n"))
 
-    def test_refuses_to_run_without_the_problem_study(self):
+    def test_accepts_complete_inputs_without_the_problem_study(self):
         (self.workspace / "study" / "problem.md").unlink()
         status, out, err = self.plan(make_preconditions(ALL_YES))
-        self.assertEqual((status, out), (1, ""))
-        self.assertEqual(err, "study/problem.md: missing or empty; write the problem-level study (STUDY.md) before plan\n")
-        self.assertFalse((self.workspace / "openings.json").exists())
+        self.assertEqual((status, err), (0, ""))
+        self.assertEqual(len(self.read_json("openings.json")["openings"]), 5)
 
-    def test_refuses_to_run_when_the_problem_study_is_empty(self):
+    def test_accepts_complete_inputs_when_the_problem_study_is_empty(self):
         write_study(self.workspace, "problem", " \n")
         status, out, err = self.plan(make_preconditions(ALL_YES))
-        self.assertEqual(status, 1)
-        self.assertEqual(err, "study/problem.md: missing or empty; write the problem-level study (STUDY.md) before plan\n")
+        self.assertEqual((status, err), (0, ""))
+
+    def test_refuses_incomplete_problem_inputs_even_with_a_study(self):
+        for field in ("claim", "known", "quadruple", "shape"):
+            problem = make_problem()
+            del problem[field]
+            self.write_json("problem.json", problem)
+            with self.subTest(field=field):
+                status, out, err = self.plan(make_preconditions(ALL_YES))
+                self.assertEqual((status, out), (1, ""))
+                self.assertIn(field + ": missing", err)
+                self.assertFalse((self.workspace / "openings.json").exists())
+
+    def test_refuses_empty_or_incomplete_shape_inputs_before_planning(self):
+        for key, value in (("known_bounds", ""), ("neighbours", None)):
+            problem = make_problem()
+            if value is None:
+                del problem["shape"][key]
+            else:
+                problem["shape"][key] = value
+            self.write_json("problem.json", problem)
+            with self.subTest(field=key):
+                status, out, err = self.plan(make_preconditions(ALL_YES))
+                self.assertEqual((status, out), (1, ""))
+                self.assertIn("shape." + key, err)
+                self.assertFalse((self.workspace / "openings.json").exists())
 
     def test_writes_the_openings(self):
         status, out, err = self.plan(make_preconditions(ALL_YES))

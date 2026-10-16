@@ -26,9 +26,11 @@ unrelated reference does not invalidate it. Native registry captures
 use their parser; web/MCP JSON requires results_pointer into the actual array
 and the original import mappings for every result. Query provenance is a saved
 response locator or the exact query in its captured URL. Under the bounded
-preparation policies each captured query carries at most ten results across all
-its responses. Search records describe bounded searches and do not establish
-universal novelty.
+preparation policies each captured query carries at most its recorded effective
+hits_per_query across all responses. A question may be recorded provisionally
+before roots; binding {provisional_search_id, reason} on a later scoped search
+reuses its exact responses without recapture. Search coverage describes saved
+results and does not establish universal novelty.
 """
 
 import copy
@@ -53,7 +55,7 @@ from .providers import _json
 from . import resources
 from . import screening
 from .reading import bundle_digest, current_readings, fulltext_coverage, registry_abstract_present, required_unit_obligations
-from .search_pages import QUERY_PARAMETER_NAMES, enumerate_pages, native_page
+from .search_pages import QUERY_PARAMETER_NAMES, build_search_coverage, enumerate_pages, find_captured_ordering, native_page
 from .source_links import captured_source, complete_original, contains, covers_text, exact_work, fulltext_capture, original_identity, read_locator, validate_link
 
 
@@ -377,11 +379,111 @@ def _items_list(value, name):
     return value
 
 
+def find_search_integrity_errors(search):
+    """Keep parser/integrity failures separate from bounded enumeration."""
+    if "integrity_errors" in search:
+        return search["integrity_errors"]
+    return [item for item in search.get("pending", []) if item.get("code") != "search_response_incomplete"]
+
+
+def build_search_capture(artifacts, response, source, found, page):
+    """Keep raw returned row counts, including rows a parser could not import."""
+    count = page["count"] if page is not None else len(_pointer(
+        _json(artifacts.read(source["response"]), require_object=False), response["results_pointer"]))
+    return {"source": source, "query": response["query"], "found": found, "page": page,
+            "results_pointer": response.get("results_pointer"), "returned_count": count}
+
+
+def find_search_coverage(search, records=None, artifacts=None):
+    """Read saved coverage or derive legacy coverage without rewriting reports.
+
+    With the snapshot and artifact store, legacy receipts establish the same
+    coverage as new calls. Without them, complete page-group evidence remains
+    usable; a query whose receipts cannot be located stays unspecified.
+    """
+    if "coverage" in search:
+        return copy.deepcopy(search["coverage"])
+    from .lineage import HITS_PER_QUERY
+    requested = search.get("hits_per_query", HITS_PER_QUERY)
+    if records is not None and artifacts is not None and search.get("responses"):
+        evaluation = Evaluation.of(records, artifacts)
+        captures, pages, pending = [], [], []
+        for response in search["responses"]:
+            source, found, gaps, page = _search_response(records, evaluation, response, search["scope"])
+            captures.append(build_search_capture(evaluation, response, source, found, page))
+            pending.extend(gaps)
+            if page is not None:
+                pages.append(page)
+        groups, gaps = enumerate_pages(pages)
+        return build_search_coverage(search["queries"], requested, captures, groups, pending + gaps)
+    result = []
+    for query in search.get("queries", []):
+        groups = [group for group in search.get("page_groups", []) if group["query"] == query]
+        providers = sorted({group["provider"] for group in groups})
+        orders = [find_captured_ordering(group["provider"], group["parameters"]) for group in groups]
+        ordering = orders[0] if orders and all(order == orders[0] for order in orders) else None
+        response_ids = {response["source_id"] for response in search.get("responses", []) if response["query"] == query}
+        covered_ids = {identifier for group in groups for identifier in group["source_ids"]}
+        group_ids = {group["id"] for group in groups}
+        query_errors = []
+        for error in find_search_integrity_errors(search):
+            if error.get("group_id") is not None:
+                if error["group_id"] not in group_ids:
+                    continue
+            elif error.get("source_id") is not None and error["source_id"] not in response_ids | covered_ids:
+                continue
+            query_errors.append(error)
+        established = bool(groups) and (not response_ids or response_ids == covered_ids)
+        complete = established and all(group["complete"] for group in groups)
+        if complete:
+            kind = "complete"
+        elif (established and len(groups) == 1 and ordering is not None
+              and not query_errors and groups[0]["returned_count"] >= requested):
+            kind = "top_k"
+        else:
+            kind = "bounded_unordered" if established else "unspecified"
+        result.append({"query": query, "requested_k": requested,
+                       "returned_count": sum(group["returned_count"] for group in groups) if complete else None,
+                       "inspected_count": len(search.get("found_work_ids", [])) if len(search["queries"]) == 1 else None,
+                       "page_positions": [], "provider": providers[0] if len(providers) == 1 else providers or None,
+                       "ordering": ordering, "kind": kind})
+    return result
+
+
+def validate_search_binding(records, value, scope):
+    """Bind unchanged provisional response identities to the current scope."""
+    binding = value.get("binding")
+    if binding is None:
+        return None
+    fields(binding, ("provisional_search_id", "reason"), code="invalid_search")
+    text(binding["provisional_search_id"], "Provisional search ID", code="invalid_search")
+    text(binding["reason"], "Search binding reason", code="invalid_search")
+    previous = records.get("literature_search", {}).get(binding["provisional_search_id"])
+    if (scope is None or previous is None or previous.get("provisional") is not True
+            or previous["profile"] != value["profile"] or previous["purpose"] != value["purpose"]
+            or previous["queries"] != value["queries"] or previous["responses"] != value["responses"]):
+        raise ResearchError("invalid_search", "Bind the unchanged responses and queries of a provisional search with this profile and purpose to an existing scope")
+    return {"id": value["id"], "search_id": value["id"], "provisional_search_id": previous["id"],
+            "profile": value["profile"], "purpose": value["purpose"], "scope_digest": digest(scope),
+            "response_source_ids": [response["source_id"] for response in value["responses"]],
+            "reason": binding["reason"]}
+
+
 def record_search(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
-        fields(value, ("id", "profile", "purpose", "queries", "responses", "captured_at", "scope", "found_work_ids", "verdict",
-                       "cited_work_ids", "impact", "gaps", "dispositions"), ("resolved",), code="invalid_search")
+        fields(value, ("id", "profile", "purpose", "queries", "responses", "captured_at", "found_work_ids", "verdict",
+                       "cited_work_ids", "impact", "gaps", "dispositions"),
+               ("resolved", "scope", "question", "binding", "depth", "hits_per_query"), code="invalid_search")
         profile_name(value["profile"])
+        current_scope = records.get("literature_scope", {}).get(value["profile"])
+        provisional = current_scope is None
+        if "question" in value:
+            text(value["question"], "Search question", code="invalid_search")
+        if provisional and "question" not in value:
+            raise ResearchError("roots_missing", "Define the literature scope or record a provisional search question")
+        if "scope" not in value:
+            value = dict(value, scope=value.get("question"))
+        binding = validate_search_binding(records, value, current_scope)
         if value["purpose"] not in SEARCH_PURPOSES + DEVELOPMENT_PURPOSES or value["verdict"] not in NOVELTY_VERDICTS:
             raise ResearchError("invalid_search", "Use the five search purposes, the four development purposes, and the existing novelty verdict vocabulary")
         strings(value["queries"], "Queries", nonempty=True, code="invalid_search")
@@ -393,10 +495,23 @@ def record_search(store, payload, *, expected_revision, request_id):
         date = timestamp(value["captured_at"])
         if not isinstance(value["responses"], list) or not value["responses"]:
             raise ResearchError("invalid_search", "An empty user list without original captured responses is not a search")
-        found, pending, pages, by_query = set(), [], [], {}
+        found, pending, pages, captures, by_query = set(), [], [], [], {}
         evaluation = Evaluation(records, ArtifactStore(store.root))
-        from .lineage import HITS_PER_QUERY, LINEAGE
+        from .depth import resolve_depth_values
+        from .lineage import LINEAGE
         from .sampling import SAMPLED
+        overrides = value.get("depth")
+        if "hits_per_query" in value:
+            if overrides is not None and not isinstance(overrides, dict):
+                raise ResearchError("invalid_input", "Depth overrides must map supported amounts to positive integers")
+            overrides = dict(overrides or {}, hits_per_query=value["hits_per_query"])
+        depth_records = records
+        if value["profile"] == "verification":
+            configured = records.get("configuration", {})
+            depth_records = dict(records, configuration=dict(configured, research=dict(
+                configured.get("research", {}), profile="verification")))
+        effective = resolve_depth_values(depth_records, overrides, keys=("hits_per_query",))
+        amount = effective["hits_per_query"]
         bounded = preparation_policy(records) in (LINEAGE, SAMPLED)
         for response in value["responses"]:
             source, identifiers, gaps, page = _search_response(records, evaluation, response, value["scope"])
@@ -405,30 +520,37 @@ def record_search(store, payload, *, expected_revision, request_id):
             found.update(identifiers)
             by_query.setdefault(response["query"], set()).update(identifiers)
             pending.extend(gaps)
+            captures.append(build_search_capture(evaluation, response, source, identifiers, page))
             if page is not None:
                 pages.append(page)
         if bounded:
             for query, hits in sorted(by_query.items()):
-                if len(hits) > HITS_PER_QUERY:
-                    raise ResearchError("invalid_search", "Capture at most " + str(HITS_PER_QUERY)
-                                        + " hits per query under this policy; rank and keep the top " + str(HITS_PER_QUERY),
-                                        {"query": query, "found": len(hits), "limit": HITS_PER_QUERY})
+                if len(hits) > amount:
+                    raise ResearchError("invalid_search", "Capture at most " + str(amount)
+                                        + " hits per query under this policy; record the captured ordering when claiming a ranked prefix",
+                                        {"query": query, "found": len(hits), "limit": amount})
         page_groups, enumeration_pending = enumerate_pages(pages)
         pending.extend(enumeration_pending)
         if found != set(value["found_work_ids"]) or set(by_query) != set(value["queries"]):
             raise ResearchError("invalid_search", "Search results and queries must account for every saved response")
         if not set(value["cited_work_ids"]) <= found or value["verdict"] == "replicate-extend" and not value["cited_work_ids"]:
             raise ResearchError("invalid_search", "A replicate-extend verdict must cite acquired work from the search")
-        current_scope = records.get("literature_scope", {}).get(value["profile"])
-        if current_scope is None:
-            raise ResearchError("roots_missing", "Define the literature scope before recording a dependent search")
-        _dispositions(records, value)
+        _dispositions(dict(records, search_selection={}) if provisional else records, value)
+        coverage = build_search_coverage(value["queries"], amount, captures, page_groups, pending)
+        base = dict(value, hits_per_query=amount, coverage=coverage, pending=pending, page_groups=page_groups,
+                    integrity_errors=find_search_integrity_errors({"pending": pending}))
+        if provisional:
+            record = dict(base, scope_digest=None, provisional=True)
+            return [immutable_record(records, "literature_search", value["id"], record)], {
+                "id": value["id"], "pending": pending, "found_work_ids": sorted(found)}
         judged_evaluation = Evaluation.of(_build_judged_records(records, value), evaluation)
-        record = dict(value, scope_digest=digest(current_scope), pending=pending, page_groups=page_groups,
+        record = dict(base, scope_digest=digest(current_scope),
                       evidence_digest=_search_evidence_digest(judged_evaluation, current_scope, found,
                                                               value["cited_work_ids"]),
                       frontier_digest=frontier_digest(judged_evaluation, value["profile"]))
         changes = [immutable_record(records, "literature_search", value["id"], record)]
+        if binding is not None:
+            changes.append(immutable_record(records, "search_binding", value["id"], dict(binding, revision=expected_revision + 1)))
         changes.append(("search_selection", value["profile"] + ":" + value["purpose"], {"search_id": value["id"]}))
         for version in value["cited_work_ids"]:
             identifier = format_search_requirement_id(value["id"], version)
@@ -549,7 +671,8 @@ def _foundation_state(evaluation, profile):
     from .rounds import active_round, fresh_searches, has_round_exemplar, latest_admission, literature_obligations
     latest = latest_admission(records) if profile == "research" else None
     active = active_round(records) if latest is not None else None
-    searches = {k: s for k, s in records.get("literature_search", {}).items() if s["profile"] == profile}
+    searches = {k: s for k, s in records.get("literature_search", {}).items()
+                if s["profile"] == profile and not s.get("provisional")}
     selections = records.get("search_selection", {})
     selected_searches = {purpose: selections.get(profile + ":" + purpose, {}).get("search_id") for purpose in SEARCH_PURPOSES}
     # The current round's consequence searches are judgments beside the five purposes. A selection the
@@ -569,9 +692,12 @@ def _foundation_state(evaluation, profile):
         for search in current:
             for response in search["responses"]:
                 _search_response(records, artifacts, response, search["scope"])
-            if search["pending"]:
+            pending = search["pending"]
+            if profile == "research" and "integrity_errors" in search:
+                pending = find_search_integrity_errors(search)
+            if pending:
                 obligations.append(obligation("search_pending", "Complete the captured search enumeration or parser obligations.",
-                                              purpose=purpose, search_id=search["id"], pending=search["pending"]))
+                                              purpose=purpose, search_id=search["id"], pending=pending))
             if "dispositions" not in search:
                 obligations.append(obligation("search_dispositions_missing", "Re-record this search with a disposition for every found work.",
                                               purpose=purpose, search_id=search["id"]))

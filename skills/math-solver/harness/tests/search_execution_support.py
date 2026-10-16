@@ -8,7 +8,8 @@ from tests.search_fixtures import contract, proposal, review, digest
 from tests.support import ALL_YES, OPENING, FIXTURE_STRATEGIES, make_problem, make_preconditions, run, write_study
 
 
-def admit_workspace(root, slug="sample", max_runs=24, computational=False, exact_claim="True holds.", historical=False, configure=None):
+def admit_workspace(root, slug="sample", max_runs=24, computational=False, exact_claim="True holds.", historical=False, configure=None,
+                    common=False, review_workspace="."):
     controller = Controller(root, FIXTURE_STRATEGIES)
     workspace = root / slug
     problem = make_problem()
@@ -66,8 +67,14 @@ def admit_workspace(root, slug="sample", max_runs=24, computational=False, exact
                                     validate=lambda document, event: apply_event(replay(document), event))
     else:
         from tests.research_support import pin_research
-        pin_research(root, candidate, inputs)
-        controller.command("propose", {"proposal": candidate, "inputs": inputs}, 1, "proposal")
+        if common or candidate["role"] == "verification":
+            pin_research(root, candidate, inputs)
+        else:
+            candidate.update(schema_version=3, computation=candidate.get("computation"), foundation=None)
+        proposed = {"proposal": candidate, "inputs": inputs}
+        if candidate["foundation"] is None:
+            proposed["review_workspace"] = review_workspace
+        controller.command("propose", proposed, 1, "proposal")
         from tests.native_reviewer_support import observe_review
         controller.command("review", {"proposal_id": "proposal-000001",
             "review": observe_review(controller, review(candidate), candidate), "inputs": []}, 2, "review")
@@ -77,7 +84,7 @@ def admit_workspace(root, slug="sample", max_runs=24, computational=False, exact
                 "review": observe_review(controller, review(candidate, "reviewer-two"), candidate), "inputs": []}, 3, "second-review")
             revision = 4
         controller.command("admit", {}, revision, "admit", "proposal-000001")
-    if historical:
+    if historical and (common or candidate["role"] == "verification"):
         from tests.research_support import pin_research, amendment_spec
         import copy
         prepared = copy.deepcopy(candidate)

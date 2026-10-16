@@ -106,10 +106,11 @@ def evidence(records, artifacts, values, *, required=True):
             from .reading import validate_read_evidence
             validate_read_evidence(records, artifacts, reference["link"])
         elif reference.get("kind") == "record":
+            from .claim_dependencies import verify_record_dependency
             fields(reference, ("kind", "record_kind", "id", "digest"), code="invalid_strategy")
             text(reference["record_kind"], "Evidence record kind", code="invalid_strategy")
             saved = get_record(records, reference["record_kind"], reference["id"])
-            if digest(saved) != reference["digest"]:
+            if not verify_record_dependency(records, reference["record_kind"], reference["id"], reference["digest"]):
                 raise ResearchError("strategy_evidence_stale", "The cited record differs from the bound evidence", {"id": reference["id"]})
             if reference["record_kind"] == "local_artifact":
                 artifacts.read(saved["artifact"])
@@ -530,9 +531,10 @@ def record_strategy(store, payload, *, expected_revision, request_id):
             choice(comparator["reading_status"], ("abstract", "fulltext", "unavailable"), "Comparator reading status")
             evidence(records, artifacts, comparator["evidence"], required=comparator["reading_status"] != "unavailable")
         for dependency in items(value["dependencies"], "Bound record dependencies"):
+            from .claim_dependencies import verify_record_dependency
             fields(dependency, ("kind", "id", "digest"), code="invalid_strategy")
-            held = get_record(records, dependency["kind"], dependency["id"])
-            if digest(held) != dependency["digest"]:
+            get_record(records, dependency["kind"], dependency["id"])
+            if not verify_record_dependency(records, dependency["kind"], dependency["id"], dependency["digest"]):
                 raise ResearchError("strategy_dependency_stale", "A bound scientific record changed", {"id": dependency["id"]})
         strings(value["work_items"], "Persistent work-item revisions")
         for identifier in value["work_items"]:
