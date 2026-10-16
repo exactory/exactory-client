@@ -84,7 +84,7 @@ class ResearchGuidanceTests(unittest.TestCase):
                     if started:
                         interpreted.add((arguments[0], parsed.command))
         required = {("exactory-research", command) for command in
-                    ("target", "read", "search", "cycle", "admit", "bind-run", "assess", "checkpoint", "review", "gate")}
+                    ("target", "read", "search", "cycle", "admit", "bind-run", "assess", "checkpoint", "value-review", "gate")}
         required.update({("exactory-lab", "init"), ("exactory-lab", "run"), ("exactory-cohort", "freeze")})
         self.assertLessEqual(required, observed)
         # An admission of a venv interpreter binds and launches under that interpreter.
