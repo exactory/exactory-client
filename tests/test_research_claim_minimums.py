@@ -77,12 +77,17 @@ class DirectionMinimumTests(DeferralCase, SynthesisCase):
 
     def test_direct_search_integrity_failure_or_without_dispositions_is_incomplete(self):
         records = self.prepare_direction()
-        for change in ("pending", "dispositions"):
+        for change in ("integrity_errors", "legacy_pending", "dispositions"):
             changed = copy.deepcopy(records)
-            if change == "pending":
-                changed["literature_search"]["direct"]["pending"] = [{"code": "search_page_missing"}]
+            search = changed["literature_search"]["direct"]
+            if change == "integrity_errors":
+                search["pending"] = search["integrity_errors"] = [{"code": "search_page_missing"}]
+            elif change == "legacy_pending":
+                # A search recorded before integrity_errors existed derives them from pending.
+                del search["integrity_errors"]
+                search["pending"] = [{"code": "search_page_missing"}]
             else:
-                changed["literature_search"]["direct"].pop("dispositions")
+                search.pop("dispositions")
             with self.subTest(change=change):
                 self.assert_only("direction_search_incomplete", changed, search_id="direct")
 
