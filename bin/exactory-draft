@@ -181,9 +181,11 @@ def _run_init(args: argparse.Namespace) -> None:
 
 
 def _open_url(request: urllib.request.Request) -> dict:
-    """Send one Zenodo API request and return the parsed JSON body. A redirect to another origin
-    raises RefusedRedirectError, so the token stays with its origin. Tests replace this function;
-    nothing else touches the network."""
+    """Send one Zenodo API request and return the parsed JSON body. A redirect that the rule of
+    research_harness.same_origin refuses raises RefusedRedirectError: a redirect to another origin,
+    so the token stays with its origin, and every redirect of a request that is not a read, so no
+    other answer passes for the answer to a write. Tests replace this function; nothing else touches
+    the network."""
     with open_url_within_origin(request, timeout=_TIMEOUT_SECONDS) as response:
         body = response.read().decode("utf-8", "replace")
         return json.loads(body) if body else {}
@@ -213,8 +215,8 @@ def _call_zenodo(method: str, url: str, token: str,
     knows whether its request can be sent again. This is the one place that adds the
     token to a request, and it adds it only for an address under the Zenodo API of
     the environment that the token belongs to: the URL of a saved response, an intent,
-    or a journal is checked like any other, and a redirect to another origin is not
-    followed."""
+    or a journal is checked like any other. A redirect to another origin is not
+    followed, and neither is any redirect of a request that is not a read."""
     if not _is_inside_zenodo_api(url, environment):
         _exit_with_error(f"The address {url} is not under {_ZENODO_API_URLS[environment]}, the Zenodo API of the"
                          f" {environment} environment. The command sent nothing to it, and the token stayed here.")
@@ -231,9 +233,13 @@ def _call_zenodo(method: str, url: str, token: str,
     try:
         return _open_url(urllib.request.Request(url, method=method, data=data, headers=headers))
     except RefusedRedirectError as error:
-        _exit_with_error(f"Zenodo answered with a redirect to {error.target_url}, which is not on the origin of the"
-                         f" request. The command did not follow it, and the token was not sent there."
-                         f" {uncertain_outcome_advice_msg}")
+        if error.is_cross_origin:
+            refusal_msg = (f"Zenodo answered with a redirect to {error.target_url}, which is not on the origin of the"
+                           " request. The command did not follow it, and the token was not sent there.")
+        else:
+            refusal_msg = (f"Zenodo answered the {error.method} request with a redirect. The command does not follow"
+                           f" a redirect of a {error.method} request, so the result of the request is not confirmed.")
+        _exit_with_error(f"{refusal_msg} {uncertain_outcome_advice_msg}")
     except urllib.error.HTTPError as error:
         detail = error.read().decode("utf-8", "replace")[:2000]
         message = f"The Zenodo API returned HTTP {error.code}.\n{detail}"
@@ -447,15 +453,13 @@ def _run_deposit(args: argparse.Namespace) -> None:
     # An unsettled deposit for a problem is settled before this run reads any other input, so the
     # recorded operation decides, never the current draft (design 2026-10-12 §17). The settle
     # completes the operation that the earlier run approved with its own flags, as reconcile does,
-    # so this run's flags decide nothing about it. The settle drives requests to the recorded
-    # origin, so the origin of this run must be that origin.
+    # so this run's flags decide nothing about it.
     journal = _read_problem_journal("Nothing was deposited.")
     if journal is not None and not journal["settled"]:
-        _require_current_origin(journal)
         if _settle_problem_deposit(journal, may_publish=True):
             print(f"This run completed the earlier deposit for problem {journal['math_problem']['problem_id']},"
                   " which the earlier run started with its own approval. It deposited nothing new."
-                  " Run the command again to start a new deposit.", file=sys.stderr)
+                  f" {_build_next_deposit_advice_msg(journal)}", file=sys.stderr)
             return
     elif journal is not None and args.publish and args.math_problem_id is not None \
             and _is_attachment_pending(journal):
@@ -911,7 +915,7 @@ def _require_approved_intent(intent: dict) -> None:
         flaw_msg = "the intent names no Zenodo environment that this command knows"
     elif binding.get("base_url") != _ZENODO_API_URLS[environment]:
         flaw_msg = (f"the intent names the Zenodo address {binding.get('base_url')}, which is not"
-                f" {_ZENODO_API_URLS[environment]}, the Zenodo API of the {environment} environment")
+                    f" {_ZENODO_API_URLS[environment]}, the Zenodo API of the {environment} environment")
     else:
         return
     _exit_with_error(f"The command does not execute intent {intent.get('id')}: {flaw_msg}."
@@ -945,28 +949,48 @@ def _is_attachment_outstanding(journal: dict) -> bool:
 
 
 def _require_current_origin(journal: dict) -> None:
-    """A journal drives its exactory requests to the origin that it records, and those requests carry
-    the API key of the user. A workspace can come from someone else, so the recorded origin is used
-    only when it is the origin that the environment of this run names (the one origin rule of
-    research_harness.exactory_api). Otherwise the command stops before it sends anything, and the
-    journal stays as it is. A journal with no attachment left to do drives no request, and neither
-    does a managed journal whose intent never sent its publish request: the run releases it."""
-    problem_target = journal["math_problem"]
-    recorded_origin, current_origin = problem_target["api_url"], read_api_base_url()
-    if (not _is_attachment_outstanding(journal) or recorded_origin == current_origin
-            or _is_unclaimed_intent(journal, Path.cwd())):
+    """The check before a command settles an unsettled journal. A settle can end in an attachment,
+    which carries the API key of the user to the origin that the journal records, and a workspace
+    can come from someone else. So a settle starts only when the recorded origin is the origin that
+    the environment of this run names (the one origin rule of research_harness.exactory_api).
+    Otherwise the command stops before it sends anything to Zenodo or to exactory, and the journal
+    stays as it is. Two unsettled journals lead to no exactory request, so they pass at any origin:
+    a sandbox journal, which is never attached, and a managed journal whose intent never sent its
+    publish request, which deposit releases and attach-problem leaves with nothing to attach. A
+    settled journal has no such exception, and its attachment checks the origin itself
+    (_attach_recorded_record)."""
+    if journal["math_problem"]["api_url"] == read_api_base_url() or not _is_attachment_outstanding(journal):
         return
+    is_key_at_risk = True
+    if not journal["settled"] and journal["path"] == "managed":
+        intent = _read_journal_intent(journal, Path.cwd())
+        if intent is not None and not has_claimed_publish(intent):
+            return
+        # The settle reads the intent and checks it against the journal before any exactory request,
+        # so an intent that cannot be read, or that describes another operation, stops it there.
+        is_key_at_risk = intent is not None and _find_intent_flaw(intent, journal) is None
+    _exit_with_error(_build_other_origin_msg(journal, is_key_at_risk=is_key_at_risk))
+
+
+def _build_other_origin_msg(journal: dict, *, is_key_at_risk: bool) -> str:
+    """The stop of a command whose journal records another exactory origin than this run uses. It
+    names both origins and says that the journal stays. It says that the recorded origin would
+    receive the API key only when `is_key_at_risk` holds, because the run would go on to an exactory
+    request there. A published record is attached from its own origin or given up, and an unsettled
+    deposit is settled from its own origin or removed by the rule for an unpublished deposition."""
+    problem_target = journal["math_problem"]
+    recorded_origin = problem_target["api_url"]
     if journal["settled"]:
         next_step_msg = (f"run exactory-draft attach-problem with EXACTORY_API_URL set to {recorded_origin}."
                          f" {_build_settled_removal_advice(journal['doi'])}")
     else:
         next_step_msg = (f"run the command again with EXACTORY_API_URL set to {recorded_origin}."
                          f" {_build_journal_removal_advice(_name_journal_deposition(journal))}")
-    _exit_with_error(f"The recorded deposit for problem {problem_target['problem_id']} names the exactory origin"
-                     f" {recorded_origin}. This run uses the exactory origin {current_origin}."
-                     " The recorded origin would receive your API key."
-                     f" Nothing was sent, and {_PROBLEM_DEPOSIT_JOURNAL_PATH} stays as it is."
-                     f" If {recorded_origin} is your own exactory origin, {next_step_msg}")
+    key_msg = " The recorded origin would receive your API key." if is_key_at_risk else ""
+    return (f"The recorded deposit for problem {problem_target['problem_id']} names the exactory origin"
+            f" {recorded_origin}. This run uses the exactory origin {read_api_base_url()}.{key_msg}"
+            f" Nothing was sent, and {_PROBLEM_DEPOSIT_JOURNAL_PATH} stays as it is."
+            f" If {recorded_origin} is your own exactory origin, {next_step_msg}")
 
 
 def _build_settled_removal_advice(doi: str) -> str:
@@ -996,12 +1020,12 @@ def _build_pending_attachment_refusal_msg(journal: dict, problem_id: str, closin
 def _retry_pending_attachment(journal: dict, problem_id: str) -> None:
     """A publishing deposit meets a settled journal with an unattached record (design 2026-10-12
     §17). A deposit that names the problem of that record is a retry: it attaches the record and
-    publishes nothing new, on the managed and on the direct path. A deposit that names another
-    problem is refused before any request, and the journal stays."""
+    publishes nothing new, on the managed and on the direct path, and the attachment checks the
+    recorded origin first. A deposit that names another problem is refused before any request, and
+    the journal stays."""
     if problem_id.lower() != journal["math_problem"]["problem_id"].lower():
         _exit_with_error(_build_pending_attachment_refusal_msg(
             journal, problem_id, "Nothing was sent, and the journal stays as it is."))
-    _require_current_origin(journal)
     _attach_recorded_record(journal, is_retry=True)
     # The attached record goes to stdout as JSON, like the record of a settle, for a caller that reads
     # only that stream.
@@ -1011,33 +1035,33 @@ def _retry_pending_attachment(journal: dict, problem_id: str) -> None:
 
 
 def _build_next_deposit_advice_msg(journal: dict) -> str:
-    """How to publish another record for the problem of a journal whose record is attached. A direct
-    deposit creates a record on every run. A managed deposit with the manuscript of the earlier one
-    resumes that completed deposit, so only a changed manuscript or a new version makes a record."""
+    """How to publish another record for the problem of a journal whose deposit is complete: its
+    record is attached after a retry, and recorded after a settle. A direct deposit creates a record
+    on every run. A managed deposit with the manuscript of the earlier one resumes that completed
+    deposit, so only a changed manuscript or a new version makes a record."""
     if journal["path"] == "managed":
         return ("To publish another record for this problem, change the manuscript or add --new-version."
                 " The same manuscript resumes the same completed deposit.")
     return "To publish another record for this problem, run the command again."
 
 
-def _is_unclaimed_intent(journal: dict, root: Path) -> bool:
-    """Whether the managed intent of a journal never sent its publish request. A direct journal, and
-    an intent that cannot be read, answer no."""
-    if journal["path"] != "managed":
-        return False
+def _read_journal_intent(journal: dict, root: Path) -> dict | None:
+    """The saved intent that a managed journal names, or None when the store of the workspace at
+    `root` does not give it: the store does not open, or it holds no intent with that id."""
+    from research_harness.remote import get_intent
     try:
-        from research_harness.remote import get_intent
-        return not has_claimed_publish(get_intent(current_store(root), journal["operation_id"]))
+        return get_intent(current_store(root), journal["operation_id"])
     except ResearchError:
-        return False
+        return None
 
 
 def _build_unsettled_journal_note(journal: dict | None, root: Path | None = None) -> str:
     """What the user reads when the command stops while the journal of its deposit is unsettled.
     The note describes the file as it stands, so it is empty when the file records another
-    operation, or records this one as settled, or cannot be read. Its second sentence says what
+    operation, or records this one as settled, or cannot be read. When it knows, the note says what
     the next deposit run does: it releases the journal of an intent that never sent its publish
-    request, and it reads any other deposition back from Zenodo."""
+    request, and it reads any other deposition back from Zenodo. The next run of a managed journal
+    starts from its intent, so for an intent that the store does not give the note says neither."""
     if journal is None:
         return ""
     root = Path.cwd() if root is None else root
@@ -1047,11 +1071,14 @@ def _build_unsettled_journal_note(journal: dict | None, root: Path | None = None
         return ""
     if recorded is None or recorded["operation_id"] != journal["operation_id"] or recorded["settled"]:
         return ""
-    if _is_unclaimed_intent(recorded, root):
-        next_run_msg = "The next deposit run releases it and deposits as usual."
+    intent = _read_journal_intent(recorded, root) if recorded["path"] == "managed" else None
+    if recorded["path"] == "managed" and intent is None:
+        next_run_msg = ""
+    elif intent is not None and not has_claimed_publish(intent):
+        next_run_msg = " The next deposit run releases it and deposits as usual."
     else:
-        next_run_msg = "The next deposit run reads the deposition back from Zenodo and settles it."
-    return (f"{_PROBLEM_DEPOSIT_JOURNAL_PATH} stays as the recovery record of this deposit. {next_run_msg}"
+        next_run_msg = " The next deposit run reads the deposition back from Zenodo and settles it."
+    return (f"{_PROBLEM_DEPOSIT_JOURNAL_PATH} stays as the recovery record of this deposit.{next_run_msg}"
             f" {_build_journal_removal_advice(_name_journal_deposition(recorded))}")
 
 
@@ -1130,10 +1157,11 @@ def _mark_journal_settled(journal: dict, record: dict) -> dict:
 
 def _attach_recorded_record(journal: dict, *, is_retry: bool = False) -> None:
     """After publication (design 2026-10-12 §17): a published production record attaches to its
-    problem through the recorded origin, which is the origin of this run (_require_current_origin has
-    checked it), and the journal is marked attached. Attaching the same
-    paper again changes nothing (design 2026-10-12 §12), so a retry after a lost mark is safe. A
-    failed attachment leaves the journal settled and unattached, and attach-problem retries the
+    problem through the recorded origin, and the journal is marked attached. Every attachment comes
+    here, so this is where the recorded origin must be the origin of this run, before the exactory
+    request and whatever path led here: the request carries the API key of the user. Attaching the
+    same paper again changes nothing (design 2026-10-12 §12), so a retry after a lost mark is safe.
+    A failed attachment leaves the journal settled and unattached, and attach-problem retries the
     attachment alone: it reads no Zenodo token and sends no Zenodo request. The failure of a retry
     says that the record belongs to the earlier deposit and that this run published nothing."""
     problem_target = journal["math_problem"]
@@ -1141,6 +1169,8 @@ def _attach_recorded_record(journal: dict, *, is_retry: bool = False) -> None:
         print("Only a published production record is attached to a problem. This sandbox record stays unattached.",
               file=sys.stderr)
         return
+    if problem_target["api_url"] != read_api_base_url():
+        _exit_with_error(_build_other_origin_msg(journal, is_key_at_risk=True))
     completed = _call_exactory(["link-problem-paper", problem_target["problem_id"], "--identifier", journal["doi"]],
                                problem_target["api_url"])
     if completed.returncode != 0:
@@ -1162,7 +1192,9 @@ def _settle_problem_deposit(journal: dict, *, may_publish: bool) -> bool:
     """Settle the recorded deposit for a problem (design 2026-10-12 §17): find the publication
     of the journal's own operation, record it, mark the journal settled, and attach the record.
     Returns False when the recorded managed intent never claimed its publish step: no publication
-    is uncertain, and the journal is released."""
+    is uncertain, and the journal is released. Every settle comes here, so the recorded origin is
+    checked here before the first request (_require_current_origin)."""
+    _require_current_origin(journal)
     with _explain_unsettled_journal(journal):
         if journal["path"] == "managed":
             record = _settle_managed_publication(journal, may_publish=may_publish)
@@ -1195,8 +1227,9 @@ def _settle_managed_publication(journal: dict, *, may_publish: bool) -> dict | N
     _require_intent_of_journal(intent, journal)
     if not has_claimed_publish(intent):
         if not may_publish:
+            # The note on the journal follows this exit and says what that deposit run does with the journal.
             _exit_with_error("The recorded deposit never sent its publish request, so there is no record to"
-                             " attach. Run exactory-draft deposit to finish it.")
+                             " attach. Run exactory-draft deposit to deposit the paper.")
         return None
     token = _read_zenodo_token(journal["environment"] == "production")
     return continue_deposit(store, journal["operation_id"], _build_zenodo_client(journal["environment"], token),
@@ -1248,7 +1281,6 @@ def _run_attach_problem(args: argparse.Namespace) -> None:
     if journal is None:
         _exit_with_error(f"{_PROBLEM_DEPOSIT_JOURNAL_PATH} does not exist here. Run attach-problem from the"
                          " workspace root of a deposit made with --math-problem.")
-    _require_current_origin(journal)
     if not journal["settled"]:
         _settle_problem_deposit(journal, may_publish=False)
     elif _is_attachment_pending(journal):

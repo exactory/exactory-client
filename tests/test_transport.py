@@ -136,10 +136,11 @@ class _FakeResponse(io.BytesIO):
         return self._status
 
 
-class _UrlopenTransportTestCase(unittest.TestCase):
+class _OpenUrlTransportTestCase(unittest.TestCase):
     """Shared plumbing for the grand-challenge subcommands: a scratch cwd and a
-    stubbed urllib.request.urlopen, so the method, the full URL, the JSON body,
-    and the Authorization header are all asserted on the real request object."""
+    stubbed open_url_within_origin, the one function that bin/exactory sends
+    every request through, so the method, the full URL, the JSON body, and the
+    Authorization header are all asserted on the real request object."""
 
     def setUp(self) -> None:
         scratch = tempfile.TemporaryDirectory()
@@ -165,14 +166,14 @@ class _UrlopenTransportTestCase(unittest.TestCase):
         self.sent_requests: list[urllib.request.Request] = []
         self.response_status = 200
         self.response_body = b"{}"
-        self.addCleanup(setattr, urllib.request, "urlopen", urllib.request.urlopen)
+        self.addCleanup(setattr, _transport, "open_url_within_origin", _transport.open_url_within_origin)
 
-        def _fake_urlopen(request: urllib.request.Request,
-                          timeout: float | None = None) -> _FakeResponse:
+        def _fake_open_url(request: urllib.request.Request,
+                           timeout: float | None = None) -> _FakeResponse:
             self.sent_requests.append(request)
             return _FakeResponse(self.response_body, self.response_status)
 
-        urllib.request.urlopen = _fake_urlopen
+        _transport.open_url_within_origin = _fake_open_url
 
     def _run(self, argv: list[str], expected_exit_code: int | None = None) -> tuple[str, str]:
         return _invoke_cli(self, argv, expected_exit_code)
@@ -298,14 +299,14 @@ class TestSubmitSupersession(_TransportTestCase):
         self.assertEqual(json.loads(stdout_text)["supersedes"], "old-id")
 
 
-class TestSupersededVerification(_UrlopenTransportTestCase):
+class TestSupersededVerification(_OpenUrlTransportTestCase):
     def test_a_superseded_task_names_the_successor_and_not_the_status_command(self) -> None:
         body = json.dumps({"error": "verification_superseded", "successorId": "successor-id"}).encode()
 
         def _refuse(request: urllib.request.Request, timeout: float | None = None) -> _FakeResponse:
             raise urllib.error.HTTPError(request.full_url, 409, "Conflict", None, io.BytesIO(body))
 
-        urllib.request.urlopen = _refuse
+        _transport.open_url_within_origin = _refuse
         _, stderr_text = self._run(["task", "earlier-id"], expected_exit_code=1)
         self.assertIn("moved this verification to a newer version", stderr_text)
         self.assertIn("successor-id", stderr_text)
@@ -646,7 +647,7 @@ class TestParserStrictness(unittest.TestCase):
         self.assertEqual(caught.exception.code, 2)
 
 
-class TestChallengesSubcommand(_UrlopenTransportTestCase):
+class TestChallengesSubcommand(_OpenUrlTransportTestCase):
     def test_it_lists_challenges_with_the_default_limit(self) -> None:
         self._run(["challenges"])
         request = self._single_request()
@@ -696,7 +697,7 @@ class TestChallengesSubcommand(_UrlopenTransportTestCase):
         self.assertEqual(caught.exception.code, 2)
 
 
-class TestChallengeSubcommand(_UrlopenTransportTestCase):
+class TestChallengeSubcommand(_OpenUrlTransportTestCase):
     def test_it_reads_one_challenge_by_id(self) -> None:
         self._run(["challenge", "656c336e-e892-4c47-80d2-a71d022f4116"])
         request = self._single_request()
@@ -732,7 +733,7 @@ class TestChallengeSubcommand(_UrlopenTransportTestCase):
         self.assertEqual(json.loads(stdout_text), detail)
 
 
-class TestPostChallengeSubcommand(_UrlopenTransportTestCase):
+class TestPostChallengeSubcommand(_OpenUrlTransportTestCase):
     _CITATION_TEXT = ("Carol Instance and Dana Case. Predicting Citation Impact"
                       " with Cohort Percentiles. 2023.")
 
@@ -876,7 +877,7 @@ class TestPostChallengeSubcommand(_UrlopenTransportTestCase):
         self.assertEqual(self.sent_requests, [])
 
 
-class TestVoteChallengeSubcommand(_UrlopenTransportTestCase):
+class TestVoteChallengeSubcommand(_OpenUrlTransportTestCase):
     def test_an_upvote_puts_value_one(self) -> None:
         self._run(["vote-challenge", "chal-1", "--value", "1"])
         request = self._single_request()
@@ -908,7 +909,7 @@ class TestVoteChallengeSubcommand(_UrlopenTransportTestCase):
         self.assertEqual(caught.exception.code, 2)
 
 
-class TestSolveChallengeSubcommand(_UrlopenTransportTestCase):
+class TestSolveChallengeSubcommand(_OpenUrlTransportTestCase):
     def test_solving_sends_the_resolution_note(self) -> None:
         note = "The linked paper meets every criterion."
         self._run(["solve-challenge", "chal-1", "--note", note])
@@ -939,7 +940,7 @@ class TestSolveChallengeSubcommand(_UrlopenTransportTestCase):
         self.assertEqual(caught.exception.code, 2)
 
 
-class TestReportChallengeSubcommand(_UrlopenTransportTestCase):
+class TestReportChallengeSubcommand(_OpenUrlTransportTestCase):
     def test_it_posts_the_subject_without_a_note(self) -> None:
         self.response_status = 201
         self._run(["report-challenge", "chal-1"])
@@ -996,7 +997,7 @@ class TestReportChallengeSubcommand(_UrlopenTransportTestCase):
         self.assertEqual(stderr_text, "The server returned the existing report for this challenge.\n")
 
 
-class TestSubmitChallengeDeclaration(_UrlopenTransportTestCase):
+class TestSubmitChallengeDeclaration(_OpenUrlTransportTestCase):
     """The scratch cwd holds no draft workspace, so the citation gate is skipped."""
 
     def test_challenges_join_the_submit_body(self) -> None:
@@ -1076,7 +1077,7 @@ class TestCredentials(unittest.TestCase):
         self.assertEqual(_transport._read_api_key(), "")
 
 
-class TestLoginSubcommand(_UrlopenTransportTestCase):
+class TestLoginSubcommand(_OpenUrlTransportTestCase):
     """`login` is the one path that sends no key: the emailed code is the credential."""
 
     def setUp(self) -> None:
@@ -1098,7 +1099,7 @@ class TestLoginSubcommand(_UrlopenTransportTestCase):
             self.sent_requests.append(request)
             error.url = request.full_url
             raise error
-        urllib.request.urlopen = _raise
+        _transport.open_url_within_origin = _raise
         return error
 
     def test_without_a_code_it_requests_one_and_sends_no_key(self) -> None:

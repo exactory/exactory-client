@@ -57,8 +57,9 @@ class _FakeResponse(io.BytesIO):
 
 
 class _MathCliTestCase(unittest.TestCase):
-    """A scratch cwd, a test key and origin, and a urlopen stub that answers by method and
-    path, so the preflight read and the write are told apart on the real request objects."""
+    """A scratch cwd, a test key and origin, and a stub of open_url_within_origin, the one function
+    that bin/exactory sends every request through. The stub answers by method and path, so the
+    preflight read and the write are told apart on the real request objects."""
 
     def setUp(self) -> None:
         scratch = tempfile.TemporaryDirectory()
@@ -83,7 +84,7 @@ class _MathCliTestCase(unittest.TestCase):
         self.sent: list[urllib.request.Request] = []
         self.me = {"displayName": "Ada", "orcidId": _ORCID_ID}
         self.answers: dict[tuple[str, str], tuple[int, dict]] = {}
-        self.addCleanup(setattr, urllib.request, "urlopen", urllib.request.urlopen)
+        self.addCleanup(setattr, _cli, "open_url_within_origin", _cli.open_url_within_origin)
 
         def answer_request(request: urllib.request.Request, timeout: float | None = None) -> _FakeResponse:
             self.sent.append(request)
@@ -95,7 +96,7 @@ class _MathCliTestCase(unittest.TestCase):
                 raise urllib.error.HTTPError(request.full_url, status, "refused", {}, io.BytesIO(json.dumps(body).encode()))
             return _FakeResponse(json.dumps(body).encode(), status)
 
-        urllib.request.urlopen = answer_request
+        _cli.open_url_within_origin = answer_request
 
     def run_cli(self, argv: list[str], expected_exit_code: int | None = None) -> tuple[str, str]:
         args = _cli._build_parser().parse_args(argv)

@@ -160,7 +160,9 @@ def _send_request(method: str, path: str, body: dict | None = None, *,
                   error_messages: dict[int, str] = _HTTP_ERR_MSGS) -> tuple[dict, int]:
     """Send one API request. Returns the parsed JSON body and the HTTP status. This is the one place
     that adds the API key, and the request goes out under the rule of research_harness.same_origin:
-    a redirect to another origin is refused, so the key stays with the origin that the user set."""
+    a redirect to another origin is refused, so the key stays with the origin that the user set, and
+    every redirect of a request that is not a read is refused, so no other answer passes for the
+    answer to a write."""
     headers = {"Content-Type": "application/json", "User-Agent": _USER_AGENT}
     if authenticated:
         api_key = _read_api_key()
@@ -196,13 +198,20 @@ def _send_request(method: str, path: str, body: dict | None = None, *,
 
 
 def _build_redirect_refusal_msg(error: RefusedRedirectError) -> str:
-    """The message for a redirect to another origin. It names both origins. The redirected request
-    is never sent, so the API key and the body stay with the first one."""
-    target_origin = get_origin(error.target_url)
-    return (f"The exactory server at {get_origin(error.request_url)} answered with a redirect to {target_origin}."
-            " The command did not follow it, and it sent nothing there."
-            f" If {target_origin} is your own exactory origin, set EXACTORY_API_URL to it."
-            " Then run the command again.")
+    """The message for a redirect that the command did not follow. A redirect to another origin is
+    refused before anything is sent there, so the API key and the body stay with the configured
+    origin. A redirect of a request that is not a read is refused within the origin too, so the
+    result of that request is not confirmed. Neither redirect makes its target the origin to use,
+    so both messages send the user back to the configured origin."""
+    request_origin = get_origin(error.request_url)
+    if error.is_cross_origin:
+        refusal_msg = (f"The exactory server at {request_origin} answered with a redirect to another origin,"
+                       f" {get_origin(error.target_url)}. The command refused the redirect and sent nothing there.")
+    else:
+        refusal_msg = (f"The exactory server at {request_origin} answered the {error.method} request with a redirect."
+                       f" The command does not follow a redirect of a {error.method} request, so the result of the"
+                       " request is not confirmed.")
+    return f"{refusal_msg} Make sure that EXACTORY_API_URL is correct. Then run the command again."
 
 
 def _describe_http_error(status: int, detail: str, error_messages: dict[int, str]) -> str:
