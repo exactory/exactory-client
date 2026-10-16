@@ -124,7 +124,6 @@ def build_begin(controller, state, spec, target, content):
     planned = dict(spec, move=len(moves) + 1, walk=walk)
     strategies = controller.strategies_dir or Path(attack.__file__).resolve().parent.parent / "strategies"
     defects = (list(attack.find_problem_defects(problem))
-        or attack.find_study_defects(workspace, "problem", "the problem-level study", "begin")
         or attack.find_study_defects(workspace, spec["strategy"], "the strategy study", "begin")
         or list(attack.find_move_flow_defects(planned, moves, workspace, attack.load_strategies(strategies), problem))
         or list(attack.find_budget_defects(planned, budget)))
@@ -159,7 +158,14 @@ def internal_operation(controller, command, request_id, build):
     identity = {"command": command, "target": None, "spec_digest": s.digest({"request_id": request_id})}
     revision = controller.status()["revision"]
     def builder(document, content):
-        operations = build(replay(document), content)
+        state = replay(document)
+        operations = build(state, content)
+        if command in {"legacy-native", "execution-launch"}:
+            from .research import needs_review_workspace
+            if needs_review_workspace(state):
+                operations.append({"kind": "review_workspace_recorded", "payload": {"workspace": "."}})
+        from .reviewer import initialize_review_workspace
+        initialize_review_workspace(controller.root, operations)
         return dict(identity, operations=operations, effects=[])
     return controller.store.append_operation(identity, revision, request_id, builder,
         lambda document, event: apply_event(replay(document), event))

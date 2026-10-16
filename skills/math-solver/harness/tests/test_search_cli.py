@@ -55,7 +55,8 @@ class SearchCLIWorkspace:
     def initialize(self):
         return self.search("init", {"contract": contract()}, request="initialize")
 
-    def prepared_proposal(self, common=True):
+    def prepared_proposal(self, common=None):
+        """Default to optional preparation; False retains the archived v1 shape."""
         value = proposal()
         inputs = []
         for name in ["problem", "novelty", "induction"]:
@@ -70,6 +71,8 @@ class SearchCLIWorkspace:
         if common:
             from tests.research_support import pin_research
             pin_research(self.root, value, inputs)
+        elif common is None:
+            value.update(schema_version=3, computation=None, foundation=None)
         return {"proposal": value, "inputs": inputs}
 
     def admit(self):

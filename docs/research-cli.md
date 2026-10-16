@@ -1154,16 +1154,36 @@ actual source bytes and an `inputs.json` manifest.
 
 ## Native math preparation
 
-New native proposals use schema version 3 with the existing computation field and a `foundation` reference. Export current complete preparation before independent proposal review:
+Math-solver is an orchestration over shared tools. Its gates preserve the contract,
+openness, independent result review, requested formal verification and closure.
+A user-specified proposition has no value gate; problem value belongs to
+`math-conjecturer`. Native research requires no Grand Challenge record.
+
+New native proposals use schema version 3 with the existing computation field.
+For `role: "research"`, common preparation is optional and `foundation: null` is
+valid. In the proposal delivery (`{proposal, inputs}`), optionally include
+`review_workspace: "."` or a canonical ancestor such as `".."`. The first proposal
+without a foundation records that stable common review-store association as an
+append-only event; omitted workspace defaults to the existing foundation ancestor
+or `.`. Observed shared review assignments use that store. Conflicting associations
+and later foundations naming another workspace are refused. Existing objectives
+continue deriving the common store from their foundation references.
+
+Historical work and external checkpoints without a foundation record the default
+`.` on the first fresh scientific mutation, including reviewed adoption and native plan or launch
+intents. Read-only status and packet export remain free of native events.
+
+To include an optional research foundation, or supply the required verification
+foundation, export current complete common preparation before independent review:
 
 ```sh
 exactory-research export --workspace /study --kind native --attack-root /study/attack \
   --destination /study/attack/research/native-inputs/review-001
 ```
 
-The manifest returns `foundation` and native `inputs`. Add both to the proposal's existing reviewed delivery. The reference contains `schema_version`, `workspace`, `profile`, `revision`, `snapshot_digest`, `preparation_digest`, and `claim_binding`. Its workspace is `.` or an ancestor expressed with `..`; the delivery remains inside the attack root. The immutable native store imports the snapshot blob and actual source artifacts. A later unrelated common revision does not invalidate unchanged preparation, but changed required sources, policy, scope, or synthesis require a new reviewed amendment before fresh work.
+The manifest returns `foundation` and native `inputs`. Add both to the proposal's existing reviewed delivery. The reference contains `schema_version`, `workspace`, `profile`, `revision`, `snapshot_digest`, `preparation_digest`, and `claim_binding`. Its workspace is `.` or an ancestor expressed with `..`; the delivery remains inside the attack root. The immutable native store imports the snapshot blob and actual source artifacts. Research validates the recorded snapshot and preparation digests, exact pinned sources, original-objective correspondence and observed review provenance without rerunning the historical preparation evaluator or requiring equality with current common preparation. Changed common preparation alone requires no research amendment; corrupted pinned bytes still refuse fresh work. Verification retains the current preparation checks and requires a reviewed amendment when those dependencies change.
 
-Common author research preparation supports native research and an author's native verification of the same full original objective. It is complete only with a current Grand Challenge record (`grand_challenge_missing` otherwise), like every research-profile preparation since 0.42.0: record `grand-challenge` for the objective before the export. Common external verification preparation supports only native `role: "verification"`. The latter additionally exports `--claim-binding binding.json` with this exact reviewed correspondence:
+Common author preparation can be retained for native research and an author's verification of the same full objective. The optional common research export still evaluates common preparation, including its Grand Challenge condition; research can use `foundation: null` instead. Verification using a research-profile foundation retains that profile's current preparation audit, including this condition, as required by its unchanged contract. Common external verification preparation supports only native `role: "verification"` and has no Grand Challenge condition. The latter additionally exports `--claim-binding binding.json` with this exact reviewed correspondence:
 
 ```json
 {
@@ -1186,9 +1206,46 @@ Common author research preparation supports native research and an author's nati
 
 Replace the illustrative IDs, hashes, and passage with the actual exact-target `Link`. Both native claim digests and the configured exact original target reading must match. This is a reviewed source correspondence, not automatic semantic entailment.
 
-Historical proposal versions 1 and 2 and old terminal runs continue to replay under their original schemas. Before fresh work, use `search amend-foundation NODE --file FILE` with the ordinary revision/request arguments. Its input is `{subject, review, inputs}`. The subject is `{node_id, proposal_digest, previous_snapshot_digest, foundation, reason}`; the previous snapshot is null only when none was previously selected. The independent review uses the existing native proof-review schema, with subject and exact claim digests. The amendment is an append-only native event and cannot alter the claim, budget, accounts, or prior proof acceptance.
+Historical proposal versions 1 and 2 and old terminal runs continue to replay under their original schemas. Research may continue without a foundation amendment. Verification without its required current foundation must use `search amend-foundation NODE --file FILE` with the ordinary revision/request arguments. Its input is `{subject, review, inputs}`. The subject is `{node_id, proposal_digest, previous_snapshot_digest, foundation, reason}`; the previous snapshot is null only when none was previously selected. The independent review uses the versioned native result-review schema, with subject and exact claim digests. The amendment is an append-only native event and cannot alter the claim, budget, accounts, or prior proof acceptance.
 
-Complete retained run/journal reconciliation before an amendment. Recovery, pause, existing journal completion, historical audit, and proof/account replay remain available without pretending new preparation was already done. Admission, new planning/ranking, begin, run, and actual token release check their applicable current frozen foundation under the native writer lock followed by a common-store read. At final launch, the validated common read transaction and native lock remain held through the actual token write and flush. Common mutations cannot commit during that interval; a busy request can be retried unchanged after release. Both locks are released before waiting for the worker or reconciling results. Common mutations never acquire the native lock. Current source-byte checks and the receiver's check before each command remain required. Native proof acceptance and account rules remain separate authorities.
+Complete retained run/journal reconciliation before an amendment. Recovery, pause, existing journal completion, historical audit, and proof/account replay remain available. Admission, planning/ranking, begin, run and token release preserve the pinned foundation evidence audits described above; verification additionally checks current preparation. At final launch the common review-store read transaction and native writer lock remain held through the token write and flush. Common mutations cannot commit during that interval; both locks are released before waiting for the worker or reconciling results. Common mutations never acquire the native lock. Source-byte checks and the receiver's check before each command remain required.
+
+The novelty study uses shared search/read tools for the exact statement and each
+neighbouring formulation, recording each query's date, depth and top-k versus
+complete coverage. New acceptance requires native result review version 2 with
+`findings.openness`: `{outcome, statement_digest, evidence, searched_at, coverage,
+reason}`. Outcomes are `supported_open`, `already_solved` (citing the settling
+source), and `unresolved`. The exact claim digest binds the statement; nonempty
+evidence digests cite the delivered novelty study and search/read records, the
+date is `YYYY-MM-DD`, and coverage and reason are nonempty text. Every decisive
+prior or settling source must be fully read; an unavailable decisive source stays
+a gap and keeps the finding unresolved. Material new settling evidence must be
+recorded as a native checkpoint with exact source/search/read artifacts and
+reassessed in a new observed final review that includes them. `accept` may set `claims_openness: true`, requiring
+`supported_open`; otherwise it defaults to false and `unresolved` may approve proof
+support without claiming openness. For every math-solver objective, including a
+request to prove or disprove, unresolved keeps the openness milestone and root
+closure pending. Fresh `complete` requires a version 2 closure subject and result
+review with `supported_open` or `already_solved`. A prior observed packet omitting
+newly recorded material evidence cannot authorize closure. Already solved preserves
+requested formal verification, proof policy and every other deliverable. Recorded
+version 1 acceptances and closures replay unchanged.
+A new native checkpoint after version 2 closure reopens final openness and root
+closure review, retaining accepted proofs and the earlier closure record.
+
+Exploratory `exactory-lab probe` runs in the common workspace under the common budget
+and exploratory provenance, outside managed math execution, with no native credit.
+Any computation whose result a recorded strategy decision, proof, finite check,
+counterexample or acceptance relies on requires native admission, accounts,
+interpretation and review even when run in the common workspace. Every finite
+computation inside the controller, including diagnostics, keeps this contract.
+The cash-out inventory lists every used probe's id, question and elapsed time.
+`plan` validates complete `problem.json` and precondition inputs directly; neither
+`plan` nor `begin` requires the local `study/problem.md` file. The reviewed proposal
+study digests remain required. The [remaining order table](../skills/math-solver/SKILL.md#remaining-order-conditions)
+justifies complete planning inputs, proposal study digests, strategy study
+before moves, precondition scan and ranking, computation admission, move/pass
+limits and closure as claim, execution-authority or proof-dependency conditions.
 
 ## Status, projections, and recovery
 

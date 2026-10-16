@@ -253,6 +253,23 @@ def start_identity():
     proc = Path("/proc/self/stat")
     if proc.exists():
         return "proc:" + proc.read_text().rsplit(")", 1)[1].split()[19]
+    if sys.platform == "darwin":
+        # Read the same kernel process-birth identity directly. Sandboxed macOS
+        # hosts may forbid spawning ps even for the current process.
+        import ctypes
+        class BsdInfo(ctypes.Structure):
+            _fields_ = [("header", ctypes.c_uint32 * 12), ("comm", ctypes.c_char * 16),
+                        ("name", ctypes.c_char * 32), ("details", ctypes.c_uint32 * 6),
+                        ("start_seconds", ctypes.c_uint64), ("start_microseconds", ctypes.c_uint64)]
+        library = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
+        library.proc_pidinfo.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint64, ctypes.c_void_p, ctypes.c_int]
+        library.proc_pidinfo.restype = ctypes.c_int
+        info = BsdInfo()
+        size = library.proc_pidinfo(os.getpid(), 3, 0, ctypes.byref(info), ctypes.sizeof(info))
+        s.require(size == ctypes.sizeof(info) and info.header[3] == os.getpid()
+                  and info.start_seconds > 0 and info.start_microseconds < 1000000,
+                  "Cannot establish launcher process identity", "process_identity_unavailable")
+        return "proc-bsd:{}:{}".format(info.start_seconds, info.start_microseconds)
     result = subprocess.run(["/bin/ps", "-o", "lstart=", "-p", str(os.getpid())], capture_output=True, text=True, timeout=2)
     s.require(result.returncode == 0 and result.stdout.strip(), "Cannot establish launcher process identity", "process_identity_unavailable")
     return "ps:" + result.stdout.strip()
@@ -359,8 +376,10 @@ def launch(controller, run):
         with controller.store._writer_lock():
             from .model import replay
             from .research import effective_foundation, guard_foundation
+            from .reviewer import common_root
             state = replay(controller.store.read())
-            with guard_foundation(controller.root, effective_foundation(state, state["nodes"][run["node_id"]])) as common_guard:
+            with guard_foundation(controller.root, effective_foundation(state, state["nodes"][run["node_id"]]),
+                                  review_root=common_root(controller.root, state)) as common_guard:
                 audit_launch(state, controller.store, common_guard=common_guard)
                 if run["kind"] == "command":
                     from .execution_state import require_producer_context

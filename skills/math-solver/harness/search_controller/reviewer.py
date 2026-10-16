@@ -1,6 +1,6 @@
 """Shared observed reviewer boundary for native mathematics.
 
-Native Review, ResultReview and recovery schemas remain unchanged. Their host
+Native reviews retain their versioned schemas. Their host
 attestation identifies an actual shared assignment. Historical reducers remain
 pure; this module is called only by the filesystem service and current audits.
 """
@@ -36,7 +36,7 @@ def reviews(value):
 
 
 def kind(value):
-    return "proposal" if "schema_version" in value and "claim_digest" in value else (
+    return "proposal" if "unresolved_objections" in value and "claim_digest" in value else (
         "result" if "claim_digest" in value else "recovery")
 
 
@@ -44,11 +44,32 @@ def common_root(root, state, supplied=()):
     """Resolve only the native root or its existing canonical preparation ancestor."""
     from .research import _common_root
     roots = set()
+    workspace = state.get("service", {}).get("review_workspace")
+    if workspace is not None:
+        from .research import validate_workspace
+        validate_workspace(workspace)
+        roots.add((Path(root) / workspace).resolve())
     for record in objects([supplied, state.get("proposals", {}), state.get("service", {}).get("foundation_amendments", {})]):
         if {"workspace", "profile", "snapshot_digest", "preparation_digest", "claim_binding"} <= record.keys():
             roots.add(_common_root(root, record).resolve())
     s.require(len(roots) <= 1, "Native review references conflicting common workspaces", "review_workspace_mismatch")
     return next(iter(roots), Path(root).resolve())
+
+
+def initialize_review_workspace(root, operations):
+    """Create the review store when a new association is first recorded."""
+    from research_harness.errors import ResearchError
+    from research_harness.storage import Store
+    from .research import validate_workspace
+    for operation in operations:
+        if operation["kind"] == "review_workspace_recorded":
+            workspace = operation["payload"]["workspace"]
+            validate_workspace(workspace)
+            try:
+                Store((Path(root) / workspace).resolve(), create=True)
+            except ResearchError as error:
+                raise SearchError("review_workspace_unavailable", "The shared review store could not be initialized",
+                                  {"cause": error.code}) from error
 
 
 def scientific_context(state, subject, review_kind):
@@ -58,9 +79,18 @@ def scientific_context(state, subject, review_kind):
     if not objective_context:
         # Input checks and fixed-result reviews bind the exact subject and its
         # dependency closure. Unrelated later runs do not change those inputs.
-        return {"scope": "exact_subject_and_dependencies"}
+        scientific = {"scope": "exact_subject_and_dependencies"}
+        origin = subject.get("origin") if isinstance(subject.get("origin"), dict) else {}
+        node_id = origin.get("node_id", subject.get("node_id"))
+        if node_id is None and isinstance(subject.get("run_id"), str) and subject["run_id"] in state["runs"]:
+            node_id = state["runs"][subject["run_id"]]["node_id"]
+        if isinstance(node_id, str) and node_id in state["nodes"] and state["nodes"][node_id]["proposal_id"] is not None:
+            scientific["studies"] = copy.deepcopy(state["nodes"][node_id]["admission"]["studies"])
+        return scientific
     return {"current": context(state), "obligations": copy.deepcopy(state["obligations"]),
             "routes": copy.deepcopy(state["routes"]),
+            "studies": {node["id"]: copy.deepcopy(node["admission"]["studies"])
+                        for node in state["nodes"].values() if node["proposal_id"] is not None},
             "previous_assessments": [copy.deepcopy(row["assessment"])
                                      for row in state["control"]["strategy_refresh"]["assessments"]],
             "nodes": [{key: copy.deepcopy(node[key]) for key in
@@ -317,6 +347,10 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
             s.require(supplied == expected, "The reviewer packet omits or changes required native scientific evidence", "review_packet_mismatch")
         for entry in supplied["evidence"]:
             artifacts.read(entry["artifact"])
+        if supplied["kind"] == "result" and value.get("schema_version") == 2:
+            delivered = {entry["digest"] for entry in supplied["evidence"]}
+            s.require(set(value["findings"]["openness"]["evidence"]) <= delivered,
+                      "Openness evidence must be delivered in the observed review packet", "review_packet_mismatch")
         return current
     except ResearchError as error:
         raise SearchError("review_context_unverified", "Shared native review evidence could not be verified",
@@ -384,7 +418,7 @@ def validate_submitted(controller, state, spec, candidate, content, locks):
         if new_review:
             prepare_subject(controller, state, content, subject)
         require_review(controller.root, state, content, value, subject=subject,
-                       new=new_review, common_guard=guard)
+                       new=new_review or command == "complete", common_guard=guard)
     if command == "admit":
         from .evidence import audit_admission
         audit_admission(controller.root, state, state["proposals"][target]["record"], content, common_guard=guard)

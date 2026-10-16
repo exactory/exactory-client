@@ -14,7 +14,7 @@ from tests.test_search_cli import SearchCLIWorkspace
 
 
 class FoundationRaceChecks:
-    def assert_foundation_update_blocks_commit(self, controller, command, spec, target):
+    def assert_foundation_update_blocks_commit(self, controller, command, spec, target, *, research=False):
         from research_harness.storage import Store
         from research_harness.synthesis import record_rationale
 
@@ -36,52 +36,61 @@ class FoundationRaceChecks:
             return candidate
 
         with patch.object(controller, "_build", side_effect=build_then_update):
-            with self.assertRaises(SearchError) as caught:
+            if research:
                 controller.command(command, spec, controller.status()["revision"],
                                    "consume-after-foundation-update", target)
+            else:
+                with self.assertRaises(SearchError) as caught:
+                    controller.command(command, spec, controller.status()["revision"],
+                                       "consume-after-foundation-update", target)
 
-        self.assertEqual(caught.exception.code, "research_foundation_stale")
+        if not research:
+            self.assertEqual(caught.exception.code, "research_foundation_stale")
         self.assertEqual(len(observations), 1)
         current = common.snapshot()["records"]
         self.assertEqual(current["synthesis_selection"]["research:rationale"]["id"], changed["id"])
-        self.assertEqual(controller.store.read(), before)
+        if research:
+            self.assertEqual(controller.store.read()["events"][:-1], before["events"])
+        else:
+            self.assertEqual(controller.store.read(), before)
 
 
 class NativeAdmissionRaceTests(FoundationRaceChecks, SearchCLIWorkspace, unittest.TestCase):
-    def test_foundation_changed_after_admission_build_cannot_create_a_native_node(self):
+    def test_common_preparation_changed_after_build_allows_research_admission(self):
         controller = Controller(self.root)
         controller.command("init", {"contract": contract()}, 0, "initialize")
-        proposed = self.prepared_proposal()
+        proposed = self.prepared_proposal(common=True)
         controller.command("propose", proposed, 1, "propose")
         value = observe_review(controller, review(proposed["proposal"]), proposed["proposal"])
         controller.command("review", {"proposal_id": "proposal-000001", "review": value,
                                       "inputs": []}, 2, "observed-review")
 
-        self.assert_foundation_update_blocks_commit(controller, "admit", {}, "proposal-000001")
-        self.assertFalse(controller.status()["nodes"])
+        self.assert_foundation_update_blocks_commit(controller, "admit", {}, "proposal-000001", research=True)
+        self.assertIn("node-000001", controller.status()["nodes"])
 
 
 class NativeBeginRaceTests(FoundationRaceChecks, WorkspaceTest):
-    def test_foundation_changed_after_begin_build_cannot_reserve_a_move(self):
-        controller = admit_workspace(self.attack_root)
+    def test_common_preparation_changed_after_build_allows_research_move(self):
+        controller = admit_workspace(self.attack_root, common=True)
         before = copy.deepcopy(controller.status()["totals"])
 
-        self.assert_foundation_update_blocks_commit(controller, "begin", begin_spec(), "node-000001")
+        self.assert_foundation_update_blocks_commit(controller, "begin", begin_spec(), "node-000001", research=True)
+        before["reserved_moves"] += 1
         self.assertEqual(controller.status()["totals"], before)
-        self.assertFalse(controller.status()["service"]["moves"])
+        self.assertEqual(len(controller.status()["service"]["moves"]), 1)
 
-    def test_foundation_changed_after_amendment_build_cannot_select_stale_preparation(self):
+    def test_common_preparation_changed_after_build_allows_optional_research_amendment(self):
         from research_harness.native_export import export_native
         from research_harness.storage import Store
         from tests.research_support import amendment_spec
 
-        controller = admit_workspace(self.attack_root)
+        controller = admit_workspace(self.attack_root, common=True)
         delivery = export_native(Store(self.attack_root), self.attack_root,
                                  self.attack_root / "review-race-foundation")
         amendment = amendment_spec(controller, "node-000001", delivery["foundation"], delivery["inputs"])
 
-        self.assert_foundation_update_blocks_commit(controller, "amend-foundation", amendment, "node-000001")
-        self.assertFalse(controller.status()["service"]["foundation_amendments"])
+        self.assert_foundation_update_blocks_commit(controller, "amend-foundation", amendment, "node-000001", research=True)
+        self.assertTrue(controller.status()["service"]["foundation_amendments"])
 
 
 class NativeAdoptionRaceTests(FoundationRaceChecks, SearchCLIWorkspace, unittest.TestCase):

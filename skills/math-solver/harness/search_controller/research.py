@@ -1,10 +1,10 @@
-"""Pinned shared preparation at native admission and actual launch boundaries.
+"""Pinned shared evidence at native admission and actual launch boundaries.
 
 Lock order is the native writer lock, then a common Store read. At final launch,
 both are held through token delivery. Common operations never acquire the native
 lock. Historical proof/account replay reads only native records. Fresh work also
-checks the currently selected common source bytes and policy; migration never
-supplies a successful research assessment.
+checks retained source bytes. Verification also checks current preparation;
+research never reruns a historical preparation evaluator.
 """
 
 import copy
@@ -22,8 +22,7 @@ def validate_reference(value):
     s.integer(value["schema_version"], 1, 1)
     s.integer(value["revision"])
     s.choice(value["profile"], {"research", "verification"})
-    s.require(value["workspace"] == "." or isinstance(value["workspace"], str) and all(part == ".." for part in value["workspace"].split("/")),
-              "Common workspace must be the attack root or a canonical ancestor", "unsafe_path")
+    validate_workspace(value["workspace"])
     for key in ("snapshot_digest", "preparation_digest"):
         s.digest_string(value[key])
     binding = value["claim_binding"]
@@ -38,8 +37,36 @@ def validate_reference(value):
 
 
 def require_new(proposal):
-    s.require(proposal["schema_version"] == 3, "New native proposals require schema_version 3 and a reviewed common foundation snapshot",
+    s.require(proposal["schema_version"] == 3, "New native proposals require schema_version 3; verification requires a reviewed common foundation",
               "research_foundation_required")
+
+
+def validate_workspace(value):
+    s.require(value == "." or isinstance(value, str) and all(part == ".." for part in value.split("/")),
+              "Common workspace must be the attack root or a canonical ancestor", "unsafe_path")
+
+
+def record_review_workspace(state, payload):
+    s.closed(payload, "workspace")
+    validate_workspace(payload["workspace"])
+    previous = state["service"].get("review_workspace")
+    s.require(previous is None or previous == payload["workspace"],
+              "The objective's common review workspace is immutable", "review_workspace_mismatch")
+    for saved in state["proposals"].values():
+        foundation = saved["record"].get("foundation")
+        s.require(foundation is None or foundation["workspace"] == payload["workspace"],
+                  "Review workspace conflicts with the recorded foundation", "review_workspace_mismatch")
+    for saved in state["service"]["foundation_amendments"].values():
+        s.require(saved["subject"]["foundation"]["workspace"] == payload["workspace"],
+                  "Review workspace conflicts with a foundation amendment", "review_workspace_mismatch")
+    state["service"]["review_workspace"] = payload["workspace"]
+
+
+def needs_review_workspace(state):
+    """Retain the historical root default once foundationless work is committed."""
+    return (state["service"].get("review_workspace") is None
+            and not state["service"]["foundation_amendments"]
+            and not any(saved["record"].get("foundation") is not None for saved in state["proposals"].values()))
 
 
 class FrozenArtifacts:
@@ -67,12 +94,13 @@ def _common_root(root, value):
 
 
 @contextmanager
-def guard_foundation(root, value):
+def guard_foundation(root, value, *, review_root=None):
     from research_harness.errors import ResearchError
     from research_harness.storage import Store
-    s.require(value is not None, "Historical admission requires search amend-foundation NODE before fresh work", "research_foundation_amendment_required")
+    s.require(value is not None or review_root is not None,
+              "A common review workspace is required for execution", "review_workspace_mismatch")
     try:
-        with Store(_common_root(root, value)).guarded_snapshot() as guard:
+        with Store(review_root if review_root is not None else _common_root(root, value)).guarded_snapshot() as guard:
             yield guard
     except ResearchError as error:
         raise SearchError("research_readiness_required", "Common preparation could not be verified: " + error.message,
@@ -115,15 +143,30 @@ def audit_foundation(root, state, proposal, value, content, *, current=True, com
     from research_harness.errors import ResearchError
     from research_harness.storage import Store
     from research_harness.synthesis import synthesis_state
-    s.require(value is not None, "Historical admission requires search amend-foundation NODE before fresh work", "research_foundation_amendment_required")
+    if value is None and proposal["role"] == "research":
+        return {"reference": None, "observed_revision": None}
+    s.require(value is not None, "Verification requires search amend-foundation NODE before fresh work", "research_foundation_amendment_required")
     common = _common_root(root, value)
     snapshot = foundation_inputs(value, content)
     s.closed(snapshot, "schema_version profile research_revision preparation records")
     s.require(snapshot["schema_version"] == 1 and snapshot["profile"] == value["profile"] and snapshot["research_revision"] == value["revision"],
               "Reviewed common snapshot differs from its reference", "research_foundation_mismatch")
     try:
+        if common_guard is not None:
+            s.require(common_guard.root == common.resolve(), "Guarded preparation belongs to a different common workspace", "research_foundation_mismatch")
+            common_guard.snapshot()
         pinned = FrozenArtifacts(content, common)
         _claim_binding(state, proposal, value, snapshot["records"], pinned)
+        if proposal["role"] == "research":
+            s.require(isinstance(snapshot["preparation"], dict) and snapshot["preparation"].get("digest") == value["preparation_digest"],
+                      "Recorded preparation digest differs from its reference", "research_foundation_mismatch")
+            # Inspect the exact recorded objects, independent of current selections
+            # and preparation policy. The immutable native copies are checked above.
+            from research_harness.review_delivery import references
+            artifacts = ArtifactStore(common)
+            for artifact in references(snapshot):
+                artifacts.read(artifact)
+            return {"reference": value, "observed_revision": value["revision"]}
         report = synthesis_state(snapshot["records"], pinned, value["profile"])
         s.require(report["ready"] and report == snapshot["preparation"] and report["digest"] == value["preparation_digest"],
                   "Pinned complete research preparation is unavailable or stale", "research_readiness_required")
@@ -185,4 +228,4 @@ def record_amendment(state, payload):
     state["service"]["foundation_selection"][node["id"]] = payload["digest"]
 
 
-EVENT_HANDLERS = {"foundation_amended": record_amendment}
+EVENT_HANDLERS = {"foundation_amended": record_amendment, "review_workspace_recorded": record_review_workspace}

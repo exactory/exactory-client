@@ -27,7 +27,7 @@ def observe_review(controller, value, subject, *, inputs=(), alter_packet=None, 
     reviewed = copy.deepcopy(value)
     reviewed["reviewer"]["source"] = "host"
     reviewed["reviewer"]["attestation_id"] = "review-assignment:" + identifier
-    kind = "proposal" if "claim_digest" in reviewed and "schema_version" in reviewed else (
+    kind = "proposal" if "claim_digest" in reviewed and "unresolved_objections" in reviewed else (
         "result" if "claim_digest" in reviewed else "recovery")
     exported = controller.command("review-packet", {"kind": kind, "subject": subject,
         "claim_digest": reviewed.get("claim_digest"), "reviewer": reviewed["reviewer"],

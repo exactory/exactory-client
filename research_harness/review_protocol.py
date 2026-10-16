@@ -215,8 +215,8 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=2):
     if role not in ROLES:
         raise ResearchError('invalid_review_role', 'Unknown reviewer role')
     if role == 'native_math':
-        from .native_review import PROMPT
-        prompt = _COMMON + PROMPT
+        from .native_review import PROMPT, LEGACY_PROMPT
+        prompt = _COMMON + (LEGACY_PROMPT if legacy else PROMPT)
     else:
         prompt = _COMMON + (_ROLE_PROMPTS_V1 if version == 1 else _ROLE_PROMPTS)[role]
     if role in ('bar', 'slate', 'result'):
@@ -616,8 +616,10 @@ def is_previous_prompt(assignment):
 
 def _prompt_matches(assignment):
     repair = assignment.get('reassessment_required') is True
-    return (assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair)
-            or is_previous_prompt(assignment))
+    if assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair) or is_previous_prompt(assignment):
+        return True
+    # Native assignments recorded before the openness finding keep their exact prompt.
+    return assignment['role'] == 'native_math' and assignment['prompt'] == canonical_prompt('native_math', legacy=True)
 
 
 def _repair_packet(records, artifacts, value, repair):

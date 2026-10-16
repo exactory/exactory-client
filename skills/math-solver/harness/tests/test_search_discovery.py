@@ -148,24 +148,34 @@ class StopOwnershipTests(WorkspaceTest):
                            controller.status()["revision"], "focus")
         step = self.workspace / "deterministic/job"
         step.mkdir()
-        (step / "job.py").write_text("import time\ntime.sleep(1.5)\n")
+        started = self.attack_root / "owned-workload-started"
+        release = self.attack_root / "release-owned-workload"
+        (step / "job.py").write_text("import time\nfrom pathlib import Path\n"
+            "Path(" + repr(str(started)) + ").write_text('started')\n"
+            "while not Path(" + repr(str(release)) + ").exists(): time.sleep(0.01)\n")
         invoke(controller, "begin", begin_spec())
-        spec = command_spec(self.workspace, [sys.executable, "job.py"], 3)
+        spec = command_spec(self.workspace, [sys.executable, "job.py"], 10)
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
             workload = pool.submit(invoke, controller, "run", spec)
-            deadline = time.monotonic() + 3
-            while time.monotonic() < deadline:
-                state = controller.status()
-                if any(run["status"] == "launched" for run in state["runs"].values()):
-                    break
-                time.sleep(0.01)
-            self.assertTrue(any(run["status"] == "launched" for run in state["runs"].values()))
-            result = controller.command("hook-stop", {"delivery_id": "waiting", "session_id": "codex:session",
-                "turn_id": None, "stop_hook_active": False}, state["revision"], "stop",
-                hook_session={"focus_request_id": "focus"})
-            self.assertEqual(result["decision"]["kind"], "allow_stop")
-            self.assertEqual(controller.status()["control"]["stop_count"], 0)
-            workload.result(timeout=5)
+            try:
+                # Synchronize with the real producer instead of racing a fixed
+                # sleep against all admission and prelaunch evidence audits.
+                deadline = time.monotonic() + 10
+                while time.monotonic() < deadline:
+                    state = controller.status()
+                    if started.exists() and any(run["status"] == "launched" for run in state["runs"].values()):
+                        break
+                    time.sleep(0.01)
+                self.assertTrue(started.exists(), "The owned producer must actually start")
+                self.assertTrue(any(run["status"] == "launched" for run in state["runs"].values()))
+                result = controller.command("hook-stop", {"delivery_id": "waiting", "session_id": "codex:session",
+                    "turn_id": None, "stop_hook_active": False}, state["revision"], "stop",
+                    hook_session={"focus_request_id": "focus"})
+                self.assertEqual(result["decision"]["kind"], "allow_stop")
+                self.assertEqual(controller.status()["control"]["stop_count"], 0)
+            finally:
+                release.write_text("finish")
+            workload.result(timeout=15)
 
     def test_owned_native_intent_prevents_observing_partial_edits(self):
         from argparse import Namespace

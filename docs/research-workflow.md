@@ -792,20 +792,25 @@ bound the verdict with `task --bind` and `bind-verdict` also records its receipt
 The [verification skill](../skills/verify/SKILL.md) states the direct procedure.
 `requestedByViewer` identifies the request opener and proves no authorship.
 
-For a native mathematical attack, complete current common preparation first,
-then export `--kind native` for independent review of the actual schema-3
-proposal. Preserve the native original claim, novelty and strategy studies,
+For a native mathematical research attack, common preparation is optional:
+the schema-3 proposal may use `foundation: null` and records its stable common
+review workspace once. An optional foundation exports with `--kind native`
+for independent review of its exact retained evidence. Verification retains
+the required current foundation and exact-source claim binding.
+Preserve the native original claim, novelty and strategy studies,
 proof checks, budgets, accounts, failed-method history, and checkpoint lineage.
 Follow the [math skill](../skills/math-solver/SKILL.md) and
 [native CLI contract](research-cli.md#native-math-preparation); common readiness
-never replaces mathematical acceptance. Historical replay remains available,
-while fresh work needs a current reviewed foundation and applicable amendments.
+never replaces mathematical acceptance. Historical replay remains available.
+Research validates retained foundation evidence without rerunning the historical
+preparation report or requiring equality with current common preparation.
+Applicable computation and strategy amendments remain required for fresh work.
 
-The native preparation path retains its independent `review` record:
-
-```sh
-exactory-research review --file native-review.json --expected-revision REVISION --request-id native-review-001
-```
+All native approvals retain the observed shared assignment. Export the exact
+subject with `search review-packet`, invoke the `native_math` assignment on a
+verified route, and submit its unchanged `review-run` output with `search review`
+or the corresponding native result, amendment or recovery command. Follow the
+[observed native review contract](../skills/math-solver/SEARCH.md#observed-native-review-delivery).
 
 ## Pending work and continuation
 
