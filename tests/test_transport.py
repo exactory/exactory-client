@@ -5,17 +5,22 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import http.client
 import importlib.machinery
 import importlib.util
 import io
 import json
 import os
+import socket
 import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
 import unittest
 from pathlib import Path
+
+from integration_fixtures import build_unconfirmed_write_msg
+from research_harness.same_origin import RefusedRedirectError
 
 _PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 
@@ -84,13 +89,17 @@ def _invoke_cli(test_case: unittest.TestCase, argv: list[str],
                 expected_exit_code: int | None = None) -> tuple[str, str]:
     """Parse argv with the real parser and run its handler, capturing both streams."""
     args = _transport._build_parser().parse_args(argv)
+    def invoke():
+        # Each invocation stands for a process, whose configuration is checked once at boot.
+        _transport._API_BASE_URL = _transport._read_checked_api_base_url()
+        args.handler(args)
     stdout_sink, stderr_sink = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(stdout_sink), contextlib.redirect_stderr(stderr_sink):
         if expected_exit_code is None:
-            args.handler(args)
+            invoke()
         else:
             with test_case.assertRaises(SystemExit) as caught:
-                args.handler(args)
+                invoke()
             test_case.assertEqual(caught.exception.code, expected_exit_code)
     return stdout_sink.getvalue(), stderr_sink.getvalue()
 
@@ -112,8 +121,8 @@ class _TransportTestCase(unittest.TestCase):
         self.responses: dict[tuple[str, str], tuple[dict, int]] = {}
         self.addCleanup(setattr, _transport, "_send_request", _transport._send_request)
 
-        def _record_request(method: str, path: str, body: dict | None = None,
-                            *, allow_missing: bool = False) -> tuple[dict, int]:
+        def _record_request(method: str, path: str, body: dict | None = None, *, allow_missing: bool = False,
+                            error_messages: dict[int, str] | None = None) -> tuple[dict, int]:
             self.requested_paths.append(path)
             self.requested_methods.append(method)
             self.request_bodies.append(body)
@@ -136,10 +145,33 @@ class _FakeResponse(io.BytesIO):
         return self._status
 
 
-class _UrlopenTransportTestCase(unittest.TestCase):
+class _BodyThatBreaksOff(io.BytesIO):
+    """A body that does not arrive: reading it raises `error`, as http.client raises it for a dropped connection."""
+
+    def __init__(self, error: Exception) -> None:
+        super().__init__(b"")
+        self.error = error
+
+    def read(self, *args) -> bytes:
+        raise self.error
+
+
+class _AnswerThatBreaksOff(_BodyThatBreaksOff):
+    """An answer whose status arrived and whose body does not."""
+
+    def __init__(self, error: Exception, status: int) -> None:
+        super().__init__(error)
+        self._status = status
+
+    def getcode(self) -> int:
+        return self._status
+
+
+class _OpenUrlTransportTestCase(unittest.TestCase):
     """Shared plumbing for the grand-challenge subcommands: a scratch cwd and a
-    stubbed urllib.request.urlopen, so the method, the full URL, the JSON body,
-    and the Authorization header are all asserted on the real request object."""
+    stubbed open_url_within_origin, the one function that bin/exactory sends
+    every request through, so the method, the full URL, the JSON body, and the
+    Authorization header are all asserted on the real request object."""
 
     def setUp(self) -> None:
         scratch = tempfile.TemporaryDirectory()
@@ -161,18 +193,19 @@ class _UrlopenTransportTestCase(unittest.TestCase):
         self.addCleanup(_restore_env)
         os.environ["EXACTORY_API_KEY"] = "test-key"
         os.environ["EXACTORY_API_URL"] = "https://api.test"
+        _transport._API_BASE_URL = _transport._read_checked_api_base_url()
 
         self.sent_requests: list[urllib.request.Request] = []
         self.response_status = 200
         self.response_body = b"{}"
-        self.addCleanup(setattr, urllib.request, "urlopen", urllib.request.urlopen)
+        self.addCleanup(setattr, _transport, "open_url_within_origin", _transport.open_url_within_origin)
 
-        def _fake_urlopen(request: urllib.request.Request,
-                          timeout: float | None = None) -> _FakeResponse:
+        def _fake_open_url(request: urllib.request.Request,
+                           timeout: float | None = None) -> _FakeResponse:
             self.sent_requests.append(request)
             return _FakeResponse(self.response_body, self.response_status)
 
-        urllib.request.urlopen = _fake_urlopen
+        _transport.open_url_within_origin = _fake_open_url
 
     def _run(self, argv: list[str], expected_exit_code: int | None = None) -> tuple[str, str]:
         return _invoke_cli(self, argv, expected_exit_code)
@@ -265,6 +298,16 @@ class TestPathEncoding(_TransportTestCase):
             self.requested_paths, ["/api/v1/verdicts/..%2Ftasks%3Fx%3D1/vote"]
         )
 
+    def test_a_command_with_an_id_in_its_path_refuses_an_empty_or_dot_id_before_any_request(self) -> None:
+        for unroutable_id in ("", ".", ".."):
+            for argv in (["status", unroutable_id], ["vote", unroutable_id, "--value", "1"],
+                         ["challenge", unroutable_id], ["vote-challenge", unroutable_id, "--value", "0"],
+                         ["solve-challenge", unroutable_id, "--reopen"]):
+                with self.subTest(argv=argv):
+                    _, stderr_text = self._run(argv, expected_exit_code=1)
+                    self.assertIn("is not an identifier", stderr_text)
+        self.assertEqual(self.requested_paths, [])
+
 
 class TestSubmitRepeatNotice(_TransportTestCase):
     def test_a_200_response_notes_the_existing_open_request_on_stderr(self) -> None:
@@ -288,14 +331,14 @@ class TestSubmitSupersession(_TransportTestCase):
         self.assertEqual(json.loads(stdout_text)["supersedes"], "old-id")
 
 
-class TestSupersededVerification(_UrlopenTransportTestCase):
+class TestSupersededVerification(_OpenUrlTransportTestCase):
     def test_a_superseded_task_names_the_successor_and_not_the_status_command(self) -> None:
         body = json.dumps({"error": "verification_superseded", "successorId": "successor-id"}).encode()
 
         def _refuse(request: urllib.request.Request, timeout: float | None = None) -> _FakeResponse:
             raise urllib.error.HTTPError(request.full_url, 409, "Conflict", None, io.BytesIO(body))
 
-        urllib.request.urlopen = _refuse
+        _transport.open_url_within_origin = _refuse
         _, stderr_text = self._run(["task", "earlier-id"], expected_exit_code=1)
         self.assertIn("moved this verification to a newer version", stderr_text)
         self.assertIn("successor-id", stderr_text)
@@ -359,7 +402,7 @@ class TestSubmitDecision(_TransportTestCase):
             if method == "POST" and url.endswith("/deposit/depositions"):
                 return {"id": 1, "links": {"bucket": "https://zenodo.org/api/files/fixture"}}
             if url.endswith("/actions/publish"):
-                return {"id": 1, "doi": "10.5281/zenodo.1", "conceptdoi": "10.5281/zenodo.0",
+                return {"id": 1, "submitted": True, "doi": "10.5281/zenodo.1", "conceptdoi": "10.5281/zenodo.0",
                         "links": {"record_html": "https://zenodo.org/records/1"}}
             return {}
 
@@ -636,7 +679,7 @@ class TestParserStrictness(unittest.TestCase):
         self.assertEqual(caught.exception.code, 2)
 
 
-class TestChallengesSubcommand(_UrlopenTransportTestCase):
+class TestChallengesSubcommand(_OpenUrlTransportTestCase):
     def test_it_lists_challenges_with_the_default_limit(self) -> None:
         self._run(["challenges"])
         request = self._single_request()
@@ -686,7 +729,7 @@ class TestChallengesSubcommand(_UrlopenTransportTestCase):
         self.assertEqual(caught.exception.code, 2)
 
 
-class TestChallengeSubcommand(_UrlopenTransportTestCase):
+class TestChallengeSubcommand(_OpenUrlTransportTestCase):
     def test_it_reads_one_challenge_by_id(self) -> None:
         self._run(["challenge", "656c336e-e892-4c47-80d2-a71d022f4116"])
         request = self._single_request()
@@ -722,7 +765,7 @@ class TestChallengeSubcommand(_UrlopenTransportTestCase):
         self.assertEqual(json.loads(stdout_text), detail)
 
 
-class TestPostChallengeSubcommand(_UrlopenTransportTestCase):
+class TestPostChallengeSubcommand(_OpenUrlTransportTestCase):
     _CITATION_TEXT = ("Carol Instance and Dana Case. Predicting Citation Impact"
                       " with Cohort Percentiles. 2023.")
 
@@ -836,15 +879,26 @@ class TestPostChallengeSubcommand(_UrlopenTransportTestCase):
                 body = json.loads(self._single_request().data.decode())
                 self.assertEqual(body["citations"][0]["locator"], locator)
 
-    def test_a_lone_surrogate_in_a_citation_counts_as_one_utf16_unit(self) -> None:
-        # json.load turns a "\ud800" escape into a lone surrogate, and the
-        # server's zod bounds count it as one UTF-16 unit; the client mirror
-        # must count it the same way instead of raising UnicodeEncodeError.
+    def test_a_lone_surrogate_in_a_citation_is_refused_before_any_request(self) -> None:
+        # json.load turns a "\ud800" escape into a lone surrogate. The server
+        # builds the citation on plainTextSchema, which refuses an unpaired
+        # surrogate, so the client refuses it first.
         self.citations_path.write_text(
             '[{"citation": "0123456789\\ud800", "locator": "10.1234/exact.5678"}]')
-        self._run(self._post_argv())
+        _, stderr_text = self._run(self._post_argv(), expected_exit_code=1)
+        self.assertEqual(stderr_text, "The citation of entry 1 contains U+D800 at position 11. A \\uD800 escape in the"
+                                      " citations file gives it, and it is half of a surrogate pair. Write the"
+                                      " character as UTF-8 text in the file, or write both escapes of the pair.\n")
+        self.assertEqual(self.sent_requests, [])
+
+    def test_a_lone_surrogate_in_the_title_counts_as_one_utf16_unit(self) -> None:
+        # argv turns a byte that is not UTF-8 into a lone surrogate. The server
+        # builds the title on z.string(), whose bounds count it as one UTF-16
+        # unit, so the client counts it the same way instead of raising
+        # UnicodeEncodeError, and sends a title of exactly eight units.
+        self._run(self._post_argv(title="Seven c\udcff"))
         body = json.loads(self._single_request().data.decode())
-        self.assertEqual(body["citations"][0]["citation"], "0123456789\ud800")
+        self.assertEqual(body["title"], "Seven c\udcff")
 
     def test_an_empty_citations_list_is_refused(self) -> None:
         self.citations_path.write_text("[]")
@@ -866,7 +920,7 @@ class TestPostChallengeSubcommand(_UrlopenTransportTestCase):
         self.assertEqual(self.sent_requests, [])
 
 
-class TestVoteChallengeSubcommand(_UrlopenTransportTestCase):
+class TestVoteChallengeSubcommand(_OpenUrlTransportTestCase):
     def test_an_upvote_puts_value_one(self) -> None:
         self._run(["vote-challenge", "chal-1", "--value", "1"])
         request = self._single_request()
@@ -898,7 +952,7 @@ class TestVoteChallengeSubcommand(_UrlopenTransportTestCase):
         self.assertEqual(caught.exception.code, 2)
 
 
-class TestSolveChallengeSubcommand(_UrlopenTransportTestCase):
+class TestSolveChallengeSubcommand(_OpenUrlTransportTestCase):
     def test_solving_sends_the_resolution_note(self) -> None:
         note = "The linked paper meets every criterion."
         self._run(["solve-challenge", "chal-1", "--note", note])
@@ -929,7 +983,7 @@ class TestSolveChallengeSubcommand(_UrlopenTransportTestCase):
         self.assertEqual(caught.exception.code, 2)
 
 
-class TestReportChallengeSubcommand(_UrlopenTransportTestCase):
+class TestReportChallengeSubcommand(_OpenUrlTransportTestCase):
     def test_it_posts_the_subject_without_a_note(self) -> None:
         self.response_status = 201
         self._run(["report-challenge", "chal-1"])
@@ -980,8 +1034,198 @@ class TestReportChallengeSubcommand(_UrlopenTransportTestCase):
         self.assertIn("existing report", stderr_text)
         json.loads(stdout_text)
 
+    def test_the_notice_for_an_existing_report_names_the_challenge(self) -> None:
+        self.response_status = 200
+        _, stderr_text = self._run(["report-challenge", "chal-1"])
+        self.assertEqual(stderr_text, "The server returned the existing report for this challenge.\n")
 
-class TestSubmitChallengeDeclaration(_UrlopenTransportTestCase):
+
+class TestAnswersThatDidNotArriveInFull(_OpenUrlTransportTestCase):
+    """The request went out, and then its answer did not arrive in full: a timeout or a dropped connection while the
+    command waits for the answer or reads it, or a 2xx answer whose body is not JSON. The command ends with one message
+    that names the origin and the cause, and exits with code 1. A read changed nothing on the server, so the user runs
+    it again. A write may have been applied, so the user checks on the origin first."""
+
+    # A write and a read, each with the advice that its message ends with.
+    _REQUESTS = (("POST", ["report-challenge", "chal-1"], build_unconfirmed_write_msg("https://api.test")),
+                 ("GET", ["challenge", "chal-1"], "Run the command again."))
+
+    @staticmethod
+    def _build_errors() -> tuple:
+        """What http.client raises for an answer that does not arrive in full. On Python 3.10 and later
+        socket.timeout is TimeoutError; on 3.9 they are two classes."""
+        return (socket.timeout("timed out"), TimeoutError("timed out"),
+                ConnectionResetError(54, "Connection reset by peer"),
+                http.client.RemoteDisconnected("Remote end closed connection without response"),
+                http.client.IncompleteRead(b'{"id"', 20))
+
+    @staticmethod
+    def _build_message(method: str, cause: str, advice: str) -> str:
+        return (f"The client cannot read the answer of the exactory server at https://api.test to the {method}"
+                f" request. Cause: {cause}. {advice}\n")
+
+    def test_an_answer_that_breaks_off_while_its_body_is_read_ends_with_a_message(self) -> None:
+        for method, argv, advice in self._REQUESTS:
+            for error in self._build_errors():
+                with self.subTest(method=method, error=type(error).__name__):
+                    def answer_then_break_off(request: urllib.request.Request, timeout: float | None = None,
+                                              error: Exception = error) -> _AnswerThatBreaksOff:
+                        self.sent_requests.append(request)
+                        return _AnswerThatBreaksOff(error, 200)
+                    _transport.open_url_within_origin = answer_then_break_off
+
+                    stdout_text, stderr_text = self._run(argv, expected_exit_code=1)
+
+                    self.assertEqual(stderr_text, self._build_message(method, str(error), advice))
+                    self.assertEqual(stdout_text, "")
+
+    def test_an_answer_that_does_not_come_while_the_command_waits_ends_with_a_message(self) -> None:
+        for method, argv, advice in self._REQUESTS:
+            for error in self._build_errors():
+                with self.subTest(method=method, error=type(error).__name__):
+                    def break_off_before_the_status(request: urllib.request.Request, timeout: float | None = None,
+                                                    error: Exception = error) -> _FakeResponse:
+                        self.sent_requests.append(request)
+                        raise error
+                    _transport.open_url_within_origin = break_off_before_the_status
+
+                    _, stderr_text = self._run(argv, expected_exit_code=1)
+
+                    self.assertEqual(stderr_text, self._build_message(method, str(error), advice))
+
+    def test_a_2xx_answer_whose_body_is_not_json_ends_with_a_message(self) -> None:
+        for method, argv, advice in self._REQUESTS:
+            for status in (200, 201):
+                with self.subTest(method=method, status=status):
+                    self.response_status, self.response_body = status, b"not json"
+
+                    _, stderr_text = self._run(argv, expected_exit_code=1)
+
+                    self.assertEqual(stderr_text, self._build_message(
+                        method, f"the answer has HTTP {status} and a body that is not JSON", advice))
+
+    def answer_with_an_error_whose_body_breaks_off(self, status: int) -> tuple[urllib.error.HTTPError, Exception]:
+        """Make every request end with an error answer of `status` whose body breaks off, and return the answer and
+        the error that the reading of its body raises."""
+        broken_off = http.client.IncompleteRead(b'{"err', 30)
+        http_error = urllib.error.HTTPError("https://api.test", status, "error", {}, _BodyThatBreaksOff(broken_off))
+        self.addCleanup(http_error.close)
+
+        def answer_with_the_error(request: urllib.request.Request, timeout: float | None = None) -> _FakeResponse:
+            self.sent_requests.append(request)
+            raise http_error
+        _transport.open_url_within_origin = answer_with_the_error
+        return http_error, broken_off
+
+    def test_a_server_error_whose_body_breaks_off_keeps_its_message_and_says_that_the_detail_is_missing(self) -> None:
+        (post_method, post_argv, write_advice), (get_method, get_argv, _) = self._REQUESTS
+        for method, argv, advice in ((post_method, post_argv, write_advice),
+                                     (get_method, get_argv, "Send the same request again later.")):
+            with self.subTest(method=method):
+                http_error, broken_off = self.answer_with_an_error_whose_body_breaks_off(503)
+
+                _, stderr_text = self._run(argv, expected_exit_code=1)
+
+                self.assertEqual(stderr_text, f"The paper source is not reachable now. {advice}\nThe detail of the"
+                                              f" answer did not arrive in full. Cause: {broken_off}.\n")
+                self.assertTrue(http_error.closed)
+
+    def test_a_refusal_whose_body_breaks_off_keeps_its_own_advice(self) -> None:
+        # A 4xx is the server's refusal of the request, which it gives before it writes.
+        for method, argv, _ in self._REQUESTS:
+            with self.subTest(method=method):
+                http_error, broken_off = self.answer_with_an_error_whose_body_breaks_off(409)
+
+                _, stderr_text = self._run(argv, expected_exit_code=1)
+
+                self.assertEqual(stderr_text, "The resource is in a state that does not accept this operation. Run"
+                                              " exactory status <verification-id> to see the current state.\nThe"
+                                              f" detail of the answer did not arrive in full. Cause: {broken_off}.\n")
+                self.assertTrue(http_error.closed)
+
+    def test_a_failure_before_the_request_went_out_keeps_its_message(self) -> None:
+        # Connection refusal and InvalidURL both prove that no request byte was sent.
+        for cause, error in (("[Errno 61] Connection refused",
+                              urllib.error.URLError(ConnectionRefusedError(61, "Connection refused"))),
+                             ("nonnumeric port: 'abc'", http.client.InvalidURL("nonnumeric port: 'abc'"))):
+            def refuse_the_request(request: urllib.request.Request, timeout: float | None = None,
+                                   error: Exception = error) -> _FakeResponse:
+                raise error
+            _transport.open_url_within_origin = refuse_the_request
+            for method, argv, _ in self._REQUESTS:
+                with self.subTest(method=method, error=type(error).__name__):
+                    _, stderr_text = self._run(argv, expected_exit_code=1)
+
+                    self.assertEqual(stderr_text, f"The client cannot reach https://api.test. Cause: {cause}. Make sure"
+                                                  " that the network and EXACTORY_API_URL are correct. Then send the"
+                                                  " request again.\n")
+
+
+# What the command says about an EXACTORY_API_URL that it cannot use as the address of the API.
+_UNUSABLE_API_URL_ERR_MSG = ("EXACTORY_API_URL is not an address that the client can use. Set it to an http or https"
+                             " URL with a host, for example https://www.exactory.ai. Write a port, if any, as a number."
+                             " Leave out a user name, a query, a fragment, spaces, control characters, and characters"
+                             " outside ASCII. Or unset EXACTORY_API_URL to use https://www.exactory.ai.")
+
+
+class TestApiBaseUrlCheck(_OpenUrlTransportTestCase):
+    """main checks EXACTORY_API_URL once, after parsing arguments and before a handler runs (CLAUDE.md §2). A value that
+    urllib or http.client would refuse, or would read as another address, ends the command before any request."""
+
+    _UNUSABLE_URLS = ("http://127.0.0.1:abc", "https://api.test:99999", "http://127.0.0.1/a b", "https://api.test/x\n",
+                      "http://api.test/" + chr(0x07), "https://ex" + chr(0xE4) + "mple.test", "ftp://api.test",
+                      "file:///etc", "localhost:3000", "https://", "http://user:secret@api.test", "http://user@api.test",
+                      "http://[::1", "", "https://api.test?x=1", "https://api.test/?", "https://api.test#top")
+
+    def test_an_address_that_the_client_cannot_use_ends_before_any_request(self) -> None:
+        opened_urls: list[str] = []
+        self.addCleanup(setattr, _transport.webbrowser, "open", _transport.webbrowser.open)
+        _transport.webbrowser.open = lambda url: opened_urls.append(url) or True
+        for value in self._UNUSABLE_URLS:
+            os.environ["EXACTORY_API_URL"] = value
+            for argv in (["report-challenge", "chal-1"], ["challenge", "chal-1"], ["open-signup"],
+                         ["login", "--email", "a@test.local"]):
+                with self.subTest(value=value, command=argv[0]):
+                    stdout_text, stderr_text = self._run(argv, expected_exit_code=2)
+
+                    self.assertEqual(stderr_text, _UNUSABLE_API_URL_ERR_MSG + "\n")
+                    self.assertEqual(stdout_text, "")
+        self.assertEqual((self.sent_requests, opened_urls), ([], []))
+
+    def test_a_usable_address_is_used_as_given(self) -> None:
+        for value, address in (("https://api.test", "https://api.test"), ("https://api.test/", "https://api.test"),
+                               ("http://127.0.0.1:8080", "http://127.0.0.1:8080"),
+                               ("https://api.test/prefix", "https://api.test/prefix"),
+                               ("http://[::1]:9000", "http://[::1]:9000"), ("HTTPS://API.test", "HTTPS://API.test")):
+            with self.subTest(value=value):
+                os.environ["EXACTORY_API_URL"] = value
+                self.sent_requests.clear()
+
+                self._run(["challenge", "chal-1"])
+
+                self.assertEqual(self._single_request().full_url, f"{address}/api/v1/grand-challenges/chal-1")
+
+
+class TestListQueryRefusals(_OpenUrlTransportTestCase):
+    """A read sends no body, so a 422 to a list is the server's refusal of its query, and the message names the parts
+    of the query that the list sends. The server judges every limit, so the message states no bound."""
+
+    def test_the_task_and_challenge_lists_name_the_parts_of_their_queries(self) -> None:
+        def refuse_the_query(request: urllib.request.Request, timeout: float | None = None) -> _FakeResponse:
+            self.sent_requests.append(request)
+            raise urllib.error.HTTPError(request.full_url, 422, "refused", {}, io.BytesIO(b'{"error": "invalid_request"}'))
+        _transport.open_url_within_origin = refuse_the_query
+        for argv, query_parts in ((["tasks", "--limit", "500"], "the search text, a filter, the sort, the limit, or the"
+                                                                 " cursor"),
+                                  (["challenges", "--limit", "500"], "a filter, the sort, the limit, or the cursor")):
+            with self.subTest(command=argv[0]):
+                _, stderr_text = self._run(argv, expected_exit_code=1)
+
+                self.assertEqual(stderr_text, f"The server rejected the query ({query_parts}). Correct it. Then send the"
+                                              ' request again.\n{"error": "invalid_request"}\n')
+
+
+class TestSubmitChallengeDeclaration(_OpenUrlTransportTestCase):
     """The scratch cwd holds no draft workspace, so the citation gate is skipped."""
 
     def test_challenges_join_the_submit_body(self) -> None:
@@ -1061,7 +1305,7 @@ class TestCredentials(unittest.TestCase):
         self.assertEqual(_transport._read_api_key(), "")
 
 
-class TestLoginSubcommand(_UrlopenTransportTestCase):
+class TestLoginSubcommand(_OpenUrlTransportTestCase):
     """`login` is the one path that sends no key: the emailed code is the credential."""
 
     def setUp(self) -> None:
@@ -1083,7 +1327,7 @@ class TestLoginSubcommand(_UrlopenTransportTestCase):
             self.sent_requests.append(request)
             error.url = request.full_url
             raise error
-        urllib.request.urlopen = _raise
+        _transport.open_url_within_origin = _raise
         return error
 
     def test_without_a_code_it_requests_one_and_sends_no_key(self) -> None:
@@ -1144,6 +1388,53 @@ class TestLoginSubcommand(_UrlopenTransportTestCase):
         self.assertIn("Wait", stderr)
         self.assertTrue(error.closed)
 
+    # What each login request says after an outcome that it cannot confirm. The code request may have sent the email,
+    # and the code check may have made a key, whose plaintext the server shows once.
+    _CODE_REQUEST_ADVICE = ("If the request worked, an email with a sign-in code is on its way to a@test.local. Then"
+                            " run: exactory login --email a@test.local --code <the code>. If no email arrives within a"
+                            " few minutes, request a new code: exactory login --email a@test.local")
+    _CODE_CHECK_ADVICE = ('The server may have made a key labeled "laptop" for your account. The page'
+                          " https://api.test/keys lists your keys, and its Revoke button revokes one. Run the command"
+                          " again with the same code. If the server answers that the code is wrong, expired, or already"
+                          " used, request a new code: exactory login --email a@test.local")
+    _LOGIN_REQUESTS = ((["login", "--email", "a@test.local"], _CODE_REQUEST_ADVICE),
+                       (["login", "--email", "a@test.local", "--code", "123456", "--label", "laptop"], _CODE_CHECK_ADVICE))
+
+    def test_a_server_error_keeps_its_description_and_gives_the_advice_of_its_login_request(self) -> None:
+        for argv, advice in self._LOGIN_REQUESTS:
+            for status, description in ((503, "exactory cannot send or check codes now."),
+                                        (500, "The server returned HTTP 500.")):
+                with self.subTest(argv=argv, status=status):
+                    error = self._fail_next_request(status, {"error": "unavailable"})
+                    _, stderr = self._run(argv, expected_exit_code=1)
+                    self.assertEqual(stderr, f'{description} {advice}\n{{"error": "unavailable"}}\n')
+                    self.assertTrue(error.closed)
+
+    def test_a_refused_redirect_or_a_broken_answer_gives_the_advice_of_its_login_request(self) -> None:
+        def refuse_the_redirect(request: urllib.request.Request, timeout: float | None = None) -> _FakeResponse:
+            self.sent_requests.append(request)
+            raise RefusedRedirectError(request.full_url, "https://api.test/moved", "POST", is_cross_origin=False)
+
+        def break_off_the_answer(request: urllib.request.Request, timeout: float | None = None) -> _FakeResponse:
+            self.sent_requests.append(request)
+            return _AnswerThatBreaksOff(TimeoutError("timed out"), 201)
+
+        for argv, advice in self._LOGIN_REQUESTS:
+            for label, end_the_request, lead in (
+                    ("a refused redirect", refuse_the_redirect,
+                     "The exactory server at https://api.test answered the POST request with a redirect. The command"
+                     " does not follow a redirect of a POST request."),
+                    ("an answer that breaks off", break_off_the_answer,
+                     "The client cannot read the answer of the exactory server at https://api.test to the POST"
+                     " request. Cause: timed out.")):
+                with self.subTest(argv=argv, outcome=label):
+                    _transport.open_url_within_origin = end_the_request
+
+                    _, stderr = self._run(argv, expected_exit_code=1)
+
+                    self.assertEqual(stderr, f"{lead} {advice}\n")
+                    self.assertEqual(_transport._read_api_key(), "")
+
     def test_an_allowed_missing_response_is_closed(self) -> None:
         error = self._fail_next_request(404, {"error": "not_found"})
         self.assertEqual(_transport._send_request(
@@ -1160,7 +1451,7 @@ class TestLoginSubcommand(_UrlopenTransportTestCase):
         stdout, stderr = self._run(["logout"])
         self.assertFalse(path.exists())
         self.assertEqual(json.loads(stdout), {"removed": str(path)})
-        self.assertIn("exactory.ai/keys", stderr)
+        self.assertIn("https://api.test/keys", stderr)
         self.assertEqual(self.sent_requests, [])
 
     def test_logout_with_no_file_reports_nothing_removed(self) -> None:

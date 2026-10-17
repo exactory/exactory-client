@@ -389,7 +389,7 @@ def publication_state(records, artifacts, action="publication"):
             obligations.append(obligation("manuscript_reviews_required", "Obtain two independent accepting reviews of this exact manuscript and resolve current rejections."))
         if action == "deposited":
             if not any(r.get("bundle_digest") == bundle["digest"] and r.get("doi") and r.get("environment") == "production"
-                       for r in records.get("publication_receipt", {}).values()):
+                       for r in list_publication_receipts(records)):
                 obligations.append(obligation("publication_receipt_required", "Publish this exact reviewed bundle and reconcile its concrete record DOI."))
         if action == "submitted":
             if not any(r.get("bundle_digest") == bundle["digest"] and r.get("matched") is True
@@ -402,10 +402,17 @@ def publication_state(records, artifacts, action="publication"):
     obligations.extend(strategic["obligations"])
     return {"ready": not obligations, "obligations": obligations, "bundle": bundle, "reviews": reviews,
             "research_decision": strategic,
-            "historical_publications": list(records.get("publication_receipt", {}).values()),
+            "historical_publications": list_publication_receipts(records),
             "historical_submissions": list(records.get("submission_receipt", {}).values()),
             "digest": digest({"bundle": bundle["digest"] if bundle else None, "reviews": reviews, "obligations": obligations}),
             "mechanical_only": True}
+
+
+def list_publication_receipts(records):
+    """Every publication receipt: the receipts that deposits completed, then the read-back receipts
+    that a read of the same deposition wrote for a receipt that an earlier version completed without
+    a DOI (research_harness.zenodo)."""
+    return [*records.get("publication_receipt", {}).values(), *records.get("publication_read_back", {}).values()]
 
 
 def publication_report(store, action="publication"):

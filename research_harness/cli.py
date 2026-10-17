@@ -99,7 +99,7 @@ OPERATIONS.update({"review-probe": _review_probe, "review-run": _review_run})
 
 from .execution import bind_execution, reconcile_execution, record_imported_execution
 OPERATIONS.update({"bind-run": bind_execution, "reconcile-run": reconcile_execution, "result": record_imported_execution})
-from .publication import prepare_publication, record_manuscript_review
+from .publication import list_publication_receipts, prepare_publication, record_manuscript_review
 from .verification import bind_verdict
 OPERATIONS.update({"manuscript": prepare_publication, "manuscript-review": record_manuscript_review, "bind-verdict": bind_verdict})
 
@@ -330,7 +330,7 @@ def status_report(store, *, counters=False):
         scope_status = {key: scoped_report[key] for key in ("manuscript_ready", "manuscript_obligations", "objective_complete",
                                                            "objective_obligations", "scientific_target_digest", "remaining_obligations")}
         scope_status["scope_contract_id"] = scoped_report["selected_contract_id"]
-        scope_status["historical_publications"] = list(records.get("publication_receipt", {}).values())
+        scope_status["historical_publications"] = list_publication_receipts(records)
         scope_status["historical_submissions"] = list(records.get("submission_receipt", {}).values())
         if scoped_report["contract"] is not None:
             flags = ["--managed-only", "--scope-contract-id", scoped_report["contract"]["id"],

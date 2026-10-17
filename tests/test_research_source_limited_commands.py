@@ -112,7 +112,7 @@ class SourceLimitedLifecycleTests(SourceLimitedCase):
         if method == "POST" and url.endswith("/deposit/depositions"):
             return {"id": 91, "links": {"bucket": "https://zenodo.org/api/files/test", "html": "https://zenodo.org/deposit/91"}}
         if url.endswith("/actions/publish"):
-            return {"id": 91, "doi": "10.5281/zenodo.91", "conceptdoi": "10.5281/zenodo.90",
+            return {"id": 91, "submitted": True, "doi": "10.5281/zenodo.91", "conceptdoi": "10.5281/zenodo.90",
                     "links": {"record_html": "https://zenodo.org/records/91"}}
         return {}
 
