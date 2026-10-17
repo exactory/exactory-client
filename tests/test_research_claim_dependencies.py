@@ -75,7 +75,8 @@ class ClaimDependencyTests(DevelopmentCase):
         from research_harness.gates import gate_report
         self.build_managed_study()
         self.mutate(development.plan_cycle, bind_plan(self, self.plan()))
-        self.record_purpose("direct", "later-direct")
+        # A new direct search is decisive evidence of the direction and needs a new decision.
+        self.record_purpose("adjacent", "later-adjacent")
         self.record_impact()
         admission = self.admit()
         records = self.store.snapshot()["records"]

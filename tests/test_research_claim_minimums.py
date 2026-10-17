@@ -142,6 +142,21 @@ class DirectionMinimumTests(DeferralCase, SynthesisCase):
         records["synthesis"]["standards"]["dependencies"]["scope"] = "previous-scope"
         self.assert_only("direction_standards_unresolved", records, section_id="standards")
 
+    def test_standards_stale_only_by_the_configuration_or_constitution_pass(self):
+        records = self.prepare_direction()
+        from research_harness.principles import configuration_state
+        from research_harness.evaluation import Evaluation
+        evaluation = Evaluation(records, self.artifacts)
+        current = synthesis._assess(records, evaluation, "standards", records["synthesis"]["standards"]["payload"],
+                                    configuration_state(records, evaluation, "research"),
+                                    literature.foundation_state(records, evaluation, "research"))
+        records["synthesis"]["standards"]["dependencies"] = dict(current["dependencies"], configuration="previous-configuration",
+                                                                 constitution="previous-constitution")
+        self.assertFalse(synthesis.synthesis_state(records, self.artifacts, "research")["sections"]["standards"]["ready"])
+        self.assertEqual(self.assess_minimum(records), [])
+        records["synthesis"]["standards"]["dependencies"]["evidence"] = "previous-evidence"
+        self.assert_only("direction_standards_unresolved", records, section_id="standards")
+
     def test_challenge_missing(self):
         records = self.prepare_direction()
         records.pop("grand_challenge_selection")

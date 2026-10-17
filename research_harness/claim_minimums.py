@@ -2,6 +2,7 @@
 
 from .challenge import find_current_challenge
 from .evaluation import Evaluation
+from .claim_dependencies import project_claim_dependencies
 from .evidence import digest
 from .graph import format_search_requirement_id, obligation
 from .literature import find_search_integrity_errors, foundation_state
@@ -51,8 +52,12 @@ def describe_direction(records, artifacts):
         obligations.append(obligation("direction_standards_missing", "Select a source-grounded field standards section.", section="standards"))
     else:
         section = synthesis_state(records, evaluation, "research")["sections"]["standards"]
-        current_dependencies = {key: value for key, value in section.get("dependencies", {}).items() if key != "foundation"}
-        bound_dependencies = {key: value for key, value in section.get("bound_dependencies", {}).items() if key != "foundation"}
+        # The foundation, the configuration and the constitution are advisory to
+        # the direction claim; the scope, the evidence and the population are not.
+        current_dependencies = project_claim_dependencies({key: value for key, value in section.get("dependencies", {}).items()
+                                                           if key != "foundation"}, managed=True)
+        bound_dependencies = project_claim_dependencies({key: value for key, value in section.get("bound_dependencies", {}).items()
+                                                         if key != "foundation"}, managed=True)
         findings = [item for item in section["obligations"]
                     if item["code"] != "synthesis_dependencies_stale" or current_dependencies != bound_dependencies]
         if findings:

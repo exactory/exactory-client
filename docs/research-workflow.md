@@ -421,7 +421,7 @@ The mechanical direction minimum is:
 | A valid `direct` search bound to the current literature scope, with explicit bounded or complete coverage, every captured result dispositioned, and integrity gaps resolved. | `direction_search_missing`, `direction_search_incomplete` |
 | Every relevant or contradictory work from that search read in full. Source deferral leaves the reading missing. | `direction_reading_missing` |
 | Every root read in full. | `direction_root_reading_missing` |
-| A selected `standards` section with valid own sources and resolved applicability. Global-foundation staleness alone is ignored. | `direction_standards_missing`, `direction_standards_unresolved` |
+| A selected `standards` section with valid own sources and resolved applicability. Staleness by the foundation, the configuration or the constitution alone is ignored. | `direction_standards_missing`, `direction_standards_unresolved` |
 | A current study Grand Challenge record with source-grounded goals and advance criteria. | `grand_challenge_missing` |
 
 Record the challenges with `grand-challenge`; retain that record until evidence

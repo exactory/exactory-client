@@ -78,7 +78,7 @@ and probes can inform it in any order. Before recording a new `investigate` or
 | A selected valid `direct` search bound to the current literature scope, with explicit bounded or complete coverage, all captured results accounted by disposition, and no unresolved integrity error. | `direction_search_missing`, `direction_search_incomplete` |
 | Every relevant or contradictory direct-search work read in full. A deferral retains the missing reading. | `direction_reading_missing` |
 | Every root read in full. | `direction_root_reading_missing` |
-| Selected `standards` with valid own sources and resolved applicability, ignoring only global-foundation staleness. | `direction_standards_missing`, `direction_standards_unresolved` |
+| Selected `standards` with valid own sources and resolved applicability. Staleness by the foundation, the configuration or the constitution alone is ignored; a changed scope, evidence or population is not. | `direction_standards_missing`, `direction_standards_unresolved` |
 | A current study Grand Challenge record. | `grand_challenge_missing` |
 
 For historical searches without coverage fields, the gate uses their captured
