@@ -167,44 +167,47 @@ class LegacyDepthReportTests(SynthesisCase):
     """Whole reports frozen from 0.50.1 HEAD, with legacy deficits and a recorded verification sample."""
 
     def compare_reports(self, profile):
+        from constitution_fixtures import distribute_version_six
         from research_harness import principles, sampling, synthesis
         from research_harness.evaluation import Evaluation
         from research_harness.literature import foundation_state
-        work = self.metadata()
-        target = {"kind": "objective", "id": "full-objective", "statement": "Establish finite bounds for all bounded input sequences."}
-        if profile == "verification":
-            capture = self.capture(work)
-            target = {"kind": "work", "id": work, "source_id": capture["source_id"], "sha256": capture["original"]["sha256"]}
-        self.mutate(principles.initialize_research, {"profile": profile, "target": target,
-                    "preparation_policy": "lineage-v1" if profile == "research" else "sampled-v1"})
-        self.scope([work], profile=profile, **({"target": target} if profile == "verification" else {}))
-        link = self.read_source(2)
-        if profile == "verification":
-            collection = self.cohort((1, 2))
-            self.mutate(sampling.record_sample, {"id": "legacy-sample", "collection_id": collection,
-                        "size": 1, "seed": "legacy-seed"})
-        records = self.store.snapshot()["records"]
-        # Model only the record shapes the old writer produced. The four expected reports were
-        # exported by the same authored setup running the untouched 0.50.1 implementation.
-        for sample in records.get("cohort_sample", {}).values():
-            sample.pop("depth", None)
-        values = [("standards", self.standards(link, profile=profile))]
-        if profile == "research":
-            values.append(("innovation", self.innovation([self.case(link, 1)])))
-        for kind, payload in values:
-            evaluation = Evaluation(records, self.artifacts)
-            configuration = principles.configuration_state(records, evaluation, profile)
-            foundation = foundation_state(records, evaluation, profile)
-            assessment = synthesis._assess(records, evaluation, kind, payload, configuration, foundation)
-            records.setdefault("synthesis", {})[payload["id"]] = {"id": payload["id"], "kind": kind,
-                "profile": profile, "payload": payload, "dependencies": assessment["dependencies"], "assessment": assessment}
-            records.setdefault("synthesis_selection", {})[profile + ":" + kind] = {"id": payload["id"]}
-        reports = {"foundation": foundation_state(records, Evaluation(records, self.artifacts), profile),
-                   "synthesis": synthesis.synthesis_state(records, self.artifacts, profile)}
-        for name, report in reports.items():
-            with self.subTest(profile=profile, report=name):
-                fixture = Path(__file__).parent / "fixtures" / "research" / ("legacy-0.50.1-" + profile + "-" + name + ".json")
-                self.assertEqual(report, json.loads(fixture.read_text(encoding="utf-8")))
+        # The legacy reports of 0.50.1 were recorded under Version 6.
+        with distribute_version_six():
+            work = self.metadata()
+            target = {"kind": "objective", "id": "full-objective", "statement": "Establish finite bounds for all bounded input sequences."}
+            if profile == "verification":
+                capture = self.capture(work)
+                target = {"kind": "work", "id": work, "source_id": capture["source_id"], "sha256": capture["original"]["sha256"]}
+            self.mutate(principles.initialize_research, {"profile": profile, "target": target,
+                        "preparation_policy": "lineage-v1" if profile == "research" else "sampled-v1"})
+            self.scope([work], profile=profile, **({"target": target} if profile == "verification" else {}))
+            link = self.read_source(2)
+            if profile == "verification":
+                collection = self.cohort((1, 2))
+                self.mutate(sampling.record_sample, {"id": "legacy-sample", "collection_id": collection,
+                            "size": 1, "seed": "legacy-seed"})
+            records = self.store.snapshot()["records"]
+            # Model only the record shapes the old writer produced. The four expected reports were
+            # exported by the same authored setup running the untouched 0.50.1 implementation.
+            for sample in records.get("cohort_sample", {}).values():
+                sample.pop("depth", None)
+            values = [("standards", self.standards(link, profile=profile))]
+            if profile == "research":
+                values.append(("innovation", self.innovation([self.case(link, 1)])))
+            for kind, payload in values:
+                evaluation = Evaluation(records, self.artifacts)
+                configuration = principles.configuration_state(records, evaluation, profile)
+                foundation = foundation_state(records, evaluation, profile)
+                assessment = synthesis._assess(records, evaluation, kind, payload, configuration, foundation)
+                records.setdefault("synthesis", {})[payload["id"]] = {"id": payload["id"], "kind": kind,
+                    "profile": profile, "payload": payload, "dependencies": assessment["dependencies"], "assessment": assessment}
+                records.setdefault("synthesis_selection", {})[profile + ":" + kind] = {"id": payload["id"]}
+            reports = {"foundation": foundation_state(records, Evaluation(records, self.artifacts), profile),
+                       "synthesis": synthesis.synthesis_state(records, self.artifacts, profile)}
+            for name, report in reports.items():
+                with self.subTest(profile=profile, report=name):
+                    fixture = Path(__file__).parent / "fixtures" / "research" / ("legacy-0.50.1-" + profile + "-" + name + ".json")
+                    self.assertEqual(report, json.loads(fixture.read_text(encoding="utf-8")))
 
     def test_research_foundation_and_synthesis_are_unchanged(self):
         self.compare_reports("research")

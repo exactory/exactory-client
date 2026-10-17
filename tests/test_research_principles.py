@@ -232,10 +232,11 @@ class PreparationPolicyTests(LiteratureCase):
             {"previous": "exhaustive-v1", "policy": "sampled-v1", "reason": "Wrong profile."}))
         self.mutate(change_policy, {"previous": "exhaustive-v1", "policy": "lineage-v1", "reason": "Adopt the lineage policy."})
 
-    def test_constitution_is_version_six_and_names_the_policies_and_the_grand_challenge(self):
-        from research_harness.principles import CONSTITUTION_PATH, constitution_contract
-        self.assertEqual(constitution_contract()["version"], "6")
+    def test_constitution_is_version_seven_and_names_the_policies_and_the_grand_challenge(self):
+        from research_harness.principles import CONSTITUTION_PATH, PREVIOUS_CONSTITUTION, constitution_contract
+        self.assertEqual(constitution_contract()["version"], "7")
+        self.assertEqual(PREVIOUS_CONSTITUTION["version"], "6")
         text = CONSTITUTION_PATH.read_text(encoding="utf-8")
-        for phrase in ("lineage-v1", "sampled-v1", "five external original papers", "ten candidates", "random sample",
-                       "Direction by Grand Challenge", "adequate transfer"):
+        for phrase in ("lineage-v1", "sampled-v1", "five full-read external cases", "ten abstract-read candidates",
+                       "random sample", "Direction by Grand Challenge", "adequate transfer", "Tools and gates"):
             self.assertIn(phrase, text)

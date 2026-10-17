@@ -419,14 +419,16 @@ class ClaimDependencyTests(DevelopmentCase):
         self.assertTrue(research_decisions.decision_state(records, self.artifacts, "write")["ready"])
 
     def test_legacy_claim_and_decision_survive_explicit_constitution_adoption(self):
-        self.build_managed_study()
-        with patch.object(development, "uses_claim_dependencies", return_value=False):
-            plan, execution = self.run_cycle(bind_plan(self, self.plan()))
-            self.execution_payload = execution
-            self.mutate(development.assess_cycle, self.assessment(plan, execution))
-            self.save_checkpoint()
-            ManagedStrategy(self).decide(phase="result")
-        before = self.read_state()
+        from constitution_fixtures import distribute_version_six
+        with distribute_version_six():
+            self.build_managed_study()
+            with patch.object(development, "uses_claim_dependencies", return_value=False):
+                plan, execution = self.run_cycle(bind_plan(self, self.plan()))
+                self.execution_payload = execution
+                self.mutate(development.assess_cycle, self.assessment(plan, execution))
+                self.save_checkpoint()
+                ManagedStrategy(self).decide(phase="result")
+            before = self.read_state()
         changed = self.root / "constitution-v8.md"
         changed.write_text("# Research constitution\n\nVersion: 8\n\nAn explicitly adopted contract.\n", encoding="utf-8")
         with patch.object(principles, "CONSTITUTION_PATH", changed):
@@ -614,17 +616,10 @@ class LegacyReportShapeTests(SourceLimitedCase):
 
 class ConstitutionCompatibilityTests(DevelopmentCase):
     def check_previous_contract(self, profile):
+        from constitution_fixtures import distribute_version_six
         from research_harness.cohort_evidence import cohort_report
         from research_harness.literature import foundation_state
         from research_harness.synthesis import synthesis_state
-        if profile == "research":
-            self.prepared_study()
-        else:
-            work = self.configured(profile)
-            link = self.read_source()
-            self.complete_foundation(work, profile)
-            self.mutate(self.api().record_standards, self.standards(link, profile))
-        records = self.store.snapshot()["records"]
         def read_reports(snapshot):
             return [principles.configuration_state(snapshot, self.artifacts, profile),
                     foundation_state(snapshot, self.artifacts, profile),
@@ -632,26 +627,35 @@ class ConstitutionCompatibilityTests(DevelopmentCase):
                     cohort_report(snapshot, self.artifacts, []),
                     principles.configuration_state(snapshot, self.artifacts,
                         "verification" if profile == "research" else "research")]
-        before = read_reports(records)
-        changed = self.root / "constitution-v7.md"
-        changed.write_text("# Research constitution\n\nVersion: 7\n\nA revised distributed contract.\n", encoding="utf-8")
-        with patch.object(principles, "CONSTITUTION_PATH", changed):
-            self.assertEqual(read_reports(records), before)
-            # Full serialized reports are the native frozen-snapshot audit contract.
-            self.assertEqual(json.dumps(read_reports(records), ensure_ascii=False).encode("utf-8"),
-                             json.dumps(before, ensure_ascii=False).encode("utf-8"))
-            self.assertEqual(digest(read_reports(records)), digest(before))
-            adopted = records["configuration"]["research"]["constitution"]
-            missing = copy.deepcopy(records)
-            missing["constitution"] = {}
-            self.assertFalse(principles.configuration_state(missing, self.artifacts, profile)["ready"])
-            different = copy.deepcopy(records)
-            different["configuration"]["research"]["constitution"]["version"] = "5"
-            self.assertIn("constitution_revalidation_required", {o["code"] for o in
-                principles.configuration_state(different, self.artifacts, profile)["obligations"]})
-            self.mutate(principles.revalidate_constitution, {
-                "previous_sha256": adopted["sha256"], "reason": "Explicitly adopt Version 7."})
-            self.assertEqual(principles.configuration_report(self.store, profile)["constitution"]["version"], "7")
+        # The store adopted Version 6 under release 0.50.1.
+        with distribute_version_six():
+            if profile == "research":
+                self.prepared_study()
+            else:
+                work = self.configured(profile)
+                link = self.read_source()
+                self.complete_foundation(work, profile)
+                self.mutate(self.api().record_standards, self.standards(link, profile))
+            records = self.store.snapshot()["records"]
+            before = read_reports(records)
+        # The current distribution is Version 7.
+        self.assertEqual(principles.constitution_contract()["version"], "7")
+        self.assertEqual(read_reports(records), before)
+        # Full serialized reports are the native frozen-snapshot audit contract.
+        self.assertEqual(json.dumps(read_reports(records), ensure_ascii=False).encode("utf-8"),
+                         json.dumps(before, ensure_ascii=False).encode("utf-8"))
+        self.assertEqual(digest(read_reports(records)), digest(before))
+        adopted = records["configuration"]["research"]["constitution"]
+        missing = copy.deepcopy(records)
+        missing["constitution"] = {}
+        self.assertFalse(principles.configuration_state(missing, self.artifacts, profile)["ready"])
+        different = copy.deepcopy(records)
+        different["configuration"]["research"]["constitution"]["version"] = "5"
+        self.assertIn("constitution_revalidation_required", {o["code"] for o in
+            principles.configuration_state(different, self.artifacts, profile)["obligations"]})
+        self.mutate(principles.revalidate_constitution, {
+            "previous_sha256": adopted["sha256"], "reason": "Explicitly adopt Version 7."})
+        self.assertEqual(principles.configuration_report(self.store, profile)["constitution"]["version"], "7")
 
     def test_version_six_research_reports_are_identical_after_the_distribution_changes(self):
         self.check_previous_contract("research")
