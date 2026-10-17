@@ -66,6 +66,44 @@ class ResearchGateTests(DevelopmentCase):
         report = gate_state(records, self.artifacts, "execution")
         self.assertTrue(report["ready"], report["obligations"])
 
+    def test_returning_to_ideate_requires_the_current_direction_and_an_assessment(self):
+        from managed_strategy_fixtures import bind_plan
+        from research_harness.gates import gate_state, validate_transition
+        self.build_managed_records()
+        plan, execution = self.run_cycle(bind_plan(self, self.plan()))
+        self.mutate(self.development().assess_cycle, self.assessment(plan, execution))
+        records = self.store.snapshot()["records"]
+        previous, proposed = {"stage": "experiment"}, {"stage": "ideate", "status": "in_progress"}
+        self.assertTrue(gate_state(records, self.artifacts, "direction")["ready"])
+        validate_transition(records, self.artifacts, previous, proposed)
+        for change in ("missing_decision", "stale_decision", "missing_assessment"):
+            with self.subTest(change=change):
+                changed = copy.deepcopy(records)
+                if change == "missing_decision":
+                    changed["strategy_selection"].pop("decision")
+                elif change == "stale_decision":
+                    changed["search_selection"].pop("research:direct")
+                else:
+                    changed["cycle_assessment"] = {}
+                if change != "missing_assessment":
+                    self.assertFalse(gate_state(changed, self.artifacts, "direction")["ready"])
+                self.assert_error("readiness_required", lambda: validate_transition(changed, self.artifacts, previous, proposed))
+        # An unmanaged workspace keeps the existing assessment-only return rule.
+        changed = copy.deepcopy(records)
+        changed.pop("research_intent")
+        changed.pop("strategy_selection")
+        changed.pop("workspace", None)
+        for profile in ("research", "verification"):
+            changed["configuration"]["research"]["profile"] = profile
+            validate_transition(changed, self.artifacts, previous, proposed)
+        self.store.mutate("fixture.historical_stage", {}, lambda tx: (
+            tx.put("strategy_selection", "decision", {"id": "absent-historical-decision"}),
+            tx.put("workspace", "study", {"stage": "ideate", "status": "in_progress"})),
+            expected_revision=self.store.revision, request_id="historical-stage")
+        replayed = self.store.snapshot()["records"]
+        self.assertEqual(replayed["workspace"]["study"]["stage"], "ideate")
+        self.assertFalse(gate_state(replayed, self.artifacts, "direction")["ready"])
+
     def test_managed_next_follows_the_current_milestone_with_advisory_preparation(self):
         from research_harness.cli import status_report
         from research_harness.gates import gate_state

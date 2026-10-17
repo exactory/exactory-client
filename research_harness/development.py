@@ -17,7 +17,8 @@ the native math controller's budgets, reservations or recovery authority.
 import json
 
 from .artifacts import ArtifactStore
-from .claim_dependencies import accept_claim_dependencies, project_claim_dependencies, uses_claim_dependencies
+from .claim_dependencies import (accept_claim_dependencies, collect_source_ids, project_claim_dependencies,
+                                 project_source_inputs, uses_claim_dependencies)
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
@@ -104,7 +105,7 @@ def _scope(value, objective):
 
 
 class _Context:
-    def __init__(self, records, artifacts, *, restore_inputs=None, project_claims=False):
+    def __init__(self, records, artifacts, *, restore_inputs=None, project_claims=False, project_readings=True):
         self.artifacts = Evaluation.of(records, artifacts)
         records = self.artifacts.records
         self.records = records
@@ -113,6 +114,8 @@ class _Context:
         self.compatible = project_claims or restore_inputs is not None or uses_claim_dependencies(records)
         self.restore_inputs = restore_inputs
         self.managed = self.compatible and (restore_inputs is None or restore_inputs.get("project_claims", False))
+        self.project_readings = (self.managed and project_readings
+                                 and (restore_inputs is None or restore_inputs.get("project_readings", True)))
         artifacts = self.artifacts
         config = records.get("configuration", {}).get("research")
         if config and config["profile"] != "research":
@@ -205,6 +208,10 @@ class _Context:
         if candidate is not None and self.managed:
             candidate = dict(candidate, preparation_digest=self.synthesis["preparation_digest"],
                              constitution=self.configuration["constitution"])
+            if not self.project_readings:
+                candidate["source_records_digest"] = digest(self.sources)
+                candidate["digest"] = digest(self.project_dependencies(
+                    {key: value for key, value in candidate.items() if key != "digest"}, "candidate"))
         return candidate, pending
 
     def verify_checkpoint(self, checkpoint):
@@ -242,7 +249,7 @@ class _Context:
         current = self.project_dependencies({"payload": report["payload"], "dependencies": report["dependencies"]}, "record")
         return self.accept_dependencies(recorded, current, recorded_inputs=inputs, kind="record")
 
-    def rebuild_candidate(self, saved, record_id):
+    def rebuild_candidate(self, saved, record_id, *, recorded_digest=None, scoped=False):
         selection = self.records.get("development_selection", {}).get("candidate")
         checkpoint = self.records.get("checkpoint", {}).get((selection or {}).get("checkpoint_id"))
         if checkpoint is None or checkpoint.get("assessment_id") is None:
@@ -260,19 +267,35 @@ class _Context:
         if dependencies.get("preparation") is None or dependencies.get("constitution") is None:
             self.require_reassessment(record_id, "recorded preparation and constitution")
         body = {key: value for key, value in (saved or {}).items() if key != "digest"}
-        if saved is not None and digest(body) != saved["digest"]:
+        if saved is not None:
             if not accept_claim_dependencies(saved["digest"], digest(project_claim_dependencies(body, managed=True, kind="candidate")),
                                              managed=True, recorded_inputs=body, kind="candidate"):
                 self.require_reassessment(record_id, "authenticated recorded candidate")
-            candidate, _ = self.build_candidate()
-            candidate = dict(candidate, preparation_digest=dependencies["preparation"], constitution=dependencies["constitution"])
-        else:
+        expected = saved["digest"] if saved is not None else recorded_digest
+        # Current reading projection, 693fa04's broad managed inventory, and
+        # 0.50.1's complete audit composition, all on this recorded snapshot.
+        modes = ((True, True), (True, False), (False, False))
+        if saved is not None and digest(body) == expected:
+            modes = ((False, False),)
+        for project_claims, project_readings in modes:
             restored = _Context(self.records, self.artifacts,
-                                restore_inputs={"dependencies": dependencies, "record_id": record_id})
+                restore_inputs={"dependencies": dependencies, "record_id": record_id,
+                                "project_claims": project_claims, "project_readings": project_readings})
             candidate, _ = restored.build_candidate()
-        if saved is not None and candidate != saved:
-            self.require_reassessment(record_id, "matching recorded candidate fields and component identities")
-        return candidate
+            if saved is not None:
+                if candidate == saved:
+                    return candidate
+                continue
+            if candidate is None:
+                continue
+            inputs = {key: value for key, value in candidate.items() if key != "digest"}
+            if scoped:
+                from .publication_scope import rebuild_scoped_dependencies
+                inputs = rebuild_scoped_dependencies(self.records, self.artifacts, candidate)
+            if accept_claim_dependencies(expected, project_claim_dependencies(inputs, managed=True, kind="candidate"),
+                                         managed=True, recorded_inputs=inputs, kind="candidate"):
+                return candidate
+        self.require_reassessment(record_id, "matching recorded candidate fields and component identities")
 
     def verify_assignment_candidate(self, identifier, recorded, scoped):
         assignment = _get(self.records, "review_assignment", identifier, "unknown_review_assignment")
@@ -370,12 +393,14 @@ class _Context:
                 input_revision = self.verify_assignment_candidate(bound.get("assignment_id", identifier), recorded, scoped)
             evaluation = self.read_snapshot(input_revision, identifier)
             snapshot = evaluation.records
-            historical = _Context(snapshot, evaluation, project_claims=True)
-            original = historical.rebuild_candidate(saved, identifier)
+            historical = _Context(snapshot, evaluation, project_claims=True, project_readings=self.project_readings)
+            original = historical.rebuild_candidate(saved, identifier, recorded_digest=recorded, scoped=scoped)
             if scoped:
                 from .publication_scope import rebuild_scoped_dependencies
                 original_inputs = rebuild_scoped_dependencies(snapshot, self.artifacts, original)
-                projected_claim = rebuild_scoped_dependencies(snapshot, self.artifacts)
+                projected, _ = historical.build_candidate()
+                projected_claim = rebuild_scoped_dependencies(
+                    snapshot, self.artifacts, None if self.project_readings else projected)
             else:
                 original_inputs = {key: value for key, value in original.items() if key != "digest"}
                 projected, _ = historical.build_candidate()
@@ -389,12 +414,15 @@ class _Context:
             if origin is not None:
                 evaluated = self.read_snapshot(revision - 1, identifier)
                 actual = evaluated.records
-                reviewed = _Context(actual, evaluated, project_claims=True)
-                checked = reviewed.rebuild_candidate(bound["candidate"], identifier)
+                reviewed = _Context(actual, evaluated, project_claims=True, project_readings=self.project_readings)
+                reviewed.rebuild_candidate(bound["candidate"], identifier)
                 if scoped:
-                    reviewed_claim = rebuild_scoped_dependencies(actual, self.artifacts)
+                    projected, _ = reviewed.build_candidate()
+                    reviewed_claim = rebuild_scoped_dependencies(
+                        actual, self.artifacts, None if self.project_readings else projected)
                 else:
-                    reviewed_claim = reviewed.project_dependencies(checked, "candidate")
+                    projected, _ = reviewed.build_candidate()
+                    reviewed_claim = reviewed.project_dependencies(projected, "candidate")
                     reviewed_claim = {key: value for key, value in reviewed_claim.items() if key != "digest"}
                 if reviewed_claim != projected_claim:
                     self.require_reassessment(identifier, "matching original and reviewed claim inputs")
@@ -1408,7 +1436,7 @@ def _branch_inputs(context):
     return branches
 
 
-def _source_inputs(context, evidence):
+def _collect_source_inputs(context, evidence):
     identifiers = {e["reference"]["link"]["version_id"] for e in evidence if e["reference"]["kind"] == "source"}
     if not context.managed:
         identifiers.update(i["version_id"] for i in context.foundation["inventory"])
@@ -1424,22 +1452,9 @@ def _source_inputs(context, evidence):
                 "alias": {i: a for i, a in records.get("alias", {}).items() if any(x["work_id"] in families for x in a["assertions"])},
                 "reading": {i: r for i, r in records.get("reading", {}).items() if r["version_id"] in identifiers},
                 "source_bundle": {i: b for i, b in records.get("source_bundle", {}).items() if b["version_id"] in identifiers}}
-    source_ids = set()
-
-    def collect(value):
-        if isinstance(value, dict):
-            if isinstance(value.get("source_id"), str):
-                source_ids.add(value["source_id"])
-            source_ids.update(value.get("source_ids", []))
-            for child in value.values():
-                collect(child)
-        elif isinstance(value, list):
-            for child in value:
-                collect(child)
-
-    collect(selected)
+    source_ids = collect_source_ids(selected)
     if not context.managed:
-        collect(context.foundation)
+        source_ids.update(collect_source_ids(context.foundation))
     selected["source"] = {i: records["source"][i] for i in sorted(source_ids)}
     return selected
 
@@ -1481,7 +1496,8 @@ def _compose_candidate(context, *, branches=None):
         if branch["assessment"] is not None:
             all_evidence.update({digest(e["reference"]): e for e in branch["assessment"]["evidence"]})
     evidence = [all_evidence[k] for k in sorted(all_evidence)]
-    context.sources = _source_inputs(context, evidence)
+    context.sources = _collect_source_inputs(context, evidence)
+    sources = project_source_inputs(context.sources, evidence) if context.managed else context.sources
     result_hashes = sorted({e["reference"]["artifact"]["sha256"] for e in evidence if e["reference"]["kind"] == "result"})
     candidate = {"objective": context.objective, "scope": assessment["payload"]["scope"],
                  "checkpoint_id": checkpoint["id"], "checkpoint_digest": checkpoint["digest"],
@@ -1490,7 +1506,7 @@ def _compose_candidate(context, *, branches=None):
                  "constitution": context.configuration["constitution"], "result_hashes": result_hashes,
                  "evidence": [e["reference"] for e in evidence], "branches_digest": digest(context.project_dependencies(context.branches, "branches")),
                  "strategy_accounts_digest": digest(dict(context.records.get("strategy_account", {}))),
-                 "source_records_digest": digest(context.sources),
+                 "source_records_digest": digest(sources),
                  "authors": cycle_authors(context.records)}
     changes = objective_changes(context.records)
     if changes:

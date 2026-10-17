@@ -4,6 +4,7 @@ import copy
 import json
 import unittest
 from collections import Counter
+from pathlib import Path
 from unittest.mock import patch
 
 from development_fixtures import DevelopmentCase
@@ -63,6 +64,106 @@ class ClaimDependencyTests(DevelopmentCase):
         self.read_source(2)
         self.record_impact()
         self.assert_current(before)
+
+    def test_unused_abstract_reading_of_a_cited_paper_keeps_the_reviewed_claim_current(self):
+        from research_harness.reading import record_reading
+        self.build_managed_candidate()
+        before = self.read_state()
+        self.mutate(record_reading, self.abstract_note(self.links[0]["version_id"], "unused-abstract"))
+        self.assert_current(before)
+        report = self.read_state()
+        self.assertIn("unused-abstract", report["review_inputs"]["sources"]["reading"])
+
+    def test_unmanaged_candidate_keeps_the_broad_reading_currency(self):
+        from research_harness.reading import record_reading
+        self.prepared_study()
+        plan, execution = self.run_cycle(self.plan())
+        self.mutate(development.assess_cycle, self.assessment(plan, execution))
+        self.save_checkpoint()
+        self.mutate(development.record_readiness_review, self.review(execution))
+        self.assertTrue(self.read_state()["ready"])
+        self.mutate(record_reading, self.abstract_note(self.links[0]["version_id"], "unused-unmanaged-abstract"))
+        report = self.read_state()
+        self.assertFalse(report["ready"])
+        self.assertIn("readiness_review_stale", {item["code"] for item in report["obligations"]})
+
+    def build_broad_reading_candidate(self, *, legacy):
+        from research_harness.reading import record_reading
+        self.build_managed_study()
+        self.mutate(record_reading, self.abstract_note(self.links[0]["version_id"], "earlier-unused-abstract"))
+        # Freeze the broad source formula used by 693fa04, with the 0.50.1
+        # global composition when requested. The ordinary reader is upgraded.
+        with patch.object(development, "project_source_inputs", lambda sources, evidence: sources, create=True), \
+                patch.object(development, "uses_claim_dependencies", return_value=not legacy):
+            plan, execution = self.run_cycle(bind_plan(self, self.plan()))
+            self.execution_payload = execution
+            self.mutate(development.assess_cycle, self.assessment(plan, execution))
+            self.save_checkpoint()
+            ManagedStrategy(self).decide(phase="result")
+            saved = self.read_state()
+            self.assertTrue(saved["ready"], saved["obligations"])
+        return saved
+
+    def check_broad_reading_candidate(self, *, legacy):
+        from research_harness.reading import record_reading
+        saved = self.build_broad_reading_candidate(legacy=legacy)
+        upgraded = self.read_state()
+        self.assertTrue(upgraded["ready"], upgraded["obligations"])
+        self.assertNotEqual(saved["candidate"]["digest"], upgraded["candidate"]["digest"])
+        records = self.store.snapshot()["records"]
+        records["readiness_review"] = {}
+        context = development._Context(records, self.artifacts)
+        self.assertTrue(context.verify_candidate_digest(saved["candidate"]["digest"], upgraded["candidate"],
+                                                       record_id="hash-only-support"))
+        self.mutate(record_reading, self.abstract_note(self.links[0]["version_id"], "later-unused-abstract"))
+        self.assert_current(upgraded)
+
+    def test_previous_claim_digest_authenticates_broad_readings_before_narrowing(self):
+        self.check_broad_reading_candidate(legacy=False)
+
+    def test_legacy_digest_authenticates_broad_readings_before_narrowing(self):
+        self.check_broad_reading_candidate(legacy=True)
+
+    def test_previous_broad_alias_review_keeps_its_authenticated_origin_current(self):
+        self.build_broad_reading_candidate(legacy=True)
+        records = self.store.snapshot()["records"]
+        selected = records["development_selection"]["review"]["review_id"]
+        payload = copy.deepcopy(records["readiness_review"][selected]["payload"])
+        payload["id"] = "previous-broad-alias-review"
+        with patch.object(development, "project_source_inputs", lambda sources, evidence: sources):
+            self.mutate(development.record_readiness_review, payload)
+        saved = self.store.snapshot()["records"]["readiness_review"][payload["id"]]
+        self.assertIn("candidate_inputs", saved)
+        before = self.read_state()
+        self.assertTrue(before["ready"], before["obligations"])
+        from research_harness.reading import record_reading
+        self.mutate(record_reading, self.abstract_note(self.links[0]["version_id"], "unused-after-alias"))
+        self.assert_current(before)
+
+    def test_changed_cited_passage_or_used_full_reading_still_invalidates_reviews(self):
+        self.build_managed_candidate()
+        before = self.read_state()
+        original = self.store.snapshot()["records"]
+        for change in ("cited_passage", "full_reading", "required_bundle"):
+            with self.subTest(change=change):
+                records = copy.deepcopy(original)
+                if change == "cited_passage":
+                    link = records["cycle_assessment"]["assessment-1"]["payload"]["development"]["novelty"]["evidence"][0]["link"]
+                    link["locator"]["quote"] = "A different cited passage."
+                else:
+                    identifier = next(e["reading"]["reading_id"] for e in before["review"]["evidence"]
+                                      if e["reference"]["kind"] == "source")
+                    reading = records["reading"][identifier]
+                    if change == "full_reading":
+                        reading["notes"]["evidence"]["text"] = "A changed full-reading finding."
+                    else:
+                        bundle = records["source_bundle"][reading["bundle_id"]]
+                        bundle["units"].append(dict(bundle["units"][0], id="new-required-unit"))
+                report = development.readiness_state(records, self.artifacts)
+                self.assertFalse(report["ready"])
+                self.assertTrue(report["obligations"])
+                decision = research_decisions.decision_state(records, self.artifacts, "write")
+                self.assertFalse(decision["ready"], decision)
 
     def test_new_search_judgment_keeps_the_supported_claim_current(self):
         self.build_managed_candidate()
@@ -419,7 +520,9 @@ class ClaimDependencyTests(DevelopmentCase):
         self.assertTrue(research_decisions.decision_state(records, self.artifacts, "write")["ready"])
 
     def test_legacy_claim_and_decision_survive_explicit_constitution_adoption(self):
-        self.build_managed_study()
+        previous = Path(__file__).parent / "fixtures/research/constitution-v6.txt"
+        with patch.object(principles, "CONSTITUTION_PATH", previous):
+            self.build_managed_study()
         with patch.object(development, "uses_claim_dependencies", return_value=False):
             plan, execution = self.run_cycle(bind_plan(self, self.plan()))
             self.execution_payload = execution
@@ -617,14 +720,6 @@ class ConstitutionCompatibilityTests(DevelopmentCase):
         from research_harness.cohort_evidence import cohort_report
         from research_harness.literature import foundation_state
         from research_harness.synthesis import synthesis_state
-        if profile == "research":
-            self.prepared_study()
-        else:
-            work = self.configured(profile)
-            link = self.read_source()
-            self.complete_foundation(work, profile)
-            self.mutate(self.api().record_standards, self.standards(link, profile))
-        records = self.store.snapshot()["records"]
         def read_reports(snapshot):
             return [principles.configuration_state(snapshot, self.artifacts, profile),
                     foundation_state(snapshot, self.artifacts, profile),
@@ -632,7 +727,17 @@ class ConstitutionCompatibilityTests(DevelopmentCase):
                     cohort_report(snapshot, self.artifacts, []),
                     principles.configuration_state(snapshot, self.artifacts,
                         "verification" if profile == "research" else "research")]
-        before = read_reports(records)
+        previous = Path(__file__).parent / "fixtures/research/constitution-v6.txt"
+        with patch.object(principles, "CONSTITUTION_PATH", previous):
+            if profile == "research":
+                self.prepared_study()
+            else:
+                work = self.configured(profile)
+                link = self.read_source()
+                self.complete_foundation(work, profile)
+                self.mutate(self.api().record_standards, self.standards(link, profile))
+            records = self.store.snapshot()["records"]
+            before = read_reports(records)
         changed = self.root / "constitution-v7.md"
         changed.write_text("# Research constitution\n\nVersion: 7\n\nA revised distributed contract.\n", encoding="utf-8")
         with patch.object(principles, "CONSTITUTION_PATH", changed):

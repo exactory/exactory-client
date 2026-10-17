@@ -1,5 +1,6 @@
 import copy
 from functools import partial
+from pathlib import Path
 from unittest.mock import patch
 
 from development_fixtures import DevelopmentCase
@@ -493,11 +494,13 @@ class DevelopmentTests(DevelopmentCase):
 
     def test_archived_policy_keeps_readiness_until_explicit_unmanaged_adoption_requires_refresh(self):
         api = self.development()
-        _, execution, payload = self.prepared_candidate()
-        review = self.review(execution)
-        receipt = self.mutate(api.record_readiness_review, review)
         principles = self.api("principles")
-        original_policy = principles.CONSTITUTION_PATH.read_bytes()
+        previous = Path(__file__).parent / "fixtures/research/constitution-v6.txt"
+        with patch.object(principles, "CONSTITUTION_PATH", previous):
+            _, execution, payload = self.prepared_candidate()
+            review = self.review(execution)
+            receipt = self.mutate(api.record_readiness_review, review)
+            original_policy = principles.CONSTITUTION_PATH.read_bytes()
         policy = self.root / "revised-constitution.md"
         policy.write_bytes(original_policy.replace(b"Version: 6", b"Version: 8") + b"\nA test-only policy revision.\n")
         with patch.object(principles, "CONSTITUTION_PATH", policy):
