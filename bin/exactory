@@ -737,7 +737,7 @@ def _is_https_url(value: str) -> bool:
     """Refuse the https URLs that the server's URL.canParse (the WHATWG URL parser) certainly
     refuses: an empty host, an unclosed or invalid IPv6 literal, a forbidden host code point, or an
     invalid port. International and numeric hosts are left to the server, which refuses an invalid
-    one with a 400, so this check never refuses a URL that the server accepts. The locator is posted
+    one with a 422, so this check never refuses a URL that the server accepts. The locator is posted
     as given."""
     # WHATWG removes ASCII tabs and newlines, reads a backslash as a slash, and ends the authority
     # at the first slash, backslash, question mark, or number sign.
