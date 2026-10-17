@@ -267,6 +267,8 @@ class Store:
                 raise SearchError("revision_conflict", "Expected revision differs", {"expected": expected_revision, "actual": revision})
             sink = ContentSink(self)
             payload = build(_strict_json(canonical_bytes(document), "corrupt_state"), sink)
+            from .provenance import append_import_identities
+            append_import_identities(payload, sink)
             payload = _strict_json(canonical_bytes(payload), "invalid_json")
             if any(payload.get(key) != value for key, value in identity.items()):
                 raise SearchError("invalid_input", "Builder changed the command identity")

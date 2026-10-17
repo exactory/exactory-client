@@ -81,7 +81,11 @@ Every `relevant` or `contradictory` result needs complete `fulltext` reading.
 active or stale deferrals leave a gap. Include all material common searches for
 these formulations when reassessing, so an old empty search cannot hide a later
 settling source. Retain earlier gaps too: a later bound search's `resolved` entry,
-resolved disposition and full reading can clear an earlier uncertain hit; a later
+resolved disposition can clear an earlier uncertain hit. `out_of_scope` removes
+that hit's reading obligation. `duplicate` needs an explicit
+`minimum.duplicate_resolutions` entry with `search_digest`, `work_id` and
+`canonical_work_id`; the canonical source must be `relevant` or `contradictory`
+in that search and completely read. Decisive judgments still require reading; a later
 search covering the same queries can repair a coverage gap. The controller checks this minimum at fresh resolved findings
 and root closure; independent review judges scientific sufficiency.
 Unresolved cannot support a claim that the statement was open, but can support a

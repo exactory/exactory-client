@@ -1200,6 +1200,12 @@ it as `findings.openness.minimum`. The exporter delivers records and captured
 source bytes from the associated common workspace. Other material searches for
 the same formulations must be included on fresh resolved review. The exact
 schemas and `openness_*` refusal codes are in the math-solver `SEARCH.md`.
+Retain earlier uncertain hits and their explicit later `resolved` judgments.
+`out_of_scope` removes the uncertain hit's reading obligation. A `duplicate`
+needs `minimum.duplicate_resolutions: [{search_digest, work_id, canonical_work_id}]`;
+the canonical source must be `relevant` or `contradictory` in that same search
+and fully read. Decisive judgments retain their reading obligations. A missing
+canonical binding or reading leaves `openness_reading_gap`.
 A new native checkpoint after version 2 closure reopens final openness and root
 closure review, retaining accepted proofs and the earlier closure record.
 
@@ -1217,6 +1223,15 @@ nesting a digest in JSON, importing a canonical `blob`, or labelling an artifact
 (`exploratory_evidence`). A probe-derived certificate or Lean proof needs native
 admission, its actual verification and candidate interpretation. Historical
 accepted imports replay unchanged.
+Normalized review-packet JSON references, including native problem snapshots,
+carry `raw_identities: [ArtifactRef]`.
+Export first appends checked `native_import_identity` records in the associated
+common store: `{schema_version: 1, canonical_digest, raw: ArtifactRef}`. Imports
+and fresh audits verify the original bytes against their canonical digest and
+consult the aliases before resolving shared probe origins, including origins
+recorded later. Missing original bytes require an original-artifact export.
+Packet assessment and historical replay publish no objects or aliases; recorded
+packets remain readable.
 `plan` validates complete `problem.json` and precondition inputs directly; neither
 `plan` nor `begin` requires the local `study/problem.md` file. The reviewed proposal
 study digests remain required. The [remaining order table](../skills/math-solver/SKILL.md#remaining-order-conditions)

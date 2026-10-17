@@ -121,7 +121,7 @@ def freeze_execution_inputs(root, node, spec, content, foundation=None):
 
 def import_inputs(root, inputs, content, *, state=None, common_workspace=None):
     seen = set()
-    bindings = []
+    bindings, loaded = [], []
     for item in s.records(inputs):
         s.closed(item, "path digest kind")
         s.choice(item["kind"], {"artifact", "blob"})
@@ -141,13 +141,18 @@ def import_inputs(root, inputs, content, *, state=None, common_workspace=None):
         else:
             s.require(hashlib.sha256(raw).hexdigest() == item["digest"], "Input digest differs", "digest_mismatch")
             content.put_artifact(raw)
+        raw_digest = hashlib.sha256(raw).hexdigest()
+        from .provenance import retain_import_identity
+        retain_import_identity(content, item["digest"], raw)
+        loaded.append((item, raw_digest))
+    for item, raw_digest in loaded:
+        origins = []
         if state is not None:
             from .provenance import collect_probe_origins
-            raw_digest = hashlib.sha256(raw).hexdigest()
             origins = collect_probe_origins(root, state, [item["digest"], raw_digest], content=content,
                                             common_workspace=common_workspace)
-            if origins or raw_digest != item["digest"]:
-                bindings.append({"digest": item["digest"], "raw_digest": raw_digest, "origins": origins})
+        if origins or raw_digest != item["digest"]:
+            bindings.append({"digest": item["digest"], "raw_digest": raw_digest, "origins": origins})
     return bindings
 
 

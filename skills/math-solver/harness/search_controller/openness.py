@@ -4,7 +4,8 @@ from . import schema as s
 
 
 def validate_minimum(value):
-    s.closed(value, "schema_version statement neighbours searches reading_digests settling_work_id")
+    s.closed(value, "schema_version statement neighbours searches reading_digests settling_work_id"
+             + (" duplicate_resolutions" if isinstance(value, dict) and "duplicate_resolutions" in value else ""))
     s.integer(value["schema_version"], 1, 1)
     s.text(value["statement"])
     s.strings(value["neighbours"])
@@ -17,6 +18,16 @@ def validate_minimum(value):
         s.closed(item, "formulation search_digest")
         s.text(item["formulation"])
         s.digest_string(item["search_digest"])
+    seen = set()
+    for item in s.records(value.get("duplicate_resolutions", [])):
+        s.closed(item, "search_digest work_id canonical_work_id")
+        s.digest_string(item["search_digest"])
+        s.text(item["work_id"])
+        s.text(item["canonical_work_id"])
+        key = (item["search_digest"], item["work_id"])
+        s.require(key not in seen and item["work_id"] != item["canonical_work_id"],
+                  "Each duplicate needs one distinct canonical source")
+        seen.add(key)
 
 
 def check_search_coverage(search):
@@ -56,7 +67,7 @@ def audit_minimum(finding, claim, records, artifacts, delivered):
     validate_minimum(minimum)
     s.require(minimum["statement"] == claim["statement"], "Openness minimum names a different exact statement", "openness_statement_mismatch")
     formulations = {minimum["statement"], *minimum["neighbours"]}
-    covered, required = set(), set()
+    covered, required, duplicates = set(), set(), set()
     searches = {s.digest(row): row for row in records.get("literature_search", {}).values()}
     bound = set(finding["evidence"])
     selected = {row["search_digest"] for row in minimum["searches"]}
@@ -66,7 +77,7 @@ def audit_minimum(finding, claim, records, artifacts, delivered):
         if not (search.get("question") in formulations or formulations.intersection(search["queries"])):
             continue
         material = search.get("gaps") or any(row["disposition"] in {
-            "relevant", "contradictory", "potentially_relevant", "unresolved"} for row in search["dispositions"])
+            "relevant", "contradictory", "potentially_relevant", "unresolved", "duplicate"} for row in search["dispositions"])
         s.require(not material or identity in selected,
                   "Reassess material search evidence for the declared formulations", "openness_search_stale")
     pinned_readings = {identity: row for identity, row in records.get("reading", {}).items()
@@ -91,10 +102,22 @@ def audit_minimum(finding, claim, records, artifacts, delivered):
             if row["disposition"] in {"unresolved", "potentially_relevant"}:
                 s.require(find_reassessment(search, formulation, selected_records, work_id=row["work_id"]) is not None,
                           "Unresolved search results leave an openness gap", "openness_reading_gap")
-                required.add(row["work_id"])
+                # The resolving search supplies the obligation: out_of_scope
+                # removes it; duplicate transfers it to its decisive source.
+            elif row["disposition"] == "duplicate":
+                duplicates.add((identity, row["work_id"]))
         required.update(row["work_id"] for row in search["dispositions"]
                         if row["disposition"] in {"relevant", "contradictory"})
         covered.add(formulation)
+    resolutions = {(row["search_digest"], row["work_id"]): row["canonical_work_id"]
+                   for row in minimum.get("duplicate_resolutions", [])}
+    s.require(set(resolutions) == duplicates,
+              "Bind every duplicate to its decisive canonical source in the exact search", "openness_reading_gap")
+    for (identity, work), canonical in resolutions.items():
+        s.require(any(row["work_id"] == canonical and row["disposition"] in {"relevant", "contradictory"}
+                      for row in searches[identity]["dispositions"]),
+                  "A duplicate's canonical source must be decisive in the bound search", "openness_reading_gap")
+        required.add(canonical)
     s.require(covered == formulations, "Search every declared neighbouring formulation and the exact statement", "openness_search_missing")
     s.require(set(minimum["reading_digests"]) <= bound & delivered,
               "The finding and observed packet must bind every full reading", "openness_evidence_mismatch")

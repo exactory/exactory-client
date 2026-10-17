@@ -186,7 +186,7 @@ def _closure(seed, state, content, artifacts, *, write, common_records=None):
     common_artifacts = {row["sha256"]: row for row in references(common_records or {})}
     pending, seen, found, unavailable = list(_digests(seed)), set(), {}, []
     executables, inventories = _native_executables(seed, state, content)
-    provenance = {}
+    provenance, materialized = {}, {}
     while pending:
         digest = pending.pop()
         if digest in seen:
@@ -227,8 +227,23 @@ def _closure(seed, state, content, artifacts, *, write, common_records=None):
                 if isinstance(identity, str) and identity in (common_records or {}).get(namespace, {}):
                     pending.append(s.digest(common_records[namespace][identity]))
         media = _media(raw, category == "blob")
-        reference = artifacts.put(raw, media) if write else describe_artifact(raw, media)
+        from .provenance import collect_import_sources, publish_import_identity
+        sources = collect_import_sources(digest, state, content, artifacts, common_records or {})
+        reference = describe_artifact(raw, media)
+        if sources:
+            reference["raw_identities"] = [item for item, original in sources]
         found[digest] = {"digest": digest, "kind": category, "artifact": reference}
+        materialized[digest] = (raw, media, sources)
+    if write:
+        # Publish every checked alias before any normalized bytes. An interrupted
+        # export can leave an unavailable source, never untracked canonical data.
+        for digest, (raw, media, sources) in sorted(materialized.items()):
+            for reference, original in sources:
+                publish_import_identity(artifacts, digest, original, publish=False)
+        for raw, media, sources in materialized.values():
+            for reference, original in sources:
+                artifacts.put(original, "application/json")
+            artifacts.put(raw, media)
     return ([found[key] for key in sorted(found)], sorted(unavailable),
             [provenance[key] for key in sorted(provenance)])
 
@@ -280,7 +295,6 @@ def prepare_subject(controller, state, content, subject):
     if "context_digest" in subject and "plan_bindings" in subject:
         from .strategy_refresh import context
         from .strategy_refresh_io import _plan_files, effective_state, plan_binding
-        from .problem_records import pin_problem
         current = effective_state(controller, state, content)
         s.require(content.put_blob(context(current)) == subject["context_digest"],
                   "Strategy context changed before independent review", "strategy_reassessment_stale")
@@ -288,8 +302,7 @@ def prepare_subject(controller, state, content, subject):
             node = state["nodes"][node_id]
             s.require(plan_binding(controller, node) == expected,
                       "Native plans changed before independent review", "strategy_plan_stale")
-            for name, value in _plan_files(controller, node).items():
-                pin_problem(content, value) if name == "problem" else content.put_blob(value)
+            _plan_files(controller, node, content)
 
 
 def export_packet(controller, spec):
@@ -305,15 +318,18 @@ def export_packet(controller, spec):
     with controller.store._writer_lock():
         state = controller.status()
         content = ContentSink(controller.store)
-        import_inputs(controller.root, spec["inputs"], content)
+        common = common_root(controller.root, state, spec["subject"])
+        from .provenance import record_probe_origins
+        bindings = import_inputs(controller.root, spec["inputs"], content, state=state, common_workspace=common)
+        if bindings:
+            record_probe_origins(state, {"bindings": bindings})
         prepare_subject(controller, state, content, spec["subject"])
         content.put_blob(spec["subject"])
-        common = common_root(controller.root, state, spec["subject"])
         records = Store(common, create=True).snapshot()["records"]
         artifacts = ArtifactStore(common)
         value = packet(controller.root, state, content, spec["subject"], spec["kind"],
                        spec["claim_digest"], spec["reviewer"], artifacts, write=True,
-                       openness=spec.get("openness"), common_records=records if "openness" in spec else None)
+                       openness=spec.get("openness"), common_records=records)
         reference = artifacts.put(canonical_bytes(value), "application/json")
         load_packet(artifacts, reference, spec["reviewer"]["actor_id"])
         return {"workspace": str(common), "native_packet": reference,
@@ -361,7 +377,7 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
         if new:
             minimum = value.get("findings", {}).get("openness", {}).get("minimum")
             expected = packet(root, state, content, subject, kind(value), value.get("claim_digest"), value["reviewer"], artifacts,
-                              openness=minimum, common_records=records if minimum is not None else None)
+                              openness=minimum, common_records=records)
             s.require(supplied == expected, "The reviewer packet omits or changes required native scientific evidence", "review_packet_mismatch")
         for entry in supplied["evidence"]:
             artifacts.read(entry["artifact"])

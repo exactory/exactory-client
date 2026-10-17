@@ -1,6 +1,7 @@
 """Shared exploratory origins retained across native byte imports and wrappers."""
 
 import copy
+import hashlib
 import json
 from pathlib import Path
 
@@ -18,8 +19,15 @@ def collect_probe_origins(root, state, digests, *, common_guard=None, content=No
         digests = collect_evidence_identities(digests, content, state)
     digests = set(digests)
     aliases = state["service"].get("import_identities", {})
-    for identity in list(digests):
-        digests.update(aliases.get(identity, []))
+    aliases = {key: set(values) for key, values in aliases.items()}
+    for key, values in getattr(content, "import_identities", {}).items():
+        aliases.setdefault(key, set()).update(values)
+    pending = list(digests)
+    while pending:
+        for identity in aliases.get(pending.pop(), []):
+            if identity not in digests:
+                digests.add(identity)
+                pending.append(identity)
     try:
         cache = getattr(content, "probe_snapshots", {}) if content is not None else {}
         key = (str(common), id(common_guard) if common_guard is not None else None)
@@ -30,6 +38,8 @@ def collect_probe_origins(root, state, digests, *, common_guard=None, content=No
             content.probe_snapshots = cache
         if common_guard is not None:
             s.require(Path(common_guard.root).resolve() == common, "Probe origin guard names another workspace", "review_workspace_mismatch")
+        from research_harness.artifacts import ArtifactStore
+        digests = expand_import_identities(records, ArtifactStore(common), digests, native_aliases=aliases, content=content)
         origins = find_probe_artifact_origins(records, [{"sha256": identity} for identity in digests])
     except ResearchError as error:
         # An untouched historical objective can precede any common store. Once
@@ -48,6 +58,142 @@ def collect_probe_origins(root, state, digests, *, common_guard=None, content=No
         for row in retained.get(identity, []):
             by_identity[s.digest(row)] = row
     return [by_identity[key] for key in sorted(by_identity)]
+
+
+def check_import_identity(identity, artifacts, *, content=None):
+    """Authenticate a raw-to-canonical alias by its original immutable bytes."""
+    s.closed(identity, "schema_version canonical_digest raw")
+    s.integer(identity["schema_version"], 1, 1)
+    s.digest_string(identity["canonical_digest"])
+    from research_harness.artifacts import describe_artifact
+    from research_harness.errors import ResearchError
+    from .reviewer import _read_optional
+    try:
+        raw = artifacts.read(identity["raw"])
+    except ResearchError as error:
+        if error.code != "artifact_missing" or content is None:
+            raise
+        raw = _read_optional(content, identity["raw"]["sha256"], "artifact")
+        if raw is None:
+            raise
+        s.require(describe_artifact(raw, identity["raw"]["media_type"]) == identity["raw"],
+                  "Recovered raw identity differs from its committed descriptor", "invalid_import_identity")
+    check_normalized_identity(identity["canonical_digest"], raw)
+    return raw
+
+
+def check_normalized_identity(digest, raw):
+    """Accept only the two existing lossless native JSON encodings."""
+    from .storage import _strict_json
+    from .problem_records import problem_bytes
+    value = _strict_json(raw, "invalid_import_identity")
+    encodings = {s.digest(value), hashlib.sha256(problem_bytes(value)).hexdigest()}
+    s.require(digest in encodings,
+              "Raw import bytes do not establish their canonical identity", "invalid_import_identity")
+    return encodings
+
+
+def expand_import_identities(records, artifacts, digests, *, native_aliases=None, content=None):
+    """Resolve exported aliases before asking the shared probe-origin resolver."""
+    expanded = set(digests)
+    aliases = {}
+    for identity in records.get("native_import_identity", {}).values():
+        aliases.setdefault(identity["canonical_digest"], []).append(identity)
+    pending = list(expanded)
+    while pending:
+        digest = pending.pop()
+        related = set((native_aliases or {}).get(digest, []))
+        for identity in aliases.get(digest, []):
+            check_import_identity(identity, artifacts, content=content)
+            related.add(identity["raw"]["sha256"])
+        for raw_digest in related:
+            if raw_digest not in expanded:
+                expanded.add(raw_digest)
+                pending.append(raw_digest)
+        s.require(len(expanded) <= 10000, "Probe identity closure is excessive", "dependency_cycle")
+    return expanded
+
+
+def retain_import_identity(content, digest, raw):
+    """Stage original bytes with every content-producing JSON normalization."""
+    raw_digest = hashlib.sha256(raw).hexdigest()
+    if digest != raw_digest:
+        content.put_artifact(raw)
+        if not hasattr(content, "import_identities"):
+            content.import_identities = {}
+        content.import_identities.setdefault(digest, set()).add(raw_digest)
+
+
+def append_import_identities(payload, content):
+    """Persist staged normalization aliases in the same native event as content."""
+    recorded = {(row["digest"], row.get("raw_digest")) for operation in payload["operations"]
+                if operation["kind"] == "probe_origins_recorded" for row in operation["payload"]["bindings"]}
+    bindings = [{"digest": digest, "raw_digest": raw_digest, "origins": []}
+                for digest, sources in sorted(getattr(content, "import_identities", {}).items())
+                for raw_digest in sorted(sources) if (digest, raw_digest) not in recorded]
+    if bindings:
+        payload["operations"].append({"kind": "probe_origins_recorded", "payload": {"bindings": bindings}})
+
+
+def collect_import_sources(digest, state, content, artifacts, records):
+    """Recover checked original JSON bytes without publishing anything."""
+    from research_harness.artifacts import describe_artifact
+    from .reviewer import _read_optional
+    sources, pending, seen = {}, [digest], set()
+    while pending:
+        current = pending.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        s.require(len(seen) <= 10000, "Export identity closure is excessive", "dependency_cycle")
+        for identity in records.get("native_import_identity", {}).values():
+            if identity["canonical_digest"] == current:
+                sources[identity["raw"]["sha256"]] = check_import_identity(identity, artifacts, content=content)
+        raw_digests = set(state["service"].get("import_identities", {}).get(current, []))
+        raw_digests.update(getattr(content, "import_identities", {}).get(current, []))
+        for raw_digest in sorted(raw_digests):
+            if raw_digest in seen or raw_digest in sources:
+                continue
+            raw = _read_optional(content, raw_digest, "artifact")
+            s.require(raw is not None,
+                      "Export the original artifact bytes when a canonical identity's raw bytes cannot be preserved",
+                      "exploratory_evidence" if state["service"].get("probe_origins", {}).get(current) else "missing_evidence")
+            check_normalized_identity(current, raw)
+            sources[raw_digest] = raw
+        pending.extend(key for key in sources if key not in seen)
+    # Flatten the checked chain into portable aliases of the exported identity.
+    for raw in sources.values():
+        check_normalized_identity(digest, raw)
+    sources.pop(digest, None)
+    return [(describe_artifact(sources[key], "application/json"), sources[key]) for key in sorted(sources)]
+
+
+def publish_import_identity(artifacts, digest, raw, *, publish=True):
+    """Commit the checked alias before its canonical export becomes importable."""
+    from research_harness.errors import ResearchError
+    from research_harness.operations import immutable_record, prepared_mutation
+    from research_harness.storage import Store
+    from research_harness.artifacts import describe_artifact
+    reference = describe_artifact(raw, "application/json")
+    encodings = check_normalized_identity(digest, raw)
+    store = Store(artifacts.root)
+    for canonical in sorted(encodings - {reference["sha256"]}):
+        identity = {"schema_version": 1, "canonical_digest": canonical, "raw": reference}
+        key = canonical + ":" + reference["sha256"]
+
+        def prepare(records, value):
+            return [immutable_record(records, "native_import_identity", key, value)], value
+
+        while True:
+            try:
+                prepared_mutation(store, "native_math.import_identity", identity, prepare,
+                                  expected_revision=store.revision, request_id="native-import-identity:" + key)
+                break
+            except ResearchError as error:
+                if error.code != "stale_revision":
+                    raise
+    if publish:
+        artifacts.put(raw, "application/json")
 
 
 def record_probe_origins(state, payload):
