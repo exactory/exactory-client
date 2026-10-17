@@ -11,7 +11,7 @@ import urllib.response
 
 from research_harness import zenodo
 from research_harness.artifacts import ArtifactStore
-from research_harness.remote import begin_intent, resolve_step
+from research_harness.remote import begin_intent, finish_intent, resolve_step
 from research_harness.storage import Store
 from test_draft import (_FakeZenodoApi, _LostResponseZenodoApi, _PlainWorkspaceDepositTestCase,
                         _PublishedRecordZenodoApi, _draft, _read_request, _run_draft_command)
@@ -281,7 +281,7 @@ class TestManagedPublishAnswers(_PlainWorkspaceDepositTestCase):
     def test_a_non_string_doi_keeps_the_claim_and_reads_back(self):
         self.invalid_answer_stays_pending(_published(doi=42))
 
-    def save_old_invalid_answer(self):
+    def save_old_answer(self, answer):
         self.fake_api = _LostResponseZenodoApi("/actions/publish")
         _draft._open_url = self.fake_api
         self.run_intent(1)
@@ -289,21 +289,65 @@ class TestManagedPublishAnswers(_PlainWorkspaceDepositTestCase):
         store = Store(self.workspace_dir)
         intent = self.read_intent()
         receipt_id = intent["id"] + ":resolve:" + str(store.revision)
-        resolve_step(store, intent["id"], "publish", {}, {"kind": "direct_response"})
+        resolve_step(store, intent["id"], "publish", answer, {"kind": "direct_response"})
         return self.read_intent(), uploaded, receipt_id, store.committed_request(receipt_id)
 
     def test_an_old_saved_invalid_answer_recovers_without_changing_any_prior_receipt(self):
-        intent, uploaded, receipt_id, receipt = self.save_old_invalid_answer()
+        intent, uploaded, receipt_id, receipt = self.save_old_answer({})
         records = self.assert_read_back_recovers(intent, uploaded)
         self.assertEqual(records["remote_intent"][intent["id"]]["responses"], intent["responses"])
         self.assertEqual(Store(self.workspace_dir).committed_request(receipt_id), receipt)
         self.assertEqual(records["publication_receipt"][intent["id"]]["published_response"]["id"], 4242)
 
     def test_an_old_saved_invalid_answer_never_republishes_an_unpublished_read_back(self):
-        intent, _, receipt_id, receipt = self.save_old_invalid_answer()
+        intent, _, receipt_id, receipt = self.save_old_answer({})
         self.fake_api = _FakeZenodoApi()
         _draft._open_url = self.fake_api
         _run_draft_command(["reconcile", intent["id"]], 1, self)
         self.assertEqual([r.get_method() for r in self.fake_api.requests], ["GET"])
         self.assertEqual(Store(self.workspace_dir).committed_request(receipt_id), receipt)
         self.assertEqual(self.read_intent()["responses"], intent["responses"])
+
+    def complete_from_a_null_answer(self):
+        """The state that an earlier version left: Zenodo answered the publish request with JSON
+        null, and that version completed the intent with a receipt without a DOI."""
+        intent, uploaded, _, _ = self.save_old_answer(None)
+        state = {"environment": "production", "deposition_id": 4242,
+                 "draft_url": "https://zenodo.org/api/deposit/4242"}
+        receipt = dict(state, intent_id=intent["id"], published_response=None,
+                       uploads=intent["binding"]["uploads"], bundle_digest=intent["binding"]["bundle_digest"],
+                       prepared_revision=intent["binding"]["prepared_revision"])
+        finish_intent(self.store, intent["id"], "publication_receipt", receipt, workspace=state)
+        return intent, uploaded, receipt
+
+    def test_a_receipt_completed_from_a_null_answer_is_read_back_recorded_and_attached(self):
+        intent, uploaded, receipt = self.complete_from_a_null_answer()
+        self.fake_api = _PublishedRecordZenodoApi(uploaded)
+        _draft._open_url = self.fake_api
+        _run_draft_command(["attach-problem"], None, self)
+        self.assertEqual([(r.get_method(), r.full_url) for r in self.fake_api.requests],
+                         [("GET", "https://zenodo.org/api/deposit/depositions/4242")])
+        records = Store(self.workspace_dir).snapshot()["records"]
+        self.assertEqual(records["publication_receipt"][intent["id"]], receipt)
+        self.assertEqual(records["workspace"]["deposit"],
+                         {"environment": "production", "deposition_id": 4242,
+                          "draft_url": "https://zenodo.org/api/deposit/4242", "doi": "10.5281/zenodo.4242",
+                          "concept_doi": "10.5281/zenodo.4241",
+                          "record_url": "https://sandbox.zenodo.org/api/records/4242"})
+        journal = _read_journal(self.workspace_dir)
+        self.assertEqual((journal["settled"], journal["attached"], journal["doi"]), (True, True, "10.5281/zenodo.4242"))
+        self.assertEqual(len(self.exactory.links()), 1)
+
+    def test_a_receipt_completed_from_a_null_answer_stays_unresolved_while_zenodo_shows_no_publication(self):
+        intent, _, receipt = self.complete_from_a_null_answer()
+        self.fake_api = _FakeZenodoApi()
+        _draft._open_url = self.fake_api
+        output = _run_draft_command(["attach-problem"], 1, self)
+        self.assertIn("Zenodo has not confirmed that deposition 4242 is published", output)
+        self.assertNotIn("Traceback", output)
+        self.assertEqual([r.get_method() for r in self.fake_api.requests], ["GET"])
+        records = Store(self.workspace_dir).snapshot()["records"]
+        self.assertEqual(records["publication_receipt"][intent["id"]], receipt)
+        self.assertNotIn("doi", records["workspace"]["deposit"])
+        self.assertFalse(_read_journal(self.workspace_dir)["settled"])
+        self.assertEqual(self.exactory.links(), [])
