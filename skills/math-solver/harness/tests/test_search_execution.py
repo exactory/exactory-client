@@ -784,10 +784,10 @@ class BoundedCommandTerminationTests(WorkspaceTest):
     def setUp(self):
         super().setUp()
         self.started = []
-        popen = subprocess.Popen
+        self.popen_class = subprocess.Popen
 
         def start_and_record(argv, **options):
-            self.started.append(popen(argv, **options))
+            self.started.append(self.popen_class(argv, **options))
             return self.started[-1]
 
         patcher = patch.object(subprocess, "Popen", side_effect=start_and_record)
@@ -802,12 +802,20 @@ class BoundedCommandTerminationTests(WorkspaceTest):
                 process.communicate()
         super().tearDown()
 
+    DEADLINE_SECONDS = 1000
+    FIRST_LINE = b"partial\n"
+
     @contextlib.contextmanager
     def group_gone_at_the_signal(self, error=None):
-        """SIGKILL answers ESRCH, as for a group that ended between the liveness check and the signal. The producer is
-        ended at that moment, so no test depends on when it would end by itself. Each attempt records whether the
-        producer's stdout was already closed, which tells the final wait (closed) from the output loop (open)."""
-        killpg = os.killpg
+        """SIGKILL answers ESRCH, as for a group that ended between the liveness check and the signal; the producer is
+        ended and reaped first, as the vanished group of that case, so the state after the signal does not depend on
+        scheduling, and the launcher then sees no exit status (ECHILD) and records 0. The clock stands still until the
+        output loop has consumed the producer's first line, and a timed wait on a live producer expires at once, so
+        neither the deadline nor the final wait depends on the wall clock. Each attempt records whether the producer's
+        stdout was already closed, which tells the final wait (closed) from the output loop and the output limit
+        (open)."""
+        clock = {"now": 0.0}
+        killpg, read, wait = os.killpg, os.read, self.popen_class.wait
         attempts = []
 
         def answer_for_the_signal(group, number):
@@ -817,50 +825,65 @@ class BoundedCommandTerminationTests(WorkspaceTest):
             if error is not None:
                 raise error
             killpg(group, number)
+            os.waitpid(self.started[-1].pid, 0)
             raise ProcessLookupError(errno.ESRCH, "No such process")
 
-        with patch.object(os, "killpg", side_effect=answer_for_the_signal):
+        def read_and_advance_the_clock(descriptor, size):
+            raw = read(descriptor, size)
+            if self.FIRST_LINE in raw:
+                clock["now"] = self.DEADLINE_SECONDS + 1
+            return raw
+
+        def expire_a_timed_wait(process, timeout=None):
+            if timeout is not None and process.poll() is None:
+                raise subprocess.TimeoutExpired(process.args, timeout)
+            return wait(process, timeout)
+
+        with patch.object(time, "monotonic", lambda: clock["now"]), \
+                patch.object(os, "read", read_and_advance_the_clock), \
+                patch.object(self.popen_class, "wait", expire_a_timed_wait), \
+                patch.object(os, "killpg", side_effect=answer_for_the_signal):
             yield attempts
 
-    def run_bounded(self, script, timeout_seconds):
+    def run_bounded(self, script):
         from search_controller.execution import bounded_command
         directory = Path(self._tmp.name) / "streams"
         directory.mkdir()
-        deadline = time.monotonic() + timeout_seconds
+        deadline = time.monotonic() + self.DEADLINE_SECONDS
         command, reason = bounded_command([sys.executable, "-c", script], str(self.workspace), dict(os.environ),
                                           deadline, directory, 0)
         return command, reason, directory
 
     def test_timeout_in_the_output_loop_keeps_its_reason_when_the_group_is_gone(self):
-        # The producer never ends by itself, so the deadline passes inside the output loop.
+        # The clock passes the deadline once the first line is consumed, while the producer still runs.
         with self.group_gone_at_the_signal() as attempts:
-            command, reason, directory = self.run_bounded("import time\nprint('partial', flush=True)\ntime.sleep(60)\n", 1)
+            command, reason, directory = self.run_bounded("import time\nprint('partial', flush=True)\ntime.sleep(60)\n")
         self.assertEqual(reason, "timeout")
         self.assertEqual(attempts, [{"stdout_closed": False}], "One signal, from the output loop")
-        self.assertEqual(command["exit_code"], -signal.SIGKILL)
-        self.assertEqual((directory / "0.stdout").read_bytes(), b"partial\n")
+        self.assertEqual(command["exit_code"], 0, "No exit status for a group that was reaped before the signal")
+        self.assertEqual((directory / "0.stdout").read_bytes(), self.FIRST_LINE)
 
     def test_output_limit_keeps_its_reason_when_the_group_is_gone(self):
         from search_controller.execution import OUTPUT_LIMIT
         script = "import sys, time\nsys.stdout.write('x' * %d)\nsys.stdout.flush()\ntime.sleep(60)\n" % (OUTPUT_LIMIT + 1)
         with self.group_gone_at_the_signal() as attempts:
-            command, reason, directory = self.run_bounded(script, 10)
+            command, reason, directory = self.run_bounded(script)
         self.assertEqual(reason, "output_limit")
         self.assertEqual(attempts, [{"stdout_closed": False}], "One signal, at the output limit")
-        self.assertEqual(command["exit_code"], -signal.SIGKILL)
+        self.assertEqual(command["exit_code"], 0, "No exit status for a group that was reaped before the signal")
         self.assertEqual(len((directory / "0.stdout").read_bytes()), OUTPUT_LIMIT)
 
     def test_timeout_at_the_final_wait_keeps_its_reason_when_the_group_is_gone(self):
-        # The producer closes descriptors 1 and 2, so the loop ends at EOF, and it never ends by itself, so the final
-        # wait expires at the deadline.
+        # The producer closes descriptors 1 and 2, so the loop ends at EOF before the clock moves, and the timed wait on
+        # the still running producer expires.
         with self.group_gone_at_the_signal() as attempts:
-            command, reason, directory = self.run_bounded("import os, time\nos.close(1)\nos.close(2)\ntime.sleep(60)\n", 1.5)
+            command, reason, directory = self.run_bounded("import os, time\nos.close(1)\nos.close(2)\ntime.sleep(60)\n")
         self.assertEqual(reason, "timeout")
         self.assertEqual(attempts, [{"stdout_closed": True}], "One signal, from the final wait")
-        self.assertEqual(command["exit_code"], -signal.SIGKILL)
+        self.assertEqual(command["exit_code"], 0, "No exit status for a group that was reaped before the signal")
         self.assertEqual((directory / "0.stdout").read_bytes(), b"")
 
     def test_another_signalling_error_stays_visible(self):
         with self.group_gone_at_the_signal(PermissionError(errno.EPERM, "Operation not permitted")), \
                 self.assertRaises(PermissionError):
-            self.run_bounded("import time\ntime.sleep(60)\n", 0.1)
+            self.run_bounded("import time\nprint('partial', flush=True)\ntime.sleep(60)\n")
