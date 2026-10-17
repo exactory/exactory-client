@@ -419,6 +419,14 @@ def launch(controller, run):
     reconcile_runs(controller)
 
 
+def kill_process_group(process):
+    """SIGKILL the producer's group; a group that already ended needs nothing more."""
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+
 def bounded_command(argv, cwd, environment, deadline, directory, number):
     streams = {"stdout": bytearray(), "stderr": bytearray()}
     process = subprocess.Popen(argv, cwd=cwd, env=environment, stdin=subprocess.DEVNULL,
@@ -431,7 +439,7 @@ def bounded_command(argv, cwd, environment, deadline, directory, number):
         if time.monotonic() >= deadline:
             reason = "timeout"
             if process.poll() is None:
-                os.killpg(process.pid, signal.SIGKILL)
+                kill_process_group(process)
             break
         for key, _ in selection.select(min(0.05, max(0, deadline - time.monotonic()))):
             raw = os.read(key.fd, 65536)
@@ -444,7 +452,7 @@ def bounded_command(argv, cwd, environment, deadline, directory, number):
             if len(raw) > remaining:
                 reason = "output_limit"
                 if process.poll() is None:
-                    os.killpg(process.pid, signal.SIGKILL)
+                    kill_process_group(process)
     selection.close()
     process.stdout.close()
     process.stderr.close()
@@ -453,7 +461,7 @@ def bounded_command(argv, cwd, environment, deadline, directory, number):
             process.wait(timeout=max(0.1, deadline - time.monotonic()))
         except subprocess.TimeoutExpired:
             reason = "timeout"
-            os.killpg(process.pid, signal.SIGKILL)
+            kill_process_group(process)
     code = process.wait()
     try:
         os.killpg(process.pid, 0)

@@ -1187,5 +1187,21 @@ class TestKeys(unittest.TestCase):
         self.assertIn("EXACTORY_API_KEY", report)
 
 
+class TestProbeProcessIdentity(unittest.TestCase):
+    """A process that disappears while it is looked up is absent, whichever error code the kernel gives."""
+
+    def test_a_process_reaped_between_the_listing_and_the_read_is_absent(self) -> None:
+        import errno
+        from research_harness.probe_supervision import find_probe_process_identity
+        # Linux answers ENOENT once /proc/<pid> is gone, and ESRCH when the process is
+        # reaped between the open and the read of /proc/<pid>/stat.
+        for error in (FileNotFoundError(errno.ENOENT, "No such file or directory"),
+                      ProcessLookupError(errno.ESRCH, "No such process")):
+            with self.subTest(error=type(error).__name__), \
+                    unittest.mock.patch.object(sys, "platform", "linux"), \
+                    unittest.mock.patch.object(Path, "read_text", side_effect=error):
+                self.assertIsNone(find_probe_process_identity(os.getpid()))
+
+
 if __name__ == "__main__":
     unittest.main()

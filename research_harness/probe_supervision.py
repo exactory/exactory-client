@@ -41,7 +41,8 @@ def find_probe_process_identity(pid):
         from pathlib import Path
         try:
             data = (Path("/proc") / str(pid) / "stat").read_text()
-        except FileNotFoundError:
+        except (FileNotFoundError, ProcessLookupError):
+            # ENOENT once the entry is gone; ESRCH when the process is reaped between the open and the read.
             return None
         fields = data[data.rfind(")") + 2:].split()
         if fields[0] == "Z":
