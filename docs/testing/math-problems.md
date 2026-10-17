@@ -630,3 +630,66 @@ No required test was skipped.
 | F5 round 3 GREEN (tests-python3.12.log) | `PYTHONPATH=tests python3.12 -B -X dev -W error -m unittest -v test_manifest test_research_guidance test_codex test_workspace_init_retry test_lab test_math_problems_cli` | 266 tests, 197.426s; OK |
 | F5 round 3 GREEN (final-tests-python3.12.log) | `PYTHONPATH=tests python3.12 -B -X dev -W error -m unittest -v test_manifest test_research_guidance test_codex test_workspace_init_retry test_lab test_math_problems_cli` | 266 tests, 167.003s; OK |
 | F5 round 3 GREEN (smoke-python3.12.log) | `PYTHONPATH=tests python3.12 -B tests/smoke_codex.py --codex /Users/ryshiro/.nvm/versions/node/v24.18.0/bin/codex --output <scratch-log.json>` | PASS: installed plugin, 16 skills, 11 hooks, no load errors |
+
+## F6 round 5 and supervisor checks
+
+These results cover the command changes committed as `c32a5a4`, which fix review findings P25 to P28,
+and `f0ab97e`, which fixes finding P29 of the next review.
+Source: the F6 round 5 report and the supervisor's progress ledger.
+Every command ran with the four credential removals above and `PYTHONPATH=tests`.
+The round ran in a sandbox without sockets, so its runs omit the 21 loopback tests; the supervisor's rows record them.
+
+After the round, the supervisor changed four parts of its diff before the commit:
+
+- The round's check of international hosts refused four URLs that the server accepts. Compared with
+  `URL.canParse` in Node 24.18.0, it refused `https://🫨.com/` on Python 3.9.6, and `https://क्‍.in/`,
+  `https://ஸ்‌.in/`, and `https://aא.com/` on Python 3.9.6 and 3.12.8. The local check now refuses only the forms
+  that the WHATWG parser always refuses, and the server decides international and numeric hosts. The tests
+  `test_a_url_locator_with_an_invalid_ipv4_host_is_refused` and
+  `test_a_url_locator_with_an_invalid_international_domain_is_refused` were removed, and the four URLs above were
+  added to `test_accepted_url_locators_are_sent_exactly_as_given`.
+- The round's read-back of a completed publication receipt was removed with its tests
+  `test_a_completed_legacy_intent_without_publication_evidence_cannot_settle_its_journal` and
+  `test_a_completed_legacy_intent_is_read_back_and_keeps_its_immutable_receipt`. A completed receipt was written after
+  the check of its run.
+- The settlement branch for a record without a DOI was removed, because each of its three callers passes a checked DOI.
+- The identity messages were reworded. A missing id reads "names no deposition".
+
+The next review (P29) found that an earlier version could complete a publish intent with a receipt without a DOI,
+when Zenodo answered the publish request with JSON null, and that the removed settlement branch had turned that state
+into `KeyError('doi')`. `f0ab97e` reads such a receipt's deposition back and records the publication in the workspace
+record. The receipt stays as it was written.
+
+| Task and source | Command | Result |
+| --- | --- | --- |
+| F6 round 5 RED (f6-round5-report.md:21) | P25 group of new answer-validation tests; full command not reported | 13 tests; 10 failures |
+| F6 round 5 RED (f6-round5-report.md:21) | Managed GET sweep; full command not reported | 16 tests; 1 failure |
+| F6 round 5 GREEN (f6-round5-report.md:21) | The same two groups; full command not reported | 13 tests OK, then 16 tests OK |
+| F6 round 5 RED (f6-round5-report.md:36) | P26 unit regressions; full command not reported | 5 tests; 2 failures, 3 errors |
+| F6 round 5 RED (f6-round5-report.md:36) | P26 full-fixture reproduction; full command not reported | 2 failures, 3 errors; 453.163s |
+| F6 round 5 GREEN (f6-round5-report.md:36) | `test_deposit_answer_validation` as it stood then; full command not reported | 21 tests OK |
+| F6 round 5 RED (f6-round5-report.md:45) | `test_math_problems_cli.TestLeanCheckInputs.test_an_empty_output_excerpt_file_sends_no_excerpt`; full command not reported | SystemExit: 1 |
+| F6 round 5 GREEN (f6-round5-report.md:45) | `test_math_problems_cli.TestLeanCheckInputs`; full command not reported | 17 tests OK |
+| F6 round 5 RED (f6-round5-report.md:57) | 11 P28 tests; full command not reported | 94 failing subtests |
+| F6 round 5 GREEN (f6-round5-report.md:57) | `test_math_problems_cli`; full command not reported | 176 tests OK |
+| F6 round 5 RED (f6-round5-report.md:65) | Regressions from the round's own review; full command not reported | 18 failing subtests and 2 errors; 3 failures |
+| F6 round 5 GREEN (f6-round5-report.md:65) | The focused modules after the review fixes; full command not reported | 259 tests OK |
+| F6 round 5 GREEN (f6-round5-report.md:100) | `python3 -m unittest test_deposit_answer_validation test_math_problems_cli test_request_outcome_advice test_draft_problem_attachment.TestProblemDepositJournalStates -q` | Python 3.9.6: 292 tests OK, 21.246s |
+| F6 round 5 GREEN (f6-round5-report.md:100) | The same command with `python3.12` | Python 3.12.8: 292 tests OK, 12.939s |
+| F6 round 5 GREEN (f6-round5-report.md:165) | Socket-free tests of 15 modules in three shards; `f6_verify.py` runner | Python 3.9.6: 738 tests; 0 failures, errors, skips |
+| F6 round 5 GREEN (f6-round5-report.md:166) | The same shards with `python3.12` | Python 3.12.8: 738 tests; 0 failures, errors, skips |
+| F6 round 5 CHECK (f6-round5-report.md:103) | `python3 codex/generate.py --check` | exit 0 |
+| F6 round 5 CHECK (f6-round5-report.md:104) | JSON check of the repository's JSON files | 15 files parse |
+| F6 round 5 CHECK (f6-round5-report.md:105) | `compileall -q ci hooks codex research_harness tests skills/math-solver/harness` and `py_compile` of the 8 bin scripts | Python 3.9.6 and 3.12.8: exit 0 |
+| F6 round 5 CHECK (f6-round5-report.md:106) | `git diff --check` | exit 0 |
+| Supervisor CHECK (progress.md) | The round's local check, then the revised one, against `URL.canParse` (Node 24.18.0) on 74 listed URLs | Round's check: 4 refused URLs that the server accepts. Revised check: 0, on Python 3.9.6 and 3.12.8 |
+| Supervisor CHECK (progress.md) | The revised check against `URL.canParse` on 19,991 random trimmed https URLs | Python 3.9.6 and 3.12.8: 0 refused URLs that the server accepts; 844 accepted URLs that the server refuses, all with an international host, an `xn--` label, or a host that ends in a number |
+| Supervisor RED (progress.md) | `python3 -m unittest test_deposit_answer_validation.TestManagedPublishAnswers.test_a_receipt_completed_from_a_null_answer_is_read_back_recorded_and_attached test_deposit_answer_validation.TestManagedPublishAnswers.test_a_receipt_completed_from_a_null_answer_stays_unresolved_while_zenodo_shows_no_publication`, on `c32a5a4` with the new test file | Python 3.9.6: 2 tests; FAILED (errors=2), `KeyError: 'doi'` |
+| Supervisor GREEN (progress.md) | `python3 -m unittest test_deposit_answer_validation` on `f0ab97e` | Python 3.9.6: 26 tests OK, 7.297s |
+| Supervisor GREEN (progress.md) | `python3.12 -m unittest test_deposit_answer_validation` on `f0ab97e` | Python 3.12.8: 26 tests OK, 4.951s |
+| Release CHECK (progress.md) | `python3 -m unittest test_manifest test_codex test_research_guidance` with version 0.51.0 | Python 3.9.6: 46 tests OK, 32.612s |
+| Release CHECK (progress.md) | `python3.12 -m unittest test_manifest test_codex test_research_guidance` with version 0.51.0 | Python 3.12.8: 46 tests OK, 30.401s |
+| Release CHECK (progress.md) | `python3 codex/generate.py --check` | exit 0 |
+| Release CHECK (progress.md) | `find . -name '*.json' -not -path './.git/*' -print0 \| xargs -0 -n 1 python3 -m json.tool > /dev/null` | exit 0 |
+| Release CHECK (progress.md) | CI's compile step: `py_compile` of each file in `bin/`, then `compileall -q ci hooks codex research_harness tests skills/math-solver/harness` | Python 3.9.6 and 3.12.8: 8 bin files, exit 0 |
+| Release CHECK (progress.md) | `git diff --check` | exit 0 |

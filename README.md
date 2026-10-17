@@ -35,6 +35,15 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.51.0](docs/releases/0.51.0.md) connects the plugin to the
+Mathematics section of exactory.ai. Accounts with a linked ORCID iD post open
+problems, Lean formal statements as GitHub links, proofs, and reports of Lean
+checks run elsewhere, and every signed-in account votes and reports. The
+`math-conjecturer` skill runs these operations. A deposit can name a problem and
+attach its published record to it, every direct deposit recovers by reading its
+deposition back, and a deposit records a Zenodo answer only for the deposition
+that its request named.
+
 Version [0.50.1](docs/releases/0.50.1.md) adds the literature repairs and the
 store bounds that 0.49.0 left out. A search judgment owes full readings of the
 works it cites only while it is the selected judgment of its purpose, a
