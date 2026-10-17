@@ -519,7 +519,7 @@ class ResearchPublicationTests(DevelopmentCase):
         self.assertEqual(calls, [("GET", "https://zenodo.org/api/deposit/depositions/91")])
         records = self.store.snapshot()["records"]
         self.assertEqual(records["publication_receipt"]["deposit-1"], legacy)
-        self.assertEqual(records["publication_receipt"]["deposit-1:read-back"], receipt)
+        self.assertEqual(records["publication_read_back"]["deposit-1"], receipt)
         self.assertEqual((receipt["doi"], records["workspace"]["deposit"]["doi"]), ("10.5281/zenodo.91", "10.5281/zenodo.91"))
         self.assertTrue(self.publication().publication_report(self.store, "deposited")["ready"])
         self.assertEqual(validate_submission(self.store, {"doi": "10.5281/zenodo.91"})[1], receipt)

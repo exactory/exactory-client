@@ -334,7 +334,7 @@ class TestManagedPublishAnswers(_PlainWorkspaceDepositTestCase):
                           "draft_url": "https://zenodo.org/api/deposit/4242", "doi": "10.5281/zenodo.4242",
                           "concept_doi": "10.5281/zenodo.4241",
                           "record_url": "https://sandbox.zenodo.org/api/records/4242"})
-        read_back = records["publication_receipt"][intent["id"] + ":read-back"]
+        read_back = records["publication_read_back"][intent["id"]]
         self.assertEqual((read_back["intent_id"], read_back["doi"], read_back["bundle_digest"]),
                          (intent["id"], "10.5281/zenodo.4242", receipt["bundle_digest"]))
         self.assertEqual(read_back["published_response"]["id"], 4242)
@@ -356,6 +356,25 @@ class TestManagedPublishAnswers(_PlainWorkspaceDepositTestCase):
         records = Store(self.workspace_dir).snapshot()["records"]
         self.assertEqual(records["publication_receipt"][intent["id"]], receipt)
         self.assertNotIn("doi", records["workspace"]["deposit"])
-        self.assertNotIn(intent["id"] + ":read-back", records["publication_receipt"])
+        self.assertNotIn("publication_read_back", records)
         self.assertFalse(_read_journal(self.workspace_dir)["settled"])
         self.assertEqual(self.exactory.links(), [])
+
+    def test_an_ordinary_receipt_under_the_intent_id_with_read_back_is_not_the_read_back(self):
+        intent, uploaded, receipt = self.complete_from_a_null_answer()
+        other_id = intent["id"] + ":read-back"
+        other_binding = dict(intent["binding"], metadata=dict(intent["binding"]["metadata"], title="Another deposit"))
+        begin_intent(self.store, "deposit", other_binding, expected_revision=self.store.revision, request_id=other_id)
+        other = dict(receipt, intent_id=other_id, deposition_id=4343, doi="10.5281/zenodo.4343",
+                     concept_doi="10.5281/zenodo.4241", record_url="https://zenodo.org/records/4343",
+                     published_response=_published(4343))
+        finish_intent(self.store, other_id, "publication_receipt", other)
+        self.fake_api = _PublishedRecordZenodoApi(uploaded)
+        _draft._open_url = self.fake_api
+        _run_draft_command(["attach-problem"], None, self)
+        self.assertEqual([(r.get_method(), r.full_url) for r in self.fake_api.requests],
+                         [("GET", "https://zenodo.org/api/deposit/depositions/4242")])
+        records = Store(self.workspace_dir).snapshot()["records"]
+        self.assertEqual(records["publication_receipt"][other_id], other)
+        self.assertEqual(records["publication_read_back"][intent["id"]]["doi"], "10.5281/zenodo.4242")
+        self.assertEqual(_read_journal(self.workspace_dir)["doi"], "10.5281/zenodo.4242")

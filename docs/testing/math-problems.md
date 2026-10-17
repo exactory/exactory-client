@@ -634,7 +634,8 @@ No required test was skipped.
 ## F6 round 5 and supervisor checks
 
 These results cover the command changes committed as `c32a5a4`, which fix review findings P25 to P28,
-`f0ab97e`, which fixes finding P29 of the next review, and the fix of finding P30 that follows the release commit.
+`f0ab97e`, which fixes finding P29 of the next review, and the fixes of findings P30 and P31 that follow the release
+commit.
 Source: the F6 round 5 report and the supervisor's progress ledger.
 Every command ran with the four credential removals above and `PYTHONPATH=tests`.
 The round ran in a sandbox without sockets, so its runs omit the 21 loopback tests; the supervisor's rows record them.
@@ -659,8 +660,10 @@ The next review (P29) found that an earlier version could complete a publish int
 when Zenodo answered the publish request with JSON null, and that the removed settlement branch had turned that state
 into `KeyError('doi')`. `f0ab97e` reads such a receipt's deposition back and records the publication in the workspace
 record. The receipt stays as it was written. The review after that (P30) found that the publication gate and the
-submission read only publication receipts, so the fix of P30 also writes a second receipt, under the intent id with
-`:read-back`, that holds the read publication for the same bundle.
+submission read only publication receipts, so `0f0da44` also wrote a second receipt under the intent id with
+`:read-back`. The next review (P31) found that an intent can have that id itself, so its ordinary receipt was taken
+for the read-back. The read-back receipt is now a record of its own kind, `publication_read_back`, under the intent id,
+and the gate, the submission, and the publication history read both kinds.
 
 | Task and source | Command | Result |
 | --- | --- | --- |
@@ -695,3 +698,7 @@ submission read only publication receipts, so the fix of P30 also writes a secon
 | Release CHECK (progress.md) | `find . -name '*.json' -not -path './.git/*' -print0 \| xargs -0 -n 1 python3 -m json.tool > /dev/null` | exit 0 |
 | Release CHECK (progress.md) | CI's compile step: `py_compile` of each file in `bin/`, then `compileall -q ci hooks codex research_harness tests skills/math-solver/harness` | Python 3.9.6 and 3.12.8: 8 bin files, exit 0 |
 | Release CHECK (progress.md) | `git diff --check` | exit 0 |
+| Supervisor RED (progress.md) | The new `test_research_publication` test on `f0ab97e`, without its check of the second receipt | Python 3.9.6: 1 test; FAILED (failures=1), the deposited gate is not ready after the read-back |
+| Supervisor GREEN (progress.md) | `python3 -m unittest test_deposit_answer_validation test_research_publication` on `0f0da44` | Python 3.9.6: 60 tests OK, 674.169s |
+| Supervisor GREEN (progress.md) | `python3.12 -m unittest test_deposit_answer_validation test_research_publication` on `0f0da44` | Python 3.12.8: 60 tests OK, 533.737s |
+| Supervisor RED (progress.md) | `test_deposit_answer_validation.TestManagedPublishAnswers.test_an_ordinary_receipt_under_the_intent_id_with_read_back_is_not_the_read_back` on `0f0da44` | Python 3.9.6: 1 test; FAILED (failures=1), no read was sent |

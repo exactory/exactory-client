@@ -5,6 +5,7 @@ import hashlib
 
 from .artifacts import ArtifactStore
 from .errors import ResearchError
+from .evidence import digest
 from .execution import _owner
 from .evaluation import Evaluation
 from .gates import require_ready
@@ -92,16 +93,16 @@ def _recover_published_deposition(store, intent, client, *, reconcile):
 def _record_read_back_publication(store, identifier, receipt, published):
     """Record a publication that a read of the same deposition established for a receipt without a
     DOI. An earlier version completed such a receipt from a publish answer of JSON null. That receipt
-    stays as it was written. A second receipt, under the intent id with ":read-back", holds the read
-    publication for the same bundle, so the publication gate and the submission find it, and the
-    workspace record takes the publication while it still names this deposition without a DOI."""
+    stays as it was written. A read-back receipt of the same intent holds the read publication for
+    the same bundle, so the publication gate and the submission find it, and the workspace record
+    takes the publication while it still names this deposition without a DOI."""
     state = dict({key: receipt[key] for key in ("environment", "deposition_id", "draft_url")},
                  doi=published["doi"], concept_doi=published.get("conceptdoi", ""),
                  record_url=published.get("links", {}).get("record_html", ""))
     read_back = dict(receipt, **state, published_response=published)
 
     def prepare(records, value):
-        changes = [immutable_record(records, "publication_receipt", identifier + ":read-back", value["receipt"])]
+        changes = [immutable_record(records, "publication_read_back", identifier, value["receipt"])]
         current = records.get("workspace", {}).get("deposit", {})
         # A newer deposit's workspace record stays as it is.
         if (current.get("environment") == state["environment"] and current.get("deposition_id") == state["deposition_id"]
@@ -110,7 +111,7 @@ def _record_read_back_publication(store, identifier, receipt, published):
         return changes, value["receipt"]
 
     prepared_mutation(store, "publication.read_back", {"receipt": read_back, "deposit": state}, prepare,
-                      expected_revision=store.revision, request_id=identifier + ":read-back")
+                      expected_revision=store.revision, request_id=identifier + ":read-back:" + digest(read_back))
     return read_back
 
 
@@ -263,10 +264,10 @@ def continue_deposit(store, identifier, client, *, reconcile=False, finish_only=
     with _owner(store.root, "remote:" + identifier):
         intent = get_intent(store, identifier)
         if intent["status"] == "complete":
-            receipts = store.snapshot()["records"]["publication_receipt"]
-            receipt = receipts[identifier]
+            records = store.snapshot()["records"]
+            receipt = records["publication_receipt"][identifier]
             if intent["binding"]["publish"] and not receipt.get("doi"):
-                receipt = receipts.get(identifier + ":read-back") or _record_read_back_publication(
+                receipt = records.get("publication_read_back", {}).get(identifier) or _record_read_back_publication(
                     store, identifier, receipt, _recover_published_deposition(store, intent, client, reconcile=reconcile))
             export_workspace(store)
             return receipt
