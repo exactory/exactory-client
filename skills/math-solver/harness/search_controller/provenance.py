@@ -198,6 +198,27 @@ def publish_import_identity(artifacts, digest, raw, *, publish=True):
                     raise
 
 
+def publish_import_sources(artifacts, digest, sources, *, state, content, records):
+    """Publish originals and their aliases before exposing normalized sources.
+
+    Only canonical JSON encodings can have normalization dependencies. Each
+    noncanonical original authenticates aliases for both encodings, so commit
+    those aliases before publishing either encoding as an intermediate source.
+    """
+    encodings = set()
+    for _, raw in sources:
+        encodings.update(check_normalized_identity(digest, raw))
+    has_noncanonical_originals = any(reference["sha256"] not in encodings for reference, _ in sources)
+    for reference, raw in sorted(sources, key=lambda item: item[0]["sha256"] in encodings):
+        if not has_noncanonical_originals:
+            # A canonical original can close a normalization cycle. Its retained
+            # predecessors must already be readable before exposing this source.
+            originals = collect_import_sources(reference["sha256"], state, content, artifacts, records)
+            for _, original in originals:
+                publish_import_identity(artifacts, reference["sha256"], original, publish=False)
+        publish_import_identity(artifacts, digest, raw)
+
+
 def record_probe_origins(state, payload):
     s.closed(payload, "bindings")
     retained = state["service"].setdefault("probe_origins", {})

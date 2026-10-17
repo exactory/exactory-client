@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import shutil
 import unittest
 from unittest import mock
 
@@ -262,6 +263,160 @@ class ExportOriginTests(SearchCLIWorkspace, unittest.TestCase):
                common_records=Store(self.root).snapshot()["records"])
         origins = collect_probe_origins(self.root, controller.status(), [identity])
         self.assertEqual([row["probe_id"] for row in origins], ["explore"])
+
+    def build_unpublished_non_ascii_chain(self, *, original=None):
+        """Stage A -> U -> R without publishing common normalization aliases."""
+        from research_harness.artifacts import describe_artifact
+        from search_controller.provenance import record_probe_origins
+        from search_controller.storage import ContentSink
+        self.initialize()
+        forms = ['{ "result" : "λ" }\n'.encode(), '{"result":"λ"}'.encode(), b'{"result":"\\u03bb"}']
+        if original is not None:
+            forms[0] = original
+        self.record_probe_output(forms[0])
+        controller = Controller(self.root)
+        state, content = controller.status(), ContentSink(controller.store)
+        identities = [content.put_artifact(raw) for raw in forms]
+        record_probe_origins(state, {"bindings": [
+            {"digest": identities[1], "raw_digest": identities[0], "origins": []},
+            {"digest": identities[2], "raw_digest": identities[1], "origins": []}]})
+        references = [describe_artifact(raw, "application/json") for raw in forms]
+        return controller, state, content, references
+
+    def test_interrupted_non_ascii_chain_keeps_every_readable_form_exploratory(self):
+        from research_harness import operations
+        from research_harness.errors import ResearchError
+        from research_harness.probe_provenance import find_probe_artifact_origins
+        from research_harness.storage import Store
+        from search_controller.reviewer import _closure
+        controller, state, content, references = self.build_unpublished_non_ascii_chain()
+        native_before = controller.store.read()
+        seed = {"evidence_digests": [references[2]["sha256"]]}
+
+        def run_export(stop_after=None):
+            root = self.root.parent / ("chain-publication-" + str(stop_after))
+            shutil.copytree(self.root, root)
+            store, artifacts = Store(root), ArtifactStore(root)
+            self.assertNotIn("native_import_identity", store.snapshot()["records"])
+            steps = []
+
+            def check_readable_origins():
+                before = store.snapshot()
+                for alias in before["records"].get("native_import_identity", {}).values():
+                    artifacts.read(alias["raw"])
+                for index, reference in enumerate(references):
+                    try:
+                        artifacts.read(reference)
+                    except ResearchError as error:
+                        if error.code != "artifact_missing":
+                            raise
+                        continue
+                    expected = {"probe_id": "explore", "sha256": reference["sha256"], "roles": ["outputs", "stdout"]}
+                    if index:
+                        expected["raw_sha256"] = references[0]["sha256"]
+                    self.assertEqual(find_probe_artifact_origins(before["records"], [reference], artifacts=artifacts), [expected])
+                self.assertEqual(store.snapshot(), before)
+
+            def record_step(step):
+                steps.append(step)
+                check_readable_origins()
+                if len(steps) == stop_after:
+                    raise RuntimeError("Interrupted chain publication")
+
+            put = ArtifactStore.put
+            def publish(artifacts, raw, media_type):
+                reference = put(artifacts, raw, media_type)
+                record_step(("artifact", reference["sha256"]))
+                return reference
+
+            commit = operations.prepared_mutation
+            def commit_alias(store, operation, value, prepare, **identity):
+                result = commit(store, operation, value, prepare, **identity)
+                record_step(("alias", value["canonical_digest"], value["raw"]["sha256"]))
+                return result
+
+            def export():
+                return _closure(seed, state, content, artifacts, write=True, common_records=store.snapshot()["records"])
+
+            with mock.patch.object(ArtifactStore, "put", new=publish), \
+                    mock.patch.object(operations, "prepared_mutation", new=commit_alias):
+                if stop_after is None:
+                    export()
+                else:
+                    with self.assertRaisesRegex(RuntimeError, "Interrupted chain publication"):
+                        export()
+            check_readable_origins()
+            evidence, unavailable, _ = export()
+            self.assertEqual(unavailable, [])
+            self.assertEqual(evidence[0]["artifact"]["raw_identities"], sorted(references[:2], key=lambda item: item["sha256"]))
+            for reference in references:
+                artifacts.read(reference)
+            check_readable_origins()
+            self.assertEqual(controller.store.read(), native_before)
+            return steps
+
+        complete_steps = run_export()
+        self.assertEqual(complete_steps[-1], ("artifact", references[2]["sha256"]))
+        for step in range(1, len(complete_steps) + 1):
+            with self.subTest(interrupt_after=step):
+                self.assertEqual(run_export(step), complete_steps[:step])
+
+    def test_non_ascii_chain_assessment_and_historical_replay_publish_nothing(self):
+        from research_harness.storage import Store
+        from search_controller.reviewer import _closure
+        controller, state, content, references = self.build_unpublished_non_ascii_chain()
+        before = {path.relative_to(self.root): path.read_bytes() for path in self.root.rglob("*") if path.is_file()}
+        controller.status(full_audit=True)
+        evidence, unavailable, _ = _closure({"evidence_digests": [references[2]["sha256"]]}, state, content,
+            ArtifactStore(self.root), write=False, common_records=Store(self.root).snapshot()["records"])
+        self.assertEqual(unavailable, [])
+        self.assertEqual(len(evidence[0]["artifact"]["raw_identities"]), 2)
+        after = {path.relative_to(self.root): path.read_bytes() for path in self.root.rglob("*") if path.is_file()}
+        self.assertEqual(after, before)
+
+    def test_canonical_probe_original_anchors_a_normalization_cycle_before_exposure(self):
+        from research_harness.probe_provenance import find_probe_artifact_origins
+        from research_harness.storage import Store
+        from search_controller.reviewer import _closure
+        controller, state, content, references = self.build_unpublished_non_ascii_chain(original=b'{"result":"\\u03bb"}')
+        artifacts, store = ArtifactStore(self.root), Store(self.root)
+        put = ArtifactStore.put
+        def publish(artifacts, raw, media_type):
+            reference = put(artifacts, raw, media_type)
+            expected = {"probe_id": "explore", "sha256": reference["sha256"], "roles": ["outputs", "stdout"]}
+            if reference["sha256"] != references[0]["sha256"]:
+                expected["raw_sha256"] = references[0]["sha256"]
+            self.assertEqual(find_probe_artifact_origins(store.snapshot()["records"], [reference], artifacts=artifacts), [expected])
+            return reference
+        with mock.patch.object(ArtifactStore, "put", new=publish):
+            _closure({"evidence_digests": [references[2]["sha256"]]}, state, content, artifacts, write=True,
+                     common_records=store.snapshot()["records"])
+
+    def assert_unreadable_canonical_original_refuses_export(self, *, corrupt):
+        from research_harness.errors import ResearchError
+        from research_harness.storage import Store
+        from search_controller.reviewer import _closure
+        controller, state, content, references = self.build_unpublished_non_ascii_chain(original=b'{"result":"\\u03bb"}')
+        path = self.root / references[0]["path"]
+        if corrupt:
+            path.chmod(0o600)
+            path.write_bytes(b"corrupt")
+        else:
+            path.unlink()
+        store = Store(self.root)
+        before = store.snapshot()
+        with self.assertRaises(ResearchError) as caught:
+            _closure({"evidence_digests": [references[2]["sha256"]]}, state, content, ArtifactStore(self.root),
+                     write=True, common_records=before["records"])
+        self.assertEqual(caught.exception.code, "artifact_corrupt" if corrupt else "artifact_missing")
+        self.assertFalse((self.root / references[1]["path"]).exists())
+        self.assertEqual(store.snapshot(), before)
+
+    def test_chain_export_refuses_a_missing_canonical_original_before_exposing_its_normalization(self):
+        self.assert_unreadable_canonical_original_refuses_export(corrupt=False)
+
+    def test_chain_export_refuses_a_corrupt_canonical_original_before_exposing_its_normalization(self):
+        self.assert_unreadable_canonical_original_refuses_export(corrupt=True)
 
     def test_interrupted_export_recovers_its_checked_alias_from_unchanged_original_bytes(self):
         raw, canonical = self.export_json_input(record_origin=False, interrupt_before_bytes=True)
