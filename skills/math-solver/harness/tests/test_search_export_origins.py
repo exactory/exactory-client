@@ -277,21 +277,24 @@ class ExportOriginTests(SearchCLIWorkspace, unittest.TestCase):
         controller = Controller(self.root)
         state, content = controller.status(), ContentSink(controller.store)
         identities = [content.put_artifact(raw) for raw in forms]
+        utf8_source = identities[2] if original == forms[1] else identities[0]
         record_probe_origins(state, {"bindings": [
-            {"digest": identities[1], "raw_digest": identities[0], "origins": []},
+            {"digest": identities[1], "raw_digest": utf8_source, "origins": []},
             {"digest": identities[2], "raw_digest": identities[1], "origins": []}]})
         references = [describe_artifact(raw, "application/json") for raw in forms]
         return controller, state, content, references
 
-    def test_interrupted_non_ascii_chain_keeps_every_readable_form_exploratory(self):
+    def assert_interrupted_export_keeps_origins(self, *, original=None, target_index=2):
         from research_harness import operations
         from research_harness.errors import ResearchError
         from research_harness.probe_provenance import find_probe_artifact_origins
         from research_harness.storage import Store
         from search_controller.reviewer import _closure
-        controller, state, content, references = self.build_unpublished_non_ascii_chain()
+        controller, state, content, references = self.build_unpublished_non_ascii_chain(original=original)
         native_before = controller.store.read()
-        seed = {"evidence_digests": [references[2]["sha256"]]}
+        target = references[target_index]["sha256"]
+        seed = {"evidence_digests": [target]}
+        expected_sources = {reference["sha256"]: reference for reference in references if reference["sha256"] != target}
 
         def run_export(stop_after=None):
             root = self.root.parent / ("chain-publication-" + str(stop_after))
@@ -304,7 +307,7 @@ class ExportOriginTests(SearchCLIWorkspace, unittest.TestCase):
                 before = store.snapshot()
                 for alias in before["records"].get("native_import_identity", {}).values():
                     artifacts.read(alias["raw"])
-                for index, reference in enumerate(references):
+                for reference in references:
                     try:
                         artifacts.read(reference)
                     except ResearchError as error:
@@ -312,7 +315,7 @@ class ExportOriginTests(SearchCLIWorkspace, unittest.TestCase):
                             raise
                         continue
                     expected = {"probe_id": "explore", "sha256": reference["sha256"], "roles": ["outputs", "stdout"]}
-                    if index:
+                    if reference["sha256"] != references[0]["sha256"]:
                         expected["raw_sha256"] = references[0]["sha256"]
                     self.assertEqual(find_probe_artifact_origins(before["records"], [reference], artifacts=artifacts), [expected])
                 self.assertEqual(store.snapshot(), before)
@@ -348,7 +351,8 @@ class ExportOriginTests(SearchCLIWorkspace, unittest.TestCase):
             check_readable_origins()
             evidence, unavailable, _ = export()
             self.assertEqual(unavailable, [])
-            self.assertEqual(evidence[0]["artifact"]["raw_identities"], sorted(references[:2], key=lambda item: item["sha256"]))
+            self.assertEqual(evidence[0]["artifact"]["raw_identities"],
+                             [expected_sources[key] for key in sorted(expected_sources)])
             for reference in references:
                 artifacts.read(reference)
             check_readable_origins()
@@ -356,10 +360,13 @@ class ExportOriginTests(SearchCLIWorkspace, unittest.TestCase):
             return steps
 
         complete_steps = run_export()
-        self.assertEqual(complete_steps[-1], ("artifact", references[2]["sha256"]))
+        self.assertEqual(complete_steps[-1], ("artifact", target))
         for step in range(1, len(complete_steps) + 1):
             with self.subTest(interrupt_after=step):
                 self.assertEqual(run_export(step), complete_steps[:step])
+
+    def test_interrupted_non_ascii_chain_keeps_every_readable_form_exploratory(self):
+        self.assert_interrupted_export_keeps_origins()
 
     def test_non_ascii_chain_assessment_and_historical_replay_publish_nothing(self):
         from research_harness.storage import Store
@@ -374,23 +381,17 @@ class ExportOriginTests(SearchCLIWorkspace, unittest.TestCase):
         after = {path.relative_to(self.root): path.read_bytes() for path in self.root.rglob("*") if path.is_file()}
         self.assertEqual(after, before)
 
-    def test_canonical_probe_original_anchors_a_normalization_cycle_before_exposure(self):
-        from research_harness.probe_provenance import find_probe_artifact_origins
-        from research_harness.storage import Store
-        from search_controller.reviewer import _closure
-        controller, state, content, references = self.build_unpublished_non_ascii_chain(original=b'{"result":"\\u03bb"}')
-        artifacts, store = ArtifactStore(self.root), Store(self.root)
-        put = ArtifactStore.put
-        def publish(artifacts, raw, media_type):
-            reference = put(artifacts, raw, media_type)
-            expected = {"probe_id": "explore", "sha256": reference["sha256"], "roles": ["outputs", "stdout"]}
-            if reference["sha256"] != references[0]["sha256"]:
-                expected["raw_sha256"] = references[0]["sha256"]
-            self.assertEqual(find_probe_artifact_origins(store.snapshot()["records"], [reference], artifacts=artifacts), [expected])
-            return reference
-        with mock.patch.object(ArtifactStore, "put", new=publish):
-            _closure({"evidence_digests": [references[2]["sha256"]]}, state, content, artifacts, write=True,
-                     common_records=store.snapshot()["records"])
+    def test_interrupted_cycle_exports_utf8_from_an_ascii_original(self):
+        self.assert_interrupted_export_keeps_origins(original=b'{"result":"\\u03bb"}', target_index=1)
+
+    def test_interrupted_cycle_exports_ascii_from_an_ascii_original(self):
+        self.assert_interrupted_export_keeps_origins(original=b'{"result":"\\u03bb"}', target_index=2)
+
+    def test_interrupted_cycle_exports_ascii_from_a_utf8_original(self):
+        self.assert_interrupted_export_keeps_origins(original='{"result":"λ"}'.encode(), target_index=2)
+
+    def test_interrupted_cycle_exports_utf8_from_a_utf8_original(self):
+        self.assert_interrupted_export_keeps_origins(original='{"result":"λ"}'.encode(), target_index=1)
 
     def assert_unreadable_canonical_original_refuses_export(self, *, corrupt):
         from research_harness.errors import ResearchError
@@ -405,12 +406,14 @@ class ExportOriginTests(SearchCLIWorkspace, unittest.TestCase):
             path.unlink()
         store = Store(self.root)
         before = store.snapshot()
-        with self.assertRaises(ResearchError) as caught:
-            _closure({"evidence_digests": [references[2]["sha256"]]}, state, content, ArtifactStore(self.root),
-                     write=True, common_records=before["records"])
-        self.assertEqual(caught.exception.code, "artifact_corrupt" if corrupt else "artifact_missing")
-        self.assertFalse((self.root / references[1]["path"]).exists())
-        self.assertEqual(store.snapshot(), before)
+        for target_index in (1, 2):
+            with self.subTest(target=references[target_index]["sha256"]):
+                with self.assertRaises(ResearchError) as caught:
+                    _closure({"evidence_digests": [references[target_index]["sha256"]]}, state, content, ArtifactStore(self.root),
+                             write=True, common_records=before["records"])
+                self.assertEqual(caught.exception.code, "artifact_corrupt" if corrupt else "artifact_missing")
+                self.assertFalse((self.root / references[1]["path"]).exists())
+                self.assertEqual(store.snapshot(), before)
 
     def test_chain_export_refuses_a_missing_canonical_original_before_exposing_its_normalization(self):
         self.assert_unreadable_canonical_original_refuses_export(corrupt=False)

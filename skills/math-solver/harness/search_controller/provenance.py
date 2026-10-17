@@ -198,6 +198,29 @@ def publish_import_identity(artifacts, digest, raw, *, publish=True):
                     raise
 
 
+def publish_import_cycle(artifacts, digest, sources):
+    """Resolve a canonical cycle from an authenticated, already readable member."""
+    from research_harness.errors import ResearchError
+    members = {reference["sha256"]: (reference, raw) for reference, raw in sources}
+    for _, raw in members.values():
+        check_normalized_identity(digest, raw)
+    for reference, raw in members.values():
+        try:
+            artifacts.read(reference)
+        except ResearchError as error:
+            if error.code != "artifact_missing":
+                raise
+        else:
+            publish_import_identity(artifacts, digest, raw, publish=False)
+            anchor = reference["sha256"]
+            break
+    else:
+        raise ResearchError("artifact_missing", "A normalization cycle requires an already readable original")
+    for reference, raw in members.values():
+        if reference["sha256"] != anchor:
+            publish_import_identity(artifacts, digest, raw)
+
+
 def publish_import_sources(artifacts, digest, sources, *, state, content, records):
     """Publish originals and their aliases before exposing normalized sources.
 
@@ -211,11 +234,9 @@ def publish_import_sources(artifacts, digest, sources, *, state, content, record
     has_noncanonical_originals = any(reference["sha256"] not in encodings for reference, _ in sources)
     for reference, raw in sorted(sources, key=lambda item: item[0]["sha256"] in encodings):
         if not has_noncanonical_originals:
-            # A canonical original can close a normalization cycle. Its retained
-            # predecessors must already be readable before exposing this source.
             originals = collect_import_sources(reference["sha256"], state, content, artifacts, records)
-            for _, original in originals:
-                publish_import_identity(artifacts, reference["sha256"], original, publish=False)
+            if originals:
+                return publish_import_cycle(artifacts, digest, sources + originals)
         publish_import_identity(artifacts, digest, raw)
 
 
