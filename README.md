@@ -351,7 +351,8 @@ submission binds the concrete production record and its current publication rece
 `attach-problem` reads `.exactory/problem-deposit.json` to settle the recorded deposit and attach its record, and never publishes.
 If a moderator removed the record's link, attachment exits with code 3 and leaves the record published and the journal unattached.
 A direct `--new-version` run reads a recorded deposition with no DOI before other requests.
-It records a published deposition, continues a recorded new-version draft, or stops before writing to a fresh draft from a plain run.
+It records a published deposition and stops. It continues a draft only when its saved record carries the concept DOI.
+For a fresh draft that a plain run recorded, it stops before any write and says to delete the draft first.
 After a failure leaves a fresh draft without a problem journal, delete it with the Delete button before retrying.
 
 **`exactory-lab`** owns an Exactory AI Science study. `init` creates the study

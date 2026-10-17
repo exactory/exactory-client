@@ -515,3 +515,118 @@ Source names below refer to this round’s scratch logs. No required test was sk
 | F5 round 2 GREEN (final-tests-python3.12.log) | `PYTHONPATH=tests python3.12 -B -X dev -W error -m unittest -v test_manifest test_research_guidance test_codex test_workspace_init_retry test_lab test_math_problems_cli` | 266 tests, 149.875s, OK |
 | F5 round 2 GREEN (smoke-python3.log) | `PYTHONPATH=tests python3 -B tests/smoke_codex.py --codex /Users/ryshiro/.nvm/versions/node/v24.18.0/bin/codex --output <scratch-log.json>` | PASS: installed plugin, 16 skills, 11 hooks, no load errors |
 | F5 round 2 GREEN (smoke-python3.12.log) | `PYTHONPATH=tests python3.12 -B tests/smoke_codex.py --codex /Users/ryshiro/.nvm/versions/node/v24.18.0/bin/codex --output <scratch-log.json>` | PASS: installed plugin, 16 skills, 11 hooks, no load errors |
+
+
+## F6 round 4 and supervisor checks
+
+These historical results cover the command changes committed as `8f4dd2e`.
+Source: the F6 round 4 report and the supervisor's progress ledger.
+`CLEAN` is the report's prefix: the four credential removals above, `PYTHONPATH=tests`,
+and `PYTHONPYCACHEPREFIX=/private/tmp/f6-round4-pycache`, after the plugin PATH export.
+The temporary suite runner omitted 21 loopback tests on each interpreter because sockets were blocked.
+The supervisor's rows record their later run outside the sandbox.
+The failed initial attachment runs remain in the record; the matrix rows use the complete corrected rechecks.
+
+| Task and source | Command | Result |
+| --- | --- | --- |
+| F6 round 4 RED (f6-round4-report.md:31) | `CLEAN python3 -m unittest -v test_request_outcome_advice.TestDirectReadBack` | Python 3.9.6: 15 tests, 0.503s; FAILED (failures=4) |
+| F6 round 4 RED (f6-round4-report.md:31) | `CLEAN python3 -m unittest -v test_draft_problem_attachment.TestManagedDepositForAProblem.test_new_version_refuses_a_fresh_draft_that_has_no_concept_doi` | Python 3.9.6: 1 test, 76.475s; FAILED (failures=1) |
+| F6 round 4 GREEN (f6-round4-report.md:31) | `CLEAN python3 -m unittest -v test_draft_problem_attachment.TestManagedDepositForAProblem.test_new_version_refuses_a_fresh_draft_that_has_no_concept_doi` | Python 3.9.6: 1 test, 78.437s; OK |
+| F6 round 4 RED (f6-round4-report.md:35) | `CLEAN python3 -m unittest -v test_draft.TestNewVersion.test_new_version_reuses_the_stored_deposition` | Python 3.9.6: 1 test, 94.930s; failure: None != '10.5281/zenodo.4241' |
+| F6 round 4 RED (f6-round4-report.md:35) | `CLEAN python3 -m unittest -v test_request_outcome_advice.TestManagedVersionDraftRecord` | Python 3.9.6: 5 tests, 0.307s; FAILED (failures=4) |
+| F6 round 4 GREEN (f6-round4-report.md:35) | `CLEAN python3 -m unittest -v test_draft.TestNewVersion.test_new_version_reuses_the_stored_deposition` | python3: 1 test, 111.136s; OK |
+| F6 round 4 GREEN (f6-round4-report.md:35) | `CLEAN python3.12 -m unittest -v test_draft.TestNewVersion.test_new_version_reuses_the_stored_deposition` | python3.12: 1 test, 85.548s; OK |
+| F6 round 4 RED MUTATION (f6-round4-report.md:35) | `TestManagedVersionDraftRecord.test_a_completed_intent_replay_does_not_replace_a_newer_workspace_record`; runtime-only mutation; full command not reported | 1 test, 0.261s; FAILED (failures=1); interpreter not specified for this run |
+| F6 round 4 GREEN (f6-round4-report.md:35) | `CLEAN python3 -m unittest -v test_request_outcome_advice.TestManagedVersionDraftRecord` | python3: 6 tests, 1.198s; OK |
+| F6 round 4 GREEN (f6-round4-report.md:35) | `CLEAN python3.12 -m unittest -v test_request_outcome_advice.TestManagedVersionDraftRecord` | python3.12: 6 tests, 0.974s; OK |
+| F6 round 4 RED (f6-round4-report.md:37) | `CLEAN python3 -m unittest -v test_draft_problem_attachment.TestProblemDepositJournalStates` | python3: 31 tests, 14.262s; FAILED (errors=1), stale fresh-draft expectation |
+| F6 round 4 GREEN (f6-round4-report.md:37) | `CLEAN python3 -m unittest -v test_draft_problem_attachment.TestProblemDepositJournalStates` | python3: 31 tests, 15.518s; OK |
+| F6 round 4 GREEN ATTEMPT (f6-round4-report.md:37) | Initial 132-case socket-free attachment module run; full command not reported at this step | python3: 132 tests, 2680.398s; FAILED (errors=1), same stale expectation |
+| F6 round 4 RED (f6-round4-report.md:37) | `CLEAN python3.12 -m unittest -v test_draft_problem_attachment.TestProblemDepositJournalStates` | python3.12: 31 tests, 11.246s; FAILED (errors=1), stale fresh-draft expectation |
+| F6 round 4 GREEN (f6-round4-report.md:37) | `CLEAN python3.12 -m unittest -v test_draft_problem_attachment.TestProblemDepositJournalStates` | python3.12: 31 tests, 11.254s; OK |
+| F6 round 4 GREEN ATTEMPT (f6-round4-report.md:37) | Initial 132-case socket-free attachment module run; full command not reported at this step | python3.12: 132 tests, 2015.920s; FAILED (errors=1), same stale expectation |
+| F6 round 4 RED (f6-round4-report.md:39) | `CLEAN python3 -m unittest -v test_request_outcome_advice.TestDirectReadBack.test_failed_or_unsettled_read_back_never_writes` | Python 3.9.6: 1 test, 0.008s; FAILED (failures=3) |
+| F6 round 4 RED (f6-round4-report.md:47) | `CLEAN python3 -m unittest -v test_request_outcome_advice.TestConfiguration` | Python 3.9.6: 5 tests, 0.025s; FAILED (failures=3) |
+| F6 round 4 GREEN (f6-round4-report.md:47) | `CLEAN python3 -m unittest -v test_request_outcome_advice.TestConfiguration test_transport.TestApiBaseUrlCheck` | Python 3.9.6: 7 tests, 0.409s; OK |
+| F6 round 4 RED (f6-round4-report.md:55) | `CLEAN python3 -m unittest -v test_request_outcome_advice.TestUncertainSend` | Python 3.9.6: 6 tests, 0.036s; FAILED (failures=2) |
+| F6 round 4 GREEN (f6-round4-report.md:55) | `CLEAN python3 -m unittest -v test_request_outcome_advice.TestUncertainSend` | Python 3.9.6: 6 tests, 0.030s; OK |
+| F6 round 4 RED (f6-round4-report.md:63) | `CLEAN python3 -m unittest -v test_request_outcome_advice.TestDirectReadBack.test_missing_draft_without_published_history_names_both_recovery_choices test_request_outcome_advice.TestDirectReadBack.test_a_failure_after_deleted_draft_recovery_names_the_deposition_the_record_still_names test_request_outcome_advice.TestDirectReadBack.test_an_invalid_read_back_or_new_version_address_names_the_workspace_record` | Python 3.9.6: 3 tests, 0.108s; FAILED (failures=4) |
+| F6 round 4 RED (f6-round4-report.md:63) | `TestFailureAdvice.test_a_managed_new_version_address_names_the_workspace_record`; full command not repeated | 1 test, 0.004s; one failure |
+| F6 round 4 RED (f6-round4-report.md:63) | `TestFailureAdvice.test_a_direct_recovery_address_names_its_recovery_record_source`; full command not repeated | 1 test, 0.014s; two failed subcases |
+| F6 round 4 GREEN (f6-round4-report.md:63) | `TestDirectReadBack` and `TestFailureAdvice`; full command not reported | 30 tests, 0.491s; OK |
+| F6 round 4 GREEN (f6-round4-report.md:63) | `TestFailureAdvice.test_a_direct_recovery_address_names_its_recovery_record_source`; full command not repeated | 1 test, 0.005s; OK |
+| F6 round 4 RED (f6-round4-report.md:65) | `CLEAN python3 -m unittest -v test_request_outcome_advice.TestSourceUploadAddresses` | Python 3.9.6: 2 tests, 0.016s; FAILED (failures=5) |
+| F6 round 4 GREEN (f6-round4-report.md:65) | Marker/source review fixes; full command not reported | python3: 7 tests passed |
+| F6 round 4 GREEN (f6-round4-report.md:65) | Marker/source review fixes; full command not reported | python3.12: 7 tests passed |
+| F6 round 4 RED (f6-round4-report.md:73) | `CLEAN python3 -m unittest -v test_request_outcome_advice.TestDepositRecordAdvice` | Python 3.9.6: 1 test, 0.008s; FAILED (failures=5) |
+| F6 round 4 GREEN (f6-round4-report.md:73) | `CLEAN python3 -m unittest -v test_request_outcome_advice.TestDepositRecordAdvice` | Python 3.9.6: 1 test, 0.009s; OK |
+| F6 round 4 GREEN (f6-round4-report.md:81) | `CLEAN python3 -m unittest -v test_request_outcome_advice test_transport.TestApiBaseUrlCheck` | Python 3.9.6: 50 tests, 1.063s; OK |
+| F6 round 4 RED MUTATION (f6-round4-report.md:93) | `TestJavascriptTrim.test_every_ecmascript_trim_character_and_no_python_extras` under `CLEAN python3`; full command not reported | Python 3.9.6: 1 test, 0.005s; FAILED (failures=1) |
+| F6 round 4 RED (f6-round4-report.md:101) | `CLEAN python3 -m unittest -v test_request_outcome_advice.TestZenodoErrorLifetime` | Python 3.9.6: 2 tests, 0.009s; FAILED (failures=6) |
+| F6 round 4 GREEN (f6-round4-report.md:101) | `CLEAN python3 -m unittest -v test_request_outcome_advice.TestZenodoErrorLifetime` | Python 3.9.6: 2 tests, 0.008s; OK |
+| F6 round 4 GREEN (f6-round4-report.md:202) | `CLEAN python3 -m unittest -v test_request_outcome_advice test_transport.TestApiBaseUrlCheck test_draft.TestDirectDeposit test_draft.TestZenodoAnswersThatCannotBeRead` | python3: 99 tests, 11.000s; OK |
+| F6 round 4 GREEN (f6-round4-report.md:202) | `CLEAN python3.12 -m unittest -v test_request_outcome_advice test_transport.TestApiBaseUrlCheck test_draft.TestDirectDeposit test_draft.TestZenodoAnswersThatCannotBeRead` | python3.12: 99 tests, 9.904s; OK |
+| F6 round 4 GREEN (f6-round4-report.md:202) | `CLEAN python3 -m unittest -v test_draft.TestNewVersion.test_new_version_reuses_the_stored_deposition test_draft_problem_attachment.TestManagedDepositForAProblem.test_new_version_refuses_a_fresh_draft_that_has_no_concept_doi` | python3: 2 tests, 198.516s; OK |
+| F6 round 4 GREEN (f6-round4-report.md:202) | `CLEAN python3.12 -m unittest -v test_draft.TestNewVersion.test_new_version_reuses_the_stored_deposition test_draft_problem_attachment.TestManagedDepositForAProblem.test_new_version_refuses_a_fresh_draft_that_has_no_concept_doi` | python3.12: 2 tests, 157.956s; OK |
+| F6 round 4 GREEN (f6-round4-report.md:211) | `CLEAN python3 -m unittest -v test_request_outcome_advice test_transport.TestApiBaseUrlCheck test_draft.TestDirectDeposit test_draft.TestZenodoAnswersThatCannotBeRead` | python3: 99 tests, 5.233s; OK |
+| F6 round 4 GREEN (f6-round4-report.md:211) | `CLEAN python3.12 -m unittest -v test_request_outcome_advice test_transport.TestApiBaseUrlCheck test_draft.TestDirectDeposit test_draft.TestZenodoAnswersThatCannotBeRead` | python3.12: 99 tests, 4.040s; OK |
+| F6 round 4 GREEN (f6-round4-report.md:211) | `CLEAN python3 -m unittest -v test_request_outcome_advice test_transport.TestApiBaseUrlCheck test_draft.TestDirectDeposit test_draft.TestZenodoAnswersThatCannotBeRead` | python3: 99 tests, 7.634s; OK |
+| F6 round 4 GREEN (f6-round4-report.md:211) | `CLEAN python3.12 -m unittest -v test_request_outcome_advice test_transport.TestApiBaseUrlCheck test_draft.TestDirectDeposit test_draft.TestZenodoAnswersThatCannotBeRead` | python3.12: 99 tests, 6.495s; OK |
+| F6 round 4 GREEN (f6-round4-report.md:213) | `CLEAN python3 -m unittest -v test_request_outcome_advice test_transport.TestApiBaseUrlCheck test_draft.TestDirectDeposit test_draft.TestZenodoAnswersThatCannotBeRead test_draft_problem_attachment.TestProblemDepositJournalStates` | python3: 130 tests, 48.707s; OK |
+| F6 round 4 GREEN (f6-round4-report.md:213) | `CLEAN python3.12 -m unittest -v test_request_outcome_advice test_transport.TestApiBaseUrlCheck test_draft.TestDirectDeposit test_draft.TestZenodoAnswersThatCannotBeRead test_draft_problem_attachment.TestProblemDepositJournalStates` | python3.12: 130 tests, 43.330s; OK |
+| F6 round 4 GREEN (f6-round4-report.md:215) | `CLEAN python3 -m unittest -v test_request_outcome_advice test_transport.TestApiBaseUrlCheck test_draft.TestDirectDeposit test_draft.TestZenodoAnswersThatCannotBeRead test_draft_problem_attachment.TestProblemDepositJournalStates` | python3: 130 tests, 15.936s; OK |
+| F6 round 4 GREEN (f6-round4-report.md:215) | `CLEAN python3.12 -m unittest -v test_request_outcome_advice test_transport.TestApiBaseUrlCheck test_draft.TestDirectDeposit test_draft.TestZenodoAnswersThatCannotBeRead test_draft_problem_attachment.TestProblemDepositJournalStates` | python3.12: 130 tests, 10.611s; OK |
+| F6 round 4 GREEN (f6-round4-report.md:223) | `CLEAN python3 /private/tmp/f6-round4-run-suite.py test_draft_problem_attachment` | python3: 132 socket-free tests; OK, 2966.732s |
+| F6 round 4 GREEN (f6-round4-report.md:223) | `CLEAN python3.12 /private/tmp/f6-round4-run-suite.py test_draft_problem_attachment` | python3.12: 132 socket-free tests; OK, 2462.777s |
+| F6 round 4 GREEN (f6-round4-report.md:224) | `CLEAN python3 /private/tmp/f6-round4-run-suite.py test_draft` | python3: 92 socket-free tests; OK, 4716.875s |
+| F6 round 4 GREEN (f6-round4-report.md:224) | `CLEAN python3.12 /private/tmp/f6-round4-run-suite.py test_draft` | python3.12: 92 socket-free tests; OK, 3660.868s |
+| F6 round 4 GREEN (f6-round4-report.md:225) | `CLEAN python3 /private/tmp/f6-round4-run-suite.py test_transport` | python3: 113 socket-free tests; OK, 152.770s |
+| F6 round 4 GREEN (f6-round4-report.md:225) | `CLEAN python3.12 /private/tmp/f6-round4-run-suite.py test_transport` | python3.12: 113 socket-free tests; OK, 140.445s |
+| F6 round 4 GREEN (f6-round4-report.md:226) | `CLEAN python3 /private/tmp/f6-round4-run-suite.py test_math_problems_cli` | python3: 167 socket-free tests; OK, 6.899s |
+| F6 round 4 GREEN (f6-round4-report.md:226) | `CLEAN python3.12 /private/tmp/f6-round4-run-suite.py test_math_problems_cli` | python3.12: 167 socket-free tests; OK, 3.719s |
+| F6 round 4 GREEN (f6-round4-report.md:227) | `CLEAN python3 /private/tmp/f6-round4-run-suite.py test_research_publication` | python3: 33 socket-free tests; OK, 855.883s |
+| F6 round 4 GREEN (f6-round4-report.md:227) | `CLEAN python3.12 /private/tmp/f6-round4-run-suite.py test_research_publication` | python3.12: 33 socket-free tests; OK, 700.919s |
+| F6 round 4 GREEN (f6-round4-report.md:228) | `CLEAN python3 /private/tmp/f6-round4-run-suite.py test_research_round_integrity` | python3: 12 socket-free tests; OK, 808.160s |
+| F6 round 4 GREEN (f6-round4-report.md:228) | `CLEAN python3.12 /private/tmp/f6-round4-run-suite.py test_research_round_integrity` | python3.12: 12 socket-free tests; OK, 622.964s |
+| F6 round 4 GREEN (f6-round4-report.md:229) | `CLEAN python3 /private/tmp/f6-round4-run-suite.py test_research_source_limited_commands` | python3: 10 socket-free tests; OK, 406.215s |
+| F6 round 4 GREEN (f6-round4-report.md:229) | `CLEAN python3.12 /private/tmp/f6-round4-run-suite.py test_research_source_limited_commands` | python3.12: 10 socket-free tests; OK, 393.351s |
+| F6 round 4 GREEN (f6-round4-report.md:230) | `CLEAN python3 /private/tmp/f6-round4-run-suite.py test_research_gates` | python3: 7 socket-free tests; OK, 41.616s |
+| F6 round 4 GREEN (f6-round4-report.md:230) | `CLEAN python3.12 /private/tmp/f6-round4-run-suite.py test_research_gates` | python3.12: 7 socket-free tests; OK, 45.372s |
+| F6 round 4 GREEN (f6-round4-report.md:231) | `CLEAN python3 /private/tmp/f6-round4-run-suite.py test_research_guidance` | python3: 9 socket-free tests; OK, 27.478s |
+| F6 round 4 GREEN (f6-round4-report.md:231) | `CLEAN python3.12 /private/tmp/f6-round4-run-suite.py test_research_guidance` | python3.12: 9 socket-free tests; OK, 35.713s |
+| F6 round 4 GREEN (f6-round4-report.md:232) | `CLEAN python3 /private/tmp/f6-round4-run-suite.py test_user_authorized_publication` | python3: 13 socket-free tests; OK, 7.390s |
+| F6 round 4 GREEN (f6-round4-report.md:232) | `CLEAN python3.12 /private/tmp/f6-round4-run-suite.py test_user_authorized_publication` | python3.12: 13 socket-free tests; OK, 10.889s |
+| F6 round 4 GREEN (f6-round4-report.md:233) | `CLEAN python3 /private/tmp/f6-round4-run-suite.py test_workspace_init_retry` | python3: 16 socket-free tests; OK, 11.996s |
+| F6 round 4 GREEN (f6-round4-report.md:233) | `CLEAN python3.12 /private/tmp/f6-round4-run-suite.py test_workspace_init_retry` | python3.12: 16 socket-free tests; OK, 21.710s |
+| F6 round 4 GREEN (f6-round4-report.md:234) | `CLEAN python3 /private/tmp/f6-round4-run-suite.py test_manifest` | python3: 8 socket-free tests; OK, 0.391s |
+| F6 round 4 GREEN (f6-round4-report.md:234) | `CLEAN python3.12 /private/tmp/f6-round4-run-suite.py test_manifest` | python3.12: 8 socket-free tests; OK, 0.860s |
+| F6 round 4 GREEN (f6-round4-report.md:235) | `CLEAN python3 /private/tmp/f6-round4-run-suite.py test_codex` | python3: 29 socket-free tests; OK, 15.647s |
+| F6 round 4 GREEN (f6-round4-report.md:235) | `CLEAN python3.12 /private/tmp/f6-round4-run-suite.py test_codex` | python3.12: 29 socket-free tests; OK, 26.709s |
+| F6 round 4 GREEN (f6-round4-report.md:236) | `CLEAN python3 /private/tmp/f6-round4-run-suite.py test_request_outcome_advice` | python3: 58 socket-free tests; OK, 1.240s |
+| F6 round 4 GREEN (f6-round4-report.md:236) | `CLEAN python3.12 /private/tmp/f6-round4-run-suite.py test_request_outcome_advice` | python3.12: 58 socket-free tests; OK, 3.491s |
+| F6 round 4 CHECK (f6-round4-report.md:264) | `CLEAN python3 codex/generate.py --check` | exit 0 |
+| F6 round 4 CHECK (f6-round4-report.md:266) | `CLEAN python3 -m compileall -q ci hooks codex research_harness tests` | exit 0 |
+| F6 round 4 CHECK (f6-round4-report.md:267) | `CLEAN python3.12 -m compileall -q ci hooks codex research_harness tests` | exit 0 |
+| F6 round 4 CHECK (f6-round4-report.md:268) | `git diff --check` | exit 0 |
+| F6 round 4 CHECK (f6-round4-report.md:265) | `CLEAN sh -c 'find . -name "*.json" -not -path "./.git/*" -print0 \| xargs -0 -n 1 python3 -m json.tool > /dev/null'` | exit 0 |
+| F6 round 4 supervisor GREEN (progress.md:655) | `test_transport` outside the sandbox; exact command not recorded in the ledger | Python 3.9.6 and 3.12.8: all OK |
+| F6 round 4 supervisor GREEN (progress.md:655) | `test_request_outcome_advice` outside the sandbox; exact command not recorded in the ledger | Python 3.9.6 and 3.12.8: all OK |
+| F6 round 4 supervisor GREEN (progress.md:655) | `test_math_problems_cli` outside the sandbox; exact command not recorded in the ledger | Python 3.9.6 and 3.12.8: all OK |
+| F6 round 4 supervisor GREEN (progress.md:655) | `21 loopback tests` outside the sandbox; exact command not recorded in the ledger | Python 3.9.6 and 3.12.8: all OK |
+
+
+## F5 round 3 checks
+
+These runs occurred in the F5 worktree after the final command changes.
+Each command used the four credential removals, `PYTHONPATH=tests`, and the plugin PATH export.
+The unit runs also used a writable pycache prefix. Source names refer to this round's scratch logs.
+No required test was skipped.
+
+| Task and source | Command | Result |
+| --- | --- | --- |
+| F5 round 3 GREEN (tests-python3.log) | `PYTHONPATH=tests python3 -B -X dev -W error -m unittest -v test_manifest test_research_guidance test_codex test_workspace_init_retry test_lab test_math_problems_cli` | 266 tests, 221.782s; OK |
+| F5 round 3 GREEN (final-tests-python3.log) | `PYTHONPATH=tests python3 -B -X dev -W error -m unittest -v test_manifest test_research_guidance test_codex test_workspace_init_retry test_lab test_math_problems_cli` | 266 tests, 185.965s; OK |
+| F5 round 3 GREEN (smoke-python3.log) | `PYTHONPATH=tests python3 -B tests/smoke_codex.py --codex /Users/ryshiro/.nvm/versions/node/v24.18.0/bin/codex --output <scratch-log.json>` | PASS: installed plugin, 16 skills, 11 hooks, no load errors |
+| F5 round 3 GREEN (tests-python3.12.log) | `PYTHONPATH=tests python3.12 -B -X dev -W error -m unittest -v test_manifest test_research_guidance test_codex test_workspace_init_retry test_lab test_math_problems_cli` | 266 tests, 197.426s; OK |
+| F5 round 3 GREEN (final-tests-python3.12.log) | `PYTHONPATH=tests python3.12 -B -X dev -W error -m unittest -v test_manifest test_research_guidance test_codex test_workspace_init_retry test_lab test_math_problems_cli` | 266 tests, 167.003s; OK |
+| F5 round 3 GREEN (smoke-python3.12.log) | `PYTHONPATH=tests python3.12 -B tests/smoke_codex.py --codex /Users/ryshiro/.nvm/versions/node/v24.18.0/bin/codex --output <scratch-log.json>` | PASS: installed plugin, 16 skills, 11 hooks, no load errors |

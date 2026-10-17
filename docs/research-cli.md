@@ -856,8 +856,8 @@ An overlap stops with `remote_operation_owned` and sends nothing:
 
 #### Read back a direct deposit before a new version
 
-A pending problem journal takes priority over direct-deposit recovery.
-Otherwise, `exactory-draft deposit --new-version` reads `.exactory/deposit.json` before any other request.
+The deposit command settles an unsettled problem journal before direct-deposit recovery.
+If the run reaches the direct-deposit path, `exactory-draft deposit --new-version` reads `.exactory/deposit.json` before its first request.
 If that record has no DOI, it reads the recorded deposition back from Zenodo first.
 
 | Read-back state | What the command does |
@@ -871,14 +871,18 @@ If that record has no DOI, it reads the recorded deposition back from Zenodo fir
 For a published read-back, the command prints:
 `Deposition <id> of the earlier run is published. This run recorded its DOI. A second run with --new-version revises it.`
 If no published history exists after deletion, the command offers a plain first deposit or the published version's New version button.
+If the workspace has no store, the command says that it has no store to search and gives the same options.
 A version made on Zenodo does not reach the workspace's record.
 
 If a failure leaves a fresh draft without a problem journal, delete the draft before retrying.
 The command says:
 `A second run creates another draft. Before you run the command again, delete this draft with the Delete button on its page.`
 Do not finish a draft by hand.
-If the command cannot keep the local deposit record, the message includes:
-`A second plain run starts another deposition when no problem journal records this deposit.`
+If the command cannot keep the local deposit record, its advice depends on the recorded state.
+For a published record, the message includes:
+`A second plain run publishes a second permanent record when no problem journal records this deposit.`
+For an unpublished draft, it includes:
+`A second plain run creates another draft when no problem journal records this deposit. Before a second plain run, delete this draft with the Delete button on its page.`
 Read the named record and its Zenodo state before retrying.
 
 ### Attach a recorded problem deposit

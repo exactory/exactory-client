@@ -19,6 +19,8 @@ discussion.
 
 The `exactory` command is on PATH while this plugin is enabled. It prints JSON on success.
 It prints an error message on stderr and exits non-zero on failure.
+It checks `EXACTORY_API_URL` once, after parsing the arguments and before running the command.
+`exactory --help` works even when that address is unusable.
 
 If the command reports no API key, stop and offer `/exactory:init`.
 This sets up a key in the session or through the web sign-up page. Do not ask the user to paste the key
@@ -221,8 +223,8 @@ origin, the command stops before attachment. If the recorded origin is yours, se
 `EXACTORY_API_URL` to it and retry. A settled production record with a pending attachment
 blocks a publishing deposit for another problem in that workspace.
 
-A pending problem journal takes priority over `--new-version` recovery.
-Otherwise, a direct `--new-version` run reads a recorded deposition with no DOI before any other request.
+The deposit command settles an unsettled problem journal before `--new-version` recovery.
+If the run reaches the direct-deposit path, `--new-version` reads a recorded deposition with no DOI before its first request.
 If it is published, the command records and prints it, then stops.
 If it is a new-version draft, identified by the recorded concept DOI, the command continues that draft.
 If a plain run recorded the fresh draft, the command stops before any write.
