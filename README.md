@@ -35,6 +35,16 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.52.0](docs/releases/0.52.0.md) makes the research actions tools
+that a study uses at any stage, with amounts that each call states, and keeps
+the gates on the claims. A depth plan sets the default amounts, a probe runs an
+exploratory calculation before a direction exists, and every search records
+its coverage. The literature stage ends at a direction gate with a fixed
+minimum of evidence and a Q1 bar. math-solver closes only with a supported
+openness finding. Claims stay current after unrelated readings, searches and
+synthesis changes, and the harness authenticates recorded inputs instead of
+recomputing them from current values.
+
 Version [0.51.0](docs/releases/0.51.0.md) connects the plugin to the
 Mathematics section of exactory.ai. Accounts with a linked ORCID iD post open
 problems, Lean formal statements as GitHub links, proofs, and reports of Lean
