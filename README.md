@@ -209,33 +209,62 @@ credentials leave that stage pending while preserving the completed local work.
 
 ## Exactory AI Science
 
-`/exactory:ai-science` runs a research study end to end: enumerate the cohort,
-read and synthesize its source network, fix the complete objective, execute
-admitted research cycles, and obtain independent readiness assessment before
-writing. The manuscript then receives separate blind review. Then the study
-records a round decision, and an independent assessor reviews it. `round-admit`
-opens another development round for an approved `continue`. After an approved
-`stop` and two accepting blind reviews, authorized deposit and submission follow.
+`/exactory:ai-science` orchestrates a study through direction, investigation,
+result, manuscript and publication milestones. The cohort, literature-review,
+ideate and experiment skills are tools usable at any stage. Each call states
+its depth and budget and records actual work and coverage. A quick exploratory
+probe can inform a direction before a target exists. Preparation policies supply
+default amounts; research studies can change them with a recorded reason.
+
+Gates belong to claims and milestones. The direction minimum requires a scoped
+direct search with bounded or complete coverage, full readings of relevant or
+contradictory hits and roots, applicable standards with valid sources, and a
+current Grand Challenge record. Two independent assessors establish the Q1 bar
+before seeing the candidate slate, then assess its potential. Result reviews
+assess support and realized advance together. New investigate, pivot and
+manuscript-development decisions require `q1_venue` passed in both reviews.
+Both reviewers receive the complete inspected ranges and named image assets
+behind the decisive evidence. Tool records alone grant no approval.
+
+Investigations execute prospectively admitted cycles. The manuscript receives
+separate blind measurement and publication reviews. One canonical decision
+serves target, cycle, writing, publication and round boundaries; `round-admit`
+adapts an approved continuation without a second strategic approval. An approved
+investigate/pivot round decision can return from `evaluate` to `literature`.
+Authorized deposit and submission follow the exact bundle's publication gates.
 The [research constitution](RESEARCH_CONSTITUTION.md) and
-[executable workflow](docs/research-workflow.md) describe the current obligations.
+[executable workflow](docs/research-workflow.md) describe the gates; the
+[tool catalog](docs/research-tools.md) gives arguments, records and examples.
 
 The agent develops hypotheses, writes and runs experiment code, and drafts the
 paper. Independent assessors review actual evidence and the manuscript. A study is one
 workspace, created by `exactory-lab init`; the loop reads `context/` at the
 start and at every improvement iteration, so the user drops material in as it
 runs. Experiments run on a pluggable compute layer (`local` by default, `colab`
-for GPU nodes — see [`colab/README.md`](colab/README.md)). Invoking the study
+for GPU nodes, see [`colab/README.md`](colab/README.md)). Invoking the study
 authorizes every stage, including deposit and submission. The shared workflow
 preserves resource limits, pending evidence and review obligations, and the pacing
 the user names. A mechanical gate does not certify scientific truth or a breakthrough.
 
-| Stage skill | Purpose |
+| Tool or endpoint | Purpose |
 |---|---|
-| `/exactory:cohort` | Build the cohort and extract its doctrine: the field's rules, its authorities, its open problems with their advance criteria |
-| `/exactory:literature-review` | Read the source network, record all five search purposes, and ground the full objective, standards, innovation, and scientific context |
-| `/exactory:ideate` | Turn an open problem and the human context into a specific, novel, feasible problem |
-| `/exactory:experiment` | Run a best-first experiment search, with an optional autoresearch optimization mode |
+| `/exactory:cohort` | Enumerate, sample or screen a population and read selected abstracts at caller-stated depth, preserving doctrine and coverage |
+| `/exactory:literature-review` | Search, read, expand and synthesize at any stage, stating survey, abstract-only and full-reading counts |
+| `/exactory:ideate` | Generate and compare candidates, prepare the Q1 direction decision and plan bounded investigations |
+| `/exactory:experiment` | Run quick exploratory probes at any stage or admitted prospective cycles with result assessment |
 | `/exactory:deposit` | Deposit the preprint to Zenodo and get its DOI |
+
+On resume, `status --summary` keeps the preparation report advisory and
+`next --summary` names the current milestone's missing condition. The
+`direction` gate lists its minimum's missing evidence during intake, before
+a cycle decision exists. Claim currency
+follows exact supporting dependencies; unrelated reading, synthesis or policy
+changes leave plans, results and reviews current. Existing studies keep their
+evidence, results and budgets and continue from their next action. They may retain
+Version 6; research adoption of Version 7 alone changes no claim. New direction
+and Q1 obligations apply at the next relevant commitment. Verification retains
+Version 6 and its fixed contract in this release. See the
+[upgrade path](docs/research-workflow.md#studies-in-progress).
 
 ## Skills
 
@@ -243,8 +272,8 @@ the user names. A mechanical gate does not certify scientific truth or a breakth
 |---|---|---|
 | `/exactory:init` | Both | Guided setup: check what is set, then register in the session with an emailed code or through the web sign-up page |
 | `/exactory:login` | Both | Sign in or create an account with a code sent to your email, and store the API key locally |
-| `/exactory:ai-science` | Submitter | Run a study through current preparation, admitted research, independent readiness, drafting, and authorized publication |
-| `/exactory:literature-review` | Both | Build or refresh exact-source literature and synthesis before research admission or paper verification |
+| `/exactory:ai-science` | Submitter | Orchestrate direction, investigation, result, manuscript and publication milestones using tools at any stage |
+| `/exactory:literature-review` | Both | Search, read, expand and synthesize exact sources at explicit depth whenever the question needs them |
 | `/exactory:math-solver` | Submitter | Attack a stated mathematical proposition: set the problem, check novelty, walk the admitted strategies under a fixed budget, cash out what stands, and resume an open attack from its record |
 | `/exactory:write` | Submitter | Draft the paper: evidence intake and doctrine-conforming sections with verified citations |
 | `/exactory:evaluate` | Both | Evaluate a paper locally: citation integrity, a structured quality review, and the verdict you expect the market to reach |
@@ -344,8 +373,8 @@ on a compute backend (`local`, or `colab` via `colab-status` and
 journal is built from.
 
 **`exactory-derive`** checks a paper's equation manipulations. `check` reads a
-JSON list of steps — each an evaluable `from` and `to` expression with the
-variables' ranges — and, using only a whitelisted arithmetic grammar (never
+JSON list of steps, each an evaluable `from` and `to` expression with the
+variables' ranges, and, using only a whitelisted arithmetic grammar (never
 `eval`), finds a point where the two sides differ. Such a point is a
 counterexample: the step is invalid, and the witness is reproducible. Agreement
 is soft evidence. When SymPy is installed it adds a symbolic verdict, but it is
@@ -363,9 +392,11 @@ fails with exit code 2, and no step is checked, when it is not a readable JSON
 list or nests more than 32 levels.
 
 **`exactory-math`** runs the harness of the `/exactory:math-solver` skill
-from the user's workspace. A managed objective starts with `search init`, current
-common preparation, a schema-3 proposal carrying the exported foundation,
-independent review, and `search admit`. The controller preserves the complete
+from the user's workspace. A managed objective starts with `search init`,
+a schema-3 proposal, observed independent review and `search admit`.
+Research can use `foundation: null` with a stable common review workspace,
+or retain an optional exported foundation. Verification keeps its required
+current foundation and exact-source binding. The controller preserves the complete
 objective, proof standard, evidence graph, finite task admission, resource
 accounts, and checkpoint lineage. `search status` and `search next` identify the
 current action; a recorded pause requires an authorized explicit resume.
@@ -388,8 +419,9 @@ the directory that holds the skill's own strategies and entries, which the
 solver reads as it works.
 
 After new evidence, the controller can require reviewed strategy reassessment,
-including retained failed methods. Changed common preparation requires a reviewed
-foundation amendment before fresh work. Legacy `init` and `--from` remain part of
+including retained failed methods. Research validates retained pinned foundation
+evidence independently of current common preparation. Verification retains
+current preparation checks and applicable reviewed foundation amendments. Legacy `init` and `--from` remain part of
 the unmanaged native interface; managed children use reviewed controller proposals.
 Local `finish` does not complete the controller's root objective. See the
 [native controller contract](skills/math-solver/SEARCH.md) for its exact rules.

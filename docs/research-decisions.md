@@ -9,7 +9,8 @@ the supported consequence is worth pursuing.
 
 Read this guide before committing an author-chosen objective, opening another
 investigation tranche, selecting a result for writing, or deciding a manuscript
-round. Use the [managed workflow](research-workflow.md) for source preparation,
+round. Use the [tool catalog](research-tools.md) for freely ordered actions and
+the [managed workflow](research-workflow.md) for milestone gates, source preparation,
 execution and publication, and the [CLI reference](research-cli.md) and
 `exactory-research example OPERATION` for the exact current payloads. Examples
 require actual evidence, identities and digests before they can be recorded.
@@ -68,6 +69,54 @@ Conversely, a new true bound may still leave the motivating question undecided.
 
 ## Before target commitment
 
+The direction decision is a milestone of ai-science. Ideation, search, reading
+and probes can inform it in any order. Before recording a new `investigate` or
+`pivot` decision, satisfy this mechanical minimum:
+
+| Evidence | Obligation codes |
+| --- | --- |
+| A selected valid `direct` search bound to the current literature scope, with explicit bounded or complete coverage, all captured results accounted by disposition, and no unresolved integrity error. | `direction_search_missing`, `direction_search_incomplete` |
+| Every relevant or contradictory direct-search work read in full. A deferral retains the missing reading. | `direction_reading_missing` |
+| Every root read in full. | `direction_root_reading_missing` |
+| Selected `standards` with valid own sources and resolved applicability, ignoring only global-foundation staleness. | `direction_standards_missing`, `direction_standards_unresolved` |
+| A current study Grand Challenge record. | `grand_challenge_missing` |
+
+For historical searches without coverage fields, the gate uses their captured
+response accounting and integrity checks. Preserve those captures and the
+coverage they establish without repeating a search just to add a new label.
+
+New decisions record `gate_version: 2`. Recording an `investigate` or `pivot`
+decision while the minimum is unmet returns `direction_minimum_unmet`, with
+the missing obligations. The evidence must exist before the reviews that judge
+it. Both reviewers must receive the decisive source content and claim in their
+observed packet histories, source-request continuations or bound supplements.
+Coverage requires the complete inspected ranges and every image asset named by
+the inspection. The harness checks the supplied bytes and their provenance
+against the exact captured source. Long ranges are delivered in consecutive
+chunks of at most 2,000 characters; PDF inspections deliver the checked original
+within the 64 MiB per-artifact bound. Every chunk of the inspected range and each
+named image must be present. A caption with an image descriptor leaves coverage
+missing until the image bytes are delivered.
+
+Reading-record equality, author notes, artifact descriptors, inventory membership
+and assignment chronology alone supply no source-content coverage. A passage
+marked `visuals_require_source_request: true` remains incomplete while required
+visual bytes are missing. Missing ranges or assets leave
+`direction_evidence_unassessed`. Qualifying historical source attachments and
+checked passage deliveries retain coverage without rewriting packets or repeating
+author reading. Assessment verifies delivery without creating source artifacts.
+
+The decision stores `direction_evidence_digest`: the direct search ID, relevant
+and contradictory versions with their full-reading IDs, roots with their
+full-reading IDs, standards section ID and digest, and Grand Challenge record
+ID. Readiness requires the minimum to hold with that same decisive evidence.
+`direction_evidence_unassessed` requires a new decision with reviews that saw
+new decisive evidence. Selecting a replacement standards section changes this
+evidence even when its conclusions match the earlier section. Stamping a digest
+when recording a decision supplies no evidence of what earlier reviewers saw.
+Target commitment applies the same minimum
+and review-coverage rule to its decision. Historical decisions keep their standing.
+
 Create a prospective dossier from the available literature. It compares the
 direction with a credible alternative and with not pursuing the branch. For a
 fixed user question, compare methods or intermediate questions within that scope.
@@ -113,7 +162,7 @@ delivery alone does not establish visual inspection. Source and inspection check
 do not establish that the source's claims are true.
 Withhold the proposed objective, candidate consequences,
 methods, desired action, earlier scores and the other assessor's initial answer.
-Each states a smallest worthwhile consequence and why it matters. Persist both
+Each states the Q1 bar described below. Persist both
 responses before either sees the other's bar. Reconcile alternative sufficient
 consequences with reasons; a material dispute follows focused adjudication.
 Tell the user once which independently derived bar guides an otherwise unspecified
@@ -131,7 +180,56 @@ preparation delta since approval, including newly relevant sources not listed
 in the old dependency set. Material or unresolved impact on nearest work, scope,
 transfer or the bar requires affected findings to refresh before commitment.
 The first result assessment checks that declaration against the source delta.
-Prospective approval does not certify the whole preparation gate or admit a cycle.
+The `direction` gate combines current configuration readiness with the selected
+decision's obligations at the `cycle` boundary. It governs completing literature
+and entering investigation planning. The complete preparation report is advisory
+for managed research; cycle execution retains prospective admission. Before a
+cycle decision exists, `gate direction` also lists the direction minimum
+obligations alongside configuration and missing-decision obligations.
+
+## The Q1 bar and assurance
+
+The bar describes field- and intent-level standards while the author's candidate
+is withheld. In `value.consequence`, each assessor states:
+
+1. The field and Q1 venues considered.
+2. The advance over the closest prior work such a venue would accept for this intent.
+3. The evidence standard it requires.
+4. Conditions that would make the result unpublishable there.
+
+These standards guide the scientific assessment; journal acceptance itself is
+out of scope for the assurance. The `q1_venue` assurance uses the existing
+`{kind, status, reason, evidence}` shape with status `passed`, `failed` or
+`unresolved`. At the slate it assesses potential: the selected candidate, if its
+success criterion is met with the planned method, meets the required advance
+and evidence standard and avoids the disqualifying conditions. At a result or
+post-measurement decision it assesses the realized, supported advance and its
+actual evidence.
+
+For a `gate_version: 2` decision, `investigate`, `pivot` and
+`develop_manuscript` require a passed `q1_venue` finding in both reviews.
+`q1_venue_missing` reports an absent finding; `research_assurance_pending`
+reports one that has not passed. An old review without this finding can retain
+historical standing while leaving a new commitment pending. `deliver_requested`
+retains its `stop` and `demand` checks, actual authority and explicit quality
+conditions.
+
+### Previous and current prompt versions
+
+Assignments bind exact template IDs and hashes. The previous strategic prompts
+use `exactory-independent-review-sources-v2/ROLE`, or the earlier
+`exactory-independent-review-v1/ROLE`. The current bar, slate and result prompts
+use `exactory-q1-review-v2/ROLE`; the current legacy packet form uses
+`exactory-q1-review-v2/legacy/ROLE`. Context-repair templates retain their
+`/context-repair` suffix. `ROLE` is `bar`, `slate` or `result`.
+
+Assignments recorded with the previous prompts still run and record with their
+previous assurance set: `impact`, `demand`, `novelty_risk`, `feasibility`,
+`distinctness`, `continuity`, `grand_challenge` and `stop`. Current slate and
+result responses add `q1_venue`. Bars keep empty assurances and unassessed
+objective and method findings while establishing the field standard. A new
+commitment consumes the findings it requires; a changed template leaves already
+approved historical tranches intact.
 
 ## Test the inference that matters
 
@@ -168,7 +266,7 @@ while making necessary definitions, proofs and evidence available.
 
 Each of two independent assessors evaluates validity, scope, novelty,
 contribution-statement support, development and branch obligations before
-consequence in one response. The harness records support and value as distinct
+consequence, including realized `q1_venue`, in one response. The harness records support and value as distinct
 immutable findings and derives compatible readiness from them. Do not commission
 a separate readiness approval followed by another full value-review loop.
 Unsupported retained claims cannot be promoted because their possible importance
@@ -517,14 +615,32 @@ requirements current.
 
 ## Migration and limits
 
-Constitution version 6 changes the recorded policy hash. Preserve historical
-policy and completed manuscript/deposit states. Adopt the current policy through
-the existing explicit revalidation flow before a new substantial commitment;
-read its named obligations instead of fabricating earlier strategic reviews.
-Historical strategic decisions are `legacy_unassessed`. An already admitted
-cycle may finish and retain its evidence. Neither policy adoption nor later
-context findings mean all old science is invalid or require every old cycle to
-run again.
+Continue existing studies with their evidence and results. A study may retain
+Version 6 without constitution revalidation and keep its configuration,
+foundation and synthesis reports byte-identical. A research study may adopt
+Version 7 explicitly; adoption alone changes no claim. Verification workspaces
+retain Version 6; their Version 7 adoption is out of scope for this release.
+
+Claim currency follows objective, scope, assumptions, plan, executions, exact
+supporting evidence and its source records, inheritance, validations, strategy
+failures and authorizations. Full dependency maps remain available for audit.
+Unrelated global preparation, configuration, constitution, foundation inventory
+and synthesis changes leave the claim current. Declare relevant source changes
+through `source-impact`; changed decisive evidence requires affected assessment.
+Validate historical digests against recorded inputs before comparing their claim
+projections. Reconstruct every missing historical field from retained evidence
+and verify the original digest. Managed per-record history supplies the original
+revision's inputs; `claim_reassessment_required` names any record whose inputs
+cannot be recovered or authenticated. The
+[workflow upgrade procedure](research-workflow.md#studies-in-progress) describes
+the compatibility mechanics.
+
+Apply new direction and Q1 obligations at the next relevant commitment. Recorded
+decisions and approved tranches keep their historical standing. Stores that never
+recorded strategic assessment can remain `legacy_unassessed` until that next
+commitment. Reconcile pending executions once under their frozen authority.
+Preserve completed manuscripts and receipts and repeat scientific work only when
+required validation needs it.
 
 This workflow preserves scientific support, source provenance and user authority.
 It does not guarantee an important discovery. Report software correctness,

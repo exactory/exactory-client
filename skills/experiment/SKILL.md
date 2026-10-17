@@ -1,5 +1,5 @@
 ---
-description: Use when executing an admitted research cycle, assessing actual results, renewing an investigation tranche, or deciding whether supported results can enter writing.
+description: Use when a study needs an exploratory calculation at any stage, an admitted execution, result assessment or a decision before writing.
 ---
 
 # Experiment
@@ -8,7 +8,51 @@ Read the [research constitution](../../RESEARCH_CONSTITUTION.md) and execute the
 [managed research workflow](../../docs/research-workflow.md) and
 [scientific contribution decisions](../../docs/research-decisions.md). Begin or resume with
 `exactory-research status --summary` and `next --summary`. Keep the complete objective, admitted cycle,
-resource account, current preparation, and exact output contract in view.
+resource account, advisory preparation, and exact output contract in view.
+This is a [tool](../../docs/research-tools.md) available at every stage.
+The caller states the question, depth and budget. Record effective amounts,
+actual work, outcomes, stopping reason and cost. The orchestration holds the
+gates that accept a direction or result; a tool record grants no approval.
+
+## Probe before or during any milestone
+
+Use `exactory-lab probe` for a quick calculation before choosing a theme, while
+comparing approaches, or during a later stage. Configuration is required; a
+target and admitted cycle may still be absent. State the exact question, program,
+inputs and wall-time allowance:
+
+```sh
+exactory-lab probe --id example-001 --question "Does the small example satisfy the conjectured relation?" \
+  --script experiment/check.py --input experiment/data.json --output-dir results --timeout 30
+```
+
+The [two-phase probe contract](../../docs/research-tools.md#probe) pins program
+and inputs and records `probe-intent` before launch, reserving the timeout against
+the `experiment` purpose. The observed `probe` outcome pins outputs, stdout and
+stderr, records exit status and actual elapsed time, charges that usage and
+releases the reservation, including failures, timeouts and output-bound outcomes.
+Launch ownership is persisted and exclusive. The frozen `supervision.json`
+binds worker/program identities, process group and deadline. An independent
+watchdog enforces the deadline after worker loss even without a retry. It writes
+`supervisor-timeout.json`, terminates the program group, verifies termination
+and writes `supervisor-terminal.json`. A later retry records the outcome and
+reconciles actual usage before releasing the reservation.
+
+Repeating an ID returns its outcome
+or `pending` for a live owner. Reconcile an unfinished intent only after owner
+loss or checked terminal evidence and confirmation that the original computation
+has stopped; retain the reservation until reconciliation. Preserve measured
+elapsed time and record unmeasured usage as unknown.
+
+Cite probes in dossiers with their record references. Probe artifacts retain
+exploratory origin through references and imports, with no prospective-test
+credit. Existing supported imported evidence retains its standing. Independent
+support assessment determines the additional validation a claim needs; repeat an
+execution when that validation requires it and retain the prior chronology.
+Computations relied on by recorded mathematical strategy decisions, proofs,
+finite checks, counterexamples or acceptances require native admission.
+Follow the [native provenance contract](../math-solver/SEARCH.md#computation-admission-and-mandatory-interpretation)
+for imported exploratory output and `exploratory_evidence`.
 
 ## Plan and execute each cycle
 
@@ -24,11 +68,13 @@ Check whether the method can distinguish the hypotheses and whether its proxy
 supports the target inference. A bounded adequacy probe may establish that link;
 extra precision on a shared fit cannot establish it by itself.
 
-Before every new launch, write the prospective `cycle`, pin actual program/input
+For every admitted prospective run, write the `cycle`, pin actual program/input
 bytes with `artifact`, `admit` the current plan and reservation, and `bind-run` the
 exact backend, seed, timeout, paths, outputs, and usage. These are prerequisites
-even for debugging, tuning, plotting that constitutes a planned execution, or a
-return from manuscript revision. Launch with the actual admission ID:
+for debugging, tuning and plotting when they form part of that planned execution,
+including a return from manuscript revision. Quick exploratory work uses the
+probe contract above. Planning and admission require configuration and a current
+cycle decision; the complete synthesis report remains advisory. Launch with the actual admission ID:
 
 ```sh
 exactory-lab run code/program.py --admission run-001 --backend local --timeout 30 \
@@ -132,7 +178,8 @@ slate is released. Reuse unaffected existing bars when the intent is unchanged.
 Record the evidence-bound `research-decision` and run
 `research-decision-assess --boundary write` with the current readiness gate.
 `develop_manuscript` needs both supported claims and a worthwhile realized
-consequence. `deliver_requested` can use an existing unconditional delivery
+consequence. Version-2 decisions require `q1_venue` passed in both reviews on
+the realized supported advance and actual evidence. `deliver_requested` can use an existing unconditional delivery
 instruction for a valid limited result while retaining an unmet bar and objective.
 An explicit quality condition remains binding. Selected source-limited publication
 contracts retain `gate manuscript-readiness`; whole-objective `gate readiness`

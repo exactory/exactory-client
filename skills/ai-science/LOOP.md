@@ -7,18 +7,40 @@ research has one strategic decision lifecycle. Manuscript blind measurement is a
 separate later assessment. Scores do not replace scientific support or sufficient
 consequence, and a delivery receipt does not establish scientific success.
 
+AI Science holds the direction, investigation, result, manuscript and publication
+milestones. Use the [shared tools](../../docs/research-tools.md) at any point,
+stating depth and budget and recording actual work. Tool order is free; each
+claim's fixed minimum and independent assessment determine its gate. Probe
+observations remain exploratory wherever cited. The preparation report in
+managed `status` has `preparation.advisory: true` and `next` names the
+milestone's missing condition. At intake, `direction` already lists its
+minimum's missing evidence before a cycle decision exists.
+
 ## Develop research before writing
 
 1. Read `status --summary`, `next --summary`, actual user intent, full objective,
-   current preparation, retained checkpoints/failures, critical work items and
+   advisory preparation, retained checkpoints/failures, critical work items and
    remaining authorized resources. Historical completed work stays historical;
    apply the current policy at the next substantial commitment.
 2. Before an author-chosen target is committed, prepare the proposed-content
    dossier. Two independent assessors first state worthwhile consequences from
    intent and verified field context, without the author's slate or value advocacy.
-   Persist and reconcile those bars, then deliver the candidate slate. Assess
+   The bar names the field, Q1 venues, acceptable advance over closest prior
+   work, evidence standard and disqualifying conditions. Persist and reconcile
+   those bars, then deliver the candidate slate. Assess
    objective adequacy and approach adequacy separately. Commit the exact approved
-   target with its source/preparation delta; refresh materially affected findings.
+   target with its source delta; refresh materially affected findings. Recording
+   a version-2 investigate/pivot decision and target commitment require the
+   direction minimum: scoped direct search with bounded or complete coverage
+   and accounted results, full readings of relevant/contradictory hits and
+   roots, applicable standards with valid own sources, and the Grand Challenge
+   record. Both reviewers receive complete inspected ranges and every named
+   image asset, with checked source bytes and provenance. Observed deliveries
+   in packets, continuations and supplements establish coverage; inventory,
+   reading notes and assignment chronology alone do not. Missing content
+   leaves `direction_evidence_unassessed`. Its evidence digest is
+   fixed in the decision; new decisive readings need a new reviewed decision.
+   Both slate reviews pass `q1_venue` on potential under the planned method.
 3. Compare credible candidate approaches, the option of not pursuing the branch,
    and discrepancy leads from verifications, reviews or failed checks. Preserve
    prior findings as input knowledge. A fixed user question remains fixed.
@@ -38,7 +60,8 @@ consequence, and a delivery receipt does not establish scientific success.
    verified context routes. Each answers support first and consequence second in
    one response. Preserve validity, scope, novelty, contribution-statement,
    development and branch findings. Derived readiness and the canonical decision
-   consume those findings; do not request a second full strategic approval.
+   consume those findings, including `q1_venue` on realized supported advance;
+   do not request a second full strategic approval.
 
 Every retained validity gap needs evidence or withdrawal of the claim. Every
 consequence-critical gap stays open until resolved, even when its request is
@@ -134,7 +157,8 @@ outside it. See the evaluate skill for unchanged output and recording contracts.
 At post-measurement commitment, bind the exact bundle, completed measurement and
 all reviewer-demand dispositions to the canonical research decision. Old `round`,
 `round-review` and `round-admit` commands adapt this same decision and assessment.
-Continue means an approved investigate/pivot with a next tranche. Stop records
+Continue means an approved investigate/pivot with a next tranche and permits
+`evaluate` to return to `literature`. Stop records
 branch closure, manuscript preparation or an authorized limited delivery separately.
 It does not authorize publication or complete the full objective by itself.
 
@@ -144,6 +168,18 @@ Grand Challenge and stopping assurances as named scientific findings. Reuse
 not a second strategic approval. Preserve the stored admitted goal and its criteria
 when directing cycles. A relevant prior failure must be resolved or avoided with
 evidence before a route is reopened.
+
+Claim currency follows exact objective, scope, assumptions, plans, executions,
+evidence, cited sources, inheritance, validations, failures and authorizations.
+Full dependencies remain recorded. Unrelated reading, synthesis, configuration
+or constitution changes leave the claim current. Preserve historical digests and
+validate them against recorded inputs before comparing claim projections.
+Managed per-record history supplies the original input snapshots; unresolved
+reconstruction reports `claim_reassessment_required`. Follow the
+[upgrade procedure](../../docs/research-workflow.md#studies-in-progress). A
+study may retain Version 6; research adoption of Version 7 alone changes no claim.
+New direction and Q1 requirements apply at the next relevant commitment, and
+pending executions reconcile once under frozen authority.
 
 Refresh downstream, next-step, exemplar and changed-source questions when a
 material scientific need arises. Retain applicable source/preparation obligations
