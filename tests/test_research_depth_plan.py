@@ -202,12 +202,14 @@ class LegacyDepthReportTests(SynthesisCase):
                 records.setdefault("synthesis", {})[payload["id"]] = {"id": payload["id"], "kind": kind,
                     "profile": profile, "payload": payload, "dependencies": assessment["dependencies"], "assessment": assessment}
                 records.setdefault("synthesis_selection", {})[profile + ":" + kind] = {"id": payload["id"]}
-            reports = {"foundation": foundation_state(records, Evaluation(records, self.artifacts), profile),
-                       "synthesis": synthesis.synthesis_state(records, self.artifacts, profile)}
-            for name, report in reports.items():
-                with self.subTest(profile=profile, report=name):
-                    fixture = Path(__file__).parent / "fixtures" / "research" / ("legacy-0.50.1-" + profile + "-" + name + ".json")
-                    self.assertEqual(report, json.loads(fixture.read_text(encoding="utf-8")))
+        # The current distribution is Version 7; the store that adopted Version 6 keeps its reports.
+        self.assertEqual(principles.constitution_contract()["version"], "7")
+        reports = {"foundation": foundation_state(records, Evaluation(records, self.artifacts), profile),
+                   "synthesis": synthesis.synthesis_state(records, self.artifacts, profile)}
+        for name, report in reports.items():
+            with self.subTest(profile=profile, report=name):
+                fixture = Path(__file__).parent / "fixtures" / "research" / ("legacy-0.50.1-" + profile + "-" + name + ".json")
+                self.assertEqual(report, json.loads(fixture.read_text(encoding="utf-8")))
 
     def test_research_foundation_and_synthesis_are_unchanged(self):
         self.compare_reports("research")
