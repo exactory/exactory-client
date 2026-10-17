@@ -334,9 +334,16 @@ class TestManagedPublishAnswers(_PlainWorkspaceDepositTestCase):
                           "draft_url": "https://zenodo.org/api/deposit/4242", "doi": "10.5281/zenodo.4242",
                           "concept_doi": "10.5281/zenodo.4241",
                           "record_url": "https://sandbox.zenodo.org/api/records/4242"})
+        read_back = records["publication_receipt"][intent["id"] + ":read-back"]
+        self.assertEqual((read_back["intent_id"], read_back["doi"], read_back["bundle_digest"]),
+                         (intent["id"], "10.5281/zenodo.4242", receipt["bundle_digest"]))
+        self.assertEqual(read_back["published_response"]["id"], 4242)
         journal = _read_journal(self.workspace_dir)
         self.assertEqual((journal["settled"], journal["attached"], journal["doi"]), (True, True, "10.5281/zenodo.4242"))
         self.assertEqual(len(self.exactory.links()), 1)
+        self.fake_api.requests.clear()
+        _run_draft_command(["reconcile", intent["id"]], None, self)
+        self.assertEqual(self.fake_api.requests, [])
 
     def test_a_receipt_completed_from_a_null_answer_stays_unresolved_while_zenodo_shows_no_publication(self):
         intent, _, receipt = self.complete_from_a_null_answer()
@@ -349,5 +356,6 @@ class TestManagedPublishAnswers(_PlainWorkspaceDepositTestCase):
         records = Store(self.workspace_dir).snapshot()["records"]
         self.assertEqual(records["publication_receipt"][intent["id"]], receipt)
         self.assertNotIn("doi", records["workspace"]["deposit"])
+        self.assertNotIn(intent["id"] + ":read-back", records["publication_receipt"])
         self.assertFalse(_read_journal(self.workspace_dir)["settled"])
         self.assertEqual(self.exactory.links(), [])

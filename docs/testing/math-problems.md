@@ -634,7 +634,7 @@ No required test was skipped.
 ## F6 round 5 and supervisor checks
 
 These results cover the command changes committed as `c32a5a4`, which fix review findings P25 to P28,
-and `f0ab97e`, which fixes finding P29 of the next review.
+`f0ab97e`, which fixes finding P29 of the next review, and the fix of finding P30 that follows the release commit.
 Source: the F6 round 5 report and the supervisor's progress ledger.
 Every command ran with the four credential removals above and `PYTHONPATH=tests`.
 The round ran in a sandbox without sockets, so its runs omit the 21 loopback tests; the supervisor's rows record them.
@@ -658,7 +658,9 @@ After the round, the supervisor changed four parts of its diff before the commit
 The next review (P29) found that an earlier version could complete a publish intent with a receipt without a DOI,
 when Zenodo answered the publish request with JSON null, and that the removed settlement branch had turned that state
 into `KeyError('doi')`. `f0ab97e` reads such a receipt's deposition back and records the publication in the workspace
-record. The receipt stays as it was written.
+record. The receipt stays as it was written. The review after that (P30) found that the publication gate and the
+submission read only publication receipts, so the fix of P30 also writes a second receipt, under the intent id with
+`:read-back`, that holds the read publication for the same bundle.
 
 | Task and source | Command | Result |
 | --- | --- | --- |

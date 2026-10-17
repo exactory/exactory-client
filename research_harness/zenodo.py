@@ -9,7 +9,7 @@ from .execution import _owner
 from .evaluation import Evaluation
 from .gates import require_ready
 from .integration import export_workspace
-from .operations import prepared_mutation
+from .operations import immutable_record, prepared_mutation
 from .publication import publication_state, validate_upload
 from .remote import begin_intent, discard_step, finish_intent, get_intent, remote_step, resolve_step
 from .rounds import round_state
@@ -91,22 +91,27 @@ def _recover_published_deposition(store, intent, client, *, reconcile):
 
 def _record_read_back_publication(store, identifier, receipt, published):
     """Record a publication that a read of the same deposition established for a receipt without a
-    DOI. An earlier version completed such a receipt from a publish answer of JSON null; the receipt
-    stays as it was written, and the workspace record takes the publication."""
+    DOI. An earlier version completed such a receipt from a publish answer of JSON null. That receipt
+    stays as it was written. A second receipt, under the intent id with ":read-back", holds the read
+    publication for the same bundle, so the publication gate and the submission find it, and the
+    workspace record takes the publication while it still names this deposition without a DOI."""
     state = dict({key: receipt[key] for key in ("environment", "deposition_id", "draft_url")},
                  doi=published["doi"], concept_doi=published.get("conceptdoi", ""),
                  record_url=published.get("links", {}).get("record_html", ""))
-    snapshot = store.snapshot()
-    current = snapshot["records"].get("workspace", {}).get("deposit", {})
-    # Only this deposit's own record, still without a DOI, takes the publication, so a newer
-    # deposit's record stays as it is.
-    if (current.get("environment") == state["environment"] and current.get("deposition_id") == state["deposition_id"]
-            and not current.get("doi")):
-        prepared_mutation(store, "workspace.read_back_publication", {"deposit": state},
-                          lambda records, value: ([("workspace", "deposit", value["deposit"])], value["deposit"]),
-                          expected_revision=snapshot["revision"], request_id=identifier + ":read-back-publication")
-    export_workspace(store)
-    return dict(receipt, **state)
+    read_back = dict(receipt, **state, published_response=published)
+
+    def prepare(records, value):
+        changes = [immutable_record(records, "publication_receipt", identifier + ":read-back", value["receipt"])]
+        current = records.get("workspace", {}).get("deposit", {})
+        # A newer deposit's workspace record stays as it is.
+        if (current.get("environment") == state["environment"] and current.get("deposition_id") == state["deposition_id"]
+                and not current.get("doi")):
+            changes.append(("workspace", "deposit", value["deposit"]))
+        return changes, value["receipt"]
+
+    prepared_mutation(store, "publication.read_back", {"receipt": read_back, "deposit": state}, prepare,
+                      expected_revision=store.revision, request_id=identifier + ":read-back")
+    return read_back
 
 
 def has_published_record(deposit_state):
@@ -258,10 +263,11 @@ def continue_deposit(store, identifier, client, *, reconcile=False, finish_only=
     with _owner(store.root, "remote:" + identifier):
         intent = get_intent(store, identifier)
         if intent["status"] == "complete":
-            receipt = store.snapshot()["records"]["publication_receipt"][identifier]
+            receipts = store.snapshot()["records"]["publication_receipt"]
+            receipt = receipts[identifier]
             if intent["binding"]["publish"] and not receipt.get("doi"):
-                published = _recover_published_deposition(store, intent, client, reconcile=reconcile)
-                return _record_read_back_publication(store, identifier, receipt, published)
+                receipt = receipts.get(identifier + ":read-back") or _record_read_back_publication(
+                    store, identifier, receipt, _recover_published_deposition(store, intent, client, reconcile=reconcile))
             export_workspace(store)
             return receipt
         if reconcile:
