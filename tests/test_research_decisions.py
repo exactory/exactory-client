@@ -1,12 +1,418 @@
 """Canonical scientific actions cannot bypass evidence, authority or independence."""
 
 import copy
+import json
 from unittest.mock import patch
 
 from strategy_fixtures import StrategyCase
 
 
 class DecisionContractTests(StrategyCase):
+    def prepare_visual_direction(self):
+        from test_research_direction_sources import DirectionSourceTests
+        self.prepare_direction()
+        fixture = DirectionSourceTests()
+        fixture.root, fixture.store, fixture.artifacts = self.root, self.store, self.artifacts
+        fixture.sequence = self.store.revision
+        version, asset = fixture.prepare_visual_reading()
+        fixture.mutate(self.module("literature").record_search, fixture.capture_search(found=[version]))
+        return asset
+
+    def test_new_review_packets_attach_decisive_visuals_and_authorize_the_direction(self):
+        asset = self.prepare_visual_direction()
+        self.reviewed_dossier()
+        for suffix in ("a", "b"):
+            assignment = self.store.snapshot()["records"]["review_assignment"]["assignment-slate-" + suffix]
+            packet = json.loads(self.artifacts.read(assignment["packet"]))
+            attachment = next(item for item in packet["evidence"] if item["artifact"] == asset["artifact"])
+            import base64
+            self.assertEqual(base64.b64decode(attachment["content"]), self.artifacts.read(asset["artifact"]))
+        self.mutate(self.module("research_decisions").record_research_decision, self.decision())
+        self.assertTrue(self.state()["ready"], self.state()["obligations"])
+
+    def test_an_omitted_decisive_visual_reports_direction_evidence_unassessed(self):
+        self.prepare_visual_direction()
+        protocol = self.module("review_protocol")
+        original = protocol.build_direction_evidence
+        def omit_assets(*args, **kwargs):
+            value = original(*args, **kwargs)
+            for passage in value["passages"]:
+                passage.pop("assets", None)
+            return value
+        with patch.object(protocol, "build_direction_evidence", side_effect=omit_assets):
+            self.reviewed_dossier()
+        error = self.error("direction_evidence_unassessed", lambda: self.mutate(
+            self.module("research_decisions").record_research_decision, self.decision()))
+        self.assertEqual({item["review_id"] for item in error.details["obligations"]}, {"slate-a", "slate-b"})
+        self.assertTrue(all("html-visual-reading" in item["reading_ids"] for item in error.details["obligations"]))
+
+    def test_decision_state_leaves_source_objects_unchanged_without_artifact_writes(self):
+        self.reviewed_dossier()
+        self.mutate(self.module("research_decisions").record_research_decision, self.decision())
+        from research_harness.artifacts import ArtifactStore
+        objects = self.root / "research/sources/objects"
+        before = sorted(path.name for path in objects.iterdir())
+        original = ArtifactStore.put
+        with patch.object(ArtifactStore, "put", autospec=True, side_effect=original) as writes:
+            state = self.state()
+        self.assertTrue(state["ready"], state["obligations"])
+        self.assertEqual(sorted(path.name for path in objects.iterdir()), before)
+        self.assertEqual(writes.call_count, 0)
+
+    def test_status_leaves_source_objects_unchanged_without_artifact_writes(self):
+        self.reviewed_dossier()
+        self.mutate(self.module("research_decisions").record_research_decision, self.decision())
+        from research_harness import cli
+        from research_harness.artifacts import ArtifactStore
+        objects = self.root / "research/sources/objects"
+        before = sorted(path.name for path in objects.iterdir())
+        original = ArtifactStore.put
+        with patch.object(ArtifactStore, "put", autospec=True, side_effect=original) as writes:
+            result = cli.run(cli.build_parser().parse_args(["status", "--workspace", str(self.root)]))
+        self.assertEqual(result["revision"], self.store.revision)
+        self.assertEqual(sorted(path.name for path in objects.iterdir()), before)
+        self.assertEqual(writes.call_count, 0)
+
+    def test_gate_version_is_record_metadata_and_does_not_change_payload_fingerprint(self):
+        from research_harness.evidence import digest
+        self.reviewed_dossier()
+        payload = self.decision()
+        saved = self.mutate(self.module("research_decisions").record_research_decision, payload)["result"]
+        self.assertEqual(saved["gate_version"], 2)
+        self.assertNotIn("gate_version", saved["payload"])
+        self.assertEqual(saved["digest"], digest(payload))
+        self.assertEqual(saved["fingerprint"], digest({key: value for key, value in payload.items() if key not in ("id", "reason")}))
+
+    def prepare_unread_direction(self):
+        self.prepare_direction()
+        fixture = self.direction_fixture
+        decisive = fixture.metadata(90002)
+        bundle = fixture.bundle(decisive, bundle_id="decisive-bundle")
+        fixture.mutate(self.module("literature").import_bundle, bundle)
+        fixture.mutate(self.module("literature").record_search, fixture.capture_search(found=[decisive]))
+        self.mutate(self.module("strategy").record_intent, self.intent())
+        self.mutate(self.module("strategy").record_strategy, self.dossier())
+        self.route()
+        for stage in ("bar", "slate"):
+            for suffix in ("a", "b"):
+                self.record_response(stage + "-" + suffix, "reviewer-" + suffix, self.review_response(stage))
+        return fixture, bundle
+
+    def test_decision_refused_until_decisive_reading_exists_before_reviews(self):
+        self.prepare_unread_direction()
+        error = self.error("direction_minimum_unmet", lambda: self.mutate(
+            self.module("research_decisions").record_research_decision, self.decision()))
+        self.assertEqual({item["code"] for item in error.details["obligations"]}, {"direction_reading_missing"})
+        self.assertIn("before the reviews", error.message)
+        self.assertNotIn("research_decision", self.store.snapshot()["records"])
+
+    def test_reviews_predating_decisive_reading_cannot_authorize_new_decision(self):
+        fixture, bundle = self.prepare_unread_direction()
+        fixture.mutate(self.module("reading").record_reading, fixture.full_note(bundle, note_id="decisive-reading"))
+        self.assertEqual(self.module("claim_minimums").assess_direction(self.store.snapshot()["records"], self.artifacts), [])
+        error = self.error("direction_evidence_unassessed", lambda: self.mutate(
+            self.module("research_decisions").record_research_decision, self.decision()))
+        self.assertEqual({item["review_id"] for item in error.details["obligations"]}, {"slate-a", "slate-b"})
+
+    def test_historical_decision_keeps_standing_but_new_target_needs_reviewed_evidence(self):
+        self.prepare_unread_direction()
+        # A decision recorded before gate version 2 could retain an unread gap.
+        # Keep that historical standing, but require review of a new commitment.
+        dossier = self.store.snapshot()["records"]["strategy_dossier"]["dossier-1"]
+        intent = self.store.snapshot()["records"]["research_intent"]["intent-1"]
+        from research_harness.evidence import digest
+        payload = self.decision()
+        self.put("research_decision", "decision-1", {"id": "decision-1", "payload": payload,
+            "digest": digest(payload), "fingerprint": digest({key: value for key, value in payload.items() if key not in ("id", "reason")}),
+            "dossier_digest": dossier["digest"], "intent_digest": intent["digest"], "recorded_revision": self.store.revision + 1})
+        self.put("strategy_selection", "decision", {"id": "decision-1"})
+        self.assertTrue(self.state()["ready"], self.state()["obligations"])
+        decisions = self.module("research_decisions")
+        target = {"kind": "objective", "id": "new-target", "statement": self.intent()["objective"]["statement"]}
+        self.error("direction_minimum_unmet", lambda: decisions.prepare_objective_commitment(
+            self.store.snapshot()["records"], self.artifacts, target, decision_id="decision-1",
+            source_impact=payload["source_impact"], revision=self.store.revision + 1))
+        fixture = self.direction_fixture
+        bundle = self.store.snapshot()["records"]["source_bundle"]["decisive-bundle"]
+        fixture.mutate(self.module("reading").record_reading, fixture.full_note(bundle, note_id="new-target-reading"))
+        self.assertTrue(self.state()["ready"], self.state()["obligations"])
+        error = self.error("direction_evidence_unassessed", lambda: decisions.prepare_objective_commitment(
+            self.store.snapshot()["records"], self.artifacts, target, decision_id="decision-1",
+            source_impact=payload["source_impact"], revision=self.store.revision + 1))
+        self.assertEqual({item["review_id"] for item in error.details["obligations"]}, {"slate-a", "slate-b"})
+        reading = self.store.snapshot()["records"]["reading"]["new-target-reading"]
+        successor = self.dossier("reviewed-direction")
+        successor.update(previous="dossier-1", material_change={"kind": "new_evidence",
+            "reason": "The decisive reading is now available for scientific assessment.",
+            "evidence": [{"kind": "record", "record_kind": "reading", "id": reading["id"], "digest": digest(reading)}],
+            "prior_objections": []})
+        self.mutate(self.module("strategy").record_strategy, successor)
+        for suffix in ("a", "b"):
+            self.record_response("fresh-" + suffix, "reviewer-" + suffix, self.review_response(), dossier_id=successor["id"])
+        reviewed = dict(self.decision("fresh-decision"), dossier_id=successor["id"], review_ids=["fresh-a", "fresh-b"])
+        self.mutate(decisions.record_research_decision, reviewed)
+        changes, commitment = decisions.prepare_objective_commitment(self.store.snapshot()["records"], self.artifacts, target,
+            decision_id=reviewed["id"], source_impact=reviewed["source_impact"], revision=self.store.revision + 1)
+        self.assertTrue(changes)
+        self.assertEqual(commitment["decision_id"], reviewed["id"])
+
+    def test_packet_digest_alone_does_not_establish_claim_coverage(self):
+        protocol = self.module("review_protocol")
+        original = protocol.build_direction_evidence
+        def omit_claim(*args, **kwargs):
+            value = original(*args, **kwargs)
+            value["claim"] = {"digest": value["claim"]["digest"]}
+            return value
+        with patch.object(protocol, "build_direction_evidence", side_effect=omit_claim):
+            self.reviewed_dossier()
+        error = self.error("direction_evidence_unassessed", lambda: self.mutate(
+            self.module("research_decisions").record_research_decision, self.decision()))
+        self.assertEqual({tuple(item["missing"]) for item in error.details["obligations"]}, {("claim",)})
+
+    def test_decision_evidence_digest_freezes_the_minimum_and_claim_packets(self):
+        self.reviewed_dossier()
+        saved = self.mutate(self.module("research_decisions").record_research_decision, self.decision())["result"]
+        report = self.module("claim_minimums").describe_direction(self.store.snapshot()["records"], self.artifacts)
+        self.assertEqual(saved["direction_evidence_digest"], report["digest"])
+        for identifier in ("slate-a", "slate-b"):
+            import json
+            assignment = self.store.snapshot()["records"]["review_assignment"]["assignment-" + identifier]
+            packet = json.loads(self.artifacts.read(assignment["packet"]))
+            self.assertEqual(packet["direction_evidence"]["binding"], report["evidence"])
+            for supplied in packet["direction_evidence"]["readings"]:
+                reading = self.store.snapshot()["records"]["reading"][supplied["id"]]
+                self.assertEqual(supplied["reading"]["notes"], reading["notes"])
+                self.assertTrue(supplied["reading"]["inspections"])
+        self.assertTrue(self.state()["ready"], self.state()["obligations"])
+
+    def test_new_relevant_hit_and_reading_cannot_activate_existing_approval_or_target(self):
+        self.reviewed_dossier()
+        decisions = self.module("research_decisions")
+        saved = self.mutate(decisions.record_research_decision, self.decision())["result"]
+        fixture = self.direction_fixture
+        decisive = fixture.metadata(90002)
+        bundle = fixture.bundle(decisive, bundle_id="later-decisive")
+        fixture.mutate(self.module("literature").import_bundle, bundle)
+        fixture.mutate(self.module("reading").record_reading, fixture.full_note(bundle, note_id="later-reading"))
+        fixture.mutate(self.module("literature").record_search, fixture.capture_search(found=[decisive]))
+        self.assertIn("direction_evidence_unassessed", self.codes(self.state()))
+        target = {"kind": "objective", "id": "committed", "statement": self.intent()["objective"]["statement"]}
+        impact = copy.deepcopy(self.decision()["source_impact"])
+        dossier = self.store.snapshot()["records"]["strategy_dossier"]["dossier-1"]
+        impact["sources"] = [{"source_id": identifier, "impact": "unrelated", "reason": "Test the direction gate independently of source-impact classification.",
+                              "evidence": [self.evidence]} for identifier in self.module("strategy").source_delta(self.store.snapshot()["records"], dossier)]
+        error = self.error("direction_evidence_unassessed", lambda: decisions.prepare_objective_commitment(
+            self.store.snapshot()["records"], self.artifacts, target, decision_id=saved["id"],
+            source_impact=impact, revision=self.store.revision + 1))
+        self.assertIn("direction_evidence_unassessed", {item["code"] for item in error.details["obligations"]})
+        self.assertEqual(saved, self.store.snapshot()["records"]["research_decision"][saved["id"]])
+
+    def test_legacy_inventory_and_record_chronology_do_not_cover_readings(self):
+        protocol = self.module("review_protocol")
+        original = protocol.build_direction_evidence
+        def omit_reading_ids(*args, **kwargs):
+            value = original(*args, **kwargs)
+            value["readings"] = []
+            value.pop("passages", None)
+            return value
+        with patch.object(protocol, "build_direction_evidence", side_effect=omit_reading_ids):
+            self.reviewed_dossier()
+        error = self.error("direction_evidence_unassessed", lambda: self.mutate(
+            self.module("research_decisions").record_research_decision, self.decision()))
+        self.assertTrue(all(item["reading_ids"] for item in error.details["obligations"]))
+
+    def test_reading_records_without_source_content_do_not_cover_direction(self):
+        protocol = self.module("review_protocol")
+        original = protocol.build_direction_evidence
+        def omit_content(*args, **kwargs):
+            value = original(*args, **kwargs)
+            value.pop("passages", None)
+            return value
+        with patch.object(protocol, "build_direction_evidence", side_effect=omit_content):
+            self.reviewed_dossier()
+        error = self.error("direction_evidence_unassessed", lambda: self.mutate(
+            self.module("research_decisions").record_research_decision, self.decision()))
+        self.assertEqual({item["review_id"] for item in error.details["obligations"]}, {"slate-a", "slate-b"})
+        self.assertTrue(all(item["reading_ids"] for item in error.details["obligations"]))
+
+    def test_legacy_observed_bar_passages_cover_readings_in_the_bound_slate_history(self):
+        self.prepare_direction()
+        self.setup_dossier()
+        self.route()
+        readings = self.store.snapshot()["records"]["reading"]
+        links = [inspection["link"] for reading in readings.values() for inspection in reading["inspections"]]
+        for suffix in ("a", "b"):
+            self.record_response("bar-" + suffix, "reviewer-" + suffix, self.review_response("bar"),
+                                 context={"source_links": links})
+        protocol = self.module("review_protocol")
+        original = protocol.build_direction_evidence
+        def supply_metadata_only(*args, **kwargs):
+            value = original(*args, **kwargs)
+            value.pop("passages", None)
+            return value
+        with patch.object(protocol, "build_direction_evidence", side_effect=supply_metadata_only):
+            for suffix in ("a", "b"):
+                self.record_response("slate-" + suffix, "reviewer-" + suffix, self.review_response())
+        self.mutate(self.module("research_decisions").record_research_decision, self.decision())
+        self.assertTrue(self.state()["ready"], self.state()["obligations"])
+        self.assertEqual(self.store.snapshot()["records"]["reading"], readings)
+
+        # D7 slates also bind their prior bar by session_id without the later
+        # explicit history_assignment_id field.
+        snapshot = self.store.snapshot()["records"]
+        for suffix in ("a", "b"):
+            assignment = snapshot["review_assignment"]["assignment-slate-" + suffix]
+            assignment.pop("history_assignment_id")
+        from research_harness.claim_minimums import describe_direction
+        from research_harness.direction_reviews import assess_direction_reviews
+        obligations = assess_direction_reviews(snapshot, self.artifacts, snapshot["strategy_dossier"]["dossier-1"],
+            [snapshot["value_review"]["slate-" + suffix] for suffix in ("a", "b")],
+            describe_direction(snapshot, self.artifacts))
+        self.assertEqual(obligations, [])
+
+    def test_decisive_inspected_passages_are_delivered_without_repeating_readings(self):
+        self.reviewed_dossier()
+        before = self.store.snapshot()["records"]["reading"]
+        for suffix in ("a", "b"):
+            assignment = self.store.snapshot()["records"]["review_assignment"]["assignment-slate-" + suffix]
+            packet = json.loads(self.artifacts.read(assignment["packet"]))
+            passages = packet["direction_evidence"]["passages"]
+            self.assertEqual({item["reading_id"] for item in passages}, set(before))
+            attached = {item["artifact"]["sha256"]: item["content"] for item in packet["evidence"]}
+            self.assertTrue(any("The finite example holds only for bounded inputs." in attached[item["excerpt"]["sha256"]]
+                                for item in passages))
+            self.assertTrue(all(item["origin"]["source_id"] for item in passages))
+        self.mutate(self.module("research_decisions").record_research_decision, self.decision())
+        self.assertEqual(self.store.snapshot()["records"]["reading"], before)
+        self.assertTrue(self.state()["ready"], self.state()["obligations"])
+
+    def test_explicit_mismatched_reading_cannot_use_legacy_inventory_fallback(self):
+        protocol = self.module("review_protocol")
+        original = protocol.build_direction_evidence
+        def change_inspection(*args, **kwargs):
+            value = original(*args, **kwargs)
+            value["readings"][0]["reading"]["inspections"] = []
+            value.pop("passages", None)
+            return value
+        with patch.object(protocol, "build_direction_evidence", side_effect=change_inspection):
+            self.reviewed_dossier()
+        error = self.error("direction_evidence_unassessed", lambda: self.mutate(
+            self.module("research_decisions").record_research_decision, self.decision()))
+        self.assertTrue(all(item["reading_ids"] for item in error.details["obligations"]))
+
+    def prepare_reading_supplement(self, *, full_source):
+        self.prepare_direction()
+        fixture = self.direction_fixture
+        decisive = fixture.metadata(90002)
+        bundle = fixture.bundle(decisive, bundle_id="supplement-decisive")
+        fixture.mutate(self.module("literature").import_bundle, bundle)
+        fixture.mutate(self.module("literature").record_search, fixture.capture_search(found=[decisive]))
+        self.mutate(self.module("strategy").record_intent, self.intent())
+        self.mutate(self.module("strategy").record_strategy, self.dossier())
+        self.route()
+        protocol, decisions = self.module("review_protocol"), self.module("research_decisions")
+        for suffix in ("a", "b"):
+            self.record_response("bar-" + suffix, "reviewer-" + suffix, self.review_response("bar"))
+        for suffix in ("a", "b"):
+            self.mutate(protocol.record_assignment, {"id": "request-" + suffix, "route_id": "route", "dossier_id": "dossier-1",
+                "role": "slate", "reviewer_id": "reviewer-" + suffix, "author_id": "author", "context": {}})
+            output = self.review_response(status="unresolved")
+            output["source_requests"] = ([{"id": "read-decisive", "kind": "source", "version_id": decisive, "depth": "fulltext"}]
+                if full_source else [{"id": "inventory", "kind": "inventory_page", "page": 0}])
+            with patch("research_harness.review_transport.send_request", return_value=self.provider_response(output)):
+                self.mutate(protocol.invoke_assignment, {"id": "request-attempt-" + suffix, "assignment_id": "request-" + suffix}, credential="fixture-only")
+        fixture.mutate(self.module("reading").record_reading, fixture.full_note(bundle, note_id="supplement-reading"))
+        original = protocol.build_direction_evidence
+        def supply_content(*args, **kwargs):
+            value = original(*args, **kwargs)
+            if full_source:
+                # Exercise source delivery itself, without automatic passages of
+                # the new reading also satisfying this review's coverage.
+                value["passages"] = [item for item in value.get("passages", []) if item["version_id"] != decisive]
+            return value
+        for suffix in ("a", "b"):
+            identifier = "assignment-slate-" + suffix
+            with patch.object(protocol, "build_direction_evidence", side_effect=supply_content):
+                self.mutate(protocol.record_assignment, {"id": identifier, "route_id": "route", "dossier_id": "dossier-1", "role": "slate",
+                    "reviewer_id": "reviewer-" + suffix, "author_id": "author", "context": {"prior_assignment_id": "request-" + suffix}})
+            output = self.review_response()
+            with patch("research_harness.review_transport.send_request", return_value=self.provider_response(output)):
+                self.mutate(protocol.invoke_assignment, {"id": "supplement-attempt-" + suffix, "assignment_id": identifier}, credential="fixture-only")
+            self.mutate(decisions.record_value_review, dict(output, id="slate-" + suffix, dossier_id="dossier-1", assignment_id=identifier))
+        return decisive
+
+    def test_observed_exact_source_continuations_cover_new_decisive_reading(self):
+        self.prepare_reading_supplement(full_source=True)
+        self.mutate(self.module("research_decisions").record_research_decision, self.decision())
+        self.assertTrue(self.state()["ready"], self.state()["obligations"])
+
+    def test_observed_passage_supplements_cover_new_decisive_reading(self):
+        decisive = self.prepare_reading_supplement(full_source=False)
+        before = self.store.snapshot()["records"]["reading"]
+        for suffix in ("a", "b"):
+            assignment = self.store.snapshot()["records"]["review_assignment"]["assignment-slate-" + suffix]
+            packet = json.loads(self.artifacts.read(assignment["packet"]))
+            self.assertEqual(packet["source_deliveries"][0]["request"]["kind"], "inventory_page")
+            self.assertIn(decisive, {item["version_id"] for item in packet["direction_evidence"]["passages"]})
+        self.mutate(self.module("research_decisions").record_research_decision, self.decision())
+        self.assertEqual(self.store.snapshot()["records"]["reading"], before)
+        self.assertTrue(self.state()["ready"], self.state()["obligations"])
+
+    def test_unobserved_or_failed_source_continuation_cannot_cover_decisive_reading(self):
+        self.prepare_reading_supplement(full_source=True)
+        from research_harness.direction_reviews import assess_direction_reviews
+        for status in ("unobserved", "failed"):
+            with self.subTest(status=status):
+                records = self.store.snapshot()["records"]
+                if status == "unobserved":
+                    records["review_attempt"].pop("supplement-attempt-a")
+                else:
+                    records["review_attempt"]["supplement-attempt-a"]["status"] = "failed"
+                direction = self.module("claim_minimums").describe_direction(records, self.artifacts)
+                obligations = assess_direction_reviews(records, self.artifacts, records["strategy_dossier"]["dossier-1"],
+                    [records["value_review"][identifier] for identifier in ("slate-a", "slate-b")], direction)
+                self.assertEqual({item["review_id"] for item in obligations}, {"slate-a"})
+                self.assertIn("supplement-reading", obligations[0]["reading_ids"])
+
+    def test_historical_decision_keeps_obligations_without_direction_or_q1_upgrade(self):
+        response = self.review_response()
+        response["value"]["assurances"] = [item for item in response["value"]["assurances"] if item["kind"] != "q1_venue"]
+        self.reviewed_dossier(response_a=response, response_b=response, previous_prompts=True)
+        self.mutate(self.module("research_decisions").record_research_decision, self.decision())
+        records = self.store.snapshot()["records"]
+        records["research_decision"]["decision-1"].pop("gate_version", None)
+        records.pop("search_selection")
+        state = self.module("research_decisions").decision_state(records, self.artifacts, "cycle")
+        self.assertEqual(state["obligations"], [])
+
+    def test_new_decision_reports_q1_missing_from_each_previous_protocol_review(self):
+        response = self.review_response()
+        response["value"]["assurances"] = [item for item in response["value"]["assurances"] if item["kind"] != "q1_venue"]
+        self.reviewed_dossier(response_a=response, response_b=response, previous_prompts=True)
+        self.mutate(self.module("research_decisions").record_research_decision, self.decision())
+        missing = [item for item in self.state()["obligations"] if item["code"] == "q1_venue_missing"]
+        self.assertEqual({item["review_id"] for item in missing}, {"slate-a", "slate-b"})
+
+    def test_current_assignment_cannot_record_a_review_without_q1(self):
+        from research_harness.errors import ResearchError
+        response = self.review_response()
+        response["value"]["assurances"] = [item for item in response["value"]["assurances"] if item["kind"] != "q1_venue"]
+        with self.assertRaises(ResearchError) as caught:
+            self.reviewed_dossier(response_b=response)
+        self.assertEqual(caught.exception.code, "invalid_value_review")
+
+    def test_failed_q1_assurance_blocks_investigation_and_pivot(self):
+        response = self.review_response()
+        next(item for item in response["value"]["assurances"] if item["kind"] == "q1_venue")["status"] = "failed"
+        self.reviewed_dossier(response_b=response)
+        decisions = self.module("research_decisions")
+        for action in ("investigate", "pivot"):
+            with self.subTest(action=action):
+                self.mutate(decisions.record_research_decision, self.decision("decision-" + action, action=action))
+                self.assertEqual(self.codes(self.state()), {"research_assurance_pending"})
+                pending = self.state()["obligations"][0]
+                self.assertEqual((pending["review_id"], pending["check"]), ("slate-b", "q1_venue"))
+
     def state(self, boundary="cycle", **kwargs):
         return self.module("research_decisions").decision_state(self.store.snapshot()["records"], self.artifacts, boundary, **kwargs)
 
@@ -278,6 +684,7 @@ class DecisionContractTests(StrategyCase):
         self.assertEqual(self.store.snapshot()["records"]["review_adjudication"]["quantifier-correction"], finding)
 
     def test_two_favorable_slate_reviews_do_not_erase_an_earlier_material_counterexample(self):
+        self.prepare_direction()
         self.setup_dossier()
         self.route()
         objection = {"id": "counterexample", "claim": "The proposed discriminator separates mechanisms.",

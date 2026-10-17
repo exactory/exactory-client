@@ -390,6 +390,19 @@ def _parse_stage(value: str) -> str:
     return value
 
 
+def _run_probe(args: argparse.Namespace) -> None:
+    try:
+        from research_harness.probe import launch_probe
+        receipt = launch_probe(current_store(_find_workspace()), identifier=args.id, question=args.question,
+                               script=args.script, inputs=args.input, output_dir=args.output_dir,
+                               timeout=args.timeout, observation=args.observation)
+    except ResearchError as error:
+        _exit_with_error(json.dumps({"error": error.as_dict()}))
+    except OSError as error:
+        _exit_with_error(json.dumps({"error": {"code": "probe_io", "message": str(error)}}))
+    print(json.dumps(receipt))
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="exactory-lab",
@@ -467,6 +480,16 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--admission", help="The exact prospective admission ID, claimed once before launch.")
     add_identity(run, required=False)
     run.set_defaults(handler=_run_run)
+
+    probe = commands.add_parser("probe", allow_abbrev=False, help="Run and retain an exploratory computation at any stage.")
+    probe.add_argument("--id", required=True, help="Immutable probe identity.")
+    probe.add_argument("--question", required=True, help="Exploratory question being checked.")
+    probe.add_argument("--script", required=True, help="Python script to copy and run.")
+    probe.add_argument("--input", action="append", default=[], help="Input file to copy; may be repeated.")
+    probe.add_argument("--output-dir", default=".", help="Output directory relative to the fresh working directory. Default: .")
+    probe.add_argument("--timeout", type=float, required=True, help="Wall time limit in seconds.")
+    probe.add_argument("--observation", help="Author observation; default: factual exit-status summary.")
+    probe.set_defaults(handler=_run_probe)
 
     colab_status = commands.add_parser("colab-status", allow_abbrev=False,
                                        help="Report whether a colab runner is"

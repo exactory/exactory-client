@@ -84,7 +84,7 @@ class ResearchGuidanceTests(unittest.TestCase):
                     if started:
                         interpreted.add((arguments[0], parsed.command))
         required = {("exactory-research", command) for command in
-                    ("target", "read", "search", "cycle", "admit", "bind-run", "assess", "checkpoint", "review", "gate")}
+                    ("target", "read", "search", "cycle", "admit", "bind-run", "assess", "checkpoint", "value-review", "gate")}
         required.update({("exactory-lab", "init"), ("exactory-lab", "run"), ("exactory-cohort", "freeze")})
         self.assertLessEqual(required, observed)
         # An admission of a venv interpreter binds and launches under that interpreter.
@@ -136,8 +136,8 @@ class ResearchGuidanceTests(unittest.TestCase):
 
     def test_release_manifests_and_notes_describe_the_same_final_version(self):
         for relative in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
-            self.assertEqual(json.loads((PLUGIN / relative).read_text())["version"], "0.51.0")
-        self.assertTrue((PLUGIN / "docs/releases/0.51.0.md").is_file())
+            self.assertEqual(json.loads((PLUGIN / relative).read_text())["version"], "0.52.0")
+        self.assertTrue((PLUGIN / "docs/releases/0.52.0.md").is_file())
 
     def test_staged_plugin_runs_common_and_native_entrypoints_without_repository_cwd(self):
         from research_harness.cli import ACQUISITION, OPERATIONS

@@ -491,17 +491,22 @@ class DevelopmentTests(DevelopmentCase):
         self.assertTrue(result["validated_result"])
         self.assertTrue(result["complete"])
 
-    def test_policy_adoption_requires_fresh_synthesis_development_checkpoint_and_review(self):
+    def test_version_six_policy_keeps_readiness_until_explicit_unmanaged_adoption_requires_refresh(self):
+        from constitution_fixtures import distribute_version_six
         api = self.development()
-        _, execution, payload = self.prepared_candidate()
-        review = self.review(execution)
-        receipt = self.mutate(api.record_readiness_review, review)
         principles = self.api("principles")
-        original_policy = principles.CONSTITUTION_PATH.read_bytes()
+        # A store that adopted Version 6 under 0.50.1 keeps its readiness under a later distribution.
+        with distribute_version_six():
+            _, execution, payload = self.prepared_candidate()
+            review = self.review(execution)
+            receipt = self.mutate(api.record_readiness_review, review)
+            original_policy = principles.CONSTITUTION_PATH.read_bytes()
         policy = self.root / "revised-constitution.md"
-        policy.write_bytes(original_policy.replace(b"Version: 1", b"Version: 2") + b"\nA test-only policy revision.\n")
+        version = principles.constitution_contract()["version"].encode("utf-8")
+        policy.write_bytes(original_policy.replace(b"Version: " + version, b"Version: 8") + b"\nA test-only policy revision.\n")
         with patch.object(principles, "CONSTITUTION_PATH", policy):
-            self.assertFalse(api.readiness_report(self.store)["ready"])
+            report = api.readiness_report(self.store)
+            self.assertTrue(report["ready"], report["obligations"])
             old = self.store.snapshot()["records"]["configuration"]["research"]["constitution"]["sha256"]
             adopted = self.mutate(principles.revalidate_constitution, {"previous_sha256": old, "reason": "Review the revised policy explicitly."})
             self.assertFalse(adopted["result"]["decisions_revalidated"])

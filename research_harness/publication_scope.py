@@ -9,11 +9,11 @@ import json
 import unicodedata
 
 from .artifacts import ArtifactStore
-from .development import _Context, _Evidence, _candidate, _REVIEW_CHECKS, _unique, cycle_authors
+from .development import _Context, _Evidence, _REVIEW_CHECKS, _unique, cycle_authors
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
-from .execution_evidence import _observed, author_readiness_state
+from .execution_evidence import author_readiness_state, validate_observed_execution
 from .graph import obligation
 from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .source_deferrals import assess_deferrals, build_source_gap_disclosure
@@ -106,7 +106,8 @@ def _validate_payload(context, payload, candidate):
     text(payload["id"], "Contract ID", code=_CODE)
     if payload["policy"] != POLICY:
         raise ResearchError(_CODE, "Use the explicit source-limited-v1 policy")
-    if candidate is None or any(payload[k] != candidate[k] for k in ("checkpoint_id", "assessment_id", "assessment_digest")):
+    if (candidate is None or any(payload[k] != candidate[k] for k in ("checkpoint_id", "assessment_id"))
+            or not context.verify_assessment_digest(payload["assessment_digest"], candidate["assessment_id"])):
         raise ResearchError("publication_scope_stale", "Bind the selected current assessment and checkpoint")
     if payload["objective_digest"] != digest(context.objective):
         raise ResearchError("publication_scope_stale", "Keep the exact original complete objective")
@@ -127,7 +128,7 @@ def _validate_payload(context, payload, candidate):
     for key in ("id", "statement"):
         text(payload["scope"][key], "Supported scope " + key, code=_CODE)
     strings(payload["scope"]["assumptions"], "Supported assumptions", code=_CODE)
-    assessment = context.assessment(candidate["assessment_id"])
+    assessment = context.assess_record(candidate["assessment_id"])
     if not set(assessment["payload"]["assumptions"]) <= set(payload["scope"]["assumptions"]):
         raise ResearchError("scope_assumptions_missing", "Retain the assessed scientific assumptions")
     limitations, claims = payload["public_limitations"], payload["supported_claims"]
@@ -207,8 +208,15 @@ def find_required_corrections(records):
             findings = [c["kind"] for c in payload["checks"] if c["status"] != "passed"]
             if payload["verdict"] != "ready":
                 findings.append("verdict")
+            target = review.get("scientific_target_digest")
+            if target is None:
+                candidate = review.get("candidate")
+                target = candidate.get("digest") if isinstance(candidate, dict) else None
+            if target is None:
+                raise ResearchError("claim_reassessment_required", "Reassess the review whose original scientific target is unavailable.",
+                                    {"record_id": review["id"], "missing_input": "recorded review candidate"})
             result.append({"kind": kind, "review_id": review["id"], "review_digest": digest(review),
-                           "scientific_target_digest": review.get("scientific_target_digest", review["candidate"]["digest"]),
+                           "scientific_target_digest": target,
                            "findings": sorted(findings)})
     return sorted(result, key=lambda value: (value["kind"], value["review_id"]))
 
@@ -298,7 +306,7 @@ def record_publication_scope(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
         context = _Context(records, ArtifactStore(store.root))
         context.require_objective()
-        candidate, _ = _candidate(context)
+        candidate, _ = context.build_candidate()
         _validate_payload(context, value, candidate)
         projection = build_scientific_target(context, value)
         required = find_required_corrections(records)
@@ -328,9 +336,10 @@ def select_publication_scope(store, payload, *, expected_revision, request_id):
                              expected_revision=expected_revision, request_id=request_id)
 
 
-def _load_scope_snapshot(records, artifacts):
-    context = _Context(records, artifacts)
-    candidate, _ = _candidate(context)
+def _load_scope_snapshot(records, artifacts, *, restore_inputs=None, include_dependencies=False, project_claims=False):
+    context = _Context(records, artifacts, restore_inputs=restore_inputs, project_claims=project_claims)
+    records, artifacts = context.records, context.artifacts
+    candidate, _ = context.build_candidate()
     contract = find_publication_scope(records)
     if contract is None:
         raise ResearchError("publication_scope_missing", "Select an explicit immutable source-limited contract")
@@ -353,20 +362,45 @@ def _load_scope_snapshot(records, artifacts):
     for identifier in sorted({e["execution_id"] for e in candidate["evidence"] if e["kind"] == "result"}):
         if records["execution"][identifier]["payload"]["origin"]["kind"] == "managed":
             try:
-                observations[identifier] = _observed(records, artifacts, identifier)
+                observations[identifier] = validate_observed_execution(records, artifacts, identifier)
             except ResearchError as error:
                 pending.append(obligation(error.code, error.message, execution_id=identifier))
     dependencies["observations"] = observations
-    return context, candidate, contract, digest(dependencies), observations, pending
+    result = (context, candidate, contract, digest(context.project_dependencies(dependencies)), observations, pending)
+    return result + (dependencies,) if include_dependencies else result
 
 
-def _validate_scoped_review(context, value, candidate, contract, candidate_digest):
+def rebuild_scoped_dependencies(records, artifacts, candidate=None):
+    evaluation = Evaluation.of(records, artifacts)
+    records = evaluation.records
+    key = ("scoped_dependencies", None if candidate is None else candidate["digest"],
+           None if candidate is None else digest(candidate))
+    return evaluation.compute_once_in_root(key, lambda: _rebuild_scoped_dependencies(records, evaluation, candidate))
+
+
+def _rebuild_scoped_dependencies(records, artifacts, candidate=None):
+    """Recover the complete composition at a recorded scoped-review snapshot."""
+    from .evidence import digest
+    legacy = candidate is not None and digest({key: value for key, value in candidate.items() if key != "digest"}) == candidate["digest"]
+    restore = None if not legacy else {
+        "dependencies": {"preparation": candidate["preparation_digest"], "constitution": candidate["constitution"]},
+        "record_id": candidate["checkpoint_id"]}
+    context, _, _, _, _, _, dependencies = _load_scope_snapshot(
+        records, artifacts, restore_inputs=restore, include_dependencies=True, project_claims=True)
+    if candidate is not None:
+        context.rebuild_candidate(candidate, candidate["checkpoint_id"])
+        dependencies = dict(dependencies, candidate=candidate["digest"])
+    return dependencies
+
+
+def _validate_scoped_review(context, value, candidate, contract, candidate_digest, *, assignment_id=None):
     from .publication import validate_assessor
     fields(value, ("id", "target", "candidate_digest", "assessor", "verdict", "checks", "limitations"), code=_CODE)
     text(value["id"], "Scoped review ID", code=_CODE)
     if (value["target"] != {"kind": "source_limited_manuscript", "contract_id": contract["id"],
                            "scientific_target_digest": contract["scientific_target_digest"]}
-            or value["candidate_digest"] != candidate_digest):
+            or not context.verify_candidate_digest(value["candidate_digest"], candidate_digest, scoped=True,
+                                                   record_id=value["id"], assignment_id=assignment_id)):
         raise ResearchError("scoped_review_stale", "Review the exact current scoped scientific target and freshness snapshot")
     validate_assessor(context.artifacts, value["assessor"], collect_scientific_authors(context.records, contract))
     if value["verdict"] not in ("ready", "not_ready", "unresolved"):
@@ -387,17 +421,19 @@ def _validate_scoped_review(context, value, candidate, contract, candidate_diges
         raise ResearchError("review_evidence_incomplete", "Independently assess every scientific check and candidate evidence reference")
 
 
-def prepare_combined_scoped_support(records, artifacts, payload, *, revision, request_id):
+def prepare_combined_scoped_support(records, artifacts, payload, *, revision, request_id, assignment_id=None):
     """Prepare scoped support and its pure report for one combined review commit."""
     context, candidate, contract, exact, _, _ = _load_scope_snapshot(records, Evaluation.of(records, artifacts))
-    _validate_scoped_review(context, payload, candidate, contract, exact)
+    _validate_scoped_review(context, payload, candidate, contract, exact, assignment_id=assignment_id)
     artifact = context.artifacts.put(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode(), "application/json")
     saved = {"id": payload["id"], "payload": payload, "artifact": artifact, "candidate": candidate,
              "scientific_target_digest": contract["scientific_target_digest"],
              "scientific_projection": contract["scientific_projection"], "reviewed_revision": revision}
+    if payload["candidate_digest"] in context.candidate_inputs:
+        saved["candidate_inputs"] = context.candidate_inputs[payload["candidate_digest"]]
     changes = [immutable_record(records, "scoped_readiness_review", payload["id"], saved),
                ("scoped_review_selection", contract["id"], {"id": payload["id"]})]
-    prospective = dict(records)
+    prospective = records.copy()
     for kind, key, value in changes:
         prospective[kind] = dict(prospective.get(kind, {}), **{key: value})
     report = assess_manuscript_readiness(prospective, artifacts)
@@ -413,16 +449,25 @@ def record_scoped_readiness_review(store, payload, *, expected_revision, request
                              expected_revision=expected_revision, request_id=request_id)
 
 
-def assess_manuscript_readiness(records, artifacts):
+def assess_manuscript_readiness(records, artifacts, *, restore_inputs=None):
+    evaluation = Evaluation.of(records, artifacts)
+    records = evaluation.records
+    key = ("manuscript_readiness", None if restore_inputs is None else digest(restore_inputs))
+    return evaluation.once(key, lambda: _assess_manuscript_readiness(records, evaluation, restore_inputs=restore_inputs))
+
+
+def _assess_manuscript_readiness(records, artifacts, *, restore_inputs=None):
     artifacts = Evaluation.of(records, artifacts)
-    full = author_readiness_state(records, artifacts)
+    full = author_readiness_state(records, artifacts, restore_inputs=restore_inputs)
     obligations, contract, exact, observations, review = [], None, None, {}, None
     candidate = full["candidate"]
     remaining = []
+    required_corrections = []
     try:
+        required_corrections = find_required_corrections(records)
         contract = find_publication_scope(records)
-        context, candidate, contract, exact, observations, pending = _load_scope_snapshot(records, artifacts)
-        assessment = context.assessment(candidate["assessment_id"])
+        context, candidate, contract, exact, observations, pending = _load_scope_snapshot(records, artifacts, restore_inputs=restore_inputs)
+        assessment = context.assess_record(candidate["assessment_id"])
         remaining = assessment["remaining_obligations"]
         obligations.extend(context.prerequisites["validity"] + context.prerequisites["workflow"] + pending)
         for cycle in records.get("cycle", {}).values():
@@ -454,7 +499,7 @@ def assess_manuscript_readiness(records, artifacts):
               "obligations": obligations, "objective_complete": full["ready"], "objective_obligations": full["obligations"],
               "remaining_obligations": remaining, "contract": contract, "candidate": candidate, "candidate_digest": exact,
               "selected_contract_id": records.get("publication_scope_selection", {}).get("current", {}).get("id"),
-              "required_corrections": find_required_corrections(records),
+              "required_corrections": required_corrections,
               "scientific_target_digest": contract["scientific_target_digest"] if contract else None,
               "review": review, "review_inputs": full["review_inputs"], "execution_observations": observations,
               "source_gaps": build_source_gap_disclosure((full.get("synthesis") or {}).get("foundation", {}).get("source_deferrals", [])),

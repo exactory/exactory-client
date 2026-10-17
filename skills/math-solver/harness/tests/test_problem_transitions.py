@@ -21,7 +21,7 @@ class ProblemTransitionTests(WorkspaceTest):
     def reserve_historical_move(self):
         # Old begin events have exactly this schema, but did not store problem bytes.
         with mock.patch("search_controller.integration.pin_problem",
-                        side_effect=lambda content, problem: attack.compute_problem_digest(problem)):
+                        side_effect=lambda content, problem, raw=None: attack.compute_problem_digest(problem)):
             invoke(self.controller, "begin", begin_spec())
 
     def journal_process(self, *extra):

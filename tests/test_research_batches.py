@@ -77,6 +77,17 @@ class ReadBatchTests(LiteratureCase):
 
 
 class BatchExportTests(LiteratureCase):
+    def test_loop_export_notes_state_the_current_candidate_depth(self):
+        from research_harness.batches import export_batches
+        from research_harness.cli import OPERATIONS
+        from research_harness.principles import initialize_research
+        self.mutate(initialize_research, {"profile": "research", "target": None})
+        self.assertIn("depth", OPERATIONS)
+        self.mutate(OPERATIONS["depth"], {"id": "more", "values": {"innovation_candidates": 15}, "reason": "Compare more candidates."})
+        export_batches(self.store, loop=True, destination=self.root / "loop-batches")
+        readme = json.loads((self.root / "loop-batches/README.json").read_text())
+        self.assertIn("15 innovation candidates", readme["innovation_candidate"])
+
     def test_export_writes_unread_abstracts_without_touching_the_store(self):
         from research_harness.batches import export_batches
         from research_harness.principles import initialize_research

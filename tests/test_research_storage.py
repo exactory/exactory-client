@@ -1,6 +1,8 @@
 """Behavioral tests for durable, revisioned research records."""
 
 import errno
+import copy
+import gc
 import hashlib
 import json
 import os
@@ -10,12 +12,15 @@ import sys
 import tempfile
 import threading
 import time
+import tracemalloc
 import unittest
+import weakref
 from contextlib import closing, contextmanager
 from pathlib import Path
 from unittest import mock
 
 from research_harness.errors import ResearchError
+from research_harness.evidence import digest
 from research_harness.storage import Store
 
 
@@ -28,6 +33,210 @@ def build_nested_value(levels, container=list):
 
 
 class ResearchStorageTests(unittest.TestCase):
+    def test_recorded_snapshots_replay_authenticated_inputs_without_another_connection(self):
+        store = Store(self.workspace, create=True)
+        self.add(store, managed=True)
+        self.add(store, title="Revised", revision=1, request="add-2")
+        with store.guarded_snapshot() as guard:
+            records = copy.deepcopy(guard.snapshot()["records"])
+            self.assertEqual(records.read_revision(), 2)
+            original = records.read_snapshot(1)
+            self.assertEqual(original["work"]["paper"]["title"], "Original")
+            original["work"]["paper"]["title"] = "caller mutation"
+            self.assertEqual(records.read_snapshot(1)["work"]["paper"]["title"], "Original")
+            self.assertEqual(records.copy().read_snapshot(1)["work"]["paper"]["title"], "Original")
+            self.assert_error("claim_reassessment_required", lambda: records.read_snapshot(1).read_snapshot(2))
+            self.assertEqual(records.read_snapshot(2), records)
+            original = records.read_record("work", "paper", digest({"title": "Original"}))
+            self.assertEqual(original, {"title": "Original"})
+            original["title"] = "caller mutation"
+            self.assertEqual(records.read_record("work", "paper", digest({"title": "Original"})), {"title": "Original"})
+            self.assertIsNone(records.read_record("work", "paper", "unknown digest"))
+            self.assertIsNone(records.read_snapshot(1).read_record("work", "paper", digest({"title": "Revised"})))
+            self.assertNotIn("history", json.loads(json.dumps(records)))
+            self.assert_error("claim_reassessment_required", lambda: records.read_snapshot(3))
+
+    def test_verification_and_unmanaged_snapshots_keep_no_event_history(self):
+        store = Store(self.workspace, create=True)
+        self.add(store)
+        self.assertFalse(hasattr(store.snapshot()["records"], "_history"))
+        def configure(tx):
+            tx.put("configuration", "research", {"profile": "verification"})
+            tx.put("workspace", "study", {"stage": "evaluate"})
+        store.mutate("configure", {}, configure, expected_revision=1, request_id="verification")
+        with store.guarded_snapshot() as guard:
+            records = guard.snapshot()["records"]
+            self.assertFalse(hasattr(records, "_history"))
+            self.assertFalse(hasattr(records, "read_snapshot"))
+            self.assertEqual(records["work"]["paper"]["title"], "Original")
+
+    def test_historical_record_lookups_do_not_reparse_event_changes(self):
+        from research_harness import storage
+        store = Store(self.workspace, create=True)
+        self.add(store, managed=True)
+        self.add(store, title="Revised", revision=1, request="add-2")
+        records = store.snapshot()["records"]
+        with mock.patch.object(storage, "_load", side_effect=AssertionError("History must already be indexed")):
+            for _ in range(3):
+                self.assertEqual(records.read_record("work", "paper", digest({"title": "Original"})), {"title": "Original"})
+                self.assertIsNone(records.read_snapshot(1).read_record("work", "paper", digest({"title": "Revised"})))
+
+    def test_historical_views_do_not_materialize_full_record_maps(self):
+        store = Store(self.workspace, create=True)
+        self.add(store, title="x" * 262144, managed=True)
+        self.add(store, title="y" * 262144, revision=1, request="add-2")
+        records = store.snapshot()["records"]
+        tracemalloc.start()
+        try:
+            views = [records.read_snapshot(1 + index % 2) for index in range(100)]
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        self.assertLess(peak, 262144)
+        self.assertEqual(views[0]["work"]["paper"]["title"], "x" * 262144)
+        self.assertEqual(views[1]["work"]["paper"]["title"], "y" * 262144)
+
+    def test_historical_iteration_retains_the_original_snapshot_order(self):
+        store = Store(self.workspace, create=True)
+        self.add(store, key="z", managed=True)
+        def add_earlier_keys(tx):
+            tx.put("work", "b", {"title": "second"})
+            tx.put("work", "a", {"title": "first"})
+        store.mutate("add", {}, add_earlier_keys, expected_revision=1, request_id="earlier-keys")
+        historical = store.snapshot()["records"].read_snapshot(2)
+        self.assertEqual(list(historical), ["configuration", "work", "workspace"])
+        self.assertEqual(list(historical["work"]), ["a", "b", "z"])
+
+    def test_evaluating_a_historical_version_decodes_it_only_once(self):
+        from research_harness import storage
+        from research_harness.artifacts import ArtifactStore
+        from research_harness.evaluation import Evaluation
+        store = Store(self.workspace, create=True)
+        self.add(store, managed=True)
+        self.add(store, title="Revised", revision=1, request="add-2")
+        records = store.snapshot()["records"]
+        evaluation = Evaluation(records, ArtifactStore(self.workspace))
+        with mock.patch.object(storage.zlib, "decompress", wraps=storage.zlib.decompress) as decode, \
+                mock.patch.object(storage.json, "loads", wraps=storage.json.loads) as parse:
+            historical = evaluation.read_snapshot(1).records
+            for _ in range(20):
+                self.assertEqual(historical["work"]["paper"], {"title": "Original"})
+            self.assertEqual(decode.call_count, 1)
+            self.assertEqual(parse.call_count, 1)
+            self.assertIs(historical.read_record("work", "paper", digest({"title": "Original"})),
+                          historical["work"]["paper"])
+            self.assertEqual(decode.call_count, 1)
+            self.assertIsNone(historical.read_record("work", "paper", digest({"title": "Revised"})))
+
+    def test_evaluating_unchanged_history_reuses_the_current_record_without_decoding(self):
+        from research_harness import storage
+        from research_harness.artifacts import ArtifactStore
+        from research_harness.evaluation import Evaluation
+        store = Store(self.workspace, create=True)
+        self.add(store, managed=True)
+        store.mutate("later", {}, lambda tx: tx.put("work", "later", {"title": "Later"}),
+                     expected_revision=1, request_id="later")
+        records = store.snapshot()["records"]
+        evaluation = Evaluation(records, ArtifactStore(self.workspace))
+        with mock.patch.object(storage.zlib, "decompress", wraps=storage.zlib.decompress) as decode, \
+                mock.patch.object(storage.json, "loads", wraps=storage.json.loads) as parse:
+            historical = evaluation.read_snapshot(1).records
+            for _ in range(20):
+                self.assertIs(historical["work"]["paper"], records["work"]["paper"])
+            self.assertEqual(decode.call_count, 0)
+            self.assertEqual(parse.call_count, 0)
+            self.assertNotIn("later", historical["work"])
+            raw = Evaluation(records.read_snapshot(1), ArtifactStore(self.workspace))
+            self.assertIs(raw.read_snapshot(1).records["work"]["paper"], records["work"]["paper"])
+            self.assertEqual(decode.call_count, 0)
+
+    def test_evaluating_history_does_not_borrow_a_changed_current_record(self):
+        from research_harness.artifacts import ArtifactStore
+        from research_harness.evaluation import Evaluation
+        store = Store(self.workspace, create=True)
+        self.add(store, managed=True)
+        records = store.snapshot()["records"]
+        artifacts = ArtifactStore(self.workspace)
+        first = Evaluation(records, artifacts)
+        self.assertEqual(first.read_snapshot(1).records["work"]["paper"], {"title": "Original"})
+        records["work"]["paper"]["title"] = "Unrecorded change"
+        second = Evaluation(records, first)
+        self.assertEqual(second.read_snapshot(1).records["work"]["paper"], {"title": "Original"})
+        old_view = first.read_snapshot(1).records
+        fresh = Evaluation(old_view, first)
+        self.assertEqual(fresh.records["work"]["paper"], {"title": "Original"})
+        self.assertEqual(fresh.read_snapshot(1).records["work"]["paper"], {"title": "Original"})
+
+    def test_switching_historical_evaluations_releases_the_previous_decoded_values(self):
+        from research_harness.artifacts import ArtifactStore
+        from research_harness.evaluation import Evaluation
+        store = Store(self.workspace, create=True)
+        self.add(store, title="x" * 262144, managed=True)
+        self.add(store, title="y" * 262144, revision=1, request="add-2")
+        self.add(store, title="z" * 262144, revision=2, request="add-3")
+        evaluation = Evaluation(store.snapshot()["records"], ArtifactStore(self.workspace))
+        tracemalloc.start()
+        try:
+            views = []
+            for index in range(20):
+                view = evaluation.read_snapshot(1 + index % 2).records
+                self.assertEqual(len(view["work"]["paper"]["title"]), 262144)
+                views.append(view)
+            retained, _ = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        self.assertLess(retained, 2 * 262144)
+
+    def test_historical_reports_share_decodes_until_the_revision_changes(self):
+        from research_harness import storage
+        from research_harness.artifacts import ArtifactStore
+        from research_harness.evaluation import Evaluation
+        store = Store(self.workspace, create=True)
+        self.add(store, managed=True)
+        self.add(store, title="Second", revision=1, request="add-2")
+        self.add(store, title="Third", revision=2, request="add-3")
+        records = store.snapshot()["records"]
+        evaluation = Evaluation(records, ArtifactStore(self.workspace))
+        with mock.patch.object(storage.zlib, "decompress", wraps=storage.zlib.decompress) as decode:
+            first = evaluation.read_snapshot(1).records
+            self.assertEqual(first["work"]["paper"]["title"], "Original")
+            child = Evaluation.of(first, evaluation)
+            self.assertEqual(child.read_snapshot(1).records["work"]["paper"]["title"], "Original")
+            self.assertEqual(decode.call_count, 1)
+            self.assertEqual(evaluation.read_snapshot(2).records["work"]["paper"]["title"], "Second")
+            self.assertEqual(decode.call_count, 2)
+            self.assertEqual(first["work"]["paper"]["title"], "Original")
+            self.assertEqual(decode.call_count, 3)
+            self.assertIs(evaluation.read_snapshot(3).records["work"]["paper"], records["work"]["paper"])
+            self.assertEqual(decode.call_count, 3)
+
+    def test_historical_evaluations_refuse_another_snapshots_cache(self):
+        from research_harness.artifacts import ArtifactStore
+        from research_harness.evaluation import Evaluation
+        store = Store(self.workspace, create=True)
+        self.add(store, managed=True)
+        records = store.snapshot()["records"]
+        evaluation = Evaluation(records, ArtifactStore(self.workspace))
+        historical = evaluation.read_snapshot(1).records
+        other = Store(self.workspace / "other", create=True)
+        self.add(other, title="Another store", managed=True)
+        foreign = other.snapshot()["records"]
+        self.assert_error("claim_reassessment_required", lambda: foreign.read_snapshot(1, cache=historical._cache))
+
+    def test_releasing_a_snapshot_does_not_wait_for_cyclic_collection(self):
+        store = Store(self.workspace, create=True)
+        self.add(store, managed=True)
+        enabled = gc.isenabled()
+        gc.disable()
+        try:
+            records = store.snapshot()["records"]
+            retained = weakref.ref(records)
+            del records
+            self.assertIsNone(retained())
+        finally:
+            if enabled:
+                gc.enable()
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
@@ -47,8 +256,11 @@ class ResearchStorageTests(unittest.TestCase):
             with connection:
                 yield connection
 
-    def add(self, store, key="paper", title="Original", revision=0, request="add-1"):
+    def add(self, store, key="paper", title="Original", revision=0, request="add-1", managed=False):
         def apply(tx):
+            if managed:
+                tx.put("configuration", "research", {"profile": "research"})
+                tx.put("workspace", "study", {"stage": "literature"})
             tx.put("work", key, {"title": title})
             return {"id": key}
         return store.mutate("add", {"key": key, "title": title}, apply,

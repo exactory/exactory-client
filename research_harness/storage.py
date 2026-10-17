@@ -10,6 +10,8 @@ is the ordinary configuration/research record, owned by domain services.
 """
 
 import copy
+from bisect import bisect_right
+from collections.abc import Mapping
 import hashlib
 import json
 import math
@@ -20,6 +22,7 @@ import stat
 import threading
 import uuid
 import weakref
+import zlib
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
@@ -192,7 +195,7 @@ def _request_row(connection: sqlite3.Connection, request_id: str):
 
 
 def _validate(connection: sqlite3.Connection, *, replay: bool = True,
-              records: Optional[dict] = None) -> int:
+              records: Optional[dict] = None, history=None) -> int:
     """Check the store's structure, and with replay, its complete history.
 
 Construction checks the structure so unsupported, corrupt or hot stores fail
@@ -238,7 +241,10 @@ the caller must discard it if any validation fails.
             _text(change["kind"], "Stored record kind", "corrupt_state")
             _text(change["key"], "Stored record key", "corrupt_state")
             encoded = _canonical(change["value"], "corrupt_state")
-            projections[(change["kind"], change["key"])] = (encoded, _digest(encoded))
+            identity = _digest(encoded)
+            projections[(change["kind"], change["key"])] = (encoded, identity)
+            if history is not None:
+                history.record_version(change["kind"], change["key"], event_count, encoded, identity)
         receipt = connection.execute("SELECT * FROM receipts WHERE request_id = ?",
                                      (row["request_id"],)).fetchone()
         expected_response = {"revision": row["revision"], "request_id": row["request_id"],
@@ -262,10 +268,186 @@ the caller must discard it if any validation fails.
     return revision
 
 
-def _snapshot(connection: sqlite3.Connection) -> dict:
+class _RecordHistory:
+    """An immutable-after-validation index shared by one snapshot's copies and views."""
+
+    def __init__(self):
+        self._versions, self._digests = {}, {}
+
+    def __deepcopy__(self, memo):
+        return self
+
+    def record_version(self, kind, key, revision, encoded, identity):
+        previous = self._digests.get((kind, key, identity))
+        content = previous[2] if previous is not None else zlib.compress(encoded.encode("utf-8"), level=1)
+        entry = (revision, identity, content)
+        self._versions.setdefault(kind, {}).setdefault(key, []).append(entry)
+        self._digests.setdefault((kind, key, identity), entry)
+
+    def resolve_record(self, kind, key, revision, recorded_digest=None):
+        if recorded_digest is not None:
+            entry = self._digests.get((kind, key, recorded_digest))
+            return None if entry is None or entry[0] > revision else entry
+        versions = self._versions.get(kind, {}).get(key, ())
+        index = bisect_right(versions, (revision + 1,)) - 1
+        if index < 0:
+            raise KeyError(key)
+        return versions[index]
+
+    def read_record(self, kind, key, revision, recorded_digest=None):
+        entry = self.resolve_record(kind, key, revision, recorded_digest)
+        return None if entry is None else json.loads(zlib.decompress(entry[2]))
+
+
+class _HistoricalReadCache:
+    """Borrow checked current objects and retain only one revision's decoded changes.
+
+    An Evaluation freezes its records for its lifetime. Public mutable storage
+    reads do not use this cache; a fresh root Evaluation checks current values
+    again even when it shares the same authenticated event index.
+    """
+
+    def __init__(self, records):
+        self._history = records._history
+        self._current = records if records._current_source is None else records._current_source
+        self._revision, self._values, self._verified_current = None, {}, {}
+
+    def read_record(self, kind, key, revision, recorded_digest=None):
+        entry = self._history.resolve_record(kind, key, revision, recorded_digest)
+        if entry is None:
+            return None
+        if self._revision != revision:
+            self._values.clear()
+            self._revision = revision
+        identity = (kind, key, entry[1])
+        latest = self._history._versions[kind][key][-1]
+        if entry[1] == latest[1]:
+            if identity not in self._verified_current:
+                current = self._current.get(kind, {}).get(key)
+                self._verified_current[identity] = (current if current is not None
+                    and _digest(_canonical(current)) == entry[1] else None)
+            current = self._verified_current[identity]
+            if current is not None:
+                return current
+        if identity not in self._values:
+            self._values[identity] = json.loads(zlib.decompress(entry[2]))
+        return self._values[identity]
+
+
+class _HistoricalKind(Mapping):
+    def __init__(self, snapshot, kind):
+        self._snapshot, self._kind = snapshot, kind
+        self._history, self._revision = snapshot._history, snapshot._revision
+
+    def __getitem__(self, key):
+        read = self._history.read_record if self._snapshot._cache is None else self._snapshot._cache.read_record
+        return read(self._kind, key, self._revision)
+
+    def __iter__(self):
+        return (key for key in sorted(self._history._versions[self._kind])
+                if self._history._versions[self._kind][key][0][0] <= self._revision)
+
+    def __len__(self):
+        return sum(1 for _ in self)
+
+
+class _HistoricalSnapshot(Mapping):
+    """A revision view; no complete historical records map is materialized or cached."""
+
+    def __init__(self, history, revision, cache=None, current_source=None):
+        self._history, self._revision, self._cache = history, revision, cache
+        self._current_source = current_source
+
+    def __getitem__(self, kind):
+        versions = self._history._versions.get(kind, {})
+        if not any(items[0][0] <= self._revision for items in versions.values()):
+            raise KeyError(kind)
+        return _HistoricalKind(self, kind)
+
+    def __iter__(self):
+        return (kind for kind in sorted(self._history._versions) if self.get(kind))
+
+    def __len__(self):
+        return sum(1 for _ in self)
+
+    def copy(self):
+        """Create a mutable overlay while sharing the lazy kinds and revision bound."""
+        return _RecordedSnapshot(self, history=self._history, revision=self._revision, current_source=self._current_source)
+
+    def read_revision(self):
+        return self._revision
+
+    def read_record(self, kind, key, recorded_digest):
+        read = self._history.read_record if self._cache is None else self._cache.read_record
+        return read(kind, key, self._revision, recorded_digest)
+
+    def read_snapshot(self, revision, *, cache=None):
+        if type(revision) is not int or not 0 <= revision <= self._revision:
+            raise ResearchError("claim_reassessment_required", "The recorded input snapshot is unavailable; reassess the bound record.",
+                                {"record_id": "snapshot:" + str(revision)})
+        selected = self._cache if cache is None else cache
+        if selected is not None and selected._history is not self._history:
+            raise ResearchError("claim_reassessment_required", "The historical cache belongs to another snapshot.",
+                                {"record_id": "snapshot:" + str(revision)})
+        if selected is not None and selected._revision != revision:
+            selected._values.clear()
+            selected._revision = revision
+        return _HistoricalSnapshot(self._history, revision, selected, self._current_source)
+
+    def verify_record_version(self, kind, key, revision, identity):
+        if type(revision) is not int or not 0 <= revision <= self._revision:
+            return False
+        try:
+            return self._history.resolve_record(kind, key, revision)[1] == identity
+        except KeyError:
+            return False
+
+
+class _RecordedSnapshot(dict):
+    """Current JSON records or a shallow historical overlay with authenticated inputs.
+
+    Only managed research retains indexed history. Copies share its immutable
+    compressed values; historical reads require no connection or full replay.
+    """
+
+    def __init__(self, records=(), *, history, revision, current_source=None):
+        super().__init__(records)
+        self._history, self._revision = history, revision
+        self._current_source = current_source
+
+    def copy(self):
+        return _RecordedSnapshot(self, history=self._history, revision=self._revision, current_source=self._current_source)
+
+    def read_revision(self):
+        return self._revision
+
+    def read_record(self, kind, key, recorded_digest):
+        return self._history.read_record(kind, key, self._revision, recorded_digest)
+
+    def read_snapshot(self, revision, *, cache=None):
+        source = self if self._current_source is None else self._current_source
+        return _HistoricalSnapshot(self._history, self._revision, current_source=source).read_snapshot(revision, cache=cache)
+
+    def verify_record_version(self, kind, key, revision, identity):
+        return _HistoricalSnapshot(self._history, self._revision).verify_record_version(kind, key, revision, identity)
+
+
+def _read_snapshot(connection: sqlite3.Connection) -> dict:
+    from .claim_dependencies import uses_claim_dependencies
+    # This untrusted precheck controls allocation only. _validate authenticates
+    # every event and current record before any history or snapshot is returned.
+    markers = {}
+    config = connection.execute("SELECT value FROM records WHERE kind = 'configuration' AND key = 'research'").fetchone()
+    if config is not None:
+        markers["configuration"] = {"research": _load(config["value"], dict)}
+    for row in connection.execute("SELECT kind, key FROM records WHERE "
+            "(kind = 'workspace' AND key IN ('study', 'draft')) OR kind = 'research_intent' LIMIT 1"):
+        markers[row["kind"]] = {row["key"]: {}}
     records = {}
-    revision = _validate(connection, records=records)
-    return {"revision": revision, "records": records}
+    history = _RecordHistory() if uses_claim_dependencies(markers) else None
+    revision = _validate(connection, records=records, history=history)
+    return {"revision": revision, "records": records if history is None else
+            _RecordedSnapshot(records, history=history, revision=revision)}
 
 
 class _GuardedSnapshot:
@@ -513,13 +695,13 @@ class Store:
 
     def snapshot(self) -> dict:
         with self._connection() as connection:
-            return _snapshot(connection)
+            return _read_snapshot(connection)
 
     @contextmanager
     def guarded_snapshot(self):
         """Prevent common commits until the consumer releases this snapshot."""
         with self._connection() as connection:
-            guard = _GuardedSnapshot(self.root, _snapshot(connection))
+            guard = _GuardedSnapshot(self.root, _read_snapshot(connection))
             try:
                 yield guard
             finally:

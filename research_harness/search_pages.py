@@ -44,6 +44,8 @@ LIST_PARAMETER_NAMES = {"arxiv": frozenset({"id_list"}), "crossref": frozenset({
 # a filter whose name ends in .search, because OpenAlex reads the Boolean operators of a search only in uppercase
 # (https://help.openalex.org/api/searching/).
 CASELESS_FILTER_PARAMETER_NAMES = {"arxiv": frozenset(), "crossref": frozenset(), "openalex": frozenset({"filter"})}
+ORDERING_PARAMETER_NAMES = {"arxiv": frozenset({"sortBy", "sortOrder"}),
+                            "crossref": frozenset({"sort", "order"}), "openalex": frozenset({"sort"})}
 
 
 def _parse_parameters(source):
@@ -178,3 +180,63 @@ def enumerate_pages(pages):
         summaries.append(summary)
         pending.extend(dict(f, group_id=key) for f in failures)
     return summaries, pending
+
+
+def find_captured_ordering(provider, parameters):
+    """Return only ordering stated in a supported provider's captured request.
+
+    Defaults, response row order and author labels supply no ranking evidence.
+    A direction alone (for example Crossref's order=desc) names no ordering key.
+    """
+    names = ORDERING_PARAMETER_NAMES.get(provider, ())
+    ordering = {key: value for key, value in parameters if key in names and value}
+    key = "sortBy" if provider == "arxiv" else "sort"
+    return ordering if key in ordering else None
+
+
+def build_search_coverage(queries, requested_k, captures, page_groups, pending):
+    """Describe the saved results, with first-k credit only for a verified prefix.
+
+    Captures retain every response; identical native page receipts count once.
+    Inspected counts are distinct returned works whose dispositions the recorder
+    validates. They grant no abstract or full-text reading credit.
+    """
+    coverage = []
+    for query in queries:
+        members = [capture for capture in captures if capture["query"] == query]
+        groups = [group for group in page_groups if group["query"] == query]
+        providers = sorted({capture["source"]["provider"] for capture in members})
+        provider = providers[0] if len(providers) == 1 else providers or None
+        positions, seen, returned = [], set(), 0
+        found, orders = set(), []
+        for capture in members:
+            source, page = capture["source"], capture["page"]
+            found.update(capture["found"])
+            if page is not None:
+                identity = digest([page["group"], page["position"], page["sha256"]])
+                if page["position"] not in positions:
+                    positions.append(page["position"])
+                ordering = find_captured_ordering(source["provider"], page["group"]["parameters"])
+            else:
+                identity = digest([source["id"], capture.get("results_pointer")])
+                ordering = None
+            orders.append(ordering)
+            if identity not in seen:
+                returned += capture["returned_count"]
+                seen.add(identity)
+        ordering = orders[0] if orders and all(order == orders[0] for order in orders) else None
+        native = bool(members) and all(capture["page"] is not None for capture in members)
+        group_ids = {group["id"] for group in groups}
+        failures = [failure for failure in pending if failure.get("group_id") in group_ids]
+        intact = not any(failure["code"] != "search_response_incomplete" for failure in failures)
+        if native and groups and all(group["complete"] for group in groups):
+            kind = "complete"
+        elif (native and len(groups) == 1 and ordering is not None and intact
+              and groups[0]["returned_count"] >= requested_k):
+            kind = "top_k"
+        else:
+            kind = "bounded_unordered"
+        coverage.append({"query": query, "requested_k": requested_k, "returned_count": returned,
+                         "inspected_count": len(found), "page_positions": positions,
+                         "provider": provider, "ordering": ordering, "kind": kind})
+    return coverage

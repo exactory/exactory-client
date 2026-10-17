@@ -300,7 +300,7 @@ def _audit_round(records, work):
     return screening["round"]
 
 
-def _batch_item(records, evaluation, batch_id, item):
+def _batch_item(records, evaluation, batch_id, item, *, sampled_tool=False):
     fields(item, ("version_id", "note", "notes"),
            ("screening", "audit", "consequential", "placement", "loop", "innovation_candidate", "search_hit"), code="invalid_batch")
     work = exact_work(records, text(item["version_id"], "Version", code="invalid_batch"))
@@ -314,7 +314,7 @@ def _batch_item(records, evaluation, batch_id, item):
     policy = preparation_policy(records)
     if ("loop" in extras or "innovation_candidate" in extras) and policy != LINEAGE:
         raise ResearchError("invalid_batch", "Loop and candidate readings belong to the lineage-v1 policy", {"policy": policy})
-    if ("placement" in extras or "search_hit" in extras) and policy != SAMPLED:
+    if ("placement" in extras or "search_hit" in extras) and policy != SAMPLED and not sampled_tool:
         raise ResearchError("invalid_batch", "Placement and search-hit readings belong to the sampled-v1 policy", {"policy": policy})
     if "placement" in extras:
         sample = current_sample(records)
@@ -356,14 +356,24 @@ def _batch_members(records, results, items):
 def record_reading_batch(store, payload, *, expected_revision, request_id):
     """Record up to BATCH_LIMIT abstract readings in one event, all or none."""
     def prepare(records, value):
-        fields(value, ("id", "depth", "items"), ("usage",), code="invalid_batch")
+        fields(value, ("id", "depth", "items"), ("usage", "depth_values"), code="invalid_batch")
         text(value["id"], "Batch ID", code="invalid_batch")
-        if value["depth"] != "abstract":
+        overrides = value["depth"] if isinstance(value["depth"], dict) else value.get("depth_values")
+        if not isinstance(value["depth"], dict) and value["depth"] != "abstract":
             raise ResearchError("invalid_batch", "Batches record abstract readings; a full reading uses read")
         items = value["items"]
         if not isinstance(items, list) or not 1 <= len(items) <= BATCH_LIMIT:
             raise ResearchError("invalid_batch", "A batch holds 1 to " + str(BATCH_LIMIT) + " items")
         usage = _usage(value.get("usage"))
+        from .depth import find_current_depth_plan, resolve_depth_values
+        keys = []
+        if any(isinstance(item, dict) and "loop" in item for item in items):
+            keys.extend(("loop_abstracts", "round_loop_abstracts"))
+        if any(isinstance(item, dict) and "search_hit" in item for item in items):
+            keys.append("search_readings")
+        depth = resolve_depth_values(records, overrides, keys=keys)
+        sampled_tool = ((records.get("configuration", {}).get("research") or {}).get("profile") == "research"
+                        and (overrides is not None or find_current_depth_plan(records) is not None))
         evaluation = Evaluation(records, ArtifactStore(store.root))
         seen, changes, results, failures = set(), [], [], []
         for index, item in enumerate(items):
@@ -372,7 +382,7 @@ def record_reading_batch(store, payload, *, expected_revision, request_id):
                 if version in seen:
                     raise ResearchError("invalid_batch", "Each version appears once per batch")
                 seen.add(version)
-                record = _batch_item(records, evaluation, value["id"], item)
+                record = _batch_item(records, evaluation, value["id"], item, sampled_tool=sampled_tool)
                 changes.append(immutable_record(records, "reading", record["id"], record))
                 results.append({"version_id": record["version_id"], "reading_id": record["id"],
                                 "status": record["assessment"]["status"], "includes_abstract": record["assessment"]["includes_abstract"]})
@@ -380,24 +390,26 @@ def record_reading_batch(store, payload, *, expected_revision, request_id):
                 failures.append({"index": index, "code": error.code, "message": error.message})
         if failures:
             raise ResearchError("invalid_batch", "Correct the failing items and resubmit the whole batch", {"items": failures})
-        from .lineage import LOOP_LIMIT, ROUND_LOOP_LIMIT, loop_readings, round_loop_readings
-        from .sampling import SEARCH_READING_LIMIT, search_readings
+        from .lineage import loop_readings, round_loop_readings
+        from .sampling import search_readings
         new_loop = sum(1 for item in items if "loop" in item)
         if new_loop:
-            if len(loop_readings(records)) + new_loop > LOOP_LIMIT:
-                raise ResearchError("loop_limit_reached", "The loop reads at most " + str(LOOP_LIMIT) + " abstracts per study; close the loop with the gaps recorded",
-                                    {"limit": LOOP_LIMIT, "registered": len(loop_readings(records)), "requested": new_loop})
+            limit = depth["loop_abstracts"]
+            if len(loop_readings(records)) + new_loop > limit:
+                raise ResearchError("loop_limit_reached", "The loop reads at most " + str(limit) + " abstracts per study; close the loop with the gaps recorded",
+                                    {"limit": limit, "registered": len(loop_readings(records)), "requested": new_loop})
             from .rounds import active_round
             active = active_round(records)
             if active is not None:
                 registered = len(round_loop_readings(records, active))
-                if registered + new_loop > ROUND_LOOP_LIMIT:
-                    raise ResearchError("round_loop_limit_reached", "A development round adds at most " + str(ROUND_LOOP_LIMIT) + " loop readings",
-                                        {"limit": ROUND_LOOP_LIMIT, "registered": registered, "requested": new_loop})
+                limit = depth["round_loop_abstracts"]
+                if registered + new_loop > limit:
+                    raise ResearchError("round_loop_limit_reached", "A development round adds at most " + str(limit) + " loop readings",
+                                        {"limit": limit, "registered": registered, "requested": new_loop})
         new_hits = sum(1 for item in items if "search_hit" in item)
-        if new_hits and len(search_readings(records)) + new_hits > SEARCH_READING_LIMIT:
-            raise ResearchError("search_reading_limit_reached", "A verification reads at most " + str(SEARCH_READING_LIMIT) + " search hits",
-                                {"limit": SEARCH_READING_LIMIT, "registered": len(search_readings(records)), "requested": new_hits})
+        if new_hits and len(search_readings(records)) + new_hits > depth["search_readings"]:
+            raise ResearchError("search_reading_limit_reached", "A verification reads at most " + str(depth["search_readings"]) + " search hits",
+                                {"limit": depth["search_readings"], "registered": len(search_readings(records)), "requested": new_hits})
         charge = resources.charge(records, "literature", {"readings": len(results), "model_input_tokens": usage["input_tokens"],
                                                           "model_output_tokens": usage["output_tokens"], "wall_seconds": usage["wall_seconds"]})
         if charge is not None:
@@ -406,8 +418,13 @@ def record_reading_batch(store, payload, *, expected_revision, request_id):
                  "consequential": any(item.get("consequential") is True for item in items),
                  "judged": all("consequential" in item for item in items),
                  "members": _batch_members(records, results, items)}
+        if depth:
+            batch["effective_depth"] = depth
         changes.append(immutable_record(records, "reading_batch", value["id"], batch))
-        return changes, {"id": value["id"], "count": len(results), "items": results, "usage": usage}
+        result = {"id": value["id"], "count": len(results), "items": results, "usage": usage}
+        if depth:
+            result["effective_depth"] = depth
+        return changes, result
 
     return prepared_mutation(store, "literature.read_batch", payload, prepare,
                              expected_revision=expected_revision, request_id=request_id)
@@ -493,7 +510,7 @@ def fulltext_coverage(records, artifacts, version_id, *, target=None):
 
 def require_fulltext(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
-        fields(value, ("id", "profile", "version_id", "purpose", "reason"), ("historical_cutoff", "depends_on"))
+        fields(value, ("id", "profile", "version_id", "purpose", "reason"), ("historical_cutoff", "depends_on", "depth"))
         profile_name(value["profile"])
         exact_work(records, value["version_id"])
         text(value["reason"], "Full-depth reason")
@@ -504,10 +521,21 @@ def require_fulltext(store, payload, *, expected_revision, request_id):
         if value.get("historical_cutoff") is not None:
             iso_date(value["historical_cutoff"])
         if value["purpose"] == "core":
+            from .depth import resolve_depth_values
             from .sampling import CORE_LIMIT, core_requirements
-            if len(core_requirements(records)) >= CORE_LIMIT:
-                raise ResearchError("core_limit_reached", "A verification reads at most " + str(CORE_LIMIT) + " core papers in full",
-                                    {"limit": CORE_LIMIT})
+            if value["profile"] == "verification":
+                if value.get("depth"):
+                    raise ResearchError("profile_inapplicable", "Verification retains its fixed depth contract")
+                depth = {"core_fulltexts": CORE_LIMIT}
+            else:
+                depth = resolve_depth_values(records, value.get("depth"), keys=("core_fulltexts",))
+            limit = depth["core_fulltexts"]
+            if len(core_requirements(records, value["profile"])) >= limit:
+                raise ResearchError("core_limit_reached", "A verification reads at most " + str(limit) + " core papers in full",
+                                    {"limit": limit})
+            value = dict(value, depth=depth)
+        elif "depth" in value:
+            raise ResearchError("invalid_input", "Fulltext depth amounts apply to core requirements")
         value = dict(value, critical=True)
         return [immutable_record(records, "fulltext_requirement", value["id"], value)], value
 

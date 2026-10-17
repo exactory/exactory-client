@@ -31,9 +31,20 @@ class EvidenceTests(SearchCLIWorkspace, unittest.TestCase):
         return {"checkpoint": cp, "inputs": [proof, source, study, {"path": "manifest.json", "digest": digest(manifest), "kind": "blob"}]}
 
     def result_review(self, subject, claim):
-        return {"subject_digest": digest(subject), "claim_digest": digest(claim), "reviewer": provenance("independent-result-reviewer"),
+        origin = subject.get("origin", {})
+        evidence = [origin["study_digest"], origin["source_digest"]] if "study_digest" in origin else subject["evidence_digests"]
+        value = {"schema_version": 2, "subject_digest": digest(subject), "claim_digest": digest(claim), "reviewer": provenance("independent-result-reviewer"),
                 "decision": "approve", "findings": {key: "Inspected the exact original statement and all pinned proof inputs"
-                for key in ["statement", "assumptions", "scope", "dependencies", "policy"]}}
+                for key in ["statement", "assumptions", "scope", "dependencies", "policy"]} | {"openness": {
+                    "outcome": "already_solved" if "acceptance_ids" in subject else "unresolved",
+                    "statement_digest": digest(claim), "evidence": list(dict.fromkeys(evidence)),
+                    "searched_at": "2026-10-16", "coverage": "The exact synthetic fixture sources were inspected.",
+                    "reason": "The source proof settles the fixture at final closure; interim reviews assert only proof validity."}}}
+        if "acceptance_ids" in subject:
+            from tests.openness_support import attach_minimum
+            from search_controller.service import Controller
+            value = attach_minimum(Controller(self.root), value, subject=subject)
+        return value
 
     def accept_spec(self):
         cp = self.search("status")["checkpoints"]["checkpoint-000001"]
@@ -184,7 +195,7 @@ class EvidenceTests(SearchCLIWorkspace, unittest.TestCase):
         state = self.search("status")
         cp = state["checkpoints"]["checkpoint-000001"]
         output = self.artifact("final-proof.md", "Complete conventional proof with all eleven dimension cases.")
-        subject = {"schema_version": 1, "objective_id": state["objective_id"], "contract_digest": state["contract_digest"],
+        subject = {"schema_version": 2, "objective_id": state["objective_id"], "contract_digest": state["contract_digest"],
                    "outcome": "proof", "acceptance_ids": ["acceptance-000001"], "evidence_digests": cp["evidence_digests"],
                    "local_deliveries": [], "deliverables": [{"requirement": contract()["required_deliverables"][0], "digest": output["digest"]}]}
         spec = {"subject": subject, "review": self.result_review(subject, contract()["original_claim"]), "inputs": [output]}

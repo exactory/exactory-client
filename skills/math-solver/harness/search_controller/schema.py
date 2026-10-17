@@ -218,7 +218,10 @@ def validate_proposal(value):
     integer(value["schema_version"], 1, 3)
     if value["schema_version"] == 3:
         from .research import validate_reference
-        validate_reference(value["foundation"])
+        if value["foundation"] is None:
+            require(value["role"] == "research", "Verification proposals require an exact-source foundation", "research_foundation_required")
+        else:
+            validate_reference(value["foundation"])
     validate_provenance(value["author"])
     choice(value["category"], CATEGORIES)
     choice(value["relationship"], RELATIONSHIPS)

@@ -4,6 +4,7 @@ placement judgments, the percentile prediction, and the verification limits."""
 import math
 import random
 
+from .depth import find_current_depth_plan, resolve_depth_value, resolve_depth_values
 from .errors import ResearchError
 from .evidence import digest
 from .graph import find_active_requirements, obligation
@@ -18,10 +19,22 @@ UNPLACED_WIDEN = 20
 POSITIONS = ("above", "below", "unplaced")
 
 
-def core_requirements(records):
-    """Fulltext requirements with purpose core under the verification profile."""
+def resolve_sample_limit(records):
+    return resolve_depth_value(records, "sample_size", SAMPLE_LIMIT)
+
+
+def resolve_search_reading_limit(records):
+    return resolve_depth_value(records, "search_readings", SEARCH_READING_LIMIT)
+
+
+def resolve_core_limit(records):
+    return resolve_depth_value(records, "core_fulltexts", CORE_LIMIT)
+
+
+def core_requirements(records, profile="verification"):
+    """Fulltext requirements with purpose core under the requested profile."""
     return sorted((r for r in find_active_requirements(records).values()
-                   if r["profile"] == "verification" and r["purpose"] == "core"), key=lambda r: r["id"])
+                   if r["profile"] == profile and r["purpose"] == "core"), key=lambda r: r["id"])
 
 
 def _require_sampled(records):
@@ -75,12 +88,16 @@ def _members(records, collection):
 def record_sample(store, payload, *, expected_revision, request_id):
     """Draw and record {id, collection_id, size, seed} as the verification's sample."""
     def prepare(records, value):
-        fields(value, ("id", "collection_id", "size", "seed"))
+        fields(value, ("id", "collection_id", "size", "seed"), ("depth",))
         text(value["id"], "Sample ID")
         text(value["seed"], "Sample seed")
-        _require_sampled(records)
-        if type(value["size"]) is not int or not 1 <= value["size"] <= SAMPLE_LIMIT:
-            raise ResearchError("invalid_input", "The sample size is between 1 and " + str(SAMPLE_LIMIT))
+        research_tool = ((records.get("configuration", {}).get("research") or {}).get("profile") == "research"
+                         and ("depth" in value or find_current_depth_plan(records) is not None))
+        if not research_tool:
+            _require_sampled(records)
+        depth = resolve_depth_values(records, value.get("depth"), keys=("sample_size",))
+        if type(value["size"]) is not int or not 1 <= value["size"] <= depth["sample_size"]:
+            raise ResearchError("invalid_input", "The sample size is between 1 and " + str(depth["sample_size"]))
         collection = records.get("collection", {}).get(value["collection_id"])
         if collection is None:
             raise ResearchError("cohort_missing", "Select the frozen population collection", {"collection_id": value["collection_id"]})
@@ -99,7 +116,7 @@ def record_sample(store, payload, *, expected_revision, request_id):
             months[item["month"]]["sampled"] += 1
         record = {"id": value["id"], "collection_id": value["collection_id"], "seed": value["seed"], "size": value["size"],
                   "population": len(members), "population_digest": population_digest,
-                  "months": months, "members": drawn, "revision": expected_revision + 1}
+                  "months": months, "members": drawn, "revision": expected_revision + 1, "depth": depth}
         return [immutable_record(records, "cohort_sample", value["id"], record),
                 ("cohort_sample_selection", "current", {"id": value["id"]})], record
 

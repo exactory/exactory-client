@@ -1,4 +1,4 @@
-"""Native service boundaries require the reviewed complete common preparation."""
+"""Native research retains evidence; verification retains preparation audits."""
 
 import copy
 from pathlib import Path
@@ -47,14 +47,14 @@ class NativeResearchTests(SearchCLIWorkspace, unittest.TestCase):
         path.write_bytes(b"Changed source after the native review.")
         with self.assertRaises(SearchError) as caught:
             controller.command("admit", {}, 3, "admit", "proposal-000001")
-        self.assertEqual(caught.exception.code, "research_foundation_stale")
+        self.assertEqual(caught.exception.code, "research_readiness_required")
         self.assertEqual(controller.status()["nodes"], {})
         self.assertEqual(controller.store.get_blob(value["proposal"]["foundation"]["snapshot_digest"]), snapshot)
         path.write_bytes(before)
         controller.command("admit", {}, 3, "admit", "proposal-000001")
         self.assertEqual(controller.status()["totals"]["used_runs"], 0)
 
-    def test_narrower_literature_foundation_does_not_replace_complete_preparation(self):
+    def test_changed_common_synthesis_does_not_replace_the_recorded_research_evidence(self):
         controller = self.native()
         value = self.prepared_proposal(common=False)
         pin_research(self.root, value["proposal"], value["inputs"])
@@ -67,13 +67,12 @@ class NativeResearchTests(SearchCLIWorkspace, unittest.TestCase):
         incomplete["id"] = "incomplete-innovation"
         incomplete["cases"] = incomplete["cases"][:1]
         record_innovation(common, incomplete, expected_revision=snapshot["revision"], request_id="change-innovation")
-        with self.assertRaises(SearchError):
-            controller.command("propose", value, 1, "new-proposal")
-        self.assertEqual(controller.status()["proposals"], {})
+        controller.command("propose", value, 1, "new-proposal")
+        self.assertEqual(controller.status()["proposals"]["proposal-000001"]["record"], value["proposal"])
 
     def test_unrelated_common_revision_does_not_invalidate_the_reviewed_preparation(self):
         controller = self.native()
-        value = self.prepared_proposal()
+        value = self.prepared_proposal(common=True)
         controller.command("propose", value, 1, "new-proposal")
         observed = observe_review(controller, review(value["proposal"]), value["proposal"])
         controller.command("review", {"proposal_id": "proposal-000001", "review": observed, "inputs": []}, 2, "review")
@@ -104,9 +103,7 @@ class NativeResearchTests(SearchCLIWorkspace, unittest.TestCase):
                 validate=lambda doc, event: apply_event(replay(doc), event))
         historical = copy.deepcopy(controller.store.read())
         before = controller.status()
-        with self.assertRaises(SearchError) as caught:
-            controller.guard_legacy("plan", "attempt", {})
-        self.assertEqual(caught.exception.code, "research_foundation_amendment_required")
+        self.assertEqual(controller.guard_legacy("plan", "attempt", {})["id"], "node-000001")
         inputs = []
         delivery = pin_research(self.root, copy.deepcopy(value["proposal"]), inputs)
         amended = amendment_spec(controller, "node-000001", delivery["foundation"], inputs)
@@ -154,6 +151,16 @@ class NativeResearchTests(SearchCLIWorkspace, unittest.TestCase):
         controller.command("review", {"proposal_id": "proposal-000001", "review": observed, "inputs": []}, 2, "review")
         controller.command("admit", {}, 3, "admit", "proposal-000001")
         self.assertEqual(controller.status()["nodes"]["node-000001"]["role"], "verification")
+        from search_controller.research import audit_foundation
+        common = case.store
+        selected = copy.deepcopy(common.snapshot()["records"]["configuration"]["research"])
+        selected["target"]["id"] = "arxiv:2601.00002v1"
+        common.mutate("fixture.change-verification-target", {},
+                      lambda tx: tx.put("configuration", "research", selected),
+                      expected_revision=common.revision, request_id="verification-target-changed")
+        with self.assertRaises(SearchError) as caught:
+            audit_foundation(self.root, controller.status(), value["proposal"], value["proposal"]["foundation"], controller.store)
+        self.assertEqual(caught.exception.code, "research_target_mismatch")
 
 
 class NativePrelaunchTests(unittest.TestCase):
@@ -174,7 +181,7 @@ class NativePrelaunchTests(unittest.TestCase):
             root = Path(temporary).resolve() / "attack"
             root.mkdir()
             self.assertEqual(run(["init", "sample"], root)[0], 0)
-            controller = admit_workspace(root, computational=True)
+            controller = admit_workspace(root, computational=True, common=True)
             workspace = root / "sample"
             step = workspace / "deterministic/job"
             step.mkdir()
@@ -201,7 +208,7 @@ class NativePrelaunchTests(unittest.TestCase):
                 change_source()
             with interception, self.assertRaises(SearchError) as caught:
                 launch(controller, reserved)
-            self.assertEqual(caught.exception.code, "research_foundation_stale")
+            self.assertEqual(caught.exception.code, "research_readiness_required")
             terminal = Path(reserved["snapshot_root"]).parent / "terminal.json"
             deadline = time.monotonic() + 5
             while not terminal.exists() and time.monotonic() < deadline:

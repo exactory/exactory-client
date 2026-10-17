@@ -1,8 +1,7 @@
 # Managed research workflow
 
-Read the [research constitution](../RESEARCH_CONSTITUTION.md) before the stage
-workflow. System, host, and user instructions govern the work. This workflow
-connects the shared skills to the actual commands in the
+Read the [research constitution](../RESEARCH_CONSTITUTION.md) before using the tools and orchestration. System, host, and user instructions govern the work. This workflow
+connects the shared tools and milestone gates to the actual commands in the
 [CLI reference](research-cli.md). JSON shapes come from
 [the complete example catalog](research-cli-examples.json), also available with
 `exactory-research example OPERATION`. Examples need actual acquired evidence,
@@ -23,6 +22,45 @@ new mutation. Give each new mutation a distinct request ID. An interrupted retry
 uses its original ID, original payload, and original expected revision; a replay
 receipt preserves history and does not authorize a later action.
 
+## Tools and gates
+
+The [tool catalog](research-tools.md) describes population, search, reading,
+expansion, ideation, probes, admitted runs, synthesis notes, challenges and depth
+plans. The cohort, literature-review, ideate and experiment skills are callable
+at every stage. State each call's question, depth and authorized budget; record
+effective amounts, actual work, coverage, stopping reason and cost. Tool records
+grant no approval. Independent assessment is a condition attached to a claim.
+
+A gate requires the claim type's fixed minimum and independent assessment of
+whether its evidence is sufficient. Choose tool order and additional depth to
+answer the research question. A quick probe may inform the first direction or a
+later decision while retaining exploratory provenance. The probe, its two managed
+payloads and the depth-plan examples are in the [catalog](research-tools.md#probe).
+
+The stages below describe milestone progress in ai-science. They remain in the
+store so existing studies continue from their recorded state.
+
+| Stage | Milestone and gate |
+| --- | --- |
+| `initiate` | Record the user's intent, original objective, authority and resources. |
+| `cohort` | Optional population work. Leaving this stage has no gate in managed research. |
+| `literature` | Commit the direction. Completing this stage and entering `ideate` require `gate direction`. |
+| `ideate` | Plan the investigation. Entering `experiment` requires `gate execution` with a valid pending admission. |
+| `experiment` | Assess actual results and checkpoint them. Entering writing requires the current result decision and applicable readiness gate. |
+| `write` | Pin the exact evidence-grounded manuscript with citation accounting. |
+| `evaluate` | Measure that bundle blindly and decide the next action. |
+| `deposit`, `submit`, `complete` | Satisfy publication gates and preserve confirmed endpoint receipts. |
+
+Managed research may move directly from `initiate` to `literature`.
+`status` retains the preparation report with `advisory: true`; `next` names
+the current milestone's first missing condition. At `initiate`, `cohort` and
+`literature` it uses `direction`, at `ideate` it uses `execution`, and later stages keep
+their existing gates. Preparation obligations remain available for choosing
+useful tool work. Before a cycle decision exists, the `direction` report
+also lists its minimum's missing search, full readings, standards and Grand
+Challenge record alongside configuration and missing-decision obligations.
+Nonmanaged stores and verification retain their fixed contracts.
+
 ## Initiate and resume
 
 Create an author study once. Keep the initial target pending while literature
@@ -33,7 +71,7 @@ exactory-lab init --dir study --slug study --expected-revision 0 --request-id in
 exactory-lab init --dir screened-study --slug screened-study --preparation-policy screened-v1 --expected-revision 0 --request-id initialize-screened-study
 ```
 
-The preparation policy is recorded at initialization. `exactory-lab init`
+The preparation policy is recorded at initialization as a preset of tool depth. `exactory-lab init`
 records the research default `lineage-v1` when `--preparation-policy` is absent,
 and `exactory-draft init` always records it: it reads the lineage and the
 classics in full, runs the bounded five-purpose loop below, and leaves every
@@ -41,8 +79,10 @@ other cohort member unread. A verification workspace records `sampled-v1`, which
 reads a random sample of the population. The two legacy policies stay available on `exactory-lab init`:
 `exhaustive-v1` reads every cohort member and every Tier 3 reference, and
 `screened-v1` selects the preparation set through recorded screenings, audits,
-and doctrine coverage as the cohort section describes. Change the recorded
-policy later only with `policy` and a reason.
+and doctrine coverage as the cohort section describes. Change the recorded policy later with `policy` and a reason. Research studies
+can change default amounts with `depth` and a recorded reason, or give consuming
+calls a depth override. Recorded work keeps its effective amounts. Verification
+keeps its fixed contract.
 
 Change into `study`, read the user's context and constraints, and inspect the
 authoritative state. Read these first when resuming any managed stage:
@@ -71,21 +111,19 @@ effective; distinguish a limited authorized delivery from scientific success.
 Only an actual explicit quality condition makes that condition a publication
 prerequisite. Unknown resource limits are not zero or an invented whole-run cap.
 
-Constitution version 6 changes the policy hash. Use the existing explicit
-`constitution` revalidation flow for a new substantial commitment, preserving old policy and
-completed historical states. Old strategic decisions remain `legacy_unassessed`.
-An admitted active cycle may finish and retain its evidence; migration does not
-rerun all old cycles or fabricate prospective assessments from hindsight.
+Version 7 uses claim-scoped currency and retains existing scientific work.
+Follow [the upgrade path](#studies-in-progress) when continuing an older study.
 
-## Cohort: enumerate the population and read its abstracts
+## Population tool: enumerate, sample, screen and read
 
-Select the corpus and category from the field and context. The freeze command
+Use the cohort tool at any stage. State the corpus, category, window, abstract
+depth (none, a seeded sample of N, screening, or every member) and resource
+allowance. Select the corpus and category from the field and context. The freeze command
 computes a population definition, including the six complete calendar months
 before publication. It does not enumerate or read members. For an undeposited
 study use the current date, then reconcile the publication date at deposit.
 
 ```sh
-exactory-lab state set --waiting none --stage cohort --status pending
 exactory-cohort freeze --corpus arxiv --category cs.LG --published 2026-09-08 > cohort-definition.json
 exactory-research example budget > budget.json
 exactory-research budget --file budget.json --expected-revision REVISION --request-id set-budget-001
@@ -110,16 +148,13 @@ exactory-research example read-batch > notes-001.json
 exactory-research read-batch --file notes-001.json --expected-revision REVISION --request-id read-batch-001
 exactory-research example read > abstract-reading.json
 exactory-research read --file abstract-reading.json --expected-revision REVISION --request-id read-abstract-001
-exactory-research gate cohort
-exactory-lab decide --stage cohort --decision "Enter literature" --why "The captured cohort is enumerated and every required abstract is read."
-exactory-lab state set --stage literature --status pending
 ```
 
 `batches` writes the unread abstracts as files for reader agents; each reader
 returns one notes file and one coordinator records it with `read-batch`, which
 derives the whole-abstract inspection and applies the single-reading rules to
-every item. Repeat the reading mutations with distinct actual records for all
-members before the gate. Under `lineage-v1` this plain export is refused with
+every item. Repeat reading mutations for the members selected by the call's stated depth
+and recorded policy. Under `lineage-v1` this plain export is refused with
 `policy_inapplicable`: that policy reads no cohort member, and its abstracts come
 out of the loop export below, `batches --loop`.
 
@@ -133,7 +168,14 @@ serve the loop as a local source: `population-query` ranks them by terms taken
 from the target statement and the parent's title and abstract, and its matches
 are handed to `batches --loop --candidates`, as the literature section shows.
 
-Under `sampled-v1` the enumeration must complete before any reading: `sample`
+Research can draw a seeded sample with `sample` when the call provides a
+`depth` object or a current depth plan is selected. The payload retains
+`{id, collection_id, size, seed}` and resolves `sample_size`. Enumeration must
+be complete. Record actual sampled readings with `depth: "abstract"` and
+`depth_values` in `read-batch`; the draw alone supplies no reading credit.
+
+Under `sampled-v1` verification keeps its fixed contract. Enumeration must
+complete before the sample: `sample`
 refuses to draw while the collection is pending (`collection_pending`). Draw the
 sample once per verification with `{id, collection_id, size, seed}`. The draw is
 stratified by month with equal allocation, and it takes the whole population
@@ -167,20 +209,24 @@ exactory-research policy-report --policy screened-v1
 ```
 
 Complete abstracts reveal field coverage; consequential claims and
-doctrine from a paper require its applicable full reading in the next stage.
+doctrine from a paper require the full reading appropriate to the dependent claim.
 Handwritten completion flags are not reading evidence.
 
-## Literature: build the source network and the full objective
+## Literature tools: search, read, expand and synthesize
 
-Acquire one to five exact root paper families. Record `roots` with the actual
+Use literature tools at any stage. State how many distinct works to survey,
+how many to read at abstract depth only, how many to read in full, the required
+units, expansion levels and budget. Record the amounts actually completed,
+coverage, gaps and stopping reason. Acquire one to five exact root paper families
+when establishing a claim's literature scope. Record `roots` with the actual
 selected collection IDs. Follow captured bibliography occurrences through the
 three-tier network: a root is Tier 1, read in full with its complete bibliography;
 its references are Tier 3, read at abstract depth, until the author selects a
 reference with `require-fulltext` for a major claim, novelty judgment, innovation
 transfer, or validity decision. A selected reference is Tier 2 wherever it appears:
 read in full with its complete bibliography, and its own references become Tier 3.
-Few papers are read in full; every reference of those papers is still inventoried
-and read at abstract depth. Preserve all occurrences and exact versions. A work
+Under the exhaustive and screened presets, references of full-read papers
+retain the abstract-reading requirements of the recorded policy. Preserve all occurrences and exact versions. A work
 that a search judgment cites is required in full in the same way while that
 judgment is the selected search of its purpose; recording a new search for the
 purpose retires the requirements of the works it no longer cites.
@@ -220,8 +266,9 @@ Conduct and record each search purpose separately against the current scope:
 | `adjacent` | Which neighboring fields offer a relevant mechanism or counterexample? |
 | `recent` | Which current developments change the proposed claim or comparison? |
 
-These are five purposes, independently required from the external innovation
-papers below. Save the actual query, original response, enumeration,
+These are the five-purpose preparation preset, separate from external innovation
+studies. Choose searches for the current question; the direction claim minimum
+requires a scoped `direct` search and the decisive readings described below. Save the actual query, original response, enumeration,
 source dates, found works, exact scope, judgment, and remaining gaps. Judge every
 found work with a disposition (relevant, contradictory, potentially relevant, out
 of scope, duplicate, unresolved) and a reason; a later search for the same purpose
@@ -242,45 +289,10 @@ exactory-research search --file recent-search.json --expected-revision REVISION 
 exactory-research grand-challenge --file grand-challenge.json --expected-revision REVISION --request-id record-grand-challenge-001
 ```
 
-Before the objective, investigate the challenges ahead of the research and record
-them with `grand-challenge`: the ultimate goal the field is trying to reach and,
-where useful, nearer large goals, each with criteria that would show it reached
-and evidence read in full. Open Grand Challenges on exactory for the field are one
-input. The record is not a synthesis section: it stays current for the whole
-study, and a new record with a reason replaces it only when the direction
-changes. `gate preparation` owes `grand_challenge_missing` until it exists.
-
-Before `target` in managed author research, prepare the prospective `strategy`
-dossier from the user's intent, available prior work, candidates and discrepancy
-leads. Follow the [bar-before-slate delivery](research-decisions.md#before-target-commitment)
-with two independent assessors on verified routes. Compare the proposed objective
-and approach against the independently recorded worthwhile consequences. A fixed
-user problem stays fixed; compare methods within its scope. This strategic approval
-does not declare preparation complete or authorize an experiment.
-
-At commitment, `target` consumes the approved exact statement/scope and records
-its native objective link. Record the source/preparation delta since approval,
-including newly relevant unbound sources. Material or unresolved impact requires
-affected findings to refresh first; an unrelated metadata change does not require
-a complete new review. The first result assessment checks that declaration.
-
-```sh
-exactory-research research-decision-assess --boundary target
-exactory-research target --file complete-objective.json --expected-revision REVISION --request-id fix-complete-objective
-```
-
-Set the complete objective while still in `literature`, written against that
-record and the prospective decision. A branch's
-special case, restricted parameter range, or conditional hypothesis belongs in
-its cycle scope and leaves the original objective intact. A fixed objective
-changes only on the user's explicit instruction: save the user's own words in
-`context/`, pin the file with `artifact`, and pass the pin's id as
-`authorization` to `target`. Never write such an instruction yourself; the
-harness checks the pinned bytes, not who wrote them, and one instruction
-authorizes one change. The earlier objective stays retained as the predecessor,
-and the synthesis and earlier assessments are recorded again under the new
-objective. Develop the following
-source-grounded synthesis before entering `ideate`:
+Record synthesis notes from their own sources and applicability. These tools
+remain available throughout the study. The selected standards are part of the
+direction minimum; the complete preparation report is advisory for managed
+research.
 
 - `standards`: retain the cohort doctrine, applicable field and article type,
   and venue when chosen. Link methodological, reporting, citation, and
@@ -288,11 +300,14 @@ source-grounded synthesis before entering `ideate`:
 - `rationale`: And gives cited established context, But gives the cited
   consequential unresolved bottleneck, and Therefore proposes a response and
   distinguishing test. Distinguish hypotheses from observed results.
-- `innovation`: under `lineage-v1`, read the abstracts of ten candidate papers,
-  each registered with `innovation_candidate: true`, and study exactly five of
-  them in full; the lineage supplies the within-field case. Under
-  `exhaustive-v1` and `screened-v1`, study within-field innovations and five to
-  ten distinct external original paper families in full. For each case, identify
+- `innovation`: under `lineage-v1`, the default is ten abstract-read candidate papers,
+  each registered with `innovation_candidate: true`, and five full-read cases;
+  state effective candidate and case amounts for the call, which retains them.
+  The lineage supplies the within-field case. Under
+  `exhaustive-v1` and `screened-v1`, study within-field innovations and at least
+  the recorded `innovation_cases` external families, up to
+  `max(10, innovation_cases)`. Historical sections without recorded depth keep
+  their original five-to-ten external-case rule. For each case, identify
   the original bottleneck, prior constraint, conceptual change, evidence, scope,
   and the proposed transfer's assumptions, limits, distinguishing test, and
   failure signal. Versions, aliases, and several case labels for one paper still
@@ -310,29 +325,26 @@ exactory-research standards --file standards.json --expected-revision REVISION -
 exactory-research rationale --file rationale.json --expected-revision REVISION --request-id assess-rationale-001
 exactory-research innovation --file innovation.json --expected-revision REVISION --request-id assess-innovation-001
 exactory-research context --file scientific-context.json --expected-revision REVISION --request-id assess-context-001
-exactory-research gate preparation
-exactory-lab decide --stage literature --decision "Enter ideation" --why "Current literature and synthesis support the complete objective."
-exactory-lab state set --stage ideate --status pending
 ```
 
 ### The five-purpose loop (lineage-v1)
 
 Under `lineage-v1` the five purposes are covered by a bounded loop over recent
 work rather than by a reading of the whole population. Stage 1 captures one
-search per purpose, keeps the top 10 hits of each query, and adds two local
+search per purpose, uses the call's effective hit count (default 10), and adds two local
 sources: a `population-query` over the enumerated population's stored abstracts,
-and the papers that cite the parent within the window. A native registry
-capture must enumerate completely, because a captured page that returns fewer
-records than its reported total is `search_response_incomplete` and leaves the
-search a `search_pending` obligation on the foundation: write each native query
-narrow enough to return at most ten results in total, or import the results as a
-mapped capture and acquire every kept hit with `acquire` before it is read. Read
+and the papers that cite the parent within the window. Preserve all captured responses and distinguish bounded inspection from complete
+enumeration. The [search coverage rule](research-tools.md#search-coverage)
+requires captured ordering for `top_k` and enumeration evidence for `complete`.
+For research, a bounded enumeration is a coverage limit; parser and capture
+failures remain integrity gaps. Verification keeps the original enumeration
+requirement and its `search_pending` obligation, even with new coverage metadata. Read
 every candidate abstract and register it as a loop entry that names its
 purposes, its disposition and the source it came from (`search`, `population`,
 `citing` or `author`).
 
 ```sh
-exactory-research search --file direct-search.json --expected-revision REVISION --request-id search-direct-001   # at most 10 results, enumerated completely
+exactory-research search --file direct-search.json --expected-revision REVISION --request-id search-direct-001
 exactory-research population-query --terms Haar purity "random state" --limit 30 > candidates.json
 exactory-research batches --destination loop/round-1 --loop --candidates candidates.json
 exactory-research read-batch --file loop/round-1/notes-001.json --expected-revision REVISION --request-id loop-read-001   # items carry "loop"
@@ -374,31 +386,111 @@ purpose was bound to that query. The record of each purpose states which.
 For each uncovered purpose, a new query is captured and up to 20 more abstracts
 are read. The loop stops when every purpose is covered, when a
 round adds no `relevant` or `contradictory` paper to any uncovered purpose, or
-when the study has registered 100 abstract readings in the loop. At the limit,
+when the study reaches the effective loop limit (default 100 abstract readings). At the limit,
 the uncovered purposes are recorded as gaps with the queries tried. `loop-close`
 records all five purposes at once, each `covered` or `gap`, and it keeps the
 queries every gap rests on.
 
-A registered abstract reading is one loop entry with a disposition. Stage-1
-candidates count when their abstracts are read, which is all of them. The 100
-limit counts registered readings across all rounds of the same study. When stage
-1 yields more than 100 candidates, they are read in order of how many sources
-returned them, and the remainder are recorded as unread candidates.
+A registered abstract reading is one loop entry with a disposition. The study
+limit counts registered readings across rounds. If candidates exceed the effective
+limit, read them in order of how many sources returned them and record the
+remainder as unread candidates. `loop-close` records the effective limit used;
+later depth defaults leave that closure's recorded amount unchanged.
 
-| Limit | Value | Enforced by |
+| Amount | Default | Recorded or enforced by |
 | --- | --- | --- |
-| Registered abstract readings in the loop | 100 per study | `read-batch` rejects the batch with `loop_limit_reached` |
-| New loop readings while a development round is open | 40 per round | `read-batch` rejects the batch with `round_loop_limit_reached` |
+| Registered abstract readings in the loop | 100 per study, adjustable for research | `read-batch` rejects the batch with `loop_limit_reached` |
+| New loop readings while a development round is open | 40 per round, adjustable for research | `read-batch` rejects the batch with `round_loop_limit_reached` |
 | Abstracts per further loop round | 20 per uncovered purpose | the coordinator follows it; the store does not refuse the batch |
-| Hits kept per captured query | 10, counted across every response of that query | `search` rejects the capture with `invalid_search` |
-| Innovation candidates at abstract depth | 10 | `innovation` reports `innovation_candidates_missing` |
-| External innovation cases read in full | exactly 5 | `innovation` reports `external_cases_insufficient` or `external_cases_excess` |
+| Hits kept per captured query | 10, with effective value recorded by the call | `search` rejects the capture with `invalid_search` |
+| Innovation candidates at abstract depth | 10, with effective value recorded by the section | `innovation` reports `innovation_candidates_missing` |
+| External innovation cases read in full | 5, with effective value recorded by the section | `innovation` reports `external_cases_insufficient` or `external_cases_excess` |
 
 `status` reports the loop's registered readings, its limit and its covered
 purposes under `limits.loop`, and the candidate count under
 `limits.innovation_candidates`.
 
-## Ideate and experiment: plan before launching
+## ai-science: direction milestone
+
+Ideation tools can generate tentative questions before this milestone. A direction
+claim requires evidence and two independent assessments before commitment.
+The mechanical direction minimum is:
+
+| Evidence | Obligation codes |
+| --- | --- |
+| A valid `direct` search bound to the current literature scope, with explicit bounded or complete coverage, every captured result dispositioned, and integrity gaps resolved. | `direction_search_missing`, `direction_search_incomplete` |
+| Every relevant or contradictory work from that search read in full. Source deferral leaves the reading missing. | `direction_reading_missing` |
+| Every root read in full. | `direction_root_reading_missing` |
+| A selected `standards` section with valid own sources and resolved applicability. Staleness by the foundation, the configuration or the constitution alone is ignored. | `direction_standards_missing`, `direction_standards_unresolved` |
+| A current study Grand Challenge record with source-grounded goals and advance criteria. | `grand_challenge_missing` |
+
+Record the challenges with `grand-challenge`; retain that record until evidence
+changes the direction. A mathematical proposition supplied by the user follows
+math-solver's gates; a study Grand Challenge record is out of scope for it.
+
+Prepare the prospective `strategy` dossier from the actual `intent`, candidate
+questions, closest prior work, credible alternatives and discrepancy leads.
+For a user-fixed question, compare methods within that question's scope. Follow
+[the decision protocol](research-decisions.md#before-target-commitment).
+
+Two assessors first receive verified field context and the intent with the
+candidate withheld. Each bar states the field and Q1 venues considered, the
+advance over the closest prior work acceptable for that intent, the evidence
+standard, and disqualifying conditions. Persist both final bars before slate
+delivery. Slate reviews assess `q1_venue` as potential if the planned method
+meets the success criterion; result reviews assess realized supported advance
+and actual evidence. This scientific bar describes the research standard.
+
+New decisions carry `gate_version: 2`. Recording `investigate` or `pivot`
+requires the direction minimum; otherwise `direction_minimum_unmet` reports
+the missing evidence. Both reviewers must receive the decisive source content
+and claim in observed packets, continuations or bound supplements. Coverage
+requires complete inspected ranges and every named image asset, verified against
+the source bytes and provenance. Long ranges use consecutive bounded chunks;
+qualifying historical attachments remain usable. Descriptors, reading notes,
+inventory membership and assignment dates alone supply no delivery coverage.
+See [the direction delivery contract](research-decisions.md#before-target-commitment). The decision stores
+`direction_evidence_digest`; it stays ready only while the minimum holds with
+that evidence. Newly read decisive evidence requires a new decision with reviews
+that saw it; `direction_evidence_unassessed` identifies lost coverage.
+A digest recorded after the reviews cannot establish that coverage.
+
+For version-2 `investigate`, `pivot` and `develop_manuscript`, both reviews
+must pass `q1_venue`. `q1_venue_missing` identifies an absent finding and
+`research_assurance_pending` a finding that has not passed. Previous prompt
+assignments retain their original assurance set and can finish; a new commitment
+requiring Q1 evidence still needs both current findings. Historical decisions
+and approved tranches retain their standing. `deliver_requested` keeps its
+stop checks, authority and explicit quality conditions.
+
+Commit the exact approved statement and scope with `target` while in
+`literature`. It applies the same direction minimum and review-coverage rule.
+Assigning a native objective ID alone leaves approval current. Declare every
+source delta since approval, including newly relevant sources absent from the
+old dependencies; material or unresolved impact requires affected reassessment.
+The first result assessment checks that declaration.
+
+```sh
+exactory-research research-decision-assess --boundary target
+exactory-research target --file complete-objective.json --expected-revision REVISION --request-id fix-complete-objective
+exactory-research gate direction
+exactory-lab decide --stage literature --decision "Plan the approved direction" --why "The current decision and its decisive evidence pass the direction gate."
+exactory-lab state set --stage ideate --status pending
+```
+
+The gate combines current configuration readiness with the selected decision's
+obligations at the `cycle` boundary. It uses the same authority as cycle planning
+and admission. Before a cycle decision exists, the gate also lists the direction
+minimum obligations. Completing literature and entering ideate require it.
+
+Keep the complete objective separate from a special case, restricted parameter
+range or conditional cycle scope. A fixed objective changes with the user's
+explicit instruction: save the user's own words in `context/`, pin them with
+`artifact`, and pass that pin ID as `authorization` to `target`. The harness
+checks the pinned bytes, not their authorship. Retain the earlier objective,
+lineage and evidence, and reassess affected claims under the actual new scope.
+
+## ai-science: investigation planning and execution
 
 Choose a falsifiable hypothesis within the complete objective and the current
 canonical decision. Reuse the strategy dossier to compare credible alternatives,
@@ -409,6 +501,8 @@ transfer plan where a proxy serves a wider target, and resources. Use the earlie
 affordable test that can change the commitment. A baseline prerequisite needs a
 bounded exit into that deciding test.
 
+Planning and admitting a managed cycle require ready configuration and the
+current cycle decision. The complete synthesis report remains advisory.
 An approved investigation names a question, authorized resource tranche, expected
 evidence and end/failure conditions. Link its cycles to that decision. Resolution,
 a failure signal or tranche exhaustion requires a new decision assessing what
@@ -499,7 +593,7 @@ finding differs from a broken implementation, missing output, or unknown
 execution. An exit code or metric alone does not settle validity or the full
 objective.
 
-## Develop and review the research before writing
+## ai-science: result milestone before writing
 
 Read the actual outputs and checks. `assess` separately records the result,
 validity evidence, scope, novelty/contribution, branch development, failures,
@@ -527,7 +621,8 @@ same strategy dossier. Include claims, failures, nearest-work comparisons,
 committed consequences and unresolved work items. Deliver a canonical combined
 result packet to two assessors using verified context routes. Each assesses
 validity, scope, novelty, contribution-statement support, development and branches
-before judging realized consequence in the same response. Retain original outputs
+before judging realized consequence and the realized `q1_venue` assurance in
+the same response. Retain original outputs
 and actual invocation provenance. The validated support and value sections become
 separate immutable findings; compatible readiness derives from them. Do not run a
 second full readiness review after those combined responses.
@@ -596,7 +691,7 @@ synthesis and dependent assessments; do not rewrite an earlier objective or pret
 old evidence was collected under the new scope. Neither a policy migration nor a
 limited delivery requires all old cycles to be executed again.
 
-## Manuscript assessment and publication
+## ai-science: manuscript and publication milestones
 
 Draft from the reviewed evidence and field standards. Keep source support,
 source-level contradiction, unsupported attribution, and unresolved access
@@ -648,7 +743,7 @@ submit names its record. Otherwise they create the record or request directly,
 with one `Managed record skipped` line when a store refuses the receipt.
 Reconcile an unknown remote intent before any new managed write.
 
-## Develop the paper across rounds
+## ai-science: continuation after manuscript measurement
 
 The paper develops across rounds. Every blind measurement reviewer returns the
 rubric core and, in a separate file, a cohort prediction with its reasons. Give
@@ -703,8 +798,10 @@ use `example` and the CLI reference for the adapter payloads. Old `round`,
 assessment, not a second strategic approval loop. Continue projects an approved
 investigate/pivot action with a next tranche. Stop separately records whether
 research on the branch ends, the result is ready for manuscript preparation, or
-an authorized limited delivery applies. Ending a round alone authorizes neither
-publication nor full-objective completion.
+an authorized limited delivery applies. An approved canonical round decision with action `investigate` or `pivot`
+permits `evaluate` to return to `literature` for more tool work. The transition
+retains the objective, evidence, failures and accounts. Publication and full
+objective completion retain their own gates.
 
 Preserve all seven old continue assurances: scientific consequence, real demand,
 prior-work risk, adequacy and resources, material distinctness, evidence/failure
@@ -728,6 +825,59 @@ limit does not authorize abandoning a continuously requested full objective.
 An unavailable independent reviewer remains a specific operational dependency.
 Preserve attempts and costs, repair the route, and continue independent research
 that does not consume the missing approval.
+
+## Claim-scoped currency
+
+A plan, admission, assessment, checkpoint, candidate, readiness review or scoped
+publication contract depends on its objective, scope and assumptions, plan,
+executions, supporting evidence and its cited source records, inheritance,
+validations, strategy failures and authorizations. Full dependency maps remain
+recorded for audit. Global preparation, configuration and constitution digests,
+foundation inventory and synthesis sections stay outside the claim projection.
+Synthesis obligations therefore stay outside managed result assessment and
+writing readiness. Applicable standards still belong to the direction minimum.
+
+Unrelated readings, search judgments or synthesis changes leave existing claims
+current. A later tool result reaches a claim when used as evidence, or through a
+source change that its decision must declare with `source-impact`. Changed
+supporting bytes, scope, assumptions or authorization require affected reassessment.
+Plan literature and novelty comparisons retain exact scope, resolved gaps and
+valid cited full-read sources. A changed global literature digest alone leaves
+those comparisons current.
+
+## Studies in progress
+
+Continue from the next action with existing results, readings, failures and
+budgets. Preserve records and original digests. Validate each historical digest
+against its recorded inputs, then compare the claim projection of those inputs
+with the current projection. Apply this transitively through checkpoints,
+inheritance, candidates, reviews and scoped contracts. For a digest without its
+inputs, reconstruct every original field from evidence, snapshots or packets,
+including branch, strategy-account and source-record identities. Verify that
+object against the original digest before comparing projections. An unavailable
+historical input reports `claim_reassessment_required`, naming the record to
+reassess. Current values cannot substitute for missing historical inputs.
+
+The managed store retains indexed per-record history and reconstructs the
+original input snapshot at its recorded revision. Evaluations share that retained
+history, preserving the original branch, strategy-account and source-record
+identities while comparing their scientific projection. Historical audit digests
+remain unchanged. This compatibility applies transitively to plans, admissions,
+assessments, checkpoints, inheritance, candidates, readiness and support reviews,
+and scoped publication contracts.
+
+A study retaining Version 6 keeps byte-identical configuration, foundation and
+synthesis reports and needs no constitution revalidation. A research study can
+explicitly adopt Version 7 with `constitution`; adoption alone changes no
+claim. Its synthesis stays advisory and standards are judged by their own sources
+and applicability. Depth changes also work under adopted Version 6. New direction
+minimums and Q1 findings apply at the next relevant commitment. Existing approved
+tranches keep their authority; reconcile pending executions once under their
+frozen authority. Scientific work is repeated only when required validation needs it.
+
+Verification workspaces retain Version 6. Conversion of verify, grand-challenge
+and math-conjecturer orchestrations, and Version 7 adoption compatibility for
+verification and native verification nodes, are out of scope for this release.
 
 ## Verification and native mathematics
 
@@ -792,20 +942,28 @@ bound the verdict with `task --bind` and `bind-verdict` also records its receipt
 The [verification skill](../skills/verify/SKILL.md) states the direct procedure.
 `requestedByViewer` identifies the request opener and proves no authorship.
 
-For a native mathematical attack, complete current common preparation first,
-then export `--kind native` for independent review of the actual schema-3
-proposal. Preserve the native original claim, novelty and strategy studies,
+For a native mathematical research attack, common preparation is optional:
+the schema-3 proposal may use `foundation: null` and records its stable common
+review workspace once. An optional foundation exports with `--kind native`
+for independent review of its exact retained evidence. Verification retains
+the required current foundation and exact-source claim binding.
+Preserve the native original claim, novelty and strategy studies,
 proof checks, budgets, accounts, failed-method history, and checkpoint lineage.
 Follow the [math skill](../skills/math-solver/SKILL.md) and
 [native CLI contract](research-cli.md#native-math-preparation); common readiness
-never replaces mathematical acceptance. Historical replay remains available,
-while fresh work needs a current reviewed foundation and applicable amendments.
+never replaces mathematical acceptance. The math orchestration holds openness,
+independent proof review, requested formal checks and closure gates and has no
+value gate for a proposition supplied by the user. Historical replay remains
+available.
+Research validates retained foundation evidence without rerunning the historical
+preparation report or requiring equality with current common preparation.
+Applicable computation and strategy amendments remain required for fresh work.
 
-The native preparation path retains its independent `review` record:
-
-```sh
-exactory-research review --file native-review.json --expected-revision REVISION --request-id native-review-001
-```
+All native approvals retain the observed shared assignment. Export the exact
+subject with `search review-packet`, invoke the `native_math` assignment on a
+verified route, and submit its unchanged `review-run` output with `search review`
+or the corresponding native result, amendment or recovery command. Follow the
+[observed native review contract](../skills/math-solver/SEARCH.md#observed-native-review-delivery).
 
 ## Pending work and continuation
 

@@ -13,7 +13,7 @@ from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .gates import gate_state
-from .lineage import INNOVATION_CANDIDATES, LINEAGE, LOOP_SOURCES, loop_readings
+from .lineage import resolve_innovation_candidates, LINEAGE, LOOP_SOURCES, loop_readings
 from .literature import DISPOSITIONS, foundation_state
 from .operations import strings
 from .principles import preparation_policy
@@ -82,10 +82,6 @@ SCREEN_SHAPE = {"id": "screen-001", "screener": {"kind": "agent", "model": None}
                            "relevance": "none|weak|strong", "reason": "Why.", "conventions": [], "context": "Citation context for a reference."}]}
 
 
-_INNOVATION_CANDIDATE_NOTE = ("Set innovation_candidate to true on a reading that names one of the "
-                              + str(INNOVATION_CANDIDATES) + " innovation candidates; leave the key out otherwise.")
-
-
 def _build_notes_shape(screen, loop, policy):
     """The item template a coordinator fills: the screening shape, or NOTES_SHAPE plus the key this export's readings carry."""
     if screen:
@@ -146,6 +142,7 @@ def export_batches(store, *, depth="abstract", size=60, destination, profile=Non
     readme = {"notes_shape": _build_notes_shape(screen, loop, policy),
               "submit": "exactory-research " + ("screen-batch" if screen else "read-batch") + " --file NOTES.json --expected-revision REVISION --request-id ID"}
     if loop:
-        readme["innovation_candidate"] = _INNOVATION_CANDIDATE_NOTE
+        readme["innovation_candidate"] = ("Set innovation_candidate to true on a reading that names one of the "
+                                          + str(resolve_innovation_candidates(records)) + " innovation candidates; leave the key out otherwise.")
     (destination / "README.json").write_text(json.dumps(readme, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return {"revision": snapshot["revision"], "entries": len(entries), "files": files, "mechanical_only": True}

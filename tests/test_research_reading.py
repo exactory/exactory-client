@@ -297,6 +297,23 @@ class ExtractionOptionTests(LiteratureCase):
 
 
 class FulltextPurposeTests(LiteratureCase):
+    def test_research_core_override_counts_the_research_requirements(self):
+        from research_harness.principles import initialize_research
+        from research_harness.reading import require_fulltext
+        self.mutate(initialize_research, {"profile": "research", "target": None, "preparation_policy": "lineage-v1"})
+        payload = dict(self.requirement(1, "core", depends_on="finding-1"), profile="research", depth={"core_fulltexts": 1})
+        saved = self.mutate(require_fulltext, payload)["result"]
+        self.assertEqual(saved["depth"], {"core_fulltexts": 1})
+        next_payload = dict(self.requirement(2, "core", depends_on="finding-2"), profile="research", depth={"core_fulltexts": 1})
+        self.assert_error("core_limit_reached", lambda: self.mutate(require_fulltext, next_payload))
+        next_payload["depth"] = {"core_fulltexts": 2}
+        self.mutate(require_fulltext, next_payload)
+
+    def test_verification_core_refuses_an_override_even_without_configuration(self):
+        from research_harness.reading import require_fulltext
+        payload = self.requirement(1, "core", depends_on="finding-1", depth={"core_fulltexts": 20})
+        self.assert_error("profile_inapplicable", lambda: self.mutate(require_fulltext, payload))
+
     def requirement(self, number, purpose, **extra):
         return dict({"id": "req-" + str(number), "profile": "verification", "version_id": self.metadata(number),
                      "purpose": purpose, "reason": "The verdict rests on this source."}, **extra)
@@ -316,6 +333,18 @@ class FulltextPurposeTests(LiteratureCase):
 
 
 class BatchExtrasTests(LiteratureCase):
+    def test_research_search_hit_readings_record_the_override_and_enforce_it(self):
+        from research_harness.principles import initialize_research
+        from research_harness.reading import record_reading_batch
+        self.mutate(initialize_research, {"profile": "research", "target": None, "preparation_policy": "lineage-v1"})
+        first, second = self.metadata(1), self.metadata(2)
+        self.assert_error("invalid_batch", lambda: self.batch([self.note(first, search_hit=True)]))
+        result = self.mutate(record_reading_batch, {"id": "research-hit", "depth": {"search_readings": 1},
+                             "items": [self.note(first, search_hit=True)]})["result"]
+        self.assertEqual(result["effective_depth"], {"search_readings": 1})
+        self.assert_error("search_reading_limit_reached", lambda: self.mutate(record_reading_batch,
+            {"id": "second-hit", "depth": {"search_readings": 1}, "items": [self.note(second, search_hit=True)]}))
+
     def note(self, version, **extra):
         return dict({"version_id": version, "note": "Read the complete abstract.",
                      "notes": {f: {"text": "The abstract discusses " + f + ".", "status": "present"} for f in FIELDS}}, **extra)

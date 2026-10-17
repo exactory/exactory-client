@@ -1,6 +1,6 @@
 ---
 name: experiment
-description: Use when executing an admitted research cycle, assessing actual results, renewing an investigation tranche, or deciding whether supported results can enter writing.
+description: Use when a study needs an exploratory calculation at any stage, an admitted execution, result assessment or a decision before writing.
 ---
 
 # Exactory: experiment

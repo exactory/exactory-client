@@ -6,6 +6,7 @@ is a pointer to the detailed command, not an executable instruction.
 """
 
 from collections import Counter
+import json
 
 from .errors import ResearchError
 from .evidence import digest
@@ -23,7 +24,10 @@ PRIORITY = ("migration_required", "profile_mismatch", "configuration_missing", "
             "reference_unresolved", "search_purpose_missing", "search_scope_stale", "search_frontier_stale",
             "search_evidence_stale", "search_dispositions_missing", "search_pending", "loop_closure_missing",
             "loop_closure_stale", "abstract_reading_missing",
-            "historical_version_unresolved", "grand_challenge_missing", "objective_missing", "objective_mismatch",
+            "historical_version_unresolved", "research_intent_missing",
+            "direction_search_missing", "direction_search_incomplete", "direction_root_reading_missing",
+            "direction_reading_missing", "direction_standards_missing", "direction_standards_unresolved",
+            "grand_challenge_missing", "objective_missing", "objective_mismatch",
             "standards_missing", "rationale_missing", "innovation_missing",
             "innovation_candidates_missing", "innovation_case_not_candidate", "context_missing",
             "synthesis_dependencies_stale", "resource_budget_exhausted",
@@ -106,6 +110,9 @@ def status_summary(report):
     result = next_summary(report)
     preparation = report.get("preparation") or {}
     study = report.get("study") or {}
+    limits = report.get("limits")
+    if limits is not None and limits.get("depth") is not None:
+        limits = dict(limits, depth=dict(limits["depth"], plan_id=_short(limits["depth"].get("plan_id"), 64)))
     result.update({"schema": "research-status-summary-v1", "runtime": report.get("runtime"),
                    "profile": _short(report.get("profile"), 24), "stage": _short(study.get("stage"), 32),
                    "status": _short(study.get("status"), 32), "waiting": _short(study.get("waiting"), 160),
@@ -113,17 +120,30 @@ def status_summary(report):
                    "obligations": _obligations(report.get("obligations", [])),
                    "preparation_obligations": _obligations(preparation.get("obligations", [])),
                    "counts": report.get("counts"), "resources": report.get("resources", {}),
-                   "limits": report.get("limits"),
+                   "limits": limits,
                    "round": report.get("round"), "evaluation": report.get("evaluation"),
                    "grand_challenge": _summarize_grand_challenge(report.get("grand_challenge"))})
     result["source_deferrals"] = dict(Counter(item["status"] for item in report.get("source_deferrals", [])))
     result["deferred_obligations"] = _obligations(report.get("deferred_obligations", []))
+    if "probes" in report:
+        result["probes"] = report["probes"]
+    if "provisional_searches" in report:
+        result["provisional_searches"] = {"count": len(report["provisional_searches"])}
+    # Keep depth amounts and counts visible when they take room previously available to optional criterion previews.
+    challenge = result["grand_challenge"]
+    while ((limits or {}).get("depth") or "probes" in report or "provisional_searches" in report) and (challenge and challenge["criterion_ids"]
+           and len(json.dumps(result, ensure_ascii=False, indent=2).encode("utf-8")) > 16 * 1024):
+        challenge["criterion_ids"].pop()
+        challenge["omitted_criterion_ids"] += 1
     return result
 
 
 def current_obligations(report):
     """The obligations `next` follows: the preparation stage's while it has any, else readiness."""
-    return report.get("preparation", {}).get("obligations") or report["obligations"]
+    preparation = report.get("preparation", {})
+    if preparation.get("advisory"):
+        return report["obligations"]
+    return preparation.get("obligations") or report["obligations"]
 
 
 def obligations_page(report, code, *, limit, cursor):

@@ -44,8 +44,12 @@ class ReleaseWorkflowTests(WorkspaceTest):
         return list(self.controller.status()["checkpoints"].values())[-1]
 
     def accept(self, checkpoint, obligation, manifest):
+        origin = checkpoint["origin"]
+        evidence = ([origin["study_digest"]] if origin["kind"] == "external_result" else
+                    [self.controller.status()["nodes"][origin["node_id"]]["admission"]["studies"]["novelty"]])
         value = dict(manifest["conclusion"], obligation_id=obligation, inputs=[],
-                     review=self.result_review(digest(checkpoint), digest(checkpoint["claim"])))
+                     review=self.result_review(digest(checkpoint), digest(checkpoint["claim"]),
+                                               openness_evidence=evidence + checkpoint["evidence_digests"]))
         invoke(self.controller, "accept", value, checkpoint["id"])
         return list(self.controller.status()["acceptances"].values())[-1]
 
@@ -266,11 +270,12 @@ class ReleaseWorkflowTests(WorkspaceTest):
         delivery = self.delivery(continuation, unused)
         final = self.input_file("FINAL.md", "0^2=0, 1^2=1, 2^2=4, 3^2=9. Their residues are 0,1,0,1. " + bridge_text)
         state = self.controller.status()
-        subject = {"schema_version": 1, "objective_id": state["objective_id"], "contract_digest": state["contract_digest"],
+        subject = {"schema_version": 2, "objective_id": state["objective_id"], "contract_digest": state["contract_digest"],
             "outcome": "proof", "acceptance_ids": expected_acceptances,
             "evidence_digests": sorted({d for aid in expected_acceptances for d in state["checkpoints"][state["acceptances"][aid]["checkpoint_id"]]["evidence_digests"]}),
             "local_deliveries": [delivery], "deliverables": [{"requirement": original["required_deliverables"][0], "digest": final["digest"]}]}
-        final_review = self.result_review(digest(subject), digest(root))
+        final_review = self.result_review(digest(subject), digest(root),
+            openness_evidence=subject["evidence_digests"] + [continuation["admission"]["studies"]["novelty"]], openness_subject=subject)
         final_review["reviewer"] = provenance("fixture-final-auditor")
         invoke(self.controller, "complete", {"subject": subject, "review": final_review, "inputs": [final]}, None)
         state = self.controller.status()

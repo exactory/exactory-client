@@ -5,6 +5,32 @@ from research_harness.errors import ResearchError
 
 
 class CanonicalRoundAdapterTests(StrategyCase):
+    def test_evaluate_returns_to_literature_on_the_ready_canonical_investigation(self):
+        from research_harness.gates import validate_transition
+        self.mutate(self.module('principles').initialize_research, {'profile': 'research', 'target': None})
+        self.ready_decision()
+        records = self.store.snapshot()['records']
+        self.assertIsNone(self.module('rounds').active_round(records))
+        validate_transition(records, self.artifacts, {'stage': 'evaluate'},
+                            {'stage': 'literature', 'status': 'in_progress'})
+
+    def test_evaluate_returns_to_literature_on_the_ready_canonical_pivot(self):
+        from research_harness.gates import validate_transition
+        self.mutate(self.module('principles').initialize_research, {'profile': 'research', 'target': None})
+        self.reviewed_dossier()
+        self.mutate(self.module('research_decisions').record_research_decision, self.decision(action='pivot'))
+        validate_transition(self.store.snapshot()['records'], self.artifacts, {'stage': 'evaluate'},
+                            {'stage': 'literature', 'status': 'in_progress'})
+
+    def test_evaluate_cannot_return_on_an_unready_canonical_investigation(self):
+        from research_harness.gates import validate_transition
+        self.mutate(self.module('principles').initialize_research, {'profile': 'research', 'target': None})
+        response = self.review_response()
+        next(a for a in response['value']['assurances'] if a['kind'] == 'feasibility')['status'] = 'failed'
+        self.ready_decision(response_b=response)
+        self.error('readiness_required', lambda: validate_transition(self.store.snapshot()['records'], self.artifacts,
+            {'stage': 'evaluate'}, {'stage': 'literature', 'status': 'in_progress'}))
+
     def ready_decision(self, **kwargs):
         self.reviewed_dossier(**kwargs)
         return self.mutate(self.module('research_decisions').record_research_decision,self.decision())['result']
@@ -53,10 +79,11 @@ class CanonicalRoundAdapterTests(StrategyCase):
     def test_round_adapter_does_not_create_a_new_tranche_or_resource_budget(self):
         self.ready_decision(); records=self.store.snapshot()['records']
         tranche=records['strategy_dossier']['dossier-1']['payload']['tranche']
+        accounts=records.get('resource_account',{})
         self.mutate(self.module('rounds').admit_round,{'id':'admission','research_decision_id':'decision-1','reason':'Execute the approved test.'})
         records=self.store.snapshot()['records']
         self.assertEqual(records['strategy_dossier']['dossier-1']['payload']['tranche'],tranche)
-        self.assertNotIn('resource_account',records)
+        self.assertEqual(records.get('resource_account',{}),accounts)
 
     def test_round_gate_and_direct_decision_have_identical_current_obligations(self):
         self.ready_decision()

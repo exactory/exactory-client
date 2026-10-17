@@ -42,6 +42,7 @@ class AdoptionTests(SearchCLIWorkspace, unittest.TestCase):
         self.assertEqual((self.root / "legacy" / "units" / "FINISHED.json").read_bytes(), self.finish)
         state = self.search("status")
         self.assertEqual(state["nodes"]["node-000001"]["status"], "finished")
+        self.assertEqual(state["service"].get("review_workspace"), ".")
         self.assertEqual(state["totals"]["historical_usage"], "unknown")
         self.assertIsNone(state["accounts"]["account-000001"]["historical_runs"])
         self.assertEqual(state["acceptances"], {})
@@ -78,7 +79,7 @@ class AdoptionTests(SearchCLIWorkspace, unittest.TestCase):
 
     def verification_spec(self):
         spec = self.adoption_spec()
-        prepared = self.prepared_proposal()
+        prepared = self.prepared_proposal(common=True)
         proposal = prepared["proposal"]
         proposal.update(attack_slug="verify-legacy", role="verification", relationship="prerequisite")
         proposal["task"]["purpose"] = "Verify the exact preserved claim and certificate"
@@ -317,7 +318,7 @@ class AdoptionTests(SearchCLIWorkspace, unittest.TestCase):
     def managed_verification_state(self):
         self.create_legacy()
         self.initialize()
-        proposed = self.prepared_proposal()
+        proposed = self.prepared_proposal(common=True)
         proposed["proposal"].update(role="verification", attack_slug="managed-verification")
         self.search("propose", proposed, revision=1)
         self.search("review", {"proposal_id": "proposal-000001", "review": review(proposed["proposal"]), "inputs": []}, revision=2)

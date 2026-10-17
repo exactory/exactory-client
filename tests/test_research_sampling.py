@@ -11,6 +11,19 @@ def member(number, month):
 
 
 class DrawTests(LiteratureCase):
+    def test_research_sampling_uses_an_explicit_depth_without_claim_credit(self):
+        from research_harness.gates import gate_state
+        from research_harness.principles import initialize_research
+        self.mutate(initialize_research, {"profile": "research", "target": None, "preparation_policy": "lineage-v1"})
+        collection = self.cohort((1, 2, 3))
+        payload = {"id": "research-sample", "collection_id": collection, "size": 2, "seed": "draw"}
+        self.assert_error("policy_inapplicable", lambda: self.mutate(sampling.record_sample, payload))
+        result = self.mutate(sampling.record_sample, dict(payload, depth={"sample_size": 2001}))["result"]
+        self.assertEqual((result["size"], result["depth"]), (2, {"sample_size": 2001}))
+        records = self.store.snapshot()["records"]
+        report = gate_state(records, self.artifacts, "cohort", profile="research")
+        self.assertFalse(report["counts"].get("sample"))
+
     def test_equal_allocation_by_month_and_determinism(self):
         members = [member(n, "2026-0" + str(1 + n % 3)) for n in range(1, 31)]
         first = sampling.draw(members, 9, "seed-a")
@@ -53,6 +66,10 @@ class SampleRecordTests(LiteratureCase):
             {"id": "sample-2", "collection_id": self.collection, "size": 101, "seed": "abc"}))
         self.assert_error("sample_exists", lambda: self.mutate(sampling.record_sample,
             {"id": "sample-3", "collection_id": self.collection, "size": 5, "seed": "xyz"}))
+
+    def test_verification_refuses_a_sample_depth_override(self):
+        self.assert_error("profile_inapplicable", lambda: self.mutate(sampling.record_sample,
+            {"id": "override", "collection_id": self.collection, "size": 5, "seed": "x", "depth": {"sample_size": 200}}))
 
     def test_prediction_from_placements(self):
         from research_harness.reading import record_reading_batch
