@@ -781,19 +781,46 @@ class BoundedCommandTerminationTests(WorkspaceTest):
     """A producer group that ends between the liveness check and the signal is already absent: the command keeps its
     record and its termination reason. Any other signalling error stays visible."""
 
+    def setUp(self):
+        super().setUp()
+        self.started = []
+        popen = subprocess.Popen
+
+        def start_and_record(argv, **options):
+            self.started.append(popen(argv, **options))
+            return self.started[-1]
+
+        patcher = patch.object(subprocess, "Popen", side_effect=start_and_record)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def tearDown(self):
+        # A producer that an error left to its launcher ends here.
+        for process in self.started:
+            if process.poll() is None:
+                process.kill()
+                process.communicate()
+        super().tearDown()
+
     @contextlib.contextmanager
-    def group_gone_before_the_signal(self, error=None):
+    def group_gone_at_the_signal(self, error=None):
+        """SIGKILL answers ESRCH, as for a group that ended between the liveness check and the signal. The producer is
+        ended at that moment, so no test depends on when it would end by itself. Each attempt records whether the
+        producer's stdout was already closed, which tells the final wait (closed) from the output loop (open)."""
         killpg = os.killpg
-        signals = []
+        attempts = []
 
         def answer_for_the_signal(group, number):
-            signals.append(number)
-            if number == signal.SIGKILL:
-                raise error or ProcessLookupError(errno.ESRCH, "No such process")
-            return killpg(group, number)
+            if number != signal.SIGKILL:
+                return killpg(group, number)
+            attempts.append({"stdout_closed": self.started[-1].stdout.closed})
+            if error is not None:
+                raise error
+            killpg(group, number)
+            raise ProcessLookupError(errno.ESRCH, "No such process")
 
         with patch.object(os, "killpg", side_effect=answer_for_the_signal):
-            yield signals
+            yield attempts
 
     def run_bounded(self, script, timeout_seconds):
         from search_controller.execution import bounded_command
@@ -804,47 +831,36 @@ class BoundedCommandTerminationTests(WorkspaceTest):
                                           deadline, directory, 0)
         return command, reason, directory
 
-    def test_timeout_during_the_output_loop_keeps_its_reason_when_the_group_is_gone(self):
-        with self.group_gone_before_the_signal() as signals:
-            command, reason, directory = self.run_bounded("import time\nprint('partial', flush=True)\ntime.sleep(0.5)\n", 0.2)
+    def test_timeout_in_the_output_loop_keeps_its_reason_when_the_group_is_gone(self):
+        # The producer never ends by itself, so the deadline passes inside the output loop.
+        with self.group_gone_at_the_signal() as attempts:
+            command, reason, directory = self.run_bounded("import time\nprint('partial', flush=True)\ntime.sleep(60)\n", 1)
         self.assertEqual(reason, "timeout")
-        self.assertEqual(command["exit_code"], 0)
+        self.assertEqual(attempts, [{"stdout_closed": False}], "One signal, from the output loop")
+        self.assertEqual(command["exit_code"], -signal.SIGKILL)
         self.assertEqual((directory / "0.stdout").read_bytes(), b"partial\n")
-        self.assertIn(signal.SIGKILL, signals)
 
     def test_output_limit_keeps_its_reason_when_the_group_is_gone(self):
         from search_controller.execution import OUTPUT_LIMIT
-        script = "import sys, time\nsys.stdout.write('x' * %d)\nsys.stdout.flush()\ntime.sleep(0.5)\n" % (OUTPUT_LIMIT + 1)
-        with self.group_gone_before_the_signal() as signals:
-            command, reason, directory = self.run_bounded(script, 5)
+        script = "import sys, time\nsys.stdout.write('x' * %d)\nsys.stdout.flush()\ntime.sleep(60)\n" % (OUTPUT_LIMIT + 1)
+        with self.group_gone_at_the_signal() as attempts:
+            command, reason, directory = self.run_bounded(script, 10)
         self.assertEqual(reason, "output_limit")
-        self.assertEqual(command["exit_code"], 0)
+        self.assertEqual(attempts, [{"stdout_closed": False}], "One signal, at the output limit")
+        self.assertEqual(command["exit_code"], -signal.SIGKILL)
         self.assertEqual(len((directory / "0.stdout").read_bytes()), OUTPUT_LIMIT)
-        self.assertIn(signal.SIGKILL, signals)
 
     def test_timeout_at_the_final_wait_keeps_its_reason_when_the_group_is_gone(self):
-        # The producer closes its streams and outlives the deadline, so the loop ends at EOF and the final wait times out.
-        with self.group_gone_before_the_signal() as signals:
-            command, reason, directory = self.run_bounded("import sys, time\nsys.stdout.close()\nsys.stderr.close()\ntime.sleep(0.6)\n", 0.3)
+        # The producer closes descriptors 1 and 2, so the loop ends at EOF, and it never ends by itself, so the final
+        # wait expires at the deadline.
+        with self.group_gone_at_the_signal() as attempts:
+            command, reason, directory = self.run_bounded("import os, time\nos.close(1)\nos.close(2)\ntime.sleep(60)\n", 1.5)
         self.assertEqual(reason, "timeout")
-        self.assertEqual(command["exit_code"], 0)
-        self.assertIn(signal.SIGKILL, signals)
+        self.assertEqual(attempts, [{"stdout_closed": True}], "One signal, from the final wait")
+        self.assertEqual(command["exit_code"], -signal.SIGKILL)
+        self.assertEqual((directory / "0.stdout").read_bytes(), b"")
 
     def test_another_signalling_error_stays_visible(self):
-        popen = subprocess.Popen
-        started = []
-
-        def start_and_record(argv, **options):
-            started.append(popen(argv, **options))
-            return started[-1]
-
-        try:
-            with patch.object(subprocess, "Popen", side_effect=start_and_record), \
-                    self.group_gone_before_the_signal(PermissionError(errno.EPERM, "Operation not permitted")), \
-                    self.assertRaises(PermissionError):
-                self.run_bounded("import time\ntime.sleep(5)\n", 0.1)
-        finally:
-            # The error leaves the producer to its launcher; the test ends it itself.
-            for process in started:
-                process.kill()
-                process.communicate()
+        with self.group_gone_at_the_signal(PermissionError(errno.EPERM, "Operation not permitted")), \
+                self.assertRaises(PermissionError):
+            self.run_bounded("import time\ntime.sleep(60)\n", 0.1)
