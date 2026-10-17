@@ -14,7 +14,42 @@ def uses_claim_dependencies(records):
             and managed_research(records))
 
 
-def project_claim_dependencies(value, *, managed, kind="dependencies"):
+def collect_source_ids(value):
+    identifiers = set()
+
+    def collect(item):
+        if isinstance(item, dict):
+            if isinstance(item.get("source_id"), str):
+                identifiers.add(item["source_id"])
+            identifiers.update(item.get("source_ids", []))
+            for child in item.values():
+                collect(child)
+        elif isinstance(item, list):
+            for child in item:
+                collect(child)
+
+    collect(value)
+    return identifiers
+
+
+def project_source_inputs(sources, evidence):
+    """Bind the checked readings and their inspected bundles, using records only.
+
+    Evidence validation has already established that each full reading's bundle
+    has the currently required units. Its checked reading digest also holds the
+    recomputed coverage and visual dependencies. Other reading/bundle history
+    remains in the source inventory for audit, outside claim currency.
+    """
+    identifiers = {item["reading"]["reading_id"] for item in evidence if item["reference"]["kind"] == "source"}
+    readings = {key: sources["reading"][key] for key in sorted(identifiers)}
+    bundles = {reading["bundle_id"] for reading in readings.values() if reading.get("bundle_id") is not None}
+    selected = {key: value for key, value in sources.items() if key != "source"}
+    selected.update(reading=readings, source_bundle={key: sources["source_bundle"][key] for key in sorted(bundles)})
+    selected["source"] = {key: sources["source"][key] for key in sorted(collect_source_ids(selected))}
+    return selected
+
+
+def project_claim_dependencies(value, *, managed, kind="dependencies", project_readings=True):
     """Project internal dependency compositions; retain the original maps for audit.
 
     Traverse known report fields only. Record IDs, runtime names, source records
@@ -40,6 +75,13 @@ def project_claim_dependencies(value, *, managed, kind="dependencies"):
             projected["candidate"] = project_claim_dependencies(projected["candidate"], managed=True, kind="candidate")
         if projected.get("review_inputs") is not None:
             inputs = {key: item for key, item in projected["review_inputs"].items() if key != "synthesis"}
+            if project_readings and "sources" in inputs:
+                evidence = []
+                for branch in inputs["branches"].values():
+                    evidence.extend(branch["plan_evidence"])
+                    if branch["assessment"] is not None:
+                        evidence.extend(branch["assessment"]["evidence"])
+                inputs["sources"] = project_source_inputs(inputs["sources"], evidence)
             if inputs.get("candidate") is not None:
                 inputs["candidate"] = project_claim_dependencies(inputs["candidate"], managed=True, kind="candidate")
             inputs["branches"] = project_claim_dependencies(inputs["branches"], managed=True, kind="branches")
@@ -63,7 +105,12 @@ def accept_claim_dependencies(recorded, current, *, managed, recorded_inputs=Non
             return project_claim_dependencies(recorded, managed=True, kind=kind) == current
         return recorded == current
     projected = project_claim_dependencies(recorded_inputs, managed=True, kind=kind)
-    if recorded not in (digest(recorded_inputs), digest(projected)):
+    compositions = [digest(recorded_inputs), digest(projected)]
+    if kind == "readiness":
+        # 693fa04 projected policy but retained the broad reading inventory.
+        compositions.append(digest(project_claim_dependencies(recorded_inputs, managed=True,
+                                                              kind=kind, project_readings=False)))
+    if recorded not in compositions:
         return False
     claim = projected if recorded_claim is None else recorded_claim
     return (digest(claim) if isinstance(current, str) else claim) == current

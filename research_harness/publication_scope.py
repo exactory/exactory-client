@@ -385,7 +385,12 @@ def _rebuild_scoped_dependencies(records, artifacts, candidate=None):
     restore = None if not legacy else {
         "dependencies": {"preparation": candidate["preparation_digest"], "constitution": candidate["constitution"]},
         "record_id": candidate["checkpoint_id"]}
-    return _load_scope_snapshot(records, artifacts, restore_inputs=restore, include_dependencies=True, project_claims=True)[6]
+    context, _, _, _, _, _, dependencies = _load_scope_snapshot(
+        records, artifacts, restore_inputs=restore, include_dependencies=True, project_claims=True)
+    if candidate is not None:
+        context.rebuild_candidate(candidate, candidate["checkpoint_id"])
+        dependencies = dict(dependencies, candidate=candidate["digest"])
+    return dependencies
 
 
 def _validate_scoped_review(context, value, candidate, contract, candidate_digest, *, assignment_id=None):

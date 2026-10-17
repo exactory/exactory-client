@@ -118,6 +118,8 @@ def validate_transition(records, artifacts, previous, proposed):
             raise ResearchError("readiness_required", "Assess the experiment before returning to ideate")
         if proposed["status"] == "done":
             raise ResearchError("readiness_required", "A return for more work cannot assert that work is done")
+        if managed and target == "ideate":
+            require_ready(gate_state(records, artifacts, "direction"), "entering ideate")
         if (source, target) == ("evaluate", "literature"):
             if managed:
                 from .research_decisions import decision_state

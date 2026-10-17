@@ -69,11 +69,13 @@ def _rebuild_pinned_readiness(records, artifacts, bundle):
                "record_id": identifier, "synthesis": inputs["synthesis"]}
     body = {key: value for key, value in original.items() if key != "digest"}
     restore["project_claims"] = digest(body) != original["digest"]
+    projected, _ = historical.build_candidate()
+    restore["project_readings"] = original["source_records_digest"] == projected["source_records_digest"]
     evaluate = assess_manuscript_readiness if bundle.get("publication_scope") else author_readiness_state
     original_report = evaluate(snapshot, evaluation, restore_inputs=restore)
     if original_report["review_inputs"] != inputs:
         context.require_reassessment(identifier, "matching recorded readiness inputs and snapshot")
-    return original_report, evaluate(snapshot, evaluation, restore_inputs=dict(restore, project_claims=True))
+    return original_report, evaluate(snapshot, evaluation, restore_inputs=dict(restore, project_claims=True, project_readings=True))
 
 
 def _scientific_readiness(report, records=None):

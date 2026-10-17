@@ -8,6 +8,40 @@ from research_harness.cli import OPERATIONS
 
 
 class PublicationScopeTests(SourceLimitedCase):
+    def test_previous_broad_reading_scope_and_pin_survive_an_unused_abstract(self):
+        from unittest.mock import patch
+        from managed_strategy_fixtures import ManagedStrategy
+        from research_harness import development, publication
+        from research_harness.reading import record_reading
+        self.prepare_source_limited()
+        version = self.links[0]["version_id"]
+        self.mutate(record_reading, self.abstract_note(version, "earlier-unused-abstract"))
+        project = publication.project_claim_dependencies
+
+        def project_broad(value, **options):
+            return project(value, **dict(options, project_readings=False))
+
+        # Reproduce 693fa04's policy projection and broad reading inventory.
+        # The fixture stays outside direction policy until its pin is recorded.
+        with patch.object(development, "uses_claim_dependencies", return_value=True), \
+                patch.object(development, "project_source_inputs", lambda sources, evidence: sources), \
+                patch.object(publication, "uses_claim_dependencies", return_value=True), \
+                patch.object(publication, "project_claim_dependencies", project_broad):
+            self.record_scope()
+            self.accept_scope()
+            original = self.manuscript_readiness()
+            bundle = self.scoped_manuscript()
+        ManagedStrategy(self).ensure_intent()
+        before = self.manuscript_readiness()
+        self.assertTrue(before["manuscript_ready"], before["manuscript_obligations"])
+        self.assertNotEqual(original["candidate_digest"], before["candidate_digest"])
+        self.assertEqual(publication._bundle(self.store.snapshot()["records"], self.artifacts), bundle)
+        self.mutate(record_reading, self.abstract_note(version, "later-unused-abstract"))
+        after = self.manuscript_readiness()
+        self.assertTrue(after["manuscript_ready"], after["manuscript_obligations"])
+        self.assertEqual(after["candidate_digest"], before["candidate_digest"])
+        self.assertEqual(publication._bundle(self.store.snapshot()["records"], self.artifacts), bundle)
+
     def test_managed_scope_and_its_review_survive_an_unrelated_reading(self):
         from managed_strategy_fixtures import ManagedStrategy
         self.store.mutate("fixture.managed", {}, lambda tx: tx.put("workspace", "study", {"stage": "literature"}),
