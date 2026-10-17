@@ -1,5 +1,8 @@
 """Probe bytes remain exploratory through every result import and later reference."""
 
+import hashlib
+import json
+from pathlib import Path
 import sys
 import unittest
 from unittest import mock
@@ -50,6 +53,179 @@ class ResearchProbeProvenanceTests(DevelopmentCase):
             "outputs": [{"id": "result", "requirement_id": "measurements", "artifact": artifact},
                         {"id": "validation", "requirement_id": "checks", "artifact": artifact}],
             "notes": "Retain the original bytes and chronology."}
+
+    def export_native_json(self, raw):
+        """Publish through the real native packet exporter into this common store."""
+        harness = str(Path(__file__).resolve().parents[1] / "skills/math-solver/harness")
+        with mock.patch.object(sys, "path", [harness] + sys.path):
+            from search_controller.service import Controller
+        claim = {"statement": self.objective["statement"], "quantifiers": "Every integer n in [0, 3]",
+            "assumption_ids": [], "proof_policy": "reviewed",
+            "scope": {"kind": "integer_interval", "lower": 0, "upper": 3,
+                "lower_inclusive": True, "upper_inclusive": True}}
+        contract = {"schema_version": 1, "original_claim": claim, "assumption_ids": [],
+            "root_obligation": "obligation-000001", "root_attack_slug": "root", "requested_outcome": "proof",
+            "proof_policy": "reviewed", "required_deliverables": ["A proof of the finite bound"],
+            "resource_policy": {"max_total_moves": None, "max_total_runs": None, "max_workers": 1}}
+        controller = Controller(self.root)
+        controller.command("init", {"contract": contract}, 0, "native-init")
+        (self.root / "noncanonical.json").write_bytes(raw)
+        identity = digest(json.loads(raw))
+        exported = controller.command("review-packet", {"kind": "result",
+            "subject": {"claim": claim, "evidence_digests": [identity]}, "claim_digest": digest(claim),
+            "reviewer": {"source": "host", "actor_id": "reviewer", "attestation_id": "review-assignment:probe-export"},
+            "inputs": [{"path": "noncanonical.json", "kind": "blob", "digest": identity}]}, None, None)
+        self.assertEqual(Path(exported["workspace"]).resolve(), self.root.resolve())
+        packet = json.loads(self.artifacts.read(exported["native_packet"]))
+        artifact = next(row["artifact"] for row in packet["evidence"] if row["digest"] == identity)
+        self.assertEqual(artifact["raw_identities"][0]["sha256"], hashlib.sha256(raw).hexdigest())
+        return artifact
+
+    def launch_json_probe(self, raw):
+        from research_harness.probe import launch_probe
+        script = self.root / "normalization-probe.py"
+        script.write_text("from pathlib import Path\nPath('result.json').write_bytes(" + repr(raw) + ")\n")
+        return launch_probe(self.store, identifier="json-probe", question="What does this finite enumeration return?",
+            script=str(script), timeout=2)["result"]
+
+    def test_canonical_native_export_keeps_probe_origin_through_execution_import_and_result_reference(self):
+        from research_harness.execution import record_imported_execution
+        raw = json.dumps(json.loads(RESULT), indent=2).encode() + b"\n"
+        self.launch_json_probe(raw)
+        canonical = self.export_native_json(raw)
+        expected = [{"probe_id": "json-probe", "sha256": canonical["sha256"],
+            "raw_sha256": hashlib.sha256(raw).hexdigest(), "roles": ["outputs"]}]
+        plan = self.plan()
+        self.mutate(self.development().plan_cycle, plan)
+        admission = self.admit()
+        for index, operation in enumerate((self.development().record_execution, record_imported_execution)):
+            payload = self.build_import(canonical, "canonical-import-" + str(index))
+            saved = self.mutate(operation, payload)["result"]
+            self.assertEqual(saved.get("probe_origins"), expected)
+            before = self.store.snapshot()
+            evidence = self.development()._Evidence(self.development()._Context(before["records"], self.artifacts))
+            self.assertEqual(evidence.one(self.result_evidence(payload))["probe_origins"], expected)
+            self.assertEqual(self.store.snapshot(), before)
+        managed = dict(payload, id="canonical-managed", origin={"kind": "managed", "admission_id": admission["id"]},
+            command=admission["command"], usage={"units": 1, "reason": "An attempted declarative relabel."})
+        self.assert_error("probe_exploratory_origin", lambda: self.mutate(self.development().record_execution, managed))
+        assessed = self.mutate(self.development().assess_cycle, self.assessment(plan, payload))["result"]
+        self.assertIn("prospective_execution_missing", {item["code"] for item in assessed["obligations"]})
+
+    def test_probe_origin_recorded_after_export_and_import_is_found_without_rewriting_history(self):
+        raw = json.dumps(json.loads(RESULT), indent=2).encode() + b"\n"
+        canonical = self.export_native_json(raw)
+        plan = self.plan()
+        self.mutate(self.development().plan_cycle, plan)
+        payload = self.build_import(canonical)
+        revision = self.store.revision
+        saved = self.development().record_execution(self.store, payload, expected_revision=revision,
+            request_id="before-probe")["result"]
+        self.assertNotIn("probe_origins", saved)
+        self.launch_json_probe(raw)
+        before = self.store.snapshot()
+        replay = self.development().record_execution(self.store, payload, expected_revision=revision,
+            request_id="before-probe")["result"]
+        self.assertEqual(replay, saved)
+        evidence = self.development()._Evidence(self.development()._Context(before["records"], self.artifacts))
+        self.assertEqual(evidence.one(self.result_evidence(payload)).get("probe_origins"), [
+            {"probe_id": "json-probe", "sha256": canonical["sha256"],
+             "raw_sha256": hashlib.sha256(raw).hexdigest(), "roles": ["outputs"]}])
+        self.assertEqual(self.store.snapshot(), before)
+        later = self.mutate(self.development().record_execution, dict(payload, id="after-probe"))["result"]
+        self.assertTrue(later.get("probe_origins"))
+        assessed = self.mutate(self.development().assess_cycle, self.assessment(plan, payload))["result"]
+        self.assertIn("prospective_execution_missing", {item["code"] for item in assessed["obligations"]})
+
+    def test_shared_alias_chain_authenticates_each_edge_and_keeps_the_requested_output(self):
+        from research_harness.probe_provenance import find_probe_artifact_origins
+        raw = self.artifacts.put(b'{ "result": "\\u03bb" }\n', "application/json")
+        middle = self.artifacts.put(b'{"result":"\\u03bb"}', "application/json")
+        canonical = self.artifacts.put('{"result":"λ"}'.encode(), "application/json")
+        self.save_probe(raw)
+        aliases = [(canonical, middle), (middle, raw), (middle, canonical)]
+        def record_aliases(transaction):
+            for index, (output, original) in enumerate(aliases):
+                transaction.put("native_import_identity", str(index),
+                    {"schema_version": 1, "canonical_digest": output["sha256"], "raw": original})
+        self.store.mutate("fixture.aliases", {}, record_aliases, expected_revision=self.store.revision,
+            request_id="alias-chain")
+        before = self.store.snapshot()
+        expected = [{"probe_id": "probe-1", "sha256": canonical["sha256"],
+            "raw_sha256": raw["sha256"], "roles": ["outputs"]}]
+        self.assertEqual(find_probe_artifact_origins(before["records"], [canonical], artifacts=self.artifacts), expected)
+        self.assertEqual(self.store.snapshot(), before)
+        # The canonical object remains valid; a missing or corrupt intermediate
+        # original must still fail rather than silently discard its probe origin.
+        (self.root / middle["path"]).chmod(0o600)
+        (self.root / middle["path"]).write_bytes(b"corrupt")
+        self.assert_error("artifact_corrupt", lambda: find_probe_artifact_origins(
+            before["records"], [canonical], artifacts=self.artifacts))
+
+    def test_shared_lookup_refuses_an_unauthenticated_or_forged_normalization_alias(self):
+        from research_harness.probe_provenance import find_probe_artifact_origins
+        raw = self.artifacts.put(b'{ "other": 8 }\n', "application/json")
+        canonical = self.artifacts.put(b'{"result":7}', "application/json")
+        records = {"native_import_identity": {"forged":
+            {"schema_version": 1, "canonical_digest": canonical["sha256"], "raw": raw}}}
+        self.assert_error("invalid_import_identity", lambda: find_probe_artifact_origins(records, [canonical]))
+        self.assert_error("invalid_import_identity", lambda: find_probe_artifact_origins(
+            records, [canonical], artifacts=self.artifacts))
+
+    def test_completed_managed_canonical_output_keeps_its_verified_origin_after_a_later_probe(self):
+        from research_harness.execution import launch_execution
+        canonical = self.export_native_json(b'{ "metric": 7 }\n')
+        admission = admit_lab(self, body="import sys\nsys.stdout.write('{\"metric\":7}')\n")
+        self.assertTrue(launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+            request_id="canonical-rerun")["ok"])
+        self.launch_json_probe(b'{ "metric": 7 }\n')
+        before = self.store.snapshot()
+        records = before["records"]
+        identifier = records["execution_outcome"][admission["id"]]["execution_id"]
+        artifact = records["execution"][identifier]["payload"]["outputs"][0]["artifact"]
+        self.assertEqual(artifact["sha256"], canonical["sha256"])
+        reference = {"kind": "result", "execution_id": identifier, "output_id": "result", "artifact": artifact,
+            "locator": {"kind": "json", "pointer": "/metric", "value": 7}}
+        evidence = self.development()._Evidence(self.development()._Context(records, self.artifacts)).one(reference)
+        self.assertEqual(evidence["origin"]["kind"], "managed")
+        self.assertNotIn("probe_origins", evidence)
+        self.assertEqual(self.store.snapshot(), before)
+
+    def test_late_probe_origin_keeps_unsealed_historical_result_readable_as_exploratory(self):
+        from research_harness import execution
+        from research_harness.execution_evidence import validate_observed_execution
+        from research_harness.storage import _canonical
+        from research_harness.workspace import strict_json
+        canonical = self.export_native_json(b'{ "metric": 7 }\n')
+        admission = admit_lab(self, body="import sys\nsys.stdout.write('{\"metric\":7}')\n")
+        original = execution.prepared_mutation
+        def retain_legacy_observation(store, operation, payload, prepare, **identity):
+            if operation == "execution.observe":
+                def prepare_legacy(records, value):
+                    changes, observation = prepare(records, value)
+                    terminal = strict_json(self.artifacts.read(observation["terminal"]))
+                    terminal.pop("output_seal")
+                    observation["terminal"] = self.artifacts.put(_canonical(terminal).encode(), "application/json")
+                    observation.pop("files")
+                    return changes, observation
+                return original(store, operation, payload, prepare_legacy, **identity)
+            return original(store, operation, payload, prepare, **identity)
+        with mock.patch.object(execution, "prepared_mutation", side_effect=retain_legacy_observation):
+            execution.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
+                request_id="legacy-canonical-run")
+        self.launch_json_probe(b'{ "metric": 7 }\n')
+        before = self.store.snapshot()
+        records = before["records"]
+        identifier = records["execution_outcome"][admission["id"]]["execution_id"]
+        artifact = records["execution"][identifier]["payload"]["outputs"][0]["artifact"]
+        self.assertEqual(artifact["sha256"], canonical["sha256"])
+        reference = {"kind": "result", "execution_id": identifier, "output_id": "result", "artifact": artifact,
+            "locator": {"kind": "json", "pointer": "/metric", "value": 7}}
+        evidence = self.development()._Evidence(self.development()._Context(records, self.artifacts)).one(reference)
+        self.assertEqual(evidence["origin"]["kind"], "exploratory")
+        self.assertTrue(evidence["probe_origins"])
+        self.assert_error("execution_output_seal_required", lambda: validate_observed_execution(records, self.artifacts, identifier))
+        self.assertEqual(self.store.snapshot(), before)
 
     def save_pending_launch(self, identifier="pending-probe", output_dir="results", initial=None):
         from research_harness.probe import record_probe_intent, record_probe_launch
@@ -134,7 +310,8 @@ class ResearchProbeProvenanceTests(DevelopmentCase):
         self.mutate(pin_artifact, {"id": "later-probe-pin", "path": relative, "media_type": "application/json"})
         self.assertEqual(self.store.snapshot()["records"]["execution"][payload["id"]], saved)
         evidence = self.development()._Evidence(self.development()._Context(self.store.snapshot()["records"], self.artifacts))
-        self.assertNotIn("probe_origins", evidence.one(self.result_evidence(payload)))
+        self.assertEqual(evidence.one(self.result_evidence(payload))["probe_origins"], [
+            {"probe_id": launch["id"], "sha256": payload["outputs"][0]["artifact"]["sha256"], "roles": ["stdout"]}])
 
     def test_pinning_registers_origin_before_publishing_bytes_and_retries_only_stale(self):
         from research_harness import probe_provenance
@@ -328,9 +505,16 @@ class ResearchProbeProvenanceTests(DevelopmentCase):
         self.assertIn(admission["id"], after["execution_observation"])
 
     def test_interrupted_recovery_retains_matching_probe_bytes_without_prospective_credit(self):
+        self.assert_interrupted_recovery_keeps_probe_origins(late_origin=False)
+
+    def test_late_probe_origin_keeps_interrupted_recovery_readable_without_prospective_credit(self):
+        self.assert_interrupted_recovery_keeps_probe_origins(late_origin=True)
+
+    def assert_interrupted_recovery_keeps_probe_origins(self, *, late_origin):
         from research_harness import execution
         artifact = self.artifacts.put(RESULT, "application/json")
-        self.save_probe(artifact)
+        if not late_origin:
+            self.save_probe(artifact)
         admission = admit_lab(self, body="raise RuntimeError('must never launch')\n",
             outputs=[{"id": "result", "requirement_id": "measurements", "path": "stdout", "media_type": "application/json"},
                      {"id": "validation", "requirement_id": "checks", "path": "stderr", "media_type": "application/json"}])
@@ -342,16 +526,22 @@ class ResearchProbeProvenanceTests(DevelopmentCase):
             "reason": "The producer has no live owner and retained only partial bytes."},
             expected_revision=self.store.revision, request_id="recover-partial-probe-reuse")
         self.assertFalse(result["ok"])
+        if late_origin:
+            self.save_probe(artifact)
         records = self.store.snapshot()["records"]
         identifier = records["execution_outcome"][admission["id"]]["execution_id"]
         record = records["execution"][identifier]
         self.assertEqual(record["payload"]["status"], "interrupted")
-        self.assertEqual(record["probe_origins"], [{"probe_id": "probe-1", "sha256": artifact["sha256"], "roles": ["outputs"]}])
+        origins = [{"probe_id": "probe-1", "sha256": artifact["sha256"], "roles": ["outputs"]}]
+        if late_origin:
+            self.assertNotIn("probe_origins", record)
+        else:
+            self.assertEqual(record["probe_origins"], origins)
         reference = {"kind": "result", "execution_id": identifier, "output_id": "result", "artifact": artifact,
             "locator": {"kind": "json", "pointer": "/result", "value": {"values": [0, 1, 4, 9], "bound": 9}}}
         evidence = self.development()._Evidence(self.development()._Context(records, self.artifacts)).one(reference)
         self.assertEqual(evidence["origin"]["kind"], "exploratory")
-        self.assertEqual(evidence["probe_origins"], record["probe_origins"])
+        self.assertEqual(evidence["probe_origins"], origins)
         self.assertEqual(records["strategy_account"][admission["strategy_key"]]["charged_units"], admission["reserved_units"])
         assessment = self.assessment(records["cycle_plan"][admission["cycle_id"]]["payload"], record["payload"])
         assessment["validity_checks"][0]["status"] = "unresolved"
@@ -362,6 +552,13 @@ class ResearchProbeProvenanceTests(DevelopmentCase):
 
 
 class ResearchProbeOriginLookupTests(unittest.TestCase):
+    def test_shared_lookup_bounds_the_identity_closure(self):
+        from research_harness.probe_provenance import find_probe_artifact_origins
+        descriptors = [{"sha256": format(index, "064x")} for index in range(10001)]
+        with self.assertRaises(ResearchError) as caught:
+            find_probe_artifact_origins({}, descriptors)
+        self.assertEqual(caught.exception.code, "dependency_cycle")
+
     def test_pending_local_paths_exclude_unchanged_copied_inputs_and_sibling_directories(self):
         from research_harness.probe_provenance import find_probe_artifact_origins
         first = {"sha256": "a" * 64}

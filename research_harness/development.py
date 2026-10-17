@@ -523,6 +523,20 @@ class _Evidence:
                     "requirement_id": output["requirement_id"], "requirement_kind": requirement["kind"]}
             origins = [origin for origin in execution.get("probe_origins", [])
                        if origin["sha256"] == value["artifact"]["sha256"]]
+            discovered = find_probe_artifact_origins(context.records, [value["artifact"]], artifacts=context.artifacts)
+            if (discovered and payload["origin"]["kind"] == "managed" and not origins
+                    and payload["status"] == "completed" and payload["exit_code"] == 0):
+                from .execution_evidence import validate_observed_execution
+                admission_id = payload["origin"]["admission_id"]
+                observation = context.records.get("execution_observation", {}).get(admission_id)
+                if observation is not None:
+                    terminal = strict_json(context.artifacts.read(observation["terminal"]))
+                    # Legacy unsealed history stays readable, with no exemption
+                    # from the discovered exploratory origin or the author gate.
+                    if "output_seal" in terminal:
+                        validate_observed_execution(context.records, context.artifacts, value["execution_id"])
+                        discovered = []
+            origins = list({digest(origin): origin for origin in origins + discovered}.values())
             if origins:
                 item["probe_origins"] = origins
                 if payload["origin"]["kind"] == "managed":
@@ -1038,7 +1052,7 @@ def record_execution(store, payload, *, expected_revision, request_id, _observat
         # Completed output recording must work after policy/literature changes:
         # it preserves actual history, which a fresh assessment may revalidate.
         _execution_artifacts(artifacts, value)
-        probe_origins = find_probe_artifact_origins(records, [output["artifact"] for output in value["outputs"]])
+        probe_origins = find_probe_artifact_origins(records, [output["artifact"] for output in value["outputs"]], artifacts=artifacts)
         if probe_origins and admission:
             from .execution_evidence import validate_probe_execution_observation
             if validate_probe_execution_observation(records, artifacts, value, _observation):

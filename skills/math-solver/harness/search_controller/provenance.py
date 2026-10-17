@@ -10,7 +10,7 @@ from . import schema as s
 
 def collect_probe_origins(root, state, digests, *, common_guard=None, content=None, common_workspace=None):
     from research_harness.errors import ResearchError
-    from research_harness.probe_provenance import find_probe_artifact_origins
+    from research_harness.probe_provenance import match_probe_artifact_origins
     from research_harness.storage import Store
     from .errors import SearchError
     from .reviewer import common_root
@@ -40,7 +40,7 @@ def collect_probe_origins(root, state, digests, *, common_guard=None, content=No
             s.require(Path(common_guard.root).resolve() == common, "Probe origin guard names another workspace", "review_workspace_mismatch")
         from research_harness.artifacts import ArtifactStore
         digests = expand_import_identities(records, ArtifactStore(common), digests, native_aliases=aliases, content=content)
-        origins = find_probe_artifact_origins(records, [{"sha256": identity} for identity in digests])
+        origins = match_probe_artifact_origins(records, [{"sha256": identity} for identity in digests])
     except ResearchError as error:
         # An untouched historical objective can precede any common store. Once
         # associated, absence or corruption must fail rather than erase origins.
@@ -84,13 +84,13 @@ def check_import_identity(identity, artifacts, *, content=None):
 
 def check_normalized_identity(digest, raw):
     """Accept only the two existing lossless native JSON encodings."""
-    from .storage import _strict_json
-    from .problem_records import problem_bytes
-    value = _strict_json(raw, "invalid_import_identity")
-    encodings = {s.digest(value), hashlib.sha256(problem_bytes(value)).hexdigest()}
-    s.require(digest in encodings,
-              "Raw import bytes do not establish their canonical identity", "invalid_import_identity")
-    return encodings
+    from research_harness.errors import ResearchError
+    from research_harness.probe_provenance import check_normalized_identity as check_shared_identity
+    from .errors import SearchError
+    try:
+        return check_shared_identity(digest, raw)
+    except ResearchError as error:
+        raise SearchError(error.code, error.message, error.details) from error
 
 
 def expand_import_identities(records, artifacts, digests, *, native_aliases=None, content=None):

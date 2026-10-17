@@ -389,7 +389,8 @@ def _reconcile(store, payload, expected_revision, request_id):
                 raise ResearchError("execution_identity_mismatch", "Recovered bytes differ from the already recorded actual outcome")
         else:
             from .probe_provenance import find_probe_artifact_origins
-            observed_origin = {"_observation": observation} if find_probe_artifact_origins(records, [item["artifact"] for item in outputs]) else {}
+            observed_origin = {"_observation": observation} if find_probe_artifact_origins(
+                records, [item["artifact"] for item in outputs], artifacts=artifacts) else {}
             record_execution(store, execution, expected_revision=store.revision, request_id="launcher-outcome-" + digest(claim), **observed_origin)
         prepared_mutation(store, "execution.observe", {"admission_id": admission_id},
             lambda current, value: ([immutable_record(current, "execution_observation", admission_id, observation)], observation),
