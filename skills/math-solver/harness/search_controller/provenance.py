@@ -169,13 +169,17 @@ def collect_import_sources(digest, state, content, artifacts, records):
 
 
 def publish_import_identity(artifacts, digest, raw, *, publish=True):
-    """Commit the checked alias before its canonical export becomes importable."""
+    """Make originals durable before committing aliases of a canonical export."""
     from research_harness.errors import ResearchError
     from research_harness.operations import immutable_record, prepared_mutation
     from research_harness.storage import Store
     from research_harness.artifacts import describe_artifact
     reference = describe_artifact(raw, "application/json")
     encodings = check_normalized_identity(digest, raw)
+    if publish:
+        artifacts.put(raw, "application/json")
+    else:
+        artifacts.read(reference)
     store = Store(artifacts.root)
     for canonical in sorted(encodings - {reference["sha256"]}):
         identity = {"schema_version": 1, "canonical_digest": canonical, "raw": reference}
@@ -192,8 +196,6 @@ def publish_import_identity(artifacts, digest, raw, *, publish=True):
             except ResearchError as error:
                 if error.code != "stale_revision":
                     raise
-    if publish:
-        artifacts.put(raw, "application/json")
 
 
 def record_probe_origins(state, payload):

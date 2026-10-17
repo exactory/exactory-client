@@ -137,6 +137,80 @@ class ResearchProbeProvenanceTests(DevelopmentCase):
         assessed = self.mutate(self.development().assess_cycle, self.assessment(plan, payload))["result"]
         self.assertIn("prospective_execution_missing", {item["code"] for item in assessed["obligations"]})
 
+    def assert_export_preserves_recorded_result(self, *, record_origin):
+        from research_harness import operations
+        from research_harness.artifacts import ArtifactStore, describe_artifact
+        from research_harness.probe_provenance import record_probe_artifact_origin
+        self.mutate(self.development().plan_cycle, self.plan())
+        for index, boundary in enumerate(("raw", "alias", "canonical")):
+            with self.subTest(boundary=boundary, record_origin=record_origin):
+                raw = ('{ "result" : %d }\n' % (7 + index)).encode()
+                original = describe_artifact(raw, "application/json")
+                canonical = self.artifacts.put(('{"result":%d}' % (7 + index)).encode(), "application/json")
+                payload = self.build_import(canonical, "before-export-" + boundary)
+                saved = self.mutate(self.development().record_execution, payload)["result"]
+                reference = self.result_evidence(payload)
+                if record_origin:
+                    self.save_pending_launch(identifier="probe-" + boundary)
+                    record_probe_artifact_origin(self.root, "probe-" + boundary, original["sha256"], "outputs")
+                expected_origins = ([{"probe_id": "probe-" + boundary, "sha256": canonical["sha256"],
+                    "raw_sha256": original["sha256"], "roles": ["outputs"]}] if record_origin else [])
+
+                def read_evidence():
+                    before = self.store.snapshot()
+                    evidence = self.development()._Evidence(self.development()._Context(before["records"], self.artifacts))
+                    try:
+                        result = evidence.one(reference)
+                    except ResearchError as error:
+                        self.fail("Existing result became unreadable: " + error.code)
+                    self.assertEqual(self.store.snapshot(), before)
+                    self.assertEqual(before["records"]["execution"][payload["id"]], saved)
+                    return result
+
+                baseline = read_evidence()
+                observed = []
+
+                def inspect_boundary(stage):
+                    observed.append(stage)
+                    self.assertEqual(observed, ["raw", "alias", "canonical"][:len(observed)])
+                    result = read_evidence()
+                    self.assertEqual({key: value for key, value in result.items() if key != "probe_origins"}, baseline)
+                    self.assertEqual(result.get("probe_origins", []), expected_origins if "alias" in observed else [])
+                    if stage == boundary:
+                        raise RuntimeError("Interrupted at " + boundary)
+
+                put = ArtifactStore.put
+                def publish(artifacts, data, media_type):
+                    result = put(artifacts, data, media_type)
+                    if data == raw:
+                        inspect_boundary("raw")
+                    elif result["sha256"] == canonical["sha256"]:
+                        inspect_boundary("canonical")
+                    return result
+
+                commit = operations.prepared_mutation
+                def commit_alias(store, operation, value, prepare, **identity):
+                    result = commit(store, operation, value, prepare, **identity)
+                    if operation == "native_math.import_identity":
+                        inspect_boundary("alias")
+                    return result
+
+                with mock.patch.object(ArtifactStore, "put", new=publish), \
+                        mock.patch.object(operations, "prepared_mutation", new=commit_alias):
+                    with self.assertRaisesRegex(RuntimeError, "Interrupted at " + boundary):
+                        self.export_native_json(raw)
+                read_evidence()
+                exported = self.export_native_json(raw)
+                self.assertEqual(exported["sha256"], canonical["sha256"])
+                self.assertEqual(self.artifacts.read(original), raw)
+                self.assertEqual(read_evidence().get("probe_origins", []), expected_origins)
+
+    def test_interrupted_native_export_preserves_recorded_result_without_a_probe(self):
+        self.assert_export_preserves_recorded_result(record_origin=False)
+
+    def test_interrupted_native_export_preserves_recorded_result_and_completed_probe_origin(self):
+        self.assert_export_preserves_recorded_result(record_origin=True)
+
     def test_shared_alias_chain_authenticates_each_edge_and_keeps_the_requested_output(self):
         from research_harness.probe_provenance import find_probe_artifact_origins
         raw = self.artifacts.put(b'{ "result": "\\u03bb" }\n', "application/json")

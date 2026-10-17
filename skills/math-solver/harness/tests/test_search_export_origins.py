@@ -3,6 +3,7 @@
 import hashlib
 import json
 import unittest
+from unittest import mock
 
 from research_harness.artifacts import ArtifactStore
 from search_controller.service import Controller
@@ -28,10 +29,16 @@ class ExportOriginTests(SearchCLIWorkspace, unittest.TestCase):
             self.record_probe_output(raw)
         (self.root / "probe.json").write_bytes(raw)
         if interrupt_before_bytes:
+            from research_harness.artifacts import describe_artifact
             from research_harness.storage import Store
-            from search_controller.provenance import publish_import_identity
-            Store(self.root, create=True)
-            publish_import_identity(ArtifactStore(self.root), digest(value), raw, publish=False)
+            # Replay an alias left by the historical alias-before-bytes exporter.
+            store = Store(self.root, create=True)
+            identity = {"schema_version": 1, "canonical_digest": digest(value),
+                        "raw": describe_artifact(raw, "application/json")}
+            def record_legacy_alias(transaction):
+                transaction.put("native_import_identity", digest(value) + ":" + identity["raw"]["sha256"], identity)
+            store.mutate("fixture.legacy_import_identity", identity, record_legacy_alias,
+                         expected_revision=store.revision, request_id="legacy-import-identity")
         item = {"path": "probe.json", "digest": digest(value), "kind": "blob"}
         claim = controller.status()["contract"]["original_claim"]
         subject = {"claim": claim, "evidence_digests": [digest(value)]}
@@ -116,6 +123,49 @@ class ExportOriginTests(SearchCLIWorkspace, unittest.TestCase):
         with self.assertRaises(SearchError) as caught:
             expand_import_identities(records, artifacts, [canonical])
         self.assertEqual(caught.exception.code, "invalid_import_identity")
+
+    def test_publication_helper_makes_original_readable_before_committing_its_alias(self):
+        from research_harness import operations
+        from research_harness.artifacts import describe_artifact
+        from research_harness.storage import Store
+        from search_controller.provenance import publish_import_identity
+        self.initialize()
+        store = Store(self.root, create=True)
+        artifacts = ArtifactStore(self.root)
+        raw = b'{ "result" : 7 }\n'
+        reference = describe_artifact(raw, "application/json")
+        commit = operations.prepared_mutation
+        def commit_after_original(*args, **kwargs):
+            self.assertEqual(artifacts.read(reference), raw)
+            return commit(*args, **kwargs)
+        with mock.patch.object(operations, "prepared_mutation", new=commit_after_original):
+            publish_import_identity(artifacts, digest({"result": 7}), raw)
+        self.assertTrue(store.snapshot()["records"]["native_import_identity"])
+
+    def assert_unreadable_original_refuses_alias(self, *, corrupt):
+        from research_harness.errors import ResearchError
+        from research_harness.storage import Store
+        from search_controller.provenance import publish_import_identity
+        self.initialize()
+        store = Store(self.root, create=True)
+        artifacts = ArtifactStore(self.root)
+        raw = b'{ "result" : 7 }\n'
+        if corrupt:
+            reference = artifacts.put(raw, "application/json")
+            path = self.root / reference["path"]
+            path.chmod(0o600)
+            path.write_bytes(b"corrupt")
+        before = store.snapshot()
+        with self.assertRaises(ResearchError) as caught:
+            publish_import_identity(artifacts, digest({"result": 7}), raw, publish=False)
+        self.assertEqual(caught.exception.code, "artifact_corrupt" if corrupt else "artifact_missing")
+        self.assertEqual(store.snapshot(), before)
+
+    def test_alias_only_publication_refuses_a_missing_original_without_committing(self):
+        self.assert_unreadable_original_refuses_alias(corrupt=False)
+
+    def test_alias_only_publication_refuses_a_corrupt_original_without_committing(self):
+        self.assert_unreadable_original_refuses_alias(corrupt=True)
 
     def test_export_refuses_an_exploratory_blob_whose_original_bytes_cannot_be_preserved(self):
         from search_controller.provenance import collect_probe_origins, record_probe_origins

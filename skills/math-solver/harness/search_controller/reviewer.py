@@ -235,14 +235,15 @@ def _closure(seed, state, content, artifacts, *, write, common_records=None):
         found[digest] = {"digest": digest, "kind": category, "artifact": reference}
         materialized[digest] = (raw, media, sources)
     if write:
-        # Publish every checked alias before any normalized bytes. An interrupted
-        # export can leave an unavailable source, never untracked canonical data.
+        # Make every original durable before exposing aliases, then publish
+        # canonical bytes only after their checked provenance is committed.
+        for raw, media, sources in materialized.values():
+            for reference, original in sources:
+                artifacts.put(original, "application/json")
         for digest, (raw, media, sources) in sorted(materialized.items()):
             for reference, original in sources:
                 publish_import_identity(artifacts, digest, original, publish=False)
         for raw, media, sources in materialized.values():
-            for reference, original in sources:
-                artifacts.put(original, "application/json")
             artifacts.put(raw, media)
     return ([found[key] for key in sorted(found)], sorted(unavailable),
             [provenance[key] for key in sorted(provenance)])
