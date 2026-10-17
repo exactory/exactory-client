@@ -40,6 +40,14 @@ def build_review_core(decision="accept"):
                 "contribution": ["Establish the bound for every bounded input sequence, not only for n in [0, 3]."]}}
 
 
+def build_unconfirmed_write_msg(origin):
+    """What a message of bin/exactory says after a write whose result the command cannot confirm, as
+    _build_unconfirmed_write_msg builds it: the server at `origin` may have applied it, so the user checks before
+    sending it again."""
+    return (f"The server at {origin} may have applied the request. Before you run the command again, check on"
+            f" {origin} whether the change is there.")
+
+
 def build_manuscript_review(case, bundle, assessor, decision="accept", *, core=None, percentile=30, band=(20, 40)):
     """One blind reviewer's unchanged rubric JSON, wrapped for `manuscript-review` on the exact bundle."""
     from reviewer_fixtures import manuscript_assignment

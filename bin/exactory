@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""exactory: client for the exactory verification API.
+"""exactory: client for the exactory verification API and the exactory math section.
 
 Python standard library only. Authentication comes from EXACTORY_API_KEY, or
 from the credentials file that `exactory login` writes
@@ -13,11 +13,13 @@ submit continues.
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 import re
 import socket
 import sys
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -27,19 +29,75 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from research_harness.citation_report import report_citation_gate
 from research_harness.cli import add_identity, select_managed_path
-from research_harness.errors import ResearchError
+from research_harness.errors import REMOVED_PROBLEM_LINK_EXIT_CODE, ResearchError
+from research_harness.exactory_api import _DEFAULT_API_URL, build_orcid_required_msg, read_api_base_url
 from research_harness.integration import command_identity, current_store
+from research_harness.same_origin import (REQUEST_ERROR_TYPES, RefusedRedirectError,
+                                          describe_request_error_cause, get_origin, is_read_method,
+                                          open_url_within_origin, read_error_detail, is_request_known_unsent)
 from research_harness.submission import (check_submission_preconditions, check_verdict_preconditions,
                                          continue_submission, send_verdict, submit_managed)
 from research_harness.verification import record_task
 from research_harness.workspace import find_workspace, strict_json
 
-_DEFAULT_API_URL = "https://www.exactory.ai"
 _TIMEOUT_SECONDS = 30
-_BARE_ARXIV_ID_RE = re.compile(r"(\d{4}\.\d{4,5})(?:v\d+)?")
+# ECMAScript WhiteSpace and LineTerminator, used by String.prototype.trim:
+# https://tc39.es/ecma262/#sec-string.prototype.trim (TrimString and the lexical whitespace rules).
+_JAVASCRIPT_TRIM_CHARACTERS = ("\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680"
+                               "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a"
+                               "\u2028\u2029\u202f\u205f\u3000\ufeff")
+# [0-9], not \d: the server reads ASCII digits only, as the link patterns below explain.
+_BARE_ARXIV_ID_RE = re.compile(r"([0-9]{4}\.[0-9]{4,5})(?:v[0-9]+)?")
 # The server rejects more than this; the local check turns that into a message the
 # user reads before a request goes out. The server stays the authority.
 _MAX_DECLARED_CHALLENGES = 3
+_MAX_CHALLENGE_PAPER_LINKS = 20
+# The math section (design 2026-10-12 §17). The server rejects more than these; the local
+# checks turn that into a message the user reads before a request goes out.
+_MAX_DECLARED_MATH_PROBLEMS = 3
+_MAX_CREATION_PAPERS = 10
+_MAX_CREATION_GITHUB_LINKS = 10
+_MAX_FORMAL_STATEMENT_TARGETS = 20
+_MAX_LEAN_CHECK_AXIOMS = 20
+# The first sentence of the help of every limit option of the section's lists.
+_PAGE_SIZE_HELP = "How many entries one page holds."
+# The report kinds of the section (design 2026-10-12 §19); the server owns the vocabulary.
+_MATH_REPORT_KINDS = ("math_problem", "math_status_event", "math_formal_statement", "math_proof",
+                      "math_lean_check", "math_post", "math_problem_paper", "math_github_link")
+# The statuses of a problem (design 2026-10-12 §4); the server owns the vocabulary.
+_MATH_PROBLEM_STATUSES = ("open", "proved", "disproved")
+# The claims of a proof (design 2026-10-12 §6) and the outcomes of a Lean check report (§7); the
+# server owns both vocabularies.
+_MATH_PROOF_CLAIMS = ("proves", "disproves")
+_MATH_LEAN_CHECK_OUTCOMES = ("pass", "fail")
+# Every posted link mirrors the server's link rules (design 2026-10-12 §12): at most 500 UTF-16
+# code units, checked first, and no character of the Unicode categories Cc, Cf, or Cs (control
+# characters, invisible characters, unpaired surrogates). The pattern of every link kind refuses
+# whitespace, so the client refuses it here, last, with a message that names it. The server stays
+# the authority; an older Python knows a few late-added format characters fewer than the server does.
+_MAX_LINK_UTF16_UNITS = 500
+_NON_TEXT_CHARACTER_CATEGORIES = ("Cc", "Cf", "Cs")
+# Mirrors plainTextSchema (apps/web/src/server/schemas/plain-text.ts in the exactory repository, design
+# 2026-10-12 §26.24), which the server applies to every free-text field: no control character except tab,
+# line feed, and no unpaired surrogate, after CRLF and lone CR become LF. Python holds a character beyond the basic plane
+# as one code point, and the json module joins an escaped surrogate pair into one, so every surrogate in the
+# text of an option is unpaired.
+_NON_PLAIN_TEXT_CHARACTER_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f\ud800-\udfff]")
+# The line breaks that plainTextSchema accepts: a carriage return and a line feed as a pair, and each of the two alone.
+_LINE_BREAK_RE = re.compile(r"\r\n|\r|\n")
+# The character that starts a terminal color code.
+_ESCAPE_CHARACTER = "\x1b"
+# The refusal of an unpaired surrogate names where it comes from. In a command argument, it is what Python makes of
+# bytes that are not UTF-8. A citations file is read as UTF-8, so there it comes from the escape of one half of a
+# surrogate pair, which the json module keeps as it is. `found` names the character and its place.
+_ARGUMENT_SURROGATE_REFUSAL_TEMPLATE = (
+    "The {field_name} is not valid UTF-8 text. It contains {found}. Give the text as UTF-8."
+)
+_ESCAPED_SURROGATE_REFUSAL_TEMPLATE = (
+    "The {field_name} contains {found}. A \\u{code_hex} escape in the citations file gives it, and it is half of a"
+    " surrogate pair. Write the character as UTF-8 text in the file, or write both escapes of the pair."
+)
+_GITHUB_PAGE_URL_PREFIX = "https://github.com/"
 _CHECK_COMMAND_PATH = Path(__file__).with_name("exactory-check")
 
 # The release version has one definition: the plugin manifest. Deriving the
@@ -61,8 +119,23 @@ _HTTP_ERR_MSGS = {
     422: "The server rejected the request body. Correct the body. Then send it again.",
     429: "The hourly posting limit is reached. The Retry-After response header"
          " states the seconds to wait. Send the request again after that.",
-    503: "The paper source is not reachable now. Send the same request again later.",
+    # An answer of 500 to 599 does not show whether the server applied the request, so its message is a
+    # description, and _describe_http_error adds the advice that the method of the request earns.
+    503: "The paper source is not reachable now.",
 }
+# The advice after an answer of 500 to 599 to a read, which changed nothing on the server.
+_SEND_AGAIN_LATER_ADVICE_MSG = "Send the same request again later."
+# A read sends no body, so a 422 to a list is the server's refusal of its query. The server judges every
+# limit, so the message names the parts of the query and states no bound of its own.
+_LIST_QUERY_REFUSAL_TEMPLATE = "The server rejected the query ({query_parts}). Correct it. Then send the request again."
+# A page of a list sends its limit and its cursor (_build_page_query). The problem list and the task list send their
+# search text, their filters, and their sort too, and the Grand Challenge list sends its filters and its sort.
+_PAGE_QUERY_ERR_MSGS = {**_HTTP_ERR_MSGS,
+                        422: _LIST_QUERY_REFUSAL_TEMPLATE.format(query_parts="the limit or the cursor")}
+_SEARCH_AND_FILTER_QUERY_ERR_MSGS = {**_HTTP_ERR_MSGS, 422: _LIST_QUERY_REFUSAL_TEMPLATE.format(
+    query_parts="the search text, a filter, the sort, the limit, or the cursor")}
+_FILTER_QUERY_ERR_MSGS = {**_HTTP_ERR_MSGS, 422: _LIST_QUERY_REFUSAL_TEMPLATE.format(
+    query_parts="a filter, the sort, the limit, or the cursor")}
 
 # The login routes carry no key, so their failures mean other things than the ones above.
 _LOGIN_ERR_MSGS = {
@@ -72,8 +145,7 @@ _LOGIN_ERR_MSGS = {
     422: "The server rejected the address or the code. Correct them. Then send the"
          " request again.",
     429: "Too many requests. Wait one minute. Then send the request again.",
-    503: "exactory cannot send or check codes now. Send the request again in a few"
-         " minutes.",
+    503: "exactory cannot send or check codes now.",
 }
 _TERMS_NOTICE = (
     "When you use the code, you agree to the Terms of Service"
@@ -82,6 +154,20 @@ _TERMS_NOTICE = (
 )
 _NO_KEY_ERR_MSG = ("No API key found. Run: exactory login --email <your email>."
                    " Or set EXACTORY_API_KEY.")
+# What EXACTORY_API_URL must hold for urllib to send each request to the address that it names: an http or https URL
+# with a host, a port from 1 to 65535 if it names one, and no user name. Every character is printable ASCII, so no
+# space, control character, or character outside ASCII changes the address or stops http.client. The URL has no query
+# and no fragment, because the path that each request adds to the URL would become part of them.
+_NON_ADDRESS_CHARACTER_RE = re.compile(r"[^\x21-\x7e]|[?#]")
+_UNUSABLE_API_URL_ERR_MSG = ("EXACTORY_API_URL is not an address that the client can use. Set it to an http or https"
+                             f" URL with a host, for example {_DEFAULT_API_URL}. Write a port, if any, as a number."
+                             " Leave out a user name, a query, a fragment, spaces, control characters, and characters"
+                             f" outside ASCII. Or unset EXACTORY_API_URL to use {_DEFAULT_API_URL}.")
+# The page of the application that lists the API keys of the account and revokes them.
+_KEYS_PAGE_PATH = "/keys"
+# argv decodes a byte that is not UTF-8 text to a lone surrogate, which has no percent-encoding.
+_NOT_UTF8_ARGUMENT_ERR_MSG = ("A command argument is not valid UTF-8 text."
+                              " Give every argument as UTF-8 text.")
 
 
 def _exit_with_error(message: str, code: int = 1) -> None:
@@ -121,11 +207,39 @@ def _save_api_key(api_key: str, email: str, label: str) -> Path:
     return path
 
 
+def _read_checked_api_base_url() -> str:
+    """The API base URL, checked once when the command starts, because configuration is a boundary. A value
+    that urllib cannot send a request to as given ends the command before any request, with a message that
+    names EXACTORY_API_URL and its remedy."""
+    base_url = read_api_base_url()
+    try:
+        parts = urllib.parse.urlsplit(base_url)
+        port = parts.port
+    except ValueError:
+        _exit_with_error(_UNUSABLE_API_URL_ERR_MSG, 2)
+    if (parts.scheme not in ("http", "https") or not parts.hostname or parts.username is not None or port == 0
+            or _NON_ADDRESS_CHARACTER_RE.search(base_url)):
+        _exit_with_error(_UNUSABLE_API_URL_ERR_MSG, 2)
+    return base_url
+
+
+_API_BASE_URL: str
+
+
 def _send_request(method: str, path: str, body: dict | None = None, *,
                   authenticated: bool = True,
                   allow_missing: bool = False,
-                  error_messages: dict[int, str] = _HTTP_ERR_MSGS) -> tuple[dict, int]:
-    """Send one API request. Returns the parsed JSON body and the HTTP status."""
+                  error_messages: dict[int, str] = _HTTP_ERR_MSGS,
+                  error_exit_codes: dict[int, int] | None = None,
+                  unconfirmed_write_advice_msg: str | None = None) -> tuple[dict, int]:
+    """Send one API request. Returns the parsed JSON body and the HTTP status. This is the one place
+    that adds the API key, and the request goes out under the rule of research_harness.same_origin:
+    a redirect to another origin is refused, so the key stays with the origin that the user set, and
+    every redirect of a request that is not a read is refused, so no other answer passes for the
+    answer to a write. Every other end of the request is one message too: an error answer, a request
+    that did not go out, a send whose outcome is unknown, and an answer that did not arrive in full
+    or whose body is not JSON. A write whose outcome the command cannot confirm ends with the caller's
+    `unconfirmed_write_advice_msg` when provided, or the origin's check-first advice otherwise."""
     headers = {"Content-Type": "application/json", "User-Agent": _USER_AGENT}
     if authenticated:
         api_key = _read_api_key()
@@ -133,7 +247,9 @@ def _send_request(method: str, path: str, body: dict | None = None, *,
             _exit_with_error(_NO_KEY_ERR_MSG, 2)
         headers["Authorization"] = f"Bearer {api_key}"
 
-    base_url = os.environ.get("EXACTORY_API_URL", _DEFAULT_API_URL).rstrip("/")
+    base_url = _API_BASE_URL
+    origin = get_origin(base_url)
+    write_advice_msg = unconfirmed_write_advice_msg or _build_unconfirmed_write_msg(origin)
     request = urllib.request.Request(
         base_url + path,
         method=method,
@@ -142,38 +258,182 @@ def _send_request(method: str, path: str, body: dict | None = None, *,
     )
 
     try:
-        with urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS) as response:
-            return json.load(response), response.getcode()
+        with open_url_within_origin(request, timeout=_TIMEOUT_SECONDS) as response:
+            status, answer_bytes = response.getcode(), response.read()
+    except RefusedRedirectError as error:
+        _exit_with_error(_build_redirect_refusal_msg(error, write_advice_msg))
     except urllib.error.HTTPError as error:
         with error:
             if allow_missing and error.code == 404:
                 return {}, 404
-            detail = error.read().decode(errors="replace")[:2000]
-            message = _describe_http_error(error.code, detail, error_messages)
-            _exit_with_error(f"{message}\n{detail}")
-    except urllib.error.URLError as error:
-        _exit_with_error(f"The client cannot reach {base_url}. Cause: {error.reason}."
-                         " Make sure that the network and EXACTORY_API_URL are correct."
-                         " Then send the request again.")
+            detail = read_error_detail(error)
+            message = _describe_http_error(method, write_advice_msg, error.code, detail, error_messages)
+            _exit_with_error(f"{message}\n{detail}", (error_exit_codes or {}).get(error.code, 1))
+    except REQUEST_ERROR_TYPES as error:
+        cause = describe_request_error_cause(error)
+        if is_request_known_unsent(error):
+            _exit_with_error(f"The client cannot reach {base_url}. Cause: {cause}."
+                             " Make sure that the network and EXACTORY_API_URL are correct."
+                             " Then send the request again.")
+        _exit_with_error(_build_unconfirmed_request_msg(method, origin, cause, write_advice_msg))
+    try:
+        return json.loads(answer_bytes), status
+    except ValueError:
+        _exit_with_error(_build_unconfirmed_request_msg(
+            method, origin, f"the answer has HTTP {status} and a body that is not JSON", write_advice_msg))
     raise AssertionError("unreachable")
 
 
-def _describe_http_error(status: int, detail: str, error_messages: dict[int, str]) -> str:
+def _build_redirect_refusal_msg(error: RefusedRedirectError, write_advice_msg: str) -> str:
+    """The message for a redirect that the command did not follow. A redirect to another origin is
+    refused before anything is sent there, so the API key and the body stay with the configured
+    origin, and the user checks EXACTORY_API_URL. A redirect of a request that is not a read is
+    refused within the origin too. The configured origin received the request and may have applied
+    it before it answered, so the message of every refused write ends with `write_advice_msg`, which
+    sends the user to check before running the command again. A refused read changed nothing, and its
+    message keeps the advice to run the command again."""
+    request_origin = get_origin(error.request_url)
+    if error.is_cross_origin:
+        refusal_msg = (f"The exactory server at {request_origin} answered the {error.method} request with a redirect to"
+                       f" another origin, {get_origin(error.target_url)}. The command refused the redirect and sent"
+                       " nothing there. Make sure that EXACTORY_API_URL is correct.")
+    else:
+        refusal_msg = (f"The exactory server at {request_origin} answered the {error.method} request with a redirect."
+                       f" The command does not follow a redirect of a {error.method} request.")
+    next_step_msg = _choose_unconfirmed_outcome_advice(error.method, write_advice_msg, "Then run the command again.")
+    return f"{refusal_msg} {next_step_msg}"
+
+
+def _build_unconfirmed_request_msg(method: str, origin: str, cause: str, write_advice_msg: str) -> str:
+    """The message when the request may have been sent and its answer cannot be read: sending failed,
+    the answer did not arrive in full, or its body is not JSON."""
+    next_step_msg = _choose_unconfirmed_outcome_advice(method, write_advice_msg, "Run the command again.")
+    return (f"The client cannot read the answer of the exactory server at {origin} to the {method} request."
+            f" Cause: {cause}. {next_step_msg}")
+
+
+def _choose_unconfirmed_outcome_advice(method: str, write_advice_msg: str, read_advice_msg: str) -> str:
+    """The advice after an outcome that does not show whether the server applied the request. A read
+    changed nothing, so it gets `read_advice_msg`. Any other request may have taken effect, so it
+    gets `write_advice_msg`, which sends the user to check first."""
+    return read_advice_msg if is_read_method(method) else write_advice_msg
+
+
+def _build_unconfirmed_write_msg(origin: str) -> str:
+    """The advice after a write whose result the command cannot confirm. The server at `origin` may
+    have applied it, and a second run would apply it again, so the user checks first. Every outcome
+    in which a write may have taken effect ends with this advice."""
+    return (f"The server at {origin} may have applied the request. Before you run the command again, check on"
+            f" {origin} whether the change is there.")
+
+
+def _describe_http_error(method: str, write_advice_msg: str, status: int, detail: str,
+                         error_messages: dict[int, str]) -> str:
     """The message for a failed request. A superseded verification names where the work went,
-    which no status-level message can: the requester moved it to a newer version of the paper."""
+    which no status-level message can: the requester moved it to a newer version of the paper. An
+    error answer outside 400 to 499 does not show that the server applied nothing, so its description ends
+    with the advice that the method of the request earns. A 4xx is refused before the write, and
+    its message keeps its own advice, also when the detail of the answer broke off."""
     try:
         body = json.loads(detail)
     except ValueError:
         body = None
-    if isinstance(body, dict) and body.get("error") == "verification_superseded":
+    if 400 <= status <= 499 and isinstance(body, dict) and body.get("error") == "verification_superseded":
         return ("The requester moved this verification to a newer version of the paper."
                 f" Work on verification {body.get('successorId')} instead.")
-    return error_messages.get(status, f"The server returned HTTP {status}.")
+    description = error_messages.get(status, f"The server returned HTTP {status}.")
+    if not 400 <= status <= 499:
+        next_step_msg = _choose_unconfirmed_outcome_advice(method, write_advice_msg, _SEND_AGAIN_LATER_ADVICE_MSG)
+        return f"{description} {next_step_msg}"
+    return description
 
 
 def _print_json(payload: dict) -> None:
     json.dump(payload, sys.stdout, indent=2)
     print()
+
+
+# Segments that no id can be, because each one changes the route of a request: the empty segment
+# (a doubled slash) and the two dot segments, which a URL parser resolves.
+_UNROUTABLE_PATH_SEGMENTS = ("", ".", "..")
+
+
+def _quote_segment(segment: str) -> str:
+    """One path segment, percent-encoded. A segment that holds a byte which is not UTF-8 text has no
+    encoding, so the command ends with a message."""
+    try:
+        return urllib.parse.quote(segment, safe="")
+    except UnicodeEncodeError:
+        _exit_with_error(_NOT_UTF8_ARGUMENT_ERR_MSG)
+    raise AssertionError("unreachable")
+
+
+def _build_api_path(*segments: str) -> str:
+    """An /api/v1 path whose every segment is percent-encoded, ids included. An empty or dot
+    segment is refused, so each id stays inside its own segment of the route."""
+    for segment in segments:
+        if segment in _UNROUTABLE_PATH_SEGMENTS:
+            _exit_with_error(f"{segment} is not an identifier exactory can read.")
+    return "/api/v1/" + "/".join(_quote_segment(segment) for segment in segments)
+
+
+def _encode_query(query: dict[str, str]) -> str:
+    """The query string of a list request. A value with no UTF-8 encoding ends the command with a
+    message, like such a path segment."""
+    try:
+        return urllib.parse.urlencode(query)
+    except UnicodeEncodeError:
+        _exit_with_error(_NOT_UTF8_ARGUMENT_ERR_MSG)
+    raise AssertionError("unreachable")
+
+
+def _build_page_query(args: argparse.Namespace) -> dict[str, str]:
+    """The limit and the cursor of one page of a list, each when given. The server judges every limit
+    that goes out, a limit of 0 included. An empty cursor is left out, like an empty filter."""
+    query = {}
+    if args.limit is not None:
+        query["limit"] = str(args.limit)
+    if args.cursor:
+        query["cursor"] = args.cursor
+    return query
+
+
+def _require_linked_orcid() -> None:
+    """Writes that the math section gates on ORCID need a linked iD now (design 2026-10-12 §3).
+    The server stays the authority; this read stops before the write and names the page that
+    links an iD, which the server's generic 403 cannot."""
+    me, _ = _send_request("GET", "/api/v1/me")
+    if not me.get("orcidId"):
+        _exit_with_error(build_orcid_required_msg("This operation", _API_BASE_URL))
+
+
+def _send_vote(path: str, value: int) -> None:
+    """Cast a vote on the content at path, or clear it when the value is 0, and print the answer."""
+    if value == 0:
+        payload, _ = _send_request("DELETE", path)
+    else:
+        payload, _ = _send_request("PUT", path, {"value": value})
+    _print_json(payload)
+
+
+def _send_report(subject_kind: str, subject_id: str, note: str | None, existing_report_notice: str) -> None:
+    """File a report on one piece of content and print the answer. The server answers 200, not
+    201, when this account already reported the content, and the notice then goes to stderr."""
+    body = {"subjectKind": subject_kind, "subjectId": subject_id}
+    if note is not None:
+        body["note"] = _require_plain_text_bounds("note", note, 1, 1000, is_trim_required=True)
+    payload, status = _send_request("POST", "/api/v1/reports", body)
+    if status == 200:
+        print(existing_report_notice, file=sys.stderr)
+    _print_json(payload)
+
+
+def _send_math_write(method: str, path: str, body: dict) -> None:
+    """Send a write that the math section gates on a linked ORCID iD, and print the answer. The
+    caller runs every local check first, so a command that fails one sends no request."""
+    _require_linked_orcid()
+    payload, _ = _send_request(method, path, body)
+    _print_json(payload)
 
 
 def _run_submit(args: argparse.Namespace) -> None:
@@ -186,10 +446,13 @@ def _run_submit(args: argparse.Namespace) -> None:
     else:
         body = {"url": args.url}
     if args.challenge:
-        if len(args.challenge) > _MAX_DECLARED_CHALLENGES:
-            _exit_with_error(f"The command names {len(args.challenge)} challenges."
-                             f" The limit is {_MAX_DECLARED_CHALLENGES}. Remove some.")
+        _require_at_most(args.challenge, "challenges", _MAX_DECLARED_CHALLENGES)
         body["grandChallengeIds"] = args.challenge
+    if args.math_problem:
+        _require_at_most(args.math_problem, "math problems", _MAX_DECLARED_MATH_PROBLEMS)
+        body["mathProblemIds"] = args.math_problem
+        # Declaring problems is a math section contribution (design 2026-10-12 §3, §13).
+        _require_linked_orcid()
 
     # Inside a draft workspace the offline citation check runs first and prints
     # its report when it fails; the submit continues either way, because the
@@ -220,10 +483,7 @@ def _run_submit(args: argparse.Namespace) -> None:
 
 
 def _run_status(args: argparse.Namespace) -> None:
-    payload, _ = _send_request(
-        "GET",
-        "/api/v1/verifications/" + urllib.parse.quote(args.verification_id, safe=""),
-    )
+    payload, _ = _send_request("GET", _build_api_path("verifications", args.verification_id))
     _print_json(payload)
 
 
@@ -237,7 +497,8 @@ def _run_tasks(args: argparse.Namespace) -> None:
     for key, value in optional_params:
         if value:
             query[key] = value
-    payload, _ = _send_request("GET", "/api/v1/tasks?" + urllib.parse.urlencode(query))
+    payload, _ = _send_request("GET", "/api/v1/tasks?" + _encode_query(query),
+                               error_messages=_SEARCH_AND_FILTER_QUERY_ERR_MSGS)
     _print_json(payload)
 
 
@@ -262,34 +523,17 @@ def _quote_identifier_path(identifier: str) -> str:
     character is encoded. An empty or dot segment is refused: neither names a paper, and
     both would walk the request out of its route."""
     segments = identifier.split("/")
-    if any(segment in ("", ".", "..") for segment in segments):
+    if any(segment in _UNROUTABLE_PATH_SEGMENTS for segment in segments):
         _exit_with_error(f"{identifier} is not an identifier exactory can read.")
-    return "/".join(urllib.parse.quote(segment, safe="") for segment in segments)
+    return "/".join(_quote_segment(segment) for segment in segments)
 
 
 def _run_vote(args: argparse.Namespace) -> None:
-    path = ("/api/v1/verdicts/"
-            + urllib.parse.quote(args.verdict_id, safe="") + "/vote")
-    if args.value == 0:
-        payload, _ = _send_request("DELETE", path)
-    else:
-        payload, _ = _send_request("PUT", path, {"value": args.value})
-    _print_json(payload)
-
-
-_UUID_RE = re.compile(
-    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.IGNORECASE
-)
+    _send_vote(_build_api_path("verdicts", args.verdict_id, "vote"), args.value)
 
 
 def _run_verify(args: argparse.Namespace) -> None:
-    try:
-        with open(args.file, encoding="utf-8") as handle:
-            body = strict_json(handle.read())
-    except OSError as error:
-        _exit_with_error(f"Cannot read {args.file}: {error}.")
-    except json.JSONDecodeError as error:
-        _exit_with_error(f"{args.file} is not valid JSON: {error}.")
+    body = strict_json(_read_text_file(args.file))
 
     # Every verdict states its cohort impact prediction; the server accepts a
     # verdict without one, so this client refuses to send one.
@@ -377,18 +621,29 @@ def _count_utf16_units(text: str) -> int:
 # Bounds mirror the server's contract in UTF-16 code units, the unit the server
 # counts, so a bad request fails fast without a network round trip.
 
-_DOI_LOCATOR_RE = re.compile(r"10\.\d{4,9}/\S+")
+# DOI_LOCATOR uses JavaScript's \S in the server schema; Python's \S treats U+0085 differently.
+_DOI_LOCATOR_RE = re.compile(r"10\.[0-9]{4,9}/[^" + re.escape(_JAVASCRIPT_TRIM_CHARACTERS) + r"]+")
 # Mirrors the server's locator refinement: a new-format id (2301.00001), an
-# old-style id (hep-th/9901001), and the arXiv: prefix are all accepted.
+# old-style id (hep-th/9901001), and the arXiv: prefix are all accepted. The patterns
+# use [0-9], not \d, as the link patterns below explain.
 _ARXIV_LOCATOR_RE = re.compile(
-    r"(?:arxiv:)?(?:\d{4}\.\d{4,5}|[a-z-]+(?:\.[a-z]{2})?/\d{7})(?:v\d+)?",
+    r"(?:arxiv:)?(?:[0-9]{4}\.[0-9]{4,5}|[a-z-]+(?:\.[a-z]{2})?/[0-9]{7})(?:v[0-9]+)?",
     re.IGNORECASE,
 )
 
 
+def _require_at_most(items: list, noun: str, limit: int, next_step: str = "") -> None:
+    """A command names at most `limit` items of one kind. The message gives the count and the limit.
+    The sentence `next_step`, when given, says where the rest goes."""
+    if len(items) > limit:
+        _exit_with_error(f"The command names {len(items)} {noun}. The limit is {limit}. Remove some."
+                         + (f" {next_step}" if next_step else ""))
+
+
 def _require_utf16_bounds(field_name: str, value: str,
-                          min_units: int, max_units: int) -> str:
-    value = value.strip()
+                          min_units: int, max_units: int, *, is_trim_required: bool = False) -> str:
+    if is_trim_required:
+        value = value.strip(_JAVASCRIPT_TRIM_CHARACTERS)
     units = _count_utf16_units(value)
     if units < min_units:
         _exit_with_error(f"The {field_name} is {units} characters long."
@@ -399,33 +654,121 @@ def _require_utf16_bounds(field_name: str, value: str,
     return value
 
 
-def _read_inline_or_file_text(inline: str | None, path: str | None) -> str:
-    """One challenge field arrives inline or as a file; argparse enforces that
-    exactly one of the pair is set."""
-    if inline is not None:
-        return inline
-    try:
-        with open(path, encoding="utf-8") as handle:
-            return handle.read()
-    except FileNotFoundError:
-        _exit_with_error(f"The file {path} does not exist.")
+def _normalize_plain_text_line_breaks(text: str) -> str:
+    """Mirror plainTextSchema: CRLF and lone CR become LF before every other check."""
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _require_plain_text(field_name: str, text: str,
+                        surrogate_refusal_template: str = _ARGUMENT_SURROGATE_REFUSAL_TEMPLATE) -> str:
+    """Refuse a text that the server's plainTextSchema refuses, and return it otherwise. The message names the
+    field, the first refused character, and where it is in the normalized text, counted in characters from 1: its
+    position in a text of one line, and its line and its column in a text of more lines. U+001B starts a terminal
+    color code, and an unpaired surrogate comes from where `surrogate_refusal_template` says, so each of the two
+    names its own remedy."""
+    text = _normalize_plain_text_line_breaks(text)
+    match = _NON_PLAIN_TEXT_CHARACTER_RE.search(text)
+    if match is None:
+        return text
+    character = match.group()
+    if _LINE_BREAK_RE.search(text) is None:
+        place = f"position {match.start() + 1}"
+    else:
+        line_breaks = list(_LINE_BREAK_RE.finditer(text, 0, match.start()))
+        line_start = line_breaks[-1].end() if line_breaks else 0
+        place = f"line {len(line_breaks) + 1}, column {match.start() - line_start + 1}"
+    found_msg = f"U+{ord(character):04X} at {place}"
+    if character == _ESCAPE_CHARACTER:
+        refusal_msg = (f"The {field_name} contains the control character {found_msg}. Terminal color codes start with"
+                       " this character. Copy the text without colors.")
+    elif unicodedata.category(character) == "Cs":
+        refusal_msg = surrogate_refusal_template.format(field_name=field_name, found=found_msg,
+                                                        code_hex=f"{ord(character):04X}")
+    else:
+        refusal_msg = (f"The {field_name} contains the control character {found_msg}. The server accepts no control"
+                       " character except tab, line feed, and carriage return. Remove the character.")
+    _exit_with_error(refusal_msg)
     raise AssertionError("unreachable")
 
 
-def _is_challenge_locator(locator: str) -> bool:
+def _require_plain_text_bounds(field_name: str, value: str, min_units: int, max_units: int,
+                               surrogate_refusal_template: str = _ARGUMENT_SURROGATE_REFUSAL_TEMPLATE,
+                               *, is_trim_required: bool = False) -> str:
+    """A free-text field that the server builds on plainTextSchema, checked in the order of that schema: the
+    normalized line breaks, then its characters, then the field's optional trim, then its bounds."""
+    return _require_utf16_bounds(field_name, _require_plain_text(field_name, value, surrogate_refusal_template),
+                                 min_units, max_units, is_trim_required=is_trim_required)
+
+
+def _read_text_file(path: str) -> str:
+    """The text of a file that the user named. A file that cannot be read as UTF-8 text ends the
+    command with one message that gives the cause and the remedy."""
+    try:
+        with open(path, encoding="utf-8", newline="") as handle:
+            return handle.read()
+    except FileNotFoundError:
+        _exit_with_error(f"The file {path} does not exist. Give the path of an existing file.")
+    except IsADirectoryError:
+        _exit_with_error(f"The file {path} is a directory. Give the path of a file.")
+    except UnicodeDecodeError:
+        _exit_with_error(f"The file {path} is not UTF-8 text. Save it as UTF-8.")
+    except OSError as error:
+        _exit_with_error(f"The file {path} cannot be read: {error.strerror}."
+                         " Check the path and the permissions of the file.")
+    raise AssertionError("unreachable")
+
+
+def _read_inline_or_file_text(inline: str | None, path: str | None) -> str:
+    """One text field arrives inline or as a file; argparse enforces that
+    exactly one of the pair is set."""
+    if inline is not None:
+        return inline
+    return _read_text_file(path)
+
+
+def _is_citation_locator(locator: str) -> bool:
     """A locator an agent can resolve: a DOI, an arXiv id, or an https URL."""
     return bool(_DOI_LOCATOR_RE.fullmatch(locator)
                 or _ARXIV_LOCATOR_RE.fullmatch(locator)
-                or (locator.startswith("https://") and len(locator) > len("https://")))
+                or (locator.startswith("https://") and _is_https_url(locator)))
 
 
-def _read_challenge_citations_file(path: str) -> list[dict]:
+def _is_https_url(value: str) -> bool:
+    """Refuse the https URLs that the server's URL.canParse (the WHATWG URL parser) certainly
+    refuses: an empty host, an unclosed or invalid IPv6 literal, a forbidden host code point, or an
+    invalid port. International and numeric hosts are left to the server, which refuses an invalid
+    one with a 422, so this check never refuses a URL that the server accepts. The locator is posted
+    as given."""
+    # WHATWG removes ASCII tabs and newlines, reads a backslash as a slash, and ends the authority
+    # at the first slash, backslash, question mark, or number sign.
+    parsed = re.sub(r"[\t\n\r]", "", value)
+    authority = re.split(r"[/\\?#]", parsed[len("https:"):].lstrip("/\\"), maxsplit=1)[0]
+    host_port = authority.rpartition("@")[2]
+    if host_port.startswith("["):
+        host, closing, tail = host_port[1:].partition("]")
+        # ipaddress accepts a zone id after %, and WHATWG does not.
+        if not closing or "%" in host or (tail and not tail.startswith(":")):
+            return False
+        try:
+            ipaddress.IPv6Address(host)
+        except ValueError:
+            return False
+        port = tail[1:]
+    else:
+        host, _, port = host_port.partition(":")
+        try:
+            host = urllib.parse.unquote(host, errors="strict")
+        except UnicodeDecodeError:
+            return False
+        if not host or re.search(r"[\x00-\x20\x7f%#/:<>?@\[\]\\^|]", host):
+            return False
+    return not port or bool(re.fullmatch(r"[0-9]+", port) and int(port) <= 65535)
+
+
+def _read_citations_file(path: str) -> list[dict]:
     """Parse the citations file: a JSON array of {citation, locator} entries."""
     try:
-        with open(path, encoding="utf-8") as handle:
-            entries = json.load(handle)
-    except FileNotFoundError:
-        _exit_with_error(f"The file {path} does not exist.")
+        entries = json.loads(_read_text_file(path))
     except json.JSONDecodeError as error:
         _exit_with_error(f"The file {path} is not valid JSON. Cause: {error}."
                          " Correct the file. Then run the command again.")
@@ -447,13 +790,14 @@ def _read_challenge_citations_file(path: str) -> list[dict]:
         if not isinstance(citation, str) or not isinstance(locator, str):
             _exit_with_error(f'Citation {index} is missing "citation" or "locator".'
                              " Write both as strings.")
-        citation = _require_utf16_bounds(f"citation of entry {index}",
-                                         citation, 10, 1000)
-        locator = locator.strip()
+        citation = _require_plain_text_bounds(f"citation of entry {index}", citation, 10, 1000,
+                                              _ESCAPED_SURROGATE_REFUSAL_TEMPLATE, is_trim_required=True)
+        locator = _require_plain_text(f"locator of entry {index}", locator,
+                                      _ESCAPED_SURROGATE_REFUSAL_TEMPLATE).strip(_JAVASCRIPT_TRIM_CHARACTERS)
         if _count_utf16_units(locator) > 500:
             _exit_with_error(f"The locator of entry {index} is over the limit of"
                              " 500 characters. Make it shorter.")
-        if not _is_challenge_locator(locator):
+        if not _is_citation_locator(locator):
             _exit_with_error(f"The locator of entry {index} is not a DOI, an arXiv"
                              " id, or an https URL. Correct it.")
         parsed.append({"citation": citation, "locator": locator})
@@ -471,58 +815,47 @@ def _run_challenges(args: argparse.Namespace) -> None:
     for key, value in optional_params:
         if value:
             query[key] = value
-    payload, _ = _send_request(
-        "GET", "/api/v1/grand-challenges?" + urllib.parse.urlencode(query))
+    payload, _ = _send_request("GET", "/api/v1/grand-challenges?" + _encode_query(query),
+                               error_messages=_FILTER_QUERY_ERR_MSGS)
     _print_json(payload)
 
 
 def _run_challenge(args: argparse.Namespace) -> None:
-    payload, _ = _send_request(
-        "GET",
-        "/api/v1/grand-challenges/" + urllib.parse.quote(args.challenge_id, safe=""),
-    )
+    payload, _ = _send_request("GET", _build_api_path("grand-challenges", args.challenge_id))
     _print_json(payload)
 
 
 def _run_post_challenge(args: argparse.Namespace) -> None:
     body = {
-        "title": _require_utf16_bounds("title", args.title, 8, 200),
-        "field": _require_utf16_bounds("field", args.field, 2, 100),
+        "title": _require_utf16_bounds("title", args.title, 8, 200, is_trim_required=True),
+        "field": _require_utf16_bounds("field", args.field, 2, 100, is_trim_required=True),
         "problemStatement": _require_utf16_bounds(
             "problem statement",
             _read_inline_or_file_text(args.problem_statement,
                                       args.problem_statement_file),
-            200, 20000),
+            200, 20000, is_trim_required=True),
         "currentState": _require_utf16_bounds(
             "current state",
             _read_inline_or_file_text(args.current_state, args.current_state_file),
-            100, 10000),
+            100, 10000, is_trim_required=True),
         "resolutionCriteria": _require_utf16_bounds(
             "resolution criteria",
             _read_inline_or_file_text(args.resolution_criteria,
                                       args.resolution_criteria_file),
-            50, 5000),
-        "citations": _read_challenge_citations_file(args.citations_file),
+            50, 5000, is_trim_required=True),
+        "citations": _read_citations_file(args.citations_file),
     }
     if args.parent_id:
         body["parentId"] = args.parent_id
     if args.paper_doi:
-        if len(args.paper_doi) > 20:
-            _exit_with_error(f"The command names {len(args.paper_doi)} papers."
-                             " The limit is 20. Remove some.")
+        _require_at_most(args.paper_doi, "papers", _MAX_CHALLENGE_PAPER_LINKS)
         body["paperDois"] = [_resolve_paper_identifier(doi) for doi in args.paper_doi]
     payload, _ = _send_request("POST", "/api/v1/grand-challenges", body)
     _print_json(payload)
 
 
 def _run_vote_challenge(args: argparse.Namespace) -> None:
-    path = ("/api/v1/grand-challenges/"
-            + urllib.parse.quote(args.challenge_id, safe="") + "/vote")
-    if args.value == 0:
-        payload, _ = _send_request("DELETE", path)
-    else:
-        payload, _ = _send_request("PUT", path, {"value": args.value})
-    _print_json(payload)
+    _send_vote(_build_api_path("grand-challenges", args.challenge_id, "vote"), args.value)
 
 
 def _run_solve_challenge(args: argparse.Namespace) -> None:
@@ -532,29 +865,363 @@ def _run_solve_challenge(args: argparse.Namespace) -> None:
         body = {"status": "solved",
                 "resolutionNote": _require_utf16_bounds("resolution note",
                                                         args.note, 10, 5000)}
-    payload, _ = _send_request(
-        "PATCH",
-        "/api/v1/grand-challenges/" + urllib.parse.quote(args.challenge_id, safe=""),
-        body,
-    )
+    payload, _ = _send_request("PATCH", _build_api_path("grand-challenges", args.challenge_id), body)
     _print_json(payload)
 
 
 def _run_report_challenge(args: argparse.Namespace) -> None:
-    body = {"subjectKind": "grand_challenge", "subjectId": args.challenge_id}
-    if args.note is not None:
-        body["note"] = _require_utf16_bounds("note", args.note, 1, 1000)
-    payload, status = _send_request("POST", "/api/v1/reports", body)
-    if status == 200:
-        print("The server returned the existing report for this challenge.",
-              file=sys.stderr)
+    _send_report("grand_challenge", args.challenge_id, args.note,
+                 "The server returned the existing report for this challenge.")
+
+
+def _require_math_area(area: str) -> str:
+    """The area is one math.* subject class. The server trims the code, ignores its case, and
+    checks it against the subject classes, so the value goes out as given."""
+    if not area.strip(_JAVASCRIPT_TRIM_CHARACTERS).lower().startswith("math."):
+        _exit_with_error(f"The area {area} is not a math.* subject class. Give one such as math.NT or math.CO.")
+    return area
+
+
+def _require_posted_link(kind: str, url: str) -> None:
+    """The rules every link kind meets before its own check: the length, the characters, and
+    whitespace, in that order. The message names the kind and never prints the value, which can be
+    long or hold control characters."""
+    units = _count_utf16_units(url)
+    if units > _MAX_LINK_UTF16_UNITS:
+        _exit_with_error(f"The {kind} is {units} characters long. The limit is {_MAX_LINK_UTF16_UNITS}.")
+    if any(unicodedata.category(character) in _NON_TEXT_CHARACTER_CATEGORIES for character in url):
+        _exit_with_error(f"The {kind} contains a control character, an invisible character, or an unpaired"
+                         " surrogate. Give the link as plain text.")
+    if re.search(r"\s", url):
+        _exit_with_error(f"The {kind} contains a space or a line break. Give the link without them.")
+
+
+def _require_github_context_url(url: str) -> str:
+    """A context link is an https://github.com/ page; the poster gives the exact URL (design
+    2026-10-12 §12, decision 14). It needs the literal prefix and a path after the host."""
+    _require_posted_link("context link", url)
+    # Only the parsed path decides whether the URL names a page. The server's URL
+    # parser removes dot segments (also %2e in either case) and treats backslashes as
+    # separators. Keep empty segments and the trailing slash, as WHATWG does.
+    path = re.split(r"[?#]", url[len(_GITHUB_PAGE_URL_PREFIX):], maxsplit=1)[0].replace("\\", "/")
+    segments = path.split("/")
+    resolved = []
+    for index, segment in enumerate(segments):
+        dots = re.sub(r"%2e", ".", segment, flags=re.IGNORECASE)
+        if dots in (".", ".."):
+            if dots == ".." and resolved:
+                resolved.pop()
+            if index == len(segments) - 1:
+                resolved.append("")
+        else:
+            resolved.append(segment)
+    if not url.startswith(_GITHUB_PAGE_URL_PREFIX) or not "/".join(resolved):
+        _exit_with_error(f"{url} is not a context link. Give an https://github.com/ URL that names a page.")
+    return url
+
+
+# The pieces that the Lean source and check evidence patterns share, named as in the server's
+# math-links.ts. The patterns use [0-9], not \d: the server's \d matches ASCII digits only, and
+# Python's \d matches other Unicode digits too. A path segment holds no "/", so each "/" opens
+# exactly one segment and a match takes time linear in the length of the link;
+# _require_posted_link caps a link at 500 characters before any pattern runs. The segment keeps
+# the server's \s, although _require_posted_link refuses whitespace first, so that the patterns
+# stay an exact copy of the server's.
+_GITHUB_REPOSITORY_URL_PATTERN_FRAGMENT = (
+    r"https://github\.com/[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/[A-Za-z0-9._-]{1,100}")
+_COMMIT_SHA_PATTERN_FRAGMENT = r"[0-9a-f]{40}"
+_PATH_SEGMENT_PATTERN_FRAGMENT = r"/[^\s?#/]+"
+_LINE_ANCHOR_PATTERN_FRAGMENT = r"(?:#L[0-9]+(?:-L[0-9]+)?)?"
+# Mirrors leanSourceUrlSchema (design 2026-10-12 §5): a file or a directory at a full commit,
+# an optional line anchor, no query. The URL is sent exactly as given.
+_LEAN_SOURCE_URL_RE = re.compile(
+    f"{_GITHUB_REPOSITORY_URL_PATTERN_FRAGMENT}/(?:blob|tree)/{_COMMIT_SHA_PATTERN_FRAGMENT}"
+    f"(?:{_PATH_SEGMENT_PATTERN_FRAGMENT})*{_LINE_ANCHOR_PATTERN_FRAGMENT}")
+# Mirrors the server's path rule for Lean source and check evidence links: no "." or ".." path
+# step, each dot also written %2e in any case, no encoded slash in any case, and no backslash. A
+# URL parser resolves each of them, so a link pinned to a commit could name a branch (design
+# 2026-10-12 §5, §7). \Z, not $: Python's $ also matches before a final newline.
+_PATH_TRAVERSAL_RE = re.compile(r"/(?:\.|%2[eE]){1,2}(?:[/?#\\]|\Z)|%2[fF]|\\")
+
+
+def _require_exact_link_path(kind: str, url: str) -> None:
+    """A Lean source or check evidence link names its target by a path that no URL parser moves."""
+    if _PATH_TRAVERSAL_RE.search(url):
+        _exit_with_error(f'The {kind} {url} has a "." or ".." path step, a backslash, or an encoded'
+                         " slash. Give the link without them.")
+
+
+def _require_lean_source_url(url: str) -> str:
+    """The rules of every posted link run first, then the shape of a Lean source link, then the
+    path rule. The poster gives the exact URL (design 2026-10-12 §12, decision 14)."""
+    _require_posted_link("Lean source link", url)
+    if not _LEAN_SOURCE_URL_RE.fullmatch(url):
+        _exit_with_error(f"{url} is not a Lean source link. Give a github.com blob or tree URL at a full"
+                         " 40-character commit SHA, for example"
+                         " https://github.com/<owner>/<repo>/blob/<sha>/Statement.lean."
+                         " A branch name does not pin the content.")
+    _require_exact_link_path("Lean source link", url)
+    return url
+
+
+# Mirrors checkEvidenceUrlSchema (design 2026-10-12 §7): a GitHub Actions run, or a file at a
+# full commit. The URL is sent exactly as given.
+_CHECK_EVIDENCE_URL_RE = re.compile(
+    f"{_GITHUB_REPOSITORY_URL_PATTERN_FRAGMENT}/(?:actions/runs/[0-9]+(?:/job/[0-9]+)?"
+    f"|blob/{_COMMIT_SHA_PATTERN_FRAGMENT}(?:{_PATH_SEGMENT_PATTERN_FRAGMENT})+{_LINE_ANCHOR_PATTERN_FRAGMENT})")
+
+
+def _require_check_evidence_url(url: str) -> str:
+    """The rules of every posted link run first, then the shape of a check evidence link, then the
+    path rule. The poster gives the exact URL (design 2026-10-12 §12, decision 14)."""
+    _require_posted_link("check evidence link", url)
+    if not _CHECK_EVIDENCE_URL_RE.fullmatch(url):
+        _exit_with_error(f"{url} is not a check evidence link."
+                         " Give a GitHub Actions run, for example https://github.com/<owner>/<repo>/actions/runs/<id>."
+                         " Or give a file at a full 40-character commit SHA, for example"
+                         " https://github.com/<owner>/<repo>/blob/<sha>/<path>."
+                         " A branch link or a tree link is refused.")
+    _require_exact_link_path("check evidence link", url)
+    return url
+
+
+def _run_me(args: argparse.Namespace) -> None:
+    payload, _ = _send_request("GET", "/api/v1/me")
     _print_json(payload)
+
+
+def _run_problems(args: argparse.Namespace) -> None:
+    query = _build_page_query(args)
+    if args.query:
+        query["q"] = _require_plain_text("search text", args.query)
+    for key, value in (("status", args.status), ("area", args.area), ("sort", args.sort)):
+        if value:
+            query[key] = value
+    for key, enabled in (("hasFormalStatement", args.has_formal_statement), ("hasProof", args.has_proof),
+                         ("hasPassingLeanCheck", args.has_passing_lean_check)):
+        if enabled:
+            query[key] = "true"
+    payload, _ = _send_request("GET", "/api/v1/math-problems?" + _encode_query(query),
+                               error_messages=_SEARCH_AND_FILTER_QUERY_ERR_MSGS)
+    _print_json(payload)
+
+
+def _run_problem(args: argparse.Namespace) -> None:
+    payload, _ = _send_request("GET", _build_api_path("math-problems", args.problem_id))
+    _print_json(payload)
+
+
+def _run_problem_history(args: argparse.Namespace) -> None:
+    _print_page(_build_api_path("math-problems", args.problem_id, "status-events"), args)
+
+
+def _run_post_problem(args: argparse.Namespace) -> None:
+    body = {
+        "title": _require_plain_text_bounds("title", args.title, 8, 200, is_trim_required=True),
+        "area": _require_math_area(args.area),
+        "statement": _require_plain_text_bounds(
+            "statement", _read_inline_or_file_text(args.statement, args.statement_file), 50, 20000, is_trim_required=True),
+        "motivation": _require_plain_text_bounds(
+            "motivation", _read_inline_or_file_text(args.motivation, args.motivation_file), 100, 10000, is_trim_required=True),
+        "currentState": _require_plain_text_bounds(
+            "current state", _read_inline_or_file_text(args.current_state, args.current_state_file), 100, 10000, is_trim_required=True),
+        "resolutionCriteria": _require_plain_text_bounds(
+            "resolution criteria",
+            _read_inline_or_file_text(args.resolution_criteria, args.resolution_criteria_file), 50, 5000, is_trim_required=True),
+        "citations": _read_citations_file(args.citations_file),
+    }
+    if args.paper:
+        _require_at_most(args.paper, "papers", _MAX_CREATION_PAPERS, "Attach the rest with link-problem-paper.")
+        body["paperIdentifiers"] = args.paper
+    if args.github_link:
+        _require_at_most(args.github_link, "context links", _MAX_CREATION_GITHUB_LINKS,
+                         "Attach the rest with link-problem-github.")
+        body["githubLinks"] = [
+            {"url": _require_github_context_url(url),
+             "label": _require_plain_text_bounds("link label", label, 1, 100, is_trim_required=True)}
+            for url, label in args.github_link
+        ]
+    _send_math_write("POST", "/api/v1/math-problems", body)
+
+
+def _run_vote_problem(args: argparse.Namespace) -> None:
+    _send_vote(_build_api_path("math-problems", args.problem_id, "vote"), args.value)
+
+
+def _run_report_math(args: argparse.Namespace) -> None:
+    _send_report(args.subject_kind, args.subject_id, args.note,
+                 "The server returned the existing report for this content.")
+
+
+def _run_add_formal_statement(args: argparse.Namespace) -> None:
+    disproof_targets = args.disproof_target or []
+    for target_kind, targets in (("proof", args.proof_target), ("disproof", disproof_targets)):
+        _require_at_most(targets, f"{target_kind} targets", _MAX_FORMAL_STATEMENT_TARGETS)
+    body = {"leanUrl": _require_lean_source_url(args.lean_url), "proofTargets": args.proof_target,
+            "disproofTargets": disproof_targets}
+    if args.note is not None or args.note_file is not None:
+        body["note"] = _require_plain_text_bounds("note", _read_inline_or_file_text(args.note, args.note_file),
+                                                  0, 2000, is_trim_required=True)
+    _send_math_write("POST", _build_api_path("math-problems", args.problem_id, "formal-statements"), body)
+
+
+def _run_declare_status(args: argparse.Namespace) -> None:
+    is_resolution = args.status != "open"
+    if is_resolution and not args.resolving_proof:
+        _exit_with_error("A proved or disproved declaration names its resolving proof."
+                         " Add --resolving-proof <proof-id>.")
+    if not is_resolution and args.resolving_proof is not None:
+        _exit_with_error("An open declaration names no resolving proof. Remove --resolving-proof.")
+    body = {"status": args.status}
+    if is_resolution:
+        body["resolvingProofId"] = args.resolving_proof
+    body["note"] = _require_plain_text_bounds("note", _read_inline_or_file_text(args.note, args.note_file),
+                                              1, 5000, is_trim_required=True)
+    _send_math_write("PATCH", _build_api_path("math-problems", args.problem_id), body)
+
+
+def _run_link_problem_paper(args: argparse.Namespace) -> None:
+    _send_problem_link(args.problem_id, "papers", {"identifier": args.identifier}, args.identifier)
+
+
+def _send_problem_link(problem_id: str, resource: str, body: dict, identifier: str) -> None:
+    """A 201 means the link stands; a 409 means moderation removed it (design clarification 25)."""
+    path = _build_api_path("math-problems", problem_id, resource)
+    _require_linked_orcid()
+    removal_msg = (f"A moderator removed the link {identifier} from problem {problem_id}."
+                   " It cannot be attached again. Nothing changed.")
+    payload, _ = _send_request("POST", path, body,
+                               error_messages={**_HTTP_ERR_MSGS, 409: removal_msg},
+                               error_exit_codes={409: REMOVED_PROBLEM_LINK_EXIT_CODE})
+    _print_json(payload)
+
+
+def _run_link_problem_github(args: argparse.Namespace) -> None:
+    body = {"url": _require_github_context_url(args.url),
+            "label": _require_plain_text_bounds("label", args.label, 1, 100, is_trim_required=True)}
+    _send_problem_link(args.problem_id, "github-links", body, args.url)
+
+
+# An arXiv id without a version, written as a bare id, an arxiv.org abs URL, or an arXiv DOI. The
+# server refuses it as a write-up, because the arXiv resolver cannot find which version is meant
+# (design 2026-10-12 §6). The server stays the authority for every other form.
+_ARXIV_WITHOUT_VERSION_RE = re.compile(
+    r"(?:https?://(?:www\.)?arxiv\.org/abs/|10\.48550/arxiv\.)?"
+    r"(?:[0-9]{4}\.[0-9]{4,5}|[a-z-]+(?:\.[a-z]{2})?/[0-9]{7})",
+    re.IGNORECASE)
+
+
+def _run_post_proof(args: argparse.Namespace) -> None:
+    summary = _require_plain_text_bounds("summary", _read_inline_or_file_text(args.summary, args.summary_file),
+                                         100, 20000, is_trim_required=True)
+    if args.writeup is None and args.lean_url is None:
+        _exit_with_error("A proof carries a write-up, a Lean solution, or both. Add --writeup, or --lean-url with"
+                         " --formal-statement-version.")
+    if (args.lean_url is None) != (args.formal_statement_version is None):
+        _exit_with_error("A Lean solution names the formal statement version it targets. Give --lean-url and"
+                         " --formal-statement-version together.")
+    body = {"claim": args.claim, "summary": summary}
+    if args.writeup is not None:
+        writeup = args.writeup.strip(_JAVASCRIPT_TRIM_CHARACTERS)
+        if _ARXIV_WITHOUT_VERSION_RE.fullmatch(writeup):
+            _exit_with_error(f"The write-up {writeup} is an arXiv id without a version. Name the exact version,"
+                             f" for example {writeup}v2.")
+        body["writeup"] = writeup
+    if args.lean_url is not None:
+        body["lean"] = {"url": _require_lean_source_url(args.lean_url),
+                        "formalStatementVersion": args.formal_statement_version}
+    if args.supersedes is not None:
+        body["supersedesProofId"] = args.supersedes
+    _send_math_write("POST", _build_api_path("math-problems", args.problem_id, "proofs"), body)
+
+
+def _run_proofs(args: argparse.Namespace) -> None:
+    _print_page(_build_api_path("math-problems", args.problem_id, "proofs"), args)
+
+
+def _run_proof(args: argparse.Namespace) -> None:
+    payload, _ = _send_request("GET", _build_api_path("math-proofs", args.proof_id))
+    _print_json(payload)
+
+
+def _run_post_lean_check(args: argparse.Namespace) -> None:
+    """Posts the report of a check run outside exactory. Nothing runs here (design 2026-10-12 §7)."""
+    evidence_url = _require_check_evidence_url(args.evidence_url)
+    axioms = args.axiom or []
+    _require_at_most(axioms, "axioms", _MAX_LEAN_CHECK_AXIOMS)
+    body = {
+        "outcome": args.outcome,
+        "tool": _require_plain_text_bounds("tool", args.tool, 1, 200, is_trim_required=True),
+        "leanToolchain": _require_plain_text_bounds("Lean toolchain", args.lean_toolchain, 1, 100, is_trim_required=True),
+        "axioms": axioms,
+        "evidenceUrl": evidence_url,
+    }
+    if args.output_excerpt_file is not None:
+        excerpt = _require_plain_text_bounds(
+            "output excerpt", _read_inline_or_file_text(None, args.output_excerpt_file), 0, 20000)
+        if excerpt:
+            body["outputExcerpt"] = excerpt
+    _send_math_write("POST", _build_api_path("math-proofs", args.proof_id, "lean-checks"), body)
+
+
+def _run_lean_checks(args: argparse.Namespace) -> None:
+    _print_page(_build_api_path("math-proofs", args.proof_id, "lean-checks"), args)
+
+
+def _run_lean_check(args: argparse.Namespace) -> None:
+    payload, _ = _send_request("GET", _build_api_path("math-lean-checks", args.check_id))
+    _print_json(payload)
+
+
+def _run_post_discussion(args: argparse.Namespace) -> None:
+    body = {"body": _require_plain_text_bounds("post", _read_inline_or_file_text(args.body, args.body_file),
+                                               1, 10000, is_trim_required=True)}
+    if args.reply_to is not None:
+        body["replyToPostId"] = args.reply_to
+    _send_math_write("POST", _build_api_path("math-problems", args.problem_id, "posts"), body)
+
+
+def _run_discussion(args: argparse.Namespace) -> None:
+    _print_page(_build_api_path("math-problems", args.problem_id, "posts"), args)
+
+
+def _run_discussion_post(args: argparse.Namespace) -> None:
+    payload, _ = _send_request("GET", _build_api_path("math-posts", args.post_id))
+    _print_json(payload)
+
+
+def _print_page(path: str, args: argparse.Namespace) -> None:
+    """One page of a paginated list, with the limit and the cursor that the command line gives."""
+    query = _build_page_query(args)
+    payload, _ = _send_request("GET", path + ("?" + _encode_query(query) if query else ""),
+                               error_messages=_PAGE_QUERY_ERR_MSGS)
+    _print_json(payload)
+
+
+def _build_code_request_advice(email: str) -> str:
+    """The advice after a code request whose outcome the command cannot confirm. The server may have sent the
+    email, so the user looks for it before requesting another code."""
+    return (f"If the request worked, an email with a sign-in code is on its way to {email}. Then run: exactory login"
+            f" --email {email} --code <the code>. If no email arrives within a few minutes, request a new code:"
+            f" exactory login --email {email}")
+
+
+def _build_code_check_advice(email: str, label: str) -> str:
+    """The advice after a code check whose outcome the command cannot confirm. The server may have made a key with
+    this label, and it shows the plaintext of a key once, in its answer, so the user sees and revokes such a key on
+    the keys page. Then the user runs the command again with the same code, and requests a new code if the server
+    does not take that one."""
+    return (f'The server may have made a key labeled "{label}" for your account. The page'
+            f" {_API_BASE_URL}{_KEYS_PAGE_PATH} lists your keys, and its Revoke button revokes one."
+            " Run the command again with the same code. If the server answers that the code is wrong, expired, or"
+            f" already used, request a new code: exactory login --email {email}")
 
 
 def _run_login(args: argparse.Namespace) -> None:
     if args.code is None:
         payload, _ = _send_request("POST", "/api/v1/email-codes", {"email": args.email},
-                                   authenticated=False, error_messages=_LOGIN_ERR_MSGS)
+                                   authenticated=False, error_messages=_LOGIN_ERR_MSGS,
+                                   unconfirmed_write_advice_msg=_build_code_request_advice(args.email))
         email = payload["email"]
         print(f"A sign-in code is on its way to {email}.", file=sys.stderr)
         print(_TERMS_NOTICE, file=sys.stderr)
@@ -565,7 +1232,8 @@ def _run_login(args: argparse.Namespace) -> None:
     label = args.label or f"plugin on {socket.gethostname()}"
     payload, _ = _send_request("POST", "/api/v1/api-keys",
                                {"email": args.email, "code": args.code, "label": label},
-                               authenticated=False, error_messages=_LOGIN_ERR_MSGS)
+                               authenticated=False, error_messages=_LOGIN_ERR_MSGS,
+                               unconfirmed_write_advice_msg=_build_code_check_advice(args.email, label))
     # The key goes to the file and nowhere else: stdout is the chat transcript.
     path = _save_api_key(payload["apiKey"], args.email, payload["key"]["label"])
     _print_json({"email": args.email, "label": payload["key"]["label"], "saved_to": str(path)})
@@ -590,8 +1258,7 @@ def _run_whoami(args: argparse.Namespace) -> None:
 
 
 def _run_open_signup(args: argparse.Namespace) -> None:
-    base_url = os.environ.get("EXACTORY_API_URL", _DEFAULT_API_URL).rstrip("/")
-    url = base_url + "/signup"
+    url = _API_BASE_URL + "/signup"
     try:
         opened = webbrowser.open(url)
     except webbrowser.Error:
@@ -610,7 +1277,7 @@ def _run_logout(args: argparse.Namespace) -> None:
     if removed:
         path.unlink()
     print("The key stays valid on the server. To revoke it, open"
-          " https://www.exactory.ai/keys.", file=sys.stderr)
+          f" {_API_BASE_URL}{_KEYS_PAGE_PATH}.", file=sys.stderr)
     _print_json({"removed": str(path) if removed else None})
 
 
@@ -663,6 +1330,9 @@ def _build_parser() -> argparse.ArgumentParser:
                         help="A Grand Challenge this paper drew on. Repeat for"
                              " more than one, at most"
                              f" {_MAX_DECLARED_CHALLENGES}.")
+    submit.add_argument("--math-problem", action="append", dest="math_problem", metavar="PROBLEM_ID",
+                        help="A math problem this paper develops. Repeat for more than one, at most"
+                             f" {_MAX_DECLARED_MATH_PROBLEMS}. Needs a linked ORCID iD.")
     submit.set_defaults(handler=_run_submit)
     from research_harness.cli import add_managed_scope
     add_managed_scope(submit)
@@ -801,7 +1471,8 @@ def _build_parser() -> argparse.ArgumentParser:
     post_challenge.add_argument(
         "--paper-doi", action="append",
         help="Link a related paper already on exactory. A DOI or an arXiv id."
-             " Repeat for more than one, at most 20.")
+             " Repeat for more than one, at most"
+             f" {_MAX_CHALLENGE_PAPER_LINKS}.")
     post_challenge.set_defaults(handler=_run_post_challenge)
 
     vote_challenge = commands.add_parser(
@@ -841,11 +1512,212 @@ def _build_parser() -> argparse.ArgumentParser:
              " 1-1000 characters.")
     report_challenge.set_defaults(handler=_run_report_challenge)
 
+    me = commands.add_parser("me", allow_abbrev=False,
+                             help="Show your display name and your linked ORCID iD.")
+    me.set_defaults(handler=_run_me)
+
+    problems = commands.add_parser("problems", allow_abbrev=False,
+                                   help="List and search the open mathematical problems.")
+    problems.add_argument("--query", help="Full-text search over title, statement, motivation, and current state.")
+    problems.add_argument("--status", choices=[*_MATH_PROBLEM_STATUSES, "all"],
+                          help="Only problems with this status. The server default is open.")
+    problems.add_argument("--area", help="Only problems in this math.* subject class, for example math.NT.")
+    problems.add_argument("--has-formal-statement", action="store_true", dest="has_formal_statement",
+                          help="Only problems with a standing formal statement.")
+    problems.add_argument("--has-proof", action="store_true", dest="has_proof",
+                          help="Only problems with a standing, current proof.")
+    problems.add_argument("--has-passing-lean-check", action="store_true", dest="has_passing_lean_check",
+                          help="Only problems whose current proof against the current formal statement has a"
+                               " counted pass report.")
+    problems.add_argument("--sort", choices=["relevance", "top", "new"],
+                          help="Result order. Default: relevance with --query, new without.")
+    problems.add_argument("--cursor", help="Opaque cursor from a previous page.")
+    problems.add_argument("--limit", type=int, default=25, help=_PAGE_SIZE_HELP + " Default: %(default)s.")
+    problems.set_defaults(handler=_run_problems)
+
+    problem = commands.add_parser("problem", allow_abbrev=False,
+                                  help="Show one problem with its formal statements, links, and latest status.")
+    problem.add_argument("problem_id")
+    problem.set_defaults(handler=_run_problem)
+
+    problem_history = commands.add_parser("problem-history", allow_abbrev=False,
+                                          help="Show a problem's status declarations, newest first.")
+    problem_history.add_argument("problem_id")
+    problem_history.add_argument("--cursor", help="Opaque cursor from a previous page.")
+    problem_history.add_argument("--limit", type=int, default=50,
+                                 help=_PAGE_SIZE_HELP + " Default: %(default)s.")
+    problem_history.set_defaults(handler=_run_problem_history)
+
+    post_problem = commands.add_parser(
+        "post-problem", allow_abbrev=False,
+        help="Post an open mathematical problem. Needs a linked ORCID iD. Check every citation locator first.")
+    post_problem.add_argument("--title", required=True, help="The problem title, 8-200 characters.")
+    post_problem.add_argument("--area", required=True, help="One math.* subject class, for example math.CO.")
+    for name, bounds in (("statement", "the precise problem in TeX, 50-20000"),
+                         ("motivation", "why a resolution matters, 100-10000"),
+                         ("current-state", "the prior work and why the problem is open, 100-10000"),
+                         ("resolution-criteria", "what a proof or a disproof must establish, 50-5000")):
+        group = post_problem.add_mutually_exclusive_group(required=True)
+        group.add_argument(f"--{name}", help=f"The {name.replace('-', ' ')}: {bounds} characters.")
+        group.add_argument(f"--{name}-file", help=f"A file with the {name.replace('-', ' ')}.")
+    post_problem.add_argument(
+        "--citations-file", required=True,
+        help='A JSON file with 1-50 {"citation", "locator"} objects. The locator is a DOI, an arXiv id,'
+             " or an https URL.")
+    post_problem.add_argument("--paper", action="append",
+                              help=f"A related paper: an arXiv id or a DOI. Repeat, at most {_MAX_CREATION_PAPERS}.")
+    post_problem.add_argument("--github-link", action="append", nargs=2, metavar=("URL", "LABEL"),
+                              help="A GitHub context link and its label. Repeat, at most"
+                                   f" {_MAX_CREATION_GITHUB_LINKS}.")
+    post_problem.set_defaults(handler=_run_post_problem)
+
+    vote_problem = commands.add_parser("vote-problem", allow_abbrev=False,
+                                       help="Vote on a problem, or clear your vote.")
+    vote_problem.add_argument("problem_id")
+    vote_problem.add_argument("--value", type=int, choices=[1, -1, 0], required=True,
+                              help="1 votes up. -1 votes down. 0 clears your vote.")
+    vote_problem.set_defaults(handler=_run_vote_problem)
+
+    report_math = commands.add_parser("report-math", allow_abbrev=False,
+                                      help="Report content of the math section that violates the platform rules.")
+    report_math.add_argument("subject_kind", choices=_MATH_REPORT_KINDS)
+    report_math.add_argument("subject_id")
+    report_math.add_argument("--note", help="Why the content violates the rules, for the moderators only, 1-1000 characters.")
+    report_math.set_defaults(handler=_run_report_math)
+
+    add_formal_statement = commands.add_parser(
+        "add-formal-statement", allow_abbrev=False,
+        help="Add a formal statement version to a problem: a commit-pinned Lean link and its target"
+             " theorem names. Only the author or an admin. Needs a linked ORCID iD.")
+    add_formal_statement.add_argument("problem_id")
+    add_formal_statement.add_argument("--lean-url", required=True, dest="lean_url",
+                                      help="A github.com blob or tree URL at a full commit SHA.")
+    add_formal_statement.add_argument("--proof-target", action="append", required=True, dest="proof_target",
+                                      help="A theorem whose statement says the claim is true."
+                                           f" Repeat, 1-{_MAX_FORMAL_STATEMENT_TARGETS}.")
+    add_formal_statement.add_argument("--disproof-target", action="append", dest="disproof_target",
+                                      help="A theorem whose statement says the claim is false."
+                                           f" Repeat, 0-{_MAX_FORMAL_STATEMENT_TARGETS}.")
+    formal_statement_note = add_formal_statement.add_mutually_exclusive_group()
+    formal_statement_note.add_argument(
+        "--note", help="Toolchain, Mathlib revision, how to build; up to 2000 characters.")
+    formal_statement_note.add_argument("--note-file", dest="note_file", help="A file with the note.")
+    add_formal_statement.set_defaults(handler=_run_add_formal_statement)
+
+    declare_status = commands.add_parser(
+        "declare-status", allow_abbrev=False,
+        help="Declare a problem proved, disproved, or open again. Only the author or an admin."
+             " Needs a linked ORCID iD.")
+    declare_status.add_argument("problem_id")
+    declare_status.add_argument("--status", required=True, choices=_MATH_PROBLEM_STATUSES)
+    declare_status.add_argument("--resolving-proof", dest="resolving_proof",
+                                help="The proof that resolves the problem; its claim matches the status.")
+    declaration_note = declare_status.add_mutually_exclusive_group(required=True)
+    declaration_note.add_argument("--note", help="Why, 1-5000 characters.")
+    declaration_note.add_argument("--note-file", dest="note_file", help="A file with the note.")
+    declare_status.set_defaults(handler=_run_declare_status)
+
+    link_problem_paper = commands.add_parser(
+        "link-problem-paper", allow_abbrev=False,
+        help="Attach a related paper to a problem by its arXiv id or DOI. Needs a linked ORCID iD.")
+    link_problem_paper.add_argument("problem_id")
+    link_problem_paper.add_argument("--identifier", required=True,
+                                    help="An arXiv id, with or without a version, or a DOI.")
+    link_problem_paper.set_defaults(handler=_run_link_problem_paper)
+
+    link_problem_github = commands.add_parser(
+        "link-problem-github", allow_abbrev=False,
+        help="Attach a GitHub context link to a problem. Needs a linked ORCID iD.")
+    link_problem_github.add_argument("problem_id")
+    link_problem_github.add_argument("--url", required=True, help="An https://github.com/ URL, sent exactly as given.")
+    link_problem_github.add_argument("--label", required=True, help="A short label, 1-100 characters.")
+    link_problem_github.set_defaults(handler=_run_link_problem_github)
+
+    post_proof = commands.add_parser(
+        "post-proof", allow_abbrev=False,
+        help="Post a proof or a disproof of a problem: a write-up at an exact version, a commit-pinned"
+             " Lean solution, or both. Needs a linked ORCID iD.")
+    post_proof.add_argument("problem_id")
+    post_proof.add_argument("--claim", required=True, choices=_MATH_PROOF_CLAIMS)
+    proof_summary = post_proof.add_mutually_exclusive_group(required=True)
+    proof_summary.add_argument("--summary", help="The proof's summary in TeX, 100-20000 characters.")
+    proof_summary.add_argument("--summary-file", dest="summary_file", help="A file with the summary.")
+    post_proof.add_argument("--writeup",
+                            help="The write-up: an arXiv id with its version (2601.12345v2), a Zenodo DOI or"
+                                 " record URL.")
+    post_proof.add_argument("--lean-url", dest="lean_url",
+                            help="The Lean solution: a github.com blob or tree URL at a full commit SHA.")
+    post_proof.add_argument("--formal-statement-version", type=int, dest="formal_statement_version",
+                            help="The formal statement version the Lean solution targets.")
+    post_proof.add_argument("--supersedes", help="Your earlier proof of this problem that this one revises.")
+    post_proof.set_defaults(handler=_run_post_proof)
+
+    proofs = commands.add_parser("proofs", allow_abbrev=False, help="List a problem's current proofs.")
+    proofs.add_argument("problem_id")
+    proofs.add_argument("--cursor", help="Opaque cursor from a previous page.")
+    proofs.add_argument("--limit", type=int, help=_PAGE_SIZE_HELP + " The server sets the default.")
+    proofs.set_defaults(handler=_run_proofs)
+
+    proof = commands.add_parser("proof", allow_abbrev=False,
+                                help="Show one proof with its check summary and the verdicts on its write-up.")
+    proof.add_argument("proof_id")
+    proof.set_defaults(handler=_run_proof)
+
+    post_lean_check = commands.add_parser(
+        "post-lean-check", allow_abbrev=False,
+        help="Post the report of a Lean check you ran outside exactory on another account's proof."
+             " This command runs nothing. Needs a linked ORCID iD.")
+    post_lean_check.add_argument("proof_id")
+    post_lean_check.add_argument("--outcome", required=True, choices=_MATH_LEAN_CHECK_OUTCOMES)
+    post_lean_check.add_argument("--tool", required=True, help="What you ran, up to 200 characters.")
+    post_lean_check.add_argument("--lean-toolchain", required=True, dest="lean_toolchain",
+                                 help="The Lean toolchain as run, up to 100 characters.")
+    post_lean_check.add_argument("--axiom", action="append",
+                                 help=f"An axiom you permitted. Repeat, at most {_MAX_LEAN_CHECK_AXIOMS}.")
+    post_lean_check.add_argument("--evidence-url", required=True, dest="evidence_url",
+                                 help="A GitHub Actions run, or a file at a full commit SHA, that shows the check.")
+    post_lean_check.add_argument("--output-excerpt-file", dest="output_excerpt_file",
+                                 help="A file with an excerpt of the tool's output, up to 20000 characters.")
+    post_lean_check.set_defaults(handler=_run_post_lean_check)
+
+    lean_checks = commands.add_parser("lean-checks", allow_abbrev=False, help="List the Lean check reports of a proof.")
+    lean_checks.add_argument("proof_id")
+    lean_checks.add_argument("--cursor", help="Opaque cursor from a previous page.")
+    lean_checks.add_argument("--limit", type=int, help=_PAGE_SIZE_HELP + " The server sets the default.")
+    lean_checks.set_defaults(handler=_run_lean_checks)
+
+    lean_check = commands.add_parser("lean-check", allow_abbrev=False, help="Show one Lean check report.")
+    lean_check.add_argument("check_id")
+    lean_check.set_defaults(handler=_run_lean_check)
+
+    post_discussion = commands.add_parser(
+        "post-discussion", allow_abbrev=False,
+        help="Post in a problem's discussion, optionally as a reply. Needs a linked ORCID iD.")
+    post_discussion.add_argument("problem_id")
+    discussion_body = post_discussion.add_mutually_exclusive_group(required=True)
+    discussion_body.add_argument("--body", help="Plain text with TeX, 1-10000 characters.")
+    discussion_body.add_argument("--body-file", dest="body_file", help="A file with the post.")
+    post_discussion.add_argument("--reply-to", dest="reply_to", help="The post in the same discussion this replies to.")
+    post_discussion.set_defaults(handler=_run_post_discussion)
+
+    discussion = commands.add_parser("discussion", allow_abbrev=False,
+                                     help="List a problem's discussion, oldest first.")
+    discussion.add_argument("problem_id")
+    discussion.add_argument("--cursor", help="Opaque cursor from a previous page.")
+    discussion.add_argument("--limit", type=int, help=_PAGE_SIZE_HELP + " The server sets the default.")
+    discussion.set_defaults(handler=_run_discussion)
+
+    discussion_post = commands.add_parser("discussion-post", allow_abbrev=False, help="Show one discussion post.")
+    discussion_post.add_argument("post_id")
+    discussion_post.set_defaults(handler=_run_discussion_post)
+
     return parser
 
 
 def main() -> None:
+    global _API_BASE_URL
     args = _build_parser().parse_args()
+    _API_BASE_URL = _read_checked_api_base_url()
     try:
         args.handler(args)
     except ResearchError as error:

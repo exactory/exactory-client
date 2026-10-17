@@ -6,7 +6,7 @@ from .errors import ResearchError
 from .evidence import digest
 from .execution import _owner
 from .operations import immutable_record, prepared_mutation
-from .publication import publication_report
+from .publication import list_publication_receipts, publication_report
 from .publication_scope import build_publication_scope_binding, validate_scope_binding, validate_caller_scope
 from .remote import begin_intent, find_intent, finish_intent, get_intent, remote_step, resolve_step
 from .verification import task_identity, validate_verdict
@@ -27,7 +27,7 @@ def validate_submission(store, body):
     records = store.snapshot()["records"]
     current = records.get("workspace", {}).get("deposit", {})
     # An unpublished deposit has no DOI to name, so its receipt is no candidate.
-    candidates = [r for r in records.get("publication_receipt", {}).values()
+    candidates = [r for r in list_publication_receipts(records)
                   if r.get("bundle_digest") == report["bundle"]["digest"] and r.get("environment") == "production"
                   and r.get("doi") and r.get("doi") == current.get("doi")]
     if len(candidates) != 1:

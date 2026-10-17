@@ -295,7 +295,7 @@ class ResearchPublicationTests(DevelopmentCase):
                 uploaded.append(kwargs["file_bytes"])
                 return {"filename": "paper.pdf"}
             if url.endswith("/actions/publish"):
-                return {"id": 91, "doi": "10.5281/zenodo.91", "conceptdoi": "10.5281/zenodo.90", "links": {"record_html": "https://zenodo.org/records/91"}}
+                return {"id": 91, "submitted": True, "doi": "10.5281/zenodo.91", "conceptdoi": "10.5281/zenodo.90", "links": {"record_html": "https://zenodo.org/records/91"}}
             return {}
         revision = self.store.revision
         if lost:
@@ -334,7 +334,7 @@ class ResearchPublicationTests(DevelopmentCase):
             if method == "GET" and "/deposit/depositions?page=" in url:
                 return created
             if url.endswith("/actions/publish"):
-                return {"id": 93, "doi": "10.5281/zenodo.93", "conceptdoi": "10.5281/zenodo.92",
+                return {"id": 93, "submitted": True, "doi": "10.5281/zenodo.93", "conceptdoi": "10.5281/zenodo.92",
                         "links": {"record_html": "https://zenodo.org/records/93"}}
             return {}
 
@@ -479,6 +479,53 @@ class ResearchPublicationTests(DevelopmentCase):
         # no DOI to compare, so the submit is refused instead of failing on it.
         self.assert_error("publication_receipt_required",
                           lambda: validate_submission(self.store, {"doi": publication["doi"]}))
+
+    def test_a_receipt_completed_from_a_null_publish_answer_is_read_back_for_the_gate_and_the_submission(self):
+        """An earlier version confirmed a publish answer of JSON null and completed the intent with a
+        receipt without a DOI. The read of the same deposition supplies the publication that the
+        deposited gate and the submission need, and the first receipt stays as it was written."""
+        import hashlib
+        from research_harness.remote import finish_intent, resolve_step
+        from research_harness.submission import validate_submission
+        from research_harness.zenodo import continue_deposit, deposit
+        binding = self.remote_binding()
+        published = {"id": 91, "submitted": True, "doi": "10.5281/zenodo.91", "conceptdoi": "10.5281/zenodo.90",
+                     "links": {"record_html": "https://zenodo.org/records/91"}, "files": []}
+        calls = []
+        def client(method, url, **kwargs):
+            calls.append((method, url))
+            if method == "POST" and url.endswith("/deposit/depositions"):
+                return {"id": 91, "metadata": kwargs["json_body"]["metadata"],
+                        "links": {"bucket": "https://zenodo.org/api/files/bucket", "html": "https://zenodo.org/deposit/91"}}
+            if method == "PUT" and "/files/" in url:
+                published["files"].append({"filename": url.rsplit("/", 1)[-1],
+                                           "checksum": "md5:" + hashlib.md5(kwargs["file_bytes"]).hexdigest()})
+                return {"filename": url.rsplit("/", 1)[-1]}
+            if url.endswith("/actions/publish"):
+                return None
+            if method == "GET" and url.endswith("/deposit/depositions/91"):
+                return published
+            return {}
+        self.assert_error("remote_reconciliation_required", lambda: deposit(
+            self.store, binding, client, expected_revision=self.store.revision, request_id="deposit-1"))
+        resolve_step(self.store, "deposit-1", "publish", None, {"kind": "direct_response"})
+        state = {"environment": "production", "deposition_id": 91, "draft_url": "https://zenodo.org/deposit/91"}
+        legacy = dict(state, intent_id="deposit-1", bundle_digest=binding["bundle_digest"], uploads=binding["uploads"],
+                      published_response=None, prepared_revision=binding["prepared_revision"])
+        finish_intent(self.store, "deposit-1", "publication_receipt", legacy, workspace=state)
+        self.assertFalse(self.publication().publication_report(self.store, "deposited")["ready"])
+        calls.clear()
+        receipt = continue_deposit(self.store, "deposit-1", client, reconcile=True)
+        self.assertEqual(calls, [("GET", "https://zenodo.org/api/deposit/depositions/91")])
+        records = self.store.snapshot()["records"]
+        self.assertEqual(records["publication_receipt"]["deposit-1"], legacy)
+        self.assertEqual(records["publication_read_back"]["deposit-1"], receipt)
+        self.assertEqual((receipt["doi"], records["workspace"]["deposit"]["doi"]), ("10.5281/zenodo.91", "10.5281/zenodo.91"))
+        self.assertTrue(self.publication().publication_report(self.store, "deposited")["ready"])
+        self.assertEqual(validate_submission(self.store, {"doi": "10.5281/zenodo.91"})[1], receipt)
+        calls.clear()
+        self.assertEqual(continue_deposit(self.store, "deposit-1", client, reconcile=True), receipt)
+        self.assertEqual(calls, [])
 
     def test_managed_submit_keeps_concept_doi_distinct_from_concrete_record(self):
         from research_harness.submission import submit_managed, continue_submission

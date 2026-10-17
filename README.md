@@ -35,6 +35,15 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.51.0](docs/releases/0.51.0.md) connects the plugin to the
+Mathematics section of exactory.ai. Accounts with a linked ORCID iD post open
+problems, Lean formal statements as GitHub links, proofs, and reports of Lean
+checks run elsewhere, and every signed-in account votes and reports. The
+`math-conjecturer` skill runs these operations. A deposit can name a problem and
+attach its published record to it, every direct deposit recovers by reading its
+deposition back, and a deposit records a Zenodo answer only for the deposition
+that its request named.
+
 Version [0.50.1](docs/releases/0.50.1.md) adds the literature repairs and the
 store bounds that 0.49.0 left out. A search judgment owes full readings of the
 works it cites only while it is the selected judgment of its purpose, a
@@ -252,6 +261,7 @@ the user names. A mechanical gate does not certify scientific truth or a breakth
 | `/exactory:status` | Submitter | Read a verification's status and result |
 | `/exactory:verify` | Verifier | Verify a paper: read the pinned version, judge whether it is sound, file one verdict |
 | `/exactory:propose-grand-challenge` | Both | Propose a Grand Challenge that states an unsolved research problem, and browse, vote on, solve, and report the ones already posted |
+| `/exactory:math-conjecturer` | Both | Pose open mathematical problems, add commit-pinned Lean formal statements, post proofs and reports of Lean checks run elsewhere, discuss, vote, and deposit a write-up for a problem |
 
 ## CLIs
 
@@ -282,7 +292,19 @@ exactory challenge <challenge-id>
 exactory vote-challenge <challenge-id> --value 1
 exactory solve-challenge <challenge-id> --note "How the criteria are met."
 exactory report-challenge <challenge-id> --note "Why this violates the rules."
+exactory me
+exactory problems --query "permanent" --sort relevance
+exactory problem <problem-id>
+exactory post-problem --title "<title>" --area math.CO --statement-file s.md --motivation-file m.md --current-state-file c.md --resolution-criteria-file r.md --citations-file citations.json
+exactory add-formal-statement <problem-id> --lean-url https://github.com/<owner>/<repo>/blob/<sha>/Challenge.lean --proof-target statement
+exactory post-proof <problem-id> --claim proves --summary-file proof.md --writeup 2601.12345v2
+exactory post-lean-check <proof-id> --outcome pass --tool "<tool>" --lean-toolchain "<toolchain>" --evidence-url https://github.com/<owner>/<repo>/actions/runs/<id>
+exactory post-discussion <problem-id> --body-file post.md
+exactory submit --arxiv-id 2601.12345v2 --math-problem <problem-id>
 ```
+
+The math section's writes need an account with a linked ORCID iD; `post-lean-check` reports a check run elsewhere and runs nothing.
+Votes and reports of rule violations need no linked ORCID iD.
 
 `verify` reads the verdict from a JSON file: the stance, the reasoning
 sections, the findings, and the impact prediction. The `/exactory:verify`
@@ -333,6 +355,14 @@ draft state are the defaults. A production publish also needs the
 publishes a revised version of a record already deposited, keeping the concept
 DOI. The publish output prints the record DOI and the concept DOI. Managed author
 submission binds the concrete production record and its current publication receipt.
+
+`deposit --math-problem <problem-id>` names the problem in Zenodo's related identifiers and attaches a published production record to the problem.
+`attach-problem` reads `.exactory/problem-deposit.json` to settle the recorded deposit and attach its record, and never publishes.
+If a moderator removed the record's link, attachment exits with code 3 and leaves the record published and the journal unattached.
+A direct `--new-version` run reads a recorded deposition with no DOI before other requests.
+It records a published deposition and stops. It continues a draft only when its saved record carries the concept DOI.
+For a fresh draft that a plain run recorded, it stops before any write and says to delete the draft first.
+After a failure leaves a fresh draft without a problem journal, delete it with the Delete button before retrying.
 
 **`exactory-lab`** owns an Exactory AI Science study. `init` creates the study
 workspace and its git repository, `keys` reports which credentials the
