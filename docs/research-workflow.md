@@ -53,10 +53,13 @@ store so existing studies continue from their recorded state.
 
 Managed research may move directly from `initiate` to `literature`.
 `status` retains the preparation report with `advisory: true`; `next` names
-the current milestone's first missing condition. At `cohort` and `literature`
-it uses `direction`, at `ideate` it uses `execution`, and later stages keep
+the current milestone's first missing condition. At `initiate`, `cohort` and
+`literature` it uses `direction`, at `ideate` it uses `execution`, and later stages keep
 their existing gates. Preparation obligations remain available for choosing
-useful tool work. Nonmanaged stores and verification retain their fixed contracts.
+useful tool work. Before a cycle decision exists, the `direction` report
+also lists its minimum's missing search, full readings, standards and Grand
+Challenge record alongside configuration and missing-decision obligations.
+Nonmanaged stores and verification retain their fixed contracts.
 
 ## Initiate and resume
 
@@ -165,7 +168,14 @@ serve the loop as a local source: `population-query` ranks them by terms taken
 from the target statement and the parent's title and abstract, and its matches
 are handed to `batches --loop --candidates`, as the literature section shows.
 
-Under `sampled-v1` the enumeration must complete before any reading: `sample`
+Research can draw a seeded sample with `sample` when the call provides a
+`depth` object or a current depth plan is selected. The payload retains
+`{id, collection_id, size, seed}` and resolves `sample_size`. Enumeration must
+be complete. Record actual sampled readings with `depth: "abstract"` and
+`depth_values` in `read-batch`; the draw alone supplies no reading credit.
+
+Under `sampled-v1` verification keeps its fixed contract. Enumeration must
+complete before the sample: `sample`
 refuses to draw while the collection is pending (`collection_pending`). Draw the
 sample once per verification with `{id, collection_id, size, seed}`. The draw is
 stratified by month with equal allocation, and it takes the whole population
@@ -294,8 +304,10 @@ research.
   each registered with `innovation_candidate: true`, and five full-read cases;
   state effective candidate and case amounts for the call, which retains them.
   The lineage supplies the within-field case. Under
-  `exhaustive-v1` and `screened-v1`, study within-field innovations and five to
-  ten distinct external original paper families in full. For each case, identify
+  `exhaustive-v1` and `screened-v1`, study within-field innovations and at least
+  the recorded `innovation_cases` external families, up to
+  `max(10, innovation_cases)`. Historical sections without recorded depth keep
+  their original five-to-ten external-case rule. For each case, identify
   the original bottleneck, prior constraint, conceptual change, evidence, scope,
   and the proposed transfer's assumptions, limits, distinguishing test, and
   failure signal. Versions, aliases, and several case labels for one paper still
@@ -324,8 +336,9 @@ sources: a `population-query` over the enumerated population's stored abstracts,
 and the papers that cite the parent within the window. Preserve all captured responses and distinguish bounded inspection from complete
 enumeration. The [search coverage rule](research-tools.md#search-coverage)
 requires captured ordering for `top_k` and enumeration evidence for `complete`.
-A bounded enumeration is a coverage limit; parser and capture failures remain
-integrity gaps. Read
+For research, a bounded enumeration is a coverage limit; parser and capture
+failures remain integrity gaps. Verification keeps the original enumeration
+requirement and its `search_pending` obligation, even with new coverage metadata. Read
 every candidate abstract and register it as a loop entry that names its
 purposes, its disposition and the source it came from (`search`, `population`,
 `citing` or `author`).
@@ -430,8 +443,13 @@ and actual evidence. This scientific bar describes the research standard.
 
 New decisions carry `gate_version: 2`. Recording `investigate` or `pivot`
 requires the direction minimum; otherwise `direction_minimum_unmet` reports
-the missing evidence. Both observed review packets, or observed supplements
-bound to them, must cover the decisive evidence and claim. The decision stores
+the missing evidence. Both reviewers must receive the decisive source content
+and claim in observed packets, continuations or bound supplements. Coverage
+requires complete inspected ranges and every named image asset, verified against
+the source bytes and provenance. Long ranges use consecutive bounded chunks;
+qualifying historical attachments remain usable. Descriptors, reading notes,
+inventory membership and assignment dates alone supply no delivery coverage.
+See [the direction delivery contract](research-decisions.md#before-target-commitment). The decision stores
 `direction_evidence_digest`; it stays ready only while the minimum holds with
 that evidence. Newly read decisive evidence requires a new decision with reviews
 that saw it; `direction_evidence_unassessed` identifies lost coverage.
@@ -462,7 +480,8 @@ exactory-lab state set --stage ideate --status pending
 
 The gate combines current configuration readiness with the selected decision's
 obligations at the `cycle` boundary. It uses the same authority as cycle planning
-and admission. Completing literature and entering ideate require it.
+and admission. Before a cycle decision exists, the gate also lists the direction
+minimum obligations. Completing literature and entering ideate require it.
 
 Keep the complete objective separate from a special case, restricted parameter
 range or conditional cycle scope. A fixed objective changes with the user's
@@ -836,7 +855,16 @@ inheritance, candidates, reviews and scoped contracts. For a digest without its
 inputs, reconstruct every original field from evidence, snapshots or packets,
 including branch, strategy-account and source-record identities. Verify that
 object against the original digest before comparing projections. An unavailable
-historical input requires reassessment, rather than substitution of current data.
+historical input reports `claim_reassessment_required`, naming the record to
+reassess. Current values cannot substitute for missing historical inputs.
+
+The managed store retains indexed per-record history and reconstructs the
+original input snapshot at its recorded revision. Evaluations share that retained
+history, preserving the original branch, strategy-account and source-record
+identities while comparing their scientific projection. Historical audit digests
+remain unchanged. This compatibility applies transitively to plans, admissions,
+assessments, checkpoints, inheritance, candidates, readiness and support reviews,
+and scoped publication contracts.
 
 A study retaining Version 6 keeps byte-identical configuration, foundation and
 synthesis reports and needs no constitution revalidation. A research study can
@@ -923,7 +951,10 @@ Preserve the native original claim, novelty and strategy studies,
 proof checks, budgets, accounts, failed-method history, and checkpoint lineage.
 Follow the [math skill](../skills/math-solver/SKILL.md) and
 [native CLI contract](research-cli.md#native-math-preparation); common readiness
-never replaces mathematical acceptance. Historical replay remains available.
+never replaces mathematical acceptance. The math orchestration holds openness,
+independent proof review, requested formal checks and closure gates and has no
+value gate for a proposition supplied by the user. Historical replay remains
+available.
 Research validates retained foundation evidence without rerunning the historical
 preparation report or requiring equality with current common preparation.
 Applicable computation and strategy amendments remain required for fresh work.

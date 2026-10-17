@@ -59,7 +59,11 @@ readings of all relevant or contradictory hits and roots, applicable source-vali
 `standards`, and a current Grand Challenge record. A deferred decisive source
 remains a gap. Two assessors establish the Q1 bar with the candidate withheld:
 field and venues, acceptable advance over closest prior work, evidence standard
-and disqualifying conditions. Both reviews must cover the decisive evidence.
+and disqualifying conditions. Both reviewers must receive complete inspected
+ranges and every named image asset in observed packets or bound supplements.
+Coverage checks the delivered source bytes and provenance. Missing content leaves
+`direction_evidence_unassessed`; reading records and inventory alone grant no
+coverage. Qualifying historical attachments retain coverage.
 
 New decisions carry `gate_version: 2`. Recording `investigate` or `pivot` and
 committing a target require the minimum and reviewed evidence. The decision's
@@ -76,8 +80,8 @@ authority and explicit quality conditions.
 Create the workspace once with `exactory-lab init --dir PATH --slug SLUG`,
 retaining explicit revision/request identity for reliable retries. The default
 preparation preset is `lineage-v1` (the lineage and the classics in full, a
-bounded five-purpose loop of at most 100 abstracts, five innovation cases from
-ten candidates); pass `--preparation-policy exhaustive-v1` or
+bounded five-purpose loop with default limit 100 abstracts and default amounts
+of five innovation cases from ten candidates); pass `--preparation-policy exhaustive-v1` or
 `--preparation-policy screened-v1` only when the user chose them, and record the
 approved resource budget with `exactory-research budget` before costly calls.
 Change research amounts through `depth` with a reason or explicit per-call
@@ -182,8 +186,10 @@ Historical completed stores retain their status. A study can keep Version 6
 without revalidation and retain byte-identical preparation reports. Explicit
 Version 7 adoption in research alone changes no claim. Verification workspaces
 retain Version 6; their adoption is out of scope for this release. Validate old
-digests against their recorded inputs and compare claim projections; missing
-historical inputs require reassessment. Apply the new direction minimum and Q1
+digests against their recorded inputs and compare claim projections. Managed
+per-record history supplies original snapshots; `claim_reassessment_required`
+names missing or unauthenticated inputs. Follow the
+[upgrade procedure](../../docs/research-workflow.md#studies-in-progress). Apply the new direction minimum and Q1
 assurance at the next relevant commitment using retained evidence. Reconcile
 pending executions once under frozen authority. New review assignments need actual route/version isolation evidence,
 canonical packet/prompt binding and allowed-input controls; fresh agents alone

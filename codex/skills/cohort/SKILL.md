@@ -1,6 +1,6 @@
 ---
 name: cohort
-description: Use at any stage to enumerate a population, sample or screen members, read abstracts, or refresh field doctrine, with caller-stated depth and budget and recorded coverage.
+description: Use when a research question needs population enumeration, sampling, screening, abstract reading or refreshed field doctrine at any stage.
 ---
 
 # Exactory: cohort

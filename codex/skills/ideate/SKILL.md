@@ -1,6 +1,6 @@
 ---
 name: ideate
-description: Use at any stage to generate and compare candidate questions, prepare an ai-science direction decision against the Q1 bar, or plan a bounded investigation and prospective admission.
+description: Use when a study needs candidate questions, a direction decision against the Q1 bar or an investigation plan at any stage.
 ---
 
 # Exactory: ideate

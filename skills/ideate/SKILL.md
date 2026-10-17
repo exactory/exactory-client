@@ -1,5 +1,5 @@
 ---
-description: Use at any stage to generate and compare candidate questions, prepare an ai-science direction decision against the Q1 bar, or plan a bounded investigation and prospective admission.
+description: Use when a study needs candidate questions, a direction decision against the Q1 bar or an investigation plan at any stage.
 ---
 
 # Ideate
@@ -29,8 +29,13 @@ lists each obligation code.
 Two independent assessors first state the field and Q1 venues considered,
 acceptable advance over closest prior work for the intent, evidence standard
 and disqualifying conditions with the candidate withheld. Persist both bars
-before slate delivery. Both observed review packets, or observed bound
-supplements, must cover the decisive evidence and claim. At recording, the
+before slate delivery. Both reviewers must receive the decisive source content
+and claim in their observed histories or bound supplements. Coverage requires
+complete inspected ranges and every named image asset. Inventory membership,
+reading notes and assignment dates alone supply no delivery coverage.
+Missing content leaves `direction_evidence_unassessed`; qualifying historical
+attachments retain coverage. The decision contract gives the exact delivery
+and chunking rules. At recording, the
 decision carries `gate_version: 2` and `direction_evidence_digest`; new decisive
 readings require a new decision with reviews that saw them. Target commitment
 applies the same minimum and review-coverage rule.
@@ -60,7 +65,9 @@ one candidate is feasible. Obtain two independent consequence bars before
 delivering the candidate slate, then separate objective-adequacy and
 approach-adequacy findings under the verified reviewer protocol. Author advocacy
 does not establish the bar. The `direction` gate combines configuration readiness
-and the selected decision's obligations at the `cycle` boundary. Execution uses
+and the selected decision's obligations at the `cycle` boundary. Before a cycle
+decision exists, it also lists the direction minimum obligations, so missing
+evidence is visible during intake. Execution uses
 its own prospective admission.
 
 After each bar or slate `review-run`, inspect the observed output artifact for

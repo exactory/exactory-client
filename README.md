@@ -223,7 +223,8 @@ current Grand Challenge record. Two independent assessors establish the Q1 bar
 before seeing the candidate slate, then assess its potential. Result reviews
 assess support and realized advance together. New investigate, pivot and
 manuscript-development decisions require `q1_venue` passed in both reviews.
-Tool records alone grant no approval.
+Both reviewers receive the complete inspected ranges and named image assets
+behind the decisive evidence. Tool records alone grant no approval.
 
 Investigations execute prospectively admitted cycles. The manuscript receives
 separate blind measurement and publication reviews. One canonical decision
@@ -254,7 +255,9 @@ the user names. A mechanical gate does not certify scientific truth or a breakth
 | `/exactory:deposit` | Deposit the preprint to Zenodo and get its DOI |
 
 On resume, `status --summary` keeps the preparation report advisory and
-`next --summary` names the current milestone's missing condition. Claim currency
+`next --summary` names the current milestone's missing condition. The
+`direction` gate lists its minimum's missing evidence during intake, before
+a cycle decision exists. Claim currency
 follows exact supporting dependencies; unrelated reading, synthesis or policy
 changes leave plans, results and reviews current. Existing studies keep their
 evidence, results and budgets and continue from their next action. They may retain
@@ -389,9 +392,11 @@ fails with exit code 2, and no step is checked, when it is not a readable JSON
 list or nests more than 32 levels.
 
 **`exactory-math`** runs the harness of the `/exactory:math-solver` skill
-from the user's workspace. A managed objective starts with `search init`, current
-common preparation, a schema-3 proposal carrying the exported foundation,
-independent review, and `search admit`. The controller preserves the complete
+from the user's workspace. A managed objective starts with `search init`,
+a schema-3 proposal, observed independent review and `search admit`.
+Research can use `foundation: null` with a stable common review workspace,
+or retain an optional exported foundation. Verification keeps its required
+current foundation and exact-source binding. The controller preserves the complete
 objective, proof standard, evidence graph, finite task admission, resource
 accounts, and checkpoint lineage. `search status` and `search next` identify the
 current action; a recorded pause requires an authorized explicit resume.
@@ -414,8 +419,9 @@ the directory that holds the skill's own strategies and entries, which the
 solver reads as it works.
 
 After new evidence, the controller can require reviewed strategy reassessment,
-including retained failed methods. Changed common preparation requires a reviewed
-foundation amendment before fresh work. Legacy `init` and `--from` remain part of
+including retained failed methods. Research validates retained pinned foundation
+evidence independently of current common preparation. Verification retains
+current preparation checks and applicable reviewed foundation amendments. Legacy `init` and `--from` remain part of
 the unmanaged native interface; managed children use reviewed controller proposals.
 Local `finish` does not complete the controller's root objective. See the
 [native controller contract](skills/math-solver/SEARCH.md) for its exact rules.

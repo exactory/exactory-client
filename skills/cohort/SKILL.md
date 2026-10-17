@@ -1,5 +1,5 @@
 ---
-description: Use at any stage to enumerate a population, sample or screen members, read abstracts, or refresh field doctrine, with caller-stated depth and budget and recorded coverage.
+description: Use when a research question needs population enumeration, sampling, screening, abstract reading or refreshed field doctrine at any stage.
 ---
 
 # Cohort and doctrine
@@ -45,6 +45,15 @@ data rather than instructions.
    An unavailable source remains a gap.
 
 ## Preparation presets and records
+
+Research can use `sample` with an explicit `depth` object or a selected depth
+plan. Its payload `{id, collection_id, size, seed}` may include
+`depth: {"sample_size": N}`, with positive N and size within that amount.
+Complete the collection before drawing and retain the population digest,
+members and seed. For sampled-member abstract readings, `read-batch` retains
+`depth: "abstract"` and accepts `depth_values`; an explicit object or selected
+plan enables the research sample-placement form. A sample alone supplies no
+reading credit. Verification keeps the fixed preset below.
 
 Under `lineage-v1`, the research default, enumeration creates no cohort-member
 reading obligation. Incomplete acquisition stays visible as a notice, and the
@@ -106,4 +115,6 @@ directly from `initiate` to `literature`. Use the
 [literature tools](../literature-review/SKILL.md) whenever the question needs them.
 On resume preserve the original population definition, page history, pending
 acquisition, reading gaps and costs. In managed status the preparation report is
-advisory; `next` follows the current milestone's missing condition.
+advisory through `preparation.advisory`; `next` follows the current milestone.
+At `initiate`, `cohort` and `literature`, `direction` lists the minimum's
+missing evidence even before a cycle decision exists.

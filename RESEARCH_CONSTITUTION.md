@@ -247,19 +247,17 @@ scope. Presentation improvements remain useful communication work and are not
 counted as new scientific knowledge. Manuscript scores remain measurements and
 author stopping conditions, never instructions to reviewers.
 
-Existing historical decisions and completed manuscripts retain their recorded
-status. A study may retain its adopted Version 6 policy and byte-identical
-configuration, foundation and synthesis reports. A research study may explicitly
-adopt Version 7 without changing a claim through policy adoption alone. Apply new
-direction and Q1 obligations at the next relevant commitment using retained
-evidence. Validate historical digests against their recorded inputs and compare
-their claim dependencies with current ones. Reconstruct every historical input
-from recorded evidence when necessary and verify the original digest; an
-unrecoverable input requires reassessment. Preserve earlier review subjects and
-scientific work. Pending executions reconcile once under their frozen authority.
-An already admitted cycle may finish and retain its evidence. Verification
-workspaces retain Version 6; their adoption of Version 7 is out of scope for this
-release.
+Continue research from retained evidence, results, failures and resource history.
+Preserve the authority and evidence identities of historical decisions and
+completed deliverables. Apply new claim requirements at the next relevant
+commitment. Policy adoption alone leaves scientific claims current; changed
+supporting evidence requires affected reassessment.
+
+Preserve existing execution authority through reconciliation and account for
+actual outcomes once. Repeat scientific work when the required validation needs
+it. Each orchestration retains its applicable preparation and acceptance contract
+as its policy evolves.
+
 Native mathematical search, standalone evaluation and verification retain their
 own decision contracts. Sharing source infrastructure does not make them managed
 author research; the common integrity and reviewer-context requirements still

@@ -1,6 +1,6 @@
 ---
 name: literature-review
-description: Use at any stage to search, read, expand or synthesize literature, stating how many works to survey, read at abstract depth only and read in full, with budget and recorded coverage.
+description: Use when a research question needs literature search, source reading, citation expansion or source-grounded synthesis at any stage.
 ---
 
 # Exactory: literature-review

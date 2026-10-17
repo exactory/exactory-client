@@ -88,18 +88,33 @@ coverage they establish without repeating a search just to add a new label.
 New decisions record `gate_version: 2`. Recording an `investigate` or `pivot`
 decision while the minimum is unmet returns `direction_minimum_unmet`, with
 the missing obligations. The evidence must exist before the reviews that judge
-it. Both observed review packets, or observed supplements bound to them, must
-cover the decisive evidence and claim. Where a packet cannot show a decisive
-reading directly, its source inventory must include the version and the
-assignment must postdate that reading.
+it. Both reviewers must receive the decisive source content and claim in their
+observed packet histories, source-request continuations or bound supplements.
+Coverage requires the complete inspected ranges and every image asset named by
+the inspection. The harness checks the supplied bytes and their provenance
+against the exact captured source. Long ranges are delivered in consecutive
+chunks of at most 2,000 characters; PDF inspections deliver the checked original
+within the 64 MiB per-artifact bound. Every chunk of the inspected range and each
+named image must be present. A caption with an image descriptor leaves coverage
+missing until the image bytes are delivered.
+
+Reading-record equality, author notes, artifact descriptors, inventory membership
+and assignment chronology alone supply no source-content coverage. A passage
+marked `visuals_require_source_request: true` remains incomplete while required
+visual bytes are missing. Missing ranges or assets leave
+`direction_evidence_unassessed`. Qualifying historical source attachments and
+checked passage deliveries retain coverage without rewriting packets or repeating
+author reading. Assessment verifies delivery without creating source artifacts.
 
 The decision stores `direction_evidence_digest`: the direct search ID, relevant
 and contradictory versions with their full-reading IDs, roots with their
 full-reading IDs, standards section ID and digest, and Grand Challenge record
 ID. Readiness requires the minimum to hold with that same decisive evidence.
 `direction_evidence_unassessed` requires a new decision with reviews that saw
-new decisive evidence. Stamping a digest when recording a decision supplies no
-evidence of what earlier reviewers saw. Target commitment applies the same minimum
+new decisive evidence. Selecting a replacement standards section changes this
+evidence even when its conclusions match the earlier section. Stamping a digest
+when recording a decision supplies no evidence of what earlier reviewers saw.
+Target commitment applies the same minimum
 and review-coverage rule to its decision. Historical decisions keep their standing.
 
 Create a prospective dossier from the available literature. It compares the
@@ -168,7 +183,9 @@ The first result assessment checks that declaration against the source delta.
 The `direction` gate combines current configuration readiness with the selected
 decision's obligations at the `cycle` boundary. It governs completing literature
 and entering investigation planning. The complete preparation report is advisory
-for managed research; cycle execution retains prospective admission.
+for managed research; cycle execution retains prospective admission. Before a
+cycle decision exists, `gate direction` also lists the direction minimum
+obligations alongside configuration and missing-decision obligations.
 
 ## The Q1 bar and assurance
 
@@ -612,7 +629,11 @@ and synthesis changes leave the claim current. Declare relevant source changes
 through `source-impact`; changed decisive evidence requires affected assessment.
 Validate historical digests against recorded inputs before comparing their claim
 projections. Reconstruct every missing historical field from retained evidence
-and verify the original digest; unrecoverable inputs require reassessment.
+and verify the original digest. Managed per-record history supplies the original
+revision's inputs; `claim_reassessment_required` names any record whose inputs
+cannot be recovered or authenticated. The
+[workflow upgrade procedure](research-workflow.md#studies-in-progress) describes
+the compatibility mechanics.
 
 Apply new direction and Q1 obligations at the next relevant commitment. Recorded
 decisions and approved tranches keep their historical standing. Stores that never

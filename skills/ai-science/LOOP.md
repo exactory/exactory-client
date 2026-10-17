@@ -12,7 +12,9 @@ milestones. Use the [shared tools](../../docs/research-tools.md) at any point,
 stating depth and budget and recording actual work. Tool order is free; each
 claim's fixed minimum and independent assessment determine its gate. Probe
 observations remain exploratory wherever cited. The preparation report in
-managed `status` is advisory and `next` names the milestone's missing condition.
+managed `status` has `preparation.advisory: true` and `next` names the
+milestone's missing condition. At intake, `direction` already lists its
+minimum's missing evidence before a cycle decision exists.
 
 ## Develop research before writing
 
@@ -32,7 +34,11 @@ managed `status` is advisory and `next` names the milestone's missing condition.
    direction minimum: scoped direct search with bounded or complete coverage
    and accounted results, full readings of relevant/contradictory hits and
    roots, applicable standards with valid own sources, and the Grand Challenge
-   record. Both review packets must cover the decisive evidence. Its digest is
+   record. Both reviewers receive complete inspected ranges and every named
+   image asset, with checked source bytes and provenance. Observed deliveries
+   in packets, continuations and supplements establish coverage; inventory,
+   reading notes and assignment chronology alone do not. Missing content
+   leaves `direction_evidence_unassessed`. Its evidence digest is
    fixed in the decision; new decisive readings need a new reviewed decision.
    Both slate reviews pass `q1_venue` on potential under the planned method.
 3. Compare credible candidate approaches, the option of not pursuing the branch,
@@ -167,7 +173,10 @@ Claim currency follows exact objective, scope, assumptions, plans, executions,
 evidence, cited sources, inheritance, validations, failures and authorizations.
 Full dependencies remain recorded. Unrelated reading, synthesis, configuration
 or constitution changes leave the claim current. Preserve historical digests and
-validate them against recorded inputs before comparing claim projections. A
+validate them against recorded inputs before comparing claim projections.
+Managed per-record history supplies the original input snapshots; unresolved
+reconstruction reports `claim_reassessment_required`. Follow the
+[upgrade procedure](../../docs/research-workflow.md#studies-in-progress). A
 study may retain Version 6; research adoption of Version 7 alone changes no claim.
 New direction and Q1 requirements apply at the next relevant commitment, and
 pending executions reconcile once under frozen authority.

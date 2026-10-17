@@ -1,6 +1,6 @@
 ---
 name: literature-review
-description: Use at any stage to search, read, expand or synthesize literature, stating how many works to survey, read at abstract depth only and read in full, with budget and recorded coverage.
+description: Use when a research question needs literature search, source reading, citation expansion or source-grounded synthesis at any stage.
 ---
 
 # Literature review and synthesis
@@ -24,7 +24,10 @@ authorized budget; a research default change uses `depth` with a reason and
 consuming calls accept applicable overrides.
 
 The [tool catalog](../../docs/research-tools.md) gives the shared contracts.
-Preparation policies supply presets. Tool records grant no approval; a claim's
+Preparation policies supply presets. Research `read-batch` calls keep
+`depth: "abstract"` and put loop, round-loop and search-hit amount overrides
+in `depth_values`; the saved batch records `effective_depth`.
+Tool records grant no approval; a claim's
 fixed minimum and independent assessment determine sufficiency. Managed
 `status` marks preparation `advisory: true` and `next` names the current
 milestone's missing condition. Verification retains its fixed contract.
@@ -88,7 +91,9 @@ page positions, provider and request ordering, and completeness evidence.
 `complete` requires enumeration evidence, `top_k` ordering evidence, and
 `bounded_unordered` describes inspection without that ordering. Author labels
 supply neither. Bounded inspection leaves results beyond it unknown; parser or
-capture errors remain integrity gaps. Legacy captures retain established
+capture errors remain integrity gaps for research. Verification keeps every recorded enumeration
+pending item and its `search_pending` obligation, including under the current
+coverage schema. Legacy captures retain established
 coverage and use `unspecified` only when ambiguous. See the
 [coverage contract](../../docs/research-tools.md#search-coverage).
 
@@ -166,8 +171,11 @@ The complete preparation report remains advisory.
 Use the [direction decision contract](../../docs/research-decisions.md#before-target-commitment)
 when the orchestration commits a direction. Two assessors establish the Q1 bar
 before receiving the slate. Recording a version-2 investigate/pivot decision and
-committing a target require the minimum and packets covering the decisive
-evidence. The decision binds `direction_evidence_digest`; newly read decisive
+committing a target require the minimum and source content actually delivered
+in each reviewer's observed history. Complete inspected ranges and every image
+asset named by an inspection are required. Missing ranges or image bytes keep
+`direction_evidence_unassessed`. Inventory, reading notes and chronology alone
+supply no delivery coverage; qualifying historical attachments remain usable. The decision binds `direction_evidence_digest`; newly read decisive
 evidence needs a new decision with reviews that saw it. `q1_venue` assesses
 potential in slate reviews and realized supported advance at results.
 Target commitment retains its exact approved content and source-impact declaration.
@@ -182,8 +190,10 @@ in its abstract reading (`innovation_candidates_missing` until the effective
 count is read), and choose the effective number of external cases among them
 (`innovation_case_not_candidate`, `external_cases_insufficient`,
 `external_cases_excess`); the lineage supplies the within-field case. Under
-`exhaustive-v1` and `screened-v1`, study within-field innovations plus five to
-ten distinct external original paper families in full. Analyze each mechanism,
+`exhaustive-v1` and `screened-v1`, a new section uses the recorded
+`innovation_cases` as its minimum external-family count and
+`max(10, innovation_cases)` as its maximum, alongside a within-field case.
+Historical sections without recorded depth retain five to ten external families. Analyze each mechanism,
 original constraint, evidence, transfer assumptions, limits, distinguishing
 test, and failure signal. Several versions or case labels of one paper do not
 create more families. Shared examples can suggest papers but must be reread and
@@ -209,7 +219,8 @@ impact goals are not verifier requirements.
 
 Return the completed work, actual coverage and remaining gaps to the caller.
 The orchestration evaluates its current gate. In managed research
-`gate direction` governs completing literature and entering investigation planning;
+`gate direction` lists the minimum's missing evidence before a cycle decision
+exists and governs completing literature and entering investigation planning;
 `gate execution` governs admission to experiment. `gate preparation` remains
 an advisory preparation report there. Native mathematical research can use an
 optional common foundation; verification retains its required preparation.

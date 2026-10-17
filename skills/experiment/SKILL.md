@@ -1,5 +1,5 @@
 ---
-description: Use at any stage for quick exploratory calculations with a probe, or to execute admitted research cycles, assess results, renew an investigation or prepare a result decision for writing.
+description: Use when a study needs an exploratory calculation at any stage, an admitted execution, result assessment or a decision before writing.
 ---
 
 # Experiment
@@ -31,18 +31,28 @@ and inputs and records `probe-intent` before launch, reserving the timeout again
 the `experiment` purpose. The observed `probe` outcome pins outputs, stdout and
 stderr, records exit status and actual elapsed time, charges that usage and
 releases the reservation, including failures, timeouts and output-bound outcomes.
-Launch ownership is persisted and exclusive. Repeating an ID returns its outcome
+Launch ownership is persisted and exclusive. The frozen `supervision.json`
+binds worker/program identities, process group and deadline. An independent
+watchdog enforces the deadline after worker loss even without a retry. It writes
+`supervisor-timeout.json`, terminates the program group, verifies termination
+and writes `supervisor-terminal.json`. A later retry records the outcome and
+reconciles actual usage before releasing the reservation.
+
+Repeating an ID returns its outcome
 or `pending` for a live owner. Reconcile an unfinished intent only after owner
-loss or terminal evidence; retain its reservation while ownership is live.
+loss or checked terminal evidence and confirmation that the original computation
+has stopped; retain the reservation until reconciliation. Preserve measured
+elapsed time and record unmeasured usage as unknown.
 
 Cite probes in dossiers with their record references. Probe artifacts retain
 exploratory origin through references and imports, with no prospective-test
 credit. Existing supported imported evidence retains its standing. Independent
 support assessment determines the additional validation a claim needs; repeat an
 execution when that validation requires it and retain the prior chronology.
-Native mathematical proof credit is out of scope for a common-workspace probe.
 Computations relied on by recorded mathematical strategy decisions, proofs,
 finite checks, counterexamples or acceptances require native admission.
+Follow the [native provenance contract](../math-solver/SEARCH.md#computation-admission-and-mandatory-interpretation)
+for imported exploratory output and `exploratory_evidence`.
 
 ## Plan and execute each cycle
 

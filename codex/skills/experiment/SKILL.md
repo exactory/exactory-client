@@ -1,6 +1,6 @@
 ---
 name: experiment
-description: Use at any stage for quick exploratory calculations with a probe, or to execute admitted research cycles, assess results, renew an investigation or prepare a result decision for writing.
+description: Use when a study needs an exploratory calculation at any stage, an admitted execution, result assessment or a decision before writing.
 ---
 
 # Exactory: experiment

@@ -102,12 +102,15 @@ full readings, source units, dates, and availability gaps in the common records.
 
 Preserve `cohort/doctrine.md` and notes as source-grounded synthesis. Record
 searches and synthesis with the supported mutations at the depth the
-current question needs. The preparation report is advisory in managed status;
-`next` follows the current milestone. The direction minimum includes the
+current question needs. Managed status sets `preparation.advisory: true`;
+`next` follows the current milestone. The `direction` gate lists its minimum
+even before a cycle decision exists. The direction minimum includes the
 scoped direct search, full readings of relevant/contradictory hits and roots,
 applicable source-valid standards and a Grand Challenge record. Its decision
-binds decisive evidence seen by both reviewers and the passed `q1_venue`
-assurances. Other synthesis notes remain available throughout. The human survey
+binds decisive content delivered to both reviewers and the passed `q1_venue`
+assurances. Deliveries cover complete inspected ranges and every named image
+asset with checked provenance. Inventory and author notes alone supply no
+source-content coverage; missing content keeps `direction_evidence_unassessed`. Other synthesis notes remain available throughout. The human survey
 log points to those records and original evidence; it does not substitute for them.
 
 ## Depth plans and claim currency
@@ -124,7 +127,11 @@ assumptions, plan, executions, supporting evidence and cited sources, inheritanc
 validations, failures and authorizations. Unrelated global preparation,
 configuration, constitution, foundation inventory and synthesis changes leave
 the claim current. Validate historical digests against recorded inputs before
-comparing claim projections; unrecoverable inputs require reassessment.
+comparing claim projections. Managed per-record history reconstructs the original
+revision's input snapshot; missing or unauthenticated inputs report
+`claim_reassessment_required`. The
+[workflow](../../docs/research-workflow.md#studies-in-progress) gives the
+compatibility procedure.
 Reconcile pending executions once under their frozen authority.
 
 ## Experiments, branches, and claims
