@@ -228,18 +228,18 @@ def _closure(seed, state, content, artifacts, *, write, common_records=None):
                     pending.append(s.digest(common_records[namespace][identity]))
         media = _media(raw, category == "blob")
         from .provenance import collect_import_sources, publish_import_sources
-        sources = collect_import_sources(digest, state, content, artifacts, common_records or {})
+        sources, dependencies = collect_import_sources(digest, state, content, artifacts, common_records or {})
         reference = describe_artifact(raw, media)
         if sources:
             reference["raw_identities"] = [item for item, original in sources]
         found[digest] = {"digest": digest, "kind": category, "artifact": reference}
-        materialized[digest] = (raw, media, sources)
+        materialized[digest] = (raw, media, sources, dependencies)
     if write:
         # An original can itself be normalized. Commit its provenance before
         # exposing it, then publish the requested artifacts after their aliases.
-        for digest, (raw, media, sources) in sorted(materialized.items()):
-            publish_import_sources(artifacts, digest, sources, state=state, content=content, records=common_records or {})
-        for raw, media, sources in materialized.values():
+        for digest, (raw, media, sources, dependencies) in sorted(materialized.items()):
+            publish_import_sources(artifacts, digest, raw, sources, dependencies)
+        for raw, media, sources, dependencies in materialized.values():
             artifacts.put(raw, media)
     return ([found[key] for key in sorted(found)], sorted(unavailable),
             [provenance[key] for key in sorted(provenance)])

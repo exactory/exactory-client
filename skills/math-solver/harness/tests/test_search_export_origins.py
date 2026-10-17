@@ -264,8 +264,8 @@ class ExportOriginTests(SearchCLIWorkspace, unittest.TestCase):
         origins = collect_probe_origins(self.root, controller.status(), [identity])
         self.assertEqual([row["probe_id"] for row in origins], ["explore"])
 
-    def build_unpublished_non_ascii_chain(self, *, original=None):
-        """Stage A -> U -> R without publishing common normalization aliases."""
+    def build_unpublished_non_ascii_chain(self, *, original=None, mixed_cycle=False):
+        """Stage a normalization closure without publishing its common aliases."""
         from research_harness.artifacts import describe_artifact
         from search_controller.provenance import record_probe_origins
         from search_controller.storage import ContentSink
@@ -273,24 +273,29 @@ class ExportOriginTests(SearchCLIWorkspace, unittest.TestCase):
         forms = ['{ "result" : "λ" }\n'.encode(), '{"result":"λ"}'.encode(), b'{"result":"\\u03bb"}']
         if original is not None:
             forms[0] = original
-        self.record_probe_output(forms[0])
+        self.record_probe_output(forms[2] if mixed_cycle else forms[0])
         controller = Controller(self.root)
         state, content = controller.status(), ContentSink(controller.store)
         identities = [content.put_artifact(raw) for raw in forms]
-        utf8_source = identities[2] if original == forms[1] else identities[0]
+        utf8_source = identities[2] if mixed_cycle or original == forms[1] else identities[0]
         record_probe_origins(state, {"bindings": [
             {"digest": identities[1], "raw_digest": utf8_source, "origins": []},
             {"digest": identities[2], "raw_digest": identities[1], "origins": []}]})
+        if mixed_cycle:
+            record_probe_origins(state, {"bindings": [
+                {"digest": identities[1], "raw_digest": identities[0], "origins": []}]})
         references = [describe_artifact(raw, "application/json") for raw in forms]
         return controller, state, content, references
 
-    def assert_interrupted_export_keeps_origins(self, *, original=None, target_index=2):
+    def assert_interrupted_export_keeps_origins(self, *, original=None, target_index=2, mixed_cycle=False):
         from research_harness import operations
         from research_harness.errors import ResearchError
         from research_harness.probe_provenance import find_probe_artifact_origins
         from research_harness.storage import Store
         from search_controller.reviewer import _closure
-        controller, state, content, references = self.build_unpublished_non_ascii_chain(original=original)
+        controller, state, content, references = self.build_unpublished_non_ascii_chain(
+            original=original, mixed_cycle=mixed_cycle)
+        probe_digest = references[2 if mixed_cycle else 0]["sha256"]
         native_before = controller.store.read()
         target = references[target_index]["sha256"]
         seed = {"evidence_digests": [target]}
@@ -314,10 +319,13 @@ class ExportOriginTests(SearchCLIWorkspace, unittest.TestCase):
                         if error.code != "artifact_missing":
                             raise
                         continue
-                    expected = {"probe_id": "explore", "sha256": reference["sha256"], "roles": ["outputs", "stdout"]}
-                    if reference["sha256"] != references[0]["sha256"]:
-                        expected["raw_sha256"] = references[0]["sha256"]
-                    self.assertEqual(find_probe_artifact_origins(before["records"], [reference], artifacts=artifacts), [expected])
+                    expected = []
+                    if not mixed_cycle or reference != references[0]:
+                        origin = {"probe_id": "explore", "sha256": reference["sha256"], "roles": ["outputs", "stdout"]}
+                        if reference["sha256"] != probe_digest:
+                            origin["raw_sha256"] = probe_digest
+                        expected.append(origin)
+                    self.assertEqual(find_probe_artifact_origins(before["records"], [reference], artifacts=artifacts), expected)
                 self.assertEqual(store.snapshot(), before)
 
             def record_step(step):
@@ -328,6 +336,19 @@ class ExportOriginTests(SearchCLIWorkspace, unittest.TestCase):
 
             put = ArtifactStore.put
             def publish(artifacts, raw, media_type):
+                published = hashlib.sha256(raw).hexdigest()
+                if published in {reference["sha256"] for reference in references[1:]}:
+                    aliases = store.snapshot()["records"].get("native_import_identity", {})
+                    for original in references:
+                        if original["sha256"] == published:
+                            continue
+                        try:
+                            artifacts.read(original)
+                        except ResearchError as error:
+                            if error.code != "artifact_missing":
+                                raise
+                        else:
+                            self.assertIn(published + ":" + original["sha256"], aliases)
                 reference = put(artifacts, raw, media_type)
                 record_step(("artifact", reference["sha256"]))
                 return reference
@@ -367,6 +388,9 @@ class ExportOriginTests(SearchCLIWorkspace, unittest.TestCase):
 
     def test_interrupted_non_ascii_chain_keeps_every_readable_form_exploratory(self):
         self.assert_interrupted_export_keeps_origins()
+
+    def test_interrupted_mixed_cycle_keeps_an_ascii_probe_origin_on_both_encodings(self):
+        self.assert_interrupted_export_keeps_origins(mixed_cycle=True)
 
     def test_non_ascii_chain_assessment_and_historical_replay_publish_nothing(self):
         from research_harness.storage import Store
