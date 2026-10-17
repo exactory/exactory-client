@@ -136,21 +136,26 @@ def append_import_identities(payload, content):
 
 
 def collect_import_sources(digest, state, content, artifacts, records):
-    """Recover checked original JSON bytes without publishing anything."""
+    """Recover original JSON bytes and their retained provenance dependencies."""
     from research_harness.artifacts import describe_artifact
     from .reviewer import _read_optional
-    sources, pending, seen = {}, [digest], set()
+    sources, dependencies, pending, seen = {}, {}, [digest], set()
     while pending:
         current = pending.pop()
         if current in seen:
             continue
         seen.add(current)
         s.require(len(seen) <= 10000, "Export identity closure is excessive", "dependency_cycle")
+        dependencies[current] = set()
         for identity in records.get("native_import_identity", {}).values():
             if identity["canonical_digest"] == current:
                 sources[identity["raw"]["sha256"]] = check_import_identity(identity, artifacts, content=content)
+                dependencies[current].add(identity["raw"]["sha256"])
         raw_digests = set(state["service"].get("import_identities", {}).get(current, []))
         raw_digests.update(getattr(content, "import_identities", {}).get(current, []))
+        # Identity-only bindings also describe ordinary binary evidence; only
+        # distinct originals represent JSON normalization dependencies.
+        dependencies[current].update(raw_digests - {current})
         for raw_digest in sorted(raw_digests):
             if raw_digest in seen or raw_digest in sources:
                 continue
@@ -165,7 +170,8 @@ def collect_import_sources(digest, state, content, artifacts, records):
     for raw in sources.values():
         check_normalized_identity(digest, raw)
     sources.pop(digest, None)
-    return [(describe_artifact(sources[key], "application/json"), sources[key]) for key in sorted(sources)]
+    return ([(describe_artifact(sources[key], "application/json"), sources[key]) for key in sorted(sources)],
+            dependencies)
 
 
 def publish_import_identity(artifacts, digest, raw, *, publish=True):
@@ -198,46 +204,55 @@ def publish_import_identity(artifacts, digest, raw, *, publish=True):
                     raise
 
 
-def publish_import_cycle(artifacts, digest, sources):
-    """Resolve a canonical cycle from an authenticated, already readable member."""
+def publish_import_sources(artifacts, digest, raw, sources, dependencies):
+    """Commit aliases to every readable original before exposing a dependent.
+
+    Leaves supply durable originals; other members need a readable predecessor.
+    A readable export target remains an original when another member uses it.
+    The same ordering handles chains, cycles and their noncanonical sources.
+    """
+    from research_harness.artifacts import describe_artifact
     from research_harness.errors import ResearchError
-    members = {reference["sha256"]: (reference, raw) for reference, raw in sources}
-    for _, raw in members.values():
-        check_normalized_identity(digest, raw)
-    for reference, raw in members.values():
+    members = {reference["sha256"]: (reference, original) for reference, original in sources}
+    if any(digest in originals for originals in dependencies.values()):
+        members[digest] = (describe_artifact(raw, "application/json"), raw)
+    for canonical, originals in dependencies.items():
+        for original in originals:
+            check_normalized_identity(canonical, members[original][1])
+    predecessors = {identity: dependencies[identity] - {identity} for identity in members}
+    for original, (reference, original_raw) in members.items():
+        # The publication helper also retains portable aliases for both JSON
+        # encodings, so include those checked edges in the publication order.
+        for canonical in check_normalized_identity(digest, original_raw):
+            if canonical in predecessors and canonical != original:
+                predecessors[canonical].add(original)
+
+    readable = set()
+    for identity, (reference, original) in members.items():
         try:
             artifacts.read(reference)
         except ResearchError as error:
             if error.code != "artifact_missing":
                 raise
         else:
-            publish_import_identity(artifacts, digest, raw, publish=False)
-            anchor = reference["sha256"]
-            break
-    else:
-        raise ResearchError("artifact_missing", "A normalization cycle requires an already readable original")
-    for reference, raw in members.values():
-        if reference["sha256"] != anchor:
-            publish_import_identity(artifacts, digest, raw)
-
-
-def publish_import_sources(artifacts, digest, sources, *, state, content, records):
-    """Publish originals and their aliases before exposing normalized sources.
-
-    Only canonical JSON encodings can have normalization dependencies. Each
-    noncanonical original authenticates aliases for both encodings, so commit
-    those aliases before publishing either encoding as an intermediate source.
-    """
-    encodings = set()
-    for _, raw in sources:
-        encodings.update(check_normalized_identity(digest, raw))
-    has_noncanonical_originals = any(reference["sha256"] not in encodings for reference, _ in sources)
-    for reference, raw in sorted(sources, key=lambda item: item[0]["sha256"] in encodings):
-        if not has_noncanonical_originals:
-            originals = collect_import_sources(reference["sha256"], state, content, artifacts, records)
-            if originals:
-                return publish_import_cycle(artifacts, digest, sources + originals)
-        publish_import_identity(artifacts, digest, raw)
+            readable.add(identity)
+    pending, committed = set(members) - readable, set()
+    while True:
+        # Each original authenticates both canonical encodings. Include every
+        # readable member, even the target omitted from the packet's sources.
+        for original in sorted(readable - committed):
+            publish_import_identity(artifacts, digest, members[original][1], publish=False)
+            committed.add(original)
+        if not pending:
+            return
+        ready = [identity for identity in pending
+                 if not predecessors[identity] or predecessors[identity] & readable]
+        if not ready:
+            raise ResearchError("artifact_missing", "A normalization closure requires a readable original")
+        identity = min(ready, key=lambda key: (bool(predecessors[key]), key == digest, key))
+        artifacts.put(members[identity][1], "application/json")
+        readable.add(identity)
+        pending.remove(identity)
 
 
 def record_probe_origins(state, payload):
