@@ -4,7 +4,6 @@ import copy
 import json
 import unittest
 from collections import Counter
-from pathlib import Path
 from unittest.mock import patch
 
 from development_fixtures import DevelopmentCase
@@ -87,14 +86,13 @@ class ClaimDependencyTests(DevelopmentCase):
         self.assertFalse(report["ready"])
         self.assertIn("readiness_review_stale", {item["code"] for item in report["obligations"]})
 
-    def build_broad_reading_candidate(self, *, legacy):
+    def build_broad_reading_candidate(self):
         from research_harness.reading import record_reading
         self.build_managed_study()
         self.mutate(record_reading, self.abstract_note(self.links[0]["version_id"], "earlier-unused-abstract"))
-        # Freeze the broad source formula used by 693fa04, with the 0.50.1
-        # global composition when requested. The ordinary reader is upgraded.
+        # Record the complete 0.50.1 composition; the ordinary reader is upgraded.
         with patch.object(development, "project_source_inputs", lambda sources, evidence: sources, create=True), \
-                patch.object(development, "uses_claim_dependencies", return_value=not legacy):
+                patch.object(development, "uses_claim_dependencies", return_value=False):
             plan, execution = self.run_cycle(bind_plan(self, self.plan()))
             self.execution_payload = execution
             self.mutate(development.assess_cycle, self.assessment(plan, execution))
@@ -104,9 +102,9 @@ class ClaimDependencyTests(DevelopmentCase):
             self.assertTrue(saved["ready"], saved["obligations"])
         return saved
 
-    def check_broad_reading_candidate(self, *, legacy):
+    def test_legacy_digest_authenticates_broad_readings_before_narrowing(self):
         from research_harness.reading import record_reading
-        saved = self.build_broad_reading_candidate(legacy=legacy)
+        saved = self.build_broad_reading_candidate()
         upgraded = self.read_state()
         self.assertTrue(upgraded["ready"], upgraded["obligations"])
         self.assertNotEqual(saved["candidate"]["digest"], upgraded["candidate"]["digest"])
@@ -117,28 +115,6 @@ class ClaimDependencyTests(DevelopmentCase):
                                                        record_id="hash-only-support"))
         self.mutate(record_reading, self.abstract_note(self.links[0]["version_id"], "later-unused-abstract"))
         self.assert_current(upgraded)
-
-    def test_previous_claim_digest_authenticates_broad_readings_before_narrowing(self):
-        self.check_broad_reading_candidate(legacy=False)
-
-    def test_legacy_digest_authenticates_broad_readings_before_narrowing(self):
-        self.check_broad_reading_candidate(legacy=True)
-
-    def test_previous_broad_alias_review_keeps_its_authenticated_origin_current(self):
-        self.build_broad_reading_candidate(legacy=True)
-        records = self.store.snapshot()["records"]
-        selected = records["development_selection"]["review"]["review_id"]
-        payload = copy.deepcopy(records["readiness_review"][selected]["payload"])
-        payload["id"] = "previous-broad-alias-review"
-        with patch.object(development, "project_source_inputs", lambda sources, evidence: sources):
-            self.mutate(development.record_readiness_review, payload)
-        saved = self.store.snapshot()["records"]["readiness_review"][payload["id"]]
-        self.assertIn("candidate_inputs", saved)
-        before = self.read_state()
-        self.assertTrue(before["ready"], before["obligations"])
-        from research_harness.reading import record_reading
-        self.mutate(record_reading, self.abstract_note(self.links[0]["version_id"], "unused-after-alias"))
-        self.assert_current(before)
 
     def test_changed_cited_passage_or_used_full_reading_still_invalidates_reviews(self):
         self.build_managed_candidate()

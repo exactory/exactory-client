@@ -1,6 +1,5 @@
 import copy
 from functools import partial
-from pathlib import Path
 from unittest.mock import patch
 
 from development_fixtures import DevelopmentCase

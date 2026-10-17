@@ -105,12 +105,7 @@ def accept_claim_dependencies(recorded, current, *, managed, recorded_inputs=Non
             return project_claim_dependencies(recorded, managed=True, kind=kind) == current
         return recorded == current
     projected = project_claim_dependencies(recorded_inputs, managed=True, kind=kind)
-    compositions = [digest(recorded_inputs), digest(projected)]
-    if kind == "readiness":
-        # 693fa04 projected policy but retained the broad reading inventory.
-        compositions.append(digest(project_claim_dependencies(recorded_inputs, managed=True,
-                                                              kind=kind, project_readings=False)))
-    if recorded not in compositions:
+    if recorded not in (digest(recorded_inputs), digest(projected)):
         return False
     claim = projected if recorded_claim is None else recorded_claim
     return (digest(claim) if isinstance(current, str) else claim) == current

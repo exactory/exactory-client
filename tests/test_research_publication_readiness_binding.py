@@ -96,33 +96,6 @@ class ManagedPublicationCurrencyTests(DevelopmentCase):
         self.read_source(2)
         self.assertEqual(publication._bundle(self.store.snapshot()["records"], self.artifacts), bundle)
 
-    def test_previous_broad_pin_preserves_a_legacy_alias_review(self):
-        import copy
-        from integration_fixtures import account_fixture_citations
-        from research_harness import development
-        from research_harness.reading import record_reading
-        original = self.prepare_managed_bundle(legacy=True, extra_abstract=True)
-        records = self.store.snapshot()["records"]
-        review_id = records["development_selection"]["review"]["review_id"]
-        payload = copy.deepcopy(records["readiness_review"][review_id]["payload"])
-        payload["id"] = "previous-broad-alias"
-        project = publication.project_claim_dependencies
-
-        def project_broad(value, **options):
-            return project(value, **dict(options, project_readings=False))
-
-        with patch.object(development, "project_source_inputs", lambda sources, evidence: sources), \
-                patch.object(publication, "project_claim_dependencies", project_broad):
-            self.mutate(development.record_readiness_review, payload)
-            bundle = self.mutate(publication.prepare_publication, {
-                "id": "previous-broad-pin",
-                "files": {kind: item["path"] if item else None for kind, item in original["files"].items()},
-                "claim_evidence": original["claim_evidence"],
-                "citation_accounting": account_fixture_citations(self)})["result"]
-        self.assertEqual(publication._bundle(self.store.snapshot()["records"], self.artifacts), bundle)
-        self.mutate(record_reading, self.abstract_note(self.links[0]["version_id"], "later-unused-abstract"))
-        self.assertEqual(publication._bundle(self.store.snapshot()["records"], self.artifacts), bundle)
-
     def test_legacy_manuscript_accepts_new_projected_support_for_unchanged_science(self):
         bundle = self.prepare_managed_bundle(legacy=True)
         self.mutate(self.development().record_readiness_review, self.review(self.execution_payload, identifier="new-support"))

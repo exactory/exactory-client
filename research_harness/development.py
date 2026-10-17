@@ -272,9 +272,9 @@ class _Context:
                                              managed=True, recorded_inputs=body, kind="candidate"):
                 self.require_reassessment(record_id, "authenticated recorded candidate")
         expected = saved["digest"] if saved is not None else recorded_digest
-        # Current reading projection, 693fa04's broad managed inventory, and
-        # 0.50.1's complete audit composition, all on this recorded snapshot.
-        modes = ((True, True), (True, False), (False, False))
+        # The current composition (claims and readings projected), then the
+        # complete 0.50.1 composition, both on this recorded snapshot.
+        modes = ((True, True), (False, False))
         if saved is not None and digest(body) == expected:
             modes = ((False, False),)
         for project_claims, project_readings in modes:
