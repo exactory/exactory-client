@@ -706,23 +706,24 @@ class TestManagedDepositForAProblem(_PendingAttachmentTests, _DepositTestCase):
         self.assertEqual(self.fake_api.requests, [])
         self.assertEqual(self.exactory.calls, [])
 
-    def test_new_version_reads_back_and_continues_a_prior_draft_that_has_no_doi(self) -> None:
+    def test_new_version_refuses_a_fresh_draft_that_has_no_concept_doi(self) -> None:
         self._deposit(["--creator", "Shiroshita, Ryosuke"])
+        prior = json.loads((self.workspace_dir / ".exactory/deposit.json").read_text())
         self.fake_api.requests.clear()
 
-        output = self._deposit(["--new-version", "--creator", "Shiroshita, Ryosuke"])
+        output = self._deposit(["--new-version", "--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
 
         # The managed check refuses a prior with no DOI; the direct path then reads that prior back.
         self.assertIn("Managed record skipped (publication_prior_required): The prior deposit, deposition 4242,"
                       " has no recorded DOI. Open https://sandbox.zenodo.org/api/deposit/4242 and check its state.",
                       output)
         self.assertNotIn("not a published record", output)
-        self.assertIn("Continuing with draft deposition 4242", output)
+        self.assertIn("fresh draft, not a version of the workspace's published record", output)
+        self.assertIn("Delete button", output)
         self.assertEqual((self.fake_api.requests[0].get_method(), self.fake_api.requests[0].full_url),
                          ("GET", "https://sandbox.zenodo.org/api/deposit/depositions/4242"))
-        self.assertFalse(any(request.get_method() == "POST" for request in self.fake_api.requests))
-        state = json.loads((self.workspace_dir / ".exactory/deposit.json").read_text())
-        self.assertEqual(state["deposition_id"], 4242)
+        self.assertEqual(len(self.fake_api.requests), 1)
+        self.assertEqual(json.loads((self.workspace_dir / ".exactory/deposit.json").read_text()), prior)
 
 
     def test_after_the_retry_the_same_manuscript_resumes_the_same_completed_deposit(self) -> None:
@@ -2067,22 +2068,23 @@ class TestProblemDepositJournalStates(_PlainWorkspaceDepositTestCase):
         self.assertEqual(output.count("Managed record skipped (store_busy)"), 1)
         self.assertEqual(self.read_deposit_state()["doi"], "10.5281/zenodo.4242")
 
-    def test_new_version_reads_back_a_prior_deposit_whose_publish_was_refused(self) -> None:
+    def test_new_version_refuses_a_fresh_draft_whose_plain_publish_was_refused(self) -> None:
         self._answer_with(_StatusErrorZenodoApi("/actions/publish", 400))
         self._deposit(_PRODUCTION_PUBLISH, expected_exit_code=1)
-        # The refused publish left the deposition in the record of the workspace, with no DOI.
-        self.assertNotIn("doi", self.read_deposit_state())
+        # A refused plain publish leaves a fresh draft, without a prior concept DOI.
+        prior = self.read_deposit_state()
+        self.assertNotIn("doi", prior)
+        self.assertNotIn("concept_doi", prior)
         self._answer_with(_FakeZenodoApi())
 
-        output = self._deposit(["--production", "--new-version", "--creator", "Shiroshita, Ryosuke"])
+        output = self._deposit(["--production", "--new-version", "--creator", "Shiroshita, Ryosuke"],
+                               expected_exit_code=1)
 
-        self.assertIn("Continuing with draft deposition 4242", output)
-        self.assertNotIn("not a published record", output)
-        self.assertEqual((self.fake_api.requests[0].get_method(), self.fake_api.requests[0].full_url),
-                         ("GET", "https://zenodo.org/api/deposit/depositions/4242"))
-        self.assertFalse(any(request.get_method() == "POST" for request in self.fake_api.requests))
-        self.assertEqual(self.read_deposit_state()["deposition_id"], 4242)
-        self.assertNotIn("doi", self.read_deposit_state())
+        self.assertIn("Deposition 4242 is a fresh draft, not a version of the workspace's published record:"
+                      " https://zenodo.org/api/deposit/4242. Delete it with the Delete button on its page."
+                      " Then run the same command again with --new-version.", output)
+        self.assertEqual(self.requested(), [("GET", "https://zenodo.org/api/deposit/depositions/4242")])
+        self.assertEqual(self.read_deposit_state(), prior)
 
 
 class TestExplainUnsettledJournal(_PlainWorkspaceDepositTestCase):

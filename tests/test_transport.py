@@ -1169,7 +1169,7 @@ _UNUSABLE_API_URL_ERR_MSG = ("EXACTORY_API_URL is not an address that the client
 
 
 class TestApiBaseUrlCheck(_OpenUrlTransportTestCase):
-    """EXACTORY_API_URL is configuration, so the command checks it where it reads it (CLAUDE.md §2). A value that
+    """main checks EXACTORY_API_URL once, after parsing arguments and before a handler runs (CLAUDE.md §2). A value that
     urllib or http.client would refuse, or would read as another address, ends the command before any request."""
 
     _UNUSABLE_URLS = ("http://127.0.0.1:abc", "https://api.test:99999", "http://127.0.0.1/a b", "https://api.test/x\n",

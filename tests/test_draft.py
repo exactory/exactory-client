@@ -1080,6 +1080,7 @@ class TestNewVersion(_DepositTestCase):
 
     def test_new_version_reuses_the_stored_deposition(self) -> None:
         self.record_prior_deposit()
+        prior = self.read_deposit_state()
         self._deposit(["--new-version", "--creator", "Shiroshita, Ryosuke"])
         requested = [(request.get_method(), request.full_url)
                      for request in self.fake_api.requests]
@@ -1099,6 +1100,15 @@ class TestNewVersion(_DepositTestCase):
             ["https://sandbox.zenodo.org/api/files/bucket-2/paper.pdf"],
         )
         self.assertEqual(self.read_deposit_state()["deposition_id"], 4343)
+        self.assertEqual(self.read_deposit_state().get("concept_doi"), prior["concept_doi"])
+        self.fake_api.requests.clear()
+
+        self._deposit(["--new-version", "--publish", "--creator", "Shiroshita, Ryosuke"])
+
+        requested = [(request.get_method(), request.full_url) for request in self.fake_api.requests]
+        self.assertEqual(requested[0], ("GET", "https://sandbox.zenodo.org/api/deposit/depositions/4343"))
+        self.assertEqual(sum(url.endswith("/actions/publish") for _, url in requested), 1)
+        self.assertFalse(any(url.endswith("/actions/newversion") for _, url in requested))
 
     def read_deposit_state(self) -> dict:
         return json.loads(
@@ -1331,8 +1341,8 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
                       self.fake_api.printed_before_publish)
 
     def test_a_lost_publish_response_names_the_record_instead_of_a_second_run(self) -> None:
-        # A direct deposit saves no intent, so there is nothing to resume: the
-        # advice names the record to open, and the advice to send the request
+        # A plain deposit saves no intent. The advice names the record to open
+        # before another plain run, and the advice to send the request
         # again stays off this one request. The advice stands on stderr alone,
         # because the caller that reads it there holds no stdout line.
         self.fake_api = _LostResponseZenodoApi("/actions/publish")
@@ -1345,7 +1355,8 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
                       " https://sandbox.zenodo.org/api/deposit/4242 and read its state.",
                       stderr_text)
         self.assertIn("a second plain run publishes a second permanent record", stderr_text)
-        self.assertNotIn("Then run the command again", stderr_text)
+        self.assertIn("If it is still a draft, delete it with the Delete button on its page, then run the command again.",
+                      stderr_text)
 
     def test_a_lost_create_response_names_the_draft_that_may_exist(self) -> None:
         # Zenodo can have created the draft before the answer was lost, and a
@@ -1473,7 +1484,7 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
         self.assertTrue(stderr_text.endswith(
             "Deposition 4343 of this run stays a draft on Zenodo: https://sandbox.zenodo.org/api/deposit/4343. Run the"
             " same command again with --new-version. It reads the workspace's record first. If that record has no"
-            " DOI, it reads deposition 4343 back first. It continues with this draft while it is unpublished, and"
+            " DOI, it reads deposition 4242 back first. It continues with this draft while it is unpublished, and"
             " never publishes a second record.\n"), stderr_text)
 
     def test_a_refused_publish_of_a_new_version_says_that_a_second_run_reads_back_its_draft(self) -> None:
@@ -1488,8 +1499,8 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
 
         self.assertTrue(stderr_text.endswith(
             "Deposition 4343 of this run stays a draft on Zenodo: https://sandbox.zenodo.org/api/deposit/4343. Run the"
-            " same command again with --new-version. It reads deposition 4343 back first, continues with it while it"
-            " is a draft, and never publishes a second record.\n"), stderr_text)
+            " same command again with --new-version. It reads deposition 4343 back first. It continues a draft only"
+            " when its record carries a concept DOI, and never publishes a second record.\n"), stderr_text)
         # What the advice says a second run does is what it does.
         self.fake_api = _FakeZenodoApi()
         _draft._open_url = self.fake_api
@@ -1510,8 +1521,8 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
         self.assertTrue(stderr_text.endswith(
             "The client cannot read the answer of the Zenodo API. Cause: connection reset by peer. Deposition 4343 may"
             " be published already. Open https://sandbox.zenodo.org/api/deposit/4343 and read its state. Run the same"
-            " command again with --new-version. It reads deposition 4343 back first, continues with it while it is a"
-            " draft, and never publishes a second record.\n"), stderr_text)
+            " command again with --new-version. It reads deposition 4343 back first. It continues a draft only when"
+            " its record carries a concept DOI, and never publishes a second record.\n"), stderr_text)
         self.fake_api = _FakeZenodoApi()
         _draft._open_url = self.fake_api
         self._deposit(["--new-version", "--publish", "--creator", "Shiroshita, Ryosuke"])
@@ -1625,7 +1636,7 @@ class TestZenodoAnswersThatCannotBeRead(unittest.TestCase):
                  "The client cannot reach the Zenodo API.", "Make sure that the network is available."),
                 ("URL can't contain control characters", http.client.InvalidURL("URL can't contain control characters"),
                  "The client cannot use an address from a Zenodo answer.",
-                 "Open the deposition on Zenodo and check its links.")):
+                 "Check that source and correct the address.")):
             with self.subTest(error=type(error).__name__):
                 self.assertEqual(self.call_zenodo(error), f"{lead_msg} Cause: {cause}. {remedy_msg} Send it again.\n")
 

@@ -22,18 +22,16 @@ import urllib.request
 # A read sends no body, so a followed redirect cannot turn its answer into the answer to a write.
 _READ_METHODS = ("GET", "HEAD")
 # urllib wraps every OSError from HTTPConnection.request(), including send failures, in URLError.
-# Only these causes prove that no request byte was written: DNS resolution, connection refusal,
+# Only these wrapped causes prove that no request byte was written: DNS resolution, connection refusal,
 # certificate verification in the TLS handshake, and http.client's address check before sending.
 # A timeout, reset, broken pipe, or other TLS/OSError leaves the outcome unknown.
 _UNSENT_REQUEST_CAUSE_TYPES = (socket.gaierror, ConnectionRefusedError,
                               ssl.SSLCertVerificationError, http.client.InvalidURL)
-# What urllib raises once a request went out and its answer did not arrive in full: a timeout or a
-# dropped connection while the client waits for the answer or reads it (socket.timeout, which is
-# TimeoutError from Python 3.10 on, and ConnectionResetError, both OSError), and an answer that
-# breaks off (http.client.HTTPException, which includes RemoteDisconnected and IncompleteRead).
-# URLError is an OSError and InvalidURL is an HTTPException. Both may also arise before sending;
-# request_was_not_sent distinguishes those cases. Catch HTTPError first: it carries an answer.
-INCOMPLETE_ANSWER_ERROR_TYPES = (OSError, http.client.HTTPException)
+# Transport failures before or during a send and while waiting for or reading an answer.
+# OSError includes DNS, TLS, connection, and timeout failures. HTTPException includes InvalidURL,
+# RemoteDisconnected, and IncompleteRead. is_request_known_unsent distinguishes the proven
+# pre-send failures. Catch HTTPError first: it carries an answer.
+REQUEST_ERROR_TYPES = (OSError, http.client.HTTPException)
 # How much of the body of an error answer a message quotes.
 _MAX_ERROR_DETAIL_CHARACTERS = 2000
 
@@ -45,15 +43,22 @@ def is_read_method(method: str) -> bool:
     return method in _READ_METHODS
 
 
-def request_was_not_sent(error: Exception) -> bool:
-    """Whether the failure proves that no request byte was sent."""
-    cause = error.reason if isinstance(error, urllib.error.URLError) else error
-    return isinstance(cause, _UNSENT_REQUEST_CAUSE_TYPES)
+def is_request_known_unsent(error: Exception) -> bool:
+    """urllib wraps only failures of HTTPConnection.request(). An unwrapped failure can arise
+    during a read, except InvalidURL, which http.client raises only before sending."""
+    if isinstance(error, urllib.error.URLError):
+        return isinstance(get_request_error_cause(error), _UNSENT_REQUEST_CAUSE_TYPES)
+    return isinstance(error, http.client.InvalidURL)
+
+
+def get_request_error_cause(error: Exception) -> object:
+    """The reason of urllib's wrapped send error, or the error itself for an unwrapped failure."""
+    return error.reason if isinstance(error, urllib.error.URLError) else error
 
 
 def describe_request_error_cause(error: Exception) -> str:
     """The cause of a request failure, unwrapping urllib's connection or send error."""
-    return str(error.reason) if isinstance(error, urllib.error.URLError) else str(error)
+    return str(get_request_error_cause(error))
 
 
 def read_error_detail(error: urllib.error.HTTPError) -> str:
@@ -62,7 +67,7 @@ def read_error_detail(error: urllib.error.HTTPError) -> str:
     holds either way."""
     try:
         return error.read().decode("utf-8", "replace")[:_MAX_ERROR_DETAIL_CHARACTERS]
-    except INCOMPLETE_ANSWER_ERROR_TYPES as read_error:
+    except REQUEST_ERROR_TYPES as read_error:
         return f"The detail of the answer did not arrive in full. Cause: {read_error}."
 
 

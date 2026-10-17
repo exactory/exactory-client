@@ -44,10 +44,12 @@ from typing import NamedTuple
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from research_harness.errors import REMOVED_PROBLEM_LINK_EXIT_CODE, ResearchError
 from research_harness.exactory_api import UUID_RE, build_orcid_required_msg, read_api_base_url
-from research_harness.integration import command_identity, current_store, initialization_payload, initialize_workspace, record_direct_deposit
-from research_harness.same_origin import (INCOMPLETE_ANSWER_ERROR_TYPES, RefusedRedirectError,
-                                          describe_request_error_cause, get_origin,
-                                          open_url_within_origin, read_error_detail, request_was_not_sent)
+from research_harness.integration import (command_identity, current_store, export_workspace,
+                                          initialization_payload, initialize_workspace, record_direct_deposit)
+from research_harness.operations import prepared_mutation
+from research_harness.same_origin import (REQUEST_ERROR_TYPES, RefusedRedirectError,
+                                          describe_request_error_cause, get_origin, get_request_error_cause,
+                                          open_url_within_origin, read_error_detail, is_request_known_unsent)
 from research_harness.storage import Store
 from research_harness.workspace import find_workspace, json_projection, read_file, strict_json
 from research_harness.citation_report import report_citation_gate
@@ -243,7 +245,8 @@ def _call_zenodo(method: str, url: str, token: str,
                  file_bytes: bytes | None = None,
                  accept: str | None = None,
                  failure_advice: _FailureAdvice = _PLAIN_FAILURE_ADVICE,
-                 *, environment: str, raise_missing: bool = False) -> dict:
+                 *, environment: str, is_missing_error_propagated: bool = False,
+                 address_source_name: str = "a Zenodo answer") -> dict:
     """Send one request to the Zenodo API and return its JSON body. Exits with
     Zenodo's own error message on failure, and never echoes the token. The
     caller names the advice that each end of the request earns, because only the
@@ -254,8 +257,9 @@ def _call_zenodo(method: str, url: str, token: str,
     token to a request, and it adds it only for an address under the Zenodo API of
     the environment that the token belongs to: the URL of a saved response, an intent,
     or a journal is checked like any other. A redirect to another origin is not
-    followed, and neither is any redirect of a request that is not a read. With raise_missing, a 404
-    raises HTTPError for the caller to handle; every other error still ends the command."""
+    followed, and neither is any redirect of a request that is not a read. With is_missing_error_propagated, a 404
+    raises HTTPError for the caller to handle; every other error still ends the command.
+    address_source_name says where the caller obtained the address, for InvalidURL advice."""
     if not _is_inside_zenodo_api(url, environment):
         _exit_with_error(f"The address {url} is not under {_ZENODO_API_URLS[environment]}, the Zenodo API of the"
                          f" {environment} environment. The command sent nothing to it, and the token stayed here.")
@@ -280,33 +284,33 @@ def _call_zenodo(method: str, url: str, token: str,
                            f" a redirect of a {error.method} request, so the result of the request is not confirmed.")
         _exit_with_error(f"{refusal_msg} {failure_advice.uncertain_msg}")
     except urllib.error.HTTPError as error:
-        if raise_missing and error.code == 404:
-            error.close()
-            raise
-        message = f"The Zenodo API returned HTTP {error.code}.\n{read_error_detail(error)}"
-        # Only a 4xx establishes a refusal, also when the detail broke off.
-        if not 400 <= error.code <= 499:
-            message += f"\nThe server states no outcome for this request. {failure_advice.uncertain_msg}"
-        elif failure_advice.refused_msg:
-            message += f"\n{failure_advice.refused_msg}"
-        _exit_with_error(message)
-    except INCOMPLETE_ANSWER_ERROR_TYPES as error:
+        with error:
+            if is_missing_error_propagated and error.code == 404:
+                raise
+            message = f"The Zenodo API returned HTTP {error.code}.\n{read_error_detail(error)}"
+            # Only a 4xx establishes a refusal, also when the detail broke off.
+            if not 400 <= error.code <= 499:
+                message += f"\nThe server states no outcome for this request. {failure_advice.uncertain_msg}"
+            elif failure_advice.refused_msg:
+                message += f"\n{failure_advice.refused_msg}"
+            _exit_with_error(message)
+    except REQUEST_ERROR_TYPES as error:
         cause = describe_request_error_cause(error)
-        if request_was_not_sent(error):
-            reason = error.reason if isinstance(error, urllib.error.URLError) else error
+        if is_request_known_unsent(error):
+            reason = get_request_error_cause(error)
             if isinstance(reason, http.client.InvalidURL):
-                _exit_with_error(f"The client cannot use an address from a Zenodo answer. Cause: {cause}."
-                                 f" Open the deposition on Zenodo and check its links. {failure_advice.unsent_msg}")
+                _exit_with_error(f"The client cannot use an address from {address_source_name}. Cause: {cause}."
+                                 f" Check that source and correct the address. {failure_advice.unsent_msg}")
             _exit_with_error(f"The client cannot reach the Zenodo API. Cause: {cause}."
                              f" Make sure that the network is available. {failure_advice.unsent_msg}")
-        _exit_with_error(_build_unreadable_answer_msg(cause, failure_advice.uncertain_msg))
+        _exit_with_error(_build_unconfirmed_request_msg(cause, failure_advice.uncertain_msg))
     except json.JSONDecodeError:
-        _exit_with_error(_build_unreadable_answer_msg("the body of the answer is not JSON",
+        _exit_with_error(_build_unconfirmed_request_msg("the body of the answer is not JSON",
                                                       failure_advice.uncertain_msg))
     raise AssertionError("unreachable")
 
 
-def _build_unreadable_answer_msg(cause: str, uncertain_msg: str) -> str:
+def _build_unconfirmed_request_msg(cause: str, uncertain_msg: str) -> str:
     """The message when a request may have been sent and its answer cannot be read: sending failed, the answer
     did not arrive in full, or its body is not JSON. Zenodo may have acted on the request, so the advice of the caller
     for an uncertain outcome follows."""
@@ -328,6 +332,11 @@ def _build_zenodo_client(environment: str, token: str, failure_advice: _FailureA
     advice that each end of each request earns. The managed deposit sends every request through
     one, and the direct deposit every request after its creation except the publish."""
     def call(method: str, url: str, **kwargs) -> dict:
+        if kwargs.get("file_bytes") is not None:
+            bucket_url, _, upload_name = url.rpartition("/")
+            url = bucket_url + "/" + urllib.parse.quote(upload_name, safe="")
+        if method == "POST" and url.endswith("/actions/newversion"):
+            kwargs["address_source_name"] = "the workspace's record"
         return _call_zenodo(method, url, token, failure_advice=failure_advice, environment=environment, **kwargs)
     return call
 
@@ -346,6 +355,30 @@ def _continue_deposit_and_track_publish(store: Store, identifier: str, client, *
 
     record = continue_deposit(store, identifier, send_and_track_publish,
                               reconcile=True, finish_only=finish_only)
+    if record.get("doi"):
+        return record, did_send_publish
+    # The managed receipt is immutable. Add the prior concept only to this draft's
+    # current workspace record, so replay cannot replace a newer deposit or create direct history.
+    from research_harness.remote import get_intent
+    binding = get_intent(store, identifier)["binding"]
+    if not binding.get("new_version") or not binding["prior"].get("concept_doi"):
+        return record, did_send_publish
+    snapshot = store.snapshot()
+    current = snapshot["records"].get("workspace", {}).get("deposit", {})
+    concept_doi = binding["prior"]["concept_doi"]
+    if (current.get("environment") != record["environment"] or current.get("deposition_id") != record["deposition_id"]
+            or current.get("doi") or current.get("concept_doi") == concept_doi):
+        return record, did_send_publish
+    state = dict(current, concept_doi=concept_doi)
+    try:
+        prepared_mutation(store, "workspace.version_draft_concept", {"deposit": state},
+            lambda records, value: ([("workspace", "deposit", value["deposit"])], value["deposit"]),
+            expected_revision=snapshot["revision"], request_id=identifier + ":version-draft-concept")
+        export_workspace(store)
+    except (OSError, ResearchError) as error:
+        _exit_with_error(f"The command could not finish recording the concept DOI of version draft deposition"
+                         f" {record['deposition_id']}. Cause: {error}. Run exactory-draft reconcile {identifier}."
+                         " It retries the local record update and publishes nothing.")
     return record, did_send_publish
 
 
@@ -569,18 +602,14 @@ def _run_deposit(args: argparse.Namespace) -> None:
 
     # An unsettled direct publication is read back before even the exactory preflight. The
     # preflight still precedes every new remote write, including the new-version action. It runs
-    # once whether the direct path opens a version or continues a draft that it read back.
-    prepared = None
+    # once whether the direct path opens a version or continues a version draft that it read back.
     def prepare_deposit():
-        nonlocal prepared
-        if prepared is None:
-            problem_target = _resolve_problem_target(args.math_problem_id) if args.math_problem_id is not None else None
-            if args.production:
-                report_citation_gate(Path.cwd(), _CHECK_COMMAND_PATH)
-            metadata = _build_deposit_metadata(state["title"], args.creator, abstract_text,
-                                               has_exactory_authorship_evidence, problem_target)
-            prepared = metadata, problem_target
-        return prepared
+        problem_target = _resolve_problem_target(args.math_problem_id) if args.math_problem_id is not None else None
+        if args.production:
+            report_citation_gate(Path.cwd(), _CHECK_COMMAND_PATH)
+        metadata = _build_deposit_metadata(state["title"], args.creator, abstract_text,
+                                           has_exactory_authorship_evidence, problem_target)
+        return metadata, problem_target
 
     # A study whose publication and round gates are ready records the receipt;
     # otherwise the record is created directly, and the user reads why on stderr.
@@ -599,8 +628,8 @@ def _run_deposit(args: argparse.Namespace) -> None:
         _deposit_managed(store, deposit_report, args, base_url, environment, metadata, sources_path, token,
                          problem_target)
     else:
-        _deposit_directly(store, store_open_error, args, base_url, environment, {},
-                          pdf_path, sources_path, token, None, prepare_deposit=prepare_deposit)
+        _deposit_directly(store, store_open_error, args, base_url, environment,
+                          pdf_path, sources_path, token, prepare_deposit=prepare_deposit)
     if args.math_problem_id is not None and not args.publish:
         print("Only a published production record is attached to a problem. This draft stays unattached.",
               file=sys.stderr)
@@ -638,10 +667,7 @@ def _deposit_managed(store, report: dict, args: argparse.Namespace, base_url: st
                                                         " recovery record, then continues its deposit intent.")
     with _explain_unsettled_journal(journal):
         client = _build_zenodo_client(environment, token)
-        if journal is None:
-            receipt = continue_deposit(store, intent["id"], client, reconcile=True)
-        else:
-            receipt, did_send_publish = _continue_deposit_and_track_publish(store, intent["id"], client)
+        receipt, did_send_publish = _continue_deposit_and_track_publish(store, intent["id"], client)
         print(json.dumps(receipt, indent=2))
         if journal is not None:
             journal = _mark_journal_settled(journal, receipt)
@@ -650,26 +676,35 @@ def _deposit_managed(store, report: dict, args: argparse.Namespace, base_url: st
 
 
 def _deposit_directly(store, store_open_error, args: argparse.Namespace, base_url: str, environment: str,
-                      metadata: dict, pdf_path: Path, sources_path: Path | None, token: str,
-                      problem_target: dict | None, *, prepare_deposit=None) -> None:
+                      pdf_path: Path, sources_path: Path | None, token: str, *, prepare_deposit) -> None:
     # Every local input is read before the first remote write, like the rest of
     # this command, so an unreadable path leaves no draft record on Zenodo. The
     # bytes were already held in full for the upload, so peak memory is the same.
     pdf_bytes = _read_upload_bytes(pdf_path)
     sources_bytes = _read_upload_bytes(sources_path) if sources_path is not None else None
     if args.new_version:
-        deposition = _open_new_version_draft(base_url, environment, token, store, store_open_error,
-                                             before_new_version=prepare_deposit)
-        next_step_msg = _build_new_version_draft_next_step_msg(deposition["id"])
-    if prepare_deposit is not None:
-        metadata, problem_target = prepare_deposit()
-    if not args.new_version:
+        prior, deposition, recorded_deposition_id = _read_new_version_prior(
+            base_url, environment, token, store, store_open_error)
+    metadata, problem_target = prepare_deposit()
+    if args.new_version:
+        if deposition is None:
+            # Repeating this action reopens the same unpublished version draft
+            # (https://developers.zenodo.org, checked 2026-10-16).
+            created = _call_zenodo(
+                "POST", f"{base_url}/deposit/depositions/{prior['deposition_id']}/actions/newversion", token,
+                environment=environment, address_source_name="the workspace's record")
+            new_draft_url = created.get("links", {}).get("latest_draft", "")
+            if new_draft_url == "":
+                _exit_with_error("Zenodo returned no new-version draft link.")
+            deposition = _call_zenodo("GET", new_draft_url, token, environment=environment)
+        next_step_msg = _build_new_version_draft_next_step_msg(recorded_deposition_id)
+    else:
         creation_advice = _FailureAdvice(uncertain_msg=_UNCERTAIN_DIRECT_CREATION_ADVICE_TEMPLATE.format(
             zenodo_site=get_origin(base_url)))
         deposition = _call_zenodo("POST", f"{base_url}/deposit/depositions", token, json_body={},
                                   failure_advice=creation_advice, environment=environment)
         next_step_msg = _build_fresh_draft_next_step_msg()
-    # The record exists from here on. A second plain run without a journal creates
+    # The record exists from here on. A second plain publish without a journal creates
     # and publishes a second permanent record; --new-version reads back a recorded
     # unsettled deposition instead. The user reads the id and draft link first, so a lost response
     # leaves a record to open instead of a deposit to repeat, and every failure
@@ -686,6 +721,10 @@ def _deposit_directly(store, store_open_error, args: argparse.Namespace, base_ur
     call_draft("PUT", f"{base_url}/deposit/depositions/{deposition['id']}", json_body={"metadata": metadata})
     _mark_paper_as_preview(call_draft, base_url, deposition["id"])
     state = {"environment": environment, "deposition_id": deposition["id"], "draft_url": draft_url}
+    if args.new_version:
+        # The published workspace record supplies this marker, not a field of Zenodo's draft.
+        # It distinguishes a version draft from a fresh draft made by a plain run (ruling 2026-10-16).
+        state["concept_doi"] = prior.get("concept_doi", "")
     journal = None
     if args.publish and problem_target is not None:
         # A fresh operation id tells this publication from a retry of an earlier one, and the next
@@ -701,8 +740,8 @@ def _deposit_directly(store, store_open_error, args: argparse.Namespace, base_ur
             # Every publishing direct deposit keeps its local record before the publish call
             # (design 2026-10-12 §26.11).
             _record_pending_deposit(store, state)
-            # Per https://developers.zenodo.org, doi is present only on published
-            # depositions; conceptdoi names the paper across all its versions.
+            # The publish answer supplies the DOI values. The concept DOI used to recognize
+            # a version draft comes from the published workspace record, as ruled 2026-10-16.
             publish_response = _call_zenodo(
                 "POST", f"{base_url}/deposit/depositions/{deposition['id']}/actions/publish", token,
                 failure_advice=_build_publish_request_advice_set(deposition["id"], draft_url, problem_target,
@@ -739,12 +778,13 @@ def _build_fresh_draft_next_step_msg() -> str:
             " Delete button on its page.")
 
 
-def _build_new_version_draft_next_step_msg(deposition_id: int) -> str:
+def _build_new_version_draft_next_step_msg(recorded_deposition_id: int) -> str:
     """Before the record is saved, Zenodo reopens the same unpublished version on a repeated
     new-version action (https://developers.zenodo.org, checked 2026-10-16). After it is saved
-    without a DOI, the next run reads this deposition back first."""
+    without a DOI, the next run reads the deposition the local record names first. That record
+    still names the earlier deposition until this run saves its own draft."""
     return ("Run the same command again with --new-version. It reads the workspace's record first."
-            f" If that record has no DOI, it reads deposition {deposition_id} back first. It continues with this"
+            f" If that record has no DOI, it reads deposition {recorded_deposition_id} back first. It continues with this"
             " draft while it is unpublished, and never publishes a second record.")
 
 
@@ -756,8 +796,10 @@ def _mark_paper_as_preview(call_zenodo, base_url: str, record_id: int) -> None:
     call_zenodo("PUT", draft_url, json_body=build_previewed_document(document))
 
 
-def _open_new_version_draft(base_url: str, environment: str, token: str,
-                             store=None, store_open_error=None, *, before_new_version=None) -> dict:
+def _read_new_version_prior(base_url: str, environment: str, token: str,
+                            store=None, store_open_error=None) -> tuple[dict, dict | None, int]:
+    """Resolve the version's prior before preflight or writes. Return the prior record, a
+    resumable version draft if read back, and the deposition the unchanged local record names."""
     try:
         prior = json.loads(_DEPOSIT_STATE_PATH.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -773,6 +815,7 @@ def _open_new_version_draft(base_url: str, environment: str, token: str,
     if deposition_id is None:
         _exit_with_error(f"{_DEPOSIT_STATE_PATH} names no deposition_id."
                          " Run a plain deposit first; --new-version revises it.")
+    recorded_deposition_id = deposition_id
     # A direct deposit records the deposition before publishing (design §26.11). Read that same
     # deposition first when the earlier publish is unsettled, before creating or changing anything.
     if not prior.get("doi"):
@@ -780,16 +823,17 @@ def _open_new_version_draft(base_url: str, environment: str, token: str,
         read_advice = _FailureAdvice(recovery_msg, recovery_msg, recovery_msg)
         try:
             deposition = _call_zenodo("GET", f"{base_url}/deposit/depositions/{deposition_id}", token,
-                                      environment=environment, failure_advice=read_advice, raise_missing=True)
+                                      environment=environment, failure_advice=read_advice, is_missing_error_propagated=True,
+                                      address_source_name="the workspace's record")
         except urllib.error.HTTPError:
             # _call_zenodo passes only a requested 404 through; every other status exits there.
             deposition = None
         else:
             if not isinstance(deposition, dict):
-                _exit_with_error(_build_unreadable_answer_msg("the body does not describe a deposition", recovery_msg))
+                _exit_with_error(_build_unconfirmed_request_msg("the body does not describe a deposition", recovery_msg))
             # The workspace record owns the retry target; a reply cannot switch the operation to another record.
             if deposition.get("id", deposition_id) != deposition_id:
-                _exit_with_error(_build_unreadable_answer_msg("the answer names another deposition", recovery_msg))
+                _exit_with_error(_build_unconfirmed_request_msg("the answer names another deposition", recovery_msg))
         if deposition is None:
             if store_open_error is not None:
                 _exit_with_error(f"Deposition {deposition_id} was deleted, but the workspace's publication history"
@@ -804,52 +848,44 @@ def _open_new_version_draft(base_url: str, environment: str, token: str,
                 # https://developers.zenodo.org documents 404 for a missing deposition, not 410.
                 # The published version's New version button is documented at
                 # https://help.zenodo.org/docs/deposit/manage-versions/ (controller ruling 2026-10-16).
-                _exit_with_error(f"Deposition {deposition_id} was deleted, and the workspace has no published direct"
-                                 f" deposit of the {environment} environment to revise. For a first deposit, run"
+                history_msg = ("the workspace has no store to search" if store is None else
+                               f"the workspace has no published direct deposit of the {environment} environment to revise")
+                _exit_with_error(f"Deposition {deposition_id} was deleted, and {history_msg}. For a first deposit, run"
                                  " without --new-version. For a paper already published, open the published version"
                                  " on Zenodo and use its New version button. A version made there does not reach"
                                  " the workspace's record.")
             _, prior = max(published, key=lambda entry: store.committed_request(entry[0])["response"]["revision"])
             print(f"Deposition {deposition_id} was deleted. Continuing the new version from published deposition"
                   f" {prior['deposition_id']}, DOI {prior['doi']}.")
-            deposition_id = prior["deposition_id"]
         elif deposition.get("doi"):
             state = dict(prior, doi=deposition["doi"], concept_doi=deposition.get("conceptdoi", ""),
                          record_url=deposition.get("links", {}).get("record_html", ""))
             print(f"The record is published: {state['record_url']}")
             print(json.dumps(state, indent=2))
             _save_deposit_state(store, store_open_error, state)
-            _exit_with_error(f"Deposition {deposition_id} of the earlier run is published. This run recorded its DOI."
-                             " A second run with --new-version revises it.", 0)
+            print(f"Deposition {deposition_id} of the earlier run is published. This run recorded its DOI."
+                  " A second run with --new-version revises it.", file=sys.stderr)
+            sys.exit(0)
         elif deposition.get("submitted") is False:
+            if not prior.get("concept_doi"):
+                _exit_with_error(f"Deposition {deposition_id} is a fresh draft, not a version of the workspace's"
+                                 f" published record: {deposition.get('links', {}).get('html', prior['draft_url'])}."
+                                 " Delete it with the Delete button on its page. Then run the same command again"
+                                 " with --new-version.")
             print(f"Continuing with draft deposition {deposition_id} from the earlier run:"
                   f" {deposition.get('links', {}).get('html', prior['draft_url'])}")
-            return dict(deposition, id=deposition_id)
+            return prior, dict(deposition, id=deposition_id), recorded_deposition_id
         else:
             _exit_with_error(f"Deposition {deposition_id} answers without a DOI or a draft state. Open"
                              f" {prior['draft_url']} and read its state. {recovery_msg}")
     require_published_prior(prior, environment)
-    if before_new_version is not None:
-        before_new_version()
-    # https://developers.zenodo.org states that calling the new version action again has no effect while the
-    # new version draft of the first call is not published or deleted (checked 2026-10-16). So a second run
-    # answers with the same draft, and an uncertain outcome of this request keeps the plain advice.
-    created = _call_zenodo(
-        "POST",
-        f"{base_url}/deposit/depositions/{deposition_id}/actions/newversion",
-        token,
-        environment=environment,
-    )
-    draft_url = created.get("links", {}).get("latest_draft", "")
-    if draft_url == "":
-        _exit_with_error("Zenodo returned no new-version draft link.")
-    return _call_zenodo("GET", draft_url, token, environment=environment)
+    return prior, None, recorded_deposition_id
 
 
 def _build_recorded_deposition_retry_msg(deposition_id: int) -> str:
     """The next run settles the recorded deposition before it writes again."""
-    return (f"Run the same command again with --new-version. It reads deposition {deposition_id} back first,"
-            " continues with it while it is a draft, and never publishes a second record.")
+    return (f"Run the same command again with --new-version. It reads deposition {deposition_id} back first."
+            " It continues a draft only when its record carries a concept DOI, and never publishes a second record.")
 
 
 def _save_deposit_state(store, store_open_error, state: dict) -> None:
@@ -877,7 +913,6 @@ def _save_deposit_state(store, store_open_error, state: dict) -> None:
         return
     if store is None:
         _stop_with_only_the_local_deposit_copy(Path.cwd(), state)
-        return
     request_id = "direct-deposit-" + uuid.uuid4().hex
     try:
         record_direct_deposit(store, state, expected_revision=store.revision,
@@ -888,9 +923,9 @@ def _save_deposit_state(store, store_open_error, state: dict) -> None:
         try:
             recorded = store.committed_request(request_id) is not None
         except (OSError, ResearchError):
-            return _stop_with_unconfirmed_deposit_record(store.root, state, error)
+            _stop_with_unconfirmed_deposit_record(store.root, state, error)
         if recorded:
-            return _stop_with_unconfirmed_deposit_record(store.root, state, error)
+            _stop_with_unconfirmed_deposit_record(store.root, state, error)
         if isinstance(error, ResearchError):
             note_managed_record_skipped(error)
         else:
@@ -898,8 +933,12 @@ def _save_deposit_state(store, store_open_error, state: dict) -> None:
         _stop_with_only_the_local_deposit_copy(store.root, state)
 
 
-def _build_deposit_record_retry_msg() -> str:
-    return ("A second plain run starts another deposition when no problem journal records this deposit."
+def _build_deposit_record_retry_msg(state: dict) -> str:
+    plain_retry_msg = ("A second plain run publishes a second permanent record" if state.get("doi") else
+                       "A second plain run creates another draft")
+    delete_msg = ("" if state.get("doi") else
+                  " Before a second plain run, delete this draft with the Delete button on its page.")
+    return (f"{plain_retry_msg} when no problem journal records this deposit.{delete_msg}"
             " A deposit for a problem reads its journal first. With no problem journal, --new-version"
             " uses the record it finds in .exactory/deposit.json, which may still name an earlier version."
             " Check that file and the deposition on Zenodo before running again.")
@@ -910,7 +949,7 @@ def _stop_with_unconfirmed_deposit_record(root: Path, state: dict, error: Except
     _exit_with_error(f"The command could not finish keeping the local record of deposition {state['deposition_id']}."
                      f" Cause: {error}. The workspace store may already hold the record."
                      f" {_DEPOSIT_STATE_PATH} holds a copy; preserve it before a projection export."
-                     f" Open {state['draft_url']} and check its state. {_build_deposit_record_retry_msg()}")
+                     f" Open {state['draft_url']} and check its state. {_build_deposit_record_retry_msg(state)}")
 
 
 def _write_deposit_state_projection(root: Path, state: dict) -> None:
@@ -920,7 +959,7 @@ def _write_deposit_state_projection(root: Path, state: dict) -> None:
     except (OSError, ResearchError) as error:
         _exit_with_error(f"The local record of deposition {state['deposition_id']} could not be written to"
                          f" {_DEPOSIT_STATE_PATH}. Cause: {error}. Open {state['draft_url']} and check its state."
-                         f" {_build_deposit_record_retry_msg()}")
+                         f" {_build_deposit_record_retry_msg(state)}")
 
 
 def _stop_with_only_the_local_deposit_copy(root: Path, state: dict) -> None:
@@ -929,16 +968,10 @@ def _stop_with_only_the_local_deposit_copy(root: Path, state: dict) -> None:
     export replaces the file this writes. The message names that file, because
     stderr carries it to a caller that reads none of the lines on stdout."""
     _write_deposit_state_projection(root, state)
-    plain_retry_msg = ("A second plain run publishes a second permanent record" if state.get("doi") else
-                       "A second plain run creates another draft")
     _exit_with_error("The workspace store did not record this deposit. The record is on Zenodo."
                      f" {_DEPOSIT_STATE_PATH} holds the only local copy of it, and a projection"
                      " export can replace that file. Copy the state out of that file before the"
-                     f" next projection export. {plain_retry_msg} when no"
-                     " problem journal records this deposit. A deposit for a problem reads its journal first."
-                     " With no problem journal, --new-version uses the deposit in .exactory/deposit.json:"
-                     " it reads it back first if it has no DOI, or revises it if it has a DOI."
-                     " Check that file before running again.")
+                     f" next projection export. {_build_deposit_record_retry_msg(state)}")
 
 
 def _run_reconcile(args: argparse.Namespace) -> None:
@@ -962,8 +995,8 @@ def _run_reconcile(args: argparse.Namespace) -> None:
             else:
                 _require_approved_intent(intent)
             token = _read_zenodo_token(intent["binding"]["environment"] == "production")
-            receipt = continue_deposit(store, args.intent_id,
-                                       _build_zenodo_client(intent["binding"]["environment"], token), reconcile=True)
+            receipt, _ = _continue_deposit_and_track_publish(store, args.intent_id,
+                _build_zenodo_client(intent["binding"]["environment"], token))
             print(json.dumps(receipt, indent=2))
         if journal is not None and journal["operation_id"] == args.intent_id \
                 and _is_attachment_outstanding(journal):
@@ -1537,14 +1570,15 @@ def _settle_direct_publication(journal: dict, *, may_publish: bool) -> tuple[dic
     whether this run sent publish, so attachment advice describes this run."""
     token = _read_zenodo_token(journal["environment"] == "production")
     deposition_url = f"{journal['base_url']}/deposit/depositions/{journal['deposition_id']}"
-    deposition = _call_zenodo("GET", deposition_url, token, environment=journal["environment"])
+    deposition = _call_zenodo("GET", deposition_url, token, environment=journal["environment"],
+                              address_source_name="the workspace's recovery record")
     did_send_publish = False
     if deposition.get("submitted") is False:
         if not may_publish:
             _exit_with_error(f"Deposition {journal['deposition_id']} is not published. Run exactory-draft deposit"
                              " to publish it. That command publishes this deposition and creates no other.")
         deposition = _call_zenodo("POST", f"{deposition_url}/actions/publish", token,
-                                  environment=journal["environment"])
+                                  environment=journal["environment"], address_source_name="the workspace's recovery record")
         did_send_publish = True
     if not deposition.get("doi"):
         _exit_with_error(f"Deposition {journal['deposition_id']} answers without a DOI. Open {journal['draft_url']}"
