@@ -52,7 +52,7 @@ OPENNESS_PROMPT = LEGACY_PROMPT.replace(
 )
 
 
-PROMPT = OPENNESS_PROMPT.replace(
+MINIMUM_PROMPT = OPENNESS_PROMPT.replace(
     'openness is exactly {outcome:supported_open|already_solved|unresolved,statement_digest,evidence,searched_at,coverage,reason}. ',
     'openness has '
     '{outcome:supported_open|already_solved|unresolved,statement_digest,evidence,searched_at,coverage,reason}, '
@@ -65,6 +65,17 @@ PROMPT = OPENNESS_PROMPT.replace(
     'Missing, unavailable or deferred sources, unspecified search coverage and integrity gaps permit only '
     'unresolved. '
 )
+
+PROMPT = MINIMUM_PROMPT.replace(
+    '{schema_version:1,statement,neighbours,searches:[{formulation,search_digest}],reading_digests,settling_work_id}. ',
+    '{schema_version:1,statement,neighbours,searches:[{formulation,search_digest}],reading_digests,settling_work_id}, '
+    'optionally with duplicate_resolutions:[{search_digest,work_id,canonical_work_id}]. '
+    'Keep earlier uncertain hits and their explicit later resolutions in the bound searches. '
+    'An out_of_scope resolution removes the uncertain hit\'s reading obligation; duplicate_resolutions '
+    'transfers it to the named relevant or contradictory canonical source in that resolving search. '
+    'The canonical source needs a complete fulltext reading; a duplicate without that binding remains a gap. '
+)
+
 
 def _sha(value):
     if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
@@ -109,7 +120,18 @@ def load_packet(artifacts, reference, reviewer_id):
                 or entry["digest"] in seen):
             raise ResearchError("invalid_native_review_packet", "Native evidence is duplicated or identifies different bytes")
         seen.add(entry["digest"])
-        artifacts.read(entry["artifact"])
+        exported = artifacts.read(entry["artifact"])
+        if "raw_identities" in entry["artifact"]:
+            originals = entry["artifact"]["raw_identities"]
+            if not isinstance(originals, list) or not originals:
+                raise ResearchError("invalid_native_review_packet", "Raw identities must name original JSON artifacts")
+            normalized = digest(strict_json(exported))
+            raw_digests = set()
+            for original in originals:
+                validate_reference(original)
+                if original["sha256"] in raw_digests or digest(strict_json(artifacts.read(original))) != normalized:
+                    raise ResearchError("invalid_native_review_packet", "Raw bytes do not establish the exported canonical identity")
+                raw_digests.add(original["sha256"])
     for item in value["unmaterialized_digests"]:
         _sha(item)
     if not isinstance(value["execution_provenance"], list):

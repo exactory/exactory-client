@@ -9,7 +9,7 @@ import uuid
 
 from . import schema as s
 from .errors import SearchError
-from .storage import safe_path
+from .storage import safe_path, _strict_json
 from .admission import reference
 from .evidence import audit_admission, proposal_inputs
 from .execution_state import account_for_work
@@ -109,7 +109,8 @@ def build_begin(controller, state, spec, target, content):
     s.require(not (workspace / "units/FINISHED.json").exists(), "Attack is locally finished", "terminal_attack")
     studied = {item["method"] for item in node["admission"]["studies"]["strategies"]}
     s.require(spec["strategy"] in studied, "The selected strategy needs reviewed admission and its study", "admission_required")
-    problem = attack.read_json(workspace / "problem.json")
+    problem_raw = (workspace / "problem.json").read_bytes()
+    problem = _strict_json(problem_raw, "invalid_input")
     s.require(problem["claim"] == node["claim"]["statement"], "Problem claim differs from its admission", "claim_mismatch")
     moves = attack.read_journal(workspace)
     raw = (workspace / "journal.jsonl").read_bytes()
@@ -146,7 +147,7 @@ def build_begin(controller, state, spec, target, content):
     if defects:
         raise attack.ValidationError(defects)
     return dict(planned, id="move-{}-{}".format(target, len(moves) + 1), node_id=target,
-                account_id=account["id"], problem_digest=pin_problem(content, problem),
+                account_id=account["id"], problem_digest=pin_problem(content, problem, raw=problem_raw),
                 journal_prefix_digest=content.put_artifact(raw), purpose=purpose,
                 strategy_context_digest=assessment_status(state)["context_digest"],
                 assessment_digest=assessment_status(state)["assessment_digest"], planning_digest=s.digest(binding))
@@ -213,11 +214,12 @@ def record_journal_intent(context, args):
         context["reservation_id"] = reservation["id"]
         for field in ["move", "pass", "strategy", "entry", "walk", "trigger_features", "step_cites"]:
             s.require(move[field] == reservation[field], "Journal differs from reserved entry: " + field, "reservation_mismatch")
-        problem = attack.read_json(workspace / "problem.json")
+        problem_raw = (workspace / "problem.json").read_bytes()
+        problem = _strict_json(problem_raw, "invalid_input")
         validate_problem(problem, node["claim"]["statement"])
         s.require(attack.compute_problem_digest(problem) == line["problem_digest"],
                   "Problem changed while preparing the journal", "digest_mismatch")
-        problem_digest = pin_problem(content, problem)
+        problem_digest = pin_problem(content, problem, raw=problem_raw)
         raw = (workspace / "journal.jsonl").read_bytes()
         s.require(content.put_artifact(raw) == reservation["journal_prefix_digest"], "Journal changed during reserved move", "digest_mismatch")
         after = raw + (json.dumps(line) + "\n").encode("utf-8")

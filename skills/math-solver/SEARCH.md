@@ -975,6 +975,20 @@ The result is `{workspace, native_packet, subject_digest, claim_digest}`.
 `workspace` is the workspace derived from foundation references or recorded by
 `review_workspace` on a foundationless proposal. Use that returned path for the shared commands. Export
 writes immutable common evidence objects and does not append a native event.
+For normalized JSON evidence, including native problem snapshots, its exported artifact reference carries
+`raw_identities: [ArtifactRef]` for the checked original bytes. Before publishing
+canonical bytes, export records each binding in the associated common store as
+`native_import_identity` with `{schema_version: 1, canonical_digest, raw: ArtifactRef}`.
+Imports and fresh dependency audits consult these bindings, verify the raw bytes
+canonicalize to `canonical_digest`, and resolve their shared probe origins.
+Both native JSON encodings (UTF-8 canonical blobs and ASCII problem snapshots)
+retain these bindings. Checked alias chains are flattened for other importers.
+The binding survives even when the probe origin is recorded later. If the raw
+bytes cannot be recovered, supply the original artifact bytes instead of
+exporting the normalized blob. Packet assessment and historical replay publish
+neither objects nor identity records; recorded packets remain readable.
+An interrupted export can recover a missing common raw artifact from the exact
+staged or native original bytes after checking the committed descriptor.
 It needs no expected revision or request ID.
 
 Register and actually probe a supported reviewer route using
@@ -1244,7 +1258,9 @@ ResultReview = {
 OpennessMinimum = {
   schema_version: 1, statement: Text, neighbours: [Text],
   searches: [{formulation: Text, search_digest: SHA256(LiteratureSearch)}],
-  reading_digests: [SHA256(Reading)], settling_work_id: WorkID|null
+  reading_digests: [SHA256(Reading)], settling_work_id: WorkID|null,
+  duplicate_resolutions?: [{search_digest: SHA256(LiteratureSearch),
+                            work_id: WorkID, canonical_work_id: WorkID}]
 }
 ResultAudit = {
   subject_digest: SHA256(StoredCheckpoint), dependency_ids: [AcceptanceID],
@@ -1290,7 +1306,14 @@ Fresh resolved findings must also bind any other material common search for the
 same declared formulations, including later relevant or contradictory results.
 An older search's unresolved or potentially relevant hit can be cleared by a
 bound, no-earlier search of the same queries with an explicit `resolved` entry and
-resolved disposition for that work, plus its pinned full reading. A later bound
+resolved disposition for that work. `out_of_scope` removes that uncertain hit's
+reading obligation. `relevant` and `contradictory` require its pinned full reading.
+Every `duplicate` disposition needs a `duplicate_resolutions` entry binding the
+exact search and duplicate work to a distinct `canonical_work_id`; that source
+must be `relevant` or `contradictory` in the same search and fully read. Missing
+bindings, a nondecisive canonical source or incomplete canonical reading produce
+`openness_reading_gap`. Earlier decisive judgments retain their reading
+obligations. A later bound
 search with complete recorded coverage of those queries can replace an earlier
 coverage/integrity gap. Retain both records; a past gap does not permanently block
 completed research.

@@ -27,7 +27,9 @@ class ReviewProtocolTests(LiteratureCase):
         previous = canonical_prompt("native_math", version=1)
         self.assertNotEqual(current, legacy)
         self.assertNotEqual(current, previous)
-        for prompt in (current, previous, legacy):
+        minimum = canonical_prompt("native_math", version=2)
+        self.assertNotEqual(current, minimum)
+        for prompt in (current, previous, minimum, legacy):
             self.assertTrue(_prompt_matches({"role": "native_math", "prompt": prompt}))
         altered = copy.deepcopy(legacy)
         altered["text"] += " Author instructions."

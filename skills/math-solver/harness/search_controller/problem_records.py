@@ -61,15 +61,21 @@ def validate_journal_line(line, move, problem_digest):
               "Journal line differs from the recorded problem", "digest_mismatch")
 
 
-def pin_problem(content, problem):
+def pin_problem(content, problem, *, raw=None):
     """Preserve canonical native bytes under the digest already used by moves."""
-    return content.put_artifact(problem_bytes(problem))
+    digest = content.put_artifact(problem_bytes(problem))
+    if raw is not None:
+        from .provenance import retain_import_identity
+        s.require(_strict_json(raw, "invalid_input") == problem, "Problem bytes changed before pinning", "digest_mismatch")
+        retain_import_identity(content, digest, raw)
+    return digest
 
 
 def load_problem_before(controller, node, reservation, content, source=None):
     """An old reservation needs an explicit preimage, never an inferred reset."""
     import attack
     before = None
+    supplied_raw = None
     try:
         before = _strict_json(content.get_artifact(reservation["problem_digest"]), "corrupt_artifact")
     except SearchError as error:
@@ -78,7 +84,8 @@ def load_problem_before(controller, node, reservation, content, source=None):
     if source is not None:
         path = safe_path(controller.root, source)
         s.require(path.is_file() and not path.is_symlink(), "Original problem snapshot is missing", "missing_evidence")
-        supplied = _strict_json(path.read_bytes(), "invalid_input")
+        supplied_raw = path.read_bytes()
+        supplied = _strict_json(supplied_raw, "invalid_input")
         validate_problem(supplied, node["claim"]["statement"])
         s.require(attack.compute_problem_digest(supplied) == reservation["problem_digest"],
                   "Original problem snapshot differs from the reservation", "digest_mismatch")
@@ -89,7 +96,7 @@ def load_problem_before(controller, node, reservation, content, source=None):
               "The reserved problem snapshot is unavailable; supply its exact original problem value with journal add --problem-before",
               "problem_snapshot_required")
     validate_problem(before, node["claim"]["statement"])
-    s.require(pin_problem(content, before) == reservation["problem_digest"],
+    s.require(pin_problem(content, before, raw=supplied_raw) == reservation["problem_digest"],
               "Stored problem snapshot differs from the reservation", "digest_mismatch")
     return before
 

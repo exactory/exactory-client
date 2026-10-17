@@ -84,6 +84,10 @@ or deferred sources remain gaps. `unresolved` may accompany proof-validity
 acceptance but keeps root closure pending. Material searches for the same
 formulations must be reassessed. `already_solved` still requires every requested
 formal verification and deliverable. Recorded version 1 acceptance/closure replays.
+Keep an uncertain hit and its later explicit `resolved` search judgment bound:
+`out_of_scope` removes its reading obligation; `duplicate` transfers it through
+`minimum.duplicate_resolutions: [{search_digest, work_id, canonical_work_id}]`
+to a fully read `relevant` or `contradictory` source in that search.
 
 Native imports retain raw and canonical identities and use the shared probe-origin
 resolver in the objective's associated common review store. Fresh dependencies
@@ -93,6 +97,13 @@ its admitted native verification and candidate interpretation. Historical accept
 imports retain their recorded audits. Exploratory `exactory-lab probe` runs stay
 in the common workspace, outside native execution, and appear in the cash-out
 inventory with `id`, `question` and actual `elapsed_seconds`.
+Normalized JSON exports carry `raw_identities` references to the original bytes,
+including native plan files and problem snapshots.
+Before canonical publication, export appends checked `native_import_identity`
+records (`schema_version`, `canonical_digest`, `raw`) in the common store.
+Fresh imports and dependency audits consult these aliases, including origins
+recorded later. Missing original bytes require an original-artifact export.
+Assessment and historical replay write neither content nor alias records.
 
 ## Test
 

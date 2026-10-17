@@ -46,7 +46,8 @@ def service_operation(state, payload):
     for command in ("adopt", "checkpoint", "accept", "complete", "begin", "run", "amend-computation", "reassess",
                     "legacy-native", "execution-launch"):
         allowed[command].add("review_workspace_recorded")
-    for command in ("propose", "review", "checkpoint", "accept", "complete", "adopt", "amend-computation", "amend-foundation"):
+    for command in ("propose", "review", "checkpoint", "accept", "complete", "adopt", "amend-computation", "amend-foundation",
+                    "begin", "reassess", "legacy-journal"):
         allowed[command].add("probe_origins_recorded")
     s.choice(payload["command"], allowed)
     s.optional_text(payload["target"])

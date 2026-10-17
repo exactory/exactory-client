@@ -1,0 +1,232 @@
+"""Canonical review exports keep the checked identity of their raw probe bytes."""
+
+import hashlib
+import json
+import unittest
+
+from research_harness.artifacts import ArtifactStore
+from search_controller.service import Controller
+from search_controller.errors import SearchError
+from tests.search_fixtures import digest
+from tests.test_search_cli import SearchCLIWorkspace
+from tests import test_search_common_evidence as common_tests
+from tests import test_search_evidence as evidence_tests
+
+
+class ExportOriginTests(SearchCLIWorkspace, unittest.TestCase):
+    artifact = evidence_tests.EvidenceTests.artifact
+    external_checkpoint = evidence_tests.EvidenceTests.external_checkpoint
+    record_probe_output = common_tests.CommonEvidenceTests.record_probe_output
+
+    def export_json_input(self, *, record_origin=True, import_first=False, interrupt_before_bytes=False):
+        self.initialize()
+        controller = Controller(self.root)
+        value = {"result": "An exploratory finite computation."}
+        raw = b'{ "result" : "An exploratory finite computation." }\n'
+        self.assertNotEqual(hashlib.sha256(raw).hexdigest(), digest(value))
+        if record_origin:
+            self.record_probe_output(raw)
+        (self.root / "probe.json").write_bytes(raw)
+        if interrupt_before_bytes:
+            from research_harness.storage import Store
+            from search_controller.provenance import publish_import_identity
+            Store(self.root, create=True)
+            publish_import_identity(ArtifactStore(self.root), digest(value), raw, publish=False)
+        item = {"path": "probe.json", "digest": digest(value), "kind": "blob"}
+        claim = controller.status()["contract"]["original_claim"]
+        subject = {"claim": claim, "evidence_digests": [digest(value)]}
+        inputs = [item]
+        if import_first:
+            spec = self.external_checkpoint()
+            spec["checkpoint"]["kind"] = "hypothesis"
+            spec["inputs"].append(item)
+            self.search("checkpoint", spec, revision=1)
+            inputs = []
+        before = controller.store.read()
+        exported = controller.command("review-packet", {"kind": "result", "subject": subject,
+            "claim_digest": digest(claim), "reviewer": {"source": "host", "actor_id": "export-reviewer",
+                "attestation_id": "review-assignment:export-origin"}, "inputs": inputs}, None, None)
+        self.assertEqual(controller.store.read(), before)
+        artifacts = ArtifactStore(exported["workspace"])
+        packet = json.loads(artifacts.read(exported["native_packet"]))
+        entry = next(row for row in packet["evidence"] if row["digest"] == digest(value))
+        self.assertEqual([ref["sha256"] for ref in entry["artifact"]["raw_identities"]],
+                         [hashlib.sha256(raw).hexdigest()])
+        return raw, artifacts.read(entry["artifact"])
+
+    def assert_export_cannot_gain_proof_credit(self, *, record_origin=True, import_first=False):
+        raw, canonical = self.export_json_input(record_origin=record_origin, import_first=import_first)
+        if not record_origin:
+            self.record_probe_output(raw)
+        spec = self.external_checkpoint()
+        item = self.artifact("exported-proof.json", canonical.decode())
+        manifest = json.loads((self.root / "manifest.json").read_text())
+        manifest["artifacts"][0].update(path=item["path"], digest=item["digest"])
+        (self.root / "manifest.json").write_text(json.dumps(manifest))
+        spec["inputs"][0] = item
+        spec["inputs"][-1]["digest"] = digest(manifest)
+        spec["checkpoint"]["evidence_digests"] = [digest(manifest)]
+        controller = Controller(self.root)
+        before = controller.store.read()
+        result = self.search("checkpoint", spec, revision=controller.status()["revision"], success=False)
+        self.assertEqual(result["error"]["code"], "exploratory_evidence")
+        self.assertEqual(controller.store.read(), before)
+
+    def test_packet_exported_canonical_probe_json_cannot_be_imported_as_analytical_proof(self):
+        self.assert_export_cannot_gain_proof_credit()
+
+    def test_export_of_a_previously_imported_blob_preserves_its_raw_probe_identity(self):
+        self.assert_export_cannot_gain_proof_credit(import_first=True)
+
+    def test_raw_probe_origin_recorded_after_export_still_blocks_canonical_proof_credit(self):
+        self.assert_export_cannot_gain_proof_credit(record_origin=False)
+
+    def test_packet_assessment_and_historical_replay_publish_no_content_or_aliases(self):
+        from research_harness.storage import Store
+        from search_controller.evidence import import_inputs
+        from search_controller.provenance import record_probe_origins
+        from search_controller.reviewer import packet
+        from search_controller.storage import ContentSink
+        self.export_json_input()
+        controller = Controller(self.root)
+        store = Store(self.root)
+        records = store.snapshot()["records"]
+        before = {path.relative_to(self.root): path.read_bytes() for path in self.root.rglob("*") if path.is_file()}
+        state = controller.status(full_audit=True)
+        identity = next(iter(records["native_import_identity"].values()))["canonical_digest"]
+        content = ContentSink(controller.store)
+        bindings = import_inputs(self.root, [{"path": "probe.json", "kind": "blob", "digest": identity}], content, state=state)
+        record_probe_origins(state, {"bindings": bindings})
+        assessed = packet(self.root, state, content, {"evidence_digests": [identity]},
+               "result", digest(state["contract"]["original_claim"]),
+               {"source": "host", "actor_id": "reviewer", "attestation_id": "review-assignment:assessment"},
+               ArtifactStore(self.root), common_records=records)
+        self.assertTrue(next(row for row in assessed["evidence"] if row["digest"] == identity)["artifact"]["raw_identities"])
+        after = {path.relative_to(self.root): path.read_bytes() for path in self.root.rglob("*") if path.is_file()}
+        self.assertEqual(after, before)
+
+    def test_unchecked_raw_alias_cannot_attach_an_unrelated_canonical_artifact(self):
+        from search_controller.provenance import expand_import_identities
+        self.initialize()
+        artifacts = ArtifactStore(self.root)
+        raw = artifacts.put(b'{ "other": true }\n', "application/json")
+        canonical = digest({"result": "An exploratory finite computation."})
+        records = {"native_import_identity": {"forged": {
+            "schema_version": 1, "canonical_digest": canonical, "raw": raw}}}
+        with self.assertRaises(SearchError) as caught:
+            expand_import_identities(records, artifacts, [canonical])
+        self.assertEqual(caught.exception.code, "invalid_import_identity")
+
+    def test_export_refuses_an_exploratory_blob_whose_original_bytes_cannot_be_preserved(self):
+        from search_controller.provenance import collect_probe_origins, record_probe_origins
+        from search_controller.reviewer import packet
+        from search_controller.storage import ContentSink
+        self.initialize()
+        raw = b'{ "answer" : 42 }\n'
+        output = self.record_probe_output(raw)
+        controller = Controller(self.root)
+        state, content = controller.status(), ContentSink(controller.store)
+        identity = content.put_blob({"answer": 42})
+        origins = collect_probe_origins(self.root, state, [output["sha256"]])
+        record_probe_origins(state, {"bindings": [{"digest": identity, "raw_digest": output["sha256"], "origins": origins}]})
+        with self.assertRaises(SearchError) as caught:
+            packet(self.root, state, content, {"evidence_digests": [identity]}, "result",
+                   digest(state["contract"]["original_claim"]), {}, ArtifactStore(self.root), write=True)
+        self.assertEqual(caught.exception.code, "exploratory_evidence")
+
+    def assert_plan_export_cannot_gain_proof_credit(self, name):
+        import attack
+        from search_controller.evidence import audit_manifest, import_inputs
+        from search_controller.provenance import record_probe_origins
+        from search_controller.storage import ContentSink
+        from tests.search_execution_support import admit_workspace
+        from tests.strategy_refresh_support import assessment_spec
+        from tests.support import run
+        self.assertEqual(run(["init", "sample"], self.root)[0], 0)
+        controller = admit_workspace(self.root)
+        raw = (self.root / "sample" / (name + ".json")).read_bytes()
+        self.record_probe_output(raw)
+        value = json.loads(raw)
+        identity = attack.compute_problem_digest(value) if name == "problem" else digest(value)
+        self.assertNotEqual(hashlib.sha256(raw).hexdigest(), identity)
+        subject = assessment_spec(controller.command("strategy-context", {}, None, None))["assessment"]
+        exported = controller.command("review-packet", {"kind": "result", "subject": subject,
+            "claim_digest": digest(controller.status()["contract"]["original_claim"]),
+            "reviewer": {"source": "host", "actor_id": "plan-reviewer", "attestation_id": "review-assignment:plan-origin"},
+            "inputs": []}, None, None)
+        artifacts = ArtifactStore(exported["workspace"])
+        packet = json.loads(artifacts.read(exported["native_packet"]))
+        entry = next(row for row in packet["evidence"] if row["digest"] == identity)
+        spec = self.external_checkpoint()
+        item = self.artifact("exported-plan.json", artifacts.read(entry["artifact"]).decode())
+        manifest = json.loads((self.root / "manifest.json").read_text())
+        manifest["artifacts"][0].update(path=item["path"], digest=item["digest"])
+        (self.root / "manifest.json").write_text(json.dumps(manifest))
+        spec["inputs"][0] = item
+        spec["inputs"][-1]["digest"] = digest(manifest)
+        state, content = controller.status(), ContentSink(controller.store)
+        bindings = import_inputs(self.root, spec["inputs"], content, state=state)
+        record_probe_origins(state, {"bindings": bindings})
+        with self.assertRaises(SearchError) as caught:
+            audit_manifest(self.root, state, digest(manifest), content, fresh=True)
+        self.assertEqual(caught.exception.code, "exploratory_evidence")
+
+    def test_plan_blob_export_preserves_its_raw_probe_identity(self):
+        self.assert_plan_export_cannot_gain_proof_credit("preconditions")
+
+    def test_problem_snapshot_export_preserves_its_raw_probe_identity(self):
+        self.assert_plan_export_cannot_gain_proof_credit("problem")
+
+    def build_mixed_alias_chain(self):
+        from search_controller.problem_records import problem_bytes
+        from search_controller.provenance import publish_import_identity, record_probe_origins
+        from search_controller.storage import ContentSink
+        self.initialize()
+        value = {"result": "finite computation α"}
+        raw = (json.dumps(value, indent=2) + "\n").encode()
+        self.record_probe_output(raw)
+        ascii_bytes = problem_bytes(value)
+        ascii_digest = hashlib.sha256(ascii_bytes).hexdigest()
+        controller = Controller(self.root)
+        state, content = controller.status(), ContentSink(controller.store)
+        content.put_artifact(raw)
+        record_probe_origins(state, {"bindings": [{"digest": ascii_digest,
+            "raw_digest": hashlib.sha256(raw).hexdigest(), "origins": []}]})
+        publish_import_identity(ArtifactStore(self.root), digest(value), ascii_bytes)
+        content.put_blob(value)
+        return controller, state, content, digest(value)
+
+    def test_probe_origin_resolution_follows_mixed_common_and_native_json_aliases(self):
+        from search_controller.provenance import collect_probe_origins
+        controller, state, content, identity = self.build_mixed_alias_chain()
+        origins = collect_probe_origins(self.root, state, [identity], content=content)
+        self.assertEqual([row["probe_id"] for row in origins], ["explore"])
+
+    def test_export_flattens_the_checked_alias_chain_for_other_native_importers(self):
+        from research_harness.storage import Store
+        from search_controller.provenance import collect_probe_origins
+        from search_controller.reviewer import packet
+        controller, state, content, identity = self.build_mixed_alias_chain()
+        packet(self.root, state, content, {"evidence_digests": [identity]}, "result",
+               digest(state["contract"]["original_claim"]), {}, ArtifactStore(self.root), write=True,
+               common_records=Store(self.root).snapshot()["records"])
+        origins = collect_probe_origins(self.root, controller.status(), [identity])
+        self.assertEqual([row["probe_id"] for row in origins], ["explore"])
+
+    def test_interrupted_export_recovers_its_checked_alias_from_unchanged_original_bytes(self):
+        raw, canonical = self.export_json_input(record_origin=False, interrupt_before_bytes=True)
+        self.assertEqual(json.loads(raw), json.loads(canonical))
+
+    def test_native_move_commit_retains_its_original_problem_bytes_and_identity(self):
+        import attack
+        from tests.search_execution_support import admit_workspace, begin_spec, invoke
+        from tests.support import run
+        self.assertEqual(run(["init", "sample"], self.root)[0], 0)
+        controller = admit_workspace(self.root)
+        raw = (self.root / "sample/problem.json").read_bytes()
+        identity = attack.compute_problem_digest(json.loads(raw))
+        raw_digest = hashlib.sha256(raw).hexdigest()
+        self.assertNotEqual(identity, raw_digest)
+        invoke(controller, "begin", begin_spec())
+        self.assertIn(raw_digest, controller.status()["service"]["import_identities"][identity])
+        self.assertEqual(controller.store.get_artifact(raw_digest), raw)

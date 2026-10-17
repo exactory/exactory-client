@@ -39,6 +39,12 @@ Fresh resolved findings must include other material searches of those formulatio
 This does not reinstate a common preparation gate for research. Requested formal
 verification and deliverables remain required after `already_solved`. Historical
 version 1 acceptances and closures replay under their recorded rules.
+Both an earlier uncertain hit and its explicit later `resolved` search judgment
+stay bound. `out_of_scope` removes that hit's reading obligation. Each `duplicate`
+has a `minimum.duplicate_resolutions` binding (`search_digest`, `work_id`,
+`canonical_work_id`) to a `relevant` or `contradictory` source in that same search;
+that decisive canonical source needs full reading. Decisive judgments retain
+their obligations; a missing canonical binding or reading is `openness_reading_gap`.
 
 Native evidence import records original and canonical content identities and
 resolves shared exploratory probe origins in the associated common store.
@@ -49,6 +55,21 @@ certificate or Lean proof requires admitted verification and a candidate
 interpretation; historical accepted imports replay. Exploratory probes remain
 outside native runs and reservations, with no native credit. Their actual `id`,
 `question` and `elapsed_seconds` belong in `units/INVENTORY.md`.
+JSON imports, plan snapshots and native problem pinning retain original bytes
+alongside canonical content. Fresh content commits append their aliases through
+`probe_origins_recorded`. Export publishes
+the checked `native_import_identity` binding (`schema_version: 1`,
+`canonical_digest`, `raw: ArtifactRef`) before canonical bytes and includes
+`raw_identities: [ArtifactRef]` in the exported artifact reference. Imports and
+fresh audits verify the alias bytes and resolve shared probe origins through
+them across both native JSON encodings and every checked alias in the chain,
+including origins recorded later. Export flattens the chain into common bindings
+for other importers. A missing raw identity requires the
+original artifact bytes. Assessment and historical replay publish nothing;
+recorded packets remain readable.
+An interrupted export may recover missing common bytes from exact staged or
+native originals after checking the committed raw descriptor. This read-only
+fallback never publishes during assessment.
 
 ## Workspace
 

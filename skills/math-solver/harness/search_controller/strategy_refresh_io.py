@@ -45,13 +45,21 @@ def effective_next_action(controller, state):
     return action
 
 
-def _plan_files(controller, node):
+def _plan_files(controller, node, content=None):
     result = {}
     for name in ["problem", "preconditions", "openings", "ranking"]:
         path = safe_path(controller.root, node["attack_slug"] + "/" + name + ".json")
         s.require(path.is_file() and not path.is_symlink(),
                   "Prepare the native " + name + ".json before strategy reassessment", "strategy_plan_stale")
-        result[name] = _strict_json(path.read_bytes(), "invalid_input")
+        raw = path.read_bytes()
+        result[name] = _strict_json(raw, "invalid_input")
+        if content is not None:
+            from .problem_records import pin_problem
+            from .provenance import retain_import_identity
+            if name == "problem":
+                pin_problem(content, result[name], raw=raw)
+            else:
+                retain_import_identity(content, content.put_blob(result[name]), raw)
     return result
 
 
@@ -147,13 +155,7 @@ def build_assessment(controller, state, spec, content):
         node = state["nodes"][node_id]
         s.require(plan_binding(controller, node) == expected,
                   "Native planning files changed after the assessment review", "strategy_reassessment_stale")
-        files = _plan_files(controller, node)
-        for name, data in files.items():
-            if name == "problem":
-                from .problem_records import pin_problem
-                pin_problem(content, data)
-            else:
-                content.put_blob(data)
+        _plan_files(controller, node, content)
     for row in value["assessment"]["assessments"]:
         if row["disposition"] == "continue":
             defects = plan_defects(controller, state["nodes"][row["node_id"]], row["strategy"])

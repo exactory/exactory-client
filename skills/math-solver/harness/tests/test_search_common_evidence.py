@@ -307,6 +307,45 @@ class CommonEvidenceTests(SearchCLIWorkspace, unittest.TestCase):
             self.assertIn(digest(source), delivered)
             self.assertIn(source["response"]["sha256"], delivered)
 
+    def build_resolved_acceptance(self, disposition, *, duplicate_of=None, read=False):
+        self.setup_external()
+        old = self.build_acceptance(relevant=True, read=False, disposition="potentially_relevant")
+        work = "arxiv:2601.99991v1"
+        spec = self.build_acceptance(relevant=True, read=read, search_tag="resolved-hit",
+                                     disposition=disposition, resolved=[work], duplicate_of=duplicate_of)
+        finding = spec["review"]["findings"]["openness"]
+        previous = old["review"]["findings"]["openness"]
+        finding["minimum"]["searches"].extend(previous["minimum"]["searches"])
+        finding["evidence"] = list(dict.fromkeys(finding["evidence"] + previous["evidence"]))
+        return spec
+
+    def test_explicit_out_of_scope_resolution_removes_the_uncertain_hits_reading_obligation(self):
+        spec = self.build_resolved_acceptance("out_of_scope")
+        self.search("accept", spec, target="checkpoint-000001", revision=2)
+        records = CommonStore(self.root).snapshot()["records"]
+        self.assertFalse(records.get("reading"))
+        self.assertEqual(len(records["literature_search"]), 2)
+
+    def test_duplicate_resolution_requires_only_its_fully_read_decisive_canonical_source(self):
+        spec = self.build_resolved_acceptance("duplicate", duplicate_of=99992, read=True)
+        self.search("accept", spec, target="checkpoint-000001", revision=2)
+        readings = CommonStore(self.root).snapshot()["records"]["reading"].values()
+        self.assertEqual({row["version_id"] for row in readings}, {"arxiv:2601.99992v1"})
+
+    def test_duplicate_resolution_without_a_canonical_full_reading_remains_a_gap(self):
+        spec = self.build_resolved_acceptance("duplicate", duplicate_of=99992)
+        self.assert_acceptance_refused(spec, "openness_reading_gap")
+
+    def test_duplicate_resolution_without_an_explicit_canonical_source_remains_a_gap(self):
+        spec = self.build_resolved_acceptance("duplicate")
+        self.assert_acceptance_refused(spec, "openness_reading_gap")
+
+    def test_omitting_a_new_duplicate_search_cannot_hide_its_unread_canonical_source(self):
+        self.setup_external()
+        spec = self.build_acceptance()
+        self.build_acceptance(relevant=True, read=False, disposition="duplicate", search_tag="new-duplicate")
+        self.assert_acceptance_refused(spec, "openness_search_stale")
+
     def test_manifest_shaped_artifact_cannot_hide_a_probe_digest_under_verification(self):
         self.initialize()
         spec = self.external_checkpoint()

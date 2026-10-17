@@ -172,6 +172,17 @@ Fresh resolved reviews must include other material searches for the same
 formulations, including new settling evidence. The packet delivers the actual
 common records, captured responses and source bundles. A proof manifest alone
 cannot establish openness. See `SEARCH.md` for the exact fields and refusal codes.
+Keep earlier uncertain hits and their explicit later `resolved` judgments in the
+bound searches. An `out_of_scope` resolution removes the uncertain hit's reading
+obligation. A `duplicate` requires `minimum.duplicate_resolutions` with
+`search_digest`, `work_id` and `canonical_work_id`; the canonical source must be
+`relevant` or `contradictory` in that search and fully read. Decisive judgments
+retain their full-reading obligation.
+JSON normalization preserves the original bytes: exported evidence references carry
+`raw_identities`, backed by checked `native_import_identity` records in the common
+store. Imports and fresh dependency audits resolve those aliases to shared probe
+origins. If an original cannot be preserved, export its original artifact bytes;
+a normalized review artifact never grants exploratory output proof credit.
 
 New result acceptance requires a version 2 native result review with an openness
 finding bound to the exact statement, novelty study, search/read evidence, date
