@@ -1230,6 +1230,12 @@ common store: `{schema_version: 1, canonical_digest, raw: ArtifactRef}`. Imports
 and fresh audits verify the original bytes against their canonical digest and
 consult the aliases before resolving shared probe origins, including origins
 recorded later. Missing original bytes require an original-artifact export.
+The shared resolver also checks these aliases when recording execution outputs
+and looking up result evidence. An execution's `probe_origins` binds `sha256` to
+the referenced output; a normalized output also retains `raw_sha256` for the
+original probe bytes. Fresh result lookups discover later probe origins without
+rewriting the execution. Only an authenticated managed launcher observation can
+establish that a matching output was independently rerun under its admission.
 Packet assessment and historical replay publish no objects or aliases; recorded
 packets remain readable.
 `plan` validates complete `problem.json` and precondition inputs directly; neither

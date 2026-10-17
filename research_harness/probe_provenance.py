@@ -1,6 +1,8 @@
 """Retain exploratory artifact identities through execution imports and references."""
 
 import errno
+import hashlib
+import json
 import os
 import re
 import stat
@@ -9,7 +11,33 @@ from .artifacts import ArtifactStore, describe_artifact
 from .errors import ResearchError
 from .operations import fields, immutable_record, prepared_mutation, text
 from .storage import Store
-from .workspace import checked_parent, read_file
+from .workspace import checked_parent, read_file, strict_json
+
+
+def check_normalized_identity(digest, raw):
+    """Authenticate the two lossless JSON encodings used by native exports."""
+    try:
+        value = strict_json(raw.decode("utf-8"))
+        encodings = {hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=ascii_only, allow_nan=False).encode("utf-8")).hexdigest()
+            for ascii_only in (False, True)}
+    except (UnicodeError, ValueError, RecursionError, ResearchError) as error:
+        raise ResearchError("invalid_import_identity", "Original import bytes must be finite, unambiguous UTF-8 JSON") from error
+    if digest not in encodings:
+        raise ResearchError("invalid_import_identity", "Original import bytes do not establish their canonical identity")
+    return encodings
+
+
+def read_import_identity(identity, artifacts):
+    """Check an append-only common alias against its immutable original bytes."""
+    fields(identity, ("schema_version", "canonical_digest", "raw"), code="invalid_import_identity")
+    if type(identity["schema_version"]) is not int or identity["schema_version"] != 1:
+        raise ResearchError("invalid_import_identity", "Expected import identity schema version 1")
+    if artifacts is None:
+        raise ResearchError("invalid_import_identity", "Resolving normalized identities requires their original artifacts")
+    raw = artifacts.read(identity["raw"])
+    check_normalized_identity(identity["canonical_digest"], raw)
+    return raw
 
 
 def record_probe_artifact_origin(root, probe_id, sha256, role):
@@ -160,8 +188,47 @@ def pin_probe_local_artifact(store, payload, *, expected_revision, request_id):
                 raise
 
 
-def find_probe_artifact_origins(records, descriptors):
-    """Match content identities, independent of a caller's filename or media label."""
+def find_probe_artifact_origins(records, descriptors, *, artifacts=None):
+    """Resolve checked aliases and bind each origin to the requested output SHA.
+
+    Exact identity queries need no artifact access. Normalization aliases always
+    require checked original bytes, including when their probe is recorded later.
+    """
+    aliases = {}
+    for identity in records.get("native_import_identity", {}).values():
+        aliases.setdefault(identity["canonical_digest"], []).append(identity)
+    requested = {item["sha256"] for item in descriptors}
+    references = {identity: {identity} for identity in requested}
+    pending = [(identity, identity) for identity in sorted(requested)]
+    checked = {}
+    count = len(pending)
+    while pending:
+        output, current = pending.pop()
+        if count > 10000:
+            raise ResearchError("dependency_cycle", "Probe identity closure is excessive")
+        if current not in checked:
+            checked[current] = []
+            for alias in aliases.get(current, []):
+                read_import_identity(alias, artifacts)
+                checked[current].append(alias["raw"]["sha256"])
+        for original in checked[current]:
+            outputs = references.setdefault(original, set())
+            if output not in outputs:
+                outputs.add(output)
+                pending.append((output, original))
+                count += 1
+    origins = []
+    for origin in match_probe_artifact_origins(records, [{"sha256": identity} for identity in references]):
+        for output in sorted(references[origin["sha256"]]):
+            row = dict(origin, sha256=output)
+            if output != origin["sha256"]:
+                row["raw_sha256"] = origin["sha256"]
+            origins.append(row)
+    return sorted(origins, key=lambda row: (row["probe_id"], row["sha256"], row.get("raw_sha256", "")))
+
+
+def match_probe_artifact_origins(records, descriptors):
+    """Match exact identities after the caller has authenticated its closure."""
     identities = {item["sha256"] for item in descriptors}
     origins = {}
     for identifier, probe in sorted(records.get("probe", {}).items()):
