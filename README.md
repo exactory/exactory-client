@@ -35,6 +35,11 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.52.1](docs/releases/0.52.1.md) corrects two errors in the handling of
+a process that ends during a lookup or a signal: the Linux process lookup of the
+probe supervision reports it as absent, and the native termination of math-solver
+keeps the record of the command.
+
 Version [0.52.0](docs/releases/0.52.0.md) makes the research actions tools
 that a study uses at any stage, with amounts that each call states, and keeps
 the gates on the claims. A depth plan sets the default amounts, a probe runs an
