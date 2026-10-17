@@ -54,7 +54,7 @@ class _SequentialFreshDraftsZenodoApi(_FakeZenodoApi):
                         "links": {"bucket": _BASE + "/files/bucket-fresh", "html": _BASE + "/deposit/4444"}}
             if method == "POST" and url.endswith("/actions/publish"):
                 self.published_ids.add(4444)
-                return {"doi": "10.5281/zenodo.4444", "conceptdoi": "10.5281/zenodo.4441", "links": {}}
+                return {"id": 4444, "submitted": True, "doi": "10.5281/zenodo.4444", "conceptdoi": "10.5281/zenodo.4441", "links": {}}
             if method == "GET" and url.endswith("/draft"):
                 return {"metadata": {}, "files": {"enabled": True}}
             if method == "PUT":
@@ -397,7 +397,7 @@ class TestDirectReadBack(_OfflineTestCase):
         calls = []
         def answer(request):
             calls.append("zenodo GET")
-            return {"id": 4242, "doi": "10.5072/zenodo.4242", "links": {"record_html": "http://zenodo.test/records/4242"}}
+            return {"id": 4242, "submitted": True, "doi": "10.5072/zenodo.4242", "links": {"record_html": "http://zenodo.test/records/4242"}}
         def resolve(problem_id):
             calls.append("problem preflight")
             return {"problem_id": problem_id, "api_url": "http://api.test"}
@@ -408,7 +408,7 @@ class TestDirectReadBack(_OfflineTestCase):
 
     def test_published_read_back_saves_the_record_and_stops_successfully(self):
         self.write_prior()
-        answer = {"id": 4242, "doi": "10.5072/zenodo.4242", "conceptdoi": "10.5072/zenodo.42",
+        answer = {"id": 4242, "submitted": True, "doi": "10.5072/zenodo.4242", "conceptdoi": "10.5072/zenodo.42",
                   "links": {"record_html": "http://zenodo.test/records/4242"}}
         with patch.object(_draft, "_open_url", return_value=answer) as opened:
             out, err = self.capture_exit(lambda: self.deposit(new_version=True), 0)
@@ -425,7 +425,7 @@ class TestDirectReadBack(_OfflineTestCase):
 
     def test_published_read_back_with_a_concept_doi_keeps_the_same_successful_stop(self):
         self.write_prior(concept_doi="10.5072/zenodo.42")
-        answer = {"id": 4242, "doi": "10.5072/zenodo.4242", "conceptdoi": "10.5072/zenodo.42", "links": {}}
+        answer = {"id": 4242, "submitted": True, "doi": "10.5072/zenodo.4242", "conceptdoi": "10.5072/zenodo.42", "links": {}}
         with patch.object(_draft, "_open_url", return_value=answer) as opened:
             _, err = self.capture_exit(lambda: self.deposit(new_version=True), 0)
         self.assertEqual(opened.call_count, 1)
@@ -569,7 +569,7 @@ class TestDirectReadBack(_OfflineTestCase):
         with patch.object(_draft, "_open_url", return_value=None) as opened:
             _, err = self.capture_exit(lambda: self.deposit(new_version=True, store=store))
         self.assertEqual(opened.call_count, 1)
-        self.assertIn("does not describe a deposition", err)
+        self.assertIn("The request named deposition 4242, but the answer of Zenodo names no deposition.", err)
         self.assertIn("reads deposition 4242 back first", err)
         self.assertNotIn("was deleted", err)
 
@@ -585,7 +585,7 @@ class TestDirectReadBack(_OfflineTestCase):
         with patch.object(_draft, "_open_url", answer):
             _, err = self.capture_exit(lambda: self.deposit(new_version=True))
         self.assertEqual(len(fake.requests), 1)
-        self.assertIn("another deposition", err)
+        self.assertIn("The request named deposition 4242, but the answer of Zenodo names deposition 4343.", err)
         self.assertEqual(json.loads(Path(".exactory/deposit.json").read_text()), prior)
 
     def test_refused_new_version_publish_then_rerun_publishes_that_draft_once(self):
@@ -619,7 +619,7 @@ class TestFailureAdvice(_OfflineTestCase):
                 def answer(request):
                     if request.get_method() == failed_method:
                         raise http.client.InvalidURL("bad recovery address")
-                    return {"submitted": False}
+                    return {"id": 4242, "submitted": False}
                 with patch.object(_draft, "_open_url", answer), patch.object(_draft, "_read_zenodo_token", return_value="test-token"):
                     _, err = self.capture_exit(lambda: _draft._settle_direct_publication(journal, may_publish=True))
                 self.assertIn("an address from the workspace's recovery record", err)

@@ -112,7 +112,7 @@ class _FakeZenodoApi:
             return {"metadata": {"prereserve_doi": {"doi": "10.5281/zenodo.4242"}}}
         if method == "POST" and url.endswith("/deposit/depositions/4242/actions/publish"):
             return {
-                "id": 4242, "doi": "10.5281/zenodo.4242",
+                "id": 4242, "submitted": True, "doi": "10.5281/zenodo.4242",
                 "conceptdoi": "10.5281/zenodo.4241",
                 "links": {"record_html": f"{base_url}/records/4242"},
             }
@@ -138,7 +138,7 @@ class _FakeZenodoApi:
             return {"metadata": {"prereserve_doi": {"doi": "10.5281/zenodo.4343"}}}
         if method == "POST" and url.endswith("/deposit/depositions/4343/actions/publish"):
             return {
-                "id": 4343, "doi": "10.5281/zenodo.4343",
+                "id": 4343, "submitted": True, "doi": "10.5281/zenodo.4343",
                 "conceptdoi": "10.5281/zenodo.4241",
                 "links": {"record_html": f"{base_url}/records/4343"},
             }

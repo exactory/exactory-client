@@ -295,7 +295,7 @@ class ResearchPublicationTests(DevelopmentCase):
                 uploaded.append(kwargs["file_bytes"])
                 return {"filename": "paper.pdf"}
             if url.endswith("/actions/publish"):
-                return {"id": 91, "doi": "10.5281/zenodo.91", "conceptdoi": "10.5281/zenodo.90", "links": {"record_html": "https://zenodo.org/records/91"}}
+                return {"id": 91, "submitted": True, "doi": "10.5281/zenodo.91", "conceptdoi": "10.5281/zenodo.90", "links": {"record_html": "https://zenodo.org/records/91"}}
             return {}
         revision = self.store.revision
         if lost:
@@ -334,7 +334,7 @@ class ResearchPublicationTests(DevelopmentCase):
             if method == "GET" and "/deposit/depositions?page=" in url:
                 return created
             if url.endswith("/actions/publish"):
-                return {"id": 93, "doi": "10.5281/zenodo.93", "conceptdoi": "10.5281/zenodo.92",
+                return {"id": 93, "submitted": True, "doi": "10.5281/zenodo.93", "conceptdoi": "10.5281/zenodo.92",
                         "links": {"record_html": "https://zenodo.org/records/93"}}
             return {}
 

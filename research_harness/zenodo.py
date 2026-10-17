@@ -55,6 +55,39 @@ def _deposition(intent):
     return intent["responses"].get("create", {}).get("response")
 
 
+def _is_published_deposition(answer, record_id):
+    return (isinstance(answer, dict) and str(answer.get("id")) == str(record_id)
+            and answer.get("submitted") is True and isinstance(answer.get("doi"), str) and bool(answer["doi"].strip()))
+
+
+def _require_published_deposition(answer, record_id):
+    """Validate before confirming a publish claim or recording its publication."""
+    if _is_published_deposition(answer, record_id):
+        return answer
+    raise ResearchError("remote_reconciliation_required",
+                        f"Zenodo has not confirmed that deposition {record_id} is published: the answer must name"
+                        f" deposition {record_id} and carry submitted true and a DOI. The publish step stays"
+                        f" unresolved, and the next run reads deposition {record_id} back from Zenodo before any"
+                        " other write.")
+
+
+def _recover_published_deposition(store, intent, client, *, reconcile):
+    """Return the publication of an intent whose publish step is confirmed. An earlier version
+    confirmed the step before it checked the answer, so a saved answer that does not show the
+    publication is read back from the same deposition, and the saved answer stays as it is."""
+    published = intent["responses"].get("publish", {}).get("response")
+    record_id = _deposition(intent)["id"]
+    if not _is_published_deposition(published, record_id):
+        if reconcile:
+            published = client("GET", intent["binding"]["base_url"] + "/deposit/depositions/" + str(record_id))
+        _require_published_deposition(published, record_id)
+        if not _files_match(published, intent["binding"], ArtifactStore(store.root)):
+            raise ResearchError("remote_reconciliation_required",
+                                f"Deposition {record_id} is published, but its files on Zenodo do not match the"
+                                " uploads of this deposit. The deposit stays unresolved, and no further write was sent.")
+    return published
+
+
 def has_published_record(deposit_state):
     """Whether a recorded deposit is a published record. A deposition has a DOI only once it is
     published (the `doi` field of https://developers.zenodo.org, checked 2026-10-14), so a record
@@ -139,13 +172,16 @@ def reconcile_pending(store, identifier, client):
                 observed = candidate
         else:
             candidate = client("GET", base + "/deposit/depositions/" + str(record_id))
+            # A read that names another deposition says nothing about this publish.
+            if name == "publish" and (not isinstance(candidate, dict) or str(candidate.get("id")) != str(record_id)):
+                _require_published_deposition(candidate, record_id)
             if name.startswith("upload:"):
                 selected = dict(binding, uploads=[u for u in binding["uploads"] if u["name"] == name[7:]])
                 if _files_match(candidate, selected, ArtifactStore(store.root)):
                     observed = candidate
             elif name == "metadata" and all(candidate.get("metadata", {}).get(k) == v for k, v in pending["request"]["metadata"].items()):
                 observed = candidate
-            elif name == "publish" and candidate.get("submitted") is True and candidate.get("doi") and _files_match(candidate, binding, ArtifactStore(store.root)):
+            elif name == "publish" and _is_published_deposition(candidate, record_id) and _files_match(candidate, binding, ArtifactStore(store.root)):
                 observed = candidate
         # Each step above writes to the record this read returned, so a read
         # with no trace of the step establishes that it never landed: the claim
@@ -209,7 +245,8 @@ def continue_deposit(store, identifier, client, *, reconcile=False, finish_only=
         # fact on Zenodo: it is recorded without the manuscript check, so an edited draft
         # cannot keep a published record unrecorded (design 2026-10-12 §17).
         if "publish" in intent["responses"]:
-            return _finish_deposit(store, identifier, intent)
+            published = _recover_published_deposition(store, intent, client, reconcile=reconcile)
+            return _finish_deposit(store, identifier, intent, published=published)
         if finish_only:
             raise ResearchError("publication_unconfirmed",
                                 "The record of this deposit is not published. Run exactory-draft deposit to finish it.",
@@ -246,20 +283,23 @@ def continue_deposit(store, identifier, client, *, reconcile=False, finish_only=
         _set_preview(store, identifier, binding, client, deposition["id"])
         if binding["publish"]:
             checked_revision = _current(store, binding)
+            def publish():
+                answer = client("POST", base + "/deposit/depositions/" + str(deposition["id"]) + "/actions/publish")
+                return _require_published_deposition(answer, deposition["id"])
             remote_step(store, identifier, "publish", {"deposition_id": deposition["id"]},
-                lambda: client("POST", base + "/deposit/depositions/" + str(deposition["id"]) + "/actions/publish"), expected_revision=checked_revision)
+                        publish, expected_revision=checked_revision)
         return _finish_deposit(store, identifier, get_intent(store, identifier))
 
 
-def _finish_deposit(store, identifier, intent):
+def _finish_deposit(store, identifier, intent, *, published=None):
     """Record the receipt and the workspace deposit from the intent's confirmed responses."""
     binding = intent["binding"]
     deposition = _deposition(intent)
-    published = intent["responses"].get("publish", {}).get("response")
+    if published is None:
+        published = intent["responses"].get("publish", {}).get("response")
     state = {"environment": binding["environment"], "deposition_id": deposition["id"], "draft_url": deposition.get("links", {}).get("html", "")}
-    if published is not None:
-        if not published.get("doi") or str(published.get("id")) != str(deposition["id"]):
-            raise ResearchError("remote_reconciliation_required", "The publish response has not established the concrete version's DOI")
+    if "publish" in intent["responses"]:
+        _require_published_deposition(published, deposition["id"])
         state.update(doi=published["doi"], concept_doi=published.get("conceptdoi", ""),
                      record_url=published.get("links", {}).get("record_html", ""))
     receipt = dict(state, intent_id=identifier, bundle_digest=binding["bundle_digest"], uploads=binding["uploads"],

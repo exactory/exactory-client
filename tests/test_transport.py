@@ -402,7 +402,7 @@ class TestSubmitDecision(_TransportTestCase):
             if method == "POST" and url.endswith("/deposit/depositions"):
                 return {"id": 1, "links": {"bucket": "https://zenodo.org/api/files/fixture"}}
             if url.endswith("/actions/publish"):
-                return {"id": 1, "doi": "10.5281/zenodo.1", "conceptdoi": "10.5281/zenodo.0",
+                return {"id": 1, "submitted": True, "doi": "10.5281/zenodo.1", "conceptdoi": "10.5281/zenodo.0",
                         "links": {"record_html": "https://zenodo.org/records/1"}}
             return {}
 

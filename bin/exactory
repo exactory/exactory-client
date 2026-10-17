@@ -13,6 +13,7 @@ submit continues.
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 import re
@@ -729,7 +730,39 @@ def _is_citation_locator(locator: str) -> bool:
     """A locator an agent can resolve: a DOI, an arXiv id, or an https URL."""
     return bool(_DOI_LOCATOR_RE.fullmatch(locator)
                 or _ARXIV_LOCATOR_RE.fullmatch(locator)
-                or (locator.startswith("https://") and len(locator) > len("https://")))
+                or (locator.startswith("https://") and _is_https_url(locator)))
+
+
+def _is_https_url(value: str) -> bool:
+    """Refuse the https URLs that the server's URL.canParse (the WHATWG URL parser) certainly
+    refuses: an empty host, an unclosed or invalid IPv6 literal, a forbidden host code point, or an
+    invalid port. International and numeric hosts are left to the server, which refuses an invalid
+    one with a 400, so this check never refuses a URL that the server accepts. The locator is posted
+    as given."""
+    # WHATWG removes ASCII tabs and newlines, reads a backslash as a slash, and ends the authority
+    # at the first slash, backslash, question mark, or number sign.
+    parsed = re.sub(r"[\t\n\r]", "", value)
+    authority = re.split(r"[/\\?#]", parsed[len("https:"):].lstrip("/\\"), maxsplit=1)[0]
+    host_port = authority.rpartition("@")[2]
+    if host_port.startswith("["):
+        host, closing, tail = host_port[1:].partition("]")
+        # ipaddress accepts a zone id after %, and WHATWG does not.
+        if not closing or "%" in host or (tail and not tail.startswith(":")):
+            return False
+        try:
+            ipaddress.IPv6Address(host)
+        except ValueError:
+            return False
+        port = tail[1:]
+    else:
+        host, _, port = host_port.partition(":")
+        try:
+            host = urllib.parse.unquote(host, errors="strict")
+        except UnicodeDecodeError:
+            return False
+        if not host or re.search(r"[\x00-\x20\x7f%#/:<>?@\[\]\\^|]", host):
+            return False
+    return not port or bool(re.fullmatch(r"[0-9]+", port) and int(port) <= 65535)
 
 
 def _read_citations_file(path: str) -> list[dict]:
@@ -867,8 +900,22 @@ def _require_github_context_url(url: str) -> str:
     """A context link is an https://github.com/ page; the poster gives the exact URL (design
     2026-10-12 §12, decision 14). It needs the literal prefix and a path after the host."""
     _require_posted_link("context link", url)
-    path_after_host = url[len(_GITHUB_PAGE_URL_PREFIX):]
-    if not url.startswith(_GITHUB_PAGE_URL_PREFIX) or not path_after_host or path_after_host.startswith(("?", "#")):
+    # Only the parsed path decides whether the URL names a page. The server's URL
+    # parser removes dot segments (also %2e in either case) and treats backslashes as
+    # separators. Keep empty segments and the trailing slash, as WHATWG does.
+    path = re.split(r"[?#]", url[len(_GITHUB_PAGE_URL_PREFIX):], maxsplit=1)[0].replace("\\", "/")
+    segments = path.split("/")
+    resolved = []
+    for index, segment in enumerate(segments):
+        dots = re.sub(r"%2e", ".", segment, flags=re.IGNORECASE)
+        if dots in (".", ".."):
+            if dots == ".." and resolved:
+                resolved.pop()
+            if index == len(segments) - 1:
+                resolved.append("")
+        else:
+            resolved.append(segment)
+    if not url.startswith(_GITHUB_PAGE_URL_PREFIX) or not "/".join(resolved):
         _exit_with_error(f"{url} is not a context link. Give an https://github.com/ URL that names a page.")
     return url
 
@@ -1110,8 +1157,10 @@ def _run_post_lean_check(args: argparse.Namespace) -> None:
         "evidenceUrl": evidence_url,
     }
     if args.output_excerpt_file is not None:
-        body["outputExcerpt"] = _require_plain_text_bounds(
-            "output excerpt", _read_inline_or_file_text(None, args.output_excerpt_file), 1, 20000)
+        excerpt = _require_plain_text_bounds(
+            "output excerpt", _read_inline_or_file_text(None, args.output_excerpt_file), 0, 20000)
+        if excerpt:
+            body["outputExcerpt"] = excerpt
     _send_math_write("POST", _build_api_path("math-proofs", args.proof_id, "lean-checks"), body)
 
 

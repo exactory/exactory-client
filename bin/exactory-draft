@@ -337,7 +337,16 @@ def _build_zenodo_client(environment: str, token: str, failure_advice: _FailureA
             url = bucket_url + "/" + urllib.parse.quote(upload_name, safe="")
         if method == "POST" and url.endswith("/actions/newversion"):
             kwargs["address_source_name"] = "the workspace's record"
-        return _call_zenodo(method, url, token, failure_advice=failure_advice, environment=environment, **kwargs)
+        answer = _call_zenodo(method, url, token, failure_advice=failure_advice, environment=environment, **kwargs)
+        # A draft link or reconciliation read names a concrete deposition even when urllib
+        # follows a redirect. Check before the managed caller records that answer or writes to it.
+        path = urllib.parse.urlsplit(url).path
+        deposition_prefix = "/api/deposit/depositions/"
+        if method == "GET" and path.startswith(deposition_prefix):
+            deposition_id = path[len(deposition_prefix):].rstrip("/")
+            _require_deposition_answer(answer, deposition_id,
+                                        f"Run the same command again. It reads deposition {deposition_id} back from Zenodo.")
+        return answer
     return call
 
 
@@ -697,6 +706,10 @@ def _deposit_directly(store, store_open_error, args: argparse.Namespace, base_ur
             if new_draft_url == "":
                 _exit_with_error("Zenodo returned no new-version draft link.")
             deposition = _call_zenodo("GET", new_draft_url, token, environment=environment)
+            expected_id = urllib.parse.urlsplit(new_draft_url).path.rstrip("/").rsplit("/", 1)[-1]
+            _require_deposition_answer(deposition, expected_id,
+                                        f"Run the same command again with --new-version. It reopens the version draft"
+                                        f" and reads deposition {expected_id} back from Zenodo.")
         next_step_msg = _build_new_version_draft_next_step_msg(recorded_deposition_id)
     else:
         creation_advice = _FailureAdvice(uncertain_msg=_UNCERTAIN_DIRECT_CREATION_ADVICE_TEMPLATE.format(
@@ -747,6 +760,9 @@ def _deposit_directly(store, store_open_error, args: argparse.Namespace, base_ur
                 failure_advice=_build_publish_request_advice_set(deposition["id"], draft_url, problem_target,
                                                                  is_new_version=args.new_version),
                 environment=environment)
+            retry_msg = (f"Run the same command again. It reads deposition {deposition['id']} back from Zenodo."
+                         if problem_target is not None else _build_recorded_deposition_retry_msg(deposition["id"]))
+            _require_deposition_answer(publish_response, deposition["id"], retry_msg, published=True)
             state["doi"] = publish_response.get("doi", "")
             state["concept_doi"] = publish_response.get("conceptdoi", "")
             state["record_url"] = publish_response.get("links", {}).get("record_html", "")
@@ -829,11 +845,7 @@ def _read_new_version_prior(base_url: str, environment: str, token: str,
             # _call_zenodo passes only a requested 404 through; every other status exits there.
             deposition = None
         else:
-            if not isinstance(deposition, dict):
-                _exit_with_error(_build_unconfirmed_request_msg("the body does not describe a deposition", recovery_msg))
-            # The workspace record owns the retry target; a reply cannot switch the operation to another record.
-            if deposition.get("id", deposition_id) != deposition_id:
-                _exit_with_error(_build_unconfirmed_request_msg("the answer names another deposition", recovery_msg))
+            _require_deposition_answer(deposition, deposition_id, recovery_msg)
         if deposition is None:
             if store_open_error is not None:
                 _exit_with_error(f"Deposition {deposition_id} was deleted, but the workspace's publication history"
@@ -858,6 +870,7 @@ def _read_new_version_prior(base_url: str, environment: str, token: str,
             print(f"Deposition {deposition_id} was deleted. Continuing the new version from published deposition"
                   f" {prior['deposition_id']}, DOI {prior['doi']}.")
         elif deposition.get("doi"):
+            _require_deposition_answer(deposition, deposition_id, recovery_msg, published=True)
             state = dict(prior, doi=deposition["doi"], concept_doi=deposition.get("conceptdoi", ""),
                          record_url=deposition.get("links", {}).get("record_html", ""))
             print(f"The record is published: {state['record_url']}")
@@ -886,6 +899,19 @@ def _build_recorded_deposition_retry_msg(deposition_id: int) -> str:
     """The next run settles the recorded deposition before it writes again."""
     return (f"Run the same command again with --new-version. It reads deposition {deposition_id} back first."
             " It continues a draft only when its record carries a concept DOI, and never publishes a second record.")
+
+
+def _require_deposition_answer(answer, deposition_id, retry_msg: str, *, published: bool = False) -> None:
+    """A response may establish only the deposition the request named, before any record or write."""
+    answered_id = answer.get("id") if isinstance(answer, dict) else None
+    if answered_id is None or str(answered_id) != str(deposition_id):
+        answered = "no deposition" if answered_id is None else f"deposition {answered_id}"
+        _exit_with_error(f"The request named deposition {deposition_id}, but the answer of Zenodo names {answered}."
+                         f" The operation stays unresolved. {retry_msg}")
+    if published and (answer.get("submitted") is not True or not isinstance(answer.get("doi"), str)
+                      or not answer["doi"].strip()):
+        _exit_with_error(f"Zenodo has not confirmed that deposition {deposition_id} is published: the answer needs"
+                         f" submitted true and a DOI. The operation stays unresolved. {retry_msg}")
 
 
 def _save_deposit_state(store, store_open_error, state: dict) -> None:
@@ -1458,10 +1484,6 @@ def _mark_journal_settled(journal: dict, record: dict) -> dict:
     """The published record is recorded, so its publication is certain: write the journal settled
     with the DOI of the record, and return that journal. The attachment is the next step, and a
     failure there leaves this journal in place for attach-problem."""
-    if not record.get("doi"):
-        _exit_with_error(f"Deposition {record['deposition_id']} is published, but Zenodo answered without a DOI."
-                         f" Open {record['draft_url']} and read its state. Then run exactory-draft attach-problem."
-                         " It reads the deposition back and attaches the record.")
     flaw_msg = _find_record_flaw(journal, record)
     if flaw_msg is not None:
         # The receipt proves the publication, so the way out is the rule for a published record.
@@ -1572,6 +1594,8 @@ def _settle_direct_publication(journal: dict, *, may_publish: bool) -> tuple[dic
     deposition_url = f"{journal['base_url']}/deposit/depositions/{journal['deposition_id']}"
     deposition = _call_zenodo("GET", deposition_url, token, environment=journal["environment"],
                               address_source_name="the workspace's recovery record")
+    retry_msg = f"Run the same command again. It reads deposition {journal['deposition_id']} back from Zenodo."
+    _require_deposition_answer(deposition, journal["deposition_id"], retry_msg)
     did_send_publish = False
     if deposition.get("submitted") is False:
         if not may_publish:
@@ -1580,10 +1604,7 @@ def _settle_direct_publication(journal: dict, *, may_publish: bool) -> tuple[dic
         deposition = _call_zenodo("POST", f"{deposition_url}/actions/publish", token,
                                   environment=journal["environment"], address_source_name="the workspace's recovery record")
         did_send_publish = True
-    if not deposition.get("doi"):
-        _exit_with_error(f"Deposition {journal['deposition_id']} answers without a DOI. Open {journal['draft_url']}"
-                         " and read its state. Then run the command again. It reads the deposition back and"
-                         " publishes no second record.")
+    _require_deposition_answer(deposition, journal["deposition_id"], retry_msg, published=True)
     return {"environment": journal["environment"], "deposition_id": journal["deposition_id"],
             "draft_url": journal["draft_url"], "doi": deposition["doi"],
             "concept_doi": deposition.get("conceptdoi", ""),

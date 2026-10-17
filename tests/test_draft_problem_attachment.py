@@ -1967,11 +1967,12 @@ class TestProblemDepositJournalStates(_PlainWorkspaceDepositTestCase):
 
         output = self._deposit(_PROBLEM_DEPOSIT, expected_exit_code=1)
 
-        self.assertIn("Deposition 4242 is published, but Zenodo answered without a DOI. Open"
-                      " https://zenodo.org/api/deposit/4242 and read its state. Then run exactory-draft"
-                      " attach-problem. It reads the deposition back and attaches the record.", output)
+        self.assertIn("Zenodo has not confirmed that deposition 4242 is published: the answer needs submitted"
+                      " true and a DOI. The operation stays unresolved. Run the same command again. It reads deposition 4242"
+                      " back from Zenodo.", output)
         self.assertIn(f"{_JOURNAL_PATH_TEXT} stays as the recovery record of this deposit.", output)
         self.assertFalse(_read_journal(self.workspace_dir)["settled"])
+        self.assertNotIn("doi", self.read_deposit_state())
         self.assertEqual(self.exactory.links(), [])
         self._answer_with(_PublishedRecordZenodoApi(b"%PDF-1.4 fake paper"))
 
@@ -1987,9 +1988,9 @@ class TestProblemDepositJournalStates(_PlainWorkspaceDepositTestCase):
 
         output = _run_draft_command(["attach-problem"], 1, self)
 
-        self.assertIn("Deposition 4000 answers without a DOI. Open https://zenodo.org/api/deposit/4000 and read its"
-                      " state. Then run the command again. It reads the deposition back and publishes no second"
-                      " record.", output)
+        self.assertIn("Zenodo has not confirmed that deposition 4000 is published: the answer needs submitted"
+                      " true and a DOI. The operation stays unresolved. Run the same command again. It reads deposition 4000"
+                      " back from Zenodo.", output)
         self.assertIn(f"{_REMOVAL_RULE_MSG} deposition 4000 (https://zenodo.org/api/deposit/4000) is not published, or"
                       " decide not to publish it. The command never removes it.", output)
         self.assertEqual(_read_journal(self.workspace_dir), _OTHER_JOURNAL)

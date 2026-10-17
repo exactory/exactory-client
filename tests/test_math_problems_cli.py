@@ -1310,7 +1310,7 @@ class TestLeanCheckInputs(_MathCliTestCase):
 
     def test_the_output_excerpt_comes_from_a_file_with_the_bounds_of_the_server_schema(self) -> None:
         excerpt_path = self.scratch_dir / "excerpt.txt"
-        for text, is_accepted in (("", False), ("  \n", True), ("o\n", True), ("o" * 20000, True), ("o" * 20001, False)):
+        for text, is_accepted in (("  \n", True), ("o\n", True), ("o" * 20000, True), ("o" * 20001, False)):
             with self.subTest(text_length=len(text)):
                 self.sent.clear()
                 excerpt_path.write_text(text, encoding="utf-8")
@@ -1321,6 +1321,12 @@ class TestLeanCheckInputs(_MathCliTestCase):
                 else:
                     self.run_cli(argv, expected_exit_code=1)
                     self.assertEqual(self.sent, [])
+
+    def test_an_empty_output_excerpt_file_sends_no_excerpt(self) -> None:
+        path = self.scratch_dir / "empty-excerpt.txt"
+        path.write_text("", encoding="utf-8")
+        self.run_cli(self.build_post_lean_check_argv("--output-excerpt-file", str(path)))
+        self.assertNotIn("outputExcerpt", self.read_report_body())
 
     def test_an_excerpt_normalizes_line_breaks_and_keeps_its_leading_spaces(self) -> None:
         path = self.scratch_dir / "excerpt.txt"
@@ -1923,6 +1929,52 @@ class TestAsciiDigitsInIdentifierPatterns(_MathCliTestCase):
         argv[argv.index("--citations-file") + 1] = str(citations_path)
         return argv
 
+    def assert_url_locator_refused(self, locator: str) -> None:
+        argv = self.build_post_problem_argv_with_locator(locator)
+        citations_path = argv[argv.index("--citations-file") + 1]
+        commands = [argv, ["post-challenge", "--title", "A test challenge", "--field", "math.CO",
+                           "--problem-statement", "s" * 200, "--current-state", "c" * 100,
+                           "--resolution-criteria", "r" * 50, "--citations-file", citations_path]]
+        for command in commands:
+            with self.subTest(command=command[0], locator=locator):
+                self.sent.clear()
+                _, message = self.run_cli(command, expected_exit_code=1)
+                self.assertIn("not a DOI, an arXiv id, or an https URL", message)
+                self.assertEqual(self.sent, [])
+
+    def test_a_url_locator_with_an_empty_host_is_refused(self) -> None:
+        for locator in ("https://", "https://?x", "https://#x", "https://:443/x", "https://user@/x"):
+            self.assert_url_locator_refused(locator)
+
+    def test_a_url_locator_with_an_unclosed_or_invalid_ipv6_bracket_is_refused(self) -> None:
+        for locator in ("https://[", "https://[::1", "https://[invalid]/x", "https://[127.0.0.1]/x",
+                        "https://[::1]extra/x", "https://[fe80::1%25eth0]/x"):
+            self.assert_url_locator_refused(locator)
+
+    def test_a_url_locator_with_forbidden_host_code_points_is_refused(self) -> None:
+        for host in ("exa mple.org", "exa<mple.org", "exa>mple.org", "exa^mple.org", "exa|mple.org",
+                     "example%00.org", "example%2f.org", "example%23.org", "example%25.org", "example%ZZ.org"):
+            self.assert_url_locator_refused("https://" + host + "/x")
+
+    def test_a_url_locator_with_an_invalid_port_is_refused(self) -> None:
+        for port in ("bad", "-1", "65536", "12.3", "443x", "１２"):
+            self.assert_url_locator_refused("https://example.org:" + port + "/x")
+
+    def test_accepted_url_locators_are_sent_exactly_as_given(self) -> None:
+        for locator in ("https://[::1]:443/x", "https://[::ffff:192.0.2.1]/x", "https://EXAMPLE.org:00443/a/../b?x=%2e#y",
+                        "https://example.org:/x", "https:///example.org/x", "https://user:pass@example.org/x",
+                        "https://127.1/x", "https://0x7f.1/x", "https://example.org/é", "https://例え.テスト/x",
+                        "https://xn--bcher-kva.example/x", "https://256.1.1.1../x", "https://4294967296../x",
+                        # International hosts that the server accepts (URL.canParse in Node 24, 2026-10-16).
+                        # The server decides international and numeric hosts, so the local check passes them.
+                        "https://\U0001fae8.com/x", "https://\u0915\u094d\u200d.in/x", "https://\u0bb8\u0bcd\u200c.in/x",
+                        "https://a\u05d0.com/x"):
+            with self.subTest(locator=locator):
+                self.sent.clear()
+                self.run_cli(self.build_post_problem_argv_with_locator(locator))
+                body = self.read_sent_body("POST", "/api/v1/math-problems")
+                self.assertEqual(body["citations"][0]["locator"], locator)
+
     def test_a_locator_is_a_doi_or_an_arxiv_id_in_ascii_digits_or_an_https_url(self) -> None:
         for locator in ("10.1017/cbo9781107340688", "arXiv:2301.00001", "arxiv:2301.00001v12", "hep-th/9901001v3",
                         "math.GT/0309136", "https://example.org/x"):
@@ -1985,6 +2037,36 @@ def _build_escaped_surrogate_refusal(field: str, code_point: int, place: str) ->
     return (f"The {field} contains U+{code_point:04X} at {place}. A \\u{code_point:04X} escape in the citations file"
             " gives it, and it is half of a surrogate pair. Write the character as UTF-8 text in the file, or write"
             " both escapes of the pair.")
+
+
+class TestGithubContextParsedPaths(_MathCliTestCase):
+    def context_commands(self, url):
+        return [self.build_post_problem_argv("--github-link", url, "Context"),
+                ["link-problem-github", _PROBLEM_ID, "--url", url, "--label", "Context"]]
+
+    def test_a_context_path_that_resolves_to_root_is_refused(self):
+        paths = [".", "a/..", "%2e", "%2E", "..", ".%2e", "%2E.", "%2e%2E",
+                 "a/.%2E", "a/%2e.", "a/%2E%2e", "a/b/../..", "a/../?tab=readme", "a/..#readme",
+                 "a\\..", "a/%2e%2e/."]
+        for path in paths:
+            url = "https://github.com/" + path
+            for command in self.context_commands(url):
+                with self.subTest(command=command[0], url=url):
+                    self.sent.clear()
+                    _, message = self.run_cli(command, expected_exit_code=1)
+                    self.assertIn("URL that names a page", message)
+                    self.assertEqual(self.sent, [])
+
+    def test_a_context_path_that_keeps_a_page_is_sent_exactly_as_given(self):
+        for path in ("a/b/..", "a/b/%2E.", "a/b/.%2e", "a/b/%2e%2E", "a/b/../?tab=readme#top",
+                     "a/../b", "a/%252e", "a/...", "/", "a\\b\\.."):
+            url = "https://github.com/" + path
+            for command in self.context_commands(url):
+                with self.subTest(command=command[0], url=url):
+                    self.sent.clear()
+                    self.run_cli(command)
+                    body = json.loads(self.sent[-1].data)
+                    self.assertEqual(body["githubLinks"][0]["url"] if command[0] == "post-problem" else body["url"], url)
 
 
 class TestPlainTextOfFreeTextFields(_MathCliTestCase):
