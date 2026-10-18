@@ -13,7 +13,7 @@ from types import SimpleNamespace
 from research_harness.artifacts import ArtifactStore
 from research_harness.errors import ResearchError
 from research_harness.scientific_delivery import project_delivery
-from research_harness.review_delivery import _deliver
+from research_harness.review_delivery import deliver_packet
 
 
 class RoundInvestigationDeliveryTests(unittest.TestCase):
@@ -93,7 +93,7 @@ class RoundInvestigationDeliveryTests(unittest.TestCase):
                 projected, derived = self.project(records, manifest)
                 self.assertEqual(projected, manifest)
                 destination = self.artifacts.root / ("delivery-" + str(index))
-                _deliver(SimpleNamespace(root=self.artifacts.root, revision=0), destination,
+                deliver_packet(SimpleNamespace(root=self.artifacts.root, revision=0), destination,
                          projected, derived=derived, transitive=True, empty_captures=(ref,))
                 self.assertEqual((destination / ref["path"]).read_bytes(), b"")
                 self.assertEqual(json.loads((destination / "inputs.json").read_bytes()), manifest)

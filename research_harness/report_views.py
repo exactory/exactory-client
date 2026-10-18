@@ -85,6 +85,9 @@ def next_summary(report):
             "preparation_ready": preparation.get("ready"), "advisory_only": True, "detail_available": True,
             "next_hint": _hint(report.get("next")),
             "details": "exactory-research obligations --code CODE [--limit N] [--cursor CURSOR]"}
+    if report.get("orchestration") == "problem_creation":
+        result.update(orchestration=report["orchestration"], milestone=report["milestone"],
+                      post_obligations=_obligations(report["obligations"]))
     if "manuscript_ready" in report:
         result.update({"manuscript_ready": report["manuscript_ready"], "objective_complete": report["objective_complete"],
                        "manuscript_obligations": _obligations(report["manuscript_obligations"]),

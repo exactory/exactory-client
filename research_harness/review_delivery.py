@@ -34,7 +34,7 @@ def references(value):
     return [found[key] for key in sorted(found)]
 
 
-def _deliver(store, destination, manifest, *, derived=None, transitive=False, empty_captures=()):
+def deliver_packet(store, destination, manifest, *, derived=None, transitive=False, empty_captures=()):
     destination = Path(destination).absolute()
     if destination.exists() or destination.is_symlink():
         raise ResearchError("review_destination_exists", "Deliver into a new independent directory")
@@ -91,8 +91,8 @@ def deliver_readiness(store, destination):
                 "checks": snapshot["records"][r["kind"]][r["review_id"]]["payload"]["checks"]}
                 for r in contract["required_corrections"]]
         packet, derived = project_delivery(snapshot["records"], evaluation, contract, packet, corrective=correction is not None)
-        return _deliver(store, destination, packet, derived=derived, transitive=True)
-    return _deliver(store, destination, packet)
+        return deliver_packet(store, destination, packet, derived=derived, transitive=True)
+    return deliver_packet(store, destination, packet)
 
 
 def _project_current_claims(bundle, artifacts):
@@ -124,8 +124,8 @@ def deliver_manuscript(store, destination):
             manuscript_files=[bundle["files"][kind]["artifact"] for kind in ("pdf", "abstract", "bibliography", "claims")],
             derived=derived)
         derived.update(projected)
-        return _deliver(store, destination, packet, derived=derived, transitive=True)
-    return _deliver(store, destination, packet, derived=derived)
+        return deliver_packet(store, destination, packet, derived=derived, transitive=True)
+    return deliver_packet(store, destination, packet, derived=derived)
 
 
 def deliver_round(store, destination):
@@ -142,5 +142,5 @@ def deliver_round(store, destination):
         captures = find_round_investigation_responses(records, packet)
         packet, derived = project_delivery(records, ArtifactStore(store.root), find_publication_scope(records), packet,
             manuscript_files=[bundle["files"][kind]["artifact"] for kind in ("pdf", "abstract", "bibliography", "claims")])
-        return _deliver(store, destination, packet, derived=derived, transitive=True, empty_captures=captures)
-    return _deliver(store, destination, packet)
+        return deliver_packet(store, destination, packet, derived=derived, transitive=True, empty_captures=captures)
+    return deliver_packet(store, destination, packet)

@@ -80,6 +80,8 @@ def initialize_workspace(store, payload, *, expected_revision, request_id):
     """{kind: study|draft, state: initial marker}; attach the current contract."""
     artifacts = ArtifactStore(store.root)
     def prepare(records, value):
+        if "problem" in records.get("workspace", {}):
+            raise ResearchError("orchestration_conflict", "A problem record cannot become a study or draft")
         fields(value, ("kind", "state"), ("preparation_policy",))
         kind = value["kind"]
         if kind not in ("study", "draft") or not isinstance(value["state"], dict):
@@ -217,6 +219,8 @@ def adopt_workspace(store, payload, *, expected_revision, request_id):
     """Archive selected legacy bytes without converting assertions into readings."""
     artifacts = ArtifactStore(store.root)
     def prepare(records, value):
+        if "problem" in records.get("workspace", {}):
+            raise ResearchError("orchestration_conflict", "A problem record cannot adopt a study or draft")
         fields(value, ("id", "profile", "target", "files", "reason"))
         text(value["id"], "Adoption ID")
         text(value["reason"], "Adoption reason")

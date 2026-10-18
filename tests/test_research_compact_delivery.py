@@ -12,7 +12,7 @@ from unittest import mock
 from research_harness import scientific_delivery
 from research_harness.artifacts import ArtifactStore
 from research_harness.errors import ResearchError
-from research_harness.review_delivery import _deliver
+from research_harness.review_delivery import deliver_packet
 
 
 class CompactDeliveryTests(unittest.TestCase):
@@ -72,7 +72,7 @@ class CompactDeliveryTests(unittest.TestCase):
         with mock.patch.object(scientific_delivery.ScientificDelivery, "_count_output", observe):
             projected, derived = scientific_delivery.project_delivery({}, self.artifacts, self.contract, manifest)
         destination = self.root / "scoped"
-        _deliver(SimpleNamespace(root=self.root, revision=1), destination, projected,
+        deliver_packet(SimpleNamespace(root=self.root, revision=1), destination, projected,
                  derived=derived, transitive=True)
         written = (destination / "inputs.json").read_bytes()
         self.assertEqual(counted, [written])
@@ -102,7 +102,7 @@ class CompactDeliveryTests(unittest.TestCase):
                 scientific_delivery.project_delivery(records, self.artifacts, self.contract, manifest, manuscript_files=[source])
         self.assertEqual(error.exception.code, "invalid_scientific_delivery")
         destination = self.root / "closure"
-        result = _deliver(SimpleNamespace(root=self.root, revision=1), destination, projected,
+        result = deliver_packet(SimpleNamespace(root=self.root, revision=1), destination, projected,
                           derived=derived, transitive=True)
         written = [path.read_bytes() for path in destination.rglob("*") if path.is_file()]
         self.assertCountEqual(written, counted.values())
@@ -125,7 +125,7 @@ class CompactDeliveryTests(unittest.TestCase):
         manifest = {"source": ref}
         for transitive in (False, True):
             destination = self.root / str(transitive)
-            _deliver(SimpleNamespace(root=self.root, revision=1), destination, manifest, transitive=transitive)
+            deliver_packet(SimpleNamespace(root=self.root, revision=1), destination, manifest, transitive=transitive)
             self.assertEqual((destination / ref["path"]).read_bytes(), data)
         self.assertEqual((self.root / "False" / "inputs.json").read_bytes(),
                          (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode())

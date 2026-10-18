@@ -59,6 +59,14 @@ def slot_id(records, assignment):
     return original.get('slot_id', original['id'])
 
 
+def is_same_subject(first, second):
+    """Keep problem result slots tied to the exact statement, and bars to the field."""
+    left, right = first.get('subject'), second.get('subject')
+    if first.get('role') == 'bar' and left is not None and right is not None:
+        return left.get('kind') == right.get('kind') == 'problem'
+    return left == right
+
+
 def require_current_slot(records, assignment):
     """A replaced failed invocation cannot later reopen its former slot."""
     if assignment['role'] not in ROLES:
@@ -66,6 +74,7 @@ def require_current_slot(records, assignment):
     current_slot = slot_id(records, assignment)
     for later in records.get('review_assignment', {}).values():
         if (later['role'] == assignment['role'] and later['dossier_id'] == assignment['dossier_id']
+                and is_same_subject(later, assignment)
                 and later['recorded_revision'] > assignment['recorded_revision']
                 and slot_id(records, later) == current_slot):
             raise ResearchError('review_assignment_superseded', 'Continue the current assignment in this fixed slot; a replaced invocation cannot be retried')
@@ -139,6 +148,7 @@ def prepare_repair(records, artifacts, assignment_payload):
     predecessor = _assignment(records, repair['assignment_id'])
     if (assignment_payload['role'] not in ROLES or predecessor['role'] != assignment_payload['role']
             or predecessor['dossier_id'] != assignment_payload['dossier_id']
+            or not is_same_subject(predecessor, assignment_payload)
             or normalized_text(predecessor['author_id']) != normalized_text(assignment_payload['author_id'])):
         raise ResearchError('review_context_repair_mismatch', 'Reassess the exact phase, dossier and author boundary')
     chain = _exposure_lineage(records, predecessor)
@@ -163,7 +173,8 @@ def prepare_repair(records, artifacts, assignment_payload):
     original_slot = slot_id(records, predecessor)
     reviewer = normalized_text(assignment_payload['reviewer_id'])
     for prior in records.get('review_assignment', {}).values():
-        if prior['dossier_id'] != predecessor['dossier_id'] or prior['role'] != predecessor['role']:
+        if (prior['dossier_id'] != predecessor['dossier_id'] or prior['role'] != predecessor['role']
+                or not is_same_subject(prior, predecessor)):
             continue
         if slot_id(records, prior) != original_slot and normalized_text(prior['reviewer_id']) == reviewer:
             raise ResearchError('review_not_independent', 'The other fixed slot cannot reassess this slot')
@@ -211,6 +222,14 @@ def reassessment_reviews(records, assignment):
         return []
     predecessor = _assignment(records, repairs[-1]['context']['context_repair']['assignment_id'])
     return _reviews(records, {item['id'] for item in _lineage(records, predecessor)})
+
+
+def collect_problem_result_history(records, assignment):
+    """Retain observed result findings across changed-evidence continuations."""
+    if assignment.get('subject', {}).get('kind') != 'problem' or assignment['role'] != 'result':
+        return []
+    return _reviews(records, {item['id'] for item in _lineage(records, assignment)
+                              if item['role'] == 'result'})
 
 
 def validate_repair_origin(records, artifacts, assignment):

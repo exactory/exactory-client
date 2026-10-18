@@ -61,6 +61,67 @@ also lists its minimum's missing search, full readings, standards and Grand
 Challenge record alongside configuration and missing-decision obligations.
 Nonmanaged stores and verification retain their fixed contracts.
 
+## Problem creation milestones
+
+A problem research record has its own `problem_creation` orchestration in the
+shared research store. It holds the claim that the problem is precisely stated,
+open and worth solving. It does not inherit ai-science's direction contract.
+See [Problem creation](research-cli.md#problem-creation) for every command,
+payload, record and post obligation.
+
+| Claim | Minimum | Independent assessment | Currency |
+| --- | --- | --- | --- |
+| Problem: precisely stated, open, worth solving | Exact statement and criteria, current supported openness, bound value evidence and citations | Two observed bars followed by two observed result reviews | Current selected statement and decisive evidence bound by `problem_evidence_digest`. |
+
+| Milestone | Condition computed from records |
+| --- | --- |
+| `exploration` | `problem-init` records the area, field and immutable authors and adopts the constitution. |
+| `formulation` | `problem-statement` selects the exact statement, resolution criteria, neighbours and optional formal statement. |
+| `openness` | An observed native openness review records a current `supported_open` finding with the shared search and full-reading minimum. |
+| `value` | Value evidence validates, both observed bars and both passed result reviews cover it, and the current decision is `post`. |
+| `post` | `problem-posted` records the confirmed server id against the rebuilt approved export. |
+
+Tools remain available in any order before posting: set budgets and depth,
+search the field and neighbouring formulations, read sources, preserve access
+gaps and deferrals, request sources and run probes. They require no intent,
+target, dossier, synthesis section or direction decision. When a paragraph
+cites a computation, use the shared cycle, admission, binding, execution,
+reconciliation and assessment route with the current problem statement as its
+objective. The statement and adopted constitution are its readiness
+requirements. That route provides empirical support only; it accepts no
+mathematical proof or formal check. Probe origin remains visible and is refused
+as cited value evidence.
+
+Record motivation and current-state paragraphs with `problem-value`. Every
+paragraph names full readings or admitted, reconciled and assessed results.
+An unavailable source stays unread. A requested formal check records the exact
+native claim, proof policy and required deliverables before verification. After
+math-solver completes that contract, deliver its authenticated closure to this
+store with `exactory-math search deliver-closure`, then bind it with
+`problem-formal-check`.
+
+Use the existing verified review routes. Both bar reviewers receive the field,
+area and source context before the statement is shown. Both result reviewers
+receive the exact claim, openness minimum, value evidence, citations and
+delivered source/computation/check content. They assess precision, openness,
+value, citations and stopping. Reviewers must be independent of every recorded
+author, and pending source requests remain obligations. Record a `post`
+decision only after the current minimum and observed pair pass. `unresolved`
+openness blocks; `already_solved` redirects to the established result or a new
+statement. Changed formulations or material evidence require reassessment.
+
+The only gate is `exactory-research gate post`. `status` and `next` compute the
+milestone and first missing condition in the order statement, openness, value,
+reviews, decision, export. They store no milestone projection. Once ready,
+`exactory-research export --kind problem --destination problem-export` writes
+the approved parts, projected citations and digest manifest. Check the exported
+citation locators and duplicates, pass those files to `exactory post-problem`,
+then record `{problem_id, export_directory}` with `problem-posted`. Its byte
+comparison rebuilds the projection from the records. A part changed after
+export requires a new statement and starts the gate again. A repeated post of
+the same statement is refused. The research record's skill entry point remains
+the user's open decision.
+
 ## Initiate and resume
 
 Create an author study once. Keep the initial target pending while literature

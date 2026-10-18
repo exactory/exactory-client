@@ -39,7 +39,7 @@ class ScopedPacketTests(SourceLimitedCase):
             self.assertNotIn(excluded, content)
         self.assertIn('original_sha256', content)
         original = self.execution_payload['outputs'][0]['artifact']
-        self.assertNotIn(original['sha256'], {r['sha256'] for r in review_protocol._refs(packet)})
+        self.assertNotIn(original['sha256'], {r['sha256'] for r in review_protocol.collect_references(packet)})
         self.assertIn(original['sha256'], json.dumps(packet['support_contract']['evidence']))
 
     def test_scoped_result_cannot_fall_back_to_raw_authored_bytes(self):

@@ -71,6 +71,13 @@ def managed_research(records):
     return bool(set(records.get("workspace", {})) & {"study", "draft"} or records.get("research_intent"))
 
 
+def find_orchestration(records):
+    """Identify the claim contract without extending ai-science authority."""
+    if "problem" in records.get("workspace", {}):
+        return "problem_creation"
+    return "ai_science" if managed_research(records) else None
+
+
 def existing_record(records, kind, value):
     text(value.get("id"), kind + " ID")
     saved = records.get(kind, {}).get(value["id"])
@@ -163,6 +170,8 @@ def record_intent(store, payload, *, expected_revision, request_id):
     artifacts = ArtifactStore(store.root)
 
     def prepare(records, value):
+        if find_orchestration(records) == "problem_creation":
+            raise ResearchError("orchestration_conflict", "A problem record cannot adopt an ai-science intent")
         fields(value, ("id", "previous", "task_kind", "instruction", "recorded_at", "full_objective", "branch",
                        "objective", "user_standard", "deliverables", "publication", "resources", "scope_changes", "authors"), code="invalid_intent")
         old = existing_record(records, "research_intent", value)

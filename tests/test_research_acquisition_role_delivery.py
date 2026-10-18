@@ -4,7 +4,7 @@ import copy
 
 from literature_fixtures import LiteratureCase
 from research_harness.errors import ResearchError
-from research_harness.review_delivery import _deliver
+from research_harness.review_delivery import deliver_packet
 from research_harness.scientific_delivery import project_delivery
 
 
@@ -23,7 +23,7 @@ class AcquisitionRoleDeliveryTests(LiteratureCase):
         projected, derived = project_delivery(records, self.artifacts,
             {"payload": {"scientific_delivery": []}}, manifest)
         target = self.root / name
-        _deliver(self.store, target, projected, derived=derived, transitive=True)
+        deliver_packet(self.store, target, projected, derived=derived, transitive=True)
         self.assertEqual(projected, manifest)
         self.assertEqual((target / ref["path"]).read_bytes(), self.artifacts.read(ref))
         self.assertNotIn(b"PRIVATE-AUTHORIZATION-SENTINEL",
