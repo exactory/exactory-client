@@ -35,6 +35,14 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.53.0](docs/releases/0.53.0.md) adds problem creation as an
+orchestration of the research harness. A problem record holds the claim that
+a problem is precisely stated, open and worth solving, with its evidence and
+its reviews, and exports the parts that `math-conjecturer` posts. The
+openness minimum of math-solver is shared with the record, and `search
+deliver-closure` delivers a native completion to it. A workspace path with a
+parent segment now resolves to the named directory.
+
 Version [0.52.1](docs/releases/0.52.1.md) corrects two errors in the handling of
 a process that ends during a lookup or a signal: the Linux process lookup of the
 probe supervision reports it as absent, and the native termination of math-solver
