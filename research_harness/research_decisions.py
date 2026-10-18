@@ -571,9 +571,13 @@ def _objection_obligations(records, artifacts, dossier, decision, reviews, *, pr
     obligations = []
     for item in decision["payload"]["objections"]:
         resolved = False
+        adjudication_obligations = []
         if item["adjudication_id"] is not None:
             adjudication = adjudication_state(records, artifacts, item["adjudication_id"])
-            obligations.extend(adjudication["obligations"])
+            if dossier.get("kind") == "problem":
+                adjudication_obligations.extend(adjudication["obligations"])
+            else:
+                obligations.extend(adjudication["obligations"])
             saved = adjudication["adjudication"]
             if saved is None:
                 scope_matches = False
@@ -588,7 +592,7 @@ def _objection_obligations(records, artifacts, dossier, decision, reviews, *, pr
                     strategy.evidence(records, artifacts, adjudication["adjudication"]["evidence"])
                 except ResearchError as error:
                     resolved = False
-                    obligations.append(obligation(error.code, str(error), objection_id=item["id"]))
+                    adjudication_obligations.append(obligation(error.code, str(error), objection_id=item["id"]))
         if not resolved and item["disposition"] == "resolved":
             findings = [{finding["id"]: finding for finding in review["payload"]["value"]["objection_findings"]} for review in reviews]
             resolved = all(item["id"] in finding and finding[item["id"]]["status"] == "resolved" for finding in findings)
@@ -602,6 +606,7 @@ def _objection_obligations(records, artifacts, dossier, decision, reviews, *, pr
                         resolved = False
                         obligations.append(obligation(error.code, str(error), objection_id=item["id"]))
         if not resolved:
+            obligations.extend(adjudication_obligations)
             obligations.append(obligation("research_objection_unresolved", "Resolve the specific material objection with evidence; another positive opinion cannot waive it.", objection_id=item["id"]))
     return obligations
 

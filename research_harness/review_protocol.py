@@ -123,6 +123,21 @@ _PROBLEM_RESPONSE = (
     'problem_citations and stop. Each assurance is {kind,status:passed|failed|not_assessed,reason,evidence}. '
     'Identify findings and exact supplied evidence in reason and evidence. Every prior material '
     'objection requires an objection_findings entry {id,status:resolved|continuing|contested,reason,evidence}.')
+_PROBLEM_ADJUDICATOR_PROMPT = (
+    'Resolve only the named material problem objection or documented correction, not an unrestricted '
+    'third vote. Examine the preserved original assessments, original_evidence and exact '
+    'supplied_source_mappings excerpts, and the current delivered problem_evidence identified by '
+    'current_evidence. The packet evidence supplies those bytes. Current evidence may resolve the '
+    'objection even when it was not delivered to the original pair. Keep the current evidence and '
+    'the original supplied context distinct: correction admissibility requires a demonstrated error '
+    'in original_evidence or its supplied_source_mappings, never newly favorable current evidence. '
+    'Native artifact references in assessments, objections and corrections are descriptive templates. '
+    'For artifact_descriptor, location is the native artifact path; sha256, size and media_type retain '
+    'their native meanings, and artifact_reference_template names the original artifact field. '
+    'A template does not supply an entire original. Honor the recorded locator bounds of mapped '
+    'passages and do not assess unsupplied portions of an original. Return exactly objection_id, '
+    'disposition (upheld, not_upheld, unresolved), reason, evidence, and correction_admissible '
+    '(null when no correction is requested, otherwise a boolean).')
 
 
 def _get(records, kind, identifier):
@@ -238,12 +253,21 @@ def _project_scoped_result(records, artifacts, packet, report):
 def canonical_prompt(role, *, legacy=False, repair=False, version=3, orchestration=None):
     if role not in ROLES:
         raise ResearchError('invalid_review_role', 'Unknown reviewer role')
+    if orchestration == 'problem_creation' and role == 'adjudicator':
+        if repair:
+            raise ResearchError('invalid_review_context', 'Context reassessment uses a current strategic review phase')
+        prompt = _COMMON + _PROBLEM_ADJUDICATOR_PROMPT
+        return {'template_id': _PROBLEM_PROTOCOL + '/adjudicator', 'template_hash': digest(prompt),
+                'rendered_prompt_hash': digest(prompt), 'parameters': {'role': role, 'orchestration': orchestration},
+                'text': prompt}
     if orchestration == 'problem_creation' and role in _PROBLEM_PROMPTS:
         prompt = _COMMON + _PROBLEM_PROMPTS[role] + _PROBLEM_RESPONSE.replace('ROLE', role) + bar_sources.PROMPT
         parameters = {'role': role, 'orchestration': orchestration}
         suffix = ''
         if repair:
             prompt += context_repair.PROMPT
+            if role == 'bar':
+                prompt += ' For a final bar reassessment, objection_findings must cover every inherited material objection despite the ordinary empty-bar default.'
             parameters['context_repair'] = True
             suffix = '/context-repair'
         return {'template_id': _PROBLEM_PROTOCOL + '/' + role + suffix, 'template_hash': digest(prompt),
@@ -518,6 +542,8 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
     if problem and role == 'adjudicator':
         add_problem_evidence(records, artifacts, packet)
         add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id, context, problem=True)
+        packet['protocol'] = _PROBLEM_PROTOCOL
+        packet['current_evidence'] = [entry['artifact'] for entry in _evidence(artifacts, packet['problem_evidence'])]
     elif problem:
         marker = records['workspace']['problem']
         packet.update(area=marker['area'], field=marker['field'],
@@ -814,6 +840,9 @@ def _prompt_matches(assignment):
     repair = assignment.get('reassessment_required') is True
     if assignment.get('subject', {}).get('kind') == 'problem' and assignment['role'] in _PROBLEM_PROMPTS:
         return assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair, orchestration='problem_creation')
+    if (assignment.get('subject', {}).get('kind') == 'problem' and assignment['role'] == 'adjudicator'
+            and assignment['prompt'] == canonical_prompt('adjudicator', orchestration='problem_creation')):
+        return True
     if assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair) or is_previous_prompt(assignment):
         return True
     # Native assignments recorded before the openness finding keep their exact prompt.
