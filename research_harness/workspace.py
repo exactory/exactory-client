@@ -29,6 +29,11 @@ def strict_json(data):
 
 def find_workspace(start=None, *, required=True):
     start = Path(start or Path.cwd()).absolute()
+    if ".." in start.parts:
+        # A parent segment follows the filesystem, as the shell does: a symlink before it leads to that link's
+        # target, and the walk never visits the directory the segment passes through. The final component stays
+        # as supplied, so a symlinked workspace is still refused where the artifacts are opened.
+        start = Path(os.path.realpath(start)) if start.name == ".." else Path(os.path.realpath(start.parent)) / start.name
     for directory in (start, *start.parents):
         marker = directory / ".exactory"
         if any((marker / name).exists() or (marker / name).is_symlink()

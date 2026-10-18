@@ -55,6 +55,11 @@ class Controller:
                       "Native review packet export has no mutation routing")
             from .reviewer import export_packet
             return export_packet(self, spec)
+        if name == "deliver-closure":
+            s.require(target is None and workspace_root is None and hook_session is None,
+                      "Native closure delivery has no mutation routing")
+            from .closure_delivery import deliver_closure
+            return deliver_closure(self, spec, expected_revision, request_id)
         if name in {"status", "next", "strategy-context"}:
             s.require(set(spec) <= {"session_id", "focus_request_id", "objective_id", "contract_digest"}, "Unknown read-only validation field")
             state = self.status()

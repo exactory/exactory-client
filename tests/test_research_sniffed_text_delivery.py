@@ -4,7 +4,7 @@ import json
 
 from literature_fixtures import LiteratureCase
 from research_harness.errors import ResearchError
-from research_harness.review_delivery import _deliver
+from research_harness.review_delivery import deliver_packet
 from research_harness.scientific_delivery import project_delivery
 from research_harness.scientific_json import parse_scientific_json
 
@@ -53,7 +53,7 @@ class SniffedTextDeliveryTests(LiteratureCase):
         self.assertEqual(projected, manifest)
         self.assertEqual(derived, {})
         target = self.root / "delivery"
-        _deliver(self.store, target, projected, derived=derived, transitive=True)
+        deliver_packet(self.store, target, projected, derived=derived, transitive=True)
         self.assertEqual((target / capture["text"]["path"]).read_bytes(), self.artifacts.read(capture["text"]))
         self.assertEqual(self.artifacts.read(capture["text"]).decode(), _TRANSCRIPT)
 
@@ -82,7 +82,7 @@ class SniffedTextDeliveryTests(LiteratureCase):
         manifest = {"source_text": capture["text"]}
         projected, derived = project_delivery(records, self.artifacts, {"payload": {"scientific_delivery": []}}, manifest)
         target = self.root / "delivery"
-        _deliver(self.store, target, projected, derived=derived, transitive=True)
+        deliver_packet(self.store, target, projected, derived=derived, transitive=True)
         return capture, target
 
     def test_text_that_names_a_private_artifact_neither_follows_nor_copies_it(self):

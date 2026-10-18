@@ -8,7 +8,7 @@ from literature_fixtures import LiteratureCase
 from research_fixtures import client
 from research_harness.acquisition import acquire_fulltext
 from research_harness.errors import ResearchError
-from research_harness.review_delivery import _deliver
+from research_harness.review_delivery import deliver_packet
 from research_harness.scientific_delivery import project_delivery
 
 
@@ -36,7 +36,7 @@ class SourceRecaptureDeliveryTests(LiteratureCase):
         contract = {"payload": {"scientific_delivery": []}}
         projected, derived = project_delivery(records, owner.artifacts, contract, manifest)
         target = owner.root / destination
-        _deliver(owner.store, target, projected, derived=derived, transitive=True)
+        deliver_packet(owner.store, target, projected, derived=derived, transitive=True)
         self.assertEqual(projected, manifest)
         for ref in manifest.values():
             self.assertEqual((target / ref["path"]).read_bytes(), owner.artifacts.read(ref))
@@ -117,7 +117,7 @@ class SourceRecaptureDeliveryTests(LiteratureCase):
         projected, derived = project_delivery(self.store.snapshot()["records"], self.artifacts, contract,
                                              {"figure": ref, "source": original})
         target = self.root / "figure-delivery"
-        _deliver(self.store, target, projected, derived=derived, transitive=True)
+        deliver_packet(self.store, target, projected, derived=derived, transitive=True)
         self.assertEqual((target / ref["path"]).read_bytes(), jpeg)
         self.assertEqual((target / original["path"]).read_bytes(), self.artifacts.read(original))
 
