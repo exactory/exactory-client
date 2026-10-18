@@ -11,8 +11,8 @@ class ProblemCitationTests(ProblemCase):
         super().setUp()
         self.initialize_problem()
         self.select_statement()
-        self.item = self.full_reading()
-        self.mutate(self.problem().record_value, self.value([self.item]))
+        self.item = self.record_full_reading()
+        self.mutate(self.load_problem_module().record_value, self.build_value([self.item]))
 
     def test_doi_precedes_arxiv_and_citations_are_distinct_by_work(self):
         records = self.store.snapshot()["records"]
@@ -49,4 +49,4 @@ class ProblemCitationTests(ProblemCase):
         for url in (None, "http://example.org/insecure"):
             with self.subTest(url=url):
                 records = self.remap_as_https_work(url)
-                self.error("problem_citation_locator_missing", lambda: project_citations(records, self.artifacts))
+                self.assert_error("problem_citation_locator_missing", lambda: project_citations(records, self.artifacts))

@@ -66,7 +66,7 @@ class ProblemExecutionToolsTests(ProblemToolsCase):
         self.prepare_problem()
         plan = self.plan()
         self.select_statement(identifier="statement-2", statement="Does the bound extend to every integer?")
-        self.error("objective_mismatch", lambda: self.mutate(development.plan_cycle, plan))
+        self.assert_error("objective_mismatch", lambda: self.mutate(development.plan_cycle, plan))
 
     def test_empirical_assessment_retains_unfinished_objective_obligations(self):
         plan, observed = self.run_problem()
@@ -83,18 +83,18 @@ class ProblemExecutionToolsTests(ProblemToolsCase):
     def test_execution_requires_statement_and_current_constitution(self):
         self.initialize_problem()
         context = development._Context(self.store.snapshot()["records"], self.artifacts)
-        self.error("configuration_not_ready", context.require_ready)
+        self.assert_error("configuration_not_ready", context.require_ready)
         self.select_statement()
         records = copy.deepcopy(self.store.snapshot()["records"])
         records["configuration"]["research"]["constitution"]["sha256"] = "0" * 64
         context = development._Context(records, self.artifacts)
-        self.error("configuration_not_ready", context.require_ready)
+        self.assert_error("configuration_not_ready", context.require_ready)
 
     def test_study_execution_still_requires_preparation(self):
         self.mutate(self.api("principles").initialize_research, {"profile": "research",
             "target": {"kind": "objective", "id": "study", "statement": "A complete study objective."}})
         context = development._Context(self.store.snapshot()["records"], self.artifacts)
-        self.error("research_not_ready", context.require_ready)
+        self.assert_error("research_not_ready", context.require_ready)
 
 
 class ProblemSharedToolsTests(DeferralCase, ProblemToolsCase):

@@ -11,9 +11,9 @@ class ProblemValueReadingTests(ProblemCase):
         super().setUp()
         self.initialize_problem()
         self.select_statement()
-        self.first = self.full_reading()
+        self.first = self.record_full_reading()
 
-    def second_original(self, read=True):
+    def capture_second_original(self, read=True):
         version = self.first["version_id"]
         capture = self.capture(version, body="A second complete rendering records the same bounded example. References: none.")
         bundle = self.bundle(version, capture=capture, bundle_id="second-body")
@@ -23,21 +23,21 @@ class ProblemValueReadingTests(ProblemCase):
         return {"kind": "reading", "version_id": version, "reading_id": "read-second-body"}
 
     def test_two_fully_read_main_originals_can_supply_the_named_value_readings(self):
-        second = self.second_original()
+        second = self.capture_second_original()
         coverage = fulltext_coverage(self.store.snapshot()["records"], self.artifacts, self.first["version_id"])
         self.assertTrue(coverage["complete"])
         self.assertEqual(set(coverage["readings"]), {"read-full", "read-second-body"})
-        saved = self.mutate(self.problem().record_value, self.value([self.first, second]))["result"]
+        saved = self.mutate(self.load_problem_module().record_value, self.build_value([self.first, second]))["result"]
         self.assertEqual(saved["motivation"][0]["evidence"], [self.first, second])
 
     def test_named_reading_stays_exact_while_current_work_coverage_is_complete(self):
-        self.second_original()
-        saved = self.mutate(self.problem().record_value, self.value([self.first]))["result"]
+        self.capture_second_original()
+        saved = self.mutate(self.load_problem_module().record_value, self.build_value([self.first]))["result"]
         self.assertEqual(saved["motivation"][0]["evidence"], [self.first])
 
     def test_an_unread_second_original_retains_the_common_full_reading_gap(self):
-        self.second_original(read=False)
-        self.error("problem_value_reading_missing", lambda: self.mutate(self.problem().record_value, self.value([self.first])))
+        self.capture_second_original(read=False)
+        self.assert_error("problem_value_reading_missing", lambda: self.mutate(self.load_problem_module().record_value, self.build_value([self.first])))
 
     def test_a_read_https_work_without_a_bundle_locator_has_an_explicit_post_obligation(self):
         from research_harness.acquisition import import_response, acquire_fulltext
@@ -54,7 +54,7 @@ class ProblemValueReadingTests(ProblemCase):
         bundle = self.bundle(version, capture=capture, bundle_id="https-bundle")
         self.mutate(import_bundle, bundle)
         self.mutate(record_reading, self.full_note(bundle, "https-reading"))
-        self.mutate(self.problem().record_value, self.value([{"kind": "reading", "version_id": version, "reading_id": "https-reading"}]))
+        self.mutate(self.load_problem_module().record_value, self.build_value([{"kind": "reading", "version_id": version, "reading_id": "https-reading"}]))
         report = gate_state(self.store.snapshot()["records"], self.artifacts, "post")
         codes = {row["code"] for row in report["obligations"]}
         self.assertIn("problem_citation_locator_missing", codes)

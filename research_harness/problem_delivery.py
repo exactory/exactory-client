@@ -10,14 +10,14 @@ from .errors import ResearchError
 from .evidence import digest
 from .graph import obligation
 from .operations import fields, immutable_record, strings, text
-from .problem_claims import current_statement, find_latest, find_value, problem_evidence_digest, require_problem, statement_digest
+from .problem_claims import find_current_statement, find_latest, find_value, compute_problem_evidence_digest, require_problem, compute_statement_digest
 from .problem_evidence import assess_formal_checks, project_citations, validate_value
 from .problem_openness import assess_openness
 
 
 def assess_minimum(records, artifacts):
     pending = []
-    statement, value = current_statement(records), find_value(records)
+    statement, value = find_current_statement(records), find_value(records)
     if statement is None:
         pending.append(obligation("problem_statement_missing", "Record the exact statement and resolution criteria."))
     pending.extend(assess_openness(records, artifacts))
@@ -58,13 +58,13 @@ def find_post(records, statement):
     if statement is None:
         return None
     return next((row for row in records.get("problem_post", {}).values()
-                 if row["statement_digest"] == statement_digest(statement)), None)
+                 if row["statement_digest"] == compute_statement_digest(statement)), None)
 
 
-def post_state(records, artifacts):
+def assess_post(records, artifacts):
     require_problem(records)
     from .research_decisions import assess_problem_reviews
-    statement = current_statement(records)
+    statement = find_current_statement(records)
     minimum = assess_minimum(records, artifacts)
     # A packet is judged only when its own evidence is available. Missing claim
     # evidence is already reported with the more useful minimum obligations.
@@ -77,7 +77,7 @@ def post_state(records, artifacts):
     # Currency is a digest of explicitly named immutable records. Do not run
     # historical execution assessment under today's preparation snapshot.
     try:
-        evidence_digest = problem_evidence_digest(records, artifacts)
+        evidence_digest = compute_problem_evidence_digest(records, artifacts)
     except ResearchError as error:
         if not minimum:
             pending.append(obligation(error.code, error.message, **(error.details or {})))
@@ -127,13 +127,13 @@ def prepare_decision(records, artifacts, value, revision):
         pending = review["obligations"] + assess_source_requests(records, artifacts)
         if pending:
             raise ResearchError(pending[0]["code"], pending[0]["explanation"], {"obligations": pending})
-        evidence_digest = problem_evidence_digest(records, artifacts)
+        evidence_digest = compute_problem_evidence_digest(records, artifacts)
     record = dict(value, problem_evidence_digest=evidence_digest, recorded_revision=revision)
     return [immutable_record(records, "problem_decision", value["id"], record)], record
 
 
 def build_projection(records, artifacts):
-    statement, value = current_statement(records), find_value(records)
+    statement, value = find_current_statement(records), find_value(records)
     decision = find_latest(records, "problem_decision")
     files = {"title.txt": statement["title"], "statement.md": statement["statement"],
              "criteria.md": statement["resolution_criteria"],
@@ -144,8 +144,8 @@ def build_projection(records, artifacts):
     if formal is not None:
         files["formal-statement.txt"] = formal["text"]
     files = {name: (content + "\n").encode("utf-8") for name, content in files.items()}
-    manifest = {"statement_id": statement["id"], "statement_digest": statement_digest(statement),
-                "problem_evidence_digest": problem_evidence_digest(records, artifacts), "decision_id": decision["id"],
+    manifest = {"statement_id": statement["id"], "statement_digest": compute_statement_digest(statement),
+                "problem_evidence_digest": compute_problem_evidence_digest(records, artifacts), "decision_id": decision["id"],
                 "area": statement["area"], "formal_statement_language": None if formal is None else formal["language"],
                 "files": {name: hashlib.sha256(content).hexdigest() for name, content in sorted(files.items())}}
     files["problem-export.json"] = (json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
@@ -156,7 +156,7 @@ def export_problem(store, destination):
     from .gates import require_ready
     records = store.snapshot()["records"]
     artifacts = ArtifactStore(store.root)
-    require_ready(post_state(records, artifacts), "post")
+    require_ready(assess_post(records, artifacts), "post")
     directory = Path(destination).absolute()
     if directory.exists() or directory.is_symlink():
         raise ResearchError("review_destination_exists", "Export into a new directory")
@@ -173,12 +173,12 @@ def prepare_posted(records, artifacts, value):
     fields(value, ("problem_id", "export_directory"))
     text(value["problem_id"], "Posted problem ID")
     text(value["export_directory"], "Problem export directory")
-    statement = current_statement(records)
+    statement = find_current_statement(records)
     earlier = find_post(records, statement)
     if earlier is not None:
         raise ResearchError("problem_already_posted", "This exact statement already has a recorded post", {"post_id": earlier["id"]})
     from .gates import require_ready
-    require_ready(post_state(records, artifacts), "post")
+    require_ready(assess_post(records, artifacts), "post")
     files, manifest = build_projection(records, artifacts)
     directory = Path(value["export_directory"])
     if not directory.is_absolute():

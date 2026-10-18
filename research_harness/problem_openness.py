@@ -8,7 +8,7 @@ from .evidence import digest
 from .graph import obligation
 from .native_review import ATTESTATION_PREFIX, PROTOCOL, load_packet
 from .operations import fields, immutable_record, iso_date, strings, text
-from .problem_claims import current_statement, find_latest, require_problem, statement_digest
+from .problem_claims import find_current_statement, find_latest, require_problem, compute_statement_digest
 from .reading import fulltext_coverage
 
 
@@ -48,14 +48,17 @@ def prepare_openness(records, artifacts, value, revision):
         raise ResearchError("review_packet_mismatch", "Use the observed version 2 native result bound to the problem packet")
     finding = output.get("findings", {}).get("openness")
     fields(finding, ("outcome", "statement_digest", "evidence", "searched_at", "coverage", "reason"), ("minimum",))
+    if "minimum" in finding:
+        from .openness_minimum import validate_minimum
+        validate_minimum(finding["minimum"])
     if finding["outcome"] not in {"supported_open", "already_solved", "unresolved"}:
         raise ResearchError("invalid_input", "Use a native openness outcome")
     iso_date(finding["searched_at"])
     text(finding["reason"], "Openness finding reason")
     text(finding["coverage"], "Openness coverage", code="invalid_record")
     strings(finding["evidence"], "Openness evidence", nonempty=True, code="invalid_record")
-    statement = current_statement(records)
-    if (statement is None or finding["statement_digest"] != statement_digest(statement)
+    statement = find_current_statement(records)
+    if (statement is None or finding["statement_digest"] != compute_statement_digest(statement)
             or finding["statement_digest"] != packet["claim_digest"]
             or packet["subject"] != statement or packet["subject_digest"] != digest(statement)):
         raise ResearchError("openness_statement_mismatch", "The finding must name the exact current problem claim")
@@ -84,11 +87,11 @@ def prepare_openness(records, artifacts, value, revision):
 
 
 def assess_openness(records, artifacts):
-    finding, statement = find_latest(records, "problem_openness"), current_statement(records)
+    finding, statement = find_latest(records, "problem_openness"), find_current_statement(records)
     if finding is None:
         return [obligation("problem_openness_missing", "Obtain an observed openness finding for the selected statement.")]
     affected = {"openness_id": finding["id"], "statement_id": None if statement is None else statement["id"]}
-    if statement is None or finding["statement_digest"] != statement_digest(statement):
+    if statement is None or finding["statement_digest"] != compute_statement_digest(statement):
         return [obligation("problem_openness_stale", "Reassess openness of the current exact claim.", **affected)]
     minimum = finding.get("minimum")
     if minimum is None:
@@ -132,7 +135,7 @@ def export_openness(store, spec, destination):
     text(spec["assignment_id"], "Openness assignment ID")
     text(spec["reviewer_id"], "Openness reviewer ID")
     fields(spec["minimum"], ("searches", "settling_work_id", "duplicate_resolutions"))
-    statement = current_statement(records)
+    statement = find_current_statement(records)
     if statement is None:
         raise ResearchError("problem_statement_missing", "Record the exact statement before openness review")
     artifacts = ArtifactStore(store.root)
@@ -156,7 +159,8 @@ def export_openness(store, spec, destination):
     readings = {}
     for work in sorted(required):
         coverage = fulltext_coverage(records, artifacts, work)
-        readings.update(coverage["readings"])
+        for reading_id in coverage["readings"]:
+            readings[reading_id] = records["reading"][reading_id]
     for reading in readings.values():
         include_record(reading)
         for artifact in collect_reading_artifacts(records, artifacts, reading):
@@ -167,7 +171,7 @@ def export_openness(store, spec, destination):
     include_record(statement)
     packet = {"protocol": PROTOCOL, "kind": "result", "root": str(store.root.resolve()), "objective_id": statement["id"],
               "contract": {"orchestration": "problem_creation", "area": marker["area"]}, "subject": statement,
-              "subject_digest": digest(statement), "claim_digest": statement_digest(statement),
+              "subject_digest": digest(statement), "claim_digest": compute_statement_digest(statement),
               "reviewer": {"source": "host", "actor_id": spec["reviewer_id"], "attestation_id": ATTESTATION_PREFIX + spec["assignment_id"]},
               "scientific_context": {"openness_minimum": minimum}, "evidence": [evidence[key] for key in sorted(evidence)],
               "execution_provenance": [], "unmaterialized_digests": []}

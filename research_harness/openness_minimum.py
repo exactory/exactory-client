@@ -15,63 +15,63 @@ def _require(condition, message, code="invalid_record"):
         raise OpennessError(code, message)
 
 
-def _closed(value, fields):
+def _require_closed_fields(value, fields):
     _require(isinstance(value, dict) and set(value) == set(fields.split()),
              "Record must contain exactly: " + fields)
 
 
-def _text(value):
+def _require_text(value):
     _require(isinstance(value, str) and bool(value.strip()), "Expected nonempty text")
 
 
-def _integer(value, minimum=0, maximum=None):
+def _require_integer(value, minimum=0, maximum=None):
     _require(type(value) is int and value >= minimum and (maximum is None or value <= maximum),
              "Integer is outside the permitted range")
 
 
-def _strings(value):
+def _require_strings(value):
     _require(isinstance(value, list), "Expected a list")
     for item in value:
-        _text(item)
+        _require_text(item)
     _require(len(value) == len(set(value)), "Duplicate list values")
 
 
-def _records(value):
+def _require_record_list(value):
     _require(isinstance(value, list), "Expected a record list")
     return value
 
 
-def _digest_string(value):
+def _require_digest(value):
     _require(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None,
              "Expected a SHA-256 digest")
 
 
-def _optional_text(value):
+def _require_optional_text(value):
     if value is not None:
-        _text(value)
+        _require_text(value)
 
 
 def validate_minimum(value):
-    _closed(value, "schema_version statement neighbours searches reading_digests settling_work_id"
+    _require_closed_fields(value, "schema_version statement neighbours searches reading_digests settling_work_id"
              + (" duplicate_resolutions" if isinstance(value, dict) and "duplicate_resolutions" in value else ""))
-    _integer(value["schema_version"], 1, 1)
-    _text(value["statement"])
-    _strings(value["neighbours"])
+    _require_integer(value["schema_version"], 1, 1)
+    _require_text(value["statement"])
+    _require_strings(value["neighbours"])
     _require(value["statement"] not in value["neighbours"], "Declare distinct neighbouring formulations")
-    _strings(value["reading_digests"])
+    _require_strings(value["reading_digests"])
     for identity in value["reading_digests"]:
-        _digest_string(identity)
-    _optional_text(value["settling_work_id"])
-    for item in _records(value["searches"]):
-        _closed(item, "formulation search_digest")
-        _text(item["formulation"])
-        _digest_string(item["search_digest"])
+        _require_digest(identity)
+    _require_optional_text(value["settling_work_id"])
+    for item in _require_record_list(value["searches"]):
+        _require_closed_fields(item, "formulation search_digest")
+        _require_text(item["formulation"])
+        _require_digest(item["search_digest"])
     seen = set()
-    for item in _records(value.get("duplicate_resolutions", [])):
-        _closed(item, "search_digest work_id canonical_work_id")
-        _digest_string(item["search_digest"])
-        _text(item["work_id"])
-        _text(item["canonical_work_id"])
+    for item in _require_record_list(value.get("duplicate_resolutions", [])):
+        _require_closed_fields(item, "search_digest work_id canonical_work_id")
+        _require_digest(item["search_digest"])
+        _require_text(item["work_id"])
+        _require_text(item["canonical_work_id"])
         key = (item["search_digest"], item["work_id"])
         _require(key not in seen and item["work_id"] != item["canonical_work_id"],
                   "Each duplicate needs one distinct canonical source")

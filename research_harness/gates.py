@@ -41,8 +41,8 @@ def gate_state(records, artifacts, action, *, profile=None):
     if problem != (action == "post"):
         return _report([obligation("gate_inapplicable", "Use the gate belonging to this workspace's orchestration.", gate=action)])
     if problem:
-        from .problem_delivery import post_state
-        return post_state(records, artifacts)
+        from .problem_delivery import assess_post
+        return assess_post(records, artifacts)
     config = records.get("configuration", {}).get("research")
     if config is None:
         return _report([obligation("migration_required", "Initialize or explicitly adopt the current research contract.")])

@@ -27,12 +27,12 @@ class ProblemOpennessTests(ProblemCase):
         self.assertEqual(packet["reviewer"], {"source": "host", "actor_id": "openness-reviewer",
                                             "attestation_id": "review-assignment:open-review"})
         self.assertEqual(packet["subject"], self.selected)
-        self.assertEqual(packet["claim_digest"], self.problem().statement_digest(self.selected))
+        self.assertEqual(packet["claim_digest"], self.load_problem_module().compute_statement_digest(self.selected))
         self.assertTrue((self.root / "packet" / "inputs.json").is_file())
 
     def test_new_neighbour_and_material_search_make_finding_stale(self):
         from research_harness.problem_openness import assess_openness
-        finding = {"id": "openness", "outcome": "supported_open", "statement_digest": self.problem().statement_digest(self.selected),
+        finding = {"id": "openness", "outcome": "supported_open", "statement_digest": self.load_problem_module().compute_statement_digest(self.selected),
             "minimum": {"schema_version": 1, "statement": self.selected["statement"], "neighbours": [], "searches": [],
                         "reading_digests": [], "settling_work_id": None}, "evidence": [], "recorded_revision": self.store.revision + 1}
         self.put("problem_openness", "openness", finding)
@@ -48,10 +48,10 @@ class ProblemOpennessTests(ProblemCase):
         reading = fixtures.ProblemOpennessMinimumTests.read(self, work)
         search = fixtures.ProblemOpennessMinimumTests.search(self, [work])
         for outcome, code in (("unresolved", "problem_openness_unresolved"), ("already_solved", "problem_already_solved")):
-            finding = fixtures.ProblemOpennessMinimumTests.finding(self, [search], [reading], outcome=outcome,
+            finding = fixtures.ProblemOpennessMinimumTests.build_finding(self, [search], [reading], outcome=outcome,
                                                                  settling=work if outcome == "already_solved" else None)
             self.put("problem_openness", outcome, dict(finding, id=outcome,
-                statement_digest=self.problem().statement_digest(self.selected), recorded_revision=self.store.revision + 1))
+                statement_digest=self.load_problem_module().compute_statement_digest(self.selected), recorded_revision=self.store.revision + 1))
             report = assess_openness(self.store.snapshot()["records"], self.artifacts)
             self.assertEqual(report[0]["code"], code)
             from research_harness.cli import status_report
@@ -63,7 +63,7 @@ class ProblemOpennessTests(ProblemCase):
     def test_settled_finding_also_becomes_stale_when_a_neighbour_is_added(self):
         from research_harness.problem_openness import assess_openness
         self.put("problem_openness", "settled", {"id": "settled", "outcome": "already_solved",
-            "statement_digest": self.problem().statement_digest(self.selected),
+            "statement_digest": self.load_problem_module().compute_statement_digest(self.selected),
             "minimum": {"statement": self.selected["statement"], "neighbours": [], "settling_work_id": "settler"},
             "recorded_revision": self.store.revision + 1})
         self.select_statement(identifier="changed-neighbours", neighbours=["A different unresolved formulation"])
@@ -73,7 +73,7 @@ class ProblemOpennessTests(ProblemCase):
     def test_unresolved_finding_with_a_minimum_tracks_declared_neighbour_currency(self):
         from research_harness.problem_openness import assess_openness
         self.put("problem_openness", "unresolved", {"id": "unresolved", "outcome": "unresolved",
-            "statement_digest": self.problem().statement_digest(self.selected),
+            "statement_digest": self.load_problem_module().compute_statement_digest(self.selected),
             "minimum": {"statement": self.selected["statement"], "neighbours": []},
             "recorded_revision": self.store.revision + 1})
         self.select_statement(identifier="changed-neighbours", neighbours=["A new formulation"])
@@ -86,7 +86,7 @@ class ProblemNativeResultShapeTests(ProblemCase):
         from research_harness import problem_openness
         self.initialize_problem()
         self.selected = self.select_statement()
-        self.route = fixtures.ProblemReviewTests.route.__get__(self)
+        self.prepare_review_route = fixtures.ProblemReviewTests.prepare_review_route.__get__(self)
         real_export = problem_openness.export_openness
         def replace_subject(store, spec, destination):
             exported = real_export(store, spec, destination)
@@ -97,15 +97,15 @@ class ProblemNativeResultShapeTests(ProblemCase):
             return exported
         with patch("research_harness.problem_openness.export_openness", side_effect=replace_subject):
             fixtures.ProblemOpennessReviewTests.observe_openness(self)
-        self.error("openness_statement_mismatch", lambda: self.mutate(self.problem().record_openness, {"assignment_id": "openness-assignment"}))
+        self.assert_error("openness_statement_mismatch", lambda: self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"}))
 
     def test_observed_unresolved_without_minimum_becomes_stale_after_a_new_neighbour(self):
         import test_research_problem_reviews as fixtures
         self.initialize_problem()
         self.selected = self.select_statement()
-        self.route = fixtures.ProblemReviewTests.route.__get__(self)
+        self.prepare_review_route = fixtures.ProblemReviewTests.prepare_review_route.__get__(self)
         fixtures.ProblemOpennessReviewTests.observe_openness(self, "unresolved")
-        self.mutate(self.problem().record_openness, {"assignment_id": "openness-assignment"})
+        self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})
         self.select_statement(identifier="new-neighbour", neighbours=["A newly declared nearby formulation"])
         from research_harness.problem_openness import assess_openness
         pending = assess_openness(self.store.snapshot()["records"], self.artifacts)
@@ -117,9 +117,9 @@ class ProblemNativeResultShapeTests(ProblemCase):
         import test_research_problem_openness_minimum as minimum_fixtures
         self.initialize_problem()
         self.selected = self.select_statement()
-        self.route = fixtures.ProblemReviewTests.route.__get__(self)
+        self.prepare_review_route = fixtures.ProblemReviewTests.prepare_review_route.__get__(self)
         fixtures.ProblemOpennessReviewTests.observe_openness(self, "unresolved")
-        self.mutate(self.problem().record_openness, {"assignment_id": "openness-assignment"})
+        self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})
         material = minimum_fixtures.ProblemOpennessMinimumTests.search(self, [self.metadata(2)])
         from research_harness.problem_openness import assess_openness
         pending = assess_openness(self.store.snapshot()["records"], self.artifacts)
@@ -130,10 +130,10 @@ class ProblemNativeResultShapeTests(ProblemCase):
         import test_research_problem_reviews as fixtures
         self.initialize_problem()
         self.selected = self.select_statement()
-        self.route = fixtures.ProblemReviewTests.route.__get__(self)
-        self.response = fixtures.ProblemReviewTests.response.__get__(self)
+        self.prepare_review_route = fixtures.ProblemReviewTests.prepare_review_route.__get__(self)
+        self.build_provider_response = fixtures.ProblemReviewTests.build_provider_response.__get__(self)
         fixtures.ProblemOpennessReviewTests.observe_openness(self, change_output=lambda output: output["findings"].pop("policy"))
-        self.error("invalid_record", lambda: self.mutate(self.problem().record_openness, {"assignment_id": "openness-assignment"}))
+        self.assert_error("invalid_record", lambda: self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"}))
 
     def test_resolved_finding_cannot_claim_reading_records_without_delivered_source_bytes(self):
         import test_research_problem_reviews as reviewers
@@ -142,7 +142,7 @@ class ProblemNativeResultShapeTests(ProblemCase):
         from research_harness import review_protocol
         self.initialize_problem()
         self.selected = self.select_statement()
-        evidence = self.full_reading()
+        evidence = self.record_full_reading()
         search = minimum_fixtures.ProblemOpennessMinimumTests.search(self, [evidence["version_id"]])
         exported = export_openness(self.store, {"assignment_id": "openness-assignment", "reviewer_id": "native-reviewer",
             "minimum": {"searches": [{"formulation": self.selected["statement"], "search_id": search["id"]}],
@@ -152,7 +152,7 @@ class ProblemNativeResultShapeTests(ProblemCase):
         record_digests = {row["search_digest"] for row in minimum["searches"]} | set(minimum["reading_digests"]) | {native["subject_digest"]}
         native["evidence"] = [row for row in native["evidence"] if row["digest"] in record_digests]
         forged = self.artifacts.put(json.dumps(native).encode(), "application/json")
-        reviewers.ProblemReviewTests.route(self)
+        reviewers.ProblemReviewTests.prepare_review_route(self)
         self.mutate(review_protocol.record_assignment, {"id": "openness-assignment", "route_id": "route", "dossier_id": None,
             "role": "native_math", "reviewer_id": "native-reviewer", "author_id": "problem-author", "context": {"native_packet": forged}})
         output = {"schema_version": 2, "subject_digest": native["subject_digest"], "claim_digest": native["claim_digest"],
@@ -161,10 +161,141 @@ class ProblemNativeResultShapeTests(ProblemCase):
                 "openness": {"outcome": "supported_open", "statement_digest": native["claim_digest"], "minimum": minimum,
                     "evidence": sorted(record_digests), "searched_at": "2026-10-17", "coverage": "The captured exact-formulation search.",
                     "reason": "No settling source was found."}}}
-        with patch("research_harness.review_transport.send_request", return_value=reviewers.ProblemReviewTests.response(self, output)):
+        with patch("research_harness.review_transport.send_request", return_value=reviewers.ProblemReviewTests.build_provider_response(self, output)):
             self.mutate(review_protocol.invoke_assignment, {"id": "openness-attempt", "assignment_id": "openness-assignment"}, credential="test-only")
-        self.error("openness_evidence_mismatch", lambda: self.mutate(self.problem().record_openness, {"assignment_id": "openness-assignment"}))
+        self.assert_error("openness_evidence_mismatch", lambda: self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"}))
 
-    def response(self, output):
+    def build_provider_response(self, output):
         import test_research_problem_reviews as reviewers
-        return reviewers.ProblemReviewTests.response(self, output)
+        return reviewers.ProblemReviewTests.build_provider_response(self, output)
+
+
+class ProblemOpennessMinimumSchemaTests(ProblemCase):
+    def setUp(self):
+        super().setUp()
+        self.initialize_problem()
+        self.selected = self.select_statement()
+
+    def prepare_review_route(self):
+        from test_research_problem_reviews import ProblemReviewTests
+        return ProblemReviewTests.prepare_review_route(self)
+
+    def build_provider_response(self, output):
+        from test_research_problem_reviews import ProblemReviewTests
+        return ProblemReviewTests.build_provider_response(self, output)
+
+    def observe_minimum(self, outcome, variant):
+        from test_research_problem_reviews import ProblemOpennessReviewTests
+
+        def change_output(output):
+            finding = output["findings"]["openness"]
+            if variant == "omitted":
+                finding.pop("minimum", None)
+            elif variant == "null":
+                finding["minimum"] = None
+            elif variant == "malformed":
+                finding["minimum"] = {"schema_version": 1}
+            else:
+                finding["minimum"] = {"schema_version": 1, "statement": self.selected["statement"],
+                    "neighbours": [], "searches": [], "reading_digests": [], "settling_work_id": None}
+
+        ProblemOpennessReviewTests.observe_openness(self, outcome, change_output=change_output)
+
+    def record_finding(self):
+        return self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})["result"]
+
+    def assert_unresolved_status(self):
+        from research_harness.cli import status_report
+        from research_harness.problem_delivery import assess_post
+        from research_harness.problem_evidence import collect_readings, describe_evidence
+        records = self.store.snapshot()["records"]
+        self.assertEqual(collect_readings(records), [])
+        self.assertEqual(describe_evidence(records, self.artifacts)["readings"], [])
+        self.assertIn("problem_openness_unresolved", {item["code"] for item in assess_post(records, self.artifacts)["obligations"]})
+        self.assertEqual(status_report(self.store)["next"]["code"], "problem_openness_unresolved")
+
+    def test_unresolved_omitted_minimum_records_and_reports_the_gap(self):
+        self.observe_minimum("unresolved", "omitted")
+        self.assertNotIn("minimum", self.record_finding())
+        self.assert_unresolved_status()
+
+    def test_unresolved_null_minimum_is_refused_by_the_shared_schema(self):
+        self.observe_minimum("unresolved", "null")
+        self.assert_error("invalid_record", self.record_finding)
+
+    def test_unresolved_malformed_minimum_is_refused_by_the_shared_schema(self):
+        self.observe_minimum("unresolved", "malformed")
+        self.assert_error("invalid_record", self.record_finding)
+
+    def test_unresolved_incomplete_minimum_records_without_evidence_audit(self):
+        self.observe_minimum("unresolved", "incomplete")
+        with patch("research_harness.openness_minimum.audit_minimum", side_effect=AssertionError("unresolved evidence audit")):
+            self.assertEqual(self.record_finding()["minimum"]["searches"], [])
+        self.assert_unresolved_status()
+
+    def test_resolved_omitted_minimum_requires_the_evidence_minimum(self):
+        self.observe_minimum("supported_open", "omitted")
+        self.assert_error("openness_minimum_required", self.record_finding)
+
+    def test_resolved_null_minimum_is_refused_by_the_shared_schema(self):
+        self.observe_minimum("supported_open", "null")
+        self.assert_error("invalid_record", self.record_finding)
+
+    def test_resolved_malformed_minimum_is_refused_by_the_shared_schema(self):
+        self.observe_minimum("supported_open", "malformed")
+        self.assert_error("invalid_record", self.record_finding)
+
+    def test_resolved_incomplete_minimum_still_requires_evidence_audit(self):
+        self.observe_minimum("supported_open", "incomplete")
+        self.assert_error("openness_search_missing", self.record_finding)
+
+    def test_existing_unresolved_null_minimum_does_not_poison_status(self):
+        self.observe_minimum("unresolved", "omitted")
+        saved = self.record_finding()
+        self.put("problem_openness", saved["id"], dict(saved, minimum=None))
+        self.assert_unresolved_status()
+
+    def test_legacy_assessment_reading_keeps_its_identity_through_observed_finding(self):
+        from research_harness import reading, review_protocol
+        from research_harness.literature import import_bundle
+        from research_harness.problem_openness import export_openness
+        from test_research_problem_openness_minimum import ProblemOpennessMinimumTests
+
+        version = self.metadata()
+        bundle = self.bundle(version)
+        self.mutate(import_bundle, bundle)
+        note = self.full_note(bundle, "legacy-full")
+        current = reading._assess(self.store.snapshot()["records"], self.artifacts, note)
+        legacy = dict(current, bundle_digest="0" * 64)
+        # Record the reading once, as the legacy implementation would have.
+        with patch("research_harness.reading._assess", return_value=legacy):
+            self.mutate(reading.record_reading, note)
+        original = self.store.snapshot()["records"]["reading"][note["id"]]
+        coverage = reading.fulltext_coverage(self.store.snapshot()["records"], self.artifacts, version)
+        self.assertTrue(coverage["complete"])
+        self.assertNotEqual(coverage["readings"][note["id"]]["assessment"], original["assessment"])
+        search = ProblemOpennessMinimumTests.search(self, [version])
+        exported = export_openness(self.store, {"assignment_id": "openness-assignment", "reviewer_id": "native-reviewer",
+            "minimum": {"searches": [{"formulation": self.selected["statement"], "search_id": search["id"]}],
+                        "settling_work_id": None, "duplicate_resolutions": []}}, self.root / "legacy-packet")
+        packet = json.loads(self.artifacts.read(exported["native_packet"]))
+        self.prepare_review_route()
+        self.mutate(review_protocol.record_assignment, {"id": "openness-assignment", "route_id": "route", "dossier_id": None,
+            "role": "native_math", "reviewer_id": "native-reviewer", "author_id": "problem-author",
+            "context": {"native_packet": exported["native_packet"]}})
+        output = {"schema_version": 2, "subject_digest": packet["subject_digest"], "claim_digest": packet["claim_digest"],
+            "reviewer": packet["reviewer"], "decision": "approve", "findings": {
+                **{key: "Assessed the exact supplied subject." for key in ("statement", "assumptions", "scope", "dependencies", "policy")},
+                "openness": {"outcome": "supported_open", "statement_digest": packet["claim_digest"],
+                    "minimum": packet["scientific_context"]["openness_minimum"],
+                    "evidence": [entry["digest"] for entry in packet["evidence"]], "searched_at": "2026-10-17",
+                    "coverage": "The recorded exact-formulation search and full legacy reading.",
+                    "reason": "The read comparator does not settle the declared problem."}}}
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+            self.mutate(review_protocol.invoke_assignment, {"id": "openness-attempt", "assignment_id": "openness-assignment"},
+                credential="test-only")
+        saved = self.record_finding()
+        self.assertEqual(saved["minimum"]["reading_digests"], [digest(original)])
+        entry = next(entry for entry in packet["evidence"] if entry["digest"] == digest(original))
+        self.assertEqual(json.loads(self.artifacts.read(entry["artifact"])), original)
+        self.assertEqual(self.store.snapshot()["records"]["reading"], {note["id"]: original})

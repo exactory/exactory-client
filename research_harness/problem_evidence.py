@@ -4,7 +4,7 @@ from .errors import ResearchError
 from .evidence import digest
 from .graph import obligation
 from .operations import fields, strings, text
-from .problem_claims import current_statement, find_latest, find_value, statement_digest
+from .problem_claims import find_current_statement, find_latest, find_value, compute_statement_digest
 from .reading import fulltext_coverage, validate_read_evidence
 
 
@@ -69,21 +69,21 @@ def validate_computation(records, artifacts, item, *, recorded_revision=None):
     validate_formal_request(item["formal_check"])
     affected = {"execution_id": item["execution_id"], "output_id": item["output_id"]}
 
-    def missing(part):
+    def raise_missing_computation(part):
         raise ResearchError("problem_value_computation_missing", "Cited empirical support requires its " + part, affected)
 
     execution = records.get("execution", {}).get(item["execution_id"])
     if execution is None:
-        missing("execution")
+        raise_missing_computation("execution")
     payload = execution["payload"]
     origin = payload["origin"]
     admission = records.get("execution_admission", {}).get(origin.get("admission_id"))
     outcome = records.get("execution_outcome", {}).get(origin.get("admission_id"))
     if admission is None or outcome is None or outcome["execution_id"] != item["execution_id"]:
-        missing("admission and reconciled outcome")
+        raise_missing_computation("admission and reconciled outcome")
     output = next((row for row in payload["outputs"] if row["id"] == item["output_id"]), None)
     if output is None or payload["status"] != "completed":
-        missing("completed output")
+        raise_missing_computation("completed output")
     from .probe_provenance import find_probe_artifact_origins
     if find_probe_artifact_origins(records, [output["artifact"]], artifacts=artifacts):
         raise ResearchError("exploratory_evidence", "Probe-origin bytes cannot support a problem claim", affected)
@@ -159,7 +159,7 @@ def validate_computation(records, artifacts, item, *, recorded_revision=None):
         return {"execution_id": item["execution_id"], "output_id": item["output_id"], "admission": admission,
                 "execution": execution, "assessment": assessment, "outputs": payload["outputs"],
                 "validations": assessment["payload"]["validity_checks"]}
-    missing("assessment listing this result")
+    raise_missing_computation("assessment listing this result")
 
 
 def validate_value(records, artifacts, value):
@@ -243,7 +243,8 @@ def assess_formal_checks(records):
 
 def collect_readings(records):
     openness = find_latest(records, "problem_openness")
-    digests = set((openness or {}).get("minimum", {}).get("reading_digests", []))
+    minimum = (openness or {}).get("minimum") or {}
+    digests = set(minimum.get("reading_digests", []))
     identifiers = {item["reading_id"] for item in collect_value_items(find_value(records)) if item["kind"] == "reading"}
     return [row for identifier, row in sorted(records.get("reading", {}).items())
             if identifier in identifiers or digest(row) in digests]
@@ -276,7 +277,7 @@ def project_citations(records, artifacts):
 
 
 def describe_binding(records, artifacts):
-    statement = current_statement(records)
+    statement = find_current_statement(records)
     openness, value = find_latest(records, "problem_openness"), find_value(records)
     computations = [validate_computation(records, artifacts, item, recorded_revision=value.get("recorded_revision")) for item in collect_value_items(value)
                     if item["kind"] == "computation"]
@@ -291,7 +292,7 @@ def describe_binding(records, artifacts):
 
 def describe_evidence(records, artifacts):
     from .direction_sources import build_reading_passages
-    statement, value = current_statement(records), find_value(records)
+    statement, value = find_current_statement(records), find_value(records)
     openness = find_latest(records, "problem_openness")
     readings = collect_readings(records)
     prepared = build_reading_passages(records, artifacts, readings)
@@ -299,7 +300,7 @@ def describe_evidence(records, artifacts):
                     if item["kind"] == "computation"]
     return {"claim": None if statement is None else dict(
                 {key: statement[key] for key in ("title", "area", "statement", "resolution_criteria", "formal_statement")},
-                statement_id=statement["id"], statement_digest=statement_digest(statement)),
+                statement_id=statement["id"], statement_digest=compute_statement_digest(statement)),
             "openness": None if openness is None else {key: openness.get(key) for key in ("id", "outcome", "statement_digest", "minimum")},
             "value": None if value is None else {key: value[key] for key in ("id", "motivation", "current_state")},
             "citations": project_citations(records, artifacts),

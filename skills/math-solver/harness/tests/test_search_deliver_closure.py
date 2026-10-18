@@ -25,7 +25,7 @@ class DeliverClosureTests(SearchCLIWorkspace, unittest.TestCase):
     set_up_accepted_proof = closure_tests.OpennessClosureTests.set_up_accepted_proof
     build_closure_spec = closure_tests.OpennessClosureTests.build_closure_spec
 
-    def completed(self):
+    def complete_objective(self):
         self.set_up_accepted_proof("already_solved")
         self.search("complete", self.build_closure_spec(), revision=3)
         return Controller(self.root)
@@ -41,7 +41,7 @@ class DeliverClosureTests(SearchCLIWorkspace, unittest.TestCase):
         self.assertEqual(common.snapshot(), before)
 
     def test_delivers_exact_native_closure_once_without_changing_native_history(self):
-        controller = self.completed()
+        controller = self.complete_objective()
         state = controller.status()
         before_native = controller.store.read()
         result = self.search("deliver-closure", {}, revision=4)
@@ -59,7 +59,7 @@ class DeliverClosureTests(SearchCLIWorkspace, unittest.TestCase):
         self.assertEqual(controller.store.read(), before_native)
 
     def test_reopened_objective_delivers_another_closure_and_preserves_the_first(self):
-        controller = self.completed()
+        controller = self.complete_objective()
         self.search("deliver-closure", {}, revision=4)
         common = CommonStore(common_root(self.root, controller.status()))
         original = copy.deepcopy(common.snapshot()["records"]["native_closure"])
@@ -104,7 +104,7 @@ class DeliverClosureTests(SearchCLIWorkspace, unittest.TestCase):
         self.assertFalse((self.root / ".exactory/research.sqlite3").exists())
 
     def test_missing_observed_closure_packet_prevents_delivery(self):
-        controller = self.completed()
+        controller = self.complete_objective()
         state = controller.status()
         common = CommonStore(common_root(self.root, state))
         assignment = state["control"]["closure"]["review"]["reviewer"]["attestation_id"].split(":", 1)[1]
@@ -115,14 +115,14 @@ class DeliverClosureTests(SearchCLIWorkspace, unittest.TestCase):
         self.assertNotIn("native_closure", common.snapshot()["records"])
 
     def test_delivery_rejects_a_stale_native_revision(self):
-        controller = self.completed()
+        controller = self.complete_objective()
         before = CommonStore(common_root(self.root, controller.status())).snapshot()
         result = self.search("deliver-closure", {}, revision=3, success=False)
         self.assertEqual(result["error"]["code"], "revision_conflict")
         self.assertEqual(CommonStore(self.root).snapshot(), before)
 
     def test_common_revision_retry_reaudits_a_late_exploratory_origin(self):
-        controller = self.completed()
+        controller = self.complete_objective()
         from search_controller.closure_delivery import audit_state
         from tests.test_search_common_evidence import CommonEvidenceTests
         changed = []
@@ -143,7 +143,7 @@ class DeliverClosureTests(SearchCLIWorkspace, unittest.TestCase):
         self.assertNotIn("native_closure", CommonStore(self.root).snapshot()["records"])
 
     def test_delivery_accepts_file_payload_without_accepting_a_caller_supplied_closure(self):
-        controller = self.completed()
+        controller = self.complete_objective()
         source = self.root / "deliver.json"
         source.write_text(json.dumps({"closure": controller.status()["control"]["closure"]}))
         result = subprocess.run([sys.executable, str(CLI), "--attack-root", str(self.root), "search",

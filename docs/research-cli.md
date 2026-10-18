@@ -1389,8 +1389,8 @@ records and move explicit selections.
 | Command | JSON payload | Records and behavior |
 | --- | --- | --- |
 | `problem-init` | `{slug, area, field, authors}` | Creates the orchestration marker and initial configuration. |
-| `problem-statement` | `{id, title, area, statement, resolution_criteria, neighbours, formal_statement}` | `problem_statement/<id>` and `problem_selection/current = {statement_id}`. Statement and criteria are nonempty TeX; neighbours are formulation texts, possibly empty. Formal statement is optional, null or `{language, text}`. Any changed field requires a new id and moves the selection. |
-| `problem-openness` | `{assignment_id}` | Records `problem_openness/<id>` from the observed native result review. `supported_open` advances the claim; `unresolved` records the gap without a minimum audit; `already_solved` redirects to the settling result and blocks posting as open. |
+| `problem-statement` | `{id, title, area, statement, resolution_criteria, neighbours, formal_statement}` | `problem_statement/<id>` and `problem_selection/current = {statement_id}`. Statement and criteria are nonempty TeX; neighbours are formulation texts, possibly empty. Formal statement is optional, null or `{language, text}`. The area must equal the immutable problem record's area (`problem_area_mismatch`); another subject class requires a new problem record. Any other changed field requires a new statement id and moves the selection. |
+| `problem-openness` | `{assignment_id}` | Records `problem_openness/<id>` from the observed native result review. Every supplied minimum must pass the shared closed-schema validation. `supported_open` advances the claim; `unresolved` records the gap without an evidence audit; `already_solved` redirects to the settling result and blocks posting as open. |
 | `problem-value` | `{id, statement_id, motivation, current_state}` | `problem_value/<id>` contains ordered paragraph arrays, each item `{text, evidence}` with nonempty evidence. |
 | `problem-formal-check` | `{evidence: {execution_id, output_id}, native_closure_digest}` | `problem_formal_check/<id>` binds a requested support check to an authenticated native completion in this store. Invalid bindings return `problem_formal_check_unbound`. |
 | `problem-decision` | `{id, action, review_ids, bar_review_ids, reason}` | `problem_decision/<id>` binds the current evidence digest. Action is `post`, `revise` or `withdraw`; `post` requires the minimum and observed review coverage, otherwise `problem_minimum_unmet`. The other actions record the reason. |
@@ -1454,8 +1454,12 @@ claim on the same output supplies no formal-check credit.
 
 The problem bar uses `exactory-problem-review-v1/bar` and receives `area`,
 `field` and source inventory/deliveries with the statement, title, neighbours and
-value withheld. Two observed bars are required before a result packet. The
-result template `exactory-problem-review-v1/result` receives `problem_evidence`
+value withheld. The selected statement must retain the record's area, so the
+bars remain established for their original scope; a statement in another area
+is refused during bar assessment with `review_bar_mismatch`. Another subject
+class requires a new problem record and its own bars. Two observed bars are
+required before a result packet. The result template
+`exactory-problem-review-v1/result` receives `problem_evidence`
 with the claim, openness, value, citations, delivered readings/passages,
 admissions/executions/assessments/output validations and bound native closures.
 Both result reviews must pass exactly `problem_statement`, `problem_openness`,
@@ -1463,6 +1467,14 @@ Both result reviews must pass exactly `problem_statement`, `problem_openness`,
 reviewer (`review_not_independent`); an assignment's unknown author is refused
 with `problem_author_unknown`. Existing route probes, source-request
 continuations, assignment currency and independence checks apply.
+
+Material objections from both bars and both observed result histories remain
+post obligations (`research_objection_unresolved`), including predecessor
+findings marked `continuing` or `contested`. Both result reviewers must record
+evidence-backed resolutions, or an independent focused adjudication must find
+the objection not upheld. Problem adjudication uses the existing review tools
+with `dossier_id: null`; changed value evidence retains the focused adjudicator
+and its observed history rather than opening a new reviewer choice.
 
 `gate post` is the only applicable gate in a problem workspace. Every other
 gate reports `gate_inapplicable`, as does `post` outside this orchestration.
@@ -1486,6 +1498,7 @@ records retain nonmanaged dependency composition and empirical meaning.
 | `problem_citation_locator_missing` | Record a DOI, arXiv id or read-version bundle HTTPS locator for the cited work. |
 | `problem_bar_pending`, `review_bar_mismatch` | Obtain both current field/area bars. |
 | `problem_review_pair_required`, `problem_evidence_unassessed`, `problem_assurance_pending` | Obtain the independent observed pair with delivered current evidence and all five assurances passed. |
+| `research_objection_unresolved` | Resolve the named material objection with evidence or a focused independent adjudication. |
 | `problem_decision_missing`, `problem_decision_stale` | Record a `post` decision covering the current evidence digest. |
 | `review_sources_pending` | Resolve the reviewers' pending source requests. |
 | `problem_already_posted` | Retain the existing confirmed post; the same statement cannot be posted twice. |

@@ -12,9 +12,9 @@ from research_harness.evidence import digest
 
 
 class ProblemDeliveryCase(ProblemCase):
-    route = reviewers.ProblemReviewTests.route
-    response = reviewers.ProblemReviewTests.response
-    output = reviewers.ProblemReviewTests.output
+    prepare_review_route = reviewers.ProblemReviewTests.prepare_review_route
+    build_provider_response = reviewers.ProblemReviewTests.build_provider_response
+    build_review_output = reviewers.ProblemReviewTests.build_review_output
     observe = reviewers.ProblemReviewTests.observe
     observe_openness = reviewers.ProblemOpennessReviewTests.observe_openness
 
@@ -26,17 +26,17 @@ class ProblemDeliveryCase(ProblemCase):
     def prepare_ready(self, formal=False):
         self.initialize_problem()
         self.selected = self.select_statement(formal_statement={"language": "Lean", "text": "theorem bound : True := by trivial"} if formal else None)
-        item = self.full_reading()
+        item = self.record_full_reading()
         self.observe_openness()
-        self.mutate(self.problem().record_openness, {"assignment_id": "openness-assignment"})
-        self.mutate(self.problem().record_value, self.value([item]))
+        self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})
+        self.mutate(self.load_problem_module().record_value, self.build_value([item]))
         self.supporting = self.artifacts.put(b"Field evidence used by the authored review fixture.", "text/plain")
         for role in ("bar", "result"):
             for reviewer in ("first", "second"):
                 self.observe(role, reviewer)
 
-    def decision(self, identifier="decision"):
-        return self.mutate(self.problem().record_decision, {"id": identifier, "action": "post",
+    def record_post_decision(self, identifier="decision"):
+        return self.mutate(self.load_problem_module().record_decision, {"id": identifier, "action": "post",
             "review_ids": ["review-result-first", "review-result-second"],
             "bar_review_ids": ["review-bar-first", "review-bar-second"], "reason": "Both independent findings support the exact evidence."})["result"]
 
@@ -47,7 +47,7 @@ class ProblemDeliveryTests(ProblemDeliveryCase):
         self.prepare_ready(formal=True)
         self.assertEqual(status_report(self.store)["milestone"], "openness")
         self.assertEqual(status_report(self.store)["next"]["code"], "problem_decision_missing")
-        decision = self.decision()
+        decision = self.record_post_decision()
         report = status_report(self.store)
         self.assertTrue(report["ready"], report["obligations"])
         self.assertEqual(report["milestone"], "value")
@@ -55,41 +55,41 @@ class ProblemDeliveryTests(ProblemDeliveryCase):
         exported = export_problem(self.store, destination)
         manifest = json.loads((destination / "problem-export.json").read_text())
         self.assertEqual(manifest["decision_id"], decision["id"])
-        self.assertEqual(manifest["statement_digest"], self.problem().statement_digest(self.selected))
+        self.assertEqual(manifest["statement_digest"], self.load_problem_module().compute_statement_digest(self.selected))
         self.assertEqual(manifest["formal_statement_language"], "Lean")
         self.assertEqual(set(manifest["files"]), {"title.txt", "statement.md", "motivation.md", "state.md", "criteria.md", "citations.json", "formal-statement.txt"})
         self.assertEqual((destination / "statement.md").read_text(), self.selected["statement"] + "\n")
         self.assertTrue(json.loads((destination / "citations.json").read_text())[0]["locator"].startswith("2601."))
-        post = self.mutate(self.problem().record_posted, {"problem_id": "posted-id", "export_directory": str(destination)})["result"]
+        post = self.mutate(self.load_problem_module().record_posted, {"problem_id": "posted-id", "export_directory": str(destination)})["result"]
         self.assertEqual(post["statement_id"], self.selected["id"])
         self.assertEqual(status_report(self.store)["milestone"], "post")
-        self.error("problem_already_posted", lambda: self.mutate(self.problem().record_posted,
+        self.assert_error("problem_already_posted", lambda: self.mutate(self.load_problem_module().record_posted,
             {"problem_id": "again", "export_directory": str(destination)}))
 
     def test_export_refuses_until_post_gate_is_ready(self):
         from research_harness.problem_delivery import export_problem
         self.initialize_problem()
-        self.error("readiness_required", lambda: export_problem(self.store, self.root / "not-ready"))
+        self.assert_error("readiness_required", lambda: export_problem(self.store, self.root / "not-ready"))
 
     def test_exported_parts_and_manifest_are_never_the_authority(self):
         from research_harness.problem_delivery import export_problem
         self.prepare_ready()
-        self.decision()
+        self.record_post_decision()
         directory = self.root / "post"
         export_problem(self.store, directory)
         (directory / "statement.md").write_text("An unreviewed claim.\n")
-        self.error("problem_export_mismatch", lambda: self.mutate(self.problem().record_posted,
+        self.assert_error("problem_export_mismatch", lambda: self.mutate(self.load_problem_module().record_posted,
             {"problem_id": "changed", "export_directory": str(directory)}))
         import hashlib
         manifest = json.loads((directory / "problem-export.json").read_text())
         manifest["files"]["statement.md"] = hashlib.sha256((directory / "statement.md").read_bytes()).hexdigest()
         (directory / "problem-export.json").write_text(json.dumps(manifest))
-        self.error("problem_export_mismatch", lambda: self.mutate(self.problem().record_posted,
+        self.assert_error("problem_export_mismatch", lambda: self.mutate(self.load_problem_module().record_posted,
             {"problem_id": "forged-manifest", "export_directory": str(directory)}))
 
     def test_statement_selection_makes_prior_finding_and_decision_stale(self):
         self.prepare_ready()
-        self.decision()
+        self.record_post_decision()
         self.select_statement(identifier="statement-2", statement="A changed exact mathematical claim.")
         report = status_report(self.store)
         codes = {item["code"] for item in report["obligations"]}
@@ -99,14 +99,14 @@ class ProblemDeliveryTests(ProblemDeliveryCase):
 
     def test_decision_refuses_missing_observed_pair_then_records(self):
         self.prepare_ready()
-        self.error("problem_review_pair_required", lambda: self.mutate(self.problem().record_decision, {
+        self.assert_error("problem_review_pair_required", lambda: self.mutate(self.load_problem_module().record_decision, {
             "id": "bad", "action": "post", "review_ids": ["review-result-first"],
             "bar_review_ids": ["review-bar-first", "review-bar-second"], "reason": "One result is missing."}))
-        self.assertEqual(self.decision()["action"], "post")
+        self.assertEqual(self.record_post_decision()["action"], "post")
 
     def test_gate_and_status_are_read_only_and_extra_unused_readings_keep_currency(self):
         self.prepare_ready()
-        self.decision()
+        self.record_post_decision()
         before = self.store.snapshot()
         first = status_report(self.store)
         self.assertTrue(first["ready"], first["obligations"])

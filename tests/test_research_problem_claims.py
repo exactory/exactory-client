@@ -16,22 +16,22 @@ from research_harness import strategy
 
 
 class ProblemCase(LiteratureCase):
-    def problem(self):
+    def load_problem_module(self):
         return importlib.import_module("research_harness.problem_claims")
 
     def initialize_problem(self):
-        return self.mutate(self.problem().initialize_problem, {
+        return self.mutate(self.load_problem_module().initialize_problem, {
             "slug": "bounded-sequences", "area": "math.CO", "field": "Extremal sequences and finite bounds",
             "authors": ["problem-author"]})["result"]
 
-    def statement(self, identifier="statement-1", **changes):
+    def build_statement(self, identifier="statement-1", **changes):
         return dict({"id": identifier, "title": "A finite bound problem", "area": "math.CO",
             "statement": r"For every $n$, does $B(n)\leq n^2$ hold?",
             "resolution_criteria": r"Prove the bound for all $n$ or exhibit a counterexample.",
             "neighbours": [], "formal_statement": None}, **changes)
 
     def select_statement(self, **changes):
-        return self.mutate(self.problem().record_statement, self.statement(**changes))["result"]
+        return self.mutate(self.load_problem_module().record_statement, self.build_statement(**changes))["result"]
 
     def put(self, kind, key, value):
         self.sequence += 1
@@ -39,17 +39,17 @@ class ProblemCase(LiteratureCase):
             lambda tx: tx.put(kind, key, value), expected_revision=self.store.revision,
             request_id="record-" + str(self.sequence))
 
-    def error(self, code, function):
+    def assert_error(self, code, function):
         with self.assertRaises(ResearchError) as caught:
             function()
         self.assertEqual(caught.exception.code, code, caught.exception.as_dict())
 
-    def value(self, evidence, identifier="value-1"):
+    def build_value(self, evidence, identifier="value-1"):
         return {"id": identifier, "statement_id": "statement-1",
             "motivation": [{"text": "The bound would connect the finite constructions.", "evidence": evidence}],
             "current_state": [{"text": "Only bounded examples have been established.", "evidence": evidence}]}
 
-    def full_reading(self):
+    def record_full_reading(self):
         version = self.metadata()
         bundle = self.bundle(version)
         self.mutate(import_bundle, bundle)
@@ -70,7 +70,7 @@ class ProblemRecordTests(ProblemCase):
         self.assertFalse(hasattr(records, "read_snapshot"))
         self.assertIsNone(records["configuration"]["research"]["target"])
         self.assertEqual(marker["authors"], ["problem-author"])
-        self.error("orchestration_conflict", self.initialize_problem)
+        self.assert_error("orchestration_conflict", self.initialize_problem)
 
     def test_ai_science_markers_conflict_with_problem_initialization(self):
         for kind, key in (("workspace", "study"), ("workspace", "draft"), ("research_intent", "intent")):
@@ -78,14 +78,14 @@ class ProblemRecordTests(ProblemCase):
                 records = {kind: {key: {}}}
                 self.assertEqual(strategy.find_orchestration(records), "ai_science")
         self.put("workspace", "study", {"stage": "initiate"})
-        self.error("orchestration_conflict", self.initialize_problem)
+        self.assert_error("orchestration_conflict", self.initialize_problem)
 
     def test_a_store_with_a_research_target_refuses_a_problem_record(self):
         self.mutate(initialize_research, {"profile": "research", "target": None})
         self.mutate(set_target, {"target": {"kind": "objective", "id": "complete-objective",
             "statement": "Establish the stated bound over the complete declared domain."},
             "reason": "Fix the complete objective before planning."})
-        self.error("orchestration_conflict", self.initialize_problem)
+        self.assert_error("orchestration_conflict", self.initialize_problem)
 
     def test_a_configured_store_without_a_target_accepts_a_problem_record(self):
         self.mutate(initialize_research, {"profile": "research", "target": None})
@@ -93,25 +93,25 @@ class ProblemRecordTests(ProblemCase):
 
     def test_problem_refuses_study_adoption_and_intent(self):
         self.initialize_problem()
-        self.error("orchestration_conflict", lambda: self.mutate(initialize_workspace, {"kind": "study", "state": {}}))
-        self.error("orchestration_conflict", lambda: self.mutate(adopt_workspace, {}))
-        self.error("orchestration_conflict", lambda: self.mutate(strategy.record_intent, {}))
+        self.assert_error("orchestration_conflict", lambda: self.mutate(initialize_workspace, {"kind": "study", "state": {}}))
+        self.assert_error("orchestration_conflict", lambda: self.mutate(adopt_workspace, {}))
+        self.assert_error("orchestration_conflict", lambda: self.mutate(strategy.record_intent, {}))
 
     def test_statement_selection_is_append_only_and_digest_covers_exact_claim(self):
         self.initialize_problem()
         first = self.select_statement()
         second = self.select_statement(identifier="statement-2", neighbours=["A sharper bound"])
         records = self.store.snapshot()["records"]
-        self.assertEqual(self.problem().current_statement(records), second)
+        self.assertEqual(self.load_problem_module().find_current_statement(records), second)
         self.assertEqual(records["problem_statement"][first["id"]], first)
-        self.assertEqual(self.problem().statement_digest(first), self.problem().statement_digest(second))
-        self.error("record_conflict", lambda: self.select_statement(title="Changed title"))
+        self.assertEqual(self.load_problem_module().compute_statement_digest(first), self.load_problem_module().compute_statement_digest(second))
+        self.assert_error("record_conflict", lambda: self.select_statement(title="Changed title"))
 
     def test_formal_statement_can_be_omitted_and_stays_optional(self):
         self.initialize_problem()
-        payload = self.statement()
+        payload = self.build_statement()
         payload.pop("formal_statement")
-        saved = self.mutate(self.problem().record_statement, payload)["result"]
+        saved = self.mutate(self.load_problem_module().record_statement, payload)["result"]
         self.assertIsNone(saved["formal_statement"])
 
     def test_post_gate_dispatch_is_exclusive(self):
@@ -127,20 +127,20 @@ class ProblemRecordTests(ProblemCase):
     def test_value_accepts_full_reading_and_rejects_abstract_or_unknown_reading(self):
         self.initialize_problem()
         self.select_statement()
-        evidence = self.full_reading()
-        saved = self.mutate(self.problem().record_value, self.value([evidence]))["result"]
-        self.assertEqual(saved["motivation"], self.value([evidence])["motivation"])
+        evidence = self.record_full_reading()
+        saved = self.mutate(self.load_problem_module().record_value, self.build_value([evidence]))["result"]
+        self.assertEqual(saved["motivation"], self.build_value([evidence])["motivation"])
         self.mutate(record_reading, self.abstract_note(evidence["version_id"], note_id="read-abstract"))
         for identifier in ("read-abstract", "deferred-source", "absent"):
             bad = dict(evidence, reading_id=identifier)
-            self.error("problem_value_reading_missing", lambda: self.mutate(self.problem().record_value,
-                self.value([bad], "bad-" + identifier)))
+            self.assert_error("problem_value_reading_missing", lambda: self.mutate(self.load_problem_module().record_value,
+                self.build_value([bad], "bad-" + identifier)))
 
     def test_value_requires_a_reconciled_assessed_admitted_computation(self):
         self.initialize_problem()
         self.select_statement()
         evidence = {"kind": "computation", "execution_id": "run", "output_id": "result", "formal_check": None}
-        self.error("problem_value_computation_missing", lambda: self.mutate(self.problem().record_value, self.value([evidence])))
+        self.assert_error("problem_value_computation_missing", lambda: self.mutate(self.load_problem_module().record_value, self.build_value([evidence])))
 
     def test_status_names_formulation_and_first_missing_condition(self):
         from research_harness.cli import status_report
@@ -156,9 +156,9 @@ class ProblemRecordTests(ProblemCase):
 
     def test_post_decision_requires_the_problem_minimum(self):
         self.initialize_problem()
-        self.error("problem_minimum_unmet", lambda: self.mutate(self.problem().record_decision, {
+        self.assert_error("problem_minimum_unmet", lambda: self.mutate(self.load_problem_module().record_decision, {
             "id": "decision", "action": "post", "review_ids": [], "bar_review_ids": [], "reason": "Ready."}))
-        revised = self.mutate(self.problem().record_decision, {
+        revised = self.mutate(self.load_problem_module().record_decision, {
             "id": "revise", "action": "revise", "review_ids": [], "bar_review_ids": [], "reason": "Narrow the claim."})["result"]
         self.assertEqual(revised["action"], "revise")
 
@@ -172,9 +172,9 @@ class ProblemFormalBindingTests(ProblemCase):
             "assumption_ids": [], "proof_policy": "lean-kernel", "scope": {"kind": "named", "name": "finite range"}}
         self.request = {"claim": self.claim, "required_deliverables": ["range check"]}
         self.item = {"kind": "computation", "execution_id": "execution", "output_id": "result", "formal_check": self.request}
-        self.put("problem_value", "value", dict(self.value([self.item], "value"), recorded_revision=self.store.revision + 1))
+        self.put("problem_value", "value", dict(self.build_value([self.item], "value"), recorded_revision=self.store.revision + 1))
 
-    def closure_record(self):
+    def build_closure_record(self):
         contract = {"original_claim": copy.deepcopy(self.claim), "proof_policy": "lean-kernel", "required_deliverables": ["range check"]}
         subject = {"contract_digest": digest(contract), "outcome": "proof", "acceptance_ids": ["acceptance"],
             "evidence_digests": ["a" * 64], "deliverables": [{"requirement": "range check", "digest": "b" * 64}]}
@@ -187,12 +187,12 @@ class ProblemFormalBindingTests(ProblemCase):
     def bind(self, record):
         identifier = digest(record["closure"])
         self.put("native_closure", identifier, record)
-        return self.mutate(self.problem().record_formal_check, {
+        return self.mutate(self.load_problem_module().record_formal_check, {
             "evidence": {"execution_id": "execution", "output_id": "result"},
             "native_closure_digest": identifier})["result"]
 
     def test_exact_native_completion_binds_and_keeps_closure(self):
-        bound = self.bind(self.closure_record())
+        bound = self.bind(self.build_closure_record())
         self.assertEqual(bound["formal_check"], self.request)
         self.assertEqual(bound["evidence"], {"execution_id": "execution", "output_id": "result"})
 
@@ -214,27 +214,27 @@ class ProblemFormalBindingTests(ProblemCase):
         ]
         for index, mutate in enumerate(mutations):
             with self.subTest(index=index):
-                record = self.closure_record()
+                record = self.build_closure_record()
                 mutate(record)
-                self.error("problem_formal_check_unbound", lambda: self.bind(record))
+                self.assert_error("problem_formal_check_unbound", lambda: self.bind(record))
 
     def test_absent_closure_and_changed_value_refuse_binding(self):
         payload = {"evidence": {"execution_id": "execution", "output_id": "result"}, "native_closure_digest": "c" * 64}
-        self.error("problem_formal_check_unbound", lambda: self.mutate(self.problem().record_formal_check, payload))
-        bound = self.bind(self.closure_record())
+        self.assert_error("problem_formal_check_unbound", lambda: self.mutate(self.load_problem_module().record_formal_check, payload))
+        bound = self.bind(self.build_closure_record())
         changed = copy.deepcopy(self.item)
         changed["formal_check"]["claim"]["statement"] = "Different bound"
-        self.put("problem_value", "later", dict(self.value([changed], "later"), recorded_revision=self.store.revision + 1))
+        self.put("problem_value", "later", dict(self.build_value([changed], "later"), recorded_revision=self.store.revision + 1))
         from research_harness.problem_evidence import assess_formal_checks
         self.assertIn("problem_formal_check_stale", {o["code"] for o in assess_formal_checks(self.store.snapshot()["records"])})
 
     def test_changed_support_can_be_rebound_without_rewriting_earlier_binding(self):
-        original = self.bind(self.closure_record())
+        original = self.bind(self.build_closure_record())
         changed = copy.deepcopy(self.item)
         changed["formal_check"]["claim"]["statement"] = "A stronger requested bound"
-        self.put("problem_value", "later", dict(self.value([changed], "later"), recorded_revision=self.store.revision + 1))
+        self.put("problem_value", "later", dict(self.build_value([changed], "later"), recorded_revision=self.store.revision + 1))
         self.claim = changed["formal_check"]["claim"]
-        replacement = self.bind(self.closure_record())
+        replacement = self.bind(self.build_closure_record())
         from research_harness.problem_evidence import assess_formal_checks
         records = self.store.snapshot()["records"]
         self.assertEqual(assess_formal_checks(records), [])
@@ -242,9 +242,9 @@ class ProblemFormalBindingTests(ProblemCase):
         self.assertNotEqual(original["id"], replacement["id"])
 
     def test_uncited_computation_does_not_leave_a_permanent_formal_check_obligation(self):
-        original = self.bind(self.closure_record())
-        reading = self.full_reading()
-        self.mutate(self.problem().record_value, self.value([reading], "reading-only"))
+        original = self.bind(self.build_closure_record())
+        reading = self.record_full_reading()
+        self.mutate(self.load_problem_module().record_value, self.build_value([reading], "reading-only"))
         from research_harness.problem_evidence import assess_formal_checks
         records = self.store.snapshot()["records"]
         self.assertEqual(assess_formal_checks(records), [])
@@ -253,23 +253,23 @@ class ProblemFormalBindingTests(ProblemCase):
     def test_each_requested_claim_on_the_same_output_needs_its_own_binding(self):
         changed = copy.deepcopy(self.item)
         changed["formal_check"]["claim"]["statement"] = "A second requested support claim"
-        value = self.value([self.item], "two-requests")
+        value = self.build_value([self.item], "two-requests")
         value["current_state"][0]["evidence"] = [changed]
         self.put("problem_value", "two-requests", dict(value, recorded_revision=self.store.revision + 1))
-        self.bind(self.closure_record())
+        self.bind(self.build_closure_record())
         from research_harness.problem_evidence import assess_formal_checks
         self.assertEqual(assess_formal_checks(self.store.snapshot()["records"])[0]["code"], "problem_formal_check_missing")
         self.claim = changed["formal_check"]["claim"]
-        self.bind(self.closure_record())
+        self.bind(self.build_closure_record())
         self.assertEqual(assess_formal_checks(self.store.snapshot()["records"]), [])
 
     def test_same_claim_with_distinct_requested_deliverables_can_bind_each_item(self):
         changed = copy.deepcopy(self.item)
         changed["formal_check"]["required_deliverables"].append("second artifact")
-        value = self.value([self.item], "two-deliverable-requests")
+        value = self.build_value([self.item], "two-deliverable-requests")
         value["current_state"][0]["evidence"] = [changed]
         self.put("problem_value", value["id"], dict(value, recorded_revision=self.store.revision + 1))
-        native = self.closure_record()
+        native = self.build_closure_record()
         native["contract"]["required_deliverables"].append("second artifact")
         subject = native["closure"]["subject"]
         subject["contract_digest"] = digest(native["contract"])

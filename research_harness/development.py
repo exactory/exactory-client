@@ -129,8 +129,8 @@ class _Context:
         self.foundation = self.synthesis["foundation"]
         self.objective = self.configuration["target"]
         if self.problem:
-            from .problem_claims import current_statement
-            statement = current_statement(records)
+            from .problem_claims import find_current_statement
+            statement = find_current_statement(records)
             self.objective = None if statement is None else {"id": statement["id"], "statement": statement["statement"]}
             pending = [item for item in self.configuration["obligations"] if item["code"] != "objective_missing"]
             if statement is None:

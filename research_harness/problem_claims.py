@@ -14,12 +14,12 @@ from .principles import prepare_initialization
 from .strategy import find_orchestration
 
 
-def current_statement(records):
+def find_current_statement(records):
     selection = records.get("problem_selection", {}).get("current")
     return None if selection is None else records.get("problem_statement", {}).get(selection["statement_id"])
 
 
-def statement_digest(statement):
+def compute_statement_digest(statement):
     return digest({key: statement[key] for key in ("statement", "resolution_criteria")})
 
 
@@ -70,12 +70,15 @@ def initialize_problem(store, payload, *, expected_revision, request_id):
 
 def record_statement(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
-        require_problem(records)
+        marker = require_problem(records)
         fields(value, ("id", "title", "area", "statement", "resolution_criteria", "neighbours"), ("formal_statement",))
         value = dict(value, formal_statement=value.get("formal_statement"))
         for key in ("id", "title", "statement", "resolution_criteria"):
             text(value[key], "Problem " + key)
         validate_area(value["area"])
+        if value["area"] != marker["area"]:
+            raise ResearchError("problem_area_mismatch", "Use the record's subject class; another area requires a new problem record",
+                                {"statement_id": value["id"], "statement_area": value["area"], "record_area": marker["area"]})
         strings(value["neighbours"], "Neighbouring formulations")
         formal = value["formal_statement"]
         if formal is not None:
@@ -103,7 +106,7 @@ def record_value(store, payload, *, expected_revision, request_id):
         require_problem(records)
         fields(value, ("id", "statement_id", "motivation", "current_state"))
         text(value["id"], "Problem value ID")
-        statement = current_statement(records)
+        statement = find_current_statement(records)
         if statement is None or value["statement_id"] != statement["id"]:
             raise ResearchError("problem_statement_missing", "Select the exact current problem statement")
         from .problem_evidence import validate_value
@@ -139,7 +142,7 @@ def describe_problem_evidence(records, artifacts):
     return describe_evidence(records, artifacts)
 
 
-def problem_evidence_digest(records, artifacts):
+def compute_problem_evidence_digest(records, artifacts):
     from .problem_evidence import describe_binding
     return digest(describe_binding(records, artifacts))
 
