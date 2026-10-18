@@ -14,7 +14,7 @@ import zipfile
 from research_harness.artifacts import ArtifactStore, describe_artifact
 from research_harness.errors import ResearchError
 from research_harness.numerical_projection import decode_npy
-from research_harness.review_delivery import _deliver
+from research_harness.review_delivery import deliver_packet
 from research_harness.scientific_delivery import project_delivery
 
 
@@ -106,7 +106,7 @@ class NumericalDeliveryTests(unittest.TestCase):
         contract = {"payload": {"scientific_delivery": [{"original_sha256": original["sha256"], "disposition": "project", "projection": projection}]}}
         manifest, derived = project_delivery(records, self.artifacts, contract, {"scientific_evidence": original})
         destination = self.root / "delivered"
-        result = _deliver(SimpleNamespace(root=self.root, revision=1), destination, manifest, derived=derived, transitive=True)
+        result = deliver_packet(SimpleNamespace(root=self.root, revision=1), destination, manifest, derived=derived, transitive=True)
         return original, destination, result
 
     def test_uint8_and_unicode_private_payloads_cannot_be_laundered(self):

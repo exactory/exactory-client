@@ -30,6 +30,7 @@ from .principles import objective_changes
 from .probe_provenance import find_probe_artifact_origins
 from .reading import validate_read_evidence
 from .source_links import captured_source, original_identity, read_locator, validate_link
+from .strategy import find_orchestration
 from .synthesis import synthesis_state
 from .workspace import strict_json
 
@@ -109,9 +110,10 @@ class _Context:
         self.artifacts = Evaluation.of(records, artifacts)
         records = self.artifacts.records
         self.records = records
+        self.problem = find_orchestration(records) == "problem_creation"
         # A study can have created its science before entering managed stages.
         # Historical projection follows the current caller's claim semantics.
-        self.compatible = project_claims or restore_inputs is not None or uses_claim_dependencies(records)
+        self.compatible = not self.problem and (project_claims or restore_inputs is not None or uses_claim_dependencies(records))
         self.restore_inputs = restore_inputs
         self.managed = self.compatible and (restore_inputs is None or restore_inputs.get("project_claims", False))
         self.project_readings = (self.managed and project_readings
@@ -126,6 +128,14 @@ class _Context:
         self.configuration = self.synthesis["configuration"]
         self.foundation = self.synthesis["foundation"]
         self.objective = self.configuration["target"]
+        if self.problem:
+            from .problem_claims import current_statement
+            statement = current_statement(records)
+            self.objective = None if statement is None else {"id": statement["id"], "statement": statement["statement"]}
+            pending = [item for item in self.configuration["obligations"] if item["code"] != "objective_missing"]
+            if statement is None:
+                pending.append(obligation("problem_statement_missing", "Record the current problem statement before admitting support computations."))
+            self.configuration = dict(self.configuration, ready=not pending, obligations=pending)
         self.assessments = {}
         self.assessing = set()
         self.candidate_inputs = {}
@@ -137,7 +147,8 @@ class _Context:
                                   preparation_digest=dependencies["preparation"])
             self.configuration = dict(self.synthesis["configuration"], constitution=dependencies["constitution"])
             self.foundation = self.synthesis["foundation"]
-            self.objective = self.configuration["target"]
+            if not self.problem:
+                self.objective = self.configuration["target"]
 
 
     def require_objective(self):
@@ -147,7 +158,7 @@ class _Context:
 
     def require_ready(self):
         self.require_objective()
-        if not self.managed and not self.synthesis["ready"]:
+        if not self.managed and not self.problem and not self.synthesis["ready"]:
             raise ResearchError("research_not_ready", "Complete the current foundation and synthesis before admitting prospective work",
                                 {"obligations": self.synthesis["obligations"]})
 
@@ -1311,7 +1322,7 @@ def _assess(context, value, *, historical=False):
     inherited = _inheritance(context, evidence, effective_plan, stale)
     if stale:
         valid_obligations.extend(stale)
-    workflow = [] if context.managed else list(context.synthesis["obligations"])
+    workflow = [] if context.managed or context.problem else list(context.synthesis["obligations"])
     objective_progress = []
     remaining = list(dict.fromkeys(value["scope"]["remaining_obligations"] + value["remaining_obligations"]))
     # A refuted hypothesis can produce a valid negative result. Result

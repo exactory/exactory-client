@@ -26,9 +26,17 @@ from .workspace import find_workspace, strict_json
 from . import research_decisions, review_protocol, strategy
 from .depth import record_depth
 from .probe import record_probe_intent, record_probe, summarize_probes
+from . import problem_claims
 
 
 OPERATIONS = {
+    "problem-init": problem_claims.initialize_problem,
+    "problem-statement": problem_claims.record_statement,
+    "problem-openness": problem_claims.record_openness,
+    "problem-value": problem_claims.record_value,
+    "problem-formal-check": problem_claims.record_formal_check,
+    "problem-decision": problem_claims.record_decision,
+    "problem-posted": problem_claims.record_posted,
     "init": principles.initialize_research,
     "adopt": adopt_workspace,
     "artifact": pin_artifact,
@@ -104,7 +112,7 @@ from .verification import bind_verdict
 OPERATIONS.update({"manuscript": prepare_publication, "manuscript-review": record_manuscript_review, "bind-verdict": bind_verdict})
 
 ACQUISITION = ("collect", "resume", "acquire", "expand", "fulltext", "import-response", "import-oai-cohort", "visual")
-GATES = ("cohort", "foundation", "preparation", "direction", "readiness", "manuscript-readiness", "execution", "verification", "manuscript", "publication", "deposited", "submitted", "round")
+GATES = ("cohort", "foundation", "preparation", "direction", "readiness", "manuscript-readiness", "execution", "verification", "manuscript", "publication", "deposited", "submitted", "round", "post")
 
 
 def add_identity(parser, *, required=True):
@@ -225,7 +233,8 @@ def build_parser():
         if command == "gate":
             item.add_argument("action", choices=GATES)
         if command == "export":
-            item.add_argument("--kind", choices=("workspace", "foundation", "readiness", "manuscript", "round", "native"), default="workspace")
+            item.add_argument("--kind", choices=("workspace", "foundation", "readiness", "manuscript", "round", "native", "problem", "problem-openness"), default="workspace")
+            item.add_argument("--spec", help="JSON assignment identity and openness minimum for problem-openness.")
             item.add_argument("--destination", help="New independent reviewer directory for the readiness, manuscript or round packet and its actual source bytes.")
             item.add_argument("--attack-root", help="Native attack root for an immutable foundation delivery.")
             item.add_argument("--claim-binding", help="JSON source correspondence for an external native verification claim.")
@@ -285,6 +294,13 @@ def status_report(store, *, counters=False):
     snapshot = store.snapshot()
     records = snapshot["records"]
     evaluation = Evaluation(records, ArtifactStore(store.root))
+    if "problem" in records.get("workspace", {}):
+        report = gate_state(records, evaluation, "post")
+        return dict(report, revision=snapshot["revision"], profile="research", runtime=runtime_provenance(),
+                    problem=records["workspace"]["problem"], resources=resources.account_report(records, "research"),
+                    limits=limits_report(records), source_deferrals=assess_deferrals(records, evaluation, "research"),
+                    next=report["obligations"][0] if report["obligations"] else
+                        {"code": "problem_export_required", "explanation": "Export the reviewed parts with exactory-research export --kind problem, then post and record the delivery."})
     config = records.get("configuration", {}).get("research")
     profile = config["profile"] if config else "research"
     study = records.get("workspace", {}).get("study")
@@ -382,7 +398,7 @@ def run(args):
             if (existing_workspace is None or not (existing_workspace / ".exactory/research.sqlite3").exists()
                     or Store(existing_workspace).committed_request(args.request_id) is None):
                 raise
-    if args.command in ("init", "adopt"):
+    if args.command in ("init", "adopt", "problem-init"):
         root = find_workspace(root, required=False) or root
         store = Store(root, create=True)
     elif args.command == "recover":
@@ -444,6 +460,16 @@ def run(args):
         report = gate_report(store, args.action)
         require_ready(report, args.action)
         return report
+    if args.kind == "problem":
+        if not args.destination:
+            raise ResearchError("invalid_input", "Problem export requires --destination")
+        from .problem_delivery import export_problem
+        return export_problem(store, args.destination)
+    if args.kind == "problem-openness":
+        if not args.destination or not args.spec:
+            raise ResearchError("invalid_input", "Problem openness export requires --spec and --destination")
+        from .problem_openness import export_openness
+        return export_openness(store, strict_json(Path(args.spec).read_bytes()), args.destination)
     if args.kind == "workspace":
         return export_workspace(store)
     if args.kind == "foundation":

@@ -1364,6 +1364,163 @@ justifies complete planning inputs, proposal study digests, strategy study
 before moves, precondition scan and ranking, computation admission, move/pass
 limits and closure as claim, execution-authority or proof-dependency conditions.
 
+## Problem creation
+
+A problem workspace uses the shared research store and the `research` profile.
+`problem-init` writes `workspace/problem` with `{version: 1, orchestration:
+"problem_creation", slug, area, field, authors, created, updated, research:
+{store, profile: "research"}}`. The nonempty immutable `authors` list governs
+reviewer independence. `area` is a nonempty `math.*` subject class; `field`
+describes the field and question explored for the bar reviewers. When
+configuration is absent, initialization adopts the constitution and sets a null
+target. Study, draft and research-intent markers conflict with this marker
+(`orchestration_conflict`) in either direction.
+
+| Claim | Mechanical minimum | Independent assessment | Currency |
+| --- | --- | --- | --- |
+| Problem: precisely stated, open, worth solving | Exact statement and criteria, current supported openness, evidence-bound value and projected citations | Two observed bar reviews and two observed result reviews | The explicit `problem_evidence_digest` binds the selected claim and decisive evidence. |
+
+Every mutation below uses `--file FILE --expected-revision REVISION
+--request-id ID`. Read the revision before a new mutation; an interrupted retry
+retains its original identity and payload. These operations append immutable
+records and move explicit selections.
+
+| Command | JSON payload | Records and behavior |
+| --- | --- | --- |
+| `problem-init` | `{slug, area, field, authors}` | Creates the orchestration marker and initial configuration. |
+| `problem-statement` | `{id, title, area, statement, resolution_criteria, neighbours, formal_statement}` | `problem_statement/<id>` and `problem_selection/current = {statement_id}`. Statement and criteria are nonempty TeX; neighbours are formulation texts, possibly empty. Formal statement is optional, null or `{language, text}`. Any changed field requires a new id and moves the selection. |
+| `problem-openness` | `{assignment_id}` | Records `problem_openness/<id>` from the observed native result review. `supported_open` advances the claim; `unresolved` records the gap without a minimum audit; `already_solved` redirects to the settling result and blocks posting as open. |
+| `problem-value` | `{id, statement_id, motivation, current_state}` | `problem_value/<id>` contains ordered paragraph arrays, each item `{text, evidence}` with nonempty evidence. |
+| `problem-formal-check` | `{evidence: {execution_id, output_id}, native_closure_digest}` | `problem_formal_check/<id>` binds a requested support check to an authenticated native completion in this store. Invalid bindings return `problem_formal_check_unbound`. |
+| `problem-decision` | `{id, action, review_ids, bar_review_ids, reason}` | `problem_decision/<id>` binds the current evidence digest. Action is `post`, `revise` or `withdraw`; `post` requires the minimum and observed review coverage, otherwise `problem_minimum_unmet`. The other actions record the reason. |
+| `problem-posted` | `{problem_id, export_directory}` | Rebuilds the approved export and compares every file byte for byte before recording `problem_post/<id>`. A changed file, even with a changed manifest hash, returns `problem_export_mismatch`. |
+
+The statement digest hashes `{statement, resolution_criteria}`. Declared
+neighbours also bind openness currency: adding a neighbour requires searches for
+that formulation even when the statement digest is unchanged. The openness
+minimum uses this store's own searches, readings and deferrals. It requires a
+dated search with bounded or complete coverage for the exact statement and each
+declared neighbour, and full readings of all decisive prior or settling works.
+An unavailable source remains a gap. Shared `openness_*` audit codes describe
+missing, incomplete, stale or undelivered evidence;
+`openness_statement_mismatch` identifies a finding for another exact claim.
+
+Prepare the native openness packet with:
+
+```sh
+exactory-research export --kind problem-openness --spec openness-spec.json --destination openness-packet
+```
+
+The spec is `{assignment_id, reviewer_id, minimum: {searches:
+[{formulation, search_id}], settling_work_id, duplicate_resolutions}}`. The
+export pins the current statement, statement digest, native reviewer assignment
+identity, search records and the captured bytes of required full readings. Use
+the exported packet in the `context` of a `review-assignment` payload with that
+assignment id, reviewer id, `role: "native_math"`, `dossier_id: null`, a verified
+route and an author from the marker, then invoke `review-run`. Record the
+observed result through `problem-openness`. A new unbound material search,
+changed bound reading/search or missing current formulation makes the finding
+stale (`problem_openness_stale`).
+
+Value evidence is `{kind: "reading", version_id, reading_id}` for a full reading,
+or `{kind: "computation", execution_id, output_id, formal_check}`. Abstract and
+passage readings, availability qualifications and deferrals supply no value
+evidence. A cited computation requires its admission, reconciled output and an
+assessment that lists and validates that result, with its execution accounting
+and resource obligations satisfied. Whole-objective obligations and obligations
+about other results do not invalidate a supported paragraph. Probe-origin
+outputs retain `exploratory_evidence` and cannot be promoted by citation. An
+uncited computation remains a probe.
+
+The value's recorded revision fixes the immutable assessment used for each cited
+execution. A later assessment enters the claim through a new value record;
+it does not silently replace an already reviewed assessment.
+
+Computation support is empirical. It grants no proof, disproof or formal-check
+acceptance. `formal_check` is null unless a formal check was requested, in which
+case record `{claim, required_deliverables}` before verification. `claim` is the
+exact native `{statement, quantifiers, assumption_ids, proof_policy, scope}`
+object, with policy `certificate` or `lean-kernel`. In math-solver, run
+`exactory-math search deliver-closure` after native completion. It writes
+`native_closure/<closure digest>` into the associated common store, retaining
+the contract, subject, review, audit and provenance. Repeating the same delivery
+is a no-op; a completed reopened objective can deliver another immutable closure.
+`problem-formal-check` checks the exact requested claim and policy, contract
+digest, proof outcome, delivered required texts and authenticated audit bindings.
+When one output has several requested support claims, each exact claim and its
+required deliverables needs its own binding. A binding for another requested
+claim on the same output supplies no formal-check credit.
+
+The problem bar uses `exactory-problem-review-v1/bar` and receives `area`,
+`field` and source inventory/deliveries with the statement, title, neighbours and
+value withheld. Two observed bars are required before a result packet. The
+result template `exactory-problem-review-v1/result` receives `problem_evidence`
+with the claim, openness, value, citations, delivered readings/passages,
+admissions/executions/assessments/output validations and bound native closures.
+Both result reviews must pass exactly `problem_statement`, `problem_openness`,
+`problem_value`, `problem_citations` and `stop`. A marker author cannot be a
+reviewer (`review_not_independent`); an assignment's unknown author is refused
+with `problem_author_unknown`. Existing route probes, source-request
+continuations, assignment currency and independence checks apply.
+
+`gate post` is the only applicable gate in a problem workspace. Every other
+gate reports `gate_inapplicable`, as does `post` outside this orchestration.
+`exactory-lab state set` has no study to update. Budgets, scopes and roots,
+searches, readings, deferrals, availability, source requests, depth plans,
+probes and review tools are available without a target, intent, dossier,
+synthesis or direction decision. The `cycle`, `admit`, `bind-run`,
+`reconcile-run` and `assess` route uses `{id: statement_id, statement}` as its
+objective and requires the current statement and adopted constitution. Its
+records retain nonmanaged dependency composition and empirical meaning.
+
+| Post obligation codes | Required action |
+| --- | --- |
+| `problem_statement_missing` | Select the exact statement and resolution criteria. |
+| `problem_openness_missing`, `problem_openness_unresolved` | Obtain an observed supported openness finding with the audited minimum. |
+| `problem_already_solved` | Redirect to the named established result or record a new statement. |
+| `problem_openness_stale` | Refresh the finding for the changed formulation, search or reading. |
+| `problem_value_missing`, `problem_value_reading_missing`, `problem_value_computation_missing` | Supply ordered value paragraphs with valid full readings or admitted, reconciled, assessed computation support. |
+| `exploratory_evidence` | Preserve the probe observation and obtain admissible support for the claim. |
+| `problem_formal_check_missing`, `problem_formal_check_stale` | Bind the requested check for the current value evidence to its authenticated native completion. |
+| `problem_citation_locator_missing` | Record a DOI, arXiv id or read-version bundle HTTPS locator for the cited work. |
+| `problem_bar_pending`, `review_bar_mismatch` | Obtain both current field/area bars. |
+| `problem_review_pair_required`, `problem_evidence_unassessed`, `problem_assurance_pending` | Obtain the independent observed pair with delivered current evidence and all five assurances passed. |
+| `problem_decision_missing`, `problem_decision_stale` | Record a `post` decision covering the current evidence digest. |
+| `review_sources_pending` | Resolve the reviewers' pending source requests. |
+| `problem_already_posted` | Retain the existing confirmed post; the same statement cannot be posted twice. |
+
+`status` and `next` compute milestones from records: `exploration` at
+initialization, `formulation` with a statement, `openness` with current
+`supported_open`, `value` with valid value evidence, both bars, both passed
+result reviews and a current post decision, and `post` with a recorded post.
+`next` names the first missing condition in the order statement, openness,
+value, reviews, decision, export. Milestones impose no tool order.
+
+After `gate post` reports ready, run:
+
+```sh
+exactory-research export --kind problem --destination problem-export
+```
+
+An unready export returns `readiness_required`. The deterministic projection is
+`title.txt`, `statement.md`, `motivation.md`, `state.md`, `criteria.md`,
+`citations.json`, optional `formal-statement.txt`, and `problem-export.json`.
+The manifest contains `{statement_id, statement_digest,
+problem_evidence_digest, decision_id, area, formal_statement_language,
+files: {name: sha256}}`. Citations are projected once per distinct work cited
+by the decisive openness/settling readings and value readings, as
+`{citation, locator}` using metadata citation and DOI, then arXiv id, then the
+read-version bundle's HTTPS URL. Every cited work has a reading in this store.
+
+The math-conjecturer delivery section checks the exported citation locators
+and duplicates, runs `exactory post-problem` on the exported files, then records
+the returned id through `problem-posted`. The post record contains
+`{id, problem_id, statement_id, statement_digest, problem_evidence_digest,
+export_digest, posted_at}`. Its export digest hashes rebuilt approved bytes;
+the directory's manifest is informational. A changed part requires a new
+statement and a fresh post gate. The choice of skill that creates the research
+record remains open.
+
 ## Development rounds
 
 Managed studies use the compact canonical adapters described above. The detailed

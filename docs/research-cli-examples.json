@@ -1,4 +1,49 @@
 {
+  "problem-init": {
+    "slug": "extremal-sequence-bound",
+    "area": "math.CO",
+    "field": "Extremal sequence bounds and their neighbouring formulations",
+    "authors": ["problem-author"]
+  },
+  "problem-statement": {
+    "id": "statement-1",
+    "title": "An extremal sequence bound",
+    "area": "math.CO",
+    "statement": "For every admissible sequence of length $n$, does $B(n) \\leq n^2$ hold?",
+    "resolution_criteria": "Prove the bound for every admissible sequence or exhibit a counterexample.",
+    "neighbours": [],
+    "formal_statement": null
+  },
+  "problem-openness": {
+    "assignment_id": "problem-openness-review"
+  },
+  "problem-value": {
+    "id": "problem-value-1",
+    "statement_id": "statement-1",
+    "motivation": [{
+      "text": "A resolution would connect the finite constructions described by the cited source.",
+      "evidence": [{"kind": "reading", "version_id": "arxiv:2601.00001v1", "reading_id": "full-reading-1"}]
+    }],
+    "current_state": [{
+      "text": "The cited source establishes the bounded examples within its stated assumptions.",
+      "evidence": [{"kind": "reading", "version_id": "arxiv:2601.00001v1", "reading_id": "full-reading-1"}]
+    }]
+  },
+  "problem-formal-check": {
+    "evidence": {"execution_id": "execution-1", "output_id": "result"},
+    "native_closure_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "problem-decision": {
+    "id": "problem-decision-1",
+    "action": "post",
+    "review_ids": ["problem-result-first", "problem-result-second"],
+    "bar_review_ids": ["problem-bar-first", "problem-bar-second"],
+    "reason": "Both observed independent assessments support the exact current claim and evidence."
+  },
+  "problem-posted": {
+    "problem_id": "returned-problem-id",
+    "export_directory": "problem-export"
+  },
   "publication-scope": {
     "id": "supported-manuscript-1",
     "policy": "source-limited-v1",

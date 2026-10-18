@@ -8,7 +8,7 @@ from literature_fixtures import LiteratureCase
 from research_fixtures import client
 from research_harness.acquisition import acquire_fulltext
 from research_harness.errors import ResearchError
-from research_harness.review_delivery import _deliver
+from research_harness.review_delivery import deliver_packet
 from research_harness.scientific_delivery import project_delivery
 
 
@@ -32,7 +32,7 @@ class PublicSourceDeliveryTests(LiteratureCase):
         contract = {"payload": {"scientific_delivery": [{"original_sha256": ref["sha256"], "disposition": "project", "projection": projection}]}}
         result, derived = project_delivery(records, self.artifacts, contract, manifest or {"evidence": ref})
         target = self.root / destination
-        _deliver(self.store, target, result, derived=derived, transitive=True)
+        deliver_packet(self.store, target, result, derived=derived, transitive=True)
         return result, target
 
     def test_exact_source_jpeg_component_preserves_bytes_and_provenance(self):
@@ -131,7 +131,7 @@ class PublicSourceDeliveryTests(LiteratureCase):
                 ref = self.artifacts.put(json.dumps({"source": capture["original"]}).encode(encoding), mime)
                 manifest, derived = project_delivery(records, self.artifacts, contract, {"file": ref}, manuscript_files=[ref])
                 target = self.root / ("encoded-public-" + str(index))
-                _deliver(self.store, target, manifest, derived=derived, transitive=True)
+                deliver_packet(self.store, target, manifest, derived=derived, transitive=True)
                 self.assertEqual((target / ref["path"]).read_bytes(), self.artifacts.read(ref))
                 self.assertEqual((target / capture["original"]["path"]).read_bytes(), self.artifacts.read(capture["original"]))
 

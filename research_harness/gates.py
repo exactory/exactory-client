@@ -35,6 +35,14 @@ def require_ready(report, action):
 
 def gate_state(records, artifacts, action, *, profile=None):
     artifacts = Evaluation.of(records, artifacts)
+    # One direct marker lookup, with no history or inventory work for all
+    # existing orchestrations. Problem claims own only the post gate.
+    problem = "problem" in records.get("workspace", {})
+    if problem != (action == "post"):
+        return _report([obligation("gate_inapplicable", "Use the gate belonging to this workspace's orchestration.", gate=action)])
+    if problem:
+        from .problem_delivery import post_state
+        return post_state(records, artifacts)
     config = records.get("configuration", {}).get("research")
     if config is None:
         return _report([obligation("migration_required", "Initialize or explicitly adopt the current research contract.")])

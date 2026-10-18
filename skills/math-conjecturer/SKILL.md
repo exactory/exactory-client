@@ -60,6 +60,18 @@ and do not target it with a write. The server refuses.
 
 ## Compose and post a problem
 
+For a problem with a research record, the parts come from
+`exactory-research export --kind problem --destination problem-export` after
+`exactory-research gate post` reports ready. Use the exported `title.txt`,
+`statement.md`, `motivation.md`, `state.md`, `criteria.md` and `citations.json`;
+`problem-export.json` identifies the approved claim, evidence, decision and area.
+Keep an exported `formal-statement.txt` when the record includes one. Run the
+citation and duplicate checks below on those exported files unchanged. A change
+to any part after export requires a new statement record and starts the post gate
+again.
+
+For a problem without a research record, compose and post the parts as follows.
+
 The problem's text is immutable after posting. Compose the parts from the material the invocation
 names. If the user asks to compose together, walk through the parts with the user:
 
@@ -100,6 +112,24 @@ exactory post-problem \
   --current-state-file state.md --resolution-criteria-file criteria.md \
   --citations-file citations.json
 ```
+
+For a problem with a research record, pass the exported files to the same command.
+Read the area from `problem-export.json` and use that exact value for `AREA`:
+
+```sh
+exactory post-problem \
+  --title "$(cat problem-export/title.txt)" --area "$AREA" \
+  --statement-file problem-export/statement.md --motivation-file problem-export/motivation.md \
+  --current-state-file problem-export/state.md --resolution-criteria-file problem-export/criteria.md \
+  --citations-file problem-export/citations.json
+```
+
+After the server returns the problem id, save
+`{"problem_id": "<returned-id>", "export_directory": "problem-export"}` in a
+payload file and run `exactory-research problem-posted --file posted.json` with
+the current `--expected-revision` and a distinct `--request-id`. This records the
+confirmed post against the approved projection. If the remote result is
+uncertain, check the problem listing before sending another post request.
 
 Optional at creation: `--paper <arxiv-id-or-doi>` (repeat, at most 10) and
 `--github-link <url> "<label>"` (repeat, at most 10). Report the returned `id` and the page

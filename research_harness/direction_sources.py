@@ -108,7 +108,7 @@ def build_reading_passages(records, artifacts, readings):
             for passage, data in _build_passages(records, evaluation, inspection['link'])]
 
 
-def _has_attachment(evaluation, packet, reference):
+def has_attachment(evaluation, packet, reference):
     if not isinstance(reference, dict) or not {'path', 'sha256', 'size', 'media_type'} <= reference.keys():
         return False
     data = evaluation.read(reference)
@@ -131,7 +131,7 @@ def _has_source_content(evaluation, packet, link):
             and item['request'].get('depth') == 'fulltext' and item['request'].get('version_id') == link['version_id']
             for item in deliveries):
         return False
-    return _has_attachment(evaluation, packet, reference)
+    return has_attachment(evaluation, packet, reference)
 
 
 def _matches_span(source, location):
@@ -146,7 +146,7 @@ def _matches_span(source, location):
 
 def _find_supplied_interval(evaluation, packet, supplied, expected, link):
     if (supplied.get('version_id') != expected['version_id']
-            or not _has_attachment(evaluation, packet, supplied.get('excerpt'))):
+            or not has_attachment(evaluation, packet, supplied.get('excerpt'))):
         return None
     origin, wanted = supplied.get('origin', {}), expected['origin']
     if any(origin.get(key) != wanted[key] for key in ('source_id', 'artifact_descriptor')):
@@ -228,7 +228,7 @@ def _has_visual_content(evaluation, packets, inspection):
     if context['visual'] is None:
         return True
     return not _find_visual_gaps(context) and all(
-        any(_has_attachment(evaluation, packet, asset['artifact']) for packet in packets)
+        any(has_attachment(evaluation, packet, asset['artifact']) for packet in packets)
         for asset in inspection['link']['locator'].get('assets', []))
 
 
