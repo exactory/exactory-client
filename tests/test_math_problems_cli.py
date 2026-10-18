@@ -23,7 +23,6 @@ _PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 _SHA = "3f2a9c1e4b5d6a7f8091a2b3c4d5e6f708192a3b"
 _PROBLEM_ID = "656c336e-e892-4c47-80d2-a71d022f4116"
 _PROOF_ID = "1f0d5a52-6f5a-4a3e-9c9d-0d3f6f4b2a10"
-_ORCID_ID = "0000-0002-1825-0097"
 # The reason the link checks give for a control character, an invisible character, or an
 # unpaired surrogate. The tests build those characters with chr(), so no source line holds one.
 _NON_TEXT_REASON = "a control character, an invisible character, or an unpaired surrogate"
@@ -60,8 +59,8 @@ class _FakeResponse(io.BytesIO):
 
 class _MathCliTestCase(unittest.TestCase):
     """A scratch cwd, a test key and origin, and a stub of open_url_within_origin, the one function
-    that bin/exactory sends every request through. The stub answers by method and path, so the
-    preflight read and the write are told apart on the real request objects."""
+    that bin/exactory sends every request through. The stub answers by method and path. The account has no
+    linked ORCID iD unless a test says otherwise, because no command checks one (design 2026-10-17 §11)."""
 
     def setUp(self) -> None:
         scratch = tempfile.TemporaryDirectory()
@@ -84,7 +83,7 @@ class _MathCliTestCase(unittest.TestCase):
         os.environ["EXACTORY_API_URL"] = "https://api.test"
 
         self.sent: list[urllib.request.Request] = []
-        self.me = {"displayName": "Ada", "orcidId": _ORCID_ID}
+        self.me = {"displayName": "Ada", "orcidId": None}
         self.answers: dict[tuple[str, str], tuple[int, dict]] = {}
         self.addCleanup(setattr, _cli, "open_url_within_origin", _cli.open_url_within_origin)
 
@@ -159,7 +158,7 @@ class TestRemovedProblemLinks(_MathCliTestCase):
                 self.assertIn("cannot be attached again", err)
                 self.assertIn("Nothing changed.", err)
                 self.assertNotIn("run the command again", err)
-                self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me"), ("POST", path)])
+                self.assertEqual(self.list_sent_requests(), [("POST", path)])
 
     def test_a_conflict_on_another_math_write_keeps_the_general_failure_code(self) -> None:
         self.answers[("POST", "/api/v1/math-problems")] = (409, {"error": "conflict"})
@@ -218,12 +217,14 @@ class TestCallerState(_MathCliTestCase):
 class TestProblemReads(_MathCliTestCase):
     def test_problems_builds_the_search_and_filter_query(self) -> None:
         self.run_cli(["problems", "--query", "permanent", "--status", "all", "--area", "math.CO",
-                      "--has-proof", "--has-passing-lean-check", "--sort", "top", "--cursor", "c1", "--limit", "10"])
+                      "--has-proof", "--has-passing-lean-check", "--posted-by-orcid-holder", "--upvoted-by-orcid-holder",
+                      "--sort", "top", "--cursor", "c1", "--limit", "10"])
         parsed = urllib.parse.urlparse(self.sent[0].full_url)
         self.assertEqual(parsed.path, "/api/v1/math-problems")
         self.assertEqual(urllib.parse.parse_qs(parsed.query), {
             "q": ["permanent"], "status": ["all"], "area": ["math.CO"], "hasProof": ["true"],
-            "hasPassingLeanCheck": ["true"], "sort": ["top"], "cursor": ["c1"], "limit": ["10"],
+            "hasPassingLeanCheck": ["true"], "postedByOrcidHolder": ["true"], "upvotedByOrcidHolder": ["true"],
+            "sort": ["top"], "cursor": ["c1"], "limit": ["10"],
         })
 
     def test_problem_and_history_read_by_id(self) -> None:
@@ -240,7 +241,7 @@ class TestPostProblem(_MathCliTestCase):
         self.answers[("POST", "/api/v1/math-problems")] = (201, {"id": _PROBLEM_ID})
         self.run_cli(self.build_post_problem_argv(
             "--paper", "2609.92001", "--github-link", "https://github.com/o/r/issues/1", "Tracking issue"))
-        self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me"), ("POST", "/api/v1/math-problems")])
+        self.assertEqual(self.list_sent_requests(), [("POST", "/api/v1/math-problems")])
         self.assertEqual(self.read_sent_body("POST", "/api/v1/math-problems"), {
             "title": "Dittert conjecture for n = 7",
             "area": "math.CO",
@@ -252,12 +253,6 @@ class TestPostProblem(_MathCliTestCase):
             "paperIdentifiers": ["2609.92001"],
             "githubLinks": [{"url": "https://github.com/o/r/issues/1", "label": "Tracking issue"}],
         })
-
-    def test_without_an_orcid_it_stops_before_the_write_and_names_the_account_page(self) -> None:
-        self.me = {"displayName": "Ada", "orcidId": None}
-        _, stderr_text = self.run_cli(self.build_post_problem_argv(), expected_exit_code=1)
-        self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me")])
-        self.assertIn("https://api.test/account", stderr_text)
 
     def test_local_bounds_refuse_before_any_request(self) -> None:
         papers = [arg for i in range(11) for arg in ("--paper", f"2609.9{i:04d}")]
@@ -289,9 +284,8 @@ class TestPostProblem(_MathCliTestCase):
         self.assertEqual(self.sent, [])
 
 
-class TestVotesAndReportsNeedNoOrcid(_MathCliTestCase):
+class TestVotesAndReports(_MathCliTestCase):
     def test_a_vote_a_cleared_vote_and_a_report_run_without_a_linked_id(self) -> None:
-        self.me = {"displayName": "Ada", "orcidId": None}
         self.answers[("POST", "/api/v1/reports")] = (201, {"id": "r1", "status": "pending"})
         self.run_cli(["vote-problem", _PROBLEM_ID, "--value", "1"])
         self.run_cli(["vote-problem", _PROBLEM_ID, "--value", "0"])
@@ -438,7 +432,7 @@ class TestPostProblemInputs(_MathCliTestCase):
                     argv[argv.index(flag) + 1] = "x" * length
                     if is_accepted:
                         self.run_cli(argv)
-                        self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me"), ("POST", "/api/v1/math-problems")])
+                        self.assertEqual(self.list_sent_requests(), [("POST", "/api/v1/math-problems")])
                     else:
                         self.run_cli(argv, expected_exit_code=1)
                         self.assertEqual(self.sent, [])
@@ -586,8 +580,8 @@ class TestFormalStatementsStatusAndLinks(_MathCliTestCase):
         self.run_cli(["link-problem-github", _PROBLEM_ID, "--url", "https://github.com/o/r/blob/main/README.md#usage",
                       "--label", "Usage"])
         self.assertEqual(self.list_sent_requests(), [
-            ("GET", "/api/v1/me"), ("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/papers"),
-            ("GET", "/api/v1/me"), ("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/github-links"),
+            ("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/papers"),
+            ("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/github-links"),
         ])
         self.assertEqual(self.read_sent_body("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/papers"), {"identifier": "2609.97001v3"})
         self.assertEqual(self.read_sent_body("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/github-links"),
@@ -643,7 +637,7 @@ _LEAN_SOURCE_URL = f"https://github.com/o/r/blob/{_SHA}/Challenge.lean"
 _CHECK_RUN_URL = "https://github.com/checker/runs/actions/runs/123456789"
 _CHECK_FILE_URL = f"https://github.com/checker/runs/blob/{_SHA}/logs/check.txt"
 
-# One valid command line for each command that writes to a problem by its id and needs a linked ORCID iD:
+# One valid command line for each command that writes to a problem by its id:
 # the command, the HTTP method of its write, the route after the problem id, and its other options.
 _PROBLEM_WRITE_COMMANDS = (
     ("add-formal-statement", "POST", "/formal-statements",
@@ -659,13 +653,13 @@ def _build_repeated_options(flag: str, count: int) -> list[str]:
 
 
 class TestWritesToAProblem(_MathCliTestCase):
-    def test_each_write_reads_the_caller_state_once_and_then_writes(self) -> None:
+    def test_each_write_sends_only_its_request(self) -> None:
         for command, method, route_after_id, options in _PROBLEM_WRITE_COMMANDS:
             with self.subTest(command=command):
                 self.sent.clear()
                 self.run_cli([command, _PROBLEM_ID, *options])
                 write_path = f"/api/v1/math-problems/{_PROBLEM_ID}{route_after_id}"
-                self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me"), (method, write_path)])
+                self.assertEqual(self.list_sent_requests(), [(method, write_path)])
 
     def test_each_write_prints_the_answer_of_the_server(self) -> None:
         for command, method, route_after_id, options in _PROBLEM_WRITE_COMMANDS:
@@ -674,15 +668,6 @@ class TestWritesToAProblem(_MathCliTestCase):
                 self.answers[(method, f"/api/v1/math-problems/{_PROBLEM_ID}{route_after_id}")] = (201, answer)
                 stdout_text, _ = self.run_cli([command, _PROBLEM_ID, *options])
                 self.assertEqual(json.loads(stdout_text), answer)
-
-    def test_without_an_orcid_each_write_stops_before_the_request_and_names_the_account_page(self) -> None:
-        self.me = {"displayName": "Ada", "orcidId": None}
-        for command, _, _, options in _PROBLEM_WRITE_COMMANDS:
-            with self.subTest(command=command):
-                self.sent.clear()
-                _, stderr_text = self.run_cli([command, _PROBLEM_ID, *options], expected_exit_code=1)
-                self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me")])
-                self.assertIn("https://api.test/account", stderr_text)
 
     def test_an_id_with_path_characters_stays_one_encoded_segment(self) -> None:
         for command, method, route_after_id, options in _PROBLEM_WRITE_COMMANDS:
@@ -1123,7 +1108,6 @@ class TestProofsChecksAndDiscussion(_MathCliTestCase):
             ("GET", f"/api/v1/math-lean-checks/{_PROOF_ID}"),
             ("GET", f"/api/v1/math-problems/{_PROBLEM_ID}/posts"),
             ("GET", f"/api/v1/math-posts/{_PROOF_ID}"),
-            ("GET", "/api/v1/me"),
             ("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/posts"),
         ])
         self.assertEqual(self.read_sent_body("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/posts"),
@@ -1131,15 +1115,14 @@ class TestProofsChecksAndDiscussion(_MathCliTestCase):
 
 
 class TestSubmitWithMathProblems(_MathCliTestCase):
-    def test_a_submission_with_problems_runs_the_preflight_and_sends_the_ids(self) -> None:
+    def test_a_submission_with_problems_sends_the_ids_and_nothing_before_them(self) -> None:
         self.answers[("POST", "/api/v1/verifications")] = (201, {"id": "v1"})
         self.run_cli(["submit", "--arxiv-id", "2601.12345v2", "--math-problem", _PROBLEM_ID])
-        self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me"), ("POST", "/api/v1/verifications")])
+        self.assertEqual(self.list_sent_requests(), [("POST", "/api/v1/verifications")])
         self.assertEqual(self.read_sent_body("POST", "/api/v1/verifications"),
                          {"arxivId": "2601.12345v2", "mathProblemIds": [_PROBLEM_ID]})
 
-    def test_a_submission_without_problems_runs_no_preflight(self) -> None:
-        self.me = {"displayName": "Ada", "orcidId": None}
+    def test_a_submission_without_problems_sends_only_the_submission(self) -> None:
         self.answers[("POST", "/api/v1/verifications")] = (201, {"id": "v1"})
         self.run_cli(["submit", "--arxiv-id", "2601.12345v2"])
         self.assertEqual(self.list_sent_requests(), [("POST", "/api/v1/verifications")])
@@ -1555,6 +1538,11 @@ class TestPagedReads(_MathCliTestCase):
                     self.assertEqual(urllib.parse.urlparse(self.sent[-1].full_url).path, route)
                     self.assertEqual(self.read_query(), query)
 
+    def test_the_discussion_filters_to_posts_by_orcid_holders_with_the_page_query(self) -> None:
+        self.run_cli(["discussion", _PROBLEM_ID, "--by-orcid-holders", "--limit", "5", "--cursor", "c1"])
+        self.assertEqual(urllib.parse.urlparse(self.sent[-1].full_url).path, f"/api/v1/math-problems/{_PROBLEM_ID}/posts")
+        self.assertEqual(self.read_query(), {"byOrcidHolders": ["true"], "limit": ["5"], "cursor": ["c1"]})
+
     def test_a_limit_of_zero_is_sent_for_the_server_to_judge(self) -> None:
         for command, path_id, _ in _PAGED_READ_COMMANDS:
             with self.subTest(command=command):
@@ -1596,25 +1584,15 @@ class TestCommandsOnAnId(_MathCliTestCase):
     def list_commands(self, method: str) -> list[tuple]:
         return [row for row in _ID_COMMANDS if row[1] == method]
 
-    def test_each_write_reads_the_caller_state_once_and_then_posts(self) -> None:
+    def test_each_write_sends_only_its_post(self) -> None:
         for command, method, route, options in self.list_commands("POST"):
             with self.subTest(command=command):
                 self.sent.clear()
                 self.run_cli([command, _PROBLEM_ID, *options])
                 self.assertEqual(self.list_sent_requests(),
-                                 [("GET", "/api/v1/me"), (method, route.format(id=_PROBLEM_ID))])
-
-    def test_without_an_orcid_each_write_stops_before_the_request_and_names_the_account_page(self) -> None:
-        self.me = {"displayName": "Ada", "orcidId": None}
-        for command, _, _, options in self.list_commands("POST"):
-            with self.subTest(command=command):
-                self.sent.clear()
-                _, stderr_text = self.run_cli([command, _PROBLEM_ID, *options], expected_exit_code=1)
-                self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me")])
-                self.assertIn("https://api.test/account", stderr_text)
+                                 [(method, route.format(id=_PROBLEM_ID))])
 
     def test_each_read_sends_one_request_and_needs_no_linked_id(self) -> None:
-        self.me = {"displayName": "Ada", "orcidId": None}
         for command, method, route, options in self.list_commands("GET"):
             with self.subTest(command=command):
                 self.sent.clear()
@@ -1656,7 +1634,7 @@ class TestSubmitMathProblemInputs(_MathCliTestCase):
         for problem_id in problem_ids:
             argv += ["--math-problem", problem_id]
         self.run_cli(argv)
-        self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me"), ("POST", "/api/v1/verifications")])
+        self.assertEqual(self.list_sent_requests(), [("POST", "/api/v1/verifications")])
         self.assertEqual(self.read_sent_body("POST", "/api/v1/verifications")["mathProblemIds"], problem_ids)
 
     def test_four_problems_are_refused_with_the_count_and_one_remedy_per_sentence(self) -> None:
@@ -1666,13 +1644,6 @@ class TestSubmitMathProblemInputs(_MathCliTestCase):
         _, stderr_text = self.run_cli(argv, expected_exit_code=1)
         self.assertIn("The command names 4 math problems. The limit is 3. Remove some.", stderr_text)
         self.assertEqual(self.sent, [])
-
-    def test_without_an_orcid_the_submission_stops_before_the_request_and_names_the_account_page(self) -> None:
-        self.me = {"displayName": "Ada", "orcidId": None}
-        _, stderr_text = self.run_cli(["submit", "--arxiv-id", "2601.12345v2", "--math-problem", _PROBLEM_ID],
-                                      expected_exit_code=1)
-        self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me")])
-        self.assertIn("https://api.test/account", stderr_text)
 
     def test_problems_and_challenges_join_the_same_body(self) -> None:
         self.run_cli(["submit", "--doi", "10.5281/zenodo.1", "--challenge", "c-1", "--math-problem", "p-1"])
@@ -1981,7 +1952,7 @@ class TestAsciiDigitsInIdentifierPatterns(_MathCliTestCase):
             with self.subTest(locator=locator):
                 self.sent.clear()
                 self.run_cli(self.build_post_problem_argv_with_locator(locator))
-                self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me"), ("POST", "/api/v1/math-problems")])
+                self.assertEqual(self.list_sent_requests(), [("POST", "/api/v1/math-problems")])
 
     def test_a_locator_with_digits_of_another_script_is_refused_before_any_request(self) -> None:
         arabic_three, fullwidth_two = chr(0x663), chr(0xFF12)
@@ -2072,7 +2043,7 @@ class TestGithubContextParsedPaths(_MathCliTestCase):
 class TestPlainTextOfFreeTextFields(_MathCliTestCase):
     """The server refuses a control character other than tab, line feed, and carriage return, and an unpaired
     surrogate, in every field that it builds on plainTextSchema (design 2026-10-12 §26.24). The command refuses the
-    same characters first, before the ORCID preflight and before any request, and names the field, the character,
+    same characters first, before any request, and names the field, the character,
     and its position."""
 
     def write_text_file(self, text: str) -> str:
@@ -2174,7 +2145,6 @@ class TestPlainTextOfFreeTextFields(_MathCliTestCase):
                 with self.subTest(kind=kind, character=f"U+{ord(text[7]):04X}"):
                     _, stderr_text = self.run_cli(build_argv(text), expected_exit_code=1)
                     self.assertEqual(stderr_text, message + "\n")
-        # The ORCID preflight is a request too, and none went out.
         self.assertEqual(self.sent, [])
 
     def test_a_lone_surrogate_is_named_as_text_that_is_not_utf8(self) -> None:
@@ -2363,19 +2333,6 @@ class TestServerErrorsAfterAWrite(_MathCliTestCase):
                 _, stderr_text = self.run_cli(["problem", _PROBLEM_ID], expected_exit_code=1)
                 self.assertEqual(stderr_text,
                                  f"{description} Send the same request again later.\n{self._DETAIL_TEXT}\n")
-
-    def test_the_preflight_read_of_a_write_keeps_the_advice_of_a_read(self) -> None:
-        def answer_503_to_the_preflight(request: urllib.request.Request, timeout: float | None = None) -> _FakeResponse:
-            self.sent.append(request)
-            raise urllib.error.HTTPError(request.full_url, 503, "unavailable", {},
-                                         io.BytesIO(self._DETAIL_TEXT.encode()))
-        _cli.open_url_within_origin = answer_503_to_the_preflight
-
-        _, stderr_text = self.run_cli(["post-discussion", _PROBLEM_ID, "--body", "A post."], expected_exit_code=1)
-
-        self.assertEqual(stderr_text, f"The paper source is not reachable now. Send the same request again later."
-                                      f"\n{self._DETAIL_TEXT}\n")
-        self.assertEqual(self.list_sent_requests(), [("GET", "/api/v1/me")])
 
     def test_a_conflict_on_another_write_keeps_its_advice(self) -> None:
         self.answers[("POST", "/api/v1/math-problems")] = (409, {"error": "conflict"})

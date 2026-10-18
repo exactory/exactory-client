@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from research_harness.citation_report import report_citation_gate
 from research_harness.cli import add_identity, select_managed_path
 from research_harness.errors import REMOVED_PROBLEM_LINK_EXIT_CODE, ResearchError
-from research_harness.exactory_api import _DEFAULT_API_URL, build_orcid_required_msg, read_api_base_url
+from research_harness.exactory_api import _DEFAULT_API_URL, read_api_base_url
 from research_harness.integration import command_identity, current_store
 from research_harness.same_origin import (REQUEST_ERROR_TYPES, RefusedRedirectError,
                                           describe_request_error_cause, get_origin, is_read_method,
@@ -398,15 +398,6 @@ def _build_page_query(args: argparse.Namespace) -> dict[str, str]:
     return query
 
 
-def _require_linked_orcid() -> None:
-    """Writes that the math section gates on ORCID need a linked iD now (design 2026-10-12 §3).
-    The server stays the authority; this read stops before the write and names the page that
-    links an iD, which the server's generic 403 cannot."""
-    me, _ = _send_request("GET", "/api/v1/me")
-    if not me.get("orcidId"):
-        _exit_with_error(build_orcid_required_msg("This operation", _API_BASE_URL))
-
-
 def _send_vote(path: str, value: int) -> None:
     """Cast a vote on the content at path, or clear it when the value is 0, and print the answer."""
     if value == 0:
@@ -429,9 +420,9 @@ def _send_report(subject_kind: str, subject_id: str, note: str | None, existing_
 
 
 def _send_math_write(method: str, path: str, body: dict) -> None:
-    """Send a write that the math section gates on a linked ORCID iD, and print the answer. The
-    caller runs every local check first, so a command that fails one sends no request."""
-    _require_linked_orcid()
+    """Send a write of the math section, and print the answer. Any signed-in account writes; a write
+    from an account with a linked ORCID iD carries it (design 2026-10-17 §5). The caller runs every
+    local check first, so a command that fails one sends no request."""
     payload, _ = _send_request(method, path, body)
     _print_json(payload)
 
@@ -451,8 +442,6 @@ def _run_submit(args: argparse.Namespace) -> None:
     if args.math_problem:
         _require_at_most(args.math_problem, "math problems", _MAX_DECLARED_MATH_PROBLEMS)
         body["mathProblemIds"] = args.math_problem
-        # Declaring problems is a math section contribution (design 2026-10-12 §3, §13).
-        _require_linked_orcid()
 
     # Inside a draft workspace the offline citation check runs first and prints
     # its report when it fails; the submit continues either way, because the
@@ -998,7 +987,9 @@ def _run_problems(args: argparse.Namespace) -> None:
         if value:
             query[key] = value
     for key, enabled in (("hasFormalStatement", args.has_formal_statement), ("hasProof", args.has_proof),
-                         ("hasPassingLeanCheck", args.has_passing_lean_check)):
+                         ("hasPassingLeanCheck", args.has_passing_lean_check),
+                         ("postedByOrcidHolder", args.posted_by_orcid_holder),
+                         ("upvotedByOrcidHolder", args.upvoted_by_orcid_holder)):
         if enabled:
             query[key] = "true"
     payload, _ = _send_request("GET", "/api/v1/math-problems?" + _encode_query(query),
@@ -1087,7 +1078,6 @@ def _run_link_problem_paper(args: argparse.Namespace) -> None:
 def _send_problem_link(problem_id: str, resource: str, body: dict, identifier: str) -> None:
     """A 201 means the link stands; a 409 means moderation removed it (design clarification 25)."""
     path = _build_api_path("math-problems", problem_id, resource)
-    _require_linked_orcid()
     removal_msg = (f"A moderator removed the link {identifier} from problem {problem_id}."
                    " It cannot be attached again. Nothing changed.")
     payload, _ = _send_request("POST", path, body,
@@ -1182,7 +1172,8 @@ def _run_post_discussion(args: argparse.Namespace) -> None:
 
 
 def _run_discussion(args: argparse.Namespace) -> None:
-    _print_page(_build_api_path("math-problems", args.problem_id, "posts"), args)
+    query = {"byOrcidHolders": "true"} if args.by_orcid_holders else {}
+    _print_page(_build_api_path("math-problems", args.problem_id, "posts"), args, query)
 
 
 def _run_discussion_post(args: argparse.Namespace) -> None:
@@ -1190,9 +1181,10 @@ def _run_discussion_post(args: argparse.Namespace) -> None:
     _print_json(payload)
 
 
-def _print_page(path: str, args: argparse.Namespace) -> None:
-    """One page of a paginated list, with the limit and the cursor that the command line gives."""
-    query = _build_page_query(args)
+def _print_page(path: str, args: argparse.Namespace, filters: dict[str, str] | None = None) -> None:
+    """One page of a paginated list, with the filters of the command and the limit and the cursor that the
+    command line gives."""
+    query = {**(filters or {}), **_build_page_query(args)}
     payload, _ = _send_request("GET", path + ("?" + _encode_query(query) if query else ""),
                                error_messages=_PAGE_QUERY_ERR_MSGS)
     _print_json(payload)
@@ -1332,7 +1324,7 @@ def _build_parser() -> argparse.ArgumentParser:
                              f" {_MAX_DECLARED_CHALLENGES}.")
     submit.add_argument("--math-problem", action="append", dest="math_problem", metavar="PROBLEM_ID",
                         help="A math problem this paper develops. Repeat for more than one, at most"
-                             f" {_MAX_DECLARED_MATH_PROBLEMS}. Needs a linked ORCID iD.")
+                             f" {_MAX_DECLARED_MATH_PROBLEMS}.")
     submit.set_defaults(handler=_run_submit)
     from research_harness.cli import add_managed_scope
     add_managed_scope(submit)
@@ -1529,6 +1521,10 @@ def _build_parser() -> argparse.ArgumentParser:
     problems.add_argument("--has-passing-lean-check", action="store_true", dest="has_passing_lean_check",
                           help="Only problems whose current proof against the current formal statement has a"
                                " counted pass report.")
+    problems.add_argument("--posted-by-orcid-holder", action="store_true", dest="posted_by_orcid_holder",
+                          help="Only problems whose author had a linked ORCID iD when posting.")
+    problems.add_argument("--upvoted-by-orcid-holder", action="store_true", dest="upvoted_by_orcid_holder",
+                          help="Only problems that another account with a linked ORCID iD upvoted.")
     problems.add_argument("--sort", choices=["relevance", "top", "new"],
                           help="Result order. Default: relevance with --query, new without.")
     problems.add_argument("--cursor", help="Opaque cursor from a previous page.")
@@ -1550,7 +1546,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     post_problem = commands.add_parser(
         "post-problem", allow_abbrev=False,
-        help="Post an open mathematical problem. Needs a linked ORCID iD. Check every citation locator first.")
+        help="Post an open mathematical problem. Check every citation locator first.")
     post_problem.add_argument("--title", required=True, help="The problem title, 8-200 characters.")
     post_problem.add_argument("--area", required=True, help="One math.* subject class, for example math.CO.")
     for name, bounds in (("statement", "the precise problem in TeX, 50-20000"),
@@ -1588,7 +1584,7 @@ def _build_parser() -> argparse.ArgumentParser:
     add_formal_statement = commands.add_parser(
         "add-formal-statement", allow_abbrev=False,
         help="Add a formal statement version to a problem: a commit-pinned Lean link and its target"
-             " theorem names. Only the author or an admin. Needs a linked ORCID iD.")
+             " theorem names. Only the author or an admin.")
     add_formal_statement.add_argument("problem_id")
     add_formal_statement.add_argument("--lean-url", required=True, dest="lean_url",
                                       help="A github.com blob or tree URL at a full commit SHA.")
@@ -1606,8 +1602,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     declare_status = commands.add_parser(
         "declare-status", allow_abbrev=False,
-        help="Declare a problem proved, disproved, or open again. Only the author or an admin."
-             " Needs a linked ORCID iD.")
+        help="Declare a problem proved, disproved, or open again. Only the author or an admin.")
     declare_status.add_argument("problem_id")
     declare_status.add_argument("--status", required=True, choices=_MATH_PROBLEM_STATUSES)
     declare_status.add_argument("--resolving-proof", dest="resolving_proof",
@@ -1619,7 +1614,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     link_problem_paper = commands.add_parser(
         "link-problem-paper", allow_abbrev=False,
-        help="Attach a related paper to a problem by its arXiv id or DOI. Needs a linked ORCID iD.")
+        help="Attach a related paper to a problem by its arXiv id or DOI.")
     link_problem_paper.add_argument("problem_id")
     link_problem_paper.add_argument("--identifier", required=True,
                                     help="An arXiv id, with or without a version, or a DOI.")
@@ -1627,7 +1622,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     link_problem_github = commands.add_parser(
         "link-problem-github", allow_abbrev=False,
-        help="Attach a GitHub context link to a problem. Needs a linked ORCID iD.")
+        help="Attach a GitHub context link to a problem.")
     link_problem_github.add_argument("problem_id")
     link_problem_github.add_argument("--url", required=True, help="An https://github.com/ URL, sent exactly as given.")
     link_problem_github.add_argument("--label", required=True, help="A short label, 1-100 characters.")
@@ -1636,7 +1631,7 @@ def _build_parser() -> argparse.ArgumentParser:
     post_proof = commands.add_parser(
         "post-proof", allow_abbrev=False,
         help="Post a proof or a disproof of a problem: a write-up at an exact version, a commit-pinned"
-             " Lean solution, or both. Needs a linked ORCID iD.")
+             " Lean solution, or both.")
     post_proof.add_argument("problem_id")
     post_proof.add_argument("--claim", required=True, choices=_MATH_PROOF_CLAIMS)
     proof_summary = post_proof.add_mutually_exclusive_group(required=True)
@@ -1666,7 +1661,7 @@ def _build_parser() -> argparse.ArgumentParser:
     post_lean_check = commands.add_parser(
         "post-lean-check", allow_abbrev=False,
         help="Post the report of a Lean check you ran outside exactory on another account's proof."
-             " This command runs nothing. Needs a linked ORCID iD.")
+             " This command runs nothing.")
     post_lean_check.add_argument("proof_id")
     post_lean_check.add_argument("--outcome", required=True, choices=_MATH_LEAN_CHECK_OUTCOMES)
     post_lean_check.add_argument("--tool", required=True, help="What you ran, up to 200 characters.")
@@ -1692,7 +1687,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     post_discussion = commands.add_parser(
         "post-discussion", allow_abbrev=False,
-        help="Post in a problem's discussion, optionally as a reply. Needs a linked ORCID iD.")
+        help="Post in a problem's discussion, optionally as a reply.")
     post_discussion.add_argument("problem_id")
     discussion_body = post_discussion.add_mutually_exclusive_group(required=True)
     discussion_body.add_argument("--body", help="Plain text with TeX, 1-10000 characters.")
@@ -1703,6 +1698,8 @@ def _build_parser() -> argparse.ArgumentParser:
     discussion = commands.add_parser("discussion", allow_abbrev=False,
                                      help="List a problem's discussion, oldest first.")
     discussion.add_argument("problem_id")
+    discussion.add_argument("--by-orcid-holders", action="store_true", dest="by_orcid_holders",
+                            help="Only posts whose author had a linked ORCID iD when posting.")
     discussion.add_argument("--cursor", help="Opaque cursor from a previous page.")
     discussion.add_argument("--limit", type=int, help=_PAGE_SIZE_HELP + " The server sets the default.")
     discussion.set_defaults(handler=_run_discussion)

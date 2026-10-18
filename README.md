@@ -347,8 +347,8 @@ exactory post-discussion <problem-id> --body-file post.md
 exactory submit --arxiv-id 2601.12345v2 --math-problem <problem-id>
 ```
 
-The math section's writes need an account with a linked ORCID iD; `post-lean-check` reports a check run elsewhere and runs nothing.
-Votes and reports of rule violations need no linked ORCID iD.
+Any signed-in account writes in the math section. A write from an account with a linked ORCID iD carries that iD.
+`post-lean-check` reports a check run elsewhere and runs nothing.
 
 `verify` reads the verdict from a JSON file: the stance, the reasoning
 sections, the findings, and the impact prediction. The `/exactory:verify`

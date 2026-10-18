@@ -19,7 +19,7 @@ from pathlib import Path
 
 from integration_fixtures import build_unconfirmed_write_msg
 from research_harness.errors import ResearchError
-from research_harness.exactory_api import UUID_RE, build_orcid_required_msg, read_api_base_url
+from research_harness.exactory_api import UUID_RE, read_api_base_url
 from research_harness.integration import export_workspace, record_direct_deposit
 from research_harness.remote import begin_intent
 from research_harness.same_origin import (RefusedRedirectError, SameOriginRedirectHandler, get_origin,
@@ -118,18 +118,16 @@ def _build_managed_journal(operation_id: str, **changes) -> dict:
 
 class _ExactoryRecorder:
     """Stands in for the exactory command: records each call with its origin and answers
-    the way the API would."""
+    the way the API would. A deposit reads no account state (design 2026-10-17 §11), so it has no
+    answer for `exactory me`."""
 
     def __init__(self) -> None:
         self.calls: list[tuple[list[str], str]] = []
-        self.orcid_id: str | None = "0000-0002-1825-0097"
         self.failing_links = 0
         self.has_removed_links = False
 
     def __call__(self, argv: list[str], api_url: str) -> subprocess.CompletedProcess:
         self.calls.append((list(argv), api_url))
-        if argv[0] == "me":
-            return subprocess.CompletedProcess(argv, 0, json.dumps({"displayName": "Ada", "orcidId": self.orcid_id}), "")
         if argv[0] == "problem":
             return subprocess.CompletedProcess(argv, 0, json.dumps({"id": argv[1], "removed": False}), "")
         if argv[0] == "link-problem-paper":
@@ -304,7 +302,7 @@ class _PendingAttachmentTests:
         self.assertEqual(_read_journal(self.workspace_dir), dict(journal, attached=True))
         # The rerun reads nothing from exactory and links the recorded record again, which changes nothing.
         self.assertEqual([argv[0] for argv, _ in self.exactory.calls],
-                         ["me", "problem", "link-problem-paper", "link-problem-paper"])
+                         ["problem", "link-problem-paper", "link-problem-paper"])
 
     def test_an_identical_rerun_attaches_the_recorded_record_and_publishes_nothing_new(self) -> None:
         self.exactory.failing_links = 1
@@ -530,7 +528,7 @@ class TestManagedDepositForAProblem(_PendingAttachmentTests, _DepositTestCase):
         self._deposit(_PROBLEM_DEPOSIT)
 
         self.assertEqual(self._requested(), [("GET", "https://zenodo.org/api/deposit/depositions/4242")])
-        self.assertEqual([argv[0] for argv, _ in self.exactory.calls], ["me", "problem", "link-problem-paper"])
+        self.assertEqual([argv[0] for argv, _ in self.exactory.calls], ["problem", "link-problem-paper"])
         self.assertEqual([url for _, url in self.exactory.links()], ["https://api.test"])
         receipts = Store(self.workspace_dir).snapshot()["records"]["publication_receipt"]
         self.assertEqual([receipt["doi"] for receipt in receipts.values()], ["10.5281/zenodo.4242"])
@@ -573,7 +571,7 @@ class TestManagedDepositForAProblem(_PendingAttachmentTests, _DepositTestCase):
         self.assertIn("completed the earlier deposit for problem", output)
         self.assertIn("which the earlier run started with its own approval", output)
         self.assertIn("deposited nothing new", output)
-        self.assertEqual([argv[0] for argv, _ in self.exactory.calls], ["me", "problem", "link-problem-paper"])
+        self.assertEqual([argv[0] for argv, _ in self.exactory.calls], ["problem", "link-problem-paper"])
         self.assertEqual(list(Store(self.workspace_dir).snapshot()["records"]["publication_receipt"]), [intent_id])
         journal = _read_journal(self.workspace_dir)
         self.assertEqual((journal["settled"], journal["attached"], journal["doi"]), (True, True, "10.5281/zenodo.4242"))
@@ -594,7 +592,7 @@ class TestManagedDepositForAProblem(_PendingAttachmentTests, _DepositTestCase):
         self.assertIn(f"{_REMOVAL_RULE_MSG} the deposition whose notes read", output)
         self.assertIn(f"Exactory publication intent {intent_id}", output)
         self.assertEqual(self.fake_api.requests, [])
-        self.assertEqual([argv[0] for argv, _ in self.exactory.calls], ["me", "problem"])
+        self.assertEqual([argv[0] for argv, _ in self.exactory.calls], ["problem"])
         records = Store(self.workspace_dir).snapshot()["records"]
         self.assertEqual(list(records["remote_intent"]), [intent_id])
         self.assertNotIn("direct_deposit", records)
@@ -694,12 +692,6 @@ class TestManagedDepositForAProblem(_PendingAttachmentTests, _DepositTestCase):
                       " unattached.", output)
         journal = _read_journal(self.workspace_dir)
         self.assertEqual((journal["settled"], journal["attached"], journal["doi"]), (True, False, "10.5072/zenodo.4242"))
-
-    def test_an_unlinked_orcid_stops_before_any_zenodo_request(self) -> None:
-        self.exactory.orcid_id = None
-        output = self._deposit(_PROBLEM_DEPOSIT, expected_exit_code=1)
-        self.assertEqual(self.fake_api.requests, [])
-        self.assertIn("https://api.test/account", output)
 
     def test_a_problem_id_that_is_not_an_id_is_refused_before_any_request(self) -> None:
         self._deposit([*_PRODUCTION_PUBLISH, "--math-problem", "not-an-id"], expected_exit_code=2)
@@ -992,7 +984,7 @@ class TestDirectDepositForAProblem(_PendingAttachmentTests, _PlainWorkspaceDepos
                       " Then run this command again.", self.fake_api.interleaved)
         self.assertEqual(self.requested().count(("POST", "https://zenodo.org/api/deposit/depositions")), 1)
         self.assertEqual(_count_publishes(self.fake_api), 1)
-        self.assertEqual([argv[0] for argv, _ in self.exactory.calls], ["me", "problem", "link-problem-paper"])
+        self.assertEqual([argv[0] for argv, _ in self.exactory.calls], ["problem", "link-problem-paper"])
         self.assertTrue(_read_journal(self.workspace_dir)["settled"])
 
     def test_attach_problem_that_overlaps_a_running_deposit_is_refused(self) -> None:
@@ -1267,22 +1259,22 @@ class TestProblemDepositRefusals(_PlainWorkspaceDepositTestCase):
         self.assertEqual(self.fake_api.requests, [])
 
     def test_an_exactory_read_that_fails_stops_before_any_zenodo_request(self) -> None:
-        self._answer_exactory_command("me", subprocess.CompletedProcess(
-            ["me"], 1, "", "The server rejected the API key."))
+        self._answer_exactory_command("problem", subprocess.CompletedProcess(
+            ["problem"], 1, "", "The server rejected the API key."))
 
         output = self._deposit(_PROBLEM_DEPOSIT, expected_exit_code=1)
 
-        self.assertIn("exactory me failed, so nothing was deposited", output)
+        self.assertIn(f"exactory problem {_PROBLEM_ID} failed, so nothing was deposited", output)
         self.assertIn("The server rejected the API key.", output)
-        self.assertEqual([argv[0] for argv, _ in self.exactory.calls], ["me"])
+        self.assertEqual([argv[0] for argv, _ in self.exactory.calls], ["problem"])
         self.assertEqual(self.fake_api.requests, [])
 
     def test_an_exactory_answer_that_is_not_json_stops_before_any_zenodo_request(self) -> None:
-        self._answer_exactory_command("me", subprocess.CompletedProcess(["me"], 0, "not json", ""))
+        self._answer_exactory_command("problem", subprocess.CompletedProcess(["problem"], 0, "not json", ""))
 
         output = self._deposit(_PROBLEM_DEPOSIT, expected_exit_code=1)
 
-        self.assertIn("exactory me printed no JSON, so nothing was deposited", output)
+        self.assertIn(f"exactory problem {_PROBLEM_ID} printed no JSON, so nothing was deposited", output)
         self.assertEqual(self.fake_api.requests, [])
 
     def test_a_draft_deposit_names_the_problem_and_keeps_no_journal(self) -> None:
@@ -2247,16 +2239,14 @@ class TestPublishedPriorRule(unittest.TestCase):
 
 
 class TestSharedExactoryApi(unittest.TestCase):
-    """The origin rule, the id pattern, and the ORCID message have one home that bin/exactory and
-    bin/exactory-draft both import (research_harness.exactory_api)."""
+    """The origin rule and the id pattern have one home that bin/exactory and bin/exactory-draft both
+    import (research_harness.exactory_api)."""
 
-    def test_both_commands_import_the_shared_origin_rule_and_the_shared_orcid_message(self) -> None:
+    def test_both_commands_import_the_shared_origin_rule_and_the_shared_id_pattern(self) -> None:
         exactory = _load_bin_module("exactory", "exactory_for_the_shared_rules")
 
         self.assertIs(exactory.read_api_base_url, read_api_base_url)
         self.assertIs(_draft.read_api_base_url, read_api_base_url)
-        self.assertIs(exactory.build_orcid_required_msg, build_orcid_required_msg)
-        self.assertIs(_draft.build_orcid_required_msg, build_orcid_required_msg)
         self.assertIs(_draft.UUID_RE, UUID_RE)
 
     def test_the_origin_defaults_to_the_application_and_loses_trailing_slashes(self) -> None:
@@ -2274,10 +2264,6 @@ class TestSharedExactoryApi(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertIsNone(UUID_RE.fullmatch(text))
 
-    def test_the_orcid_message_names_the_page_that_links_an_id(self) -> None:
-        self.assertEqual(build_orcid_required_msg("This operation", "https://api.test"),
-                         "This operation needs an ORCID iD linked to your exactory account."
-                         " Link one at https://api.test/account. Then run the command again.")
 
 
 class TestZenodoTokenOrigin(unittest.TestCase):
@@ -2399,9 +2385,7 @@ def _serve_on_loopback(test_case: unittest.TestCase, respond) -> tuple[str, list
 
 
 def _answer_like_exactory(method: str, path: str) -> tuple[int, dict, bytes]:
-    """Answer like the exactory API: an account with an ORCID iD, and success for every other request."""
-    if path.endswith("/api/v1/me"):
-        return 200, _JSON_HEADERS, json.dumps({"displayName": "Ada", "orcidId": "0000-0002-1825-0097"}).encode()
+    """Answer like the exactory API: success for every request."""
     return 200, _JSON_HEADERS, b'{"papers": []}'
 
 
@@ -2620,7 +2604,7 @@ class TestExactoryRedirects(_PlainWorkspaceDepositTestCase):
 
     def _serve_exactory(self, redirected: tuple[str, str], status: int = 302, *,
                         location: str | None = None) -> tuple[str, list]:
-        """An exactory server whose account has an ORCID iD. It redirects the one request named here (a method
+        """An exactory server. It redirects the one request named here (a method
         and the end of a path) to `location`, by default the same path at the other origin. A location that is a
         path alone stays within the origin of the server, where every other request succeeds."""
         redirected_method, redirected_path = redirected
@@ -2640,7 +2624,7 @@ class TestExactoryRedirects(_PlainWorkspaceDepositTestCase):
         return journal
 
     def _build_read_refusal_msg(self, url: str) -> str:
-        """The refusal of a redirect of the account check. A read changes nothing, so the advice is to run again."""
+        """The refusal of a redirect of the problem check. A read changes nothing, so the advice is to run again."""
         return (f"The exactory server at {url} answered the GET request with a redirect to another origin,"
                 f" {self.other_url}. The command refused the redirect and sent nothing there. Make sure that"
                 " EXACTORY_API_URL is correct. Then run the command again.")
@@ -2650,23 +2634,6 @@ class TestExactoryRedirects(_PlainWorkspaceDepositTestCase):
         return (f"The exactory server at {url} answered the POST request with a redirect to another origin,"
                 f" {self.other_url}. The command refused the redirect and sent nothing there. Make sure that"
                 f" EXACTORY_API_URL is correct. {build_unconfirmed_write_msg(url)}")
-
-    def test_a_redirect_at_the_account_check_stops_attach_problem_and_the_record_stays_pending(self) -> None:
-        url, received = self._serve_exactory(("GET", "/api/v1/me"))
-        journal = self._record_pending_journal(url)
-
-        output = _run_draft_command(["attach-problem"], 1, self)
-
-        self.assertIn(self._build_read_refusal_msg(url), output)
-        # With EXACTORY_API_URL set to the target of the redirect, the journal of this origin would stop the retry.
-        self.assertNotIn(f"set EXACTORY_API_URL to {self.other_url}", output)
-        self.assertNotIn("set EXACTORY_API_URL to it", output)
-        self.assertIn(f"Record {_EARLIER_DOI} belongs to the earlier deposit for this problem. This run published nothing."
-                      f" Attaching it to problem {_PROBLEM_ID} failed:", output)
-        self.assertEqual([(method, path) for method, path, _ in received], [("GET", "/api/v1/me")])
-        self.assertEqual(received[0][2], "Bearer test-key")
-        self.assertEqual(self.other_received, [])
-        self.assertEqual(_read_journal(self.workspace_dir), journal)
 
     def test_a_redirect_of_the_attachment_within_the_origin_stops_attach_problem_and_the_record_stays_pending(self) -> None:
         papers_path = f"/api/v1/math-problems/{_PROBLEM_ID}/papers"
@@ -2684,7 +2651,7 @@ class TestExactoryRedirects(_PlainWorkspaceDepositTestCase):
                 self.assertIn(f"Record {_EARLIER_DOI} belongs to the earlier deposit for this problem. This run published nothing."
                               f" Attaching it to problem {_PROBLEM_ID} failed:", output)
                 self.assertEqual([(method, path) for method, path, _ in received],
-                                 [("GET", "/api/v1/me"), ("POST", papers_path)])
+                                 [("POST", papers_path)])
                 self.assertEqual(_read_journal(self.workspace_dir), journal)
 
     def test_a_redirect_of_the_attachment_stops_attach_problem_and_the_record_stays_pending(self) -> None:
@@ -2703,7 +2670,7 @@ class TestExactoryRedirects(_PlainWorkspaceDepositTestCase):
                               " and publishes nothing.", output)
                 # The answer of the other origin would have looked like the answer to the write.
                 self.assertEqual([(method, path) for method, path, _ in received],
-                                 [("GET", "/api/v1/me"), ("POST", papers_path)])
+                                 [("POST", papers_path)])
                 self.assertEqual(self.other_received, [])
                 self.assertEqual(_read_journal(self.workspace_dir), journal)
 
@@ -2721,12 +2688,12 @@ class TestExactoryRedirects(_PlainWorkspaceDepositTestCase):
         self.assertEqual(self.fake_api.requests, [])
         self.assertEqual(_read_journal(self.workspace_dir), journal)
 
-    def test_a_redirect_at_the_account_check_of_a_deposit_for_a_problem_creates_nothing(self) -> None:
-        url, received = self._serve_exactory(("GET", "/api/v1/me"))
+    def test_a_redirect_at_the_problem_check_of_a_deposit_for_a_problem_creates_nothing(self) -> None:
+        url, received = self._serve_exactory(("GET", f"/api/v1/math-problems/{_PROBLEM_ID}"))
 
         output = self._deposit(_PROBLEM_DEPOSIT, expected_exit_code=1)
 
-        self.assertIn("exactory me failed, so nothing was deposited:", output)
+        self.assertIn(f"exactory problem {_PROBLEM_ID} failed, so nothing was deposited:", output)
         self.assertIn(self._build_read_refusal_msg(url), output)
         self.assertEqual(self.other_received, [])
         self.assertEqual(self.fake_api.requests, [])
@@ -2830,7 +2797,7 @@ class TestExactoryRequestRedirects(unittest.TestCase):
                 self.assertIn(build_unconfirmed_write_msg(url), sink.getvalue())
                 self.assertNotIn("Then run the command again.", sink.getvalue())
                 self.assertEqual([(method, path) for method, path, _ in received],
-                                 [("GET", "/api/v1/me"), ("POST", posts_path)])
+                                 [("POST", posts_path)])
                 self.assertEqual(stored_posts, [posts_path])
         self.assertEqual(self.other_received, [])
 
@@ -2979,7 +2946,7 @@ class TestAttachmentWhoseAnswerDidNotArriveInFull(_PlainWorkspaceDepositTestCase
                               " exactory-draft attach-problem. It attaches the recorded record and publishes nothing.",
                               output)
                 self.assertEqual([(method, path) for method, path, _ in received],
-                                 [("GET", "/api/v1/me"), ("POST", papers_path)])
+                                 [("POST", papers_path)])
                 self.assertEqual(_read_journal(self.workspace_dir), journal)
         self.assertEqual(self.fake_api.requests, [])
 

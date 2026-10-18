@@ -43,7 +43,7 @@ from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from research_harness.errors import REMOVED_PROBLEM_LINK_EXIT_CODE, ResearchError
-from research_harness.exactory_api import UUID_RE, build_orcid_required_msg, read_api_base_url
+from research_harness.exactory_api import UUID_RE, read_api_base_url
 from research_harness.integration import (command_identity, current_store, export_workspace,
                                           initialization_payload, initialize_workspace, record_direct_deposit)
 from research_harness.operations import prepared_mutation
@@ -539,13 +539,10 @@ def _require_problem_id(problem_id: str) -> None:
 
 def _resolve_problem_target(problem_id: str) -> dict:
     """The problem a deposit is for, checked before the first Zenodo write (design 2026-10-12
-    §17): a standing problem, and an account with the ORCID iD the attachment needs. The
+    §17): a standing problem. Any signed-in account attaches a record (design 2026-10-17 §5). The
     origin is kept with it, so a retry attaches against the same application when this run names it.
     The caller has checked the id."""
     api_url = read_api_base_url()
-    if not _read_exactory_json(["me"], api_url).get("orcidId"):
-        _exit_with_error(f"{build_orcid_required_msg('Attaching the record to a problem', api_url)}"
-                         " Nothing was deposited.")
     if _read_exactory_json(["problem", problem_id], api_url).get("removed") is not False:
         _exit_with_error(f"Problem {problem_id} is removed, so no record can attach to it. Nothing was deposited.")
     return {"problem_id": problem_id, "api_url": api_url}
@@ -1684,7 +1681,7 @@ def _build_parser() -> argparse.ArgumentParser:
     deposit.add_argument("--math-problem", dest="math_problem_id", metavar="PROBLEM_ID",
                          help="Deposit for this exactory math problem: the record's metadata names the problem"
                               " page, and a published production record is attached to the problem."
-                              " Needs a linked ORCID iD. While an earlier published record waits for its"
+                              " While an earlier published record waits for its"
                               " attachment, a publishing deposit for the same problem attaches that record and"
                               " publishes nothing new, and a publishing deposit for another problem is refused."
                               " exactory-draft attach-problem attaches the waiting record alone.")

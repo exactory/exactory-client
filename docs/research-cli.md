@@ -1109,7 +1109,7 @@ The task endpoint may reveal only an own-verdict ID after a lost POST response; 
 ### Deposit for a math problem
 
 `exactory-draft deposit --math-problem <problem-id>` deposits a write-up for a problem.
-The command checks that the problem stands and the account has a linked ORCID iD before the first Zenodo write.
+The command checks that the problem stands before the first Zenodo write.
 The metadata includes `related_identifiers` with `identifier: "<EXACTORY_API_URL>/math/<problem-id>"` and `relation: "references"`.
 A published production record attaches to the problem as a related paper.
 Sandbox records stay unattached.
