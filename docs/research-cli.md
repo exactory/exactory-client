@@ -1374,7 +1374,8 @@ reviewer independence. `area` is a nonempty `math.*` subject class; `field`
 describes the field and question explored for the bar reviewers. When
 configuration is absent, initialization adopts the constitution and sets a null
 target. Study, draft and research-intent markers conflict with this marker
-(`orchestration_conflict`) in either direction.
+(`orchestration_conflict`) in either direction, and so does a research target
+already recorded in the configuration.
 
 | Claim | Mechanical minimum | Independent assessment | Currency |
 | --- | --- | --- | --- |
@@ -1494,7 +1495,9 @@ initialization, `formulation` with a statement, `openness` with current
 `supported_open`, `value` with valid value evidence, both bars, both passed
 result reviews and a current post decision, and `post` with a recorded post.
 `next` names the first missing condition in the order statement, openness,
-value, reviews, decision, export. Milestones impose no tool order.
+value, reviews, decision, export. Milestones impose no tool order. `status`
+lists the current depth plan under `limits` and no cohort policy counts; those
+belong to ai-science.
 
 After `gate post` reports ready, run:
 

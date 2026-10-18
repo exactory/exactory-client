@@ -10,6 +10,7 @@ from research_harness.evidence import digest
 from research_harness.gates import gate_state
 from research_harness.integration import adopt_workspace, initialize_workspace
 from research_harness.literature import import_bundle
+from research_harness.principles import initialize_research, set_target
 from research_harness.reading import record_reading
 from research_harness import strategy
 
@@ -78,6 +79,17 @@ class ProblemRecordTests(ProblemCase):
                 self.assertEqual(strategy.find_orchestration(records), "ai_science")
         self.put("workspace", "study", {"stage": "initiate"})
         self.error("orchestration_conflict", self.initialize_problem)
+
+    def test_a_store_with_a_research_target_refuses_a_problem_record(self):
+        self.mutate(initialize_research, {"profile": "research", "target": None})
+        self.mutate(set_target, {"target": {"kind": "objective", "id": "complete-objective",
+            "statement": "Establish the stated bound over the complete declared domain."},
+            "reason": "Fix the complete objective before planning."})
+        self.error("orchestration_conflict", self.initialize_problem)
+
+    def test_a_configured_store_without_a_target_accepts_a_problem_record(self):
+        self.mutate(initialize_research, {"profile": "research", "target": None})
+        self.assertEqual(self.initialize_problem()["orchestration"], "problem_creation")
 
     def test_problem_refuses_study_adoption_and_intent(self):
         self.initialize_problem()

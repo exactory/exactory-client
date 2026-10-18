@@ -4,13 +4,19 @@ from . import lineage, principles, sampling
 from .depth import find_current_depth_plan, resolve_depth_values
 
 
+def describe_depth(records):
+    """The current depth plan with its resolved amounts, or None without a plan."""
+    plan = find_current_depth_plan(records)
+    return None if plan is None else {"plan_id": plan["id"], "values": resolve_depth_values(records)}
+
+
 def limits_report(records):
     """Counts against every limit of the recorded policy, for status."""
     policy = principles.preparation_policy(records)
     report = {"policy": policy, "loop": None, "sample": None, "innovation_candidates": None, "search_readings": None, "core_papers": None}
-    plan = find_current_depth_plan(records)
-    if plan is not None:
-        report["depth"] = {"plan_id": plan["id"], "values": resolve_depth_values(records)}
+    depth = describe_depth(records)
+    if depth is not None:
+        report["depth"] = depth
     if policy == lineage.LINEAGE:
         state = lineage.loop_state(records)
         report["loop"] = {"readings": state["readings"], "limit": state["limit"],

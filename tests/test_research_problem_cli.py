@@ -35,6 +35,7 @@ class ProblemCliTests(ProblemCase):
         self.initialize_problem()
         from research_harness.report_views import next_summary, status_summary
         report = cli.status_report(self.store)
+        self.assertEqual(report["limits"], {"depth": None})
         for view in (next_summary(report), status_summary(report)):
             self.assertEqual(view["orchestration"], "problem_creation")
             self.assertEqual(view["milestone"], "exploration")

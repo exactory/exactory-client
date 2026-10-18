@@ -15,7 +15,7 @@ from .evaluation import Evaluation
 from .evidence import digest
 from .gates import gate_report, gate_state, require_ready
 from .integration import adopt_workspace, current_store, export_workspace, pin_artifact
-from .limits import limits_report
+from .limits import describe_depth, limits_report
 from .operations import fields
 from .provenance import runtime_provenance
 from .report_views import current_obligations, next_summary, obligations_page, order_obligations, status_summary
@@ -298,7 +298,7 @@ def status_report(store, *, counters=False):
         report = gate_state(records, evaluation, "post")
         return dict(report, revision=snapshot["revision"], profile="research", runtime=runtime_provenance(),
                     problem=records["workspace"]["problem"], resources=resources.account_report(records, "research"),
-                    limits=limits_report(records), source_deferrals=assess_deferrals(records, evaluation, "research"),
+                    limits={"depth": describe_depth(records)}, source_deferrals=assess_deferrals(records, evaluation, "research"),
                     next=report["obligations"][0] if report["obligations"] else
                         {"code": "problem_export_required", "explanation": "Export the reviewed parts with exactory-research export --kind problem, then post and record the delivery."})
     config = records.get("configuration", {}).get("research")

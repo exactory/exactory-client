@@ -56,6 +56,9 @@ def initialize_problem(store, payload, *, expected_revision, request_id):
             changes, config = prepare_initialization(records, artifacts, {"profile": "research", "target": None})
         if config["profile"] != "research":
             raise ResearchError("profile_mismatch", "A problem requires the research profile")
+        if config["target"] is not None:
+            # A research target is the objective of ai-science; a problem record keeps a null target.
+            raise ResearchError("orchestration_conflict", "Keep each orchestration in its own research record")
         now = datetime.now(timezone.utc).isoformat()
         marker = dict(value, version=1, orchestration="problem_creation", created=now, updated=now,
                       research={"store": ".exactory/research.sqlite3", "profile": "research"})
