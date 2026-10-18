@@ -35,6 +35,12 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.54.0](docs/releases/0.54.0.md) follows the Mathematics section of
+exactory.ai, where the ORCID iD became optional. Any signed-in account writes,
+and a write from an account with a linked ORCID iD carries that iD. `exactory
+problems` and `exactory discussion` gain filters to ORCID holders, and each
+problem carries its ORCID upvote count.
+
 Version [0.53.0](docs/releases/0.53.0.md) adds problem creation as an
 orchestration of the research harness. A problem record holds the claim that
 a problem is precisely stated, open and worth solving, with its evidence and
