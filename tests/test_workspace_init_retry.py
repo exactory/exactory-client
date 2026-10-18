@@ -13,6 +13,7 @@ import time
 import unittest
 
 from research_harness.storage import Store
+from research_harness.workspace import find_workspace
 
 
 PLUGIN = Path(__file__).resolve().parents[1]
@@ -220,6 +221,17 @@ class StudyInitializationRetryTests(InitializationRetryCases, unittest.TestCase)
     program = "exactory-lab"
     options = ["--slug", "preserved-study"]
     conflicts = {"slug": "different-study"}
+
+
+class WorkspaceResolutionTests(unittest.TestCase):
+    def test_a_parent_segment_resolves_to_the_named_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            (root / "store/.exactory").mkdir(parents=True)
+            (root / "store/.exactory/research.sqlite3").write_bytes(b"")
+            (root / "other").mkdir()
+            self.assertIsNone(find_workspace(root / "store/../other", required=False))
+            self.assertEqual(find_workspace(root / "store/../store"), root / "store")
 
 
 if __name__ == "__main__":

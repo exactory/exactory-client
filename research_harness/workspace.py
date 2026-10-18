@@ -28,7 +28,8 @@ def strict_json(data):
 
 
 def find_workspace(start=None, *, required=True):
-    start = Path(start or Path.cwd()).absolute()
+    # Normalized first: a parent segment such as ../other must not make the walk visit the directory it passes through.
+    start = Path(os.path.normpath(Path(start or Path.cwd()).absolute()))
     for directory in (start, *start.parents):
         marker = directory / ".exactory"
         if any((marker / name).exists() or (marker / name).is_symlink()
