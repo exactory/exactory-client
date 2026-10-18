@@ -251,7 +251,7 @@ class TestJavascriptTrim(_OfflineTestCase):
                     sent = []
                     def send(method, path, body=None, **kwargs):
                         sent.append((method, body))
-                        return {"orcidId": "linked"}, 201
+                        return {}, 201
                     args = _cli._build_parser().parse_args([*command, option, value])
                     with patch.object(_cli, "_send_request", side_effect=send), contextlib.redirect_stdout(io.StringIO()):
                         if value == "\ufeff":
@@ -282,9 +282,8 @@ class TestJavascriptTrim(_OfflineTestCase):
                 argv += ["--area", "math.CO", "--motivation", "m" * 100] if command == "post-problem" else ["--field", "math"]
                 sent = []
                 def send(method, path, body=None, **kwargs):
-                    if body is not None:
-                        sent.append(body)
-                    return {"orcidId": "linked"}, 201
+                    sent.append(body)
+                    return {}, 201
                 args = _cli._build_parser().parse_args(argv)
                 with patch.object(_cli, "_send_request", side_effect=send), contextlib.redirect_stdout(io.StringIO()):
                     args.handler(args)
