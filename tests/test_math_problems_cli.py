@@ -227,6 +227,12 @@ class TestProblemReads(_MathCliTestCase):
             "sort": ["top"], "cursor": ["c1"], "limit": ["10"],
         })
 
+    def test_problems_prints_the_list_with_the_orcid_upvote_count_of_each_problem(self) -> None:
+        answer = {"problems": [{"id": _PROBLEM_ID, "score": 4, "orcidUpvoteCount": 2}], "nextCursor": None}
+        self.answers[("GET", "/api/v1/math-problems")] = (200, answer)
+        stdout_text, _ = self.run_cli(["problems"])
+        self.assertEqual(json.loads(stdout_text), answer)
+
     def test_problem_and_history_read_by_id(self) -> None:
         self.run_cli(["problem", _PROBLEM_ID])
         self.run_cli(["problem-history", _PROBLEM_ID, "--limit", "5"])

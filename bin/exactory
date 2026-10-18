@@ -1172,8 +1172,8 @@ def _run_post_discussion(args: argparse.Namespace) -> None:
 
 
 def _run_discussion(args: argparse.Namespace) -> None:
-    query = {"byOrcidHolders": "true"} if args.by_orcid_holders else {}
-    _print_page(_build_api_path("math-problems", args.problem_id, "posts"), args, query)
+    filters = {"byOrcidHolders": "true"} if args.by_orcid_holders else {}
+    _print_page(_build_api_path("math-problems", args.problem_id, "posts"), args, filters)
 
 
 def _run_discussion_post(args: argparse.Namespace) -> None:
@@ -1524,7 +1524,8 @@ def _build_parser() -> argparse.ArgumentParser:
     problems.add_argument("--posted-by-orcid-holder", action="store_true", dest="posted_by_orcid_holder",
                           help="Only problems whose author had a linked ORCID iD when posting.")
     problems.add_argument("--upvoted-by-orcid-holder", action="store_true", dest="upvoted_by_orcid_holder",
-                          help="Only problems that another account with a linked ORCID iD upvoted.")
+                          help="Only problems that an account other than the author upvoted while it had a"
+                               " linked ORCID iD.")
     problems.add_argument("--sort", choices=["relevance", "top", "new"],
                           help="Result order. Default: relevance with --query, new without.")
     problems.add_argument("--cursor", help="Opaque cursor from a previous page.")

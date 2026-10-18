@@ -2265,7 +2265,6 @@ class TestSharedExactoryApi(unittest.TestCase):
                 self.assertIsNone(UUID_RE.fullmatch(text))
 
 
-
 class TestZenodoTokenOrigin(unittest.TestCase):
     """The Zenodo token goes only to the Zenodo API of the environment that it belongs to
     (https://developers.zenodo.org), whichever address a journal, an intent, or an answer names."""
