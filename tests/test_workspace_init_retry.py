@@ -224,14 +224,29 @@ class StudyInitializationRetryTests(InitializationRetryCases, unittest.TestCase)
 
 
 class WorkspaceResolutionTests(unittest.TestCase):
+    def make_store(self, directory):
+        (directory / ".exactory").mkdir(parents=True)
+        (directory / ".exactory/research.sqlite3").write_bytes(b"")
+
     def test_a_parent_segment_resolves_to_the_named_directory(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
-            (root / "store/.exactory").mkdir(parents=True)
-            (root / "store/.exactory/research.sqlite3").write_bytes(b"")
+            self.make_store(root / "store")
             (root / "other").mkdir()
             self.assertIsNone(find_workspace(root / "store/../other", required=False))
             self.assertEqual(find_workspace(root / "store/../store"), root / "store")
+
+    def test_a_parent_segment_after_a_symlink_follows_the_link_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            self.make_store(root / "a/study")
+            self.make_store(root / "b/study")
+            self.make_store(root / "b")
+            (root / "b/child").mkdir()
+            (root / "a/link").symlink_to(root / "b/child", target_is_directory=True)
+            self.assertEqual(find_workspace(root / "a/link/../study"), root / "b/study")
+            self.assertEqual(find_workspace(root / "a/link/.."), root / "b", "a trailing parent segment resolves fully")
+            self.assertEqual(find_workspace(root / "a/study"), root / "a/study", "a path without the segment is unchanged")
 
 
 if __name__ == "__main__":
