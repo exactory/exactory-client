@@ -44,7 +44,7 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
             self.observe("bar", reviewer, output)
         if slate_reviewer is not None:
             output = self.build_slate_output(["candidate-1"])
-            output["objections"] = [self.make_objection()]
+            output["objections"] = [dict(self.make_objection(), candidate_ids=["candidate-1"])]
             self.observe("slate", slate_reviewer, output)
         self.record_slate(review_ids=[] if slate_reviewer is None else ["review-slate-" + slate_reviewer])
         if not results:
@@ -218,17 +218,57 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         self.assertEqual(packet["objection"]["id"], "unsupported-implication")
         self.assert_delivered()
 
-    def test_a_slate_review_objection_stays_while_its_candidate_set_and_bars_are_current(self):
+    def test_a_slate_objection_against_the_selected_candidate_survives_an_unrelated_candidate(self):
         self.prepare_reviews(slate_reviewer="first", results=False)
-        self.record_slate("slate-2")
+        self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
+        self.record_slate("slate-2", deferred=[{"candidate_id": "candidate-2", "evidence_needed": "A documented active line."}])
         packet = protocol.build_packet(self.store.snapshot()["records"], self.artifacts, None, "result", "first")
         self.assertEqual([objection["id"] for objection in packet["material_objections"]], ["unsupported-implication"])
+        for reviewer in ("first", "second"):
+            output = self.build_review_output("result")
+            output["value"]["objection_findings"] = [self.make_finding("continuing")]
+            self.observe("result", reviewer, output)
+        self.assert_blocked_delivery()
+        self.refresh_reviews("resolved")
+        self.assert_delivered()
+
+    def test_a_slate_objection_naming_only_a_deferred_candidate_does_not_block_the_selected_statement(self):
+        self.prepare_reviews(results=False)
         self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
-        self.record_slate("slate-3", deferred=[{"candidate_id": "candidate-2", "evidence_needed": "A documented active line."}])
-        packet = protocol.build_packet(self.store.snapshot()["records"], self.artifacts, None, "result", "first")
-        self.assertEqual(packet["material_objections"], [])
+        output = self.build_slate_output(["candidate-1", "candidate-2"])
+        output["objections"] = [dict(self.make_objection(), candidate_ids=["candidate-2"])]
+        self.observe("slate", "first", output)
+        self.record_slate("slate-2", deferred=[{"candidate_id": "candidate-2", "evidence_needed": "A documented active line."}],
+                          review_ids=["review-slate-first"])
         for reviewer in ("first", "second"):
             self.observe("result", reviewer)
+        packet = json.loads(self.artifacts.read(self.store.snapshot()["records"]["review_assignment"]["result-first"]["packet"]))
+        self.assertEqual(packet["material_objections"], [])
+        self.assert_delivered()
+
+    def test_a_later_slate_objection_permits_the_result_reviewers_to_reassess(self):
+        self.prepare_reviews()
+        for reviewer in ("first", "second"):
+            with self.subTest(reviewer=reviewer):
+                self.assert_error("review_resampling_forbidden",
+                                  lambda: self.assign("result", reviewer, identifier="unchanged-" + reviewer))
+        output = self.build_slate_output(["candidate-1"])
+        output["objections"] = [dict(self.make_objection(), candidate_ids=["candidate-1"])]
+        self.observe("slate", "second", output)
+        self.assertIn("research_objection_unresolved",
+                      {row["code"] for row in decisions.assess_problem_reviews(self.store.snapshot()["records"], self.artifacts)["obligations"]})
+        for reviewer in ("first", "second"):
+            output = self.build_review_output("result")
+            output["value"]["objection_findings"] = [self.make_finding("resolved")]
+            review = self.observe("result", reviewer, output, identifier="reassessed-" + reviewer)
+            records = self.store.snapshot()["records"]
+            assignment = records["review_assignment"]["reassessed-" + reviewer]
+            packet = json.loads(self.artifacts.read(assignment["packet"]))
+            self.assertEqual((assignment["context"], [objection["id"] for objection in packet["material_objections"]]),
+                             ({"prior_assignment_id": "result-" + reviewer}, ["unsupported-implication"]))
+            self.assertEqual(review["id"], "review-reassessed-" + reviewer)
+            self.assert_error("review_resampling_forbidden",
+                              lambda: self.assign("result", reviewer, identifier="again-" + reviewer))
         self.assert_delivered()
 
     def test_focused_adjudication_can_resolve_a_bar_objection(self):

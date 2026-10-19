@@ -16,7 +16,7 @@ from .operations import fields, immutable_record, normalized_text, prepared_muta
 from .problem_claims import find_current_statement, find_latest, require_problem
 from .research_decisions import _independence, _pair
 from .review_context_repair import slot_id
-from .review_protocol import build_problem_subject, find_current_problem_bar_ids, is_previous_prompt, validate_problem_bars
+from .review_protocol import build_problem_subject, is_previous_prompt, validate_problem_bars
 from . import problem_rubric, strategy
 
 SOURCE_KINDS = ("own_record", "literature", "computation", "section", "user")
@@ -84,24 +84,37 @@ def find_current_slate(records):
     return slate
 
 
-def find_current_slate_reviews(records, artifacts):
-    """Every observed slate review of the current candidate set and the current bars. Its material findings bind the
-    post like the bars' findings, whether or not the latest slate cites it."""
+def collect_applicable_slate_objections(records, artifacts):
+    """Each material objection of an observed slate review that still concerns the current statement, with its review.
+
+    An objection that names candidates applies while every named candidate is current with the record digest that the
+    review's packet carried, and concerns the statement that formulates one of them. An objection that names no
+    candidate concerns the slate as a whole and applies while the reviewed candidate set is current. A change of the
+    bars erases no objection."""
+    statement = find_current_statement(records)
+    candidate_id = None if statement is None else statement.get("candidate_id")
+    current = {identifier: digest(row) for identifier, row in find_current_candidates(records).items()}
     candidate_set_digest = compute_candidate_set_digest(records)
-    bar_ids = set(find_current_problem_bar_ids(records, artifacts))
-    current = []
+    applicable = []
     for review in sorted(records.get("value_review", {}).values(), key=lambda row: (row["recorded_revision"], row["id"])):
         if review["payload"]["stage"] != "slate" or review.get("subject", {}).get("kind") != "problem":
             continue
         packet = json.loads(artifacts.read(records["review_assignment"][review["assignment_id"]]["packet"]))
-        if packet.get("candidate_set_digest") == candidate_set_digest and set(packet["bar_ids"]) == bar_ids:
-            current.append(review)
-    return current
+        reviewed = {candidate["id"]: candidate["digest"] for candidate in packet["candidates"]}
+        for objection in review["payload"]["objections"]:
+            named = objection["candidate_ids"]
+            if named:
+                applies = candidate_id in named and all(current.get(identifier) == reviewed[identifier] for identifier in named)
+            else:
+                applies = packet["candidate_set_digest"] == candidate_set_digest
+            if applies:
+                applicable.append((review, objection))
+    return applicable
 
 
 def describe_candidates(records):
     """A slate reviewer's view of every current candidate, without the author's notes and disposition."""
-    return [{"id": identifier, "statement": row["statement"],
+    return [{"id": identifier, "digest": digest(row), "statement": row["statement"],
              "source": {"kind": row["source"]["kind"], "reference": row["source"]["reference"]},
              "observation": row["observation"], "neighbours": row["neighbours"], "potential": row["potential"]}
             for identifier, row in sorted(find_current_candidates(records).items())]

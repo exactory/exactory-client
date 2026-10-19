@@ -195,7 +195,9 @@ class ProblemReviewTests(LiteratureCase):
             if options.get('orchestration') == 'problem_creation':
                 options['version'] = 1
             return original(role, **options)
-        with patch.object(protocol, 'canonical_prompt', side_effect=previous_prompt):
+        # A 0.53.0 store recorded these results before version 1 bars were refused at result assignment.
+        with patch.object(protocol, 'canonical_prompt', side_effect=previous_prompt), \
+                patch.object(protocol, 'require_calibrated_bars', return_value=None):
             self.observe_bar_reviews()
             for reviewer in ('first', 'second'):
                 output = self.build_review_output('result')

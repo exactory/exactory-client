@@ -229,13 +229,26 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                         problem_objections=(json.loads(artifacts.read(saved_assignment["packet"])).get("material_objections", [])
                                              if problem is not None and value["stage"] == "result" else ()),
                         slate_packet=packet)
+        if problem is not None and value["stage"] == "result":
+            undelivered = find_undelivered_bar_ids(records, artifacts, value["assignment_id"], value["value"]["bar_ids"])
+            if undelivered:
+                raise ResearchError("review_bar_mismatch", "Assess only bars delivered to this reviewer", {"bar_ids": undelivered})
         strings(value["limitations"], "Independent assessment limitations", nonempty=True)
+        # A slate objection names the candidates it concerns; an empty list concerns the slate as a whole.
+        slate_candidate_ids = ({candidate["id"] for candidate in packet["candidates"]}
+                               if problem is not None and value["stage"] == "slate" else None)
         objection_ids = set()
         for objection in strategy.items(value["objections"], "Material objections"):
-            fields(objection, ("id", "claim", "reason", "evidence", "resolution_condition"), code="invalid_value_review")
+            fields(objection, ("id", "claim", "reason", "evidence", "resolution_condition") +
+                   (("candidate_ids",) if slate_candidate_ids is not None else ()), code="invalid_value_review")
             for key in ("id", "claim", "reason", "resolution_condition"):
                 text(objection[key], "Material objection " + key)
             strategy.evidence(records, artifacts, objection["evidence"])
+            if slate_candidate_ids is not None:
+                strings(objection["candidate_ids"], "Candidates of a slate objection", code="invalid_value_review")
+                if not set(objection["candidate_ids"]) <= slate_candidate_ids:
+                    raise ResearchError("invalid_value_review", "Name only candidates of the slate packet",
+                                        {"objection_id": objection["id"], "candidate_ids": sorted(slate_candidate_ids)})
             if objection["id"] in objection_ids:
                 raise ResearchError("invalid_value_review", "Material objection identities must be unique")
             objection_ids.add(objection["id"])
@@ -541,12 +554,29 @@ def collect_problem_objections(records, artifacts, reviews):
     return [found[key] for key in sorted(found)]
 
 
+def collect_problem_post_objections(records, artifacts, reviews):
+    """The material findings of the given bar and result ancestries and the slate objections that concern the
+    current statement."""
+    from .problem_candidates import collect_applicable_slate_objections
+    found = {objection['id']: objection for objection in collect_problem_objections(records, artifacts, reviews)}
+    for _, objection in collect_applicable_slate_objections(records, artifacts):
+        if 'claim' not in found.get(objection['id'], {}):
+            found[objection['id']] = objection
+    return [found[key] for key in sorted(found)]
+
+
+def find_undelivered_bar_ids(records, artifacts, assignment_id, bar_ids):
+    """The named bars whose content no observed packet of the reviewer's lineage delivered."""
+    from .direction_reviews import collect_observed_packets
+    delivered = {bar['id'] for _, packet in collect_observed_packets(records, artifacts, assignment_id)
+                 for bar in packet.get('bars', [])}
+    return sorted(set(bar_ids) - delivered)
+
+
 def assess_problem_objections(records, artifacts, subject, bars, reviews, evidence_digest):
     """Apply the common evidenced-resolution rule without a strategic dossier."""
-    from .problem_candidates import find_current_slate_reviews
     dispositions = []
-    for objection in collect_problem_objections(records, artifacts,
-                                                bars + find_current_slate_reviews(records, artifacts) + reviews):
+    for objection in collect_problem_post_objections(records, artifacts, bars + reviews):
         adjudication = max((saved for saved in records.get('review_adjudication', {}).values()
             if saved['objection_id'] == objection['id'] and saved.get('subject') == subject
             and saved.get('problem_evidence_digest') == evidence_digest),
@@ -596,6 +626,10 @@ def assess_problem_reviews(records, artifacts, review_ids=None, bar_review_ids=N
                 review_id=review['id'], assurances=pending))
         if set(findings['bar_ids']) != set(bar_review_ids):
             obligations.append(obligation('review_bar_mismatch', 'Both problem results must assess the selected independent bars.', review_id=review['id']))
+        undelivered = find_undelivered_bar_ids(records, artifacts, review['assignment_id'], findings['bar_ids'])
+        if undelivered:
+            obligations.append(obligation('review_bar_mismatch', 'Each problem result must receive the bars it assesses.',
+                                          review_id=review['id'], bar_ids=undelivered))
     expected, evidence_digest = None, None
     if reviews and check_evidence:
         expected = describe_problem_evidence(records, artifacts)

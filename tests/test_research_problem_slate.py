@@ -7,6 +7,7 @@ from unittest.mock import patch
 from research_harness import problem_candidates, research_decisions as decisions, review_protocol as protocol
 from research_harness.cli import status_report
 from research_harness.errors import ResearchError
+from research_harness.evidence import digest
 from research_harness.gates import gate_state
 from research_harness.report_views import next_summary, status_summary
 from test_research_problem_candidates import build_slate
@@ -190,7 +191,7 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assertEqual((packet["protocol"], packet["subject"]), ("exactory-problem-review-v2", assignment["subject"]))
         self.assertEqual(sorted(packet["bar_ids"]), ["review-bar-first", "review-bar-second"])
         self.assertEqual(sorted(bar["id"] for bar in packet["bars"]), sorted(packet["bar_ids"]))
-        self.assertEqual(packet["candidates"], [{"id": identifier, "statement": row["statement"],
+        self.assertEqual(packet["candidates"], [{"id": identifier, "digest": digest(row), "statement": row["statement"],
             "source": {"kind": row["source"]["kind"], "reference": row["source"]["reference"]},
             "observation": row["observation"], "neighbours": row["neighbours"], "potential": row["potential"]}
             for identifier, row in sorted(records["problem_candidate"].items())])
@@ -368,6 +369,45 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assertEqual(self.record_slate(bar_review_ids=bar_review_ids, review_ids=[refreshed["id"]])["review_ids"],
                          [refreshed["id"]])
 
+    def test_slate_objections_name_candidates_of_the_packet(self):
+        self.record_candidate()
+        self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
+        self.observe_bars()
+        objection = {"id": "restated", "claim": "Candidate 1 restates a known question.",
+                     "reason": "The read survey states it.", "evidence": [self.supporting],
+                     "resolution_condition": "Show what the candidate adds to the known question."}
+        for reviewer, changes in (("first", {}), ("second", {"candidate_ids": ["candidate-3"]})):
+            with self.subTest(reviewer=reviewer):
+                output = self.build_slate_output(["candidate-1", "candidate-2"])
+                output["objections"] = [dict(objection, **changes)]
+                payload = self.observe("slate", reviewer, output, record=False)
+                self.assert_error("invalid_value_review", lambda: self.mutate(decisions.record_value_review, payload))
+        schema = json.dumps(protocol._PROBLEM_SLATE_SCHEMA["objections"][0])
+        self.assertIn('"candidate_ids": []', schema)
+
+    def test_a_bar_refresh_keeps_an_applicable_slate_objection(self):
+        original = protocol.canonical_prompt
+
+        def previous_prompt(role, **options):
+            if options.get("orchestration") == "problem_creation":
+                options["version"] = 1
+            return original(role, **options)
+        self.record_candidate()
+        with patch.object(protocol, "canonical_prompt", side_effect=previous_prompt):
+            self.observe_bars()
+        output = self.build_slate_output(["candidate-1"])
+        output["objections"] = [{"id": "restated", "claim": "Candidate 1 restates a known question.",
+            "reason": "The read survey states it.", "evidence": [self.supporting],
+            "resolution_condition": "Show what the candidate adds to the known question.", "candidate_ids": ["candidate-1"]}]
+        self.observe("slate", "first", output)
+        for reviewer in ("first", "second"):
+            self.observe("bar", reviewer, identifier="bar-" + reviewer + "-v2")
+        self.record_slate(bar_review_ids=["review-bar-first-v2", "review-bar-second-v2"])
+        self.select_statement(candidate_id="candidate-1")
+        packet = protocol.build_packet(self.read_records(), self.artifacts, None, "result", "first")
+        self.assertEqual([row["id"] for row in packet["material_objections"]], ["restated"])
+        self.assertEqual(sorted(packet["bar_ids"]), ["review-bar-first-v2", "review-bar-second-v2"])
+
     def test_a_stale_slate_counts_as_no_slate_for_next_and_the_milestone(self):
         self.record_candidate()
         self.observe_bars()
@@ -413,3 +453,93 @@ class ProblemSlateCurrencyTests(ProblemDeliveryCase):
         codes = {row["code"] for row in status_report(self.store)["obligations"]}
         self.assertNotIn("problem_slate_stale", codes)
         self.assertIn("problem_candidate_unselected", codes)
+
+
+class ProblemResultCalibrationTests(ProblemDeliveryCase):
+    """A result reviewer assesses calibrated bars only after they reach it."""
+
+    version_two_bar_ids = ["review-bar-first-v2", "review-bar-second-v2"]
+
+    def prepare_legacy_results(self):
+        """Emulate a store of 0.53.0: version 1 bars and result reviews, recorded before the calibration refusal."""
+        original = protocol.canonical_prompt
+
+        def previous_prompt(role, **options):
+            if options.get("orchestration") == "problem_creation":
+                options["version"] = 1
+            return original(role, **options)
+        self.initialize_problem()
+        self.record_candidate()
+        self.selected = self.select_statement(candidate_id="candidate-1")
+        item = self.record_full_reading()
+        from research_harness.problem_attempt import record_attempt
+        from test_research_problem_attempt import build_attempt
+        from test_research_problem_assessment import build_assessment
+        self.mutate(record_attempt, build_attempt(reading=item))
+        with patch.object(protocol, "canonical_prompt", side_effect=previous_prompt):
+            self.observe_bars()
+        self.observe_openness()
+        self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})
+        self.mutate(self.load_problem_module().record_value, self.build_value([item]))
+        self.mutate(self.load_problem_module().record_assessment, build_assessment(self.selected))
+        with patch.object(protocol, "canonical_prompt", side_effect=previous_prompt), \
+                patch.object(protocol, "require_calibrated_bars", return_value=None):
+            for reviewer in ("first", "second"):
+                output = self.build_review_output("result")
+                del output["value"]["rubric"]
+                del output["value"]["rubric_evidence"]
+                self.observe("result", reviewer, output)
+        self.mutate(self.load_problem_module().record_assessment, build_assessment(self.selected, identifier="assessment-2"))
+        with self.assertRaises(ResearchError) as caught:
+            self.assign("result", "first", identifier="uncalibrated")
+        self.assertEqual((caught.exception.code, caught.exception.details),
+                         ("problem_bar_calibration_required", {"review_id": "review-bar-first"}))
+        for reviewer in ("first", "second"):
+            self.observe("bar", reviewer, identifier="bar-" + reviewer + "-v2")
+        self.record_slate(bar_review_ids=self.version_two_bar_ids)
+
+    def build_calibrated_result(self):
+        output = self.build_review_output("result")
+        output["value"]["bar_ids"] = list(self.version_two_bar_ids)
+        return output
+
+    def test_a_refreshed_result_receives_the_calibrated_bars_and_the_gate_is_ready(self):
+        self.prepare_legacy_results()
+        for reviewer in ("first", "second"):
+            self.observe("result", reviewer, self.build_calibrated_result(), identifier="refreshed-" + reviewer)
+            assignment = self.store.snapshot()["records"]["review_assignment"]["refreshed-" + reviewer]
+            packet = json.loads(self.artifacts.read(assignment["packet"]))
+            self.assertEqual(assignment["context"], {"prior_assignment_id": "result-" + reviewer})
+            self.assertEqual((sorted(packet["bar_ids"]), sorted(bar["id"] for bar in packet["bars"])),
+                             (self.version_two_bar_ids, self.version_two_bar_ids))
+            self.assertEqual([bar["id"] for bar in packet["own_bars"]], ["review-bar-" + reviewer + "-v2"])
+        reviews = decisions.assess_problem_reviews(self.store.snapshot()["records"], self.artifacts)
+        self.assertTrue(reviews["ready"], reviews["obligations"])
+        self.mutate(self.load_problem_module().record_decision, {"id": "decision", "action": "post",
+            "review_ids": reviews["review_ids"], "bar_review_ids": reviews["bar_review_ids"],
+            "reason": "Both results assess the calibrated bars they received."})
+        report = gate_state(self.store.snapshot()["records"], self.artifacts, "post")
+        self.assertTrue(report["ready"], report["obligations"])
+
+    def test_a_result_naming_bars_never_delivered_is_refused_and_blocks_the_gate(self):
+        self.prepare_legacy_results()
+
+        def build_bars_without_delivery(records, artifacts, packet, reviewer_id):
+            """The result continuation of the previous wave, which listed no bars."""
+            return [review for review, _ in protocol._bars(records, artifacts, None, subject=packet["subject"])]
+        with patch.object(protocol, "add_problem_bars", side_effect=build_bars_without_delivery):
+            payload = self.observe("result", "second", self.build_calibrated_result(), record=False,
+                                   identifier="refreshed-second")
+        packet = json.loads(self.artifacts.read(self.store.snapshot()["records"]["review_assignment"]["refreshed-second"]["packet"]))
+        self.assertNotIn("bars", packet)
+        with self.assertRaises(ResearchError) as caught:
+            self.mutate(decisions.record_value_review, payload)
+        self.assertEqual((caught.exception.code, caught.exception.details),
+                         ("review_bar_mismatch", {"bar_ids": self.version_two_bar_ids}))
+        with patch.object(decisions, "find_undelivered_bar_ids", return_value=[]):
+            self.mutate(decisions.record_value_review, payload)
+        self.observe("result", "first", self.build_calibrated_result(), identifier="refreshed-first")
+        reviews = decisions.assess_problem_reviews(self.store.snapshot()["records"], self.artifacts)
+        self.assertIn({"code": "review_bar_mismatch", "explanation": "Each problem result must receive the bars it assesses.",
+                       "review_id": "review-refreshed-second", "bar_ids": self.version_two_bar_ids}, reviews["obligations"])
+        self.assertFalse(reviews["ready"])

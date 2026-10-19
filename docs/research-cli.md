@@ -1439,12 +1439,15 @@ the two bar reviewers: it continues that reviewer's bar session and slot
 (`review_bar_continuity`). The template is `exactory-problem-review-v2/slate` and
 the subject is `{kind: "problem", statement_id: null}`. The packet carries the
 area, field, source inventory, `bar_ids`, `bars`, the reviewer's own bars and
-`candidates`: the id, statement, source kind and reference, observation,
-neighbours and potential grades of every current candidate. Notes and
-dispositions are withheld. The response names both packet bars in `bar_ids`,
+`candidates`: the id, record digest, statement, source kind and reference,
+observation, neighbours and potential grades of every current candidate. Notes
+and dispositions are withheld. The response names both packet bars in `bar_ids`,
 leaves `work_items` empty, reports the five problem assurances as `not_assessed`
 and adds `value.rubric_potential`, one `{significance: {B1, B2}, priority}` entry
-for exactly each packet candidate. Any other shape returns `invalid_value_review`.
+for exactly each packet candidate. Each material objection of a slate review also
+carries `candidate_ids`: the distinct packet candidates it concerns, or an empty
+list for an objection against the slate as a whole. Any other shape returns
+`invalid_value_review`.
 
 The slate packet also carries `candidate_set_digest`, the digest of the sorted
 `{id, digest}` of every current candidate, and a cited review must have assessed
@@ -1459,19 +1462,25 @@ review_ids}`. The new response covers the earlier material objections in
 `objection_findings`. While the candidate set and the bars are unchanged, another
 slate assignment for that reviewer returns `review_resampling_forbidden`.
 
-The material objections of every observed slate review of the current candidate
-set and the current bars bind the post like the bars' objections, whether or not
-the latest slate cites the review; `review_ids` names the reviews that the
-selection rests on. These objections join the result packets'
-`material_objections`, so each result review needs an `objection_findings` entry
-for them (`review_objection_history_incomplete`), and they remain post
-obligations (`research_objection_unresolved`) until both result reviews record an
-evidenced resolution or a focused adjudication finds them not upheld. Adjudicate
-a slate-review objection with the two bar review ids in `context.review_ids`, as
-for a bar objection; the adjudicator packet's `assessments` add the current slate
-reviews. A slate review of another candidate set or other bars leaves the post
-path; its findings stay in its reviewer's history, and a result review that keeps
-them `continuing` or `contested` keeps them material.
+The material objections of observed slate reviews bind the post like the bars'
+objections, whether or not the latest slate cites the review; `review_ids` names
+the reviews that the selection rests on. An objection that names candidates
+applies while every named candidate is current with the record digest that the
+review's packet carried, and it concerns the statement that formulates one of
+them. An objection with empty `candidate_ids` applies while the reviewed
+candidate set (`candidate_set_digest`) is current and concerns every statement.
+A change of the bars erases no objection, and an objection that names only other
+candidates does not block the current statement. The applicable objections that
+concern the current statement join the result packets' `material_objections`,
+so each result review needs an `objection_findings` entry for them
+(`review_objection_history_incomplete`), and they remain post obligations
+(`research_objection_unresolved`) until both result reviews record an evidenced
+resolution or a focused adjudication finds them not upheld. Adjudicate a
+slate-review objection with the two bar review ids in `context.review_ids`, as
+for a bar objection; the adjudicator packet's `assessments` add the slate reviews
+that raised it. An objection that no longer applies leaves the post path; its
+findings stay in its reviewer's history, and a result review that keeps them
+`continuing` or `contested` keeps them material.
 
 Formulate a selected candidate with `problem-statement` and its `candidate_id`.
 The post gate requires a slate (`problem_slate_missing`) and a current statement
@@ -1710,7 +1719,22 @@ value withheld. The selected statement must retain the record's area, so the
 bars remain established for their original scope; a statement in another area
 is refused during bar assessment with `review_bar_mismatch`. Another subject
 class requires a new problem record and its own bars. Two observed bars are
-required before a result packet. The result template
+required before a result packet, and a result assignment, its source-request
+continuations, refreshes and context repairs are refused before dispatch while a
+current bar or a bar that the latest slate cites was recorded on the version 1
+template (`problem_bar_calibration_required` naming `review_id`). Every result
+packet, including a continuation or a refresh, carries the current `bar_ids`,
+`bars` and the reviewer's `own_bars`. A result review names only bars whose
+content an observed packet of its lineage delivered: `value-review` refuses
+another with `review_bar_mismatch` naming `bar_ids`, and the post gate reports
+the same code for a recorded review. Each result packet also carries
+`problem_review_currency`, the digest of `{problem_evidence_digest, bar_ids,
+slate_objection_ids}` (the sorted current bars and the sorted applicable slate
+objections that concern the statement). A new result assignment for a reviewer
+whose completed result review was given under another currency continues that
+reviewer's session and slot as a refresh, and its `problem_refresh` adds
+`previous_problem_review_currency` and `problem_review_currency`; under the same
+currency it returns `review_resampling_forbidden`. The result template
 `exactory-problem-review-v2/result` receives `problem_evidence`
 with the claim, attempt, accepted results, openness, value, assessment, resolved
 `assessment_evidence`, citations, delivered readings/passages,
