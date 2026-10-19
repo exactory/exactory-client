@@ -250,6 +250,37 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assertEqual(self.record_slate(review_ids=[review["id"]])["review_ids"], ["review-slate-first"])
 
     def test_slate_review_context_repair_keeps_the_bars_and_candidates(self):
+        original, review = self.prepare_repaired_slate_review()
+        self.assertEqual(self.record_slate(review_ids=[review["id"]])["review_ids"], ["review-repaired-slate"])
+
+    def test_a_reviewer_installed_by_a_slate_repair_refreshes_the_slate(self):
+        original, review = self.prepare_repaired_slate_review()
+        self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
+        refreshed = self.assign("slate", "repaired-first", identifier="repaired-slate-refresh")
+        packet = json.loads(self.artifacts.read(refreshed["packet"]))
+        repaired = self.read_records()["review_assignment"]["repaired-slate"]
+        self.assertEqual((refreshed["context"], refreshed["history_assignment_id"], refreshed["slot_id"]),
+                         ({"prior_assignment_id": "repaired-slate"}, "repaired-slate", repaired["slot_id"]))
+        self.assertEqual([candidate["id"] for candidate in packet["candidates"]], ["candidate-1", "candidate-2"])
+        self.assertEqual([bar["id"] for bar in packet["own_bars"]], ["review-bar-first"])
+        self.assertEqual(packet["problem_refresh"]["review_ids"], [original["id"], review["id"]])
+        output = self.build_slate_output(["candidate-1", "candidate-2"])
+        output["reassessment"] = {"assignment_id": "slate-first", "findings": [{"review_id": original["id"],
+            "disposition": "revised", "reason": "The added candidate changes the comparison.", "evidence": [self.supporting]}]}
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {"id": "attempt-repaired-slate-refresh", "assignment_id": refreshed["id"]},
+                        credential="test-only")
+        saved = self.mutate(decisions.record_value_review,
+                            dict(output, id="review-repaired-slate-refresh", dossier_id=None, assignment_id=refreshed["id"]))["result"]
+        deferred = [{"candidate_id": "candidate-2", "evidence_needed": "A documented active line."}]
+        self.assertEqual(self.record_slate(deferred=deferred, review_ids=[saved["id"]])["review_ids"], [saved["id"]])
+        records = self.read_records()
+        self.assertEqual(records["review_assignment"]["repaired-slate"]["context"]["context_repair"]["assignment_id"], "slate-first")
+        self.assertLessEqual({"review-slate-first", "review-repaired-slate", "review-repaired-slate-refresh"},
+                             set(records["value_review"]))
+
+    def prepare_repaired_slate_review(self):
+        """A slate review by `first`, contaminated, then repaired by the replacement reviewer `repaired-first`."""
         self.record_candidate()
         self.observe_bars()
         original = self.observe("slate", "first", self.build_slate_output(["candidate-1"]))
@@ -279,7 +310,7 @@ class ProblemSlateTests(ProblemDeliveryCase):
                         credential="test-only")
         review = self.mutate(decisions.record_value_review,
                              dict(output, id="review-repaired-slate", dossier_id=None, assignment_id=repaired["id"]))["result"]
-        self.assertEqual(self.record_slate(review_ids=[review["id"]])["review_ids"], ["review-repaired-slate"])
+        return original, review
 
     def test_changed_candidates_refresh_the_slate_reviewer_in_its_session(self):
         self.record_candidate()

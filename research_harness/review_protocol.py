@@ -515,15 +515,28 @@ def require_calibrated_bars(records, bars):
                                 'Refresh this bar on the version 2 template before the result review', {'review_id': review['id']})
 
 
+def collect_result_objections(records, artifacts, subject, evidence_digest, bars):
+    """The material objections a result reviewer receives: the bars' and earlier results' findings and the slate
+    objections that concern the statement, each as its latest version; a current peer result stays hidden."""
+    from .research_decisions import collect_problem_post_objections
+    previous = []
+    for review in records.get('value_review', {}).values():
+        if review['payload']['stage'] == 'result' and review.get('subject') == subject:
+            supplied = _read_json(artifacts, _get(records, 'review_assignment', review['assignment_id'])['packet'])
+            if supplied.get('problem_evidence_digest') != evidence_digest:
+                previous.append(review)
+    return collect_problem_post_objections(records, artifacts, bars + previous)
+
+
 def compute_problem_review_currency(records, artifacts):
-    """What a problem result review assesses: the evidence, the current bars and the slate objections that concern
-    the current statement. A changed currency permits the same reviewer to reassess."""
-    from .problem_candidates import collect_applicable_slate_objections
+    """What a problem result review assesses: the evidence, the current bars and the material versions of the
+    objections it receives. A changed currency permits the same reviewer to reassess."""
     from .problem_claims import compute_problem_evidence_digest
-    return digest({'problem_evidence_digest': compute_problem_evidence_digest(records, artifacts),
-                   'bar_ids': sorted(find_current_problem_bar_ids(records, artifacts)),
-                   'slate_objection_ids': sorted({objection['id'] for _, objection
-                                                  in collect_applicable_slate_objections(records, artifacts)})})
+    evidence_digest = compute_problem_evidence_digest(records, artifacts)
+    bars = [review for review, _ in _bars(records, artifacts, None, subject=build_problem_subject(records, 'slate'))]
+    objections = collect_result_objections(records, artifacts, build_problem_subject(records), evidence_digest, bars)
+    return digest({'problem_evidence_digest': evidence_digest, 'bar_ids': sorted(review['id'] for review in bars),
+                   'objection_versions': [[row['id'], row['material_version']] for row in objections]})
 
 
 def add_problem_bars(records, artifacts, packet, reviewer_id, slot=None):
@@ -625,10 +638,11 @@ def add_direction_evidence(records, artifacts, packet, dossier_id):
     packet['direction_evidence'] = build_direction_evidence(records, artifacts, describe_direction(records, artifacts), dossier)
 
 
-def build_rubric_objection(records, artifacts, saved, context, packet):
-    """Build the named problem objection from material findings or rubric shortfalls."""
-    from .research_decisions import collect_problem_objections
-    objections = [objection for objection in collect_problem_objections(records, artifacts, saved)
+def build_rubric_objection(records, artifacts, saved, context, packet, sources):
+    """Build the named problem objection from the latest material version found in the sources' findings and the
+    applicable slate objections, or from a rubric shortfall of the named result pair."""
+    from .research_decisions import collect_problem_post_objections
+    objections = [objection for objection in collect_problem_post_objections(records, artifacts, sources)
                   if objection['id'] == context.get('objection_id') and 'claim' in objection]
     rubric_id = problem_rubric.parse_rubric_objection_id(context.get('objection_id'))
     if rubric_id is not None:
@@ -652,6 +666,10 @@ def build_rubric_objection(records, artifacts, saved, context, packet):
                     'reason': ' '.join(findings['rubric_evidence'][key] for key in evidence_items),
                     'evidence': findings['evidence'], 'resolution_condition': shortfall['required']}]
                 packet['rubric_grades'] = [row['payload']['value']['rubric'] for row in saved]
+                anchor = getattr(problem_rubric, 'ANCHORS', {}).get(item)
+                if anchor is None:
+                    raise ResearchError('review_packet_incomplete', 'The rubric item has no recorded definition', {'item': item})
+                packet['rubric_definition'] = {'item': item, 'definition': anchor['definition'], 'threshold': anchor['threshold']}
     return objections
 
 
@@ -693,7 +711,12 @@ def add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id
     assessed = reviews + [_payload(review) for review in slates]
     objections = [o for r in reviews for o in r.get('objections', []) if o['id'] == context.get('objection_id')]
     if problem:
-        objections = build_rubric_objection(records, artifacts, saved + slates, context, packet)
+        # The adjudicated version is the latest one that the post gate holds, so collect over the current pairs too.
+        from .research_decisions import _collect_problem_reviews
+        current = [records['value_review'][identifier] for stage in ('bar', 'result')
+                   for identifier in _collect_problem_reviews(records, stage, packet['subject'])]
+        objections = build_rubric_objection(records, artifacts, saved, context, packet, saved + current)
+        packet['bar_calibrations'] = [_payload(review) for review, _ in _bars(records, artifacts, None, subject=packet['subject'])]
     if not objections:
         raise ResearchError('review_objection_missing', 'The focused objection must exist in the original assessments')
     correction = context.get('correction')
@@ -722,15 +745,8 @@ def add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id
 
 def add_problem_objections(records, artifacts, packet, bars):
     """Supply prior material findings without exposing a current peer result."""
-    from .research_decisions import collect_problem_post_objections
-    previous = []
-    for review in records.get('value_review', {}).values():
-        if review['payload']['stage'] == 'result' and review.get('subject') == packet['subject']:
-            assignment = _get(records, 'review_assignment', review['assignment_id'])
-            supplied = _read_json(artifacts, assignment['packet'])
-            if supplied.get('problem_evidence_digest') != packet['problem_evidence_digest']:
-                previous.append(review)
-    packet['material_objections'] = collect_problem_post_objections(records, artifacts, bars + previous)
+    packet['material_objections'] = collect_result_objections(records, artifacts, packet['subject'],
+                                                              packet['problem_evidence_digest'], bars)
 
 
 def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
@@ -784,7 +800,7 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                         problem_evidence_digest=packet['problem_evidence_digest'],
                         problem_review_currency=packet['problem_review_currency'])
             elif problem and role == 'slate' and refreshed:
-                add_problem_bars(records, artifacts, packet, reviewer_id)
+                add_problem_bars(records, artifacts, packet, reviewer_id, slot=context_repair.slot_id(records, prior))
                 add_problem_candidates(records, packet)
                 packet['problem_refresh'] = {'assignment_id': prior['id'],
                     'previous_candidate_set_digest': previous['candidate_set_digest'],
