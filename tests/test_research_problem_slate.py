@@ -33,6 +33,17 @@ class ProblemSlateTests(ProblemDeliveryCase):
                                                for identifier in candidate_ids}
         return output
 
+    def test_a_slate_review_after_the_statement_keeps_realized_problem_assurances_unassessed(self):
+        self.record_candidate()
+        self.observe_bars()
+        self.select_statement(candidate_id="candidate-1")
+        assured = self.build_slate_output(["candidate-1"])
+        assured["value"]["assurances"][0]["status"] = "passed"
+        with self.assertRaises(ResearchError) as caught:
+            self.observe("slate", "first", assured)
+        self.assertEqual((caught.exception.code, caught.exception.message), ("invalid_value_review",
+            "This role grades candidate potential; leave every realized-problem assurance not_assessed."))
+
     def test_slate_needs_two_ready_bars(self):
         self.record_candidate()
         self.assert_error("problem_bar_pending", lambda: self.record_slate())
@@ -482,7 +493,8 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.observe("slate", "first", output)
         self.select_statement(candidate_id="candidate-1")
         records = self.read_records()
-        self.assertEqual(len(problem_candidates.collect_applicable_slate_objections(records, self.artifacts)), 1)
+        self.assertEqual([review["id"] for review in problem_candidates.collect_bound_slate_reviews(records, self.artifacts)],
+                         ["review-slate-first"])
         without_ids = copy.deepcopy(records)
         del without_ids["value_review"]["review-slate-first"]["payload"]["objections"][0]["candidate_ids"]
         without_digest = copy.deepcopy(records)
@@ -492,7 +504,7 @@ class ProblemSlateTests(ProblemDeliveryCase):
         assignment["packet"] = self.artifacts.put(json.dumps(packet).encode(), "application/json")
         for name, changed in (("candidate_ids", without_ids), ("candidate_set_digest", without_digest)):
             with self.subTest(missing=name):
-                self.assertEqual(problem_candidates.collect_applicable_slate_objections(changed, self.artifacts), [])
+                self.assertEqual(problem_candidates.collect_bound_slate_reviews(changed, self.artifacts), [])
 
     def test_a_stale_slate_counts_as_no_slate_for_next_and_the_milestone(self):
         self.record_candidate()

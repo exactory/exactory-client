@@ -112,8 +112,10 @@ concerns, or none for the slate as a whole. It binds the result reviews and the
 post like the bars' objections, whether or not the slate cites the review: it
 follows each named candidate through its later versions, a whole-slate objection
 binds every statement, and it stays until evidence or an adjudication resolves
-it. It is adjudicated with the two bars. A reviewer installed in a slate slot by a
-context repair also refreshes its slate review there.
+it. A refreshed slate review that keeps such an objection `continuing` or
+`contested` with a new reason or new evidence states a new version of it for the
+same candidates. It is adjudicated with the two bars. A reviewer installed in a
+slate slot by a context repair also refreshes its slate review there.
 
 A result review is refused before dispatch while a current or cited bar is on
 the version 1 template, and every result packet carries the current bars, also
@@ -248,10 +250,18 @@ value, citations and stopping, plus every rubric item through `value.rubric`
 and `value.rubric_evidence`. A below-threshold result grade blocks posting
 until repaired or resolved by a ready focused `not_upheld` adjudication of
 `rubric:<review_id>:<item>` for the same subject and current evidence digest,
-whose packet carried both bar calibrations and the item's rubric definition.
-A material objection is resolved in its latest material version: a resolution or
-an adjudication of an earlier version leaves a changed objection open, and the
-same reviewers reassess it in their sessions.
+whose packet carried the original calibrations, that is the bars the adjudicated
+results were graded against, and the item's rubric definition. A bar that a
+context repair installed later reaches the adjudicator apart from them.
+A material objection is resolved in its latest material version: a restated
+objection and a `continuing` or `contested` finding with a new reason or new
+evidence are new versions, a resolution or an adjudication of an earlier version
+leaves a changed objection open, and the same reviewers reassess it in their
+sessions. The adjudicator of a version receives the review that stated it and the
+evidence that review received for it, apart from the original pair's evidence,
+and the post gate accepts the adjudication only when its packet delivered them.
+The same adjudicator reassesses after a changed version or an incomplete earlier
+packet.
 Original grades remain visible. Version 1 assignments stay verified, while
 the post gate requires version 2 result reviews. Reviewers must be independent of every recorded
 author, and pending source requests remain obligations. Record a `post`

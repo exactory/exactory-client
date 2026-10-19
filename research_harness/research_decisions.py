@@ -68,7 +68,7 @@ def _validate_slate_potential(value, packet):
     if set(value["bar_ids"]) != set(packet["bar_ids"]):
         raise ResearchError("invalid_value_review", "Assess both bars of the slate packet", {"bar_ids": packet["bar_ids"]})
     if any(check["status"] != "not_assessed" for check in value["assurances"]):
-        raise ResearchError("invalid_value_review", "A slate precedes the statement; leave every problem assurance not_assessed")
+        raise ResearchError("invalid_value_review", "This role grades candidate potential; leave every realized-problem assurance not_assessed.")
     candidate_ids = sorted(candidate["id"] for candidate in packet["candidates"])
     potential = value["rubric_potential"]
     if not isinstance(potential, dict) or sorted(potential) != candidate_ids:
@@ -548,45 +548,55 @@ def state_objection(review, objection):
 
 
 def _select_latest_versions(versions):
-    """Per objection id, the latest stated version with the earlier versions as its history. A finding that keeps an
-    objection continuing or contested counts only while no review states that objection."""
+    """Per objection id, in folded order, the latest version with the earlier versions as its history."""
     by_id = {}
     for version in versions:
-        by_id.setdefault(version['id'], {})[version['material_version']] = version
-    selected = []
-    for identifier in sorted(by_id):
-        rows = list(by_id[identifier].values())
-        stated = [row for row in rows if 'claim' in row] or rows
-        stated.sort(key=lambda row: (row['recorded_revision'], row['review_id']))
-        selected.append(dict(stated[-1], history=stated[:-1]))
-    return selected
+        by_id.setdefault(version['id'], {}).setdefault(version['material_version'], version)
+    return [dict(list(rows.values())[-1], history=list(rows.values())[:-1]) for _, rows in sorted(by_id.items())]
 
 
-def _collect_objection_versions(records, artifacts, reviews):
-    from .direction_reviews import collect_observed_packets
-    identifiers = {assignment['id'] for review in reviews
-                   for assignment, _ in collect_observed_packets(records, artifacts, review['assignment_id'])}
-    versions = []
-    for saved in sorted(records.get('value_review', {}).values(), key=lambda row: (row['recorded_revision'], row['id'])):
-        if saved['assignment_id'] in identifiers and saved.get('subject', {}).get('kind') == 'problem':
-            versions.extend(state_objection(saved, objection) for objection in saved['payload']['objections'])
-            versions.extend(state_objection(saved, {key: finding[key] for key in ('id', 'reason', 'evidence')})
-                            for finding in saved['payload']['value']['objection_findings']
-                            if finding['status'] in ('continuing', 'contested'))
+def _fold_objection_versions(reviews):
+    """Fold the reviews' stated objections and their continuing or contested findings, in recorded order, into the
+    versions of each objection. A stated objection is a new version. A finding whose reason or evidence differs from
+    the latest version is a new version that keeps the claim, the resolution condition and the candidates of the
+    version it continues, unless the same review states that objection. A finding about an objection that no review
+    states is a version without a claim."""
+    latest, versions = {}, []
+    for review in sorted(reviews, key=lambda row: (row['recorded_revision'], row['id'])):
+        stated = set()
+        for objection in review['payload']['objections']:
+            latest[objection['id']] = state_objection(review, objection)
+            versions.append(latest[objection['id']])
+            stated.add(objection['id'])
+        for finding in review['payload']['value']['objection_findings']:
+            if finding['status'] not in ('continuing', 'contested') or finding['id'] in stated:
+                continue
+            current = latest.get(finding['id'])
+            if current is not None and (finding['reason'], finding['evidence']) == (current['reason'], current['evidence']):
+                continue
+            kept = {key: current[key] for key in ('claim', 'resolution_condition', 'candidate_ids')
+                    if current is not None and key in current}
+            latest[finding['id']] = state_objection(review, dict(kept, **{key: finding[key] for key in ('id', 'reason', 'evidence')}))
+            versions.append(latest[finding['id']])
     return versions
 
 
-def collect_problem_objections(records, artifacts, reviews):
-    """Retain material findings from the exact observed bar and result ancestries, each as its latest version."""
-    return _select_latest_versions(_collect_objection_versions(records, artifacts, reviews))
-
-
 def collect_problem_post_objections(records, artifacts, reviews):
-    """The material findings of the given bar and result ancestries and the slate objections that concern the
-    current statement, each as its latest version with its history."""
-    from .problem_candidates import collect_applicable_slate_objections
-    versions = _collect_objection_versions(records, artifacts, reviews)
-    versions.extend(objection for _, objection in collect_applicable_slate_objections(records, artifacts))
+    """The material objections that bind the current statement: the findings of the given bar and result reviews'
+    observed ancestries and of the slate reviews bound to candidates, each as its latest version with its history."""
+    from .direction_reviews import collect_observed_packets
+    from .problem_candidates import collect_bound_slate_reviews, project_slate_objection
+    identifiers = {assignment['id'] for review in reviews
+                   for assignment, _ in collect_observed_packets(records, artifacts, review['assignment_id'])}
+    sources = {saved['id']: saved for saved in records.get('value_review', {}).values()
+               if saved['assignment_id'] in identifiers and saved.get('subject', {}).get('kind') == 'problem'}
+    sources.update((review['id'], review) for review in collect_bound_slate_reviews(records, artifacts))
+    versions = []
+    for version in _fold_objection_versions(sources.values()):
+        # A slate objection binds a statement only through the candidates it names.
+        version = project_slate_objection(records, version) if 'candidate_ids' in version else version
+        if version is not None:
+            versions.append(version)
     return _select_latest_versions(versions)
 
 
@@ -594,11 +604,19 @@ def read_assignment_packet(records, artifacts, assignment_id):
     return json.loads(artifacts.read(records['review_assignment'][assignment_id]['packet']))
 
 
-def is_complete_adjudication(records, artifacts, adjudication, *, rubric=False):
-    """Whether the observed adjudicator packet carried both bar calibrations and, for a rubric shortfall, the rubric
-    item's definition and threshold."""
-    packet = read_assignment_packet(records, artifacts, adjudication['assignment_id'])
-    return bool(packet.get('bar_calibrations')) and (not rubric or bool(packet.get('rubric_definition')))
+def is_complete_adjudication(records, artifacts, adjudication, *, rubric=False, version=None):
+    """Whether the observed adjudicator packet delivered the adjudicated pair's original bar calibrations, for a rubric
+    shortfall the item's definition and threshold, and for a material objection the stating review and the evidence
+    supplied for its current version."""
+    from .review_protocol import describe_version_evidence, resolve_original_calibrations
+    assignment = records['review_assignment'][adjudication['assignment_id']]
+    packet = read_assignment_packet(records, artifacts, assignment['id'])
+    if packet.get('bar_calibrations') != resolve_original_calibrations(records, artifacts, assignment['context']['review_ids']):
+        return False
+    if rubric and not packet.get('rubric_definition'):
+        return False
+    return version is None or all(packet.get(key) == value
+                                  for key, value in describe_version_evidence(records, artifacts, version).items())
 
 
 def find_undelivered_bar_ids(records, artifacts, assignment_id, bar_ids):
@@ -622,7 +640,7 @@ def assess_problem_objections(records, artifacts, subject, bars, reviews, eviden
             if saved['objection_id'] == objection['id'] and saved.get('subject') == subject
             and saved.get('problem_evidence_digest') == evidence_digest
             and read_assignment_packet(records, artifacts, saved['assignment_id'])['objection'].get('material_version') == version
-            and is_complete_adjudication(records, artifacts, saved)),
+            and is_complete_adjudication(records, artifacts, saved, version=objection)),
             key=lambda saved: saved['recorded_revision'], default=None)
         given = len(reviews) == 2 and all(delivered[review['id']].get(objection['id']) == version for review in reviews)
         dispositions.append({'id': objection['id'], 'disposition': 'resolved' if given else 'continuing',

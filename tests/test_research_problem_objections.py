@@ -342,7 +342,10 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         records = self.store.snapshot()["records"]
         previous, refreshed = (json.loads(self.artifacts.read(records["review_assignment"][identifier]["packet"]))
                                for identifier in ("focused", "focused-refreshed"))
-        current = protocol.build_packet(records, self.artifacts, None, "result", "first")["material_objections"][0]
+        # The contested finding with its own reason and evidence is the latest version that the gate holds.
+        [current] = decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]
+            for identifier in bars + ["review-reassessed-first", "review-reassessed-second"]])
+        self.assertEqual(current["review_id"], "review-reassessed-second")
         self.assertEqual(refreshed["objection"]["material_version"], current["material_version"])
         self.assertEqual(refreshed["focused_refresh"], {"assignment_id": "focused",
             "previous_problem_evidence_digest": previous["problem_evidence_digest"],
@@ -362,9 +365,9 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         records = self.store.snapshot()["records"]
         packet = protocol.build_packet(records, self.artifacts, None, "result", "first")
         [objection] = packet["material_objections"]
-        self.assertEqual((objection["review_id"], objection["evidence"], len(objection["history"])),
-                         (updated["id"], [counterexample], 1))
-        self.assertEqual(objection["history"][0]["review_id"], "review-slate-first")
+        self.assertEqual((objection["review_id"], objection["evidence"]), (updated["id"], [counterexample]))
+        # The first results' continuing finding gave its own reason, so it is the version between the two statements.
+        self.assertEqual([row["review_id"] for row in objection["history"]], ["review-slate-first", "review-result-first"])
         reviews = decisions.assess_problem_reviews(records, self.artifacts)
         self.assertIn("research_objection_unresolved", {row["code"] for row in reviews["obligations"]})
         for reviewer in ("first", "second"):
@@ -373,6 +376,104 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
             self.observe("result", reviewer, output, identifier="reassessed-" + reviewer)
             assignment = self.store.snapshot()["records"]["review_assignment"]["reassessed-" + reviewer]
             self.assertEqual(assignment["context"], {"prior_assignment_id": "refreshed-" + reviewer})
+        self.assert_delivered()
+
+    def test_a_contested_slate_finding_with_new_evidence_is_a_new_objection_version(self):
+        """Astra's N1 reproduction: the slate reviewer contests O1 with new evidence in its findings only."""
+        self.prepare_reviews(slate_reviewer="first")
+        self.refresh_reviews("resolved")
+        self.assertTrue(decisions.assess_problem_reviews(self.store.snapshot()["records"], self.artifacts)["ready"])
+        self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
+        counterexample = self.artifacts.put(b"A counterexample to the earlier resolution.", "text/plain")
+        finding = dict(self.make_finding("contested"), evidence=[counterexample],
+                       reason="The supplied counterexample refutes the earlier resolution.")
+        output = self.build_slate_output(["candidate-1", "candidate-2"])
+        output["value"]["objection_findings"] = [finding]
+        updated = self.observe("slate", "first", output, identifier="slate-first-refreshed")
+        self.assertEqual(updated["payload"]["objections"], [])
+        self.record_slate("slate-2", deferred=[{"candidate_id": "candidate-2", "evidence_needed": "A documented active line."}],
+                          review_ids=[updated["id"]])
+        records = self.store.snapshot()["records"]
+        [objection] = protocol.build_packet(records, self.artifacts, None, "result", "first")["material_objections"]
+        stated = dict(self.make_objection(), candidate_ids=["candidate-1"])
+        self.assertEqual({key: objection[key] for key in stated}, dict(stated, reason=finding["reason"], evidence=[counterexample]))
+        self.assertEqual((objection["review_id"], objection["recorded_revision"]), (updated["id"], updated["recorded_revision"]))
+        self.assertEqual([row["review_id"] for row in objection["history"]], ["review-slate-first", "review-result-first"])
+        self.assertIn("research_objection_unresolved",
+                      {row["code"] for row in decisions.assess_problem_reviews(records, self.artifacts)["obligations"]})
+        for reviewer in ("first", "second"):
+            output = self.build_review_output("result")
+            output["value"]["objection_findings"] = [self.make_finding("resolved")]
+            self.observe("result", reviewer, output, identifier="reassessed-" + reviewer)
+            assignment = self.store.snapshot()["records"]["review_assignment"]["reassessed-" + reviewer]
+            self.assertEqual(assignment["context"], {"prior_assignment_id": "refreshed-" + reviewer})
+        self.assert_delivered()
+
+    def prepare_version_evidence(self):
+        """Astra's N2 reproduction: a later assessment supplies E2, a refreshed result states a new O1 version citing
+        it, and a subsequent assessment stops citing E2 while O1 stays contested."""
+        from test_research_problem_assessment import build_assessment
+        self.prepare_reviews(result_reviewer="first")
+        self.counterexample = self.artifacts.put(b"A counterexample that the stated implication misses.", "text/plain")
+        assessment = build_assessment(self.selected, identifier="assessment-2")
+        assessment["items"]["priority"]["evidence"].append(self.counterexample)
+        self.mutate(self.load_problem_module().record_assessment, assessment)
+        version = dict(self.make_objection(), reason="The supplied counterexample defeats the implication.",
+                       evidence=[self.counterexample])
+        contested = {"id": version["id"], "status": "contested", "reason": version["reason"], "evidence": version["evidence"]}
+        for reviewer in ("first", "second"):
+            output = self.build_review_output("result")
+            output["value"]["objection_findings"] = [contested]
+            if reviewer == "first":
+                output["objections"] = [version]
+            self.observe("result", reviewer, output, identifier="refreshed-" + reviewer)
+        self.mutate(self.load_problem_module().record_assessment, build_assessment(self.selected, identifier="assessment-3"))
+        for reviewer in ("first", "second"):
+            output = self.build_review_output("result")
+            output["value"]["objection_findings"] = [contested]
+            self.observe("result", reviewer, output, identifier="reassessed-" + reviewer)
+        records = self.store.snapshot()["records"]
+        self.assertNotIn(self.counterexample["sha256"], json.dumps(records["problem_assessment"]["assessment-3"]))
+        return records
+
+    def test_the_adjudicator_receives_the_stating_review_and_evidence_of_the_version(self):
+        records = self.prepare_version_evidence()
+        original_pair = ["review-result-first", "review-result-second"]
+        self.observe_adjudication(review_ids=original_pair)
+        packet = json.loads(self.artifacts.read(self.store.snapshot()["records"]["review_assignment"]["focused"]["packet"]))
+        stating = records["value_review"]["review-refreshed-first"]
+        [current] = decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]
+            for identifier in ("review-reassessed-first", "review-reassessed-second")])
+        self.assertEqual((current["review_id"], current["evidence"]), (stating["id"], [self.counterexample]))
+        self.assertEqual(packet["objection"]["material_version"], current["material_version"])
+        self.assertEqual((packet["version_review"]["id"], packet["version_review"]["objections"][0]["reason"]),
+                         (stating["id"], stating["payload"]["objections"][0]["reason"]))
+        self.assertEqual((packet["version_evidence"], packet["version_source_mappings"]), ([self.counterexample], []))
+        delivered = {entry["artifact"]["sha256"]: entry["content"] for entry in packet["evidence"]}
+        self.assertEqual(delivered[self.counterexample["sha256"]], "A counterexample that the stated implication misses.")
+        self.assertNotIn(self.counterexample, packet["original_evidence"])
+        self.assert_delivered()
+
+    def test_an_adjudication_without_the_version_evidence_does_not_resolve_and_refreshes(self):
+        self.prepare_version_evidence()
+        original_pair = ["review-result-first", "review-result-second"]
+        real = protocol.add_focused_adjudication
+
+        def build_without_version(*arguments, **options):
+            real(*arguments, **options)
+            for key in ("version_review", "version_evidence", "version_source_mappings"):
+                arguments[2].pop(key)
+        with patch.object(protocol, "add_focused_adjudication", side_effect=build_without_version):
+            self.observe_adjudication(review_ids=original_pair)
+        packet = json.loads(self.artifacts.read(self.store.snapshot()["records"]["review_assignment"]["focused"]["packet"]))
+        self.assertNotIn(self.counterexample["sha256"], {entry["artifact"]["sha256"] for entry in packet["evidence"]})
+        self.assert_blocked_delivery()
+        self.assert_error("review_adjudicator_fixed", lambda: self.assign("adjudicator", "focused-fourth",
+            identifier="focused-other", review_ids=original_pair, objection_id="unsupported-implication"))
+        self.observe_adjudication(review_ids=original_pair, identifier="focused-complete")
+        refreshed = self.store.snapshot()["records"]["review_assignment"]["focused-complete"]
+        self.assertEqual((refreshed["history_assignment_id"], json.loads(self.artifacts.read(refreshed["packet"]))["focused_refresh"]["assignment_id"]),
+                         ("focused", "focused"))
         self.assert_delivered()
 
     def test_a_material_adjudication_without_the_bar_calibrations_does_not_resolve(self):

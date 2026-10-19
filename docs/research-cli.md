@@ -1478,7 +1478,10 @@ objections that concern the current statement join the result packets'
 so each result review needs an `objection_findings` entry for them
 (`review_objection_history_incomplete`), and they remain post obligations
 (`research_objection_unresolved`) until both result reviews record an evidenced
-resolution or a focused adjudication finds them not upheld. Adjudicate a
+resolution or a focused adjudication finds them not upheld. A refreshed slate
+review that marks such an objection `continuing` or `contested` with a new
+`reason` or new `evidence` states a new material version of it, with the same
+candidates (see the material versions below). Adjudicate a
 slate-review objection with the two bar review ids in `context.review_ids`, as
 for a bar objection; the adjudicator packet's `assessments` add the slate reviews
 that raised it.
@@ -1768,20 +1771,31 @@ post obligations (`research_objection_unresolved`), including predecessor
 findings marked `continuing` or `contested`. Each objection carries a material
 version: the digest of its finding content (`claim`, `reason`, `evidence`,
 `resolution_condition` and, for a slate objection, `candidate_ids`) with the id
-and recorded revision of the review that stated it. Per objection id, packets
+and recorded revision of the review that stated it. An entry of `objection_findings`
+in an observed bar, slate or result review with status `continuing` or `contested`
+whose `reason` or `evidence` differs from the latest version of that objection is
+also a new version: it keeps the `claim`, the `resolution_condition` and the
+`candidate_ids` of the version it continues, and it takes the finding's `reason`
+and `evidence` and the id and recorded revision of its review. A finding that
+repeats the latest reason and evidence adds no version. Versions follow the
+recorded order of the reviews. Per objection id, packets
 deliver the latest version with `material_version`, `review_id`,
 `recorded_revision` and the earlier versions in `history`. Both result reviewers
 must record evidence-backed resolutions, each in a review whose packet delivered
 the current version, or an independent focused adjudication of the current
-version must find the objection not upheld; a resolution of an earlier version
-disposes of nothing later, and the changed currency lets the same reviewers
-reassess. Problem adjudication uses the existing review tools
-with `dossier_id: null`; changed value evidence, or a changed material version of
-the adjudicated objection, retains the focused adjudicator and its observed history
+version must find the objection not upheld; a resolution or an adjudication of an
+earlier version disposes of nothing later, and the changed currency lets the same
+reviewers reassess. A result packet does not show a current peer result, so a new
+version from the current peer's finding is resolved by an adjudication or by a
+reassessment under changed evidence. Problem adjudication uses the existing review tools
+with `dossier_id: null`; changed value evidence, a changed material version of
+the adjudicated objection, or an earlier packet without the calibrations, the
+rubric definition or the version evidence that the post gate verifies (below)
+retains the focused adjudicator and its observed history
 rather than opening a new reviewer choice: its next assignment is a
 `focused_refresh` naming the previous and current evidence digests and material
-versions, and under an unchanged digest and version another assignment returns
-`review_adjudicator_fixed`.
+versions, and under an unchanged digest and version and a complete earlier
+packet another assignment returns `review_adjudicator_fixed`.
 The adjudicator template is `exactory-problem-review-v2/adjudicator`. For a
 below-threshold rubric grade, set `context.objection_id` to
 `rubric:<review_id>:<item>` with both original result review IDs. Items are
@@ -1789,12 +1803,26 @@ below-threshold rubric grade, set `context.objection_id` to
 The packet identifies the grade and required threshold and carries both
 results' `rubric_grades` and `rubric_definition`, `{item, definition, threshold}`
 of the adjudicated item. Every problem adjudicator packet carries
-`bar_calibrations`, the payloads of both current bars; `current_evidence` and the
-original evidence used for a correction stay distinct. An observed, ready
+`bar_calibrations`, the payloads of the original bar reviews that the adjudicated
+pair was graded against, sorted by id: for a bar pair the two bars, and for a
+result pair the bars that the results' recorded `bar_ids` name, as the results'
+observed packets delivered them. `current_bar_calibrations` carries the current
+bars that are not among them, which a context repair installed; it is empty when
+no bar was replaced. For a material objection the packet also carries the
+evidence of the adjudicated version: `version_review`, the payload of the review
+that stated the version, with artifact references as templates;
+`version_evidence`, the artifacts that the stating review's packets delivered for
+the evidence the version cites, whose bytes the packet delivers; and
+`version_source_mappings`, the source passages that those packets delivered for
+the cited artifacts. `current_evidence`, the version evidence and the original
+evidence used for a correction (`original_evidence` and
+`supplied_source_mappings`) stay distinct. An observed, ready
 `not_upheld` adjudication resolves only that item for the same subject and current
-`problem_evidence_digest`, and only when its packet carried `bar_calibrations`
-and `rubric_definition`; a material objection's adjudication needs
-`bar_calibrations`.
+`problem_evidence_digest`, and only when its packet carried exactly the original
+`bar_calibrations` and the `rubric_definition`; a material objection's
+adjudication needs exactly the original `bar_calibrations` and the
+`version_review`, `version_evidence` and `version_source_mappings` of the current
+version.
 The original grades remain visible. An old-evidence adjudication, a resolution
 of another item, or a material-objection finding cannot waive the shortfall;
 the five independent assurances still have to pass.
