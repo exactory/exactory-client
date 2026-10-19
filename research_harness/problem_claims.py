@@ -151,14 +151,14 @@ def assess_assessment(records, artifacts):
     assessment, statement = find_assessment(records), find_current_statement(records)
     statement_id = None if statement is None else statement["id"]
     if assessment is None:
-        return [obligation("problem_assessment_missing", "Record an evidence-bound rubric self-assessment.", statement_id=statement_id)]
+        return [obligation("problem_assessment_missing", "Record the rubric self-assessment with an evidence reference for every item.", statement_id=statement_id)]
     pending = []
     if assessment["statement_id"] != statement_id:
-        pending.append(obligation("problem_assessment_stale", "Assess the current problem statement.",
+        pending.append(obligation("problem_assessment_stale", "Record a new self-assessment for the current statement.",
                                   assessment_id=assessment["id"], statement_id=statement_id))
     shortfalls = problem_rubric.assess_grades(assessment["grades"])
     if shortfalls:
-        pending.append(obligation("problem_rubric_below_threshold", "Repair the rubric self-assessment shortfalls.",
+        pending.append(obligation("problem_rubric_below_threshold", "Repair each named shortfall with evidence, or revise or withdraw the candidate.",
                                   source="self", assessment_id=assessment["id"], shortfalls=shortfalls))
     return pending
 

@@ -261,7 +261,7 @@ class ProblemAttemptTests(ProblemCase):
                 self.record_attempt(build_attempt("literature-" + identifier, reading=reading,
                                                   statement_id=self.statement["id"]))
                 self.assertEqual(self.attempt_module().assess_attempt(self.store.snapshot()["records"], self.artifacts), [{
-                    "code": "problem_attempt_resolved", "explanation": "Deliver the resolved candidate as a result.",
+                    "code": "problem_attempt_resolved", "explanation": "The attempt resolved this statement: deliver it as a result through math-solver and do not post it as open.",
                     "attempt_id": payload["id"]}])
 
     def test_records_a_literature_attempt_on_full_readings(self):
@@ -512,7 +512,7 @@ class ProblemAttemptDeliveryTests(ProblemDeliveryCase):
         old_digest = records["problem_attempt"]["attempt-1"]["solver"]["native_attempt_digest"]
         native = build_native_attempt(self.selected["statement"], [], {"proof_status": "proved"})
         latest_digest = put_native_attempt(self, native)
-        resolved = {"code": "problem_attempt_resolved", "explanation": "Deliver the resolved candidate as a result.",
+        resolved = {"code": "problem_attempt_resolved", "explanation": "The attempt resolved this statement: deliver it as a result through math-solver and do not post it as open.",
                     "attempt_id": "attempt-1"}
         def attempt_obligations():
             return [row for row in gate_state(self.store.snapshot()["records"], self.artifacts, "post")["obligations"]

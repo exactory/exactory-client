@@ -87,39 +87,45 @@ operations of the Mathematics section.
 | `value` | Value evidence validates and `problem-assessment` binds a current self-assessment meeting the rubric thresholds; both observed bars and both version 2 result reviews cover the evidence and pass the assurances and rubric after adjudication; the current decision is `post`. |
 | `post` | `problem-posted` records the confirmed server id against the rebuilt approved export. |
 
-Explore an area with any tools, then record each candidate question with
-`problem-candidate`: its tentative statement, its source (the harness's own
-research records, the literature, computation, the Mathematics section or the
-user's material) and the observation that produced it, its declared neighbours,
-the provisional potential grades and a disposition. Obtain two blind problem
-bars, then compare the candidates with `problem-slate`. The slate gives every
-current candidate one disposition: selected, deferred with the evidence that
-would raise it, or rejected with the reason. A selected candidate needs
-`max(B1, B2) >= 2` and readiness `pass` in its potential grades. The slate cites
-version 2 bars: a bar recorded on the version 1 template returns
-`problem_bar_calibration_required`, and assigning the bar again to the same
-reviewer refreshes it on version 2 in the same session and slot. A focused slate
-review by a bar reviewer is optional. It is bound to the exact candidate set and
-the current bars; after a candidate is added or superseded, or a bar is refreshed,
-assigning the slate again to the same reviewer refreshes the review in its session,
-with its earlier findings in the history. A slate objection names the candidates
-it concerns, or none for the slate as a whole. It binds the result reviews and the
-post like the bars' objections, whether or not the slate cites the review, for a
-statement that formulates a named candidate or a later version of it (a
-whole-slate objection binds every statement), until evidence or an adjudication
-resolves it; it is adjudicated with the two bars. A result review is refused
-before dispatch while a current or cited bar is on the version 1 template, and it
-receives the current bars it assesses, also after a context repair. A result reviewer whose completed review
-was given under other evidence, other bars or other applicable slate objections
-reassesses in the same session and slot. Selection authorizes further research; it establishes neither
-openness nor significance. A slate that selects no candidate records the reason
-and is the legitimate no-post outcome: `next` reports `problem_no_post` until a new
-slate selects a candidate. Formulate a selected candidate with `problem-statement`
-and its `candidate_id`; the post gate requires the latest slate to select the
-current statement's candidate. The latest slate must still cover exactly the
-current candidates; otherwise the gate reports `problem_slate_stale`, `next` names
-it instead of `problem_no_post`, and the milestone is `exploration` until a new slate
-is recorded.
+The exploration records each candidate question with `problem-candidate`: its
+tentative statement, its source (the harness's own research records, the
+literature, a computation, the Mathematics section or the user's material), the
+observation that produced it, its declared neighbours, the provisional potential
+grades and a provisional disposition. Two blind problem bars fix the field's
+standard before any candidate is shown to a reviewer, and the slate
+(`problem-slate`) records the decision: every current candidate is selected,
+deferred with the evidence that would raise it, or rejected with the reason. A
+selected candidate needs `max(B1, B2) >= 2` and readiness `pass` in its potential
+grades. Selection authorizes further research; it establishes neither openness
+nor significance. A slate that selects no candidate records the reason and is the
+legitimate no-post outcome: `next` reports `problem_no_post` until a new slate
+selects a candidate.
+
+The slate cites version 2 bars. A bar recorded on the version 1 template returns
+`problem_bar_calibration_required`; assigning the bar again to the same reviewer
+refreshes it on version 2 in the same session and slot. A focused slate review by
+a bar reviewer is optional and is bound to the exact candidate set and the current
+bars; after a candidate is added or superseded, or a bar is refreshed, assigning
+the slate again to the same reviewer refreshes the review in its session, with the
+earlier findings in the history. A slate objection names the candidates it
+concerns, or none for the slate as a whole. It binds the result reviews and the
+post like the bars' objections, whether or not the slate cites the review: it
+follows each named candidate through its later versions, a whole-slate objection
+binds every statement, and it stays until evidence or an adjudication resolves
+it. It is adjudicated with the two bars.
+
+A result review is refused before dispatch while a current or cited bar is on
+the version 1 template, and every result packet carries the current bars, also
+after a context repair. A result reviewer whose completed review was given under
+other evidence, other bars or other applicable slate objections reassesses in the
+same session and slot; under the same conditions a repeat is refused.
+
+Formulate a selected candidate with `problem-statement` and its `candidate_id`;
+the post gate requires the latest slate to select the current statement's
+candidate. The latest slate must still cover exactly the current candidates;
+otherwise the gate reports `problem_slate_stale`, `next` names it instead of
+`problem_no_post`, and the milestone is `exploration` until a new slate is
+recorded.
 
 Record the attempt with `problem-attempt`: `{id, statement_id, kind, solver,
 literature, outcomes, proportion}` becomes immutable `problem_attempt/<id>` with

@@ -1793,7 +1793,7 @@ records retain nonmanaged dependency composition and empirical meaning.
 | `problem_candidate_unselected` | Formulate a candidate that the latest slate selects, or record a new slate. |
 | `problem_statement_missing` | Select the exact statement and resolution criteria. |
 | `problem_attempt_missing`, `problem_attempt_stale` | Record an attempt for the current statement and criteria; a stale obligation names `attempt_id` and `statement_id`. A superseded native snapshot also names `native_attempt_digest` and `latest_native_attempt_digest`. |
-| `problem_attempt_resolved` | Deliver the resolved candidate as a result; the obligation names `attempt_id`. |
+| `problem_attempt_resolved` | The attempt resolved this statement: deliver it as a result through math-solver and do not post it as open; the obligation names `attempt_id`. |
 | `problem_rubric_attempt_unbound` | Bind the passing current assessment's attempt judgment to a current attempt record; the obligation names `assessment_id` and `statement_id`. |
 | `problem_attempt_unbound`, `problem_attempt_statement_mismatch`, `problem_attempt_outcome_mismatch` | Deliver and bind the native attempt from this store with the exact claim and matching resolved outcome. |
 | `problem_attempt_superseded` | Bind the snapshot named by the current pointer for `(attack_root, objective_id)`; both native digests identify the succession. |

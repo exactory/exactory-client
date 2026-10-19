@@ -93,7 +93,7 @@ def validate_attempt(records, artifacts, value):
                                 {"native_attempt_digest": identifier, "latest_native_attempt_digest": latest_digest})
         scope = native["contract"]["original_claim"]["scope"]
         if scope["kind"] != "named":
-            raise ResearchError("problem_attempt_scope_restricted", "Use a named scope covering the exact statement",
+            raise ResearchError("problem_attempt_scope_restricted", "Attempt the exact statement with a named scope; a restricted scope is a partial attempt",
                                 {"native_attempt_digest": identifier, "scope": scope})
         if native["contract"]["original_claim"]["statement"] != statement["statement"]:
             raise ResearchError("problem_attempt_statement_mismatch", "The native contract must name the exact current statement",
@@ -104,7 +104,7 @@ def validate_attempt(records, artifacts, value):
         totals = native["totals"]
         exceeded = [name for name, limit in NORMAL_ATTEMPT_LIMITS.items() if totals[name] > limit]
         if exceeded and (reason is None or not reason.strip()):
-            raise ResearchError("problem_attempt_extension_unexplained", "Explain extending the normal attempt limits",
+            raise ResearchError("problem_attempt_extension_unexplained", "Record the reason for exceeding the normal limits named in exceeded",
                                 {"totals": totals, "exceeded": exceeded})
     else:
         fields(value["literature"], ("readings", "description"))
@@ -157,7 +157,7 @@ def assess_attempt(records, artifacts):
     current = attempt is not None and statement is not None and attempt["statement_id"] == statement_id
     pending = []
     if attempt is None:
-        pending.append(obligation("problem_attempt_missing", "Record a proportionate solver or assessed literature attempt.",
+        pending.append(obligation("problem_attempt_missing", "Attempt the exact statement with math-solver, or assess an existing attempt from full readings, and record it.",
                                   statement_id=statement_id))
     elif not current:
         pending.append(obligation("problem_attempt_stale", "Reassess the attempt for the current statement and criteria.",
@@ -187,7 +187,7 @@ def assess_attempt(records, artifacts):
             resolved.append(recorded)
     if resolved:
         concerned = max(resolved, key=lambda row: (row["recorded_revision"], row["id"]))
-        pending.append(obligation("problem_attempt_resolved", "Deliver the resolved candidate as a result.", attempt_id=concerned["id"]))
+        pending.append(obligation("problem_attempt_resolved", "The attempt resolved this statement: deliver it as a result through math-solver and do not post it as open.", attempt_id=concerned["id"]))
     assessment = find_assessment(records)
     if (assessment is not None and assessment["statement_id"] == statement_id
             and assessment["grades"]["attempt"] == "pass" and not current):
