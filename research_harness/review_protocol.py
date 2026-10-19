@@ -686,7 +686,7 @@ def build_rubric_objection(records, artifacts, saved, context, packet, sources):
                     'reason': ' '.join(findings['rubric_evidence'][key] for key in evidence_items),
                     'evidence': findings['evidence'], 'resolution_condition': shortfall['required']}]
                 packet['rubric_grades'] = [row['payload']['value']['rubric'] for row in saved]
-                anchor = getattr(problem_rubric, 'ANCHORS', {}).get(item)
+                anchor = problem_rubric.ANCHORS.get(item)
                 if anchor is None:
                     raise ResearchError('review_packet_incomplete', 'The rubric item has no recorded definition', {'item': item})
                 packet['rubric_definition'] = {'item': item, 'definition': anchor['definition'], 'threshold': anchor['threshold']}
