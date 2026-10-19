@@ -9,6 +9,7 @@ from research_harness import research_decisions as decisions, review_protocol as
 class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
     make_objection = objection_fixtures.ProblemObjectionTests.make_objection
     make_finding = objection_fixtures.ProblemObjectionTests.make_finding
+    prepare_problem_evidence = objection_fixtures.ProblemObjectionTests.prepare_problem_evidence
     prepare_reviews = objection_fixtures.ProblemObjectionTests.prepare_reviews
     observe_adjudication = objection_fixtures.ProblemObjectionTests.observe_adjudication
     assert_delivered = objection_fixtures.ProblemObjectionTests.assert_delivered

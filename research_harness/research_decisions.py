@@ -196,9 +196,9 @@ def record_value_review(store, payload, *, expected_revision, request_id):
         inherited = review_context_repair.reassessment_reviews(records, saved_assignment)
         refreshed = (review_context_repair.collect_problem_review_history(records, saved_assignment)
                      if problem is not None else [])
-        # A refreshed slate or result review addresses its earlier findings; a recalibrated bar keeps them in its
-        # observed history, where the post path still collects them.
-        historical = inherited + (refreshed if value["stage"] != "bar" else [])
+        # A refreshed bar, slate or result review supersedes its earlier review, so it inherits that review's material
+        # objections and gives a finding on each; until it is recorded, the earlier objections stay current.
+        historical = inherited + refreshed
         if value["stage"] != "bar" and problem is not None:
             historical.extend(review for review in review_context_repair.historical_reviews(records, None, value["stage"])
                               if review.get("subject") == saved_assignment["subject"])

@@ -1425,7 +1425,10 @@ A version 1 bar lacks the calibration of levels 2 and 3. Assign the bar again to
 the same reviewer with an empty `context`: the assignment refreshes the version 1
 bar on the version 2 template. It continues that reviewer's bar session and slot,
 the version 1 bar stays in its history, and the packet carries `problem_refresh`
-with `{assignment_id, previous_template_id, template_id}`. Cite the refreshed bars
+with `{assignment_id, previous_template_id, template_id}`. The refreshed bar gives
+an `objection_findings` entry for every material objection of the version 1 bar
+(`review_objection_history_incomplete`); until it is recorded, those objections
+stay current. Cite the refreshed bars
 in the slate; the slate and result reviews then continue the version 2 sessions,
 because only the latest bar of each slot is current. A reviewer whose latest bar
 is on version 2 cannot be assigned another bar (`review_resampling_forbidden`).
@@ -1782,7 +1785,10 @@ recorded order of the reviews. Only the latest review of a lineage (the same
 stage, reviewer, session and slot; for a result, also the same problem evidence)
 holds versions current, by stating them or by continuing them in its findings. A
 review that a later review of its lineage superseded states no current version:
-its objections and findings are history. Per objection id, packets
+its objections and findings are history. A refreshed bar, slate or result review
+therefore gives an `objection_findings` entry for every material objection of the
+review it supersedes (`review_objection_history_incomplete`), and until it is
+recorded those objections stay current. Per objection id, packets
 deliver the latest current version with `material_version`, `review_id`,
 `recorded_revision` and the other versions in `history`. Both result reviewers
 must record evidence-backed resolutions, each in a review whose packet delivered

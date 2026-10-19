@@ -11,6 +11,7 @@ from research_harness import literature, reading, research_decisions as decision
 class ProblemAdjudicationContractTests(delivery_fixtures.ProblemDeliveryCase):
     make_objection = objection_fixtures.ProblemObjectionTests.make_objection
     make_finding = objection_fixtures.ProblemObjectionTests.make_finding
+    prepare_problem_evidence = objection_fixtures.ProblemObjectionTests.prepare_problem_evidence
     prepare_reviews = objection_fixtures.ProblemObjectionTests.prepare_reviews
 
     def read_records(self):

@@ -23,7 +23,7 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
             "reason": "The supplied comparator and changed paragraph establish this disposition.",
             "evidence": [self.supporting]}
 
-    def prepare_reviews(self, *, bar_reviewer=None, result_reviewer=None, slate_reviewer=None, results=True):
+    def prepare_problem_evidence(self):
         self.initialize_problem()
         self.record_candidate()
         self.selected = self.select_statement(candidate_id="candidate-1")
@@ -37,6 +37,9 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         from test_research_problem_assessment import build_assessment
         self.mutate(self.load_problem_module().record_assessment, build_assessment(self.selected))
         self.supporting = self.artifacts.put(b"The read comparator states an existential bound only.", "text/plain")
+
+    def prepare_reviews(self, *, bar_reviewer=None, result_reviewer=None, slate_reviewer=None, results=True):
+        self.prepare_problem_evidence()
         for reviewer in ("first", "second"):
             output = self.build_review_output("bar")
             if reviewer == bar_reviewer:
@@ -450,6 +453,98 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         """The stated variant: the reviewer withdraws its own objection when it reassesses on the same evidence."""
         objections = self.reassess_on_the_same_evidence(result_reviewer="first")
         self.assertEqual([objection["id"] for objection in objections], ["o2"])
+        self.assert_delivered()
+
+    def prepare_version_one_bar_objection(self):
+        """The re-review's reproduction: both bars recorded on the version 1 template, the first stating O1."""
+        original = protocol.canonical_prompt
+
+        def previous_prompt(role, **options):
+            if options.get("orchestration") == "problem_creation":
+                options["version"] = 1
+            return original(role, **options)
+        self.prepare_problem_evidence()
+        with patch.object(protocol, "canonical_prompt", side_effect=previous_prompt):
+            for reviewer in ("first", "second"):
+                output = self.build_review_output("bar")
+                if reviewer == "first":
+                    output["objections"] = [self.make_objection()]
+                self.observe("bar", reviewer, output)
+
+    def refresh_version_one_bars(self, findings):
+        """Refresh both bars on version 2, the first with these findings on O1, and cite them in the slate."""
+        for reviewer in ("first", "second"):
+            output = self.build_review_output("bar")
+            if reviewer == "first":
+                output["value"]["objection_findings"] = findings
+            self.observe("bar", reviewer, output, identifier="bar-" + reviewer + "-v2")
+        self.record_slate(bar_review_ids=["review-bar-first-v2", "review-bar-second-v2"])
+        return protocol.build_packet(self.store.snapshot()["records"], self.artifacts, None, "result", "first")["material_objections"]
+
+    def build_calibrated_result(self):
+        output = self.build_review_output("result")
+        output["value"]["bar_ids"] = ["review-bar-first-v2", "review-bar-second-v2"]
+        return output
+
+    def test_a_refreshed_bar_must_give_a_finding_on_its_earlier_objection(self):
+        self.prepare_version_one_bar_objection()
+        self.assert_error("review_objection_history_incomplete", lambda: self.observe(
+            "bar", "first", self.build_review_output("bar"), identifier="bar-first-v2"))
+        records = self.store.snapshot()["records"]
+        self.assertEqual(records["review_assignment"]["bar-first-v2"]["context"], {"prior_assignment_id": "bar-first"})
+        # Until the refreshed bar is recorded, the version 1 bar's objection stays current.
+        [objection] = decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]
+            for identifier in ("review-bar-first", "review-bar-second")])
+        self.assertEqual(objection["review_id"], "review-bar-first")
+
+    def test_a_continuing_finding_of_a_refreshed_bar_keeps_its_objection_binding(self):
+        self.prepare_version_one_bar_objection()
+        [objection] = self.refresh_version_one_bars([self.make_finding("continuing")])
+        self.assertEqual((objection["review_id"], objection["claim"]), ("review-bar-first-v2", self.make_objection()["claim"]))
+        self.assert_error("review_objection_history_incomplete",
+                          lambda: self.observe("result", "first", self.build_calibrated_result()))
+
+    def test_a_resolved_finding_of_a_refreshed_bar_clears_its_objection(self):
+        self.prepare_version_one_bar_objection()
+        self.assertEqual(self.refresh_version_one_bars([self.make_finding("resolved")]), [])
+        for reviewer in ("first", "second"):
+            self.observe("result", reviewer, self.build_calibrated_result())
+        self.assert_delivered()
+
+    def refresh_slate_review_output(self, status=None):
+        """The slate reviewer stated O1 against candidate-1; candidate-2 makes it refresh its review, with a finding of
+        this status on O1, or none."""
+        self.prepare_reviews(slate_reviewer="first", results=False)
+        self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
+        output = self.build_slate_output(["candidate-1", "candidate-2"])
+        output["value"]["objection_findings"] = [] if status is None else [self.make_finding(status)]
+        return output
+
+    def observe_refreshed_slate_review(self, output):
+        review = self.observe("slate", "first", output, identifier="slate-first-refreshed")
+        self.record_slate("slate-2", deferred=[{"candidate_id": "candidate-2", "evidence_needed": "A documented active line."}],
+                          review_ids=[review["id"]])
+        return protocol.build_packet(self.store.snapshot()["records"], self.artifacts, None, "result", "first")["material_objections"]
+
+    def test_a_refreshed_slate_review_must_give_a_finding_on_its_earlier_objection(self):
+        output = self.refresh_slate_review_output()
+        self.assert_error("review_objection_history_incomplete",
+                          lambda: self.observe("slate", "first", output, identifier="slate-first-refreshed"))
+        packet = protocol.build_packet(self.store.snapshot()["records"], self.artifacts, None, "result", "first")
+        self.assertEqual([(row["id"], row["review_id"]) for row in packet["material_objections"]],
+                         [("unsupported-implication", "review-slate-first")])
+
+    def test_a_continuing_finding_of_a_refreshed_slate_review_keeps_its_objection_binding(self):
+        [objection] = self.observe_refreshed_slate_review(self.refresh_slate_review_output("continuing"))
+        self.assertEqual((objection["review_id"], objection["claim"], objection["candidate_ids"]),
+                         ("review-slate-first-refreshed", self.make_objection()["claim"], ["candidate-1"]))
+        self.assert_error("review_objection_history_incomplete",
+                          lambda: self.observe("result", "first", self.build_review_output("result")))
+
+    def test_a_resolved_finding_of_a_refreshed_slate_review_clears_its_objection(self):
+        self.assertEqual(self.observe_refreshed_slate_review(self.refresh_slate_review_output("resolved")), [])
+        for reviewer in ("first", "second"):
+            self.observe("result", reviewer, self.build_review_output("result"))
         self.assert_delivered()
 
     def prepare_version_evidence(self):
