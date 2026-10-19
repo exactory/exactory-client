@@ -504,6 +504,21 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         self.assert_error("review_objection_history_incomplete",
                           lambda: self.observe("result", "first", self.build_calibrated_result()))
 
+    def test_a_bar_refresh_packet_delivers_the_earlier_bar_and_its_objection(self):
+        """R40: the refreshed bar sees the objection it must address in its packet."""
+        self.prepare_version_one_bar_objection()
+        self.refresh_version_one_bars([self.make_finding("continuing")])
+        records = self.store.snapshot()["records"]
+        for reviewer in ("first", "second"):
+            with self.subTest(reviewer=reviewer):
+                packet = json.loads(self.artifacts.read(records["review_assignment"]["bar-" + reviewer + "-v2"]["packet"]))
+                self.assertEqual(packet["historical_reviews"], [records["value_review"]["review-bar-" + reviewer]["payload"]])
+                self.assertEqual(sorted(packet["problem_refresh"]), ["assignment_id", "previous_template_id", "template_id"])
+        packet = json.loads(self.artifacts.read(records["review_assignment"]["bar-first-v2"]["packet"]))
+        self.assertEqual(packet["historical_reviews"][0]["objections"], [self.make_objection()])
+        self.assertEqual(records["value_review"]["review-bar-first-v2"]["payload"]["value"]["objection_findings"],
+                         [self.make_finding("continuing")])
+
     def test_a_resolved_finding_of_a_refreshed_bar_clears_its_objection(self):
         self.prepare_version_one_bar_objection()
         self.assertEqual(self.refresh_version_one_bars([self.make_finding("resolved")]), [])

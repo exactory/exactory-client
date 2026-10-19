@@ -1425,7 +1425,9 @@ A version 1 bar lacks the calibration of levels 2 and 3. Assign the bar again to
 the same reviewer with an empty `context`: the assignment refreshes the version 1
 bar on the version 2 template. It continues that reviewer's bar session and slot,
 the version 1 bar stays in its history, and the packet carries `problem_refresh`
-with `{assignment_id, previous_template_id, template_id}`. The refreshed bar gives
+with `{assignment_id, previous_template_id, template_id}`. The refresh packet also
+carries `historical_reviews` with the version 1 bar, whose objections the refreshed
+bar addresses. The refreshed bar gives
 an `objection_findings` entry for every material objection of the version 1 bar
 (`review_objection_history_incomplete`); until it is recorded, those objections
 stay current. Cite the refreshed bars

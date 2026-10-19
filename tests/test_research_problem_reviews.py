@@ -672,6 +672,7 @@ class ProblemReviewTests(LiteratureCase):
         packet = json.loads(self.artifacts.read(assignment["packet"]))
         self.assertEqual(packet["subject"], {"kind": "problem", "statement_id": "statement-1"})
         self.assertEqual(packet["pending_source_requests"], [])
+        self.assertEqual(packet["historical_reviews"], [])
         self.assertEqual(packet["source_deliveries"][0]["status"], "delivered")
         self.assertNotIn("PRIVATE_STATEMENT", json.dumps(packet))
         final = self.build_review_output("bar")

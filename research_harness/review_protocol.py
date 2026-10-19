@@ -840,8 +840,7 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                 # A parent with a final review is a refresh of that review; otherwise it is a source-request turn.
                 historical = context_repair.collect_problem_review_history(records, prior)
                 refreshed = any(review['assignment_id'] == prior['id'] for review in historical)
-                if role != 'bar':
-                    packet['historical_reviews'] = [_payload(review) for review in historical]
+                packet['historical_reviews'] = [_payload(review) for review in historical]
             if problem and role == 'result':
                 bars = add_problem_bars(records, artifacts, packet, reviewer_id, slot=context_repair.slot_id(records, prior))
                 require_calibrated_bars(records, bars)
