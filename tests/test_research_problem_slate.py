@@ -298,7 +298,8 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assertEqual(packet["candidate_set_digest"], problem_candidates.compute_candidate_set_digest(records))
         self.assertEqual(packet["problem_refresh"], {"assignment_id": "slate-first",
             "previous_candidate_set_digest": previous["candidate_set_digest"],
-            "candidate_set_digest": packet["candidate_set_digest"], "review_ids": [first["id"]]})
+            "candidate_set_digest": packet["candidate_set_digest"], "previous_bar_ids": previous["bar_ids"],
+            "bar_ids": packet["bar_ids"], "review_ids": [first["id"]]})
         deferred = [{"candidate_id": "candidate-2", "evidence_needed": "A documented active line."}]
         self.assert_error("problem_slate_review_unverified", lambda: self.record_slate(deferred=deferred, review_ids=[first["id"]]))
         self.assertEqual(self.record_slate(deferred=deferred, review_ids=[refreshed["id"]])["review_ids"], [refreshed["id"]])
@@ -337,6 +338,35 @@ class ProblemSlateTests(ProblemDeliveryCase):
         result = self.assign("result", "first")
         packet = json.loads(self.artifacts.read(result["packet"]))
         self.assertEqual((result["history_assignment_id"], sorted(packet["bar_ids"])), ("bar-first-v2", bar_review_ids))
+
+    def test_changed_bars_refresh_the_slate_reviewer_in_its_session(self):
+        original = protocol.canonical_prompt
+
+        def previous_prompt(role, **options):
+            if options.get("orchestration") == "problem_creation":
+                options["version"] = 1
+            return original(role, **options)
+        self.record_candidate()
+        with patch.object(protocol, "canonical_prompt", side_effect=previous_prompt):
+            self.observe_bars()
+        stranded = self.observe("slate", "first", self.build_slate_output(["candidate-1"]))
+        for reviewer in ("first", "second"):
+            self.observe("bar", reviewer, identifier="bar-" + reviewer + "-v2")
+        bar_review_ids = ["review-bar-first-v2", "review-bar-second-v2"]
+        self.assert_error("problem_slate_review_unverified",
+                          lambda: self.record_slate(bar_review_ids=bar_review_ids, review_ids=[stranded["id"]]))
+        output = self.build_slate_output(["candidate-1"])
+        output["value"]["bar_ids"] = bar_review_ids
+        refreshed = self.observe("slate", "first", output, identifier="slate-first-refreshed")
+        records = self.read_records()
+        assignment = records["review_assignment"]["slate-first-refreshed"]
+        packet = json.loads(self.artifacts.read(assignment["packet"]))
+        self.assertEqual((assignment["context"], sorted(packet["bar_ids"])),
+                         ({"prior_assignment_id": "slate-first"}, bar_review_ids))
+        self.assertEqual((sorted(packet["problem_refresh"]["previous_bar_ids"]), packet["problem_refresh"]["bar_ids"]),
+                         (["review-bar-first", "review-bar-second"], packet["bar_ids"]))
+        self.assertEqual(self.record_slate(bar_review_ids=bar_review_ids, review_ids=[refreshed["id"]])["review_ids"],
+                         [refreshed["id"]])
 
     def test_a_stale_slate_counts_as_no_slate_for_next_and_the_milestone(self):
         self.record_candidate()

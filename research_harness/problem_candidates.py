@@ -16,7 +16,7 @@ from .operations import fields, immutable_record, normalized_text, prepared_muta
 from .problem_claims import find_current_statement, find_latest, require_problem
 from .research_decisions import _independence, _pair
 from .review_context_repair import slot_id
-from .review_protocol import build_problem_subject, is_previous_prompt, validate_problem_bars
+from .review_protocol import build_problem_subject, find_current_problem_bar_ids, is_previous_prompt, validate_problem_bars
 from . import problem_rubric, strategy
 
 SOURCE_KINDS = ("own_record", "literature", "computation", "section", "user")
@@ -84,10 +84,19 @@ def find_current_slate(records):
     return slate
 
 
-def find_cited_slate_reviews(records):
-    """The slate reviews that the latest slate cites; their material findings bind the post like the bars'."""
-    slate = find_slate(records)
-    return [] if slate is None else [records["value_review"][identifier] for identifier in slate["review_ids"]]
+def find_current_slate_reviews(records, artifacts):
+    """Every observed slate review of the current candidate set and the current bars. Its material findings bind the
+    post like the bars' findings, whether or not the latest slate cites it."""
+    candidate_set_digest = compute_candidate_set_digest(records)
+    bar_ids = set(find_current_problem_bar_ids(records, artifacts))
+    current = []
+    for review in sorted(records.get("value_review", {}).values(), key=lambda row: (row["recorded_revision"], row["id"])):
+        if review["payload"]["stage"] != "slate" or review.get("subject", {}).get("kind") != "problem":
+            continue
+        packet = json.loads(artifacts.read(records["review_assignment"][review["assignment_id"]]["packet"]))
+        if packet.get("candidate_set_digest") == candidate_set_digest and set(packet["bar_ids"]) == bar_ids:
+            current.append(review)
+    return current
 
 
 def describe_candidates(records):

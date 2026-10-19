@@ -540,9 +540,10 @@ def collect_problem_objections(records, artifacts, reviews):
 
 def assess_problem_objections(records, artifacts, subject, bars, reviews, evidence_digest):
     """Apply the common evidenced-resolution rule without a strategic dossier."""
-    from .problem_candidates import find_cited_slate_reviews
+    from .problem_candidates import find_current_slate_reviews
     dispositions = []
-    for objection in collect_problem_objections(records, artifacts, bars + find_cited_slate_reviews(records) + reviews):
+    for objection in collect_problem_objections(records, artifacts,
+                                                bars + find_current_slate_reviews(records, artifacts) + reviews):
         adjudication = max((saved for saved in records.get('review_adjudication', {}).values()
             if saved['objection_id'] == objection['id'] and saved.get('subject') == subject
             and saved.get('problem_evidence_digest') == evidence_digest),

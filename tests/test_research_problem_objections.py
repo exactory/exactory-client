@@ -218,13 +218,17 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         self.assertEqual(packet["objection"]["id"], "unsupported-implication")
         self.assert_delivered()
 
-    def test_a_slate_that_no_longer_cites_the_review_drops_its_objection(self):
+    def test_a_slate_review_objection_stays_while_its_candidate_set_and_bars_are_current(self):
         self.prepare_reviews(slate_reviewer="first", results=False)
         self.record_slate("slate-2")
+        packet = protocol.build_packet(self.store.snapshot()["records"], self.artifacts, None, "result", "first")
+        self.assertEqual([objection["id"] for objection in packet["material_objections"]], ["unsupported-implication"])
+        self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
+        self.record_slate("slate-3", deferred=[{"candidate_id": "candidate-2", "evidence_needed": "A documented active line."}])
+        packet = protocol.build_packet(self.store.snapshot()["records"], self.artifacts, None, "result", "first")
+        self.assertEqual(packet["material_objections"], [])
         for reviewer in ("first", "second"):
             self.observe("result", reviewer)
-        packet = json.loads(self.artifacts.read(self.store.snapshot()["records"]["review_assignment"]["result-first"]["packet"]))
-        self.assertEqual(packet["material_objections"], [])
         self.assert_delivered()
 
     def test_focused_adjudication_can_resolve_a_bar_objection(self):

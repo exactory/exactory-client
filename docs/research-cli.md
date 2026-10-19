@@ -1448,26 +1448,30 @@ for exactly each packet candidate. Any other shape returns `invalid_value_review
 
 The slate packet also carries `candidate_set_digest`, the digest of the sorted
 `{id, digest}` of every current candidate, and a cited review must have assessed
-the current set: the same candidate ids and the same digest. After a candidate is
-added or superseded, assign the slate again to the same reviewer with an empty
-`context`. The assignment refreshes the completed slate review: it continues that
-reviewer's session and slot, lists the current candidates and bars, carries the
-earlier slate findings in `historical_reviews`, and adds `problem_refresh` with
-`{assignment_id, previous_candidate_set_digest, candidate_set_digest,
+the current set: the same candidate ids and the same digest, and the current bars.
+After a candidate is added or superseded, or after a bar is refreshed or replaced,
+assign the slate again to the same reviewer with an empty `context`. The
+assignment refreshes the completed slate review: it continues that reviewer's
+session and slot, lists the current candidates and bars, carries the earlier slate
+findings in `historical_reviews`, and adds `problem_refresh` with `{assignment_id,
+previous_candidate_set_digest, candidate_set_digest, previous_bar_ids, bar_ids,
 review_ids}`. The new response covers the earlier material objections in
-`objection_findings`. While the candidate set is unchanged, another slate
-assignment for that reviewer returns `review_resampling_forbidden`.
+`objection_findings`. While the candidate set and the bars are unchanged, another
+slate assignment for that reviewer returns `review_resampling_forbidden`.
 
-The material objections of the slate reviews that the latest slate cites bind the
-post like the bars' objections. They join the result packets'
+The material objections of every observed slate review of the current candidate
+set and the current bars bind the post like the bars' objections, whether or not
+the latest slate cites the review; `review_ids` names the reviews that the
+selection rests on. These objections join the result packets'
 `material_objections`, so each result review needs an `objection_findings` entry
 for them (`review_objection_history_incomplete`), and they remain post
 obligations (`research_objection_unresolved`) until both result reviews record an
 evidenced resolution or a focused adjudication finds them not upheld. Adjudicate
 a slate-review objection with the two bar review ids in `context.review_ids`, as
-for a bar objection; the adjudicator packet's `assessments` add the cited slate
-reviews. A later slate that no longer cites a review drops its objections, unless
-a result review keeps them `continuing` or `contested`.
+for a bar objection; the adjudicator packet's `assessments` add the current slate
+reviews. A slate review of another candidate set or other bars leaves the post
+path; its findings stay in its reviewer's history, and a result review that keeps
+them `continuing` or `contested` keeps them material.
 
 Formulate a selected candidate with `problem-statement` and its `candidate_id`.
 The post gate requires a slate (`problem_slate_missing`) and a current statement

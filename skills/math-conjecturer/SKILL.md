@@ -114,22 +114,29 @@ Keep the negative findings in the record.
 6. Assign each bar with `review-assignment`, role `bar` and `dossier_id: null`. The harness uses
    the template `exactory-problem-review-v2/bar`. Run the assignment with `review-run`.
    Record the observed bar with `value-review`.
-7. Compare the candidates by their mathematical payoff, their neighbours, their distinguishing
+7. When `problem-slate` returns `problem_bar_calibration_required`, the named bar was recorded on
+   the version 1 prompt. Assign the bar again to the same reviewer with an empty `context`. The
+   harness refreshes it on the version 2 prompt in the same session and slot. Name the refreshed
+   bar in `bar_review_ids`.
+8. Compare the candidates by their mathematical payoff, their neighbours, their distinguishing
    tests, their failure signals and their resource demand.
-8. When uncertainty warrants it, obtain a focused slate review before you record the slate.
+9. When uncertainty warrants it, obtain a focused slate review before you record the slate.
    Assign it with `review-assignment`, role `slate` and `dossier_id: null`, to one of the two bar
    reviewers. The harness builds its packet from the current candidates and the two bars, and
    uses the template `exactory-problem-review-v2/slate`. Run the assignment with `review-run`.
    Record the observed review with `value-review`.
-9. Record the selection with `exactory-research problem-slate`. Give every current candidate
-   exactly one disposition: `selected`, `deferred` with the evidence that raises it, or
-   `rejected` with the reason. Name both bars in `bar_review_ids`. When slate reviews were
-   recorded, put their ids in `review_ids` (at most two, from distinct reviewers). Otherwise
-   leave `review_ids` empty. Write the `comparison`.
-10. Select only a candidate whose potential grades reach `max(B1, B2) >= 2` with readiness `pass`.
+10. Record the selection with `exactory-research problem-slate`. Give every current candidate
+    exactly one disposition: `selected`, `deferred` with the evidence that raises it, or
+    `rejected` with the reason. Name both bars in `bar_review_ids`. When slate reviews were
+    recorded, put their ids in `review_ids` (at most two, from distinct reviewers). Otherwise
+    leave `review_ids` empty. Write the `comparison`.
+11. Select only a candidate whose potential grades reach `max(B1, B2) >= 2` with readiness `pass`.
     Defer a candidate at potential level 1 with the evidence that raises it.
-11. When the evidence that raises a deferred candidate is recorded, reconsider the candidate.
-12. When a new or revised candidate is recorded, record a new slate (`problem_slate_stale`).
+12. When the evidence that raises a deferred candidate is recorded, reconsider the candidate.
+13. When a new or revised candidate is recorded, record a new slate (`problem_slate_stale`).
+    When the candidates or the bars change after a slate review, assign the slate again to the
+    same reviewer before you cite the review. The harness refreshes the review in the same session
+    and slot.
 
 Treat a selection as authority for further research expenditure only. Do not present it as
 evidence of openness or significance. Take each selected candidate through the following steps

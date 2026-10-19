@@ -99,12 +99,13 @@ would raise it, or rejected with the reason. A selected candidate needs
 version 2 bars: a bar recorded on the version 1 template returns
 `problem_bar_calibration_required`, and assigning the bar again to the same
 reviewer refreshes it on version 2 in the same session and slot. A focused slate
-review by a bar reviewer is optional. It is bound to the exact candidate set; after
-a candidate is added or superseded, assigning the slate again to the same reviewer
-refreshes the review in its session, with its earlier findings in the history. The
-material objections of the slate reviews that the latest slate cites bind the
-result reviews and the post like the bars' objections, and are adjudicated with
-the two bars. Selection authorizes further research; it establishes neither
+review by a bar reviewer is optional. It is bound to the exact candidate set and
+the current bars; after a candidate is added or superseded, or a bar is refreshed,
+assigning the slate again to the same reviewer refreshes the review in its session,
+with its earlier findings in the history. The material objections of every slate
+review of the current candidate set and bars bind the result reviews and the post
+like the bars' objections, whether or not the slate cites the review, and are
+adjudicated with the two bars. Selection authorizes further research; it establishes neither
 openness nor significance. A slate that selects no candidate records the reason
 and is the legitimate no-post outcome: `next` reports `problem_no_post` until a new
 slate selects a candidate. Formulate a selected candidate with `problem-statement`

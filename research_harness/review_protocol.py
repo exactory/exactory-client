@@ -433,6 +433,11 @@ def validate_problem_bars(records, artifacts, bars):
                                 {'review_id': review['id']})
 
 
+def find_current_problem_bar_ids(records, artifacts):
+    """The ids of the current problem bars: the latest observed bar of each slot."""
+    return [review['id'] for review, _ in _bars(records, artifacts, None, subject=build_problem_subject(records, 'slate'))]
+
+
 def add_problem_bars(records, artifacts, packet, reviewer_id):
     """Bind a slate or result packet to both current field bars and the reviewer's own bar session."""
     bars = _bars(records, artifacts, None, subject=packet['subject'])
@@ -572,7 +577,7 @@ def add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id
     slates = []
     if problem:
         from .direction_reviews import collect_observed_packets
-        from .problem_candidates import find_cited_slate_reviews
+        from .problem_candidates import find_current_slate_reviews
         from .research_decisions import _pair, _response
         saved = _pair(records, ids, packet['subject'], reviews[0]['stage'])
         for review in saved:
@@ -585,7 +590,7 @@ def add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id
         validate_problem_bars(records, artifacts, [review for review in saved if review['payload']['stage'] == 'bar'])
         # A focused slate review continues a bar session, so its objection is adjudicated with the two bars.
         if reviews[0]['stage'] == 'bar':
-            slates = find_cited_slate_reviews(records)
+            slates = find_current_slate_reviews(records, artifacts)
         initial = {normalized_text(review['reviewer_id']) for review in records.get('value_review', {}).values()
                    if review.get('subject', {}).get('kind') == 'problem'
                    and (review['payload']['stage'] in ('bar', 'slate') or review['subject'] == packet['subject'])}
@@ -626,7 +631,7 @@ def add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id
 
 def add_problem_objections(records, artifacts, packet, bars):
     """Supply prior material findings without exposing a current peer result."""
-    from .problem_candidates import find_cited_slate_reviews
+    from .problem_candidates import find_current_slate_reviews
     from .research_decisions import collect_problem_objections
     previous = []
     for review in records.get('value_review', {}).values():
@@ -636,7 +641,7 @@ def add_problem_objections(records, artifacts, packet, bars):
             if supplied.get('problem_evidence_digest') != packet['problem_evidence_digest']:
                 previous.append(review)
     packet['material_objections'] = collect_problem_objections(records, artifacts,
-                                                               bars + find_cited_slate_reviews(records) + previous)
+                                                               bars + find_current_slate_reviews(records, artifacts) + previous)
 
 
 def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
@@ -691,6 +696,7 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                 packet['problem_refresh'] = {'assignment_id': prior['id'],
                     'previous_candidate_set_digest': previous['candidate_set_digest'],
                     'candidate_set_digest': packet['candidate_set_digest'],
+                    'previous_bar_ids': previous['bar_ids'], 'bar_ids': packet['bar_ids'],
                     'review_ids': [review['id'] for review in historical]}
             elif problem and role == 'slate':
                 packet.update({key: previous[key] for key in ('bar_ids', 'candidates', 'candidate_set_digest')})
@@ -1080,13 +1086,14 @@ def _source_parent(records, artifacts, identifier, dossier_id, reviewer_id, role
 
 def _is_problem_refresh(records, artifacts, prior, previous):
     """Whether a completed problem review no longer binds the current record: a result's evidence changed, a slate's
-    candidates changed, or a bar was recorded on the version 1 template, which lacks the rubric calibration."""
+    candidates or bars changed, or a bar was recorded on the version 1 template, which lacks the rubric calibration."""
     if prior['role'] == 'result':
         from .problem_claims import compute_problem_evidence_digest
         return previous.get('problem_evidence_digest') != compute_problem_evidence_digest(records, artifacts)
     if prior['role'] == 'slate':
         from .problem_candidates import compute_candidate_set_digest
-        return previous['candidate_set_digest'] != compute_candidate_set_digest(records)
+        return (previous['candidate_set_digest'] != compute_candidate_set_digest(records)
+                or set(previous['bar_ids']) != set(find_current_problem_bar_ids(records, artifacts)))
     return is_previous_prompt(prior)
 
 
