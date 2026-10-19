@@ -131,8 +131,9 @@ significance.
    of significance and priority mean in this field before the candidates can shape the answer.
 5. When `problem-slate` returns `problem_bar_calibration_required`, the named bar was recorded
    on the version 1 prompt. Assign the bar again to the same reviewer with an empty `context`;
-   the harness refreshes it on the version 2 prompt in the same session and slot. Name the
-   refreshed bar in `bar_review_ids`.
+   the harness refreshes it on the version 2 prompt in the same session and slot. The refreshed
+   bar gives a finding on every objection the version 1 bar stated; until it is recorded, those
+   objections stay in force. Name the refreshed bar in `bar_review_ids`.
 6. Compare the candidates by their mathematical payoff, their neighbours, the tests that would
    distinguish them, their failure signals and their resource demand. Write that comparison; it
    goes into the slate.
@@ -155,7 +156,8 @@ significance.
 10. When a new or revised candidate is recorded, the slate is stale (`problem_slate_stale`):
     record a new slate that disposes of every current candidate. When the candidates or the bars
     change after a slate review, assign the slate review again to the same reviewer before you
-    cite it; the harness refreshes it in the same session and slot.
+    cite it; the harness refreshes it in the same session and slot, and the refreshed review
+    gives a finding on every objection its earlier review stated.
 
 Take each selected candidate through the following steps in turn, and post each one that meets
 the bar. Several problems from one exploration is the normal case, not an exception.

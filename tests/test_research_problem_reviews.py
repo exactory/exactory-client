@@ -168,7 +168,7 @@ class ProblemReviewTests(LiteratureCase):
         self.assertNotIn('not reasons against a question by themselves', protocol.canonical_prompt("bar", orchestration="problem_creation", version=1)["text"])
 
     def test_problem_slate_template_is_version_two_only_and_keeps_bar_and_result_bytes(self):
-        version_two = {"bar": "18d10e762c4f7ed28a1e46681535fa96e5e202093437e65ecedcb3874a9914dd",
+        version_two = {"bar": "b0970315305977542a7b2099925a3c770087daf2e9a33a1c34d3660c72069b53",
                        "result": "19de7711580cabaeee94b19e19f10d19cd2445f4168949453c98d52786ef1494",
                        "adjudicator": "e90b8eacc63d2f9e42d8b20f6fb2fbbd64d4c1bd6ac9e9d8b221edf1530bf69d"}
         for role, expected in version_two.items():

@@ -238,8 +238,12 @@ _PROBLEM_BAR_EXAMPLE = (
     '"objections":[],"limitations":["..."]}')
 _PROBLEM_BAR_RESPONSE = (
     ' Return the exact JSON response shape: ' + json.dumps(_RESPONSE_SCHEMA) +
-    '. Support is null. A bar leaves bar_ids, work_items, assurances and objection_findings empty and both adequacies '
-    'not_assessed; value.evidence names the delivered sources your standard rests on. ' + _REVIEW_GRAMMAR +
+    '. Support is null. A bar leaves bar_ids, work_items and assurances empty and both adequacies not_assessed; '
+    'value.evidence names the delivered sources your standard rests on. objection_findings is empty for a first bar. '
+    'When the packet carries problem_refresh, this bar continues your earlier bar on a newer template, and '
+    'objection_findings holds one entry {id,status:resolved|continuing|contested,reason,evidence} for every objection '
+    'that earlier bar stated, under its id: a continuing or contested finding keeps the objection in force, a resolved '
+    'finding with evidence retires it. ' + _REVIEW_GRAMMAR +
     'A valid final response, with the placeholders replaced by the delivered values: ' + _PROBLEM_BAR_EXAMPLE + '.')
 _PROBLEM_RESULT_SCHEMA = copy.deepcopy(_RESPONSE_SCHEMA)
 _PROBLEM_RESULT_SCHEMA['value'].update(
