@@ -194,9 +194,11 @@ def record_value_review(store, payload, *, expected_revision, request_id):
         review_context_repair.validate_repair_origin(records, artifacts, saved_assignment)
         review_context_repair.validate_reassessment(records, artifacts, saved_assignment, assignment["output"])
         inherited = review_context_repair.reassessment_reviews(records, saved_assignment)
-        if problem is not None:
-            inherited.extend(review_context_repair.collect_problem_result_history(records, saved_assignment))
-        historical = list(inherited)
+        refreshed = (review_context_repair.collect_problem_review_history(records, saved_assignment)
+                     if problem is not None else [])
+        # A refreshed slate or result review addresses its earlier findings; a recalibrated bar keeps them in its
+        # observed history, where the post path still collects them.
+        historical = inherited + (refreshed if value["stage"] != "bar" else [])
         if value["stage"] != "bar" and problem is not None:
             historical.extend(review for review in review_context_repair.historical_reviews(records, None, value["stage"])
                               if review.get("subject") == saved_assignment["subject"])
@@ -206,7 +208,7 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                 if previous_dossier["payload"]["intent_id"] == dossier["payload"]["intent_id"]:
                     historical.extend(review_context_repair.historical_reviews(records, previous_dossier["id"], "bar"))
             historical.extend(review_context_repair.historical_reviews(records, value["dossier_id"], value["stage"]))
-        inherited_ids = {review["id"] for review in inherited}
+        inherited_ids = {review["id"] for review in inherited + refreshed}
         reviewer = normalized_text(assignment["reviewer_id"])
         authors = problem["authors"] if problem is not None else intent["payload"]["authors"]
         if reviewer in {normalized_text(author) for author in authors}:
@@ -538,8 +540,9 @@ def collect_problem_objections(records, artifacts, reviews):
 
 def assess_problem_objections(records, artifacts, subject, bars, reviews, evidence_digest):
     """Apply the common evidenced-resolution rule without a strategic dossier."""
+    from .problem_candidates import find_cited_slate_reviews
     dispositions = []
-    for objection in collect_problem_objections(records, artifacts, bars + reviews):
+    for objection in collect_problem_objections(records, artifacts, bars + find_cited_slate_reviews(records) + reviews):
         adjudication = max((saved for saved in records.get('review_adjudication', {}).values()
             if saved['objection_id'] == objection['id'] and saved.get('subject') == subject
             and saved.get('problem_evidence_digest') == evidence_digest),

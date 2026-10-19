@@ -11,7 +11,7 @@ from .evidence import digest
 from .graph import obligation
 from .operations import fields, immutable_record, strings, text
 from .problem_attempt import assess_attempt
-from .problem_candidates import assess_slate, find_slate
+from .problem_candidates import assess_slate, find_current_slate
 from .problem_claims import find_current_statement, find_latest, find_value, compute_problem_evidence_digest, require_problem, compute_statement_digest, assess_assessment
 from .problem_evidence import assess_formal_checks, project_citations, validate_value
 from .problem_openness import assess_openness
@@ -96,7 +96,7 @@ def assess_post(records, artifacts):
     if posted is not None:
         pending.append(obligation("problem_already_posted", "This exact statement already has a recorded post.", post_id=posted["id"], problem_id=posted["problem_id"]))
     unique = list({digest(row): row for row in pending}.values())
-    slate = find_slate(records)
+    slate = find_current_slate(records)
     milestone = "exploration"
     if slate is not None:
         milestone = "slate"

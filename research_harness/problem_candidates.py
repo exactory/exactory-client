@@ -6,14 +6,17 @@ potential grades. Selection authorizes further research expenditure; it
 establishes neither openness nor significance.
 """
 
+import json
+
 from .artifacts import ArtifactStore
 from .errors import ResearchError
+from .evidence import digest
 from .graph import obligation
 from .operations import fields, immutable_record, normalized_text, prepared_mutation, strings, text
 from .problem_claims import find_current_statement, find_latest, require_problem
 from .research_decisions import _independence, _pair
 from .review_context_repair import slot_id
-from .review_protocol import build_problem_subject, validate_problem_bars
+from .review_protocol import build_problem_subject, is_previous_prompt, validate_problem_bars
 from . import problem_rubric, strategy
 
 SOURCE_KINDS = ("own_record", "literature", "computation", "section", "user")
@@ -63,8 +66,28 @@ def record_candidate(store, payload, *, expected_revision, request_id):
                              expected_revision=expected_revision, request_id=request_id)
 
 
+def compute_candidate_set_digest(records):
+    """Bind a slate review to the exact current candidates: their ids and record digests."""
+    return digest([{"id": identifier, "digest": digest(row)}
+                   for identifier, row in sorted(find_current_candidates(records).items())])
+
+
 def find_slate(records):
     return find_latest(records, "problem_slate")
+
+
+def find_current_slate(records):
+    """The latest slate while it disposes of exactly the current candidates; a stale slate counts as none."""
+    slate = find_slate(records)
+    if slate is None or slate["candidate_ids"] != sorted(find_current_candidates(records)):
+        return None
+    return slate
+
+
+def find_cited_slate_reviews(records):
+    """The slate reviews that the latest slate cites; their material findings bind the post like the bars'."""
+    slate = find_slate(records)
+    return [] if slate is None else [records["value_review"][identifier] for identifier in slate["review_ids"]]
 
 
 def describe_candidates(records):
@@ -90,6 +113,11 @@ def _verify_bars(records, artifacts, bar_review_ids):
     except ResearchError as error:
         raise ResearchError("problem_bar_pending", "Cite two observed independent problem bars",
                             {"bar_review_ids": bar_review_ids}) from error
+    for bar in bars:
+        if is_previous_prompt(records["review_assignment"][bar["assignment_id"]]):
+            raise ResearchError("problem_bar_calibration_required",
+                                "Obtain a version 2 bar from this reviewer: assign the bar again to refresh it",
+                                {"review_id": bar["id"]})
     validate_problem_bars(records, artifacts, bars)
     pending = _independence(records, artifacts, bars)
     if pending:
@@ -102,7 +130,9 @@ def _is_current_review(records, artifacts, review, bar_review_ids, candidate_ids
             or review.get("subject") != build_problem_subject(records, "slate")):
         return False
     findings = review["payload"]["value"]
+    packet = json.loads(artifacts.read(records["review_assignment"][review["assignment_id"]]["packet"]))
     return (set(findings["bar_ids"]) == set(bar_review_ids) and set(findings["rubric_potential"]) == set(candidate_ids)
+            and packet.get("candidate_set_digest") == compute_candidate_set_digest(records)
             and not _independence(records, artifacts, [review]))
 
 

@@ -280,6 +280,82 @@ class ProblemSlateTests(ProblemDeliveryCase):
                              dict(output, id="review-repaired-slate", dossier_id=None, assignment_id=repaired["id"]))["result"]
         self.assertEqual(self.record_slate(review_ids=[review["id"]])["review_ids"], ["review-repaired-slate"])
 
+    def test_changed_candidates_refresh_the_slate_reviewer_in_its_session(self):
+        self.record_candidate()
+        self.observe_bars()
+        first = self.observe("slate", "first", self.build_slate_output(["candidate-1"]))
+        self.assert_error("review_resampling_forbidden", lambda: self.assign("slate", "first", identifier="slate-first-again"))
+        self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
+        refreshed = self.observe("slate", "first", self.build_slate_output(["candidate-1", "candidate-2"]),
+                                 identifier="slate-first-refreshed")
+        records = self.read_records()
+        original, assignment = (records["review_assignment"][identifier] for identifier in ("slate-first", "slate-first-refreshed"))
+        self.assertEqual((assignment["context"], assignment["history_assignment_id"], assignment["slot_id"]),
+                         ({"prior_assignment_id": "slate-first"}, "slate-first", original["slot_id"]))
+        packet = json.loads(self.artifacts.read(assignment["packet"]))
+        previous = json.loads(self.artifacts.read(original["packet"]))
+        self.assertEqual([candidate["id"] for candidate in packet["candidates"]], ["candidate-1", "candidate-2"])
+        self.assertEqual(packet["candidate_set_digest"], problem_candidates.compute_candidate_set_digest(records))
+        self.assertEqual(packet["problem_refresh"], {"assignment_id": "slate-first",
+            "previous_candidate_set_digest": previous["candidate_set_digest"],
+            "candidate_set_digest": packet["candidate_set_digest"], "review_ids": [first["id"]]})
+        deferred = [{"candidate_id": "candidate-2", "evidence_needed": "A documented active line."}]
+        self.assert_error("problem_slate_review_unverified", lambda: self.record_slate(deferred=deferred, review_ids=[first["id"]]))
+        self.assertEqual(self.record_slate(deferred=deferred, review_ids=[refreshed["id"]])["review_ids"], [refreshed["id"]])
+        self.assert_error("review_resampling_forbidden", lambda: self.assign("slate", "first", identifier="slate-first-third"))
+
+    def test_slate_requires_version_two_bars_and_refreshes_version_one_bars(self):
+        original = protocol.canonical_prompt
+
+        def previous_prompt(role, **options):
+            if options.get("orchestration") == "problem_creation":
+                options["version"] = 1
+            return original(role, **options)
+        self.record_candidate()
+        with patch.object(protocol, "canonical_prompt", side_effect=previous_prompt):
+            self.observe_bars()
+        with self.assertRaises(ResearchError) as caught:
+            self.record_slate()
+        self.assertEqual((caught.exception.code, caught.exception.details),
+                         ("problem_bar_calibration_required", {"review_id": "review-bar-first"}))
+        for reviewer in ("first", "second"):
+            self.observe("bar", reviewer, identifier="bar-" + reviewer + "-v2")
+        records = self.read_records()
+        for reviewer in ("first", "second"):
+            with self.subTest(reviewer=reviewer):
+                earlier, assignment = (records["review_assignment"]["bar-" + reviewer + suffix] for suffix in ("", "-v2"))
+                packet = json.loads(self.artifacts.read(assignment["packet"]))
+                self.assertEqual((assignment["context"], assignment["history_assignment_id"], assignment["slot_id"]),
+                                 ({"prior_assignment_id": earlier["id"]}, earlier["id"], earlier["slot_id"]))
+                self.assertEqual(assignment["prompt"]["template_id"], "exactory-problem-review-v2/bar")
+                self.assertEqual(packet["problem_refresh"], {"assignment_id": earlier["id"],
+                    "previous_template_id": "exactory-problem-review-v1/bar", "template_id": "exactory-problem-review-v2/bar"})
+        self.assert_error("review_resampling_forbidden", lambda: self.assign("bar", "first", identifier="bar-first-third"))
+        bar_review_ids = ["review-bar-first-v2", "review-bar-second-v2"]
+        self.assertEqual(self.record_slate(bar_review_ids=bar_review_ids)["bar_review_ids"], bar_review_ids)
+        self.select_statement(candidate_id="candidate-1")
+        result = self.assign("result", "first")
+        packet = json.loads(self.artifacts.read(result["packet"]))
+        self.assertEqual((result["history_assignment_id"], sorted(packet["bar_ids"])), ("bar-first-v2", bar_review_ids))
+
+    def test_a_stale_slate_counts_as_no_slate_for_next_and_the_milestone(self):
+        self.record_candidate()
+        self.observe_bars()
+        self.record_slate(selected=[], rejected=[{"candidate_id": "candidate-1", "reason": "A settled case."}],
+                          reason="No candidate reaches potential level 2.")
+        self.assertEqual(status_report(self.store)["next"]["code"], "problem_no_post")
+        self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
+        report = status_report(self.store)
+        self.assertEqual((report["milestone"], report["next"]["code"], report["slate_id"]),
+                         ("exploration", "problem_slate_stale", "slate-1"))
+        self.record_slate("slate-2", selected=["candidate-2"],
+                          rejected=[{"candidate_id": "candidate-1", "reason": "A settled case."}])
+        self.select_statement(candidate_id="candidate-2")
+        self.assertEqual(status_report(self.store)["milestone"], "formulation")
+        self.record_candidate("candidate-3", statement="A third formulation found later.")
+        report = status_report(self.store)
+        self.assertEqual((report["milestone"], report["next"]["code"]), ("exploration", "problem_slate_stale"))
+
 
 class ProblemSlateCurrencyTests(ProblemDeliveryCase):
     def test_gate_reports_slate_stale_after_a_new_or_superseded_candidate(self):

@@ -160,9 +160,14 @@ class ProblemReviewTests(LiteratureCase):
         bar = protocol.canonical_prompt("bar", orchestration="problem_creation")["text"]
         for content in ('levels 2 and 3', 'B1', 'B2', 'priority', 'what a resolution would give', 'uninteresting'):
             self.assertIn(content, bar)
+        for content in ('"No route to progress" and "settles nothing else" are not by themselves reasons against a problem',
+                        'accessibility E-N) is admissible on a level-3 significance case',
+                        'explanatory significance counts', 'Level 2 requires a substantial mathematical advance and its relevance'):
+            self.assertIn(content, bar)
+        self.assertNotIn('not by themselves reasons', protocol.canonical_prompt("bar", orchestration="problem_creation", version=1)["text"])
 
     def test_problem_slate_template_is_version_two_only_and_keeps_bar_and_result_bytes(self):
-        version_two = {"bar": "7c491ac770a4bcb5386a270cb629cc06e4fd3e749245464f68abe63cc6ecfc20",
+        version_two = {"bar": "32d0f7d5b6728a2c8052fbea04db5e8c0b6d092e2d75f795997f688fe98400b0",
                        "result": "f84acc0b4c2e70eefed9699849e072be767d7a8b6ce54200832923d6bb9ef611",
                        "adjudicator": "6cb910b6a89b1b17e3a55ede4dee68e528eaa3db0bac7ede4f3d6b22712ba54a"}
         for role, expected in version_two.items():

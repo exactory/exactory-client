@@ -224,12 +224,12 @@ def reassessment_reviews(records, assignment):
     return _reviews(records, {item['id'] for item in _lineage(records, predecessor)})
 
 
-def collect_problem_result_history(records, assignment):
-    """Retain observed result findings across changed-evidence continuations."""
-    if assignment.get('subject', {}).get('kind') != 'problem' or assignment['role'] != 'result':
+def collect_problem_review_history(records, assignment):
+    """Retain a problem reviewer's earlier final findings of the same phase across refreshes and continuations."""
+    if assignment.get('subject', {}).get('kind') != 'problem' or assignment['role'] not in ROLES:
         return []
     return _reviews(records, {item['id'] for item in _lineage(records, assignment)
-                              if item['role'] == 'result'})
+                              if item['role'] == assignment['role']})
 
 
 def validate_repair_origin(records, artifacts, assignment):

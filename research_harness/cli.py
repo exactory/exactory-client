@@ -300,9 +300,10 @@ def status_report(store, *, counters=False):
     evaluation = Evaluation(records, ArtifactStore(store.root))
     if "problem" in records.get("workspace", {}):
         report = gate_state(records, evaluation, "post")
-        slate = problem_candidates.find_slate(records)
-        if slate is not None and not slate["selected"]:
-            upcoming = {"code": "problem_no_post", "reason": slate["reason"],
+        slate, current_slate = problem_candidates.find_slate(records), problem_candidates.find_current_slate(records)
+        # A stale slate decides nothing; its stale obligation leads the report instead.
+        if current_slate is not None and not current_slate["selected"]:
+            upcoming = {"code": "problem_no_post", "reason": current_slate["reason"],
                         "explanation": "The latest slate selects no candidate; a new slate that selects one reopens the post path."}
         elif report["obligations"]:
             upcoming = report["obligations"][0]

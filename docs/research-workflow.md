@@ -79,9 +79,9 @@ operations of the Mathematics section.
 
 | Milestone | Condition computed from records |
 | --- | --- |
-| `exploration` | `problem-init` records the area, field and immutable authors and adopts the constitution. No slate exists yet. |
-| `slate` | `problem-slate` records the selection over every current candidate, bound to two observed blind bars; no statement exists yet, or the latest slate selects no candidate. |
-| `formulation` | The latest slate selects a candidate and `problem-statement` has selected a statement: the exact statement, resolution criteria, neighbours, optional formal statement and the candidate it formulates. |
+| `exploration` | `problem-init` records the area, field and immutable authors and adopts the constitution. No current slate exists: none is recorded, or the latest slate no longer covers exactly the current candidates. |
+| `slate` | `problem-slate` records the selection over every current candidate, bound to two observed blind version 2 bars; no statement exists yet, or the current slate selects no candidate. |
+| `formulation` | The current slate selects a candidate and `problem-statement` has selected a statement: the exact statement, resolution criteria, neighbours, optional formal statement and the candidate it formulates. |
 | `attempt` | `problem-attempt` records a current, proportionate unresolved solver or critically assessed literature attempt; `assess_attempt` returns no obligations. |
 | `openness` | The attempt passes and an observed native openness review records a current `supported_open` finding with the shared search and full-reading minimum. |
 | `value` | Value evidence validates and `problem-assessment` binds a current self-assessment meeting the rubric thresholds; both observed bars and both version 2 result reviews cover the evidence and pass the assurances and rubric after adjudication; the current decision is `post`. |
@@ -95,15 +95,24 @@ the provisional potential grades and a disposition. Obtain two blind problem
 bars, then compare the candidates with `problem-slate`. The slate gives every
 current candidate one disposition: selected, deferred with the evidence that
 would raise it, or rejected with the reason. A selected candidate needs
-`max(B1, B2) >= 2` and readiness `pass` in its potential grades. A focused slate
-review by a bar reviewer is optional. Selection authorizes further research; it
-establishes neither openness nor significance. A slate that selects no candidate
-records the reason and is the legitimate no-post outcome: `next` reports
-`problem_no_post` until a new slate selects a candidate. Formulate a selected
-candidate with `problem-statement` and its `candidate_id`; the post gate requires
-the latest slate to select the current statement's candidate. The latest slate
-must still cover exactly the current candidates; otherwise the gate reports
-`problem_slate_stale` until a new slate is recorded.
+`max(B1, B2) >= 2` and readiness `pass` in its potential grades. The slate cites
+version 2 bars: a bar recorded on the version 1 template returns
+`problem_bar_calibration_required`, and assigning the bar again to the same
+reviewer refreshes it on version 2 in the same session and slot. A focused slate
+review by a bar reviewer is optional. It is bound to the exact candidate set; after
+a candidate is added or superseded, assigning the slate again to the same reviewer
+refreshes the review in its session, with its earlier findings in the history. The
+material objections of the slate reviews that the latest slate cites bind the
+result reviews and the post like the bars' objections, and are adjudicated with
+the two bars. Selection authorizes further research; it establishes neither
+openness nor significance. A slate that selects no candidate records the reason
+and is the legitimate no-post outcome: `next` reports `problem_no_post` until a new
+slate selects a candidate. Formulate a selected candidate with `problem-statement`
+and its `candidate_id`; the post gate requires the latest slate to select the
+current statement's candidate. The latest slate must still cover exactly the
+current candidates; otherwise the gate reports `problem_slate_stale`, `next` names
+it instead of `problem_no_post`, and the milestone is `exploration` until a new slate
+is recorded.
 
 Record the attempt with `problem-attempt`: `{id, statement_id, kind, solver,
 literature, outcomes, proportion}` becomes immutable `problem_attempt/<id>` with

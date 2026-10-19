@@ -262,6 +262,17 @@ exact statement, with what it proved, left unresolved and demonstrated. Calibrat
 `fail`. Accessibility is descriptive: `E-F` (footholds give an entry), `E-A` (a proposed route
 without footholds) or `E-N` (no footholds and no proposed route).
 
+The primary account names one ground and one criterion, `V1` to `V8`. Each criterion has an
+established part, given here, and an argued part: why that change matters. V1 consequence: exact
+implications, named results that become unconditional or follow. V2 explanation: the named
+competing explanations or the mechanism the question distinguishes. V3 connection and family:
+membership in a family, with transfer to siblings only through a reduction or another mathematical
+connection; shared notation is not a connection. V4 decisiveness: the known bounds and
+constructions and the gap between them. V5 method boundary: a delimited limitation of a named
+method or class of methods. V6 informative either way: the implications under each possible answer,
+where provable. V7 programme position: reductions that fix the question's place in a named line.
+V8 routes and tools: connections to several methods or areas.
+
 Calibration separates established results from conjectures, experimental findings and reasoned
 judgments. It states the scope of every computational finding. It asserts no community outcome
 before it is observed and no human difficulty or completion time. It keeps the conjectured answer

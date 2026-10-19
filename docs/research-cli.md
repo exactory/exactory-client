@@ -1414,10 +1414,21 @@ A slate that selects no candidate is the no-post outcome and needs a nonempty
 `reason` (`problem_slate_reason_missing`); with a selection, `reason` is a string
 and can be empty. `bar_review_ids` names two observed problem bars from distinct
 reviewers and slots. A missing or invalid pair returns `problem_bar_pending` with
-`{bar_review_ids}`, a bar for another area or field returns `review_bar_mismatch`,
-and a bar whose observed context no longer qualifies returns the code of its
-first assignment obligation. Selection authorizes further research expenditure;
-it establishes neither openness nor significance.
+`{bar_review_ids}`, a bar recorded on the version 1 template returns
+`problem_bar_calibration_required` with `{review_id}`, a bar for another area or
+field returns `review_bar_mismatch`, and a bar whose observed context no longer
+qualifies returns the code of its first assignment obligation. Selection
+authorizes further research expenditure; it establishes neither openness nor
+significance.
+
+A version 1 bar lacks the calibration of levels 2 and 3. Assign the bar again to
+the same reviewer with an empty `context`: the assignment refreshes the version 1
+bar on the version 2 template. It continues that reviewer's bar session and slot,
+the version 1 bar stays in its history, and the packet carries `problem_refresh`
+with `{assignment_id, previous_template_id, template_id}`. Cite the refreshed bars
+in the slate; the slate and result reviews then continue the version 2 sessions,
+because only the latest bar of each slot is current. A reviewer whose latest bar
+is on version 2 cannot be assigned another bar (`review_resampling_forbidden`).
 
 A focused slate review is optional. `review_ids` lists zero to two observed
 problem slate reviews from distinct reviewers and slots. Each must assess exactly
@@ -1435,6 +1446,29 @@ leaves `work_items` empty, reports the five problem assurances as `not_assessed`
 and adds `value.rubric_potential`, one `{significance: {B1, B2}, priority}` entry
 for exactly each packet candidate. Any other shape returns `invalid_value_review`.
 
+The slate packet also carries `candidate_set_digest`, the digest of the sorted
+`{id, digest}` of every current candidate, and a cited review must have assessed
+the current set: the same candidate ids and the same digest. After a candidate is
+added or superseded, assign the slate again to the same reviewer with an empty
+`context`. The assignment refreshes the completed slate review: it continues that
+reviewer's session and slot, lists the current candidates and bars, carries the
+earlier slate findings in `historical_reviews`, and adds `problem_refresh` with
+`{assignment_id, previous_candidate_set_digest, candidate_set_digest,
+review_ids}`. The new response covers the earlier material objections in
+`objection_findings`. While the candidate set is unchanged, another slate
+assignment for that reviewer returns `review_resampling_forbidden`.
+
+The material objections of the slate reviews that the latest slate cites bind the
+post like the bars' objections. They join the result packets'
+`material_objections`, so each result review needs an `objection_findings` entry
+for them (`review_objection_history_incomplete`), and they remain post
+obligations (`research_objection_unresolved`) until both result reviews record an
+evidenced resolution or a focused adjudication finds them not upheld. Adjudicate
+a slate-review objection with the two bar review ids in `context.review_ids`, as
+for a bar objection; the adjudicator packet's `assessments` add the cited slate
+reviews. A later slate that no longer cites a review drops its objections, unless
+a result review keeps them `continuing` or `contested`.
+
 Formulate a selected candidate with `problem-statement` and its `candidate_id`.
 The post gate requires a slate (`problem_slate_missing`) and a current statement
 whose candidate the latest slate selects (`problem_candidate_unselected`, naming
@@ -1442,7 +1476,8 @@ whose candidate the latest slate selects (`problem_candidate_unselected`, naming
 preliminary formulation and is permitted. The latest slate must still cover
 exactly the current candidates: a candidate recorded after it, or one that
 supersedes a candidate it disposed of, gives `problem_slate_stale` with
-`{slate_id, missing, extra}` until a new slate is recorded. A statement recorded
+`{slate_id, missing, extra}` until a new slate is recorded. A stale slate counts
+as no slate for the milestone and for `problem_no_post`. A statement recorded
 in a 0.53.0 store before candidates existed carries no `candidate_id`; formulate
 it again under a new statement id with `candidate_id`, because re-selecting it
 unchanged gives `record_conflict`.
@@ -1693,16 +1728,18 @@ records retain nonmanaged dependency composition and empirical meaning.
 | `problem_already_posted` | Retain the existing confirmed post; the same statement cannot be posted twice. |
 
 `status` and `next` compute milestones from records: `exploration` before
-any slate, `slate` with a slate and no statement or with a latest slate that
-selects no candidate, `formulation` when the latest slate selects a candidate
-and a statement is selected, `attempt` when `assess_attempt` returns no obligations,
+any slate or while the latest slate is stale, `slate` with a current slate and no
+statement or with a current slate that selects no candidate, `formulation` when
+the current slate selects a candidate and a statement is selected, `attempt` when
+`assess_attempt` returns no obligations,
 `openness` after that with current `supported_open`, `value` with
 valid value evidence and a passing current rubric self-assessment, both bars,
 both version 2 result reviews passing the assurances and rubric after
 adjudication, and a current post decision, and `post` with a recorded post.
 `next` names the first missing condition in the order slate, statement,
-attempt, openness, value, reviews, decision, export. When the latest slate
-selects no candidate, `next` is `{code: "problem_no_post", reason, explanation}`
+attempt, openness, value, reviews, decision, export. A stale slate leads with
+`problem_slate_stale`. When the current slate selects no candidate, `next` is
+`{code: "problem_no_post", reason, explanation}`
 with the slate's reason: the exploration ends without a post unless a new slate
 selects a candidate. The full `status` and `next` reports carry that reason; the
 `--summary` views show the code and the explanation only. Milestones impose no

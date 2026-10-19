@@ -7,9 +7,12 @@ from research_harness import research_decisions as decisions, review_protocol as
 from research_harness.errors import ResearchError
 from research_harness.problem_delivery import export_problem, assess_post
 import test_research_problem_delivery as fixtures
+import test_research_problem_slate as slate_fixtures
 
 
 class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
+    build_slate_output = slate_fixtures.ProblemSlateTests.build_slate_output
+
     def make_objection(self):
         return {"id": "unsupported-implication", "claim": "The stated implication exceeds the read comparator.",
             "reason": "The exact quantifier is unsupported.", "evidence": [self.supporting],
@@ -20,7 +23,7 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
             "reason": "The supplied comparator and changed paragraph establish this disposition.",
             "evidence": [self.supporting]}
 
-    def prepare_reviews(self, *, bar_reviewer=None, result_reviewer=None):
+    def prepare_reviews(self, *, bar_reviewer=None, result_reviewer=None, slate_reviewer=None, results=True):
         self.initialize_problem()
         self.record_candidate()
         self.selected = self.select_statement(candidate_id="candidate-1")
@@ -39,10 +42,16 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
             if reviewer == bar_reviewer:
                 output["objections"] = [self.make_objection()]
             self.observe("bar", reviewer, output)
-        self.record_slate()
+        if slate_reviewer is not None:
+            output = self.build_slate_output(["candidate-1"])
+            output["objections"] = [self.make_objection()]
+            self.observe("slate", slate_reviewer, output)
+        self.record_slate(review_ids=[] if slate_reviewer is None else ["review-slate-" + slate_reviewer])
+        if not results:
+            return
         for reviewer in ("first", "second"):
             output = self.build_review_output("result")
-            if bar_reviewer is not None:
+            if bar_reviewer is not None or slate_reviewer is not None:
                 output["value"]["objection_findings"] = [self.make_finding("continuing")]
             if reviewer == result_reviewer:
                 output["objections"] = [self.make_objection()]
@@ -180,6 +189,43 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         self.prepare_reviews(result_reviewer="first")
         self.observe_adjudication("unresolved")
         self.assert_blocked_delivery()
+
+    def test_cited_slate_review_objection_reaches_the_result_packets_and_blocks_the_post(self):
+        self.prepare_reviews(slate_reviewer="first")
+        records = self.store.snapshot()["records"]
+        for reviewer in ("first", "second"):
+            packet = json.loads(self.artifacts.read(records["review_assignment"]["result-" + reviewer]["packet"]))
+            self.assertEqual([objection["id"] for objection in packet["material_objections"]], ["unsupported-implication"])
+        self.assert_blocked_delivery()
+
+    def test_result_without_a_finding_for_a_cited_slate_objection_is_refused(self):
+        self.prepare_reviews(slate_reviewer="second", results=False)
+        payload = self.observe("result", "first", self.build_review_output("result"), record=False)
+        self.assert_error("review_objection_history_incomplete", lambda: self.mutate(decisions.record_value_review, payload))
+
+    def test_evidenced_resolution_of_a_slate_objection_allows_delivery(self):
+        self.prepare_reviews(slate_reviewer="first")
+        self.refresh_reviews("resolved")
+        self.assert_delivered()
+
+    def test_focused_adjudication_can_resolve_a_slate_objection_with_the_bars(self):
+        self.prepare_reviews(slate_reviewer="first")
+        self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"])
+        records = self.store.snapshot()["records"]
+        packet = json.loads(self.artifacts.read(records["review_assignment"]["focused"]["packet"]))
+        self.assertEqual([assessment["id"] for assessment in packet["assessments"]],
+                         ["review-bar-first", "review-bar-second", "review-slate-first"])
+        self.assertEqual(packet["objection"]["id"], "unsupported-implication")
+        self.assert_delivered()
+
+    def test_a_slate_that_no_longer_cites_the_review_drops_its_objection(self):
+        self.prepare_reviews(slate_reviewer="first", results=False)
+        self.record_slate("slate-2")
+        for reviewer in ("first", "second"):
+            self.observe("result", reviewer)
+        packet = json.loads(self.artifacts.read(self.store.snapshot()["records"]["review_assignment"]["result-first"]["packet"]))
+        self.assertEqual(packet["material_objections"], [])
+        self.assert_delivered()
 
     def test_focused_adjudication_can_resolve_a_bar_objection(self):
         self.prepare_reviews(bar_reviewer="second")

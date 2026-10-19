@@ -144,9 +144,14 @@ _PROBLEM_PROTOCOL = 'exactory-problem-review-v2'
 PROBLEM_PROTOCOL = _PROBLEM_PROTOCOL
 _PROBLEM_PROMPTS = {
     'bar': _PROBLEM_PROMPTS_V1['bar'] +
+        ' "No route to progress" and "settles nothing else" are not by themselves reasons against a '
+        'problem: a question without footholds (accessibility E-N) is admissible on a level-3 '
+        'significance case, and explanatory significance counts.'
         ' State the specialist\'s bar for levels 2 and 3 of significance on each ground B1 '
         '(standing in an active line) and B2 (influence), and of comparative priority in this field '
-        'and line. Level 2 requires supported premises and an answer to the strongest objection; '
+        'and line. Level 2 requires a substantial mathematical advance and its relevance to the line '
+        '(B1) or to the influence argued (B2), premises supported by appropriate evidence, an answer to '
+        'the strongest objection and explicit remaining uncertainty; '
         'level 3 significance requires a consequential obstacle, important unmet need or organizing '
         'explanation or connection, with the gain distinguished from nearby results. Priority level 2 '
         'compares credible alternatives by mathematical payoff and answers the strongest objection; '
@@ -395,6 +400,13 @@ def _bars(records, artifacts, intent_id, *, subject=None):
         state = assignment_state(records, artifacts, review['assignment_id'])
         if state['ready']:
             selected.append((saved, state))
+    if subject is not None:
+        # A recalibrated bar continues its slot; only the latest bar of each slot is current.
+        latest = {}
+        for saved, _ in selected:
+            slot = context_repair.slot_id(records, records['review_assignment'][saved['assignment_id']])
+            latest[slot] = max(latest.get(slot, saved), saved, key=lambda review: review['recorded_revision'])
+        selected = [(saved, state) for saved, state in selected if saved in latest.values()]
     return selected
 
 
@@ -419,6 +431,28 @@ def validate_problem_bars(records, artifacts, bars):
         if any(packet.get(key) != marker[key] for key in ('area', 'field')):
             raise ResearchError('review_bar_mismatch', 'Use problem bars for the current area and field',
                                 {'review_id': review['id']})
+
+
+def add_problem_bars(records, artifacts, packet, reviewer_id):
+    """Bind a slate or result packet to both current field bars and the reviewer's own bar session."""
+    bars = _bars(records, artifacts, None, subject=packet['subject'])
+    if len({normalized_text(state['reviewer_id']) for _, state in bars}) < 2:
+        raise ResearchError('review_bar_pending', 'Persist both independent problem bars before releasing the candidates or the statement')
+    validate_problem_bars(records, artifacts, [review for review, _ in bars])
+    own = [(review, state) for review, state in bars
+           if normalized_text(state['reviewer_id']) == normalized_text(reviewer_id)]
+    if not own:
+        raise ResearchError('review_bar_continuity', 'The problem slate or result review must continue the same reviewer bar session')
+    packet['bar_ids'] = [review['id'] for review, _ in bars]
+    packet['bars'] = [_payload(review) for review, _ in bars]
+    packet['own_bars'] = [_payload(review) for review, _ in own]
+    return [review for review, _ in bars]
+
+
+def add_problem_candidates(records, packet):
+    """Give a slate reviewer every current candidate and bind the review to that exact candidate set."""
+    from .problem_candidates import compute_candidate_set_digest, describe_candidates
+    packet.update(candidates=describe_candidates(records), candidate_set_digest=compute_candidate_set_digest(records))
 
 
 def add_problem_evidence(records, artifacts, packet):
@@ -535,8 +569,10 @@ def add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id
     reviews = [_payload(_get(records, 'value_review', identifier)) for identifier in ids]
     if any(r['dossier_id'] != dossier_id for r in reviews):
         raise ResearchError('review_packet_mismatch', 'Both reviews must concern the adjudicated dossier')
+    slates = []
     if problem:
         from .direction_reviews import collect_observed_packets
+        from .problem_candidates import find_cited_slate_reviews
         from .research_decisions import _pair, _response
         saved = _pair(records, ids, packet['subject'], reviews[0]['stage'])
         for review in saved:
@@ -547,17 +583,21 @@ def add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id
                 raise ResearchError('research_review_unverified', 'Adjudicate the exact observed scientific review history.',
                                     {'review_id': review['id']})
         validate_problem_bars(records, artifacts, [review for review in saved if review['payload']['stage'] == 'bar'])
+        # A focused slate review continues a bar session, so its objection is adjudicated with the two bars.
+        if reviews[0]['stage'] == 'bar':
+            slates = find_cited_slate_reviews(records)
         initial = {normalized_text(review['reviewer_id']) for review in records.get('value_review', {}).values()
                    if review.get('subject', {}).get('kind') == 'problem'
-                   and (review['payload']['stage'] == 'bar' or review['subject'] == packet['subject'])}
+                   and (review['payload']['stage'] in ('bar', 'slate') or review['subject'] == packet['subject'])}
         if normalized_text(reviewer_id) in initial:
             raise ResearchError('review_not_independent', 'An initial problem assessor cannot adjudicate its dispute')
     states = [assignment_state(records, artifacts, r['assignment_id']) for r in reviews]
     if normalized_text(reviewer_id) in {normalized_text(s['reviewer_id']) for s in states}:
         raise ResearchError('review_not_independent', 'An initial assessor cannot adjudicate its own dispute')
+    assessed = reviews + [_payload(review) for review in slates]
     objections = [o for r in reviews for o in r.get('objections', []) if o['id'] == context.get('objection_id')]
     if problem:
-        objections = build_rubric_objection(records, artifacts, saved, context, packet)
+        objections = build_rubric_objection(records, artifacts, saved + slates, context, packet)
     if not objections:
         raise ResearchError('review_objection_missing', 'The focused objection must exist in the original assessments')
     correction = context.get('correction')
@@ -567,7 +607,7 @@ def add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id
             raise ResearchError('invalid_review_correction', 'Corrections concern a supplied claim or required omission')
         for key in ('claim', 'reason'):
             text(correction[key], 'Correction ' + key)
-        supplied, mappings = supplied_evidence.supplied_context(records, artifacts, [r['assignment_id'] for r in reviews])
+        supplied, mappings = supplied_evidence.supplied_context(records, artifacts, [r['assignment_id'] for r in assessed])
         supplied_evidence.validate_correction(records, artifacts, correction['evidence'], supplied, mappings)
         prior_id = correction['prior_adjudication_id']
         if prior_id is not None:
@@ -579,13 +619,14 @@ def add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id
             text(correction['new_error_explanation'], 'Why the new error was not resolved previously')
         elif correction['new_error_explanation'] is not None:
             raise ResearchError('invalid_review_correction', 'A follow-up correction identifies its prior adjudication')
-    supplied, mappings = supplied_evidence.supplied_context(records, artifacts, [r['assignment_id'] for r in reviews])
-    packet.update(objection=_reference_templates(objections[0]), assessments=_reference_templates(reviews), assignment_policy=POLICY,
+    supplied, mappings = supplied_evidence.supplied_context(records, artifacts, [r['assignment_id'] for r in assessed])
+    packet.update(objection=_reference_templates(objections[0]), assessments=_reference_templates(assessed), assignment_policy=POLICY,
                   correction=_reference_templates(correction), original_evidence=list(supplied.values()), supplied_source_mappings=mappings)
 
 
 def add_problem_objections(records, artifacts, packet, bars):
     """Supply prior material findings without exposing a current peer result."""
+    from .problem_candidates import find_cited_slate_reviews
     from .research_decisions import collect_problem_objections
     previous = []
     for review in records.get('value_review', {}).values():
@@ -594,7 +635,8 @@ def add_problem_objections(records, artifacts, packet, bars):
             supplied = _read_json(artifacts, assignment['packet'])
             if supplied.get('problem_evidence_digest') != packet['problem_evidence_digest']:
                 previous.append(review)
-    packet['material_objections'] = collect_problem_objections(records, artifacts, bars + previous)
+    packet['material_objections'] = collect_problem_objections(records, artifacts,
+                                                               bars + find_cited_slate_reviews(records) + previous)
 
 
 def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
@@ -624,14 +666,18 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
             for key in ('intent', 'support_contract', 'assessor', 'context_repair', 'subject', 'area', 'field', 'problem_refresh'):
                 if key in previous:
                     packet[key] = previous[key]
+            if problem:
+                # A parent with a final review is a refresh of that review; otherwise it is a source-request turn.
+                historical = context_repair.collect_problem_review_history(records, prior)
+                refreshed = any(review['assignment_id'] == prior['id'] for review in historical)
+                if role != 'bar':
+                    packet['historical_reviews'] = [_payload(review) for review in historical]
             if problem and role == 'result':
                 bars = _bars(records, artifacts, None, subject=packet['subject'])
                 validate_problem_bars(records, artifacts, [review for review, _ in bars])
                 add_problem_evidence(records, artifacts, packet)
                 add_problem_objections(records, artifacts, packet, [review for review, _ in bars])
-                historical = context_repair.collect_problem_result_history(records, prior)
-                packet['historical_reviews'] = [_payload(review) for review in historical]
-                if any(review['assignment_id'] == prior['id'] for review in historical):
+                if refreshed:
                     packet['problem_refresh'] = {'assignment_id': prior['id'],
                         'previous_problem_evidence_digest': previous['problem_evidence_digest'],
                         'problem_evidence_digest': packet['problem_evidence_digest'],
@@ -639,8 +685,19 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                 elif 'problem_refresh' in packet:
                     packet['problem_refresh'] = dict(packet['problem_refresh'],
                         problem_evidence_digest=packet['problem_evidence_digest'])
+            elif problem and role == 'slate' and refreshed:
+                add_problem_bars(records, artifacts, packet, reviewer_id)
+                add_problem_candidates(records, packet)
+                packet['problem_refresh'] = {'assignment_id': prior['id'],
+                    'previous_candidate_set_digest': previous['candidate_set_digest'],
+                    'candidate_set_digest': packet['candidate_set_digest'],
+                    'review_ids': [review['id'] for review in historical]}
             elif problem and role == 'slate':
-                packet.update(bar_ids=previous['bar_ids'], candidates=previous['candidates'])
+                packet.update({key: previous[key] for key in ('bar_ids', 'candidates', 'candidate_set_digest')})
+            elif problem and role == 'bar' and refreshed:
+                packet['problem_refresh'] = {'assignment_id': prior['id'],
+                    'previous_template_id': prior['prompt']['template_id'],
+                    'template_id': canonical_prompt('bar', orchestration='problem_creation')['template_id']}
             elif role in ('slate', 'result'):
                 add_direction_evidence(records, artifacts, packet, dossier_id)
             packet['evidence'] = _evidence(artifacts, packet)
@@ -658,26 +715,15 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
         if role == 'bar':
             packet['prior_context'] = bar_sources.prior_context(records, artifacts, context.get('source_links', []))
         else:
-            bars = _bars(records, artifacts, None, subject=packet['subject'])
-            if len({normalized_text(state['reviewer_id']) for _, state in bars}) < 2:
-                raise ResearchError('review_bar_pending', 'Persist both independent problem bars before releasing the candidates or the statement')
-            validate_problem_bars(records, artifacts, [review for review, _ in bars])
-            own = [(review, state) for review, state in bars
-                   if normalized_text(state['reviewer_id']) == normalized_text(reviewer_id)]
-            if not own:
-                raise ResearchError('review_bar_continuity', 'The problem slate or result review must continue the same reviewer bar session')
-            packet['bar_ids'] = [review['id'] for review, _ in bars]
-            packet['bars'] = [_payload(review) for review, _ in bars]
-            packet['own_bars'] = [_payload(review) for review, _ in own]
+            bars = add_problem_bars(records, artifacts, packet, reviewer_id)
             packet['historical_reviews'] = [{'review': _payload(review), 'independence': 'no_longer_qualified'}
                 for review in context_repair.historical_reviews(records, None, role)
                 if review.get('subject') == packet['subject']]
             if role == 'slate':
-                from .problem_candidates import describe_candidates
-                packet['candidates'] = describe_candidates(records)
+                add_problem_candidates(records, packet)
             else:
                 add_problem_evidence(records, artifacts, packet)
-                add_problem_objections(records, artifacts, packet, [review for review, _ in bars])
+                add_problem_objections(records, artifacts, packet, bars)
     elif role == 'native_math':
         fields(context, ('native_packet',))
         if dossier_id is not None:
@@ -1023,10 +1069,8 @@ def _source_parent(records, artifacts, identifier, dossier_id, reviewer_id, role
     if not isinstance(state['output'], dict) or state['output'].get('stage') != role:
         raise ResearchError('review_source_continuation_mismatch', 'Source requests must come from the exact assigned phase')
     final = any(r['assignment_id'] == identifier for r in records.get('value_review', {}).values())
-    refresh = False
-    if final and role == 'result' and prior.get('subject', {}).get('kind') == 'problem':
-        from .problem_claims import compute_problem_evidence_digest
-        refresh = previous.get('problem_evidence_digest') != compute_problem_evidence_digest(records, artifacts)
+    refresh = (final and prior.get('subject', {}).get('kind') == 'problem'
+               and _is_problem_refresh(records, artifacts, prior, previous))
     if not refresh and (final or not bar_sources.pending(previous, state['output'])):
         raise ResearchError('review_resampling_forbidden', 'A final phase assessment cannot be continued or sampled again')
     if 'source_inventory' not in previous:
@@ -1034,19 +1078,29 @@ def _source_parent(records, artifacts, identifier, dossier_id, reviewer_id, role
     return prior, state
 
 
+def _is_problem_refresh(records, artifacts, prior, previous):
+    """Whether a completed problem review no longer binds the current record: a result's evidence changed, a slate's
+    candidates changed, or a bar was recorded on the version 1 template, which lacks the rubric calibration."""
+    if prior['role'] == 'result':
+        from .problem_claims import compute_problem_evidence_digest
+        return previous.get('problem_evidence_digest') != compute_problem_evidence_digest(records, artifacts)
+    if prior['role'] == 'slate':
+        from .problem_candidates import compute_candidate_set_digest
+        return previous['candidate_set_digest'] != compute_candidate_set_digest(records)
+    return is_previous_prompt(prior)
+
+
 def _find_problem_refresh_parent(records, artifacts, value):
-    """Continue the same reviewer after its observed problem evidence changes."""
-    if value['role'] != 'result' or value.get('subject', {}).get('kind') != 'problem' or value['context']:
+    """Continue the same reviewer when its completed problem review no longer binds the current record."""
+    if value['role'] not in bar_sources.ROLES or value.get('subject', {}).get('kind') != 'problem' or value['context']:
         return None
     prior = max((saved for saved in records.get('review_assignment', {}).values()
-                 if saved['role'] == 'result' and saved.get('subject') == value['subject']
+                 if saved['role'] == value['role'] and context_repair.is_same_subject(saved, value)
                  and normalized_text(saved['reviewer_id']) == normalized_text(value['reviewer_id'])),
                 key=lambda saved: saved['recorded_revision'], default=None)
     if prior is None or not any(review['assignment_id'] == prior['id'] for review in records.get('value_review', {}).values()):
         return None
-    from .problem_claims import compute_problem_evidence_digest
-    packet = _read_json(artifacts, prior['packet'])
-    return prior['id'] if packet.get('problem_evidence_digest') != compute_problem_evidence_digest(records, artifacts) else None
+    return prior['id'] if _is_problem_refresh(records, artifacts, prior, _read_json(artifacts, prior['packet'])) else None
 
 
 def _initial_slot(records, value):
