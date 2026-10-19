@@ -306,6 +306,86 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
                             dict(output, id="review-repaired-refresh", dossier_id=None, assignment_id="repaired-refresh"))["result"]
         self.assertEqual(saved["assignment_id"], "repaired-refresh")
 
+    def update_slate_objection(self):
+        """After a new candidate, the slate reviewer restates the objection with new evidence: a new material version."""
+        self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
+        counterexample = self.artifacts.put(b"A counterexample to the earlier resolution.", "text/plain")
+        output = self.build_slate_output(["candidate-1", "candidate-2"])
+        output["objections"] = [dict(self.make_objection(), candidate_ids=["candidate-1"], evidence=[counterexample],
+            reason="The supplied counterexample refutes the earlier resolution.",
+            resolution_condition="Answer the counterexample or narrow the claim.")]
+        output["value"]["objection_findings"] = [self.make_finding("contested")]
+        updated = self.observe("slate", "first", output, identifier="slate-first-refreshed")
+        self.record_slate("slate-2", deferred=[{"candidate_id": "candidate-2", "evidence_needed": "A documented active line."}],
+                          review_ids=[updated["id"]])
+        return updated, counterexample
+
+    def test_a_changed_objection_version_refreshes_the_fixed_adjudicator(self):
+        bars = ["review-bar-first", "review-bar-second"]
+        self.prepare_reviews(slate_reviewer="first")
+        self.refresh_reviews("resolved")
+        self.observe_adjudication(review_ids=bars)
+
+        def reassign(reviewer, identifier):
+            return self.assign("adjudicator", reviewer, identifier=identifier, review_ids=bars,
+                               objection_id="unsupported-implication")
+        self.assert_error("review_adjudicator_fixed", lambda: reassign("focused-third", "focused-unchanged"))
+        self.update_slate_objection()
+        for reviewer, status in (("first", "resolved"), ("second", "contested")):
+            output = self.build_review_output("result")
+            output["value"]["objection_findings"] = [self.make_finding(status)]
+            self.observe("result", reviewer, output, identifier="reassessed-" + reviewer)
+        reviews = decisions.assess_problem_reviews(self.store.snapshot()["records"], self.artifacts)
+        self.assertIn("research_objection_unresolved", {row["code"] for row in reviews["obligations"]})
+        self.assert_error("review_adjudicator_fixed", lambda: reassign("focused-fourth", "focused-other"))
+        self.observe_adjudication(review_ids=bars, identifier="focused-refreshed")
+        records = self.store.snapshot()["records"]
+        previous, refreshed = (json.loads(self.artifacts.read(records["review_assignment"][identifier]["packet"]))
+                               for identifier in ("focused", "focused-refreshed"))
+        current = protocol.build_packet(records, self.artifacts, None, "result", "first")["material_objections"][0]
+        self.assertEqual(refreshed["objection"]["material_version"], current["material_version"])
+        self.assertEqual(refreshed["focused_refresh"], {"assignment_id": "focused",
+            "previous_problem_evidence_digest": previous["problem_evidence_digest"],
+            "problem_evidence_digest": refreshed["problem_evidence_digest"],
+            "previous_material_version": previous["objection"]["material_version"],
+            "material_version": current["material_version"]})
+        self.assertEqual(records["review_assignment"]["focused-refreshed"]["history_assignment_id"], "focused")
+        self.assert_error("review_adjudicator_fixed", lambda: reassign("focused-third", "focused-repeat"))
+        self.assert_delivered()
+
+    def test_an_updated_slate_objection_needs_a_resolution_of_its_new_version(self):
+        self.prepare_reviews(slate_reviewer="first")
+        self.refresh_reviews("resolved")
+        self.assertTrue(decisions.assess_problem_reviews(self.store.snapshot()["records"], self.artifacts)["ready"])
+        self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"])
+        updated, counterexample = self.update_slate_objection()
+        records = self.store.snapshot()["records"]
+        packet = protocol.build_packet(records, self.artifacts, None, "result", "first")
+        [objection] = packet["material_objections"]
+        self.assertEqual((objection["review_id"], objection["evidence"], len(objection["history"])),
+                         (updated["id"], [counterexample], 1))
+        self.assertEqual(objection["history"][0]["review_id"], "review-slate-first")
+        reviews = decisions.assess_problem_reviews(records, self.artifacts)
+        self.assertIn("research_objection_unresolved", {row["code"] for row in reviews["obligations"]})
+        for reviewer in ("first", "second"):
+            output = self.build_review_output("result")
+            output["value"]["objection_findings"] = [self.make_finding("resolved")]
+            self.observe("result", reviewer, output, identifier="reassessed-" + reviewer)
+            assignment = self.store.snapshot()["records"]["review_assignment"]["reassessed-" + reviewer]
+            self.assertEqual(assignment["context"], {"prior_assignment_id": "refreshed-" + reviewer})
+        self.assert_delivered()
+
+    def test_a_material_adjudication_without_the_bar_calibrations_does_not_resolve(self):
+        self.prepare_reviews(bar_reviewer="second")
+        real = protocol.add_focused_adjudication
+
+        def build_without_calibrations(*arguments, **options):
+            real(*arguments, **options)
+            arguments[2].pop("bar_calibrations")
+        with patch.object(protocol, "add_focused_adjudication", side_effect=build_without_calibrations):
+            self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"])
+        self.assert_blocked_delivery()
+
     def test_a_later_slate_objection_permits_the_result_reviewers_to_reassess(self):
         self.prepare_reviews()
         for reviewer in ("first", "second"):
@@ -389,7 +469,9 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
     def test_result_context_repair_retains_prior_peer_material_objections(self):
         packet = self.prepare_repaired_result(changed=True)
         self.assertEqual(packet["problem_evidence"]["value"]["id"], "value-copy")
-        self.assertEqual(packet["material_objections"], [self.make_objection()])
+        [objection] = packet["material_objections"]
+        self.assertEqual({key: objection[key] for key in self.make_objection()}, self.make_objection())
+        self.assertEqual((objection["review_id"], objection["history"]), ("review-result-second", []))
 
     def test_result_context_repair_withholds_the_current_peer_assessment(self):
         packet = self.prepare_repaired_result(changed=False)

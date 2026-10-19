@@ -2,9 +2,22 @@
 
 import copy
 import unittest
+from unittest.mock import patch
 
 from research_harness import problem_rubric as rubric
 from research_harness.errors import ResearchError
+
+
+def install_rubric_anchors(case):
+    """Stand in for problem_rubric.ANCHORS until the controller's rubric texts are merged; a merged constant is kept."""
+    if hasattr(rubric, "ANCHORS"):
+        return
+    items = rubric.ADMISSION_ITEMS + ("significance", "priority", "attempt", "accessibility", "calibration")
+    anchors = patch.object(rubric, "ANCHORS", {item: {"definition": "The rubric definition of " + item + ".",
+                                                     "threshold": "The posting threshold of " + item + "."}
+                                              for item in items}, create=True)
+    anchors.start()
+    case.addCleanup(anchors.stop)
 
 
 def passing_grades():

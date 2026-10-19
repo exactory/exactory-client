@@ -14,7 +14,7 @@ from .evidence import digest
 from .graph import obligation
 from .operations import fields, immutable_record, normalized_text, prepared_mutation, strings, text
 from .problem_claims import find_current_statement, find_latest, require_problem
-from .research_decisions import _independence, _pair
+from .research_decisions import _independence, _pair, state_objection
 from .review_context_repair import slot_id
 from .review_protocol import build_problem_subject, is_previous_prompt, validate_problem_bars
 from . import problem_rubric, strategy
@@ -123,7 +123,8 @@ def collect_applicable_slate_objections(records, artifacts):
             lineage = _collect_candidate_lineage(records, objection["candidate_ids"])
             if objection["candidate_ids"] and candidate_id not in lineage:
                 continue
-            applicable.append((review, dict(objection, candidate_ids=sorted(lineage & current))))
+            # The material version binds the candidates as stated; the projection names their current versions.
+            applicable.append((review, dict(state_objection(review, objection), candidate_ids=sorted(lineage & current))))
     return applicable
 
 

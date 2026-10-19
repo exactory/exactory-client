@@ -1710,9 +1710,17 @@ for literature attempts. The current literature attempt's full readings appear
 in the reviewer readings and passages, coverage check and projected citations.
 Reviewer evidence also includes
 `results: [{attempt_id, acceptance_id, claim, outcome, standard}]`, taking the
-claim from the acceptance's checkpoint. All ten evidence keys must be present
-and equal the current expected values in the observed result packets, including
-null or empty values; omissions return `problem_evidence_unassessed`.
+claim from the acceptance's checkpoint. Reviewer evidence carries the openness
+finding as recorded, `{id, outcome, statement_digest, reason, coverage,
+searched_at, evidence, minimum}`, and `openness_searches`: for every search that
+its minimum binds, `{formulation, search_digest, search, sources}` with the search
+record and its captured source records, whose response bytes are attached to the
+packet. The evidence binding adds `openness_searches: [{formulation,
+search_digest, source_digests}]`. The twelve evidence keys `claim`, `openness`,
+`openness_searches`, `value`, `assessment`, `assessment_evidence`, `attempt`,
+`results`, `citations`, `readings`, `computations` and `formal_checks` must be
+present and equal the current expected values in the observed result packets,
+including null or empty values; omissions return `problem_evidence_unassessed`.
 
 The problem bar uses `exactory-problem-review-v2/bar` and receives `area`,
 `field` and source inventory/deliveries with the statement, title, neighbours and
@@ -1732,8 +1740,8 @@ content an observed packet of its lineage delivered: `value-review` refuses
 another with `review_bar_mismatch` naming `bar_ids`, and the post gate reports
 the same code for a recorded review. Each result packet also carries
 `problem_review_currency`, the digest of `{problem_evidence_digest, bar_ids,
-slate_objection_ids}` (the sorted current bars and the sorted applicable slate
-objections that concern the statement). A new result assignment for a reviewer
+objection_versions}` (the sorted current bars and, for each material objection
+the packet delivers, its id and material version). A new result assignment for a reviewer
 whose completed result review was given under another currency continues that
 reviewer's session and slot as a refresh, and its `problem_refresh` adds
 `previous_problem_review_currency` and `problem_review_currency`; under the same
@@ -1757,18 +1765,36 @@ and remain verified; posting requires version 2 result reviews.
 
 Material objections from both bars and both observed result histories remain
 post obligations (`research_objection_unresolved`), including predecessor
-findings marked `continuing` or `contested`. Both result reviewers must record
-evidence-backed resolutions, or an independent focused adjudication must find
-the objection not upheld. Problem adjudication uses the existing review tools
-with `dossier_id: null`; changed value evidence retains the focused adjudicator
-and its observed history rather than opening a new reviewer choice.
+findings marked `continuing` or `contested`. Each objection carries a material
+version: the digest of its finding content (`claim`, `reason`, `evidence`,
+`resolution_condition` and, for a slate objection, `candidate_ids`) with the id
+and recorded revision of the review that stated it. Per objection id, packets
+deliver the latest version with `material_version`, `review_id`,
+`recorded_revision` and the earlier versions in `history`. Both result reviewers
+must record evidence-backed resolutions, each in a review whose packet delivered
+the current version, or an independent focused adjudication of the current
+version must find the objection not upheld; a resolution of an earlier version
+disposes of nothing later, and the changed currency lets the same reviewers
+reassess. Problem adjudication uses the existing review tools
+with `dossier_id: null`; changed value evidence, or a changed material version of
+the adjudicated objection, retains the focused adjudicator and its observed history
+rather than opening a new reviewer choice: its next assignment is a
+`focused_refresh` naming the previous and current evidence digests and material
+versions, and under an unchanged digest and version another assignment returns
+`review_adjudicator_fixed`.
 The adjudicator template is `exactory-problem-review-v2/adjudicator`. For a
 below-threshold rubric grade, set `context.objection_id` to
 `rubric:<review_id>:<item>` with both original result review IDs. Items are
 `A1` through `A6`, `significance`, `priority`, `attempt` or `calibration`.
 The packet identifies the grade and required threshold and carries both
-results' `rubric_grades`. An observed, ready `not_upheld` adjudication resolves
-only that item for the same subject and current `problem_evidence_digest`.
+results' `rubric_grades` and `rubric_definition`, `{item, definition, threshold}`
+of the adjudicated item. Every problem adjudicator packet carries
+`bar_calibrations`, the payloads of both current bars; `current_evidence` and the
+original evidence used for a correction stay distinct. An observed, ready
+`not_upheld` adjudication resolves only that item for the same subject and current
+`problem_evidence_digest`, and only when its packet carried `bar_calibrations`
+and `rubric_definition`; a material objection's adjudication needs
+`bar_calibrations`.
 The original grades remain visible. An old-evidence adjudication, a resolution
 of another item, or a material-objection finding cannot waive the shortfall;
 the five independent assurances still have to pass.

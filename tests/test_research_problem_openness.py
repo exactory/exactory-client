@@ -3,6 +3,8 @@
 from pathlib import Path
 
 from test_research_problem_claims import ProblemCase
+from test_research_problem_delivery import ProblemDeliveryCase
+from research_harness import problem_evidence, research_decisions as decisions, review_protocol
 from research_harness.evidence import digest
 from research_harness.literature import record_search
 from unittest.mock import patch
@@ -305,3 +307,82 @@ class ProblemOpennessMinimumSchemaTests(ProblemCase):
         entry = next(entry for entry in packet["evidence"] if entry["digest"] == digest(original))
         self.assertEqual(json.loads(self.artifacts.read(entry["artifact"])), original)
         self.assertEqual(self.store.snapshot()["records"]["reading"], {note["id"]: original})
+
+
+class ProblemOpennessDeliveryTests(ProblemDeliveryCase):
+    """Result reviewers receive the complete openness finding and the searches its minimum binds."""
+
+    def emulate_truncated_projection(self, *, binding):
+        """The result packets of the previous release: four openness fields and no bound searches; with `binding`,
+        also the evidence binding of that release."""
+        real_evidence, real_binding = problem_evidence.describe_evidence, problem_evidence.describe_binding
+
+        def truncate_evidence(records, artifacts):
+            evidence = real_evidence(records, artifacts)
+            evidence.pop("openness_searches")
+            evidence["openness"] = {key: evidence["openness"][key] for key in ("id", "outcome", "statement_digest", "minimum")}
+            return evidence
+
+        def truncate_binding(records, artifacts):
+            return {key: value for key, value in real_binding(records, artifacts).items() if key != "openness_searches"}
+        patches = [patch.object(problem_evidence, "describe_evidence", side_effect=truncate_evidence)]
+        if binding:
+            patches.append(patch.object(problem_evidence, "describe_binding", side_effect=truncate_binding))
+        return patches
+
+    def prepare_with(self, patches):
+        for active in patches:
+            active.start()
+        try:
+            self.prepare_ready()
+        finally:
+            for active in patches:
+                active.stop()
+
+    def find_unassessed(self):
+        reviews = decisions.assess_problem_reviews(self.store.snapshot()["records"], self.artifacts)
+        return [row for row in reviews["obligations"] if row["code"] == "problem_evidence_unassessed"]
+
+    def test_result_packets_carry_the_complete_finding_and_its_bound_searches(self):
+        self.prepare_ready()
+        records = self.store.snapshot()["records"]
+        finding = records["problem_openness"]["openness-assignment"]
+        packet = json.loads(self.artifacts.read(records["review_assignment"]["result-first"]["packet"]))
+        self.assertEqual(packet["problem_evidence"]["openness"], {key: finding[key] for key in (
+            "id", "outcome", "statement_digest", "reason", "coverage", "searched_at", "evidence", "minimum")})
+        [bound] = packet["problem_evidence"]["openness_searches"]
+        search = next(row for row in records["literature_search"].values() if digest(row) == bound["search_digest"])
+        self.assertEqual((bound["formulation"], bound["search"]), (self.selected["statement"], search))
+        self.assertEqual(bound["sources"], [records["source"][row["source_id"]] for row in search["responses"]])
+        self.assertTrue(any(entry["artifact"] == bound["sources"][0]["response"] for entry in packet["evidence"]))
+        self.assertEqual(self.find_unassessed(), [])
+
+    def test_a_result_without_the_captured_response_bytes_leaves_the_evidence_unassessed(self):
+        real = review_protocol._evidence
+
+        def attach_without_responses(artifacts, value, **options):
+            searches = (value.get("problem_evidence") or {}).get("openness_searches", [])
+            responses = {source["response"]["sha256"] for row in searches for source in row["sources"]}
+            return [entry for entry in real(artifacts, value, **options) if entry["artifact"]["sha256"] not in responses]
+        with patch.object(review_protocol, "_evidence", side_effect=attach_without_responses):
+            self.prepare_ready()
+        records = self.store.snapshot()["records"]
+        search = next(iter(records["literature_search"].values()))
+        response = records["source"][search["responses"][0]["source_id"]]["response"]["sha256"]
+        self.assertEqual({(tuple(row["missing"]), tuple(row["artifact_digests"])) for row in self.find_unassessed()},
+                         {((), (response,))})
+
+    def test_a_packet_without_the_openness_keys_leaves_the_evidence_unassessed(self):
+        self.prepare_with(self.emulate_truncated_projection(binding=False))
+        self.assertEqual({tuple(row["missing"]) for row in self.find_unassessed()}, {("openness", "openness_searches")})
+
+    def test_results_on_the_truncated_projection_are_refreshed_in_their_sessions(self):
+        self.prepare_with(self.emulate_truncated_projection(binding=True))
+        self.assertEqual(len(self.find_unassessed()), 2)
+        for reviewer in ("first", "second"):
+            self.observe("result", reviewer, identifier="refreshed-" + reviewer)
+            records = self.store.snapshot()["records"]
+            assignment, original = (records["review_assignment"][identifier] for identifier in ("refreshed-" + reviewer, "result-" + reviewer))
+            self.assertEqual((assignment["context"], assignment["slot_id"]), ({"prior_assignment_id": "result-" + reviewer}, original["slot_id"]))
+        reviews = decisions.assess_problem_reviews(self.store.snapshot()["records"], self.artifacts)
+        self.assertTrue(reviews["ready"], reviews["obligations"])

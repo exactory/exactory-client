@@ -112,12 +112,13 @@ concerns, or none for the slate as a whole. It binds the result reviews and the
 post like the bars' objections, whether or not the slate cites the review: it
 follows each named candidate through its later versions, a whole-slate objection
 binds every statement, and it stays until evidence or an adjudication resolves
-it. It is adjudicated with the two bars.
+it. It is adjudicated with the two bars. A reviewer installed in a slate slot by a
+context repair also refreshes its slate review there.
 
 A result review is refused before dispatch while a current or cited bar is on
 the version 1 template, and every result packet carries the current bars, also
 after a context repair. A result reviewer whose completed review was given under
-other evidence, other bars or other applicable slate objections reassesses in the
+other evidence, other bars or other material objection versions reassesses in the
 same session and slot; under the same conditions a repeat is refused.
 
 Formulate a selected candidate with `problem-statement` and its `candidate_id`;
@@ -240,12 +241,17 @@ receive `assessment_evidence`
 Use the existing verified review routes. Both bar reviewers receive the field,
 area and source context before the statement is shown, and calibrate levels
 2 and 3 of both significance grounds and comparative priority. Both result reviewers
-receive the exact claim, openness minimum, value evidence, rubric assessment, citations and
+receive the exact claim, the complete openness finding with the searches its
+minimum binds and their captured sources, value evidence, rubric assessment, citations and
 delivered source/computation/check content. They assess precision, openness,
 value, citations and stopping, plus every rubric item through `value.rubric`
 and `value.rubric_evidence`. A below-threshold result grade blocks posting
 until repaired or resolved by a ready focused `not_upheld` adjudication of
-`rubric:<review_id>:<item>` for the same subject and current evidence digest.
+`rubric:<review_id>:<item>` for the same subject and current evidence digest,
+whose packet carried both bar calibrations and the item's rubric definition.
+A material objection is resolved in its latest material version: a resolution or
+an adjudication of an earlier version leaves a changed objection open, and the
+same reviewers reassess it in their sessions.
 Original grades remain visible. Version 1 assignments stay verified, while
 the post gate requires version 2 result reviews. Reviewers must be independent of every recorded
 author, and pending source requests remain obligations. Record a `post`

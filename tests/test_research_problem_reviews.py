@@ -8,12 +8,12 @@ from unittest.mock import patch
 
 from literature_fixtures import LiteratureCase
 from research_harness import review_protocol as protocol
-from research_harness import research_decisions as decisions
+from research_harness import problem_rubric, research_decisions as decisions
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 from research_harness.problem_rubric import ITEMS, rubric_objection_id
 from test_research_problem_claims import ProblemCase
-from test_research_problem_rubric import passing_grades
+from test_research_problem_rubric import install_rubric_anchors, passing_grades
 
 
 CHECKS = ("problem_statement", "problem_openness", "problem_value", "problem_citations", "stop")
@@ -33,7 +33,7 @@ class ProblemReviewTests(LiteratureCase):
         self.expected = {"claim": {"statement_id": self.statement["id"],
             "statement_digest": digest({key: self.statement[key] for key in ("statement", "resolution_criteria")}),
             **{key: self.statement[key] for key in ("title", "area", "statement", "resolution_criteria", "formal_statement")}},
-            "openness": {"id": "open-1", "outcome": "supported_open", "minimum": {}},
+            "openness": {"id": "open-1", "outcome": "supported_open", "minimum": {}}, "openness_searches": [],
             "value": {"id": "value-1", "motivation": [{"text": "PRIVATE_VALUE", "evidence": []}], "current_state": []},
             "assessment": None, "assessment_evidence": [], "attempt": None, "results": [], "citations": [], "readings": [],
             "passages": [], "computations": [], "formal_checks": []}
@@ -46,6 +46,7 @@ class ProblemReviewTests(LiteratureCase):
         replacement = patch.dict(sys.modules, {"research_harness.problem_claims": claims})
         replacement.start()
         self.addCleanup(replacement.stop)
+        install_rubric_anchors(self)
 
     def put(self, kind, identifier, value):
         self.sequence += 1
@@ -318,6 +319,37 @@ class ProblemReviewTests(LiteratureCase):
         self.assertEqual(packet['rubric_grades'], [self.read_records()['value_review'][identifier]['payload']['value']['rubric']
             for identifier in ('review-result-first', 'review-result-second')])
         self.assertEqual(saved['problem_evidence_digest'], digest(self.expected))
+
+    def test_adjudicator_packet_carries_both_bar_calibrations_and_the_rubric_definition(self):
+        self.prepare_below_threshold_reviews()
+        _, packet = self.observe_rubric_adjudication()
+        records = self.read_records()
+        self.assertEqual(packet['bar_calibrations'], [records['value_review'][identifier]['payload']
+                                                     for identifier in ('review-bar-first', 'review-bar-second')])
+        anchor = problem_rubric.ANCHORS['priority']
+        self.assertEqual(packet['rubric_definition'], {'item': 'priority', 'definition': anchor['definition'],
+                                                       'threshold': anchor['threshold']})
+
+    def test_rubric_adjudication_without_the_bar_calibrations_does_not_clear_the_shortfall(self):
+        self.assert_incomplete_rubric_adjudication_keeps_the_shortfall('bar_calibrations')
+
+    def test_rubric_adjudication_without_the_rubric_definition_does_not_clear_the_shortfall(self):
+        self.assert_incomplete_rubric_adjudication_keeps_the_shortfall('rubric_definition')
+
+    def assert_incomplete_rubric_adjudication_keeps_the_shortfall(self, key):
+        """A not_upheld finding from a packet without one of the standards leaves the shortfall open."""
+        self.prepare_below_threshold_reviews()
+        real = protocol.add_focused_adjudication
+
+        def build_without(*arguments, **options):
+            real(*arguments, **options)
+            arguments[2].pop(key)
+        with patch.object(protocol, 'add_focused_adjudication', side_effect=build_without):
+            _, packet = self.observe_rubric_adjudication()
+        self.assertNotIn(key, packet)
+        state = decisions.assess_problem_reviews(self.read_records(), self.artifacts)
+        below = [row for row in state['obligations'] if row['code'] == 'problem_rubric_below_threshold']
+        self.assertEqual([row['shortfalls'] for row in below], [[{'item': 'priority', 'required': '>= 2', 'graded': 1}]])
 
     def test_rubric_adjudication_cannot_waive_an_assurance_or_another_item(self):
         self.prepare_below_threshold_reviews()

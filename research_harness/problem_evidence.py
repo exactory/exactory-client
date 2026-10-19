@@ -353,6 +353,22 @@ def project_citations(records, artifacts):
     return citations
 
 
+def describe_openness_searches(records, openness):
+    """Each search that the openness minimum binds, with its formulation and its captured source records. An
+    unresolved finding is recorded without an audit, so a search it names can be absent from the store."""
+    if openness is None or not openness.get("minimum"):
+        return []
+    searches = {digest(row): row for row in records.get("literature_search", {}).values()}
+    bound = []
+    for item in openness["minimum"]["searches"]:
+        search = searches.get(item["search_digest"])
+        if search is None:
+            continue
+        bound.append({"formulation": item["formulation"], "search_digest": item["search_digest"], "search": search,
+                      "sources": [records["source"][response["source_id"]] for response in search["responses"]]})
+    return bound
+
+
 def describe_binding(records, artifacts):
     from .problem_attempt import find_current_attempt
     statement = find_current_statement(records)
@@ -360,7 +376,11 @@ def describe_binding(records, artifacts):
     openness, value = find_latest(records, "problem_openness"), find_value(records)
     computations = [validate_computation(records, artifacts, item, recorded_revision=value.get("recorded_revision")) for item in collect_value_items(value)
                     if item["kind"] == "computation"]
-    return {"claim": statement, "openness": openness, "value": value, "assessment": find_assessment(records),
+    return {"claim": statement, "openness": openness,
+            "openness_searches": [{"formulation": row["formulation"], "search_digest": row["search_digest"],
+                                   "source_digests": [digest(source) for source in row["sources"]]}
+                                  for row in describe_openness_searches(records, openness)],
+            "value": value, "assessment": find_assessment(records),
             "assessment_evidence": [{key: value for key, value in row.items() if key != "record"}
                                     for row in resolve_assessment_evidence(records)],
             "attempt": None if attempt is None else {"id": attempt["id"], "digest": digest(attempt),
@@ -411,7 +431,9 @@ def describe_evidence(records, artifacts):
     return {"claim": None if statement is None else dict(
                 {key: statement[key] for key in ("title", "area", "statement", "resolution_criteria", "formal_statement")},
                 statement_id=statement["id"], statement_digest=compute_statement_digest(statement)),
-            "openness": None if openness is None else {key: openness.get(key) for key in ("id", "outcome", "statement_digest", "minimum")},
+            "openness": None if openness is None else {key: openness.get(key) for key in (
+                "id", "outcome", "statement_digest", "reason", "coverage", "searched_at", "evidence", "minimum")},
+            "openness_searches": describe_openness_searches(records, openness),
             "value": None if value is None else {key: value[key] for key in ("id", "motivation", "current_state")},
             "assessment": None if assessment is None else {key: assessment[key] for key in ("id", "grades", "items", "primary")},
             "assessment_evidence": resolve_assessment_evidence(records),
