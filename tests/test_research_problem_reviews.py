@@ -165,7 +165,13 @@ class ProblemReviewTests(LiteratureCase):
                         'a question without footholds is admissible when its significance case reaches level 3',
                         'the explanation the resolution would give is itself the significance', 'Level 2, supported:'):
             self.assertIn(content, bar)
-        self.assertNotIn('not reasons against a question by themselves', protocol.canonical_prompt("bar", orchestration="problem_creation", version=1)["text"])
+        # A refreshed bar (the packet carries problem_refresh) gives a finding on every objection its earlier bar stated.
+        for content in ('objection_findings is empty for a first bar', 'When the packet carries problem_refresh',
+                        'for every objection that earlier bar stated'):
+            self.assertIn(content, bar)
+        version_one_bar = protocol.canonical_prompt("bar", orchestration="problem_creation", version=1)["text"]
+        self.assertNotIn('not reasons against a question by themselves', version_one_bar)
+        self.assertNotIn('problem_refresh', version_one_bar)
 
     def test_problem_slate_template_is_version_two_only_and_keeps_bar_and_result_bytes(self):
         version_two = {"bar": "b0970315305977542a7b2099925a3c770087daf2e9a33a1c34d3660c72069b53",
