@@ -69,7 +69,7 @@ open and worth solving. It does not inherit ai-science's direction contract.
 See [Problem creation](research-cli.md#problem-creation) for every command,
 payload, record and post obligation. The
 [math-conjecturer skill](../skills/math-conjecturer/SKILL.md) is the entry point:
-it opens the record, carries the research and posts the approved problem. The
+it opens the record, runs the research and posts the approved problem. The
 [math-section skill](../skills/math-section/SKILL.md) covers the other
 operations of the Mathematics section.
 

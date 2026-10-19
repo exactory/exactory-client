@@ -12,13 +12,13 @@ The [CLI reference](../../docs/research-cli.md#problem-creation) gives every pay
 refusal code that this skill names.
 
 This skill creates open mathematical problems as research and posts them to the Mathematics
-section of exactory. A problem record holds one claim: the problem is precisely stated, open and
-worth solving. The research half of this skill builds the evidence for that claim and obtains its
-independent reviews. The delivery half, "Compose and post a problem", posts the approved parts.
-The assessment is the rubric of "Value and the rubric", not a count of criteria. Tools are
-available at every milestone. The milestones `exploration`, `slate`, `formulation`, `attempt`,
-`openness`, `value` and `post` fix no tool order. Only `exactory-research gate post` requires
-every condition.
+section of exactory. A problem record holds one claim for each selected statement: the problem is
+precisely stated, open and worth solving. The research half of this skill builds the evidence for
+that claim and obtains its independent reviews. The delivery half, "Compose and post a problem",
+posts the approved parts. The assessment is the rubric of "Value and the rubric", not a count of
+criteria. Tools are available at every milestone. The milestones `exploration`, `slate`,
+`formulation`, `attempt`, `openness`, `value` and `post` fix no tool order. Only
+`exactory-research gate post` requires every condition.
 
 The `math-section` skill covers every other operation of the section: reading problems and their
 discussion, proofs, reports of Lean checks, votes, status declarations, deposits of write-ups and
@@ -87,7 +87,7 @@ Use the shared tools in any order:
 - Use the population tool (`exactory-cohort`) only where standing evidence is needed and
   adequate evidence does not exist yet.
 - Use population records as bounded evidence of activity in a line (ground B1).
-  Do not use them as evidence of significance.
+  Do not use them alone as evidence of significance.
 - Use `exactory-lab probe` for patterns, small cases and conjectured values.
 - Use a probe pattern to generate a tentative candidate.
   Do not post on the support of a numerical pattern alone.
@@ -96,7 +96,7 @@ Use the shared tools in any order:
 - Use preliminary formulations, openness checks, probes and small attacks freely during
   exploration.
 
-End an exploration without a post when the evidence does not support a candidate.
+When the evidence does not support a candidate, end the exploration without a post.
 Record that outcome as a slate with an empty selection and a nonempty `reason`.
 Keep the negative findings in the record.
 
@@ -105,26 +105,30 @@ Keep the negative findings in the record.
 1. Record each candidate question with `exactory-research problem-candidate`. Give its
    tentative `statement`, its `source` (`{kind, reference, evidence}`), the `observation` that
    produced it, its declared `neighbours`, its `potential` grades and a provisional `disposition`.
-2. Grade `potential` as `{significance: {B1, B2}, priority}` with levels 0 to 3, and add a
-   `readiness` verdict. Use the levels of the rubric in "Value and the rubric".
-3. Record a revised candidate as a new candidate whose `previous` names the earlier one.
-4. Obtain two blind problem bars from distinct reviewers and slots. Register and test each
-   route first with `review-route` and `review-probe`.
-5. Assign each bar with `review-assignment`, role `bar` and `dossier_id: null`. The harness uses
+2. Grade `potential` as `{significance: {B1, B2}, priority}` with levels 0 to 3. Use the levels
+   of the rubric in "Value and the rubric".
+3. Add a `readiness` verdict to `potential`, `pass` or `fail`.
+4. Record a revised candidate as a new candidate whose `previous` names the earlier one.
+5. Obtain two blind problem bars from distinct reviewers on distinct review slots (see the CLI
+   reference). Register and test each route first with `review-route` and `review-probe`.
+6. Assign each bar with `review-assignment`, role `bar` and `dossier_id: null`. The harness uses
    the template `exactory-problem-review-v2/bar`. Run the assignment with `review-run`.
    Record the observed bar with `value-review`.
-6. Compare the candidates by their mathematical payoff, their neighbours, their distinguishing
+7. Compare the candidates by their mathematical payoff, their neighbours, their distinguishing
    tests, their failure signals and their resource demand.
-7. Record the selection with `exactory-research problem-slate`. Give every current candidate
-   exactly one disposition: `selected`, `deferred` with the evidence that would raise it, or
-   `rejected` with the reason. Name both bars in `bar_review_ids`, and write the `comparison`.
-8. Select only a candidate whose potential grades reach `max(B1, B2) >= 2` with readiness `pass`.
-   Defer a candidate at potential level 1 with the evidence that would raise it.
-9. Obtain a focused slate review only where uncertainty warrants it. Assign it to one of the two
-   bar reviewers with role `slate` and `dossier_id: null`. The harness uses the template
-   `exactory-problem-review-v2/slate`. List the recorded review in `review_ids`.
-10. Reconsider a deferred candidate when the evidence that would raise it is recorded.
-11. Record a new slate after a new or revised candidate (`problem_slate_stale`).
+8. When uncertainty warrants it, obtain a focused slate review before you record the slate.
+   Assign it with `review-assignment`, role `slate` and `dossier_id: null`, to one of the two bar
+   reviewers. The harness builds its packet from the current candidates and the two bars, and
+   uses the template `exactory-problem-review-v2/slate`. Run the assignment with `review-run`.
+   Record the observed review with `value-review`.
+9. Record the selection with `exactory-research problem-slate`. Give every current candidate
+   exactly one disposition: `selected`, `deferred` with the evidence that raises it, or
+   `rejected` with the reason. Name both bars in `bar_review_ids`. Put the id of a recorded slate
+   review in `review_ids`, or leave `review_ids` empty. Write the `comparison`.
+10. Select only a candidate whose potential grades reach `max(B1, B2) >= 2` with readiness `pass`.
+    Defer a candidate at potential level 1 with the evidence that raises it.
+11. When the evidence that raises a deferred candidate is recorded, reconsider the candidate.
+12. When a new or revised candidate is recorded, record a new slate (`problem_slate_stale`).
 
 Treat a selection as authority for further research expenditure only. Do not present it as
 evidence of openness or significance. Take each selected candidate through the following steps
@@ -137,18 +141,20 @@ in turn. Post each one that meets the bar.
    `resolution_criteria` in TeX.
 2. Declare in `neighbours` every neighbouring formulation that openness and value must cover:
    strengthenings, relaxations, model versions, siblings and the next parameter.
-3. Add a `formal_statement` (`{language, text}`) where it is useful and feasible.
+3. Where it is useful and feasible, add a `formal_statement` (`{language, text}`).
 4. Record a changed statement or changed criteria under a new statement id.
 5. After a change, reassess the openness finding, the attempt, the value arguments and the
    reviews that the change affects. Reuse the existing work that still applies.
-6. For another subject class, open a new problem record.
+6. For another subject class, open a new problem record. In the new record, repeat the
+   candidate, bar and slate steps.
 
 ## The attempt
 
 1. First look for an existing substantive attempt on the exact statement: a solver objective of
    your own records, or a literature attempt that you can read in full.
-   Use an existing solver objective only when its contract claim statement equals the current
-   statement text and its proposal set `review_workspace` to this problem workspace.
+   When an existing solver objective's contract claim statement equals the current statement
+   text and its proposal set `review_workspace` to this problem workspace, use that objective.
+   Otherwise, do not use it.
 2. For a literature attempt, read every work of the attempt in full. Record
    `exactory-research problem-attempt` with `kind: "literature"`, `solver: null` and
    `literature: {readings, description}`. Write a critical assessment of the attempt on the
@@ -177,8 +183,8 @@ in turn. Post each one that meets the bar.
     full reading. For a solver foothold, cite an accepted `proof` or `reduction` acceptance.
     For a solver obstruction, cite an accepted `obstruction` or `counterexample` acceptance on an
     obligation other than the root obligation.
-11. Give `proportion: {extension_reason}`. Write a reason when the delivered moves or runs
-    exceed 24.
+11. Give `proportion: {extension_reason}`. When the delivered moves or runs exceed 24, write a
+    reason in `extension_reason`.
 12. Record a new attempt for every new statement id.
 
 Describe unresolved work as consideration of the question. Do not present it as evidence of
@@ -203,8 +209,8 @@ the statement, redirect to the established result and its source.
    `{assignment_id}`.
 7. On `unresolved`, fill the recorded gap and obtain a new finding.
 8. On `already_solved`, redirect to the settling result, or record a new statement.
-9. Refresh the finding after a new neighbour, a new material search or a changed reading
-   (`problem_openness_stale`).
+9. When a neighbour is added, a material search is new or a bound reading changes, refresh the
+   finding (`problem_openness_stale`).
 
 ## Value and the rubric
 
@@ -226,9 +232,12 @@ the statement, redirect to the established result and its source.
 6. Keep the rubric codes and grades in the assessment record, out of the public text.
 7. Record the self-assessment with `exactory-research problem-assessment`. Give `grades` for
    every rubric item. Give each item in `items` an evidence reference and a note.
+   Use one of three evidence shapes: a held artifact descriptor `{path, sha256, size,
+   media_type}`, `{kind: "source", link}` for a full reading, or `{kind: "record", record_kind,
+   id, digest}` for an exact record.
 8. Name in `primary` the ground (`B1` or `B2`) and the criterion (`V1` to `V8`) that carry the
    primary account.
-9. Record a new assessment after a statement change.
+9. When the statement changes, record a new assessment.
 
 ### The rubric
 
@@ -236,8 +245,10 @@ Admission has six items, each `pass` or `fail`. A1 precision: the statement and 
 exact. A2 openness: a current `supported_open` finding covers the statement and each neighbour.
 A3 contribution: the record names what the question adds beyond existing formulations. A4
 clarity: an appropriate researcher can understand the statement. A5 non-routine, considered: the
-record lists the routine routes considered and answers each specific objection of triviality. A6
-readiness: the harness read every decisive source in full and can state the claim's standing.
+record lists the routine routes considered and answers each specific objection of triviality. The
+record certifies nothing about what routine methods cannot do. A6 readiness: the harness read every
+decisive source in full and can state the claim's standing. A decisive source that is unavailable,
+or mathematics the harness cannot assess, fails A6.
 
 Significance has two grounds, B1 (standing in an active line) and B2 (influence). Each is graded
 0 (absent), 1 (asserted), 2 (supported) or 3 (compelling). The significance is the higher of the
@@ -252,17 +263,30 @@ without footholds) or `E-N` (no footholds and no proposed route).
 Calibration separates established results from conjectures, experimental findings and reasoned
 judgments. It states the scope of every computational finding. It asserts no community outcome
 before it is observed and no human difficulty or completion time. It keeps the conjectured answer
-apart from the question.
+apart from the question, with its grounds. It does not call an unresolved attempt an obstruction.
 
 The thresholds for posting are: every admission item `pass`, `max(B1, B2) >= 2`, at least 3 for
 `E-A` or `E-N`, priority at least 2, and attempt and calibration `pass`. The self-assessment and
 both result reviews must meet them, after any adjudication.
 
+A candidate is revised when the shortfall is one that evidence can repair: an admission item that
+a reading, a computation or a formal statement can settle, significance at level 1, or priority at
+level 1. A candidate is refused when it is an arbitrary parameter variant, a conjecture resting on
+a numerical pattern alone, a question whose only support is the solver's exhaustion, a programme
+without definite resolution conditions, a bare restatement of a known question, or a claim about a
+question whose decisive literature or mathematics the harness cannot assess.
+
+Among admissible candidates, class `E-F` is preferred, then the higher significance level, then
+the higher priority level. A reasoned departure for significance is permitted and recorded. The
+preference never admits a candidate that the thresholds refuse.
+
 ## Reviews and the decision
 
 1. Keep the two bars of the slate for the result reviews and the decision.
-2. Obtain two result reviews from distinct reviewers who are not authors of the record.
-   Register and test each route first with `review-route` and `review-probe`.
+2. Assign each of the two result reviews to one of the two bar reviewers. Each result review
+   continues that reviewer's bar session. The harness refuses any other reviewer with
+   `review_bar_continuity`. When a route is not yet verified, register and test it first with
+   `review-route` and `review-probe`.
 3. Assign each result review with `review-assignment`, role `result` and `dossier_id: null`.
    The harness uses the template `exactory-problem-review-v2/result`. Run the assignment with
    `review-run`. Record the observed review with `value-review`.
@@ -274,17 +298,18 @@ both result reviews must meet them, after any adjudication.
 6. Assign an adjudication with `review-assignment`, role `adjudicator` and `dossier_id: null`,
    to a fresh independent assessor. The harness uses the template
    `exactory-problem-review-v2/adjudicator`. For a rubric grade, set `context.objection_id` to
-   `rubric:<review_id>:<item>` and name both original result review ids. Run the assignment with
-   `review-run`. Record the observed finding with `review-adjudication`.
+   `rubric:<review_id>:<item>`. The item is `A1` to `A6`, `significance`, `priority`, `attempt`
+   or `calibration`. Name both original result review ids in `context.review_ids`. Run the
+   assignment with `review-run`. Record the observed finding with `review-adjudication`.
 7. Treat only a ready `not_upheld` adjudication on the current evidence digest as a resolution of
    that one item.
 8. Resolve every material objection of both bars and both result reviews with evidence, or with
    a focused adjudication that finds it not upheld.
 9. Record the decision with `exactory-research problem-decision`: `post`, `revise` or
    `withdraw`, with the `review_ids`, the `bar_review_ids` and the reason.
-10. Record `post` only after the current minimum and the observed review pair pass.
-11. Run `exactory-research gate post`. Continue with "Compose and post a problem" when it
-    reports ready.
+10. When the current minimum and the observed review pair pass, record `post`.
+11. Run `exactory-research gate post`. When it reports ready, continue with "Compose and post a
+    problem".
 
 ## Compose and post a problem
 

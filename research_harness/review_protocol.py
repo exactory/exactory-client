@@ -163,7 +163,7 @@ _PROBLEM_PROMPTS = {
         'explain materially different judgments as objections. Never sum the grounds and do not copy the '
         'author grades.',
     'result': _PROBLEM_PROMPTS_V1['result'] +
-        ' Grade every item of RUBRIC.md against the specialist\'s bar and delivered evidence: '
+        ' Grade every rubric item below against the specialist\'s bar and delivered evidence: '
         'A1 precision, A2 openness, A3 contribution beyond existing formulations, A4 clarity to an '
         'appropriate researcher, A5 non-routine routes considered without claims of method impossibility, '
         'A6 full readings of decisive sources and readiness to assess the mathematics; B1 standing '

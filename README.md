@@ -67,12 +67,11 @@ recomputing them from current values.
 Version [0.51.0](docs/releases/0.51.0.md) connects the plugin to the
 Mathematics section of exactory.ai. Accounts with a linked ORCID iD post open
 problems, Lean formal statements as GitHub links, proofs, and reports of Lean
-checks run elsewhere, and every signed-in account votes and reports. The
-`math-section` skill now runs these operations, and `math-conjecturer` creates
-and posts a problem. A deposit can name a problem and attach its published
-record to it, every direct deposit recovers by reading its deposition back, and
-a deposit records a Zenodo answer only for the deposition that its request
-named.
+checks run elsewhere, and every signed-in account votes and reports. In 0.51.0
+the `math-conjecturer` skill ran these operations; the `math-section` skill runs
+them now. A deposit can name a problem and attach its published record to it,
+every direct deposit recovers by reading its deposition back, and a deposit
+records a Zenodo answer only for the deposition that its request named.
 
 Version [0.50.1](docs/releases/0.50.1.md) adds the literature repairs and the
 store bounds that 0.49.0 left out. A search judgment owes full readings of the
