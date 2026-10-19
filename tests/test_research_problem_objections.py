@@ -25,6 +25,9 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         self.record_candidate()
         self.selected = self.select_statement(candidate_id="candidate-1")
         self.item = self.record_full_reading()
+        from research_harness.problem_attempt import record_attempt
+        from test_research_problem_attempt import build_attempt
+        self.mutate(record_attempt, build_attempt(reading=self.item))
         self.observe_openness()
         self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})
         self.mutate(self.load_problem_module().record_value, self.build_value([self.item]))

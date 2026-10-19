@@ -1379,7 +1379,7 @@ already recorded in the configuration.
 
 | Claim | Mechanical minimum | Independent assessment | Currency |
 | --- | --- | --- | --- |
-| Problem: precisely stated, open, worth solving | A slate that selects the statement's candidate, exact statement and criteria, current supported openness, evidence-bound value, rubric self-assessment and projected citations | Two observed bar reviews and two observed version 2 result reviews meeting the rubric thresholds after focused adjudication | The explicit `problem_evidence_digest` binds the selected claim, assessment and decisive evidence. |
+| Problem: precisely stated, open, worth solving | A slate that selects the statement's candidate, exact statement and criteria, current unresolved attempt, current supported openness, evidence-bound value, rubric self-assessment and projected citations | Two observed bar reviews and two observed version 2 result reviews meeting the rubric thresholds after focused adjudication | The explicit `problem_evidence_digest` binds the selected claim, attempt, accepted results, assessment and decisive evidence. |
 
 Every mutation below uses `--file FILE --expected-revision REVISION
 --request-id ID`. Read the revision before a new mutation; an interrupted retry
@@ -1392,6 +1392,7 @@ records and move explicit selections.
 | `problem-candidate` | `{id, previous, statement, source, observation, neighbours, potential, notes, disposition}` | `problem_candidate/<id>` records a tentative question, adding `recorded_revision`. `previous` is null or an existing candidate id (`problem_candidate_missing`); a candidate that a later candidate names as `previous` is no longer current. `source` is `{kind, reference, evidence}`: kind `own_record`, `literature`, `computation`, `section` or `user`, a nonempty reference and a possibly empty list of evidence references. `potential` holds the provisional grades `{significance: {B1, B2}, priority}` with an optional `readiness` verdict (`invalid_rubric_grades`). `notes` is a string, possibly empty. `disposition` is `{status, reason, evidence_needed}` with status `open`, `selected`, `deferred` or `rejected` and `evidence_needed` text or null. It is the author's provisional disposition when the candidate is recorded; the slate's lists are the decision of record, may differ from it, and are the only dispositions the gate reads. |
 | `problem-slate` | `{id, selected, deferred, rejected, bar_review_ids, review_ids, comparison, reason}` | `problem_slate/<id>` records the selection decision over every current candidate, adding the computed `candidate_ids` and `recorded_revision`. The latest slate by recorded revision is current. |
 | `problem-statement` | `{id, title, area, statement, resolution_criteria, neighbours, formal_statement, candidate_id}` | `problem_statement/<id>` and `problem_selection/current = {statement_id}`. Statement and criteria are nonempty TeX; neighbours are formulation texts, possibly empty. Formal statement is optional, null or `{language, text}`. `candidate_id` is optional, null or the id of a current candidate that the statement formulates (`problem_candidate_missing`). The area must equal the immutable problem record's area (`problem_area_mismatch`); another subject class requires a new problem record. Any other changed field requires a new statement id and moves the selection. |
+| `problem-attempt` | `{id, statement_id, kind, solver, literature, outcomes, proportion}` | Appends `problem_attempt/<id>`, adding `recorded_revision`. Binds the current statement to a solver attempt delivered in this store or a critically assessed full-reading literature attempt. The latest record by recorded revision is current; a resolved attempt blocks posting as an open problem. |
 | `problem-openness` | `{assignment_id}` | Records `problem_openness/<id>` from the observed native result review. Every supplied minimum must pass the shared closed-schema validation. `supported_open` advances the claim; `unresolved` records the gap without an evidence audit; `already_solved` redirects to the settling result and blocks posting as open. |
 | `problem-value` | `{id, statement_id, motivation, current_state}` | `problem_value/<id>` contains ordered paragraph arrays, each item `{text, evidence}` with nonempty evidence. |
 | `problem-assessment` | `{id, statement_id, grades, items, primary}` | `problem_assessment/<id>` binds the rubric self-assessment to the current statement, adding `recorded_revision`. Each item has evidence and a note; `primary` names its significance ground and criterion. |
@@ -1473,8 +1474,59 @@ observed result through `problem-openness`. A new unbound material search,
 changed bound reading/search or missing current formulation makes the finding
 stale (`problem_openness_stale`).
 
+Record an attempt with `problem-attempt --file attempt.json
+--expected-revision N --request-id ID`. `kind` is `solver` or `literature`;
+exactly the matching binding is non-null (`invalid_input`). For a solver attempt,
+`solver` is `{native_attempt_digest}` and `literature` is null. The math-solver
+proposal sets `review_workspace` to the problem record's workspace, for example
+`..` from `<workspace>/attack`, so that `search deliver-attempt` writes into this
+store. Deliver with `exactory-math --attack-root attack search deliver-attempt
+--file empty.json --expected-revision N --request-id deliver-attempt --json`,
+where `empty.json` contains `{}` and N is the native controller revision.
+It writes an immutable `native_attempt/<digest(summary)>` containing the contract,
+state, obligations, checkpoints, acceptances, retreats, failed strategies, nodes,
+totals and delivery provenance. The research harness reads only this common-store
+record. Missing delivery returns `problem_attempt_unbound` with
+`{native_attempt_digest, expected_store}`. Its `contract.original_claim.statement`
+must equal the current statement text exactly (`problem_attempt_statement_mismatch`).
+
+For a literature attempt, `solver` is null and `literature` is
+`{readings: [{version_id, reading_id}], description}`: a nonempty list of this
+store's full readings and a nonempty critical assessment of the substantive
+attempt on the exact statement. The shared full-reading validator applies;
+abstract, missing, deferred or incomplete readings give
+`problem_value_reading_missing`.
+
+`outcomes` is `{resolved, footholds, unresolved, obstructions}`. `resolved` is
+boolean; for a solver it equals `state.proof_status in ("proved", "disproved")`
+(`problem_attempt_outcome_mismatch`). `footholds` is an array of `{claim, evidence}`,
+`unresolved` of `{description}`, and `obstructions` of `{claim, scope, evidence}`.
+These arrays may be empty; their text fields are nonempty. Evidence is either
+`{kind: "acceptance", acceptance_id}` for the solver binding or
+`{kind: "reading", version_id, reading_id}` for a reading in the literature
+binding. Solver footholds require accepted `proof` or `reduction` acceptances;
+obstructions require accepted `obstruction` or `counterexample` acceptances on an
+obligation other than `contract.root_obligation`. Invalid support returns
+`problem_attempt_evidence_missing`, naming the acceptance or reading ids.
+An unresolved inventory describes unfinished work and supplies no obstruction
+or difficulty claim.
+
+`proportion` is `{extension_reason}` with text or null. When delivered
+`totals.moves > 24` or `totals.runs > 24`, give a nonempty reason
+(`problem_attempt_extension_unexplained`, with `{totals}`). Totals preserve
+`moves`, `runs`, `elapsed_seconds` (null), `workers` and `historical_usage`;
+the harness infers no elapsed time or unknown historical usage. A new statement
+id requires a new attempt record even when only the resolution criteria changed.
+A resolved literature or solver attempt redirects to the established result
+and blocks the open-problem post (`problem_attempt_resolved`).
+
 Value evidence is `{kind: "reading", version_id, reading_id}` for a full reading,
-or `{kind: "computation", execution_id, output_id, formal_check}`. Abstract and
+`{kind: "computation", execution_id, output_id, formal_check}`, or
+`{kind: "result", attempt_id, acceptance_id}` for an accepted mathematical result.
+The result must belong to the current solver attempt on the current statement,
+with acceptance status `accepted` and outcome `proof`, `reduction` or `obstruction`;
+otherwise `problem_value_result_missing` names `{attempt_id, acceptance_id}`.
+Invalidated acceptances and hypotheses supply no result evidence. Abstract and
 passage readings, availability qualifications and deferrals supply no value
 evidence. A cited computation requires its admission, reconciled output and an
 assessment that lists and validates that result, with its execution accounting
@@ -1524,6 +1576,20 @@ Posting requires every admission item `pass`, `max(B1, B2) >= 2` (at least 3
 for `E-A` or `E-N`), priority at least 2, attempt `pass` and calibration `pass`.
 Grounds never add. The harness's self-assessment must meet these thresholds.
 The attempt grade records a judgment; this operation creates no attempt record.
+`assess_attempt` checks the latest assessment: a passing attempt grade on the
+current statement without a current attempt gives `problem_rubric_attempt_unbound`
+with `assessment_id` and `statement_id`. `assess_assessment` retains its rubric
+threshold and statement currency checks.
+
+The evidence binding adds `attempt: {id, digest, native_attempt_digest}` (null
+when absent, with a null native digest for literature) and distinct cited
+`results: [{attempt_id, acceptance_id, digest}]`, where each result digest hashes
+the acceptance. Reviewer evidence adds `attempt` with its `kind`, `outcomes` and
+`proportion`, plus native `state` and `totals` for a solver, and
+`results: [{attempt_id, acceptance_id, claim, outcome, standard}]`, taking the
+claim from the acceptance's checkpoint. Both result reviewers must receive the
+current `attempt` and `results` fields, including null or empty fields when
+applicable; omissions return `problem_evidence_unassessed`.
 
 The problem bar uses `exactory-problem-review-v2/bar` and receives `area`,
 `field` and source inventory/deliveries with the statement, title, neighbours and
@@ -1533,7 +1599,7 @@ is refused during bar assessment with `review_bar_mismatch`. Another subject
 class requires a new problem record and its own bars. Two observed bars are
 required before a result packet. The result template
 `exactory-problem-review-v2/result` receives `problem_evidence`
-with the claim, openness, value, assessment, citations, delivered readings/passages,
+with the claim, attempt, accepted results, openness, value, assessment, citations, delivered readings/passages,
 admissions/executions/assessments/output validations and bound native closures.
 Both result reviews must pass exactly `problem_statement`, `problem_openness`,
 `problem_value`, `problem_citations` and `stop`. A marker author cannot be a
@@ -1585,10 +1651,17 @@ records retain nonmanaged dependency composition and empirical meaning.
 | `problem_slate_stale` | Record a new slate that disposes of every current candidate; `missing` names current candidates outside the latest slate and `extra` names its candidates that are no longer current. |
 | `problem_candidate_unselected` | Formulate a candidate that the latest slate selects, or record a new slate. |
 | `problem_statement_missing` | Select the exact statement and resolution criteria. |
+| `problem_attempt_missing`, `problem_attempt_stale` | Record an attempt for the current statement and criteria; a stale obligation names `attempt_id` and `statement_id`. |
+| `problem_attempt_resolved` | Deliver the resolved candidate as a result; the obligation names `attempt_id`. |
+| `problem_rubric_attempt_unbound` | Bind the passing current assessment's attempt judgment to a current attempt record; the obligation names `assessment_id` and `statement_id`. |
+| `problem_attempt_unbound`, `problem_attempt_statement_mismatch`, `problem_attempt_outcome_mismatch` | Deliver and bind the native attempt from this store with the exact claim and matching resolved outcome. |
+| `problem_attempt_evidence_missing` | Cite an appropriate accepted acceptance or a listed full reading for the named finding. |
+| `problem_attempt_extension_unexplained` | Explain an attempt exceeding 24 consumed moves or runs; `totals` gives the usage. |
 | `problem_openness_missing`, `problem_openness_unresolved` | Obtain an observed supported openness finding with the audited minimum. |
 | `problem_already_solved` | Redirect to the named established result or record a new statement. |
 | `problem_openness_stale` | Refresh the finding for the changed formulation, search or reading. |
 | `problem_value_missing`, `problem_value_reading_missing`, `problem_value_computation_missing` | Supply ordered value paragraphs with valid full readings or admitted, reconciled, assessed computation support. |
+| `problem_value_result_missing` | Cite an accepted proof, reduction or obstruction of the current solver attempt; the obligation names `attempt_id` and `acceptance_id`. |
 | `problem_assessment_missing` | Record the rubric self-assessment with evidence for every item. |
 | `problem_assessment_stale` | Record a new assessment for the current statement; the obligation names both ids. |
 | `problem_rubric_below_threshold` | Repair self-assessment shortfalls, or repair or independently adjudicate the named review shortfalls. `source` distinguishes `self` and `review`; ids and `{item, required, graded}` shortfalls identify the judgment. |
@@ -1606,8 +1679,8 @@ records retain nonmanaged dependency composition and empirical meaning.
 `status` and `next` compute milestones from records: `exploration` before
 any slate, `slate` with a slate and no statement or with a latest slate that
 selects no candidate, `formulation` when the latest slate selects a candidate
-and a statement is selected, `attempt` (passed through until the problem record
-holds an attempt record), `openness` with current `supported_open`, `value` with
+and a statement is selected, `attempt` when `assess_attempt` returns no obligations,
+`openness` after that with current `supported_open`, `value` with
 valid value evidence and a passing current rubric self-assessment, both bars,
 both version 2 result reviews passing the assurances and rubric after
 adjudication, and a current post decision, and `post` with a recorded post.

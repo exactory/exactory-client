@@ -26,6 +26,21 @@ class ProblemGateTests(ProblemDeliveryCase):
         records.pop("problem_selection")
         self.assertIn("problem_statement_missing", self.collect_gate_codes(records))
 
+    def test_missing_stale_and_resolved_attempts_block_the_post_gate(self):
+        for variant, expected in (("missing", {"problem_attempt_missing", "problem_rubric_attempt_unbound"}),
+                                  ("stale", {"problem_attempt_stale", "problem_rubric_attempt_unbound"}),
+                                  ("resolved", {"problem_attempt_resolved"})):
+            with self.subTest(variant=variant):
+                records = self.store.snapshot()["records"]
+                if variant == "missing":
+                    records.pop("problem_attempt")
+                elif variant == "stale":
+                    records["problem_attempt"]["attempt-1"]["statement_id"] = "old-statement"
+                else:
+                    records["problem_attempt"]["attempt-1"]["outcomes"]["resolved"] = True
+                self.update_decision_evidence_digest(records)
+                self.assertEqual(self.collect_gate_codes(records), expected)
+
     def test_missing_slate_or_unselected_candidate_blocks_the_post_gate(self):
         records = self.store.snapshot()["records"]
         records.pop("problem_slate")

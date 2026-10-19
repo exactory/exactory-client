@@ -35,7 +35,8 @@ class ProblemReviewTests(LiteratureCase):
             **{key: self.statement[key] for key in ("title", "area", "statement", "resolution_criteria", "formal_statement")}},
             "openness": {"id": "open-1", "outcome": "supported_open", "minimum": {}},
             "value": {"id": "value-1", "motivation": [{"text": "PRIVATE_VALUE", "evidence": []}], "current_state": []},
-            "assessment": None, "citations": [], "readings": [], "passages": [], "computations": [], "formal_checks": []}
+            "assessment": None, "attempt": None, "results": [], "citations": [], "readings": [],
+            "passages": [], "computations": [], "formal_checks": []}
         # Isolate the review contract from the independently implemented claim validator.
         claims = types.ModuleType("research_harness.problem_claims")
         claims.find_current_statement = lambda records: records.get("problem_statement", {}).get(
@@ -699,6 +700,9 @@ class ProblemOpennessReviewTests(ProblemCase):
         self.observe_openness()
         self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})
         item = self.record_full_reading()
+        from research_harness.problem_attempt import record_attempt
+        from test_research_problem_attempt import build_attempt
+        self.mutate(record_attempt, build_attempt(reading=item))
         self.mutate(self.load_problem_module().record_value, self.build_value([item]))
         from test_research_problem_assessment import build_assessment
         self.mutate(self.load_problem_module().record_assessment, build_assessment(self.selected))

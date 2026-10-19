@@ -162,6 +162,32 @@ def validate_computation(records, artifacts, item, *, recorded_revision=None):
     raise_missing_computation("assessment listing this result")
 
 
+def validate_result(records, item):
+    from .problem_attempt import find_attempt
+    fields(item, ("kind", "attempt_id", "acceptance_id"))
+    text(item["attempt_id"], "Result attempt ID")
+    text(item["acceptance_id"], "Result acceptance ID")
+    attempt, statement = find_attempt(records), find_current_statement(records)
+    affected = {key: item[key] for key in ("attempt_id", "acceptance_id")}
+    if (attempt is not None and statement is not None and attempt["id"] == item["attempt_id"]
+            and attempt["statement_id"] == statement["id"] and attempt["kind"] == "solver"):
+        native = records.get("native_attempt", {}).get(attempt["solver"]["native_attempt_digest"])
+        if native is not None:
+            acceptance = next((row for row in native["acceptances"] if row["id"] == item["acceptance_id"]), None)
+            if (acceptance is not None and acceptance["status"] == "accepted"
+                    and acceptance["outcome"] in ("proof", "reduction", "obstruction")):
+                return acceptance
+    raise ResearchError("problem_value_result_missing", "Cite an accepted mathematical result of the current solver attempt", affected)
+
+
+def collect_results(records):
+    results = {}
+    for item in collect_value_items(find_value(records)):
+        if item["kind"] == "result":
+            results[(item["attempt_id"], item["acceptance_id"])] = validate_result(records, item)
+    return [(attempt_id, acceptance) for (attempt_id, _), acceptance in sorted(results.items())]
+
+
 def validate_value(records, artifacts, value):
     for section in ("motivation", "current_state"):
         paragraphs = value[section]
@@ -173,12 +199,14 @@ def validate_value(records, artifacts, value):
             if not isinstance(paragraph["evidence"], list) or not paragraph["evidence"]:
                 raise ResearchError("invalid_input", "Every value paragraph requires evidence")
             for item in paragraph["evidence"]:
-                if not isinstance(item, dict) or item.get("kind") not in {"reading", "computation"}:
-                    raise ResearchError("invalid_input", "Use a full reading or admitted assessed computation")
+                if not isinstance(item, dict) or item.get("kind") not in {"reading", "computation", "result"}:
+                    raise ResearchError("invalid_input", "Use a full reading, admitted assessed computation or accepted mathematical result")
                 if item["kind"] == "reading":
                     validate_reading(records, artifacts, item)
-                else:
+                elif item["kind"] == "computation":
                     validate_computation(records, artifacts, item, recorded_revision=value.get("recorded_revision"))
+                else:
+                    validate_result(records, item)
 
 
 def bind_formal_check(records, artifacts, payload):
@@ -277,11 +305,17 @@ def project_citations(records, artifacts):
 
 
 def describe_binding(records, artifacts):
+    from .problem_attempt import find_attempt
     statement = find_current_statement(records)
+    attempt = find_attempt(records)
     openness, value = find_latest(records, "problem_openness"), find_value(records)
     computations = [validate_computation(records, artifacts, item, recorded_revision=value.get("recorded_revision")) for item in collect_value_items(value)
                     if item["kind"] == "computation"]
     return {"claim": statement, "openness": openness, "value": value, "assessment": find_assessment(records),
+            "attempt": None if attempt is None else {"id": attempt["id"], "digest": digest(attempt),
+                "native_attempt_digest": None if attempt["solver"] is None else attempt["solver"]["native_attempt_digest"]},
+            "results": [{"attempt_id": attempt_id, "acceptance_id": acceptance["id"], "digest": digest(acceptance)}
+                        for attempt_id, acceptance in collect_results(records)],
             "readings": [{"id": row["id"], "digest": digest(row)} for row in collect_readings(records)],
             "computations": [{"execution_id": row["execution_id"], "output_id": row["output_id"],
                               **{key: digest(row[key]) for key in ("admission", "execution", "assessment")}} for row in computations],
@@ -292,19 +326,38 @@ def describe_binding(records, artifacts):
 
 def describe_evidence(records, artifacts):
     from .direction_sources import build_reading_passages
+    from .problem_attempt import find_attempt
     statement, value = find_current_statement(records), find_value(records)
     openness = find_latest(records, "problem_openness")
     assessment = find_assessment(records)
+    attempt = find_attempt(records)
+    attempt_evidence = None
+    if attempt is not None:
+        attempt_evidence = {key: attempt[key] for key in ("kind", "outcomes", "proportion")}
+        if attempt["kind"] == "solver":
+            native = records.get("native_attempt", {}).get(attempt["solver"]["native_attempt_digest"])
+            if native is None:
+                raise ResearchError("problem_attempt_unbound", "Deliver the native attempt into this problem store",
+                                    {"native_attempt_digest": attempt["solver"]["native_attempt_digest"], "expected_store": str(artifacts.root)})
+            attempt_evidence.update({key: native[key] for key in ("state", "totals")})
     readings = collect_readings(records)
     prepared = build_reading_passages(records, artifacts, readings)
     computations = [validate_computation(records, artifacts, item, recorded_revision=value.get("recorded_revision")) for item in collect_value_items(value)
                     if item["kind"] == "computation"]
+    results = []
+    for attempt_id, acceptance in collect_results(records):
+        native = records["native_attempt"][records["problem_attempt"][attempt_id]["solver"]["native_attempt_digest"]]
+        checkpoint = next(row for row in native["checkpoints"] if row["id"] == acceptance["checkpoint_id"])
+        results.append({"attempt_id": attempt_id, "acceptance_id": acceptance["id"], "claim": checkpoint["claim"],
+                        "outcome": acceptance["outcome"], "standard": acceptance["standard"]})
     return {"claim": None if statement is None else dict(
                 {key: statement[key] for key in ("title", "area", "statement", "resolution_criteria", "formal_statement")},
                 statement_id=statement["id"], statement_digest=compute_statement_digest(statement)),
             "openness": None if openness is None else {key: openness.get(key) for key in ("id", "outcome", "statement_digest", "minimum")},
             "value": None if value is None else {key: value[key] for key in ("id", "motivation", "current_state")},
             "assessment": None if assessment is None else {key: assessment[key] for key in ("id", "grades", "items", "primary")},
+            "attempt": attempt_evidence,
+            "results": results,
             "citations": project_citations(records, artifacts),
             "readings": [{"id": row["id"], "version_id": row["version_id"], "digest": digest(row),
                           "depth": row["depth"], "reading": row} for row in readings],

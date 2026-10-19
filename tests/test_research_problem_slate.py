@@ -171,7 +171,7 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assertEqual(report["candidates"], {"current": 1, "selected": 1, "deferred": 0, "rejected": 0})
         self.select_statement(candidate_id="candidate-1")
         report = status_report(self.store)
-        self.assertEqual((report["milestone"], report["next"]["code"]), ("formulation", "problem_openness_missing"))
+        self.assertEqual((report["milestone"], report["next"]["code"]), ("formulation", "problem_attempt_missing"))
 
     def test_optional_slate_review_packet_and_response(self):
         self.record_candidate()

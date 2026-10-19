@@ -71,15 +71,15 @@ payload, record and post obligation.
 
 | Claim | Minimum | Independent assessment | Currency |
 | --- | --- | --- | --- |
-| Problem: precisely stated, open, worth solving | A slate that selects the statement's candidate, exact statement and criteria, current supported openness, bound value evidence, rubric self-assessment and citations | Two observed bars followed by two observed version 2 result reviews | Current selected statement, assessment and decisive evidence bound by `problem_evidence_digest`. |
+| Problem: precisely stated, open, worth solving | A slate that selects the statement's candidate, exact statement and criteria, current unresolved attempt, current supported openness, bound value evidence, rubric self-assessment and citations | Two observed bars followed by two observed version 2 result reviews | Current selected statement, attempt, accepted results, assessment and decisive evidence bound by `problem_evidence_digest`. |
 
 | Milestone | Condition computed from records |
 | --- | --- |
 | `exploration` | `problem-init` records the area, field and immutable authors and adopts the constitution. No slate exists yet. |
 | `slate` | `problem-slate` records the selection over every current candidate, bound to two observed blind bars; no statement exists yet, or the latest slate selects no candidate. |
 | `formulation` | The latest slate selects a candidate and `problem-statement` has selected a statement: the exact statement, resolution criteria, neighbours, optional formal statement and the candidate it formulates. |
-| `attempt` | Passed through until the problem record holds an attempt record. |
-| `openness` | An observed native openness review records a current `supported_open` finding with the shared search and full-reading minimum. |
+| `attempt` | `problem-attempt` records a current, proportionate unresolved solver or critically assessed literature attempt; `assess_attempt` returns no obligations. |
+| `openness` | The attempt passes and an observed native openness review records a current `supported_open` finding with the shared search and full-reading minimum. |
 | `value` | Value evidence validates and `problem-assessment` binds a current self-assessment meeting the rubric thresholds; both observed bars and both version 2 result reviews cover the evidence and pass the assurances and rubric after adjudication; the current decision is `post`. |
 | `post` | `problem-posted` records the confirmed server id against the rebuilt approved export. |
 
@@ -101,6 +101,26 @@ the latest slate to select the current statement's candidate. The latest slate
 must still cover exactly the current candidates; otherwise the gate reports
 `problem_slate_stale` until a new slate is recorded.
 
+Record the attempt with `problem-attempt`: `{id, statement_id, kind, solver,
+literature, outcomes, proportion}` becomes immutable `problem_attempt/<id>` with
+`recorded_revision`. For `kind: "solver"`, use `solver: {native_attempt_digest}`
+and null `literature`; the math-solver proposal sets `review_workspace` to this
+problem workspace (for example `..` from `<workspace>/attack`), then
+`search deliver-attempt` delivers `native_attempt/<digest(summary)>` to this store.
+For `kind: "literature"`, use null `solver` and
+`literature: {readings: [{version_id, reading_id}], description}` with full readings
+and a critical assessment of the exact statement. Exactly one binding is non-null.
+`outcomes` gives `resolved`, `footholds: [{claim, evidence}]`,
+`unresolved: [{description}]` and `obstructions: [{claim, scope, evidence}]`.
+Evidence names an accepted native acceptance or a listed full reading.
+`proportion: {extension_reason}` explains consumed solver moves or runs above 24.
+Missing, stale and resolved attempts block posting as `problem_attempt_missing`,
+`problem_attempt_stale` and `problem_attempt_resolved`. A passing current rubric
+attempt grade without a current attempt gives `problem_rubric_attempt_unbound`.
+`next` names a missing attempt before missing openness. A resolved candidate
+leaves the open-problem path and is delivered as a result. Unresolved work is
+consideration evidence, never evidence of difficulty or a demonstrated obstruction.
+
 Tools remain available in any order before posting: set budgets and depth,
 search the field and neighbouring formulations, read sources, preserve access
 gaps and deferrals, request sources and run probes. They require no intent,
@@ -113,7 +133,13 @@ mathematical proof or formal check. Probe origin remains visible and is refused
 as cited value evidence.
 
 Record motivation and current-state paragraphs with `problem-value`. Every
-paragraph names full readings or admitted, reconciled and assessed results.
+paragraph names full readings, admitted, reconciled and assessed computations,
+or `{kind: "result", attempt_id, acceptance_id}`. A result must be an accepted
+`proof`, `reduction` or `obstruction` from the current solver attempt, otherwise
+`problem_value_result_missing` identifies the invalid citation. The evidence
+binding and reviewer packet carry `attempt` and `results`; the latter includes
+the acceptance's checkpoint claim, outcome and standard for each cited result.
+Both result reviewers must receive these fields (`problem_evidence_unassessed`).
 An unavailable source stays unread. A requested formal check records the exact
 native claim, proof policy and required deliverables before verification. After
 math-solver completes that contract, deliver its authenticated closure to this

@@ -40,6 +40,23 @@
     "formal_statement": null,
     "candidate_id": "problem-candidate-1"
   },
+  "problem-attempt": {
+    "id": "problem-attempt-1",
+    "statement_id": "statement-1",
+    "kind": "literature",
+    "solver": null,
+    "literature": {
+      "readings": [{"version_id": "arxiv:2601.00001v1", "reading_id": "full-reading-1"}],
+      "description": "Critically assessed the survey's attempt on the exact bound and its unfinished cases."
+    },
+    "outcomes": {
+      "resolved": false,
+      "footholds": [{"claim": "The survey establishes the finite cases.", "evidence": {"kind": "reading", "version_id": "arxiv:2601.00001v1", "reading_id": "full-reading-1"}}],
+      "unresolved": [{"description": "The bound for general length remains unresolved."}],
+      "obstructions": []
+    },
+    "proportion": {"extension_reason": null}
+  },
   "problem-openness": {
     "assignment_id": "problem-openness-review"
   },

@@ -161,7 +161,7 @@ class ProblemRecordTests(ProblemCase):
         self.select_statement(candidate_id="candidate-1")
         report = status_report(self.store)
         self.assertEqual(report["milestone"], "formulation")
-        self.assertEqual(report["next"]["code"], "problem_openness_missing")
+        self.assertEqual(report["next"]["code"], "problem_attempt_missing")
 
     def test_post_decision_requires_the_problem_minimum(self):
         self.initialize_problem()

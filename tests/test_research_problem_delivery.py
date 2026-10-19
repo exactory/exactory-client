@@ -36,7 +36,7 @@ class ProblemDeliveryCase(ProblemCase):
         for reviewer in ("first", "second"):
             self.observe("bar", reviewer)
 
-    def prepare_ready(self, formal=False):
+    def prepare_ready(self, formal=False, solver=False):
         self.initialize_problem()
         self.record_candidate()
         self.observe_bars()
@@ -44,6 +44,14 @@ class ProblemDeliveryCase(ProblemCase):
         self.selected = self.select_statement(candidate_id="candidate-1",
             formal_statement={"language": "Lean", "text": "theorem bound : True := by trivial"} if formal else None)
         item = self.record_full_reading()
+        from research_harness.problem_attempt import record_attempt
+        from test_research_problem_attempt import build_attempt, build_native_attempt, put_native_attempt
+        if solver:
+            native = build_native_attempt(self.selected["statement"], [], {})
+            attempt = build_attempt(native_attempt_digest=put_native_attempt(self, native))
+        else:
+            attempt = build_attempt(reading=item)
+        self.mutate(record_attempt, attempt)
         self.observe_openness()
         self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})
         self.mutate(self.load_problem_module().record_value, self.build_value([item]))
