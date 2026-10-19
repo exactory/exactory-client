@@ -1920,8 +1920,10 @@ write, `audit_state(..., common_guard=<common snapshot>, fresh=True)` must pass 
 every accepted acceptance and any closure whose proof status is `proved` or
 `disproved`. The common mutation checks that snapshot's revision; a concurrent
 change retries with a fresh snapshot
-and audit. An identical record re-audits and writes neither a record nor a receipt.
-A changed summary writes a new immutable record and preserves the old one.
+and audit. An identical current record re-audits and writes neither a record nor
+a receipt. A changed summary writes a new immutable record and preserves the old
+one. Re-delivering an earlier attempt updates its current pointer as described
+below, without rewriting that immutable record.
 
 ### Closure delivery
 
@@ -1941,7 +1943,8 @@ native_closure/<digest(closure)> = {
 
 The operation is `native_math.deliver_closure` with common request ID
 `native-closure:<digest(closure)>`. Output has exactly
-`{objective_id, attack_root, native_closure_digest, workspace}`.
+`{objective_id, attack_root, native_closure_digest, workspace}`. Closure delivery
+writes no `native_attempt_current` pointer.
 
 ### Attempt delivery
 
@@ -1963,18 +1966,38 @@ from controller records; it copies no local file contents:
   retreats: [as recorded],
   failed_strategies: [as recorded],
   nodes: [{id, status, cashout_action, finish_receipt: {id, post_digest} | null}],
-  totals: {moves, runs, elapsed_seconds, workers, historical_usage}
+  totals: {moves, runs, elapsed_seconds, workers, timeout_seconds, historical_usage}
 }
 ```
 
 The record is `native_attempt/<digest(summary)>`, containing `summary` plus
 `provenance: {source: "operator", actor_id: "search-controller",
-attestation_id: "filesystem-audit:deliver-attempt"}`. The digest excludes
-provenance and uses the controller's canonical digest, identical to
+attestation_id: "filesystem-audit:deliver-attempt"}` and `recorded_revision`,
+the common-store revision at first delivery. The digest excludes
+provenance and `recorded_revision` and uses the controller's canonical digest, identical to
 `research_harness.evidence.digest`. The operation is `native_math.deliver_attempt`
 with common request ID `native-attempt:<digest(summary)>`. Output has exactly
 `{objective_id, attack_root, native_attempt_digest, workspace, state}`, where
 `state` is the summary's state record.
+
+Each delivery also declares the current snapshot for the pair `(attack_root,
+objective_id)` through a mutable common-store pointer:
+
+```text
+native_attempt_current/<digest({attack_root, objective_id})> = {
+  attack_root: AbsolutePath, objective_id: ID,
+  native_attempt_digest: digest(summary), recorded_revision: CommonStoreRevision
+}
+```
+
+The pointer changes through the same prepared mutation as delivery whenever it
+does not already name that digest. An exact repeat of an earlier snapshot moves
+the pointer back while preserving the snapshot's first `recorded_revision`.
+Pointer-only mutations use common request ID
+`native-attempt:<digest(summary)>:current:<next-common-revision>` so an earlier
+delivery receipt cannot replay a later pointer update. Record order never
+declares the current snapshot, and different attack roots have separate
+successions even when they share an objective ID.
 
 Keyed collections are ordered by controller ID; retreats keep recorded order.
 `failed_strategies` contains the retained entries of
@@ -1989,7 +2012,9 @@ false; `evidence_digests` comes from its recorded audit.
 `historical_usage` copies the controller's `known` or `unknown` accounting status;
 unknown historical work is not inferred. `elapsed_seconds` is null because native
 records do not account elapsed duration. `workers` is the largest admitted worker
-limit, or zero without an admission; it is an allocation bound. Delivery preserves
+limit, or zero without an admission; it is an allocation bound. `timeout_seconds`
+is the largest admitted timeout limit across nodes with an admission, or zero
+without any. Neither bound measures elapsed usage. Delivery preserves
 the objective's current findings and decides no proof credit, difficulty, renewal
 or cash-out entitlement.
 
@@ -2001,7 +2026,7 @@ or cash-out entitlement.
 | `revision_conflict` | Both | Expected native revision differs from current state |
 | `store_missing` | Both | Associated common store does not exist |
 | `review_workspace_mismatch` | Both | Recorded common-workspace references conflict |
-| `audit_failed` | Both | Fresh accepted-evidence or resolved-closure audit fails, including on a repeat |
+| `audit_failed` | Both | Fresh accepted-evidence or resolved-closure audit fails, including on a repeat; details are the failures map keyed by acceptance id |
 | `record_conflict` | Both | An immutable record's key already contains different content |
 | `native_completion_required` | `deliver-closure` | Objective is incomplete, reopened, unresolved, or has a state error |
 | `review_assignment_required` | `deliver-closure` | Closure lacks an observed native review |

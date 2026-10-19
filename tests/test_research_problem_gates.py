@@ -76,6 +76,12 @@ class ProblemGateTests(ProblemDeliveryCase):
     def test_changed_neighbours_make_openness_stale_at_the_gate(self):
         records = self.store.snapshot()["records"]
         records["problem_statement"]["statement-1"]["neighbours"] = ["A newly declared formulation"]
+        assessment = copy.deepcopy(records["problem_assessment"]["assessment-1"])
+        assessment.update(id="assessment-neighbours", recorded_revision=self.store.revision + 1)
+        for item in assessment["items"].values():
+            for reference in item["evidence"]:
+                reference["digest"] = digest(records["problem_statement"]["statement-1"])
+        records["problem_assessment"][assessment["id"]] = assessment
         self.update_decision_evidence_digest(records)
         self.assertEqual(self.collect_gate_codes(records), {"problem_openness_stale"})
 

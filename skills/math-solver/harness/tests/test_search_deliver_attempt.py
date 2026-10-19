@@ -60,7 +60,7 @@ class DeliverAttemptTests(SearchCLIWorkspace, unittest.TestCase):
     def delivered_record(self, controller, result):
         common = CommonStore(common_root(self.root, controller.status()))
         record = common.snapshot()["records"]["native_attempt"][result["native_attempt_digest"]]
-        summary = {key: value for key, value in record.items() if key != "provenance"}
+        summary = {key: value for key, value in record.items() if key not in ("provenance", "recorded_revision")}
         self.assertEqual(result["native_attempt_digest"], digest(summary))
         self.assertEqual(result["native_attempt_digest"], common_digest(summary))
         self.assertEqual(result, {"objective_id": "objective-000001", "attack_root": str(self.root.resolve()),
@@ -74,9 +74,10 @@ class DeliverAttemptTests(SearchCLIWorkspace, unittest.TestCase):
         before_native = controller.store.read()
         result = self.search("deliver-attempt", {}, revision=7)
         record = self.delivered_record(controller, result)
+        self.assertEqual(record["recorded_revision"], CommonStore(self.root).revision)
         self.assertEqual(set(record), {"schema_version", "objective_id", "attack_root", "contract", "state",
                                        "obligations", "checkpoints", "acceptances", "retreats",
-                                       "failed_strategies", "nodes", "totals", "provenance"})
+                                       "failed_strategies", "nodes", "totals", "provenance", "recorded_revision"})
         self.assertEqual(record["schema_version"], 1)
         self.assertEqual(record["contract"], state["contract"])
         self.assertEqual(record["provenance"], {"source": "operator", "actor_id": "search-controller",
@@ -100,7 +101,7 @@ class DeliverAttemptTests(SearchCLIWorkspace, unittest.TestCase):
                                            "finish_receipt": None}])
         self.assertEqual(record["retreats"], [])
         self.assertEqual(record["failed_strategies"], [])
-        self.assertEqual(record["totals"], {"moves": 0, "runs": 0, "elapsed_seconds": None, "workers": 1,
+        self.assertEqual(record["totals"], {"moves": 0, "runs": 0, "elapsed_seconds": None, "workers": 1, "timeout_seconds": 300,
                                             "historical_usage": "known"})
         self.assertNotIn("An analytical proof covering every requested case.", json.dumps(record))
         self.assertEqual(controller.store.read(), before_native)
@@ -140,10 +141,36 @@ class DeliverAttemptTests(SearchCLIWorkspace, unittest.TestCase):
         self.assertNotEqual(first["native_attempt_digest"], second["native_attempt_digest"])
         after = common.snapshot()
         self.assertEqual(len(after["records"]["native_attempt"]), 2)
+        self.assertGreater(after["records"]["native_attempt"][second["native_attempt_digest"]]["recorded_revision"],
+                           after["records"]["native_attempt"][first["native_attempt_digest"]]["recorded_revision"])
         self.assertEqual(after["records"]["native_attempt"][first["native_attempt_digest"]],
                          snapshot["records"]["native_attempt"][first["native_attempt_digest"]])
         self.assertEqual(after["records"]["literature_operation"]["native-attempt:" + second["native_attempt_digest"]]["operation"],
                          "native_math.deliver_attempt")
+
+    def test_pause_resume_repeat_moves_the_current_pointer_without_a_new_snapshot(self):
+        from tests.search_fixtures import provenance
+        controller = self.unresolved_objective()
+        first = self.search("deliver-attempt", {}, revision=7)
+        self.search("pause", {"reason": "User requested a pause"}, revision=7)
+        paused = self.search("deliver-attempt", {}, revision=8)
+        self.search("resume", {"objective_id": "objective-000001", "message_id": "resume-delivery",
+            "session_id": "codex:fixture-resume", "instruction": "Continue the original objective",
+            "provenance": provenance("operator")}, revision=8)
+        common = CommonStore(self.root)
+        before = common.snapshot()["records"]["native_attempt"]
+        resumed = self.search("deliver-attempt", {}, revision=9)
+        self.assertEqual(resumed["native_attempt_digest"], first["native_attempt_digest"])
+        self.assertNotEqual(resumed["native_attempt_digest"], paused["native_attempt_digest"])
+        records = common.snapshot()["records"]
+        self.assertEqual(records["native_attempt"], before)
+        self.assertEqual(len(records["native_attempt"]), 2)
+        key = {name: first[name] for name in ("attack_root", "objective_id")}
+        self.assertEqual(records["native_attempt_current"], {digest(key): dict(key,
+            native_attempt_digest=resumed["native_attempt_digest"], recorded_revision=common.revision)})
+        before = common.snapshot()
+        self.search("deliver-attempt", {}, revision=9)
+        self.assertEqual(common.snapshot(), before)
 
     def test_refuses_a_non_empty_spec_and_a_stale_revision(self):
         controller = self.unresolved_objective()
@@ -242,14 +269,28 @@ class DeliverAttemptTests(SearchCLIWorkspace, unittest.TestCase):
         state = controller.status()
         first = controller.command("deliver-attempt", {}, state["revision"], "before-journal")
         self.assertEqual(self.delivered_record(controller, first)["totals"],
-                         {"moves": 0, "runs": 1, "elapsed_seconds": None, "workers": 1,
+                         {"moves": 0, "runs": 1, "elapsed_seconds": None, "workers": 1, "timeout_seconds": 300,
                           "historical_usage": "known"})
         status, out, err = run(["journal", "add", "sample", "--json", json.dumps(make_move(1))], self.root)
         self.assertEqual((status, err), (0, ""))
         second = controller.command("deliver-attempt", {}, controller.status()["revision"], "after-journal")
         self.assertEqual(self.delivered_record(controller, second)["totals"],
-                         {"moves": 1, "runs": 1, "elapsed_seconds": None, "workers": 1,
+                         {"moves": 1, "runs": 1, "elapsed_seconds": None, "workers": 1, "timeout_seconds": 300,
                           "historical_usage": "known"})
+
+    def test_summary_exports_the_largest_admitted_timeout(self):
+        import copy
+        from search_controller.attempt_delivery import build_attempt_summary
+        controller = self.unresolved_objective()
+        state = controller.status()
+        node = state["nodes"]["node-000001"]
+        node["admission"]["limits"]["timeout_seconds"] = 100
+        second = copy.deepcopy(node)
+        second["admission"]["limits"]["timeout_seconds"] = 600
+        unadmitted = copy.deepcopy(node)
+        unadmitted["admission"] = None
+        state["nodes"].update(second=second, unadmitted=unadmitted)
+        self.assertEqual(build_attempt_summary(controller, state)["totals"]["timeout_seconds"], 600)
 
     def test_summary_preserves_historical_usage(self):
         from search_controller.attempt_delivery import build_attempt_summary
@@ -261,7 +302,7 @@ class DeliverAttemptTests(SearchCLIWorkspace, unittest.TestCase):
                 state["totals"]["historical_usage"] = historical_usage
                 summary = build_attempt_summary(controller, state)
                 self.assertEqual(summary["totals"], {"moves": 0, "runs": 0, "elapsed_seconds": None,
-                                                     "workers": 0, "historical_usage": historical_usage})
+                                                     "workers": 0, "timeout_seconds": 0, "historical_usage": historical_usage})
 
     def test_finished_node_exports_its_pinned_finish_receipt(self):
         from tests.search_execution_support import admit_workspace

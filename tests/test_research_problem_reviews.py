@@ -35,7 +35,7 @@ class ProblemReviewTests(LiteratureCase):
             **{key: self.statement[key] for key in ("title", "area", "statement", "resolution_criteria", "formal_statement")}},
             "openness": {"id": "open-1", "outcome": "supported_open", "minimum": {}},
             "value": {"id": "value-1", "motivation": [{"text": "PRIVATE_VALUE", "evidence": []}], "current_state": []},
-            "assessment": None, "attempt": None, "results": [], "citations": [], "readings": [],
+            "assessment": None, "assessment_evidence": [], "attempt": None, "results": [], "citations": [], "readings": [],
             "passages": [], "computations": [], "formal_checks": []}
         # Isolate the review contract from the independently implemented claim validator.
         claims = types.ModuleType("research_harness.problem_claims")

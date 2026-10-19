@@ -113,6 +113,7 @@ def find_assessment(records):
 
 
 def record_assessment(store, payload, *, expected_revision, request_id):
+    from .problem_evidence import resolve_assessment_record
     artifacts = ArtifactStore(store.root)
 
     def prepare(records, value):
@@ -128,6 +129,9 @@ def record_assessment(store, payload, *, expected_revision, request_id):
             if not isinstance(entry, dict) or not entry.get("evidence"):
                 raise ResearchError("problem_assessment_evidence_missing", "Give evidence for every rubric item", {"item": item})
             fields(entry, ("evidence", "note"))
+            for reference in strategy.items(entry["evidence"], "Evidence", nonempty=True):
+                if isinstance(reference, dict) and reference.get("kind") == "record":
+                    resolve_assessment_record(records, item, reference)
             strategy.evidence(records, artifacts, entry["evidence"])
             text(entry["note"], "Rubric item note")
         fields(value["items"], problem_rubric.ITEMS)

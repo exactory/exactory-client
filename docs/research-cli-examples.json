@@ -43,15 +43,15 @@
   "problem-attempt": {
     "id": "problem-attempt-1",
     "statement_id": "statement-1",
-    "kind": "literature",
-    "solver": null,
-    "literature": {
-      "readings": [{"version_id": "arxiv:2601.00001v1", "reading_id": "full-reading-1"}],
-      "description": "Critically assessed the survey's attempt on the exact bound and its unfinished cases."
+    "kind": "solver",
+    "solver": {
+      "native_attempt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "applicability": "The claim quantifies over every n, has no additional assumptions, and its named scope covers exactly the statement and its resolution criteria."
     },
+    "literature": null,
     "outcomes": {
       "resolved": false,
-      "footholds": [{"claim": "The survey establishes the finite cases.", "evidence": {"kind": "reading", "version_id": "arxiv:2601.00001v1", "reading_id": "full-reading-1"}}],
+      "footholds": [{"claim": "The bound reduces to the balanced case.", "evidence": {"kind": "acceptance", "acceptance_id": "acceptance-1"}}],
       "unresolved": [{"description": "The bound for general length remains unresolved."}],
       "obstructions": []
     },

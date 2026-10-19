@@ -51,6 +51,8 @@ def build_attempt_summary(controller, state):
                    "elapsed_seconds": None,
                    "workers": max((node["admission"]["limits"]["workers"] for node in state["nodes"].values()
                                    if node["admission"] is not None), default=0),
+                   "timeout_seconds": max((node["admission"]["limits"]["timeout_seconds"]
+                                           for node in state["nodes"].values() if node["admission"] is not None), default=0),
                    "historical_usage": state["totals"]["historical_usage"]},
     }
     return copy.deepcopy(summary)
@@ -74,32 +76,60 @@ def deliver_attempt(controller, spec, expected_revision, request_id):
         value = dict(summary, provenance=controller.provenance("deliver-attempt"))
         result = {"objective_id": state["objective_id"], "attack_root": str(controller.root),
                   "native_attempt_digest": attempt_digest, "workspace": str(common), "state": summary["state"]}
-        try:
-            store = CommonStore(common)
+        return deliver_snapshot(controller, state, common, "native_attempt", attempt_digest, value, result,
+                                audit_state, "Accepted native attempt audit failed")
+
+
+def deliver_snapshot(controller, state, common, kind, identity, value, result, audit, audit_message):
+    """Audit a revision-protected common snapshot and retry competing common writes."""
+    def audit_snapshot(records):
+        snapshot = SimpleNamespace(root=common, snapshot=lambda: {"records": records})
+        failures = audit(controller.root, state, ContentSink(controller.store), common_guard=snapshot, fresh=True)
+        if failures:
+            raise SearchError("audit_failed", audit_message, failures)
+
+    key = {name: value[name] for name in ("attack_root", "objective_id")}
+    pointer_id = s.digest(key)
+    try:
+        store = CommonStore(common)
+        while True:
+            snapshot = store.snapshot()
+            existing = snapshot["records"].get(kind, {}).get(identity)
+            current = snapshot["records"].get("native_attempt_current", {}).get(pointer_id)
+            pointer_current = current is not None and current["native_attempt_digest"] == identity
+            # Exact current repeats freshly audit without adding a record or receipt.
+            if existing is not None and (kind != "native_attempt" or pointer_current):
+                audit_snapshot(snapshot["records"])
+                expected = (dict(value, recorded_revision=existing["recorded_revision"])
+                            if kind == "native_attempt" and "recorded_revision" in existing else value)
+                immutable_record(snapshot["records"], kind, identity, expected)
+                return result
 
             def prepare(records, payload):
-                # Audit the exact common snapshot protected by the mutation's revision.
-                snapshot = SimpleNamespace(root=common, snapshot=lambda: {"records": records})
-                content = ContentSink(controller.store)
-                failures = audit_state(controller.root, state, content, common_guard=snapshot, fresh=True)
-                if failures:
-                    raise SearchError("audit_failed", "Accepted native attempt audit failed", failures)
-                return [immutable_record(records, "native_attempt", attempt_digest, payload)], result
+                audit_snapshot(records)
+                record = payload
+                if kind == "native_attempt":
+                    revision = snapshot["revision"] + 1 if existing is None else existing.get("recorded_revision")
+                    if revision is not None:
+                        record = dict(payload, recorded_revision=revision)
+                checked = immutable_record(records, kind, identity, record)
+                changes = [checked] if existing is None else []
+                if kind == "native_attempt":
+                    pointer = dict(key, native_attempt_digest=identity, recorded_revision=snapshot["revision"] + 1)
+                    changes.append(("native_attempt_current", pointer_id, pointer))
+                return changes, result
 
-            while True:
-                snapshot = store.snapshot()
-                # An identical summary re-audits without adding a record or receipt.
-                existing = snapshot["records"].get("native_attempt", {}).get(attempt_digest)
-                if existing is not None:
-                    prepare(snapshot["records"], value)
-                    return result
-                try:
-                    prepared_mutation(store, "native_math.deliver_attempt", value, prepare,
-                                      expected_revision=snapshot["revision"],
-                                      request_id="native-attempt:" + attempt_digest)
-                    return result
-                except ResearchError as error:
-                    if error.code != "stale_revision":
-                        raise
-        except ResearchError as error:
-            raise SearchError(error.code, error.message, error.details) from error
+            label = kind[len("native_"):]
+            request_id = "native-" + label + ":" + identity
+            if existing is not None:
+                # A prior content receipt cannot replay a later pointer change.
+                request_id += ":current:" + str(snapshot["revision"] + 1)
+            try:
+                prepared_mutation(store, "native_math.deliver_" + label, value, prepare,
+                                  expected_revision=snapshot["revision"], request_id=request_id)
+                return result
+            except ResearchError as error:
+                if error.code != "stale_revision":
+                    raise
+    except ResearchError as error:
+        raise SearchError(error.code, error.message, error.details) from error

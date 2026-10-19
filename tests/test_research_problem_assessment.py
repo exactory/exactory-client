@@ -67,7 +67,41 @@ class ProblemAssessmentTests(ProblemCase):
 
     def test_evidence_record_reference_must_match_its_digest(self):
         self.payload['items']['A1']['evidence'][0]['digest'] = '0' * 64
-        self.assert_error('strategy_evidence_stale', self.record_assessment)
+        with self.assertRaises(ResearchError) as caught:
+            self.record_assessment()
+        self.assertEqual(caught.exception.code, 'problem_assessment_evidence_missing')
+        self.assertEqual(caught.exception.details, {'item': 'A1', 'record_kind': 'problem_statement', 'id': 'statement-1'})
+
+    def test_configuration_references_use_the_same_strict_digest_rule_at_record_and_gate_time(self):
+        from research_harness.gates import gate_state
+        configuration = self.store.snapshot()['records']['configuration']['research']
+        reference = {'kind': 'record', 'record_kind': 'configuration', 'id': 'research', 'digest': digest(configuration)}
+        self.payload['items']['A1']['evidence'] = [reference]
+        saved = self.record_assessment()
+        self.assertEqual(saved['items']['A1']['evidence'], [reference])
+        self.assertIn(dict(reference, record=configuration),
+                      describe_evidence(self.store.snapshot()['records'], self.artifacts)['assessment_evidence'])
+        changed = dict(configuration, assessment_fixture='Changed mutable configuration record.')
+        self.put('configuration', 'research', changed)
+        records = self.store.snapshot()['records']
+        expected = {'item': 'A1', 'record_kind': 'configuration', 'id': 'research'}
+        with self.assertRaises(ResearchError) as caught:
+            describe_evidence(records, self.artifacts)
+        self.assertEqual(caught.exception.code, 'problem_assessment_evidence_missing')
+        self.assertEqual(caught.exception.details, expected)
+        report = gate_state(records, self.artifacts, 'post')
+        self.assertEqual([row for row in report['obligations'] if row['code'] == 'problem_assessment_evidence_missing'], [{
+            'code': 'problem_assessment_evidence_missing', 'explanation': 'Deliver the exact record cited by this assessment', **expected}])
+        replacement = copy.deepcopy(self.payload)
+        replacement['id'] = 'assessment-2'
+        with self.assertRaises(ResearchError) as caught:
+            self.record_assessment(replacement)
+        self.assertEqual(caught.exception.code, 'problem_assessment_evidence_missing')
+        self.assertEqual(caught.exception.details, expected)
+        replacement['items']['A1']['evidence'][0]['digest'] = digest(changed)
+        self.record_assessment(replacement)
+        self.assertEqual([row for row in gate_state(self.store.snapshot()['records'], self.artifacts, 'post')['obligations']
+                          if row['code'] == 'problem_assessment_evidence_missing'], [])
 
     def test_assess_assessment_reports_missing_stale_and_below_threshold(self):
         claims = self.load_problem_module()
@@ -107,6 +141,58 @@ class ProblemAssessmentTests(ProblemCase):
         newer['items']['B1']['note'] = 'A more detailed account of the mathematical payoff.'
         self.record_assessment(newer)
         self.assertNotEqual(after, claims.compute_problem_evidence_digest(self.store.snapshot()['records'], self.artifacts))
+
+    def test_assessment_references_deliver_bound_records_in_stable_order(self):
+        other = self.select_statement(identifier='comparison', statement='A related weaker bound.')
+        self.select_statement()
+        reference = {'kind': 'record', 'record_kind': 'problem_statement',
+                     'id': other['id'], 'digest': digest(other)}
+        artifact = self.artifacts.put(b'A comparison argument.', 'text/plain')
+        self.payload['items']['A2']['evidence'] = [reference, artifact]
+        self.payload['items']['priority']['evidence'] = [reference]
+        self.record_assessment()
+        records = self.store.snapshot()['records']
+        expected = [dict(self.payload['items']['A1']['evidence'][0], record=self.statement),
+                    dict(reference, record=other), artifact]
+        self.assertEqual(describe_evidence(records, self.artifacts)['assessment_evidence'], expected)
+        self.assertEqual(describe_binding(records, self.artifacts)['assessment_evidence'], [
+            {key: value for key, value in row.items() if key != 'record'} for row in expected])
+        for variant in ('missing', 'digest-mismatch'):
+            with self.subTest(variant=variant):
+                changed = copy.deepcopy(records)
+                if variant == 'missing':
+                    del changed['problem_statement']['comparison']
+                else:
+                    changed['problem_statement']['comparison']['statement'] = 'Superseding content under the same id.'
+                for project in (describe_evidence, describe_binding):
+                    with self.assertRaises(ResearchError) as caught:
+                        project(changed, self.artifacts)
+                    self.assertEqual(caught.exception.code, 'problem_assessment_evidence_missing')
+                    self.assertEqual(caught.exception.details, {
+                        'item': 'A2', 'record_kind': 'problem_statement', 'id': 'comparison'})
+
+    def test_assessment_source_references_collect_full_readings_and_citations(self):
+        from research_harness.problem_evidence import collect_readings
+        self.record_full_reading()
+        records = self.store.snapshot()['records']
+        reading = records['reading']['read-full']
+        link = reading['inspections'][0]['link']
+        reference = {'kind': 'source', 'link': link}
+        self.payload['items']['A1']['evidence'] = [reference]
+        self.record_assessment()
+        records = self.store.snapshot()['records']
+        evidence = describe_evidence(records, self.artifacts)
+        self.assertEqual(evidence['assessment_evidence'][0], dict(reference, reading_ids=['read-full']))
+        self.assertEqual([row['id'] for row in collect_readings(records)], ['read-full'])
+        self.assertEqual(evidence['readings'][0]['reading'], reading)
+        self.assertIn('read-full', [row['reading_id'] for row in evidence['passages']])
+        self.assertEqual([row['locator'] for row in evidence['citations']], ['2601.00001v1'])
+        changed = copy.deepcopy(records)
+        changed['reading'].clear()
+        with self.assertRaises(ResearchError) as caught:
+            describe_evidence(changed, self.artifacts)
+        self.assertEqual(caught.exception.code, 'problem_assessment_evidence_missing')
+        self.assertEqual(caught.exception.details, {'item': 'A1', 'link': link})
 
     def test_assessment_is_immutable_and_replay_preserves_the_revision(self):
         claims = self.load_problem_module()

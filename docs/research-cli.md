@@ -1516,7 +1516,10 @@ stale (`problem_openness_stale`).
 Record an attempt with `problem-attempt --file attempt.json
 --expected-revision N --request-id ID`. `kind` is `solver` or `literature`;
 exactly the matching binding is non-null (`invalid_input`). For a solver attempt,
-`solver` is `{native_attempt_digest}` and `literature` is null. The math-solver
+`solver` is `{native_attempt_digest, applicability}` and `literature` is null.
+`applicability` is nonempty text explaining how the native claim's `quantifiers`,
+`assumption_ids` and `scope` match the statement and resolution criteria; missing
+or blank text returns `invalid_input`. The math-solver
 proposal sets `review_workspace` to the problem record's workspace, for example
 `..` from `<workspace>/attack`, so that `search deliver-attempt` writes into this
 store. Deliver with `exactory-math --attack-root attack search deliver-attempt
@@ -1525,9 +1528,26 @@ where `empty.json` contains `{}` and N is the native controller revision.
 It writes an immutable `native_attempt/<digest(summary)>` containing the contract,
 state, obligations, checkpoints, acceptances, retreats, failed strategies, nodes,
 totals and delivery provenance. The research harness reads only this common-store
-record. Missing delivery returns `problem_attempt_unbound` with
+record and its current pointer. Attempt delivery maintains the mutable record
+`native_attempt_current/<digest({attack_root, objective_id})>` with
+`{attack_root, objective_id, native_attempt_digest, recorded_revision}` through
+the common prepared mutation. The pair `(attack_root, objective_id)` identifies
+one succession; different attack roots remain independent even when their
+objective ids coincide. Every delivery declares the current digest, including
+an exact repeat of an earlier snapshot. Such a repeat moves the pointer without
+adding or rewriting an immutable snapshot. Closure delivery writes no pointer.
+Missing delivery or a missing pointer returns `problem_attempt_unbound` with
 `{native_attempt_digest, expected_store}`. Its `contract.original_claim.statement`
 must equal the current statement text exactly (`problem_attempt_statement_mismatch`).
+Its scope must have `kind: "named"`; `case_ids` and `integer_interval` return
+`problem_attempt_scope_restricted` with `{native_attempt_digest, scope}`.
+Bind the native snapshot named by this succession's current pointer in this
+store. Native delivery preserves its first common-store `recorded_revision`
+outside the summary digest; record order does not determine succession.
+Binding another snapshot returns `problem_attempt_superseded`
+with `{native_attempt_digest, latest_native_attempt_digest}`. At the gate it is
+`problem_attempt_stale`, also naming `attempt_id` and `statement_id`, with the
+explanation "Record a new attempt bound to the latest delivered snapshot of this objective."
 
 For a literature attempt, `solver` is null and `literature` is
 `{readings: [{version_id, reading_id}], description}`: a nonempty list of this
@@ -1541,7 +1561,7 @@ as citations and exported with the problem, even when no value paragraph or
 openness finding cites them.
 
 `outcomes` is `{resolved, footholds, unresolved, obstructions}`. `resolved` is
-boolean; a solver attempt is resolved when `state.proof_status` is `proved` or
+boolean; an `invalidated` native proof status is unresolved. Otherwise a solver attempt is resolved when `state.proof_status` is `proved` or
 `disproved`, the root obligation (`contract.root_obligation`) has status
 `accepted`, or an accepted root acceptance has outcome `proof` or `counterexample`.
 This includes accepted root support delivered before closure while proof status
@@ -1559,14 +1579,23 @@ obligation other than `contract.root_obligation`. Invalid support returns
 An unresolved inventory describes unfinished work and supplies no obstruction
 or difficulty claim.
 
-`proportion` is `{extension_reason}` with text or null. When delivered
-`totals.moves > 24` or `totals.runs > 24`, give a nonempty reason
-(`problem_attempt_extension_unexplained`, with `{totals}`). Totals preserve
-`moves`, `runs`, `elapsed_seconds` (null), `workers` and `historical_usage`;
+`proportion` is `{extension_reason}` with text or null. When
+any delivered total exceeds the normal limits of 24 moves, 24 runs, one worker
+or 300 timeout seconds, give a nonempty reason
+(`problem_attempt_extension_unexplained`, with `{totals, exceeded}`, where
+`exceeded` lists the names in moves, runs, workers, timeout_seconds order).
+Totals preserve `moves`, `runs`, `elapsed_seconds` (null), `workers`,
+`timeout_seconds` and `historical_usage`;
 the harness infers no elapsed time or unknown historical usage. A new statement
 id requires a new attempt record even when only the resolution criteria changed.
 A resolved literature or solver attempt redirects to the established result
-and blocks the open-problem post (`problem_attempt_resolved`).
+and blocks the open-problem post (`problem_attempt_resolved`). The gate examines
+every attempt for the current statement: a literature resolution persists, and
+each solver attempt uses its `(attack_root, objective_id)` pointer's snapshot to determine
+resolution. A later unresolved literature attempt cannot erase that finding.
+An `invalidated` latest native snapshot lifts that objective's resolution; a new
+statement id starts a separate resolution history. The blocker names the latest
+attempt among those establishing a resolution.
 
 Value evidence is `{kind: "reading", version_id, reading_id}` for a full reading,
 `{kind: "computation", execution_id, output_id, formal_check}`, or
@@ -1582,6 +1611,17 @@ and resource obligations satisfied. Whole-objective obligations and obligations
 about other results do not invalidate a supported paragraph. Probe-origin
 outputs retain `exploratory_evidence` and cannot be promoted by citation. An
 uncited computation remains a probe.
+
+The attempt projection gives `kind`, `outcomes`, `proportion`, the recorded
+`literature` binding (null for a solver), and `acceptances`: each acceptance cited
+by a solver foothold or obstruction, once in first citation order, as
+`{acceptance_id, claim, outcome, standard}` with its checkpoint claim. Literature
+attempts have an empty acceptance list. Solver evidence also gives
+`applicability`, `contract`, `obligations`, `failed_strategies`, `retreats` and
+`nodes` as delivered, alongside `state` and `totals`. Both the binding and the
+reviewer evidence project only an attempt for the current statement. When the
+latest attempt belongs to a previous statement they give `attempt: null` and
+`results: []`; the gate still reports the stale attempt.
 
 The value's recorded revision fixes the immutable assessment used for each cited
 execution. A later assessment enters the claim through a new value record;
@@ -1611,14 +1651,32 @@ accessibility is `E-F`, `E-A` or `E-N`. `items` has exactly `A1` through `A6`,
 `{evidence: [refs], note}` with nonempty evidence and a nonempty text note.
 References use the shared strategy evidence shapes: a held artifact descriptor
 `{path, sha256, size, media_type}`, `{kind: "source", link}` for a full reading,
-or `{kind: "record", record_kind, id, digest}` for an exact record. A mismatched
-record digest returns `strategy_evidence_stale`. A missing item or empty item
+or `{kind: "record", record_kind, id, digest}` for an exact record. An absent
+record or mismatched digest returns `problem_assessment_evidence_missing`
+with `{item, record_kind, id}` at recording and projection. Matching mutable
+records, including `configuration/research`, are accepted; after a record
+changes, re-record the assessment with its current digest. A missing item or empty item
 evidence returns `problem_assessment_evidence_missing` naming `item`; malformed
 grades return `invalid_rubric_grades`. `primary` is `{ground: "B1"|"B2",
 criterion: "V1"|...|"V8"}`; the named ground must have a nonzero grade
 (`invalid_input`). The latest assessment by recorded revision enters the
 evidence digest and the reviewer evidence as `{id, grades, items, primary}`.
-A statement change requires a new assessment for that statement.
+`assessment_evidence` resolves each distinct current assessment reference in
+item order, then reference order. A record reference becomes
+`{kind: "record", record_kind, id, digest, record}` with the stored record's
+content. If the record is absent or its digest differs, evidence projection
+returns `problem_assessment_evidence_missing {item, record_kind, id}`.
+A source reference becomes `{kind: "source", link, reading_ids}` naming this
+store's full readings whose version or inspected link matches the reference;
+none gives `problem_assessment_evidence_missing {item, link}`. These readings
+join value readings for passage delivery, coverage, citations and export.
+Artifact descriptors remain unchanged and their bytes are attached as packet
+evidence. A `local_artifact` record reference also requires its artifact bytes
+to reach both reviewers; an unattached SHA gives `problem_evidence_unassessed`.
+The digest binding carries the same `assessment_evidence` list with
+record contents omitted; both result packets must carry the resolved list
+(`problem_evidence_unassessed`). A statement change requires a new assessment
+for that statement.
 
 Posting requires every admission item `pass`, `max(B1, B2) >= 2` (at least 3
 for `E-A` or `E-N`), priority at least 2, attempt `pass` and calibration `pass`.
@@ -1654,7 +1712,8 @@ is refused during bar assessment with `review_bar_mismatch`. Another subject
 class requires a new problem record and its own bars. Two observed bars are
 required before a result packet. The result template
 `exactory-problem-review-v2/result` receives `problem_evidence`
-with the claim, attempt, accepted results, openness, value, assessment, citations, delivered readings/passages,
+with the claim, attempt, accepted results, openness, value, assessment, resolved
+`assessment_evidence`, citations, delivered readings/passages,
 admissions/executions/assessments/output validations and bound native closures.
 Both result reviews must pass exactly `problem_statement`, `problem_openness`,
 `problem_value`, `problem_citations` and `stop`. A marker author cannot be a
@@ -1706,18 +1765,21 @@ records retain nonmanaged dependency composition and empirical meaning.
 | `problem_slate_stale` | Record a new slate that disposes of every current candidate; `missing` names current candidates outside the latest slate and `extra` names its candidates that are no longer current. |
 | `problem_candidate_unselected` | Formulate a candidate that the latest slate selects, or record a new slate. |
 | `problem_statement_missing` | Select the exact statement and resolution criteria. |
-| `problem_attempt_missing`, `problem_attempt_stale` | Record an attempt for the current statement and criteria; a stale obligation names `attempt_id` and `statement_id`. |
+| `problem_attempt_missing`, `problem_attempt_stale` | Record an attempt for the current statement and criteria; a stale obligation names `attempt_id` and `statement_id`. A superseded native snapshot also names `native_attempt_digest` and `latest_native_attempt_digest`. |
 | `problem_attempt_resolved` | Deliver the resolved candidate as a result; the obligation names `attempt_id`. |
 | `problem_rubric_attempt_unbound` | Bind the passing current assessment's attempt judgment to a current attempt record; the obligation names `assessment_id` and `statement_id`. |
 | `problem_attempt_unbound`, `problem_attempt_statement_mismatch`, `problem_attempt_outcome_mismatch` | Deliver and bind the native attempt from this store with the exact claim and matching resolved outcome. |
+| `problem_attempt_superseded` | Bind the snapshot named by the current pointer for `(attack_root, objective_id)`; both native digests identify the succession. |
+| `problem_attempt_scope_restricted` | Use a named scope covering the statement; `native_attempt_digest` and `scope` identify the restricted native claim. |
 | `problem_attempt_evidence_missing` | Cite an appropriate accepted acceptance or a listed full reading for the named finding. |
-| `problem_attempt_extension_unexplained` | Explain an attempt exceeding 24 consumed moves or runs; `totals` gives the usage. |
+| `problem_attempt_extension_unexplained` | Explain an attempt exceeding 24 moves, 24 runs, one admitted worker or 300 admitted timeout seconds; `totals` gives usage and admitted bounds, and `exceeded` lists the limit names. |
 | `problem_openness_missing`, `problem_openness_unresolved` | Obtain an observed supported openness finding with the audited minimum. |
 | `problem_already_solved` | Redirect to the named established result or record a new statement. |
 | `problem_openness_stale` | Refresh the finding for the changed formulation, search or reading. |
 | `problem_value_missing`, `problem_value_reading_missing`, `problem_value_computation_missing` | Supply ordered value paragraphs with valid full readings or admitted, reconciled, assessed computation support. |
 | `problem_value_result_missing` | Cite an accepted proof, reduction or obstruction of the current solver attempt; the obligation names `attempt_id` and `acceptance_id`. |
 | `problem_assessment_missing` | Record the rubric self-assessment with evidence for every item. |
+| `problem_assessment_evidence_missing` | Supply item evidence with the exact stored record digest at recording and projection, or at least one matching full source reading at projection; names `item` and the record ids or `link`. Re-record an assessment after a mutable record changes. |
 | `problem_assessment_stale` | Record a new assessment for the current statement; the obligation names both ids. |
 | `problem_rubric_below_threshold` | Repair self-assessment shortfalls, or repair or independently adjudicate the named review shortfalls. `source` distinguishes `self` and `review`; ids and `{item, required, graded}` shortfalls identify the judgment. |
 | `problem_rubric_review_required` | Obtain a version 2 result review with full rubric grades for the named review. |
