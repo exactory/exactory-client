@@ -511,6 +511,8 @@ def _assess_problem_coverage(records, artifacts, reviews, expected, evidence_dig
             [dict(packet, direction_evidence=packet_evidence) for packet, packet_evidence in zip(current, current_evidence)])
         missing_readings = sorted(reading['id'] for reading in readings if reading['id'] not in delivered)
         assessment_artifacts = [reference for reference in expected['assessment_evidence'] if 'kind' not in reference]
+        assessment_artifacts.extend(reference['record']['artifact'] for reference in expected['assessment_evidence']
+                                    if reference.get('kind') == 'record' and reference['record_kind'] == 'local_artifact')
         missing_artifacts = sorted({reference['sha256'] for reference in collect_references(
             [assessment_artifacts, expected['computations'], expected['formal_checks']])
             if not any(has_attachment(evaluation, packet, reference) for packet in current)})

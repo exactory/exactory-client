@@ -115,9 +115,15 @@ problem workspace (for example `..` from `<workspace>/attack`), then
 assumption ids and scope match the statement and resolution criteria
 (`invalid_input` when missing or blank). The native scope must be `named`;
 `case_ids` and `integer_interval` return `problem_attempt_scope_restricted` with
-the digest and scope. Bind the objective's latest delivered snapshot, ordered
-by common-store `recorded_revision` then digest id (legacy missing revisions
-sort at zero). Earlier bindings return `problem_attempt_superseded` with both
+the digest and scope. Each delivery declares the current snapshot for the pair
+`(attack_root, objective_id)` through the mutable common-store record
+`native_attempt_current/<digest({attack_root, objective_id})>` containing
+`{attack_root, objective_id, native_attempt_digest, recorded_revision}`. Bind
+the snapshot named by this pointer; an absent pointer gives
+`problem_attempt_unbound`. Re-delivering an earlier digest moves the pointer
+without rewriting or adding an immutable snapshot. Record order does not
+declare succession, and different attack roots remain independent. Closure
+delivery writes no pointer. Other bindings return `problem_attempt_superseded` with both
 native digests. The gate reports `problem_attempt_stale` for such a binding,
 naming both digests, the attempt and the statement, and asks for a new attempt
 bound to the latest delivered snapshot of the objective.
@@ -148,7 +154,7 @@ A solver attempt is resolved by proof status `proved` or `disproved`, an
 acceptance, including root support delivered before closure with proof status
 still `open`. An `invalidated` native snapshot is unresolved. The gate examines
 all attempts for this statement: a resolved literature attempt persists, and
-each solver attempt uses its objective's latest delivered snapshot. An unresolved
+each solver attempt uses its `(attack_root, objective_id)` pointer's snapshot. An unresolved
 later attempt cannot erase a resolution. A later invalidated snapshot lifts that
 objective's resolution; a new statement id starts clean. The resolution blocker
 names the latest attempt establishing it. A root reduction remains eligible
@@ -198,10 +204,15 @@ references in item order and then reference order: record references carry their
 stored content with the bound digest, source references carry their link and
 matching full reading ids, and artifact descriptors retain their attached bytes.
 The digest binding omits the record contents from this list. Missing or changed
-records return `problem_assessment_evidence_missing {item, record_kind, id}`;
-a source without a matching full reading returns that code with `{item, link}`.
+records return `problem_assessment_evidence_missing {item, record_kind, id}`
+at recording and projection. Matching mutable records, including
+`configuration/research`, are accepted; when their digests change, re-record
+the assessment with the current digests. A source without a matching full
+reading returns that code with `{item, link}`.
 Assessment source readings join value readings for passage delivery, coverage,
-citations and export. Both result reviewers must receive `assessment_evidence`
+citations and export. References to `local_artifact` records also require
+delivery of their artifact bytes to both reviewers. Both result reviewers must
+receive `assessment_evidence`
 (`problem_evidence_unassessed`).
 
 Use the existing verified review routes. Both bar reviewers receive the field,

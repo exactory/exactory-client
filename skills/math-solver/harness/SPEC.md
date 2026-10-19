@@ -79,8 +79,17 @@ closure; see `../SEARCH.md`, Common-store delivery. Its totals are exactly
 Moves and runs are consumed totals; elapsed duration is null. Workers and
 `timeout_seconds` are the largest admitted limits across nodes with an admission,
 or zero without one. Historical usage remains as recorded. The record adds its
-first common-store `recorded_revision` outside the summary digest so successive
-deliveries of an objective can be ordered. Exact repeats retain that revision.
+first common-store `recorded_revision` outside the summary digest; repeats retain
+that revision. Current succession is keyed
+by `(attack_root, objective_id)` and declared by the mutable pointer
+`native_attempt_current/<digest({attack_root, objective_id})>` containing
+`{attack_root, objective_id, native_attempt_digest, recorded_revision}`. Attempt
+delivery updates this pointer through the common prepared mutation whenever it
+names another digest or is absent. Re-delivering an earlier digest moves the
+pointer without adding or rewriting an immutable snapshot; an already current
+repeat writes nothing. Pointer-only updates use
+`native-attempt:<digest(summary)>:current:<next-common-revision>` rather than
+replaying the first delivery's content receipt. Closure delivery writes no pointer.
 Both attempt and closure delivery freshly audit acceptance evidence, including
 on repeats and after competing common writes; `audit_failed` details retain the
 failures map keyed by acceptance id.

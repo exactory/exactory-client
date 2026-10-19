@@ -148,6 +148,30 @@ class DeliverAttemptTests(SearchCLIWorkspace, unittest.TestCase):
         self.assertEqual(after["records"]["literature_operation"]["native-attempt:" + second["native_attempt_digest"]]["operation"],
                          "native_math.deliver_attempt")
 
+    def test_pause_resume_repeat_moves_the_current_pointer_without_a_new_snapshot(self):
+        from tests.search_fixtures import provenance
+        controller = self.unresolved_objective()
+        first = self.search("deliver-attempt", {}, revision=7)
+        self.search("pause", {"reason": "User requested a pause"}, revision=7)
+        paused = self.search("deliver-attempt", {}, revision=8)
+        self.search("resume", {"objective_id": "objective-000001", "message_id": "resume-delivery",
+            "session_id": "codex:fixture-resume", "instruction": "Continue the original objective",
+            "provenance": provenance("operator")}, revision=8)
+        common = CommonStore(self.root)
+        before = common.snapshot()["records"]["native_attempt"]
+        resumed = self.search("deliver-attempt", {}, revision=9)
+        self.assertEqual(resumed["native_attempt_digest"], first["native_attempt_digest"])
+        self.assertNotEqual(resumed["native_attempt_digest"], paused["native_attempt_digest"])
+        records = common.snapshot()["records"]
+        self.assertEqual(records["native_attempt"], before)
+        self.assertEqual(len(records["native_attempt"]), 2)
+        key = {name: first[name] for name in ("attack_root", "objective_id")}
+        self.assertEqual(records["native_attempt_current"], {digest(key): dict(key,
+            native_attempt_digest=resumed["native_attempt_digest"], recorded_revision=common.revision)})
+        before = common.snapshot()
+        self.search("deliver-attempt", {}, revision=9)
+        self.assertEqual(common.snapshot(), before)
+
     def test_refuses_a_non_empty_spec_and_a_stale_revision(self):
         controller = self.unresolved_objective()
         common = CommonStore(self.root)

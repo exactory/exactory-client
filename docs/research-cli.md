@@ -1489,15 +1489,23 @@ where `empty.json` contains `{}` and N is the native controller revision.
 It writes an immutable `native_attempt/<digest(summary)>` containing the contract,
 state, obligations, checkpoints, acceptances, retreats, failed strategies, nodes,
 totals and delivery provenance. The research harness reads only this common-store
-record. Missing delivery returns `problem_attempt_unbound` with
+record and its current pointer. Attempt delivery maintains the mutable record
+`native_attempt_current/<digest({attack_root, objective_id})>` with
+`{attack_root, objective_id, native_attempt_digest, recorded_revision}` through
+the common prepared mutation. The pair `(attack_root, objective_id)` identifies
+one succession; different attack roots remain independent even when their
+objective ids coincide. Every delivery declares the current digest, including
+an exact repeat of an earlier snapshot. Such a repeat moves the pointer without
+adding or rewriting an immutable snapshot. Closure delivery writes no pointer.
+Missing delivery or a missing pointer returns `problem_attempt_unbound` with
 `{native_attempt_digest, expected_store}`. Its `contract.original_claim.statement`
 must equal the current statement text exactly (`problem_attempt_statement_mismatch`).
 Its scope must have `kind: "named"`; `case_ids` and `integer_interval` return
 `problem_attempt_scope_restricted` with `{native_attempt_digest, scope}`.
-Bind the latest native snapshot of that objective in this store, ordered by
-`recorded_revision` then digest id. Native delivery adds the common-store
-`recorded_revision` outside the summary digest; legacy snapshots without it sort
-at revision zero. Binding an earlier snapshot returns `problem_attempt_superseded`
+Bind the native snapshot named by this succession's current pointer in this
+store. Native delivery preserves its first common-store `recorded_revision`
+outside the summary digest; record order does not determine succession.
+Binding another snapshot returns `problem_attempt_superseded`
 with `{native_attempt_digest, latest_native_attempt_digest}`. At the gate it is
 `problem_attempt_stale`, also naming `attempt_id` and `statement_id`, with the
 explanation "Record a new attempt bound to the latest delivered snapshot of this objective."
@@ -1544,7 +1552,7 @@ id requires a new attempt record even when only the resolution criteria changed.
 A resolved literature or solver attempt redirects to the established result
 and blocks the open-problem post (`problem_attempt_resolved`). The gate examines
 every attempt for the current statement: a literature resolution persists, and
-each solver attempt uses its objective's latest native snapshot to determine
+each solver attempt uses its `(attack_root, objective_id)` pointer's snapshot to determine
 resolution. A later unresolved literature attempt cannot erase that finding.
 An `invalidated` latest native snapshot lifts that objective's resolution; a new
 statement id starts a separate resolution history. The blocker names the latest
@@ -1604,8 +1612,11 @@ accessibility is `E-F`, `E-A` or `E-N`. `items` has exactly `A1` through `A6`,
 `{evidence: [refs], note}` with nonempty evidence and a nonempty text note.
 References use the shared strategy evidence shapes: a held artifact descriptor
 `{path, sha256, size, media_type}`, `{kind: "source", link}` for a full reading,
-or `{kind: "record", record_kind, id, digest}` for an exact record. A mismatched
-record digest returns `strategy_evidence_stale`. A missing item or empty item
+or `{kind: "record", record_kind, id, digest}` for an exact record. An absent
+record or mismatched digest returns `problem_assessment_evidence_missing`
+with `{item, record_kind, id}` at recording and projection. Matching mutable
+records, including `configuration/research`, are accepted; after a record
+changes, re-record the assessment with its current digest. A missing item or empty item
 evidence returns `problem_assessment_evidence_missing` naming `item`; malformed
 grades return `invalid_rubric_grades`. `primary` is `{ground: "B1"|"B2",
 criterion: "V1"|...|"V8"}`; the named ground must have a nonzero grade
@@ -1621,7 +1632,9 @@ store's full readings whose version or inspected link matches the reference;
 none gives `problem_assessment_evidence_missing {item, link}`. These readings
 join value readings for passage delivery, coverage, citations and export.
 Artifact descriptors remain unchanged and their bytes are attached as packet
-evidence. The digest binding carries the same `assessment_evidence` list with
+evidence. A `local_artifact` record reference also requires its artifact bytes
+to reach both reviewers; an unattached SHA gives `problem_evidence_unassessed`.
+The digest binding carries the same `assessment_evidence` list with
 record contents omitted; both result packets must carry the resolved list
 (`problem_evidence_unassessed`). A statement change requires a new assessment
 for that statement.
@@ -1717,7 +1730,7 @@ records retain nonmanaged dependency composition and empirical meaning.
 | `problem_attempt_resolved` | Deliver the resolved candidate as a result; the obligation names `attempt_id`. |
 | `problem_rubric_attempt_unbound` | Bind the passing current assessment's attempt judgment to a current attempt record; the obligation names `assessment_id` and `statement_id`. |
 | `problem_attempt_unbound`, `problem_attempt_statement_mismatch`, `problem_attempt_outcome_mismatch` | Deliver and bind the native attempt from this store with the exact claim and matching resolved outcome. |
-| `problem_attempt_superseded` | Bind the latest snapshot of the objective; both native digests identify the succession. |
+| `problem_attempt_superseded` | Bind the snapshot named by the current pointer for `(attack_root, objective_id)`; both native digests identify the succession. |
 | `problem_attempt_scope_restricted` | Use a named scope covering the statement; `native_attempt_digest` and `scope` identify the restricted native claim. |
 | `problem_attempt_evidence_missing` | Cite an appropriate accepted acceptance or a listed full reading for the named finding. |
 | `problem_attempt_extension_unexplained` | Explain an attempt exceeding 24 moves, 24 runs, one admitted worker or 300 admitted timeout seconds; `totals` gives usage and admitted bounds, and `exceeded` lists the limit names. |
@@ -1727,7 +1740,7 @@ records retain nonmanaged dependency composition and empirical meaning.
 | `problem_value_missing`, `problem_value_reading_missing`, `problem_value_computation_missing` | Supply ordered value paragraphs with valid full readings or admitted, reconciled, assessed computation support. |
 | `problem_value_result_missing` | Cite an accepted proof, reduction or obstruction of the current solver attempt; the obligation names `attempt_id` and `acceptance_id`. |
 | `problem_assessment_missing` | Record the rubric self-assessment with evidence for every item. |
-| `problem_assessment_evidence_missing` | Supply item evidence; projection also requires the exact record digest or at least one matching full source reading, naming `item` and the record ids or `link`. |
+| `problem_assessment_evidence_missing` | Supply item evidence with the exact stored record digest at recording and projection, or at least one matching full source reading at projection; names `item` and the record ids or `link`. Re-record an assessment after a mutable record changes. |
 | `problem_assessment_stale` | Record a new assessment for the current statement; the obligation names both ids. |
 | `problem_rubric_below_threshold` | Repair self-assessment shortfalls, or repair or independently adjudicate the named review shortfalls. `source` distinguishes `self` and `review`; ids and `{item, required, graded}` shortfalls identify the judgment. |
 | `problem_rubric_review_required` | Obtain a version 2 result review with full rubric grades for the named review. |

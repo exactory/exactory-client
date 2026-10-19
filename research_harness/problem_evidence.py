@@ -269,6 +269,18 @@ def assess_formal_checks(records):
     return pending
 
 
+def resolve_assessment_record(records, item, reference):
+    fields(reference, ("kind", "record_kind", "id", "digest"), code="invalid_strategy")
+    text(reference["record_kind"], "Evidence record kind", code="invalid_strategy")
+    text(reference["id"], reference["record_kind"] + " ID", code="strategy_reference_missing")
+    affected = {key: reference[key] for key in ("record_kind", "id")}
+    record = records.get(reference["record_kind"], {}).get(reference["id"])
+    if record is None or digest(record) != reference["digest"]:
+        raise ResearchError("problem_assessment_evidence_missing",
+                            "Deliver the exact record cited by this assessment", dict(item=item, **affected))
+    return record
+
+
 def resolve_assessment_evidence(records):
     from .problem_rubric import ITEMS
     assessment, statement = find_assessment(records), find_current_statement(records)
@@ -282,11 +294,7 @@ def resolve_assessment_evidence(records):
                 continue
             seen.add(identity)
             if reference.get("kind") == "record":
-                affected = {key: reference[key] for key in ("record_kind", "id")}
-                record = records.get(reference["record_kind"], {}).get(reference["id"])
-                if record is None or digest(record) != reference["digest"]:
-                    raise ResearchError("problem_assessment_evidence_missing",
-                                        "Deliver the exact record cited by this assessment", dict(item=item, **affected))
+                record = resolve_assessment_record(records, item, reference)
                 resolved.append(dict(reference, record=record))
             elif reference.get("kind") == "source":
                 link = reference["link"]

@@ -88,13 +88,17 @@ def deliver_snapshot(controller, state, common, kind, identity, value, result, a
         if failures:
             raise SearchError("audit_failed", audit_message, failures)
 
+    key = {name: value[name] for name in ("attack_root", "objective_id")}
+    pointer_id = s.digest(key)
     try:
         store = CommonStore(common)
         while True:
             snapshot = store.snapshot()
-            # Exact repeats freshly audit without adding a record or receipt.
             existing = snapshot["records"].get(kind, {}).get(identity)
-            if existing is not None:
+            current = snapshot["records"].get("native_attempt_current", {}).get(pointer_id)
+            pointer_current = current is not None and current["native_attempt_digest"] == identity
+            # Exact current repeats freshly audit without adding a record or receipt.
+            if existing is not None and (kind != "native_attempt" or pointer_current):
                 audit_snapshot(snapshot["records"])
                 expected = (dict(value, recorded_revision=existing["recorded_revision"])
                             if kind == "native_attempt" and "recorded_revision" in existing else value)
@@ -103,13 +107,26 @@ def deliver_snapshot(controller, state, common, kind, identity, value, result, a
 
             def prepare(records, payload):
                 audit_snapshot(records)
-                record = dict(payload, recorded_revision=snapshot["revision"] + 1) if kind == "native_attempt" else payload
-                return [immutable_record(records, kind, identity, record)], result
+                record = payload
+                if kind == "native_attempt":
+                    revision = snapshot["revision"] + 1 if existing is None else existing.get("recorded_revision")
+                    if revision is not None:
+                        record = dict(payload, recorded_revision=revision)
+                checked = immutable_record(records, kind, identity, record)
+                changes = [checked] if existing is None else []
+                if kind == "native_attempt":
+                    pointer = dict(key, native_attempt_digest=identity, recorded_revision=snapshot["revision"] + 1)
+                    changes.append(("native_attempt_current", pointer_id, pointer))
+                return changes, result
 
             label = kind[len("native_"):]
+            request_id = "native-" + label + ":" + identity
+            if existing is not None:
+                # A prior content receipt cannot replay a later pointer change.
+                request_id += ":current:" + str(snapshot["revision"] + 1)
             try:
                 prepared_mutation(store, "native_math.deliver_" + label, value, prepare,
-                                  expected_revision=snapshot["revision"], request_id="native-" + label + ":" + identity)
+                                  expected_revision=snapshot["revision"], request_id=request_id)
                 return result
             except ResearchError as error:
                 if error.code != "stale_revision":

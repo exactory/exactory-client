@@ -42,6 +42,12 @@ def put_native_attempt(case, native):
     identifier = digest({key: value for key, value in native.items() if key not in ("provenance", "recorded_revision")})
     if identifier not in case.store.snapshot()["records"].get("native_attempt", {}):
         case.put("native_attempt", identifier, dict(native, recorded_revision=case.store.revision + 1))
+    key = {name: native[name] for name in ("attack_root", "objective_id")}
+    pointer_id = digest(key)
+    current = case.store.snapshot()["records"].get("native_attempt_current", {}).get(pointer_id)
+    if current is None or current["native_attempt_digest"] != identifier:
+        case.put("native_attempt_current", pointer_id, dict(key, native_attempt_digest=identifier,
+                                                          recorded_revision=case.store.revision + 1))
     return identifier
 
 
@@ -130,8 +136,9 @@ class ProblemAttemptTests(ProblemCase):
                         with self.subTest(section=section, status=status, outcome=outcome, obligation_id=obligation_id):
                             native = build_native_attempt(self.statement["statement"], [build_acceptance(
                                 outcome=outcome, status=status, obligation_id=obligation_id)], {})
-                            native["objective_id"] = "-".join((section, status, outcome, obligation_id))
-                            payload = self.solver_payload(native, native["objective_id"])
+                            identifier = "-".join((section, status, outcome, obligation_id))
+                            native["attack_root"] = "/native/" + identifier
+                            payload = self.solver_payload(native, identifier)
                             payload["outcomes"]["resolved"] = (status == "accepted" and obligation_id == "obligation-000001"
                                                                  and outcome in ("proof", "counterexample"))
                             row = {"claim": "A scoped mathematical conclusion.",
@@ -198,28 +205,64 @@ class ProblemAttemptTests(ProblemCase):
                 self.assertEqual(caught.exception.code, "invalid_input")
                 self.assertIsNone(caught.exception.details)
 
-    def test_native_snapshot_order_uses_revision_then_digest(self):
-        native = build_native_attempt(self.statement["statement"], [], {})
-        payload = self.solver_payload(native)
+    def test_native_current_pointer_defines_snapshot_succession(self):
+        first = build_native_attempt(self.statement["statement"], [], {})
+        first_digest = put_native_attempt(self, first)
+        paused = copy.deepcopy(first)
+        paused["state"]["execution_status"] = "paused"
+        paused_digest = put_native_attempt(self, paused)
+        before = copy.deepcopy(self.store.snapshot()["records"]["native_attempt"])
+        self.assertEqual(put_native_attempt(self, first), first_digest)
         records = self.store.snapshot()["records"]
-        identifier = payload["solver"]["native_attempt_digest"]
-        for later_id, revision, superseded in (("0" * 64, 0, False),
-                                                ("f" * 64, 0, True),
-                                                ("0" * 64, 1, True)):
-            with self.subTest(later_id=later_id, revision=revision):
-                changed = copy.deepcopy(records)
-                changed["native_attempt"][identifier]["recorded_revision"] = 0
-                changed["native_attempt"][later_id] = dict(native, recorded_revision=revision)
-                # A later delivery from a different objective does not supersede this one.
-                changed["native_attempt"]["other"] = dict(native, objective_id="other", recorded_revision=100)
-                if superseded:
-                    with self.assertRaises(ResearchError) as caught:
-                        self.attempt_module().validate_attempt(changed, self.artifacts, payload)
-                    self.assertEqual(caught.exception.code, "problem_attempt_superseded")
-                    self.assertEqual(caught.exception.details, {
-                        "native_attempt_digest": identifier, "latest_native_attempt_digest": later_id})
-                else:
-                    self.attempt_module().validate_attempt(changed, self.artifacts, payload)
+        self.assertEqual(records["native_attempt"], before)
+        self.assertEqual(len(records["native_attempt"]), 2)
+        key = {name: first[name] for name in ("attack_root", "objective_id")}
+        self.assertEqual(records["native_attempt_current"][digest(key)], dict(key,
+            native_attempt_digest=first_digest, recorded_revision=self.store.revision))
+        self.record_attempt(build_attempt(native_attempt_digest=first_digest))
+        with self.assertRaises(ResearchError) as caught:
+            self.record_attempt(build_attempt("paused", paused_digest))
+        self.assertEqual(caught.exception.code, "problem_attempt_superseded")
+        self.assertEqual(caught.exception.details, {
+            "native_attempt_digest": paused_digest, "latest_native_attempt_digest": first_digest})
+
+    def test_native_record_without_a_current_pointer_is_unbound(self):
+        payload = self.solver_payload()
+        records = self.store.snapshot()["records"]
+        records.pop("native_attempt_current")
+        with self.assertRaises(ResearchError) as caught:
+            self.attempt_module().validate_attempt(records, self.artifacts, payload)
+        self.assertEqual(caught.exception.code, "problem_attempt_unbound")
+        self.assertEqual(caught.exception.details, {
+            "native_attempt_digest": payload["solver"]["native_attempt_digest"], "expected_store": str(self.store.root)})
+
+    def test_two_attack_roots_have_independent_successions_and_resolutions(self):
+        reading = self.record_full_reading()
+        for index, (primary, other) in enumerate((("/native/a", "/native/b"), ("/native/b", "/native/a"))):
+            with self.subTest(primary=primary):
+                self.statement = self.select_statement(identifier="statement-root-" + str(index))
+                native = build_native_attempt(self.statement["statement"], [], {})
+                native["attack_root"] = primary
+                bound = put_native_attempt(self, native)
+                foreign = dict(copy.deepcopy(native), attack_root=other)
+                foreign["state"]["proof_status"] = "proved"
+                put_native_attempt(self, foreign)
+                identifier = "independent-" + str(index)
+                payload = build_attempt(identifier, bound, statement_id=self.statement["id"])
+                self.record_attempt(payload)
+                self.assertEqual(self.attempt_module().assess_attempt(self.store.snapshot()["records"], self.artifacts), [])
+                native["state"]["proof_status"] = "proved"
+                payload["id"] = "resolved-" + identifier
+                payload["solver"]["native_attempt_digest"] = put_native_attempt(self, native)
+                payload["outcomes"]["resolved"] = True
+                self.record_attempt(payload)
+                foreign["state"]["proof_status"] = "open"
+                put_native_attempt(self, foreign)
+                self.record_attempt(build_attempt("literature-" + identifier, reading=reading,
+                                                  statement_id=self.statement["id"]))
+                self.assertEqual(self.attempt_module().assess_attempt(self.store.snapshot()["records"], self.artifacts), [{
+                    "code": "problem_attempt_resolved", "explanation": "Deliver the resolved candidate as a result.",
+                    "attempt_id": payload["id"]}])
 
     def test_records_a_literature_attempt_on_full_readings(self):
         reading = self.record_full_reading()

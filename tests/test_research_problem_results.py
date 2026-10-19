@@ -206,6 +206,50 @@ class ProblemResultReviewTests(ProblemDeliveryCase):
                     'missing': [], 'reading_ids': [], 'artifact_digests': [artifact['sha256']]}
                     for reviewer in ('first', 'second')])
 
+    def test_assessment_local_artifact_record_bytes_are_attached_and_covered(self):
+        from test_research_problem_assessment import build_assessment
+        self.prepare_ready()
+        artifact = self.artifacts.put(b'A complete scoped comparison argument.', 'text/plain')
+        record = {'id': 'comparison-artifact', 'path': 'results/comparison.txt', 'artifact': artifact}
+        self.put('local_artifact', record['id'], record)
+        reference = {'kind': 'record', 'record_kind': 'local_artifact', 'id': record['id'], 'digest': digest(record)}
+        payload = build_assessment(self.selected, 'assessment-artifact')
+        payload['items']['priority']['evidence'] = [reference]
+        self.mutate(self.load_problem_module().record_assessment, payload)
+        original = review_protocol._evidence
+        def omit_artifact(artifacts, value, **options):
+            return [row for row in original(artifacts, value, **options) if row['artifact'] != artifact]
+        for omitted in (False, True):
+            for reviewer in ('first', 'second'):
+                identifier = 'assessment-artifact-' + str(omitted) + '-' + reviewer
+                if omitted:
+                    with patch.object(review_protocol, '_evidence', side_effect=omit_artifact):
+                        self.observe('result', reviewer, identifier=identifier)
+                else:
+                    self.observe('result', reviewer, identifier=identifier)
+                assignment = self.store.snapshot()['records']['review_assignment'][identifier]
+                packet = json.loads(self.artifacts.read(assignment['packet']))
+                self.assertIn(dict(reference, record=record), packet['problem_evidence']['assessment_evidence'])
+                if not omitted:
+                    self.assertIn({'artifact': artifact, 'content': 'A complete scoped comparison argument.',
+                                   'encoding': 'utf-8'}, packet['evidence'])
+            assessed = research_decisions.assess_problem_reviews(self.store.snapshot()['records'], self.artifacts)
+            if not omitted:
+                self.assertTrue(assessed['ready'], assessed['obligations'])
+                # A material assessment update permits a fresh result review in each bar session.
+                payload = copy.deepcopy(payload)
+                payload['id'] = 'assessment-artifact-updated'
+                payload['items']['priority']['note'] += ' Explain the comparison scope.'
+                self.mutate(self.load_problem_module().record_assessment, payload)
+            else:
+                self.assertEqual(sorted([row for row in assessed['obligations']
+                                         if row['code'] == 'problem_evidence_unassessed'], key=lambda row: row['review_id']), [{
+                    'code': 'problem_evidence_unassessed',
+                    'explanation': 'Obtain both observed results covering the current problem evidence and every delivered source and output.',
+                    'review_id': 'review-assessment-artifact-True-' + reviewer,
+                    'missing': [], 'reading_ids': [], 'artifact_digests': [artifact['sha256']]}
+                    for reviewer in ('first', 'second')])
+
     def test_results_enter_binding_coverage_and_reviewer_evidence(self):
         self.prepare_ready(solver=True)
         claims = self.load_problem_module()

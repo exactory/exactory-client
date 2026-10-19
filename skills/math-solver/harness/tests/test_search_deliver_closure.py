@@ -57,6 +57,7 @@ class DeliverClosureTests(SearchCLIWorkspace, unittest.TestCase):
         self.search("deliver-closure", {}, revision=4)
         self.assertEqual(common.snapshot(), first)
         self.assertEqual(controller.store.read(), before_native)
+        self.assertNotIn("native_attempt_current", common.snapshot()["records"])
 
     def test_reopened_objective_delivers_another_closure_and_preserves_the_first(self):
         controller = self.complete_objective()

@@ -2,6 +2,7 @@
 
 from .artifacts import ArtifactStore
 from .errors import ResearchError
+from .evidence import digest
 from .graph import obligation
 from .operations import fields, immutable_record, prepared_mutation, text
 from .problem_claims import find_assessment, find_current_statement, find_latest, require_problem
@@ -30,10 +31,16 @@ def find_current_attempt(records):
                        and attempt["statement_id"] == statement["id"]) else None
 
 
-def find_latest_native_attempt(records, objective_id):
-    return max(((identifier, native) for identifier, native in records.get("native_attempt", {}).items()
-                if native["objective_id"] == objective_id),
-               key=lambda pair: (pair[1].get("recorded_revision", 0), pair[0]), default=(None, None))
+def find_latest_native_attempt(records, bound):
+    key = {name: bound[name] for name in ("attack_root", "objective_id")}
+    pointer = records.get("native_attempt_current", {}).get(digest(key))
+    if pointer is None:
+        return None, None
+    identifier = pointer["native_attempt_digest"]
+    native = records.get("native_attempt", {}).get(identifier)
+    if native is None or any(native[name] != value for name, value in key.items()):
+        return None, None
+    return identifier, native
 
 
 def validate_attempt(records, artifacts, value):
@@ -77,7 +84,10 @@ def validate_attempt(records, artifacts, value):
         if native is None:
             raise ResearchError("problem_attempt_unbound", "Deliver the native attempt into this problem store",
                                 {"native_attempt_digest": identifier, "expected_store": str(artifacts.root)})
-        latest_digest, _ = find_latest_native_attempt(records, native["objective_id"])
+        latest_digest, _ = find_latest_native_attempt(records, native)
+        if latest_digest is None:
+            raise ResearchError("problem_attempt_unbound", "Deliver the native attempt into this problem store",
+                                {"native_attempt_digest": identifier, "expected_store": str(artifacts.root)})
         if identifier != latest_digest:
             raise ResearchError("problem_attempt_superseded", "Bind the latest delivered snapshot of this objective",
                                 {"native_attempt_digest": identifier, "latest_native_attempt_digest": latest_digest})
@@ -171,7 +181,7 @@ def assess_attempt(records, artifacts):
             established = recorded["outcomes"]["resolved"]
         else:
             native = records.get("native_attempt", {}).get(recorded["solver"]["native_attempt_digest"])
-            latest = None if native is None else find_latest_native_attempt(records, native["objective_id"])[1]
+            latest = None if native is None else find_latest_native_attempt(records, native)[1]
             established = latest is not None and is_native_resolved(latest)
         if established:
             resolved.append(recorded)

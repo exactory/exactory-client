@@ -1920,8 +1920,10 @@ write, `audit_state(..., common_guard=<common snapshot>, fresh=True)` must pass 
 every accepted acceptance and any closure whose proof status is `proved` or
 `disproved`. The common mutation checks that snapshot's revision; a concurrent
 change retries with a fresh snapshot
-and audit. An identical record re-audits and writes neither a record nor a receipt.
-A changed summary writes a new immutable record and preserves the old one.
+and audit. An identical current record re-audits and writes neither a record nor
+a receipt. A changed summary writes a new immutable record and preserves the old
+one. Re-delivering an earlier attempt updates its current pointer as described
+below, without rewriting that immutable record.
 
 ### Closure delivery
 
@@ -1941,7 +1943,8 @@ native_closure/<digest(closure)> = {
 
 The operation is `native_math.deliver_closure` with common request ID
 `native-closure:<digest(closure)>`. Output has exactly
-`{objective_id, attack_root, native_closure_digest, workspace}`.
+`{objective_id, attack_root, native_closure_digest, workspace}`. Closure delivery
+writes no `native_attempt_current` pointer.
 
 ### Attempt delivery
 
@@ -1976,6 +1979,25 @@ provenance and `recorded_revision` and uses the controller's canonical digest, i
 with common request ID `native-attempt:<digest(summary)>`. Output has exactly
 `{objective_id, attack_root, native_attempt_digest, workspace, state}`, where
 `state` is the summary's state record.
+
+Each delivery also declares the current snapshot for the pair `(attack_root,
+objective_id)` through a mutable common-store pointer:
+
+```text
+native_attempt_current/<digest({attack_root, objective_id})> = {
+  attack_root: AbsolutePath, objective_id: ID,
+  native_attempt_digest: digest(summary), recorded_revision: CommonStoreRevision
+}
+```
+
+The pointer changes through the same prepared mutation as delivery whenever it
+does not already name that digest. An exact repeat of an earlier snapshot moves
+the pointer back while preserving the snapshot's first `recorded_revision`.
+Pointer-only mutations use common request ID
+`native-attempt:<digest(summary)>:current:<next-common-revision>` so an earlier
+delivery receipt cannot replay a later pointer update. Record order never
+declares the current snapshot, and different attack roots have separate
+successions even when they share an objective ID.
 
 Keyed collections are ordered by controller ID; retreats keep recorded order.
 `failed_strategies` contains the retained entries of

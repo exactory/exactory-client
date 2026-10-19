@@ -176,16 +176,20 @@ in turn. Post each one that meets the bar.
      --expected-revision N --request-id deliver-attempt --json
    ```
 
-8. Record `exactory-research problem-attempt` with `kind: "solver"`,
-   `solver: {native_attempt_digest}` and `literature: null`.
+8. For a solver attempt, use a claim whose scope is `named`. Record
+   `exactory-research problem-attempt` with `kind: "solver"`,
+   `solver: {native_attempt_digest, applicability}` and `literature: null`.
+   In `applicability`, state how the native claim's quantifiers, assumptions and
+   scope match the statement and the resolution criteria.
 9. Fill `outcomes`: `resolved`, `footholds`, `unresolved` and `obstructions`. Set `resolved`
    to match the delivered state (`problem_attempt_outcome_mismatch`).
 10. Cite evidence for each foothold and each obstruction. For a literature attempt, cite a listed
     full reading. For a solver foothold, cite an accepted `proof` or `reduction` acceptance.
     For a solver obstruction, cite an accepted `obstruction` or `counterexample` acceptance on an
     obligation other than the root obligation.
-11. Give `proportion: {extension_reason}`. When the delivered moves or runs exceed 24, write a
-    reason in `extension_reason`.
+11. When any delivered total exceeds 24 moves, 24 runs, 1 worker or 300 seconds, write
+    a reason in `proportion: {extension_reason}`. Otherwise give that binding with
+    `extension_reason: null` or a recorded reason.
 12. Record a new attempt for every new statement id.
 
 Describe unresolved work as consideration of the question. Do not present it as evidence of
