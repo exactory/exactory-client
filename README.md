@@ -68,10 +68,11 @@ Version [0.51.0](docs/releases/0.51.0.md) connects the plugin to the
 Mathematics section of exactory.ai. Accounts with a linked ORCID iD post open
 problems, Lean formal statements as GitHub links, proofs, and reports of Lean
 checks run elsewhere, and every signed-in account votes and reports. The
-`math-conjecturer` skill runs these operations. A deposit can name a problem and
-attach its published record to it, every direct deposit recovers by reading its
-deposition back, and a deposit records a Zenodo answer only for the deposition
-that its request named.
+`math-section` skill now runs these operations, and `math-conjecturer` creates
+and posts a problem. A deposit can name a problem and attach its published
+record to it, every direct deposit recovers by reading its deposition back, and
+a deposit records a Zenodo answer only for the deposition that its request
+named.
 
 Version [0.50.1](docs/releases/0.50.1.md) adds the literature repairs and the
 store bounds that 0.49.0 left out. A search judgment owes full readings of the
@@ -319,7 +320,8 @@ Version 6 and its fixed contract in this release. See the
 | `/exactory:status` | Submitter | Read a verification's status and result |
 | `/exactory:verify` | Verifier | Verify a paper: read the pinned version, judge whether it is sound, file one verdict |
 | `/exactory:propose-grand-challenge` | Both | Propose a Grand Challenge that states an unsolved research problem, and browse, vote on, solve, and report the ones already posted |
-| `/exactory:math-conjecturer` | Both | Pose open mathematical problems, add commit-pinned Lean formal statements, post proofs and reports of Lean checks run elsewhere, discuss, vote, and deposit a write-up for a problem |
+| `/exactory:math-conjecturer` | Both | Create an open mathematical problem as research: explore an area, compare candidates, formulate the exact statement, attempt it, establish openness, build the value case with the rubric, obtain the reviews, and post it to the Mathematics section |
+| `/exactory:math-section` | Both | Browse and read problems in the Mathematics section, add commit-pinned Lean formal statements, post proofs and reports of Lean checks run elsewhere, discuss, vote, declare a status, report a rule violation, and deposit a write-up for a problem |
 
 ## CLIs
 

@@ -3,6 +3,7 @@
 import copy
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -179,7 +180,9 @@ class ProblemSharedToolsTests(DeferralCase, ProblemToolsCase):
 class ProblemDeliveryTextTests(ProblemCase):
     def test_skill_preserves_unrecorded_posts_and_uses_record_export_for_recorded_posts(self):
         text = (PLUGIN / "skills/math-conjecturer/SKILL.md").read_text()
-        section = text.split("## Compose and post a problem", 1)[1].split("## Formal statements", 1)[0]
+        rest = text.split("## Compose and post a problem\n", 1)[1]
+        self.assertIn("\n## ", rest)
+        section = rest.split("\n## ", 1)[0]
         for required in ("exactory-research gate post", "exactory-research export --kind problem",
                          "exactory-research problem-posted", "problem-export.json", "research record"):
             self.assertIn(required, section)
@@ -187,6 +190,37 @@ class ProblemDeliveryTextTests(ProblemCase):
         self.assertIn("exactory problems --query", section)
         self.assertIn("--statement-file statement.md --motivation-file motivation.md", section)
         self.assertIn("new statement", section)
+
+    def test_math_section_skill_holds_the_moved_sections(self):
+        section_skill = (PLUGIN / "skills/math-section/SKILL.md").read_text()
+        conjecturer = (PLUGIN / "skills/math-conjecturer/SKILL.md").read_text()
+        self.assertTrue(section_skill.startswith("---\nname: math-section\ndescription: "))
+        for heading in ("Security rule, before anything else", "Who can write", "Browse and read",
+                        "Formal statements (Lean)", "Proofs", "Report a Lean check you ran elsewhere",
+                        "Discussion, links, votes, status", "Deposit a write-up for a problem",
+                        "Report a rule violation", "What not to do"):
+            with self.subTest(heading=heading):
+                self.assertIn(f"\n## {heading}\n", section_skill)
+        for heading in ("Browse and read", "Formal statements (Lean)", "Proofs",
+                        "Report a Lean check you ran elsewhere", "Discussion, links, votes, status",
+                        "Deposit a write-up for a problem", "Report a rule violation"):
+            with self.subTest(moved=heading):
+                self.assertNotIn(f"\n## {heading}\n", conjecturer)
+        self.assertIn("math-section", conjecturer)
+
+    def test_math_conjecturer_research_half_names_the_commands(self):
+        text = (PLUGIN / "skills/math-conjecturer/SKILL.md").read_text()
+        body = text.split("\n---\n", 1)[1]
+        research_half = body.split("\n## Compose and post a problem\n", 1)[0]
+        for required in ("problem-candidate", "problem-slate", "problem-attempt", "problem-assessment",
+                         "search deliver-attempt", "review_workspace", "budget"):
+            with self.subTest(command=required):
+                self.assertIn(required, research_half)
+        headings = re.findall(r"^## (.+)$", body, re.M)
+        order = ["Exploration", "Candidates and the slate", "Formulation", "The attempt", "Openness",
+                 "Value and the rubric", "Reviews and the decision", "Compose and post a problem",
+                 "What not to do"]
+        self.assertEqual([heading for heading in headings if heading in order], order)
 
     def test_documents_describe_problem_claim_milestones_and_native_support_limits(self):
         cli_text = (PLUGIN / "docs/research-cli.md").read_text()

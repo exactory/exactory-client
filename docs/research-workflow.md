@@ -67,7 +67,11 @@ A problem research record has its own `problem_creation` orchestration in the
 shared research store. It holds the claim that the problem is precisely stated,
 open and worth solving. It does not inherit ai-science's direction contract.
 See [Problem creation](research-cli.md#problem-creation) for every command,
-payload, record and post obligation.
+payload, record and post obligation. The
+[math-conjecturer skill](../skills/math-conjecturer/SKILL.md) is the entry point:
+it opens the record, carries the research and posts the approved problem. The
+[math-section skill](../skills/math-section/SKILL.md) covers the other
+operations of the Mathematics section.
 
 | Claim | Minimum | Independent assessment | Currency |
 | --- | --- | --- | --- |
@@ -192,8 +196,7 @@ citation locators and duplicates, pass those files to `exactory post-problem`,
 then record `{problem_id, export_directory}` with `problem-posted`. Its byte
 comparison rebuilds the projection from the records. A part changed after
 export requires a new statement and starts the gate again. A repeated post of
-the same statement is refused. The research record's skill entry point remains
-the user's open decision.
+the same statement is refused.
 
 ## Initiate and resume
 
@@ -1009,9 +1012,11 @@ minimums and Q1 findings apply at the next relevant commitment. Existing approve
 tranches keep their authority; reconcile pending executions once under their
 frozen authority. Scientific work is repeated only when required validation needs it.
 
-Verification workspaces retain Version 6. Conversion of verify, grand-challenge
-and math-conjecturer orchestrations, and Version 7 adoption compatibility for
+Verification workspaces retain Version 6. Conversion of verify and
+grand-challenge orchestrations, and Version 7 adoption compatibility for
 verification and native verification nodes, are out of scope for this release.
+The problem-creation orchestration of `math-conjecturer` adopts Version 7 when
+`problem-init` creates its configuration.
 
 ## Verification and native mathematics
 

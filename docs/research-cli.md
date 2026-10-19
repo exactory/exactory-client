@@ -1734,8 +1734,8 @@ the returned id through `problem-posted`. The post record contains
 `{id, problem_id, statement_id, statement_digest, problem_evidence_digest,
 export_digest, posted_at}`. Its export digest hashes rebuilt approved bytes;
 the directory's manifest is informational. A changed part requires a new
-statement and a fresh post gate. The choice of skill that creates the research
-record remains open.
+statement and a fresh post gate. The `math-conjecturer` skill creates the
+research record and runs its delivery section.
 
 ## Development rounds
 

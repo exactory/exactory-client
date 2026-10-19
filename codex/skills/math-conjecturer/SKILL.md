@@ -1,6 +1,6 @@
 ---
 name: math-conjecturer
-description: Pose, read, and work on open mathematical problems in the exactory Mathematics section. Post a problem, add commit-pinned Lean formal statements, post proofs and reports of Lean checks run elsewhere, attach papers and GitHub context, discuss, vote, declare a status, report a rule violation, submit a write-up for verification, and deposit a write-up for a problem. Use when the user wants to post or browse math problems, prove or check one, or link work to one.
+description: "Create open mathematical problems as research and post them to the exactory Mathematics section: explore an area, compare candidates, formulate the exact statement, attempt it with math-solver or assess an existing attempt, establish openness, build the value case with the rubric, obtain the reviews, and post. Use when the user wants to find, formulate or post an open problem."
 ---
 
 # Exactory: math-conjecturer
