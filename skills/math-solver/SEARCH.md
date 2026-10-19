@@ -1720,6 +1720,8 @@ Public command specs are closed records:
 | checkpoint [ID] | `{checkpoint: PublicCheckpoint, inputs: [Input]}` |
 | accept ID | `{obligation_id: ID|null, outcome: Outcome, dependency_ids: [ID], route_bindings: [RouteBinding], review: ResultReview, inputs: [Input]}`, optionally `claims_openness: Boolean` |
 | complete | `{subject: ClosureSubject, review: ResultReview, inputs: [Input]}` |
+| deliver-closure | `{}` in required `--file FILE` or `--spec FILE`; see [Common-store delivery](#common-store-delivery) |
+| deliver-attempt | `{}` in required `--file FILE` or `--spec FILE`; see [Common-store delivery](#common-store-delivery) |
 | adopt | `{mappings: [ImportMapping], inputs: [Input]}` |
 | retreat ID | `Retreat` without `node_id` |
 | replan | The documented `replan_recorded` payload |
@@ -1733,7 +1735,8 @@ Public command specs are closed records:
 Every other public command uses the current `--expected-revision` and a unique
 `--request-id`. Commands whose table row defines a nonempty spec require
 `--spec FILE`; `admit` accepts an optional empty spec and `reconcile` an optional
-operator-recovery spec. `audit` and `render` have no `--spec` option. Place
+operator-recovery spec. Both delivery commands require an empty spec file.
+`audit` and `render` have no `--spec` option. Place
 `--attack-root` before `search`. For
 example:
 
@@ -1763,7 +1766,7 @@ blobs. Reviews are separately stored blobs and never occur inside the subject
 whose digest they review. New independent review fields must match an observed
 shared native assignment; declared host/operator labels alone are insufficient.
 
-Mutation receipts contain `objective_id`, `revision`, `proof_status`, and `command`.
+Native event mutation receipts contain `objective_id`, `revision`, `proof_status`, and `command`.
 They describe the original committed mutation on identical request replay.
 `hook-stop` additionally returns `decision` and `current_revision`: accounting is
 deduplicated but a former continuation is evaluated against current control. An
@@ -1888,6 +1891,126 @@ artifacts in the complete manifest dependency closure, including `source` and
 `input` roles. Two required digests for the same local path cause
 `conflicting_evidence_versions`; an omitted or replaced required artifact causes
 `digest_mismatch`. A refreshed package cannot replace the accepted closure.
+
+## Common-store delivery
+
+`search deliver-closure` exports the currently completed objective;
+`search deliver-attempt` exports the current attempt, including unresolved work.
+Both commands take an exact empty `{}` file and the current native controller
+revision, with no positional target or workspace-routing options:
+
+```sh
+exactory-math --attack-root attack search deliver-closure --file empty.json \
+  --expected-revision N --request-id deliver-closure --json
+exactory-math --attack-root attack search deliver-attempt --spec empty.json \
+  --expected-revision N --request-id deliver-attempt --json
+```
+
+`--file` and `--spec` are aliases for these commands. `--request-id` must be
+nonempty text; the common mutation uses the deterministic identity below.
+The destination is the common store resolved by `reviewer.common_root`: the
+recorded `review_workspace`, otherwise the associated foundation root, otherwise
+the canonical attack root. The store must already exist. To deliver to a research
+workspace above the attack root, associate it through the proposal's
+`review_workspace` (for example `".."`). These records provide the common-store
+boundary for consumers; the research harness reads no native store.
+
+Delivery holds the native writer lock and appends no native event. Before a common
+write, `audit_state(..., common_guard=<common snapshot>, fresh=True)` must pass for
+every accepted acceptance and any closure whose proof status is `proved` or
+`disproved`. The common mutation checks that snapshot's revision; a concurrent
+change retries with a fresh snapshot
+and audit. An identical record re-audits and writes neither a record nor a receipt.
+A changed summary writes a new immutable record and preserves the old one.
+
+### Closure delivery
+
+`deliver-closure` requires a non-null closure, `proof_status` of `proved` or
+`disproved`, `execution_status: resolved`, no `control.state_error`, and an observed
+closure review with a `review-assignment:` attestation. The closure must equal its
+pinned blob. The existing record is:
+
+```text
+native_closure/<digest(closure)> = {
+  schema_version: 1, objective_id: ID, attack_root: AbsolutePath,
+  contract: Contract, closure: {subject, review, audit},
+  provenance: {source: "operator", actor_id: "search-controller",
+               attestation_id: "filesystem-audit:deliver-closure"}
+}
+```
+
+The operation is `native_math.deliver_closure` with common request ID
+`native-closure:<digest(closure)>`. Output has exactly
+`{objective_id, attack_root, native_closure_digest, workspace}`.
+
+### Attempt delivery
+
+`deliver-attempt` requires no closure. It exports the following exact `summary`
+from controller records; it copies no local file contents:
+
+```text
+{
+  schema_version: 1, objective_id: ID, attack_root: AbsolutePath, contract: Contract,
+  state: {
+    proof_status, execution_status,
+    openness: {status, outcome, statement_digest} | null,
+    closure_digest: digest(closure) | null
+  },
+  obligations: [{id, status, claim}],
+  checkpoints: [{id, kind, claim, verification_status, origin_kind}],
+  acceptances: [{id, checkpoint_id, obligation_id, outcome, classification,
+                 standard, status, claims_openness, evidence_digests}],
+  retreats: [as recorded],
+  failed_strategies: [as recorded],
+  nodes: [{id, status, cashout_action, finish_receipt: {id, post_digest} | null}],
+  totals: {moves, runs, elapsed_seconds, workers, historical_usage}
+}
+```
+
+The record is `native_attempt/<digest(summary)>`, containing `summary` plus
+`provenance: {source: "operator", actor_id: "search-controller",
+attestation_id: "filesystem-audit:deliver-attempt"}`. The digest excludes
+provenance and uses the controller's canonical digest, identical to
+`research_harness.evidence.digest`. The operation is `native_math.deliver_attempt`
+with common request ID `native-attempt:<digest(summary)>`. Output has exactly
+`{objective_id, attack_root, native_attempt_digest, workspace, state}`, where
+`state` is the summary's state record.
+
+Keyed collections are ordered by controller ID; retreats keep recorded order.
+`failed_strategies` contains the retained entries of
+`control.strategy_refresh.failures`. Each node names its latest succeeded
+`finish` receipt by recorded revision (then receipt ID), or null, and its recorded
+cash-out action, or null. Pending hypotheses and invalidated acceptances remain
+labelled as recorded. An archived acceptance without `claims_openness` exports
+false; `evidence_digests` comes from its recorded audit.
+
+`moves` and `runs` are the controller's cumulative consumed totals across accounts
+(`used_moves` and `used_runs`), excluding reservations and allowance limits.
+`historical_usage` copies the controller's `known` or `unknown` accounting status;
+unknown historical work is not inferred. `elapsed_seconds` is null because native
+records do not account elapsed duration. `workers` is the largest admitted worker
+limit, or zero without an admission; it is an allocation bound. Delivery preserves
+the objective's current findings and decides no proof credit, difficulty, renewal
+or cash-out entitlement.
+
+### Delivery refusals
+
+| Code | Command | Condition |
+| --- | --- | --- |
+| `invalid_record` | Both | Nonempty or invalid spec, invalid native revision/request-ID type, or unsupported service routing |
+| `revision_conflict` | Both | Expected native revision differs from current state |
+| `store_missing` | Both | Associated common store does not exist |
+| `review_workspace_mismatch` | Both | Recorded common-workspace references conflict |
+| `audit_failed` | Both | Fresh accepted-evidence or resolved-closure audit fails, including on a repeat |
+| `record_conflict` | Both | An immutable record's key already contains different content |
+| `native_completion_required` | `deliver-closure` | Objective is incomplete, reopened, unresolved, or has a state error |
+| `review_assignment_required` | `deliver-closure` | Closure lacks an observed native review |
+| `digest_mismatch` | `deliver-closure` | Closure differs from its pinned bytes |
+| `native_state_pending` | `deliver-attempt` | `control.state_error` is set |
+
+Unreadable or malformed spec files fail with `invalid_input`; invalid CLI arguments
+fail with `invalid_command`. Native storage and common-store errors retain their
+structured codes. A refused delivery changes no native findings or common record.
 
 ## Immutable evidence manifests
 
