@@ -357,6 +357,60 @@ class ProblemReviewTests(LiteratureCase):
         below = [row for row in state['obligations'] if row['code'] == 'problem_rubric_below_threshold']
         self.assertEqual([row['shortfalls'] for row in below], [[{'item': 'priority', 'required': '>= 2', 'graded': 1}]])
 
+    def replace_first_bar(self):
+        """A legitimate context repair replaces the first bar B1 by B1' after both results were graded against B1."""
+        self.mutate(protocol.record_context_event, {'id': 'exposure', 'assignment_id': 'bar-first',
+            'kind': 'contamination', 'source': 'author_history', 'reason': 'Author advocacy entered the bar context.',
+            'evidence': [self.supporting]})
+        def respond_to_probe(route, request, credential):
+            packet = json.loads(request['input'][0]['content'])
+            return self.build_provider_response({'allowed_control': packet['allowed_control'],
+                'evidence_control': packet['evidence_control'], 'excluded_controls': []})
+        with patch('research_harness.review_transport.send_request', side_effect=respond_to_probe):
+            self.mutate(protocol.probe_route, {'id': 'repair-probe', 'route_id': 'route'}, credential='test-only')
+        self.assign('bar', 'replacement', identifier='bar-replaced', context_repair={
+            'assignment_id': 'bar-first', 'event_ids': ['exposure'], 'probe_id': 'repair-probe',
+            'reason': 'Reassess the field bar in a verified independent context.', 'evidence': [self.supporting]})
+        output = self.build_review_output('bar')
+        output['reassessment'] = {'assignment_id': 'bar-first', 'findings': [{'review_id': 'review-bar-first',
+            'disposition': 'revised', 'reason': 'The independent context gives the same field standard.',
+            'evidence': [self.supporting]}]}
+        with patch('research_harness.review_transport.send_request', return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {'id': 'attempt-bar-replaced', 'assignment_id': 'bar-replaced'},
+                        credential='test-only')
+        self.mutate(decisions.record_value_review, dict(output, id='review-bar-replaced', dossier_id=None,
+                                                        assignment_id='bar-replaced'))
+
+    def test_adjudicator_packet_keeps_the_original_bars_after_a_bar_repair(self):
+        self.prepare_below_threshold_reviews()
+        self.replace_first_bar()
+        _, packet = self.observe_rubric_adjudication()
+        records = self.read_records()
+        self.assertEqual(packet['bar_calibrations'], [records['value_review'][identifier]['payload']
+                                                     for identifier in ('review-bar-first', 'review-bar-second')])
+        self.assertEqual(packet['current_bar_calibrations'], [records['value_review']['review-bar-replaced']['payload']])
+        # The replaced bar retires the original pair from the current gate, so assess that pair by name.
+        state = decisions.assess_problem_reviews(records, self.artifacts, review_ids=['review-result-first', 'review-result-second'])
+        self.assertNotIn('problem_rubric_below_threshold', {row['code'] for row in state['obligations']})
+
+    def test_rubric_adjudication_against_a_replaced_bar_does_not_clear_the_shortfall(self):
+        self.prepare_below_threshold_reviews()
+        self.replace_first_bar()
+        real = protocol.add_focused_adjudication
+
+        def build_with_the_current_bars(*arguments, **options):
+            real(*arguments, **options)
+            packet = arguments[2]
+            packet['bar_calibrations'] = sorted(packet['current_bar_calibrations'] + [
+                bar for bar in packet['bar_calibrations'] if bar['id'] != 'review-bar-first'], key=lambda bar: bar['id'])
+        with patch.object(protocol, 'add_focused_adjudication', side_effect=build_with_the_current_bars):
+            _, packet = self.observe_rubric_adjudication()
+        self.assertEqual([bar['id'] for bar in packet['bar_calibrations']], ['review-bar-replaced', 'review-bar-second'])
+        state = decisions.assess_problem_reviews(self.read_records(), self.artifacts,
+                                                 review_ids=['review-result-first', 'review-result-second'])
+        below = [row for row in state['obligations'] if row['code'] == 'problem_rubric_below_threshold']
+        self.assertEqual([row['shortfalls'] for row in below], [[{'item': 'priority', 'required': '>= 2', 'graded': 1}]])
+
     def test_rubric_adjudication_cannot_waive_an_assurance_or_another_item(self):
         self.prepare_below_threshold_reviews()
         self.observe_rubric_adjudication()
@@ -624,6 +678,7 @@ class ProblemReviewTests(LiteratureCase):
         packet = json.loads(self.artifacts.read(assignment["packet"]))
         self.assertEqual(packet["subject"], {"kind": "problem", "statement_id": "statement-1"})
         self.assertEqual(packet["pending_source_requests"], [])
+        self.assertEqual(packet["historical_reviews"], [])
         self.assertEqual(packet["source_deliveries"][0]["status"], "delivered")
         self.assertNotIn("PRIVATE_STATEMENT", json.dumps(packet))
         final = self.build_review_output("bar")

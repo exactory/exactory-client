@@ -14,7 +14,7 @@ from .evidence import digest
 from .graph import obligation
 from .operations import fields, immutable_record, normalized_text, prepared_mutation, strings, text
 from .problem_claims import find_current_statement, find_latest, require_problem
-from .research_decisions import _independence, _pair, state_objection
+from .research_decisions import _independence, _pair
 from .review_context_repair import slot_id
 from .review_protocol import build_problem_subject, is_previous_prompt, validate_problem_bars
 from . import problem_rubric, strategy
@@ -99,33 +99,33 @@ def _collect_candidate_lineage(records, identifiers):
     return lineage
 
 
-def collect_applicable_slate_objections(records, artifacts):
-    """Each material objection of an observed slate review that concerns the current statement, with its review.
-
-    A named candidate stays the same candidate along its `previous` lineage, whatever a later version changes; the
-    projected objection names the current versions. Candidates are never removed, so every named lineage keeps a
-    current version. An objection concerns the statement that formulates a candidate of a named lineage; an objection
-    that names no candidate concerns the slate as a whole and every statement. Only evidence or an adjudication
-    resolves an objection. A slate review recorded before candidates were bound to objections is not current."""
-    statement = find_current_statement(records)
-    candidate_id = None if statement is None else statement.get("candidate_id")
-    current = set(find_current_candidates(records))
-    applicable = []
+def collect_bound_slate_reviews(records, artifacts):
+    """The observed slate reviews whose objections name the candidates they concern, in recorded order. A slate review
+    recorded before candidates were bound to objections is not current."""
+    bound = []
     for review in sorted(records.get("value_review", {}).values(), key=lambda row: (row["recorded_revision"], row["id"])):
         if review["payload"]["stage"] != "slate" or review.get("subject", {}).get("kind") != "problem":
             continue
         packet = json.loads(artifacts.read(records["review_assignment"][review["assignment_id"]]["packet"]))
-        if "candidate_set_digest" not in packet:
-            continue
-        for objection in review["payload"]["objections"]:
-            if "candidate_ids" not in objection:
-                continue
-            lineage = _collect_candidate_lineage(records, objection["candidate_ids"])
-            if objection["candidate_ids"] and candidate_id not in lineage:
-                continue
-            # The material version binds the candidates as stated; the projection names their current versions.
-            applicable.append((review, dict(state_objection(review, objection), candidate_ids=sorted(lineage & current))))
-    return applicable
+        if "candidate_set_digest" in packet and all("candidate_ids" in objection for objection in review["payload"]["objections"]):
+            bound.append(review)
+    return bound
+
+
+def project_slate_objection(records, objection):
+    """The slate objection as it concerns the current statement, naming the current versions of its candidates, or
+    None when it concerns other candidates only.
+
+    A named candidate stays the same candidate along its `previous` lineage, whatever a later version changes.
+    Candidates are never removed, so every named lineage keeps a current version. An objection concerns the statement
+    that formulates a candidate of a named lineage; an objection that names no candidate concerns the slate as a whole
+    and every statement. Only evidence or an adjudication resolves an objection."""
+    statement = find_current_statement(records)
+    candidate_id = None if statement is None else statement.get("candidate_id")
+    lineage = _collect_candidate_lineage(records, objection["candidate_ids"])
+    if objection["candidate_ids"] and candidate_id not in lineage:
+        return None
+    return dict(objection, candidate_ids=sorted(lineage & set(find_current_candidates(records))))
 
 
 def describe_candidates(records):

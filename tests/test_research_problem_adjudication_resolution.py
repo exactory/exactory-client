@@ -9,6 +9,7 @@ from research_harness import research_decisions as decisions, review_protocol as
 class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
     make_objection = objection_fixtures.ProblemObjectionTests.make_objection
     make_finding = objection_fixtures.ProblemObjectionTests.make_finding
+    prepare_problem_evidence = objection_fixtures.ProblemObjectionTests.prepare_problem_evidence
     prepare_reviews = objection_fixtures.ProblemObjectionTests.prepare_reviews
     observe_adjudication = objection_fixtures.ProblemObjectionTests.observe_adjudication
     assert_delivered = objection_fixtures.ProblemObjectionTests.assert_delivered
@@ -21,13 +22,16 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         self.mutate(self.load_problem_module().record_value, changed)
         return self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"])
 
-    def observe_later_resolutions(self, first_status="resolved"):
+    def observe_later_resolutions(self, first_status="resolved", *, new_continuing_evidence=False):
+        """Later results resolve with new evidence. A continuing finding repeats the adjudicated version unless it
+        carries the new evidence, which makes it a new version."""
         self.resolution_evidence = self.artifacts.put(
             b"The exact implication follows from the comparator's stated hypotheses.", "text/plain")
         for reviewer in ("first", "second"):
             output = self.build_review_output("result")
             finding = self.make_finding(first_status if reviewer == "first" else "resolved")
-            finding["evidence"] = [self.resolution_evidence]
+            if finding["status"] == "resolved" or new_continuing_evidence:
+                finding["evidence"] = [self.resolution_evidence]
             output["value"]["objection_findings"] = [finding]
             self.observe("result", reviewer, output, identifier="resolved-" + reviewer)
 
@@ -58,6 +62,16 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         self.prepare_bar_adjudication()
         self.observe_later_resolutions(first_status="continuing")
         self.assert_delivered()
+
+    def test_a_continuing_finding_with_new_evidence_is_a_version_the_adjudication_did_not_dispose_of(self):
+        self.prepare_bar_adjudication()
+        self.observe_later_resolutions(first_status="continuing", new_continuing_evidence=True)
+        records = self.store.snapshot()["records"]
+        [objection] = decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]
+            for identifier in ("review-bar-first", "review-bar-second", "review-resolved-first", "review-resolved-second")])
+        self.assertEqual((objection["review_id"], objection["evidence"], objection["claim"]),
+                         ("review-resolved-first", [self.resolution_evidence], self.make_objection()["claim"]))
+        self.assert_blocked_delivery()
 
     def test_missing_resolution_evidence_and_unavailable_adjudication_block_post(self):
         self.prepare_bar_adjudication()

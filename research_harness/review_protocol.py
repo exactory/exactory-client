@@ -564,8 +564,8 @@ def require_calibrated_bars(records, bars):
 
 
 def collect_result_objections(records, artifacts, subject, evidence_digest, bars):
-    """The material objections a result reviewer receives: the bars' and earlier results' findings and the slate
-    objections that concern the statement, each as its latest version; a current peer result stays hidden."""
+    """The material objections a result reviewer receives: those stated or updated by the bars, the earlier results
+    and the slate reviews, each as its latest version that concerns the statement; a current peer result stays hidden."""
     from .research_decisions import collect_problem_post_objections
     previous = []
     for review in records.get('value_review', {}).values():
@@ -686,6 +686,39 @@ def add_direction_evidence(records, artifacts, packet, dossier_id):
     packet['direction_evidence'] = build_direction_evidence(records, artifacts, describe_direction(records, artifacts), dossier)
 
 
+def resolve_original_calibrations(records, artifacts, review_ids):
+    """The standards the adjudicated pair was graded against, by bar id: for a bar pair the two bars, for a result pair
+    the bars that its recorded bar_ids name, as the results' observed packets delivered them. A recorded bar id that
+    no observed packet delivered was never a standard the result saw."""
+    from .direction_reviews import collect_observed_packets
+    reviews = [_get(records, 'value_review', identifier) for identifier in review_ids]
+    if all(review['payload']['stage'] == 'bar' for review in reviews):
+        return sorted((_payload(review) for review in reviews), key=lambda bar: bar['id'])
+    calibrations = {}
+    for review in reviews:
+        delivered = {bar['id']: bar for _, observed in collect_observed_packets(records, artifacts, review['assignment_id'])
+                     for bar in observed.get('bars', [])}
+        calibrations.update((identifier, delivered[identifier])
+                            for identifier in review['payload']['value']['bar_ids'] if identifier in delivered)
+    return [calibrations[identifier] for identifier in sorted(calibrations)]
+
+
+VERSION_EVIDENCE_KEYS = ('version_review', 'version_evidence', 'version_source_mappings')
+
+
+def describe_version_evidence(records, artifacts, version):
+    """What an adjudicator receives for one material objection version, apart from the original pair's correction
+    evidence, under VERSION_EVIDENCE_KEYS: the review that stated the version, and the artifacts and source passages
+    that the stating review's packets delivered for the evidence the version cites."""
+    review = _get(records, 'value_review', version['review_id'])
+    supplied, mappings = supplied_evidence.supplied_context(records, artifacts, [review['assignment_id']])
+    cited = {reference['sha256'] for reference in collect_references(version['evidence'])}
+    return dict(zip(VERSION_EVIDENCE_KEYS, (
+        _reference_templates(_payload(review)),
+        [supplied[sha256] for sha256 in sorted(cited & supplied.keys())],
+        [mapping for mapping in mappings if mapping['origin']['artifact_descriptor']['sha256'] in cited])))
+
+
 def build_rubric_objection(records, artifacts, saved, context, packet, sources):
     """Build the named problem objection from the latest material version found in the sources' findings and the
     applicable slate objections, or from a rubric shortfall of the named result pair."""
@@ -733,7 +766,7 @@ def add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id
     slates = []
     if problem:
         from .direction_reviews import collect_observed_packets
-        from .problem_candidates import collect_applicable_slate_objections
+        from .problem_candidates import collect_bound_slate_reviews, project_slate_objection
         from .research_decisions import _pair, _response
         saved = _pair(records, ids, packet['subject'], reviews[0]['stage'])
         for review in saved:
@@ -746,8 +779,9 @@ def add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id
         validate_problem_bars(records, artifacts, [review for review in saved if review['payload']['stage'] == 'bar'])
         # A focused slate review continues a bar session, so its objection is adjudicated with the two bars.
         if reviews[0]['stage'] == 'bar':
-            slates = list({review['id']: review for review, objection in collect_applicable_slate_objections(records, artifacts)
-                           if objection['id'] == context.get('objection_id')}.values())
+            slates = [review for review in collect_bound_slate_reviews(records, artifacts)
+                      if any(objection['id'] == context.get('objection_id') and project_slate_objection(records, objection)
+                             for objection in review['payload']['objections'])]
         initial = {normalized_text(review['reviewer_id']) for review in records.get('value_review', {}).values()
                    if review.get('subject', {}).get('kind') == 'problem'
                    and (review['payload']['stage'] in ('bar', 'slate') or review['subject'] == packet['subject'])}
@@ -764,7 +798,13 @@ def add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id
         current = [records['value_review'][identifier] for stage in ('bar', 'result')
                    for identifier in _collect_problem_reviews(records, stage, packet['subject'])]
         objections = build_rubric_objection(records, artifacts, saved, context, packet, saved + current)
-        packet['bar_calibrations'] = [_payload(review) for review, _ in _bars(records, artifacts, None, subject=packet['subject'])]
+        # The adjudicated grades answer the standards the pair was graded against; a bar that replaced one is apart.
+        packet['bar_calibrations'] = resolve_original_calibrations(records, artifacts, ids)
+        originals = {bar['id'] for bar in packet['bar_calibrations']}
+        packet['current_bar_calibrations'] = [_payload(review) for review, _ in _bars(records, artifacts, None, subject=packet['subject'])
+                                              if review['id'] not in originals]
+        if objections and 'review_id' in objections[0]:
+            packet.update(describe_version_evidence(records, artifacts, objections[0]))
     if not objections:
         raise ResearchError('review_objection_missing', 'The focused objection must exist in the original assessments')
     correction = context.get('correction')
@@ -828,8 +868,7 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                 # A parent with a final review is a refresh of that review; otherwise it is a source-request turn.
                 historical = context_repair.collect_problem_review_history(records, prior)
                 refreshed = any(review['assignment_id'] == prior['id'] for review in historical)
-                if role != 'bar':
-                    packet['historical_reviews'] = [_payload(review) for review in historical]
+                packet['historical_reviews'] = [_payload(review) for review in historical]
             if problem and role == 'result':
                 bars = add_problem_bars(records, artifacts, packet, reviewer_id, slot=context_repair.slot_id(records, prior))
                 require_calibrated_bars(records, bars)
@@ -1358,23 +1397,32 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                     continue
                 previous_state = assignment_state(records, artifacts, previous['id'])
                 if problem and not correction and previous_state['ready']:
+                    from .research_decisions import find_undelivered_adjudication_keys
                     previous_packet = _read_json(artifacts, previous['packet'])
                     # A material objection's version changes with its finding even when the evidence digest does not.
                     previous_version = previous_packet['objection'].get('material_version')
                     version = packet['objection'].get('material_version')
-                    if (previous_packet['problem_evidence_digest'] != packet['problem_evidence_digest']
-                            or previous_version != version):
+                    # The new packet carries the current version's evidence; the earlier one is held to the gate's rule.
+                    undelivered = find_undelivered_adjudication_keys(records, artifacts, previous['id'],
+                        rubric='rubric_definition' in packet,
+                        version_evidence={key: packet[key] for key in VERSION_EVIDENCE_KEYS if key in packet})
+                    reason = ('version_changed' if previous_version != version else
+                              'evidence_changed' if previous_packet['problem_evidence_digest'] != packet['problem_evidence_digest'] else
+                              'packet_incomplete' if undelivered else None)
+                    if reason is not None:
                         if (normalized_text(previous['reviewer_id']) != normalized_text(value['reviewer_id'])
                                 or previous['route_id'] != value['route_id']
                                 or normalized_text(previous['author_id']) != normalized_text(value['author_id'])):
-                            raise ResearchError('review_adjudicator_fixed', 'Changed problem evidence or a changed objection version continues the same focused adjudicator and route')
+                            raise ResearchError('review_adjudicator_fixed', 'Changed problem evidence, a changed objection version or an incomplete earlier packet continues the same focused adjudicator and route')
                         focused_parent = previous
                         packet.pop('evidence', None)
                         packet.pop('digest', None)
-                        packet['focused_refresh'] = {'assignment_id': previous['id'],
+                        packet['focused_refresh'] = {'assignment_id': previous['id'], 'reason': reason,
                             'previous_problem_evidence_digest': previous_packet['problem_evidence_digest'],
                             'problem_evidence_digest': packet['problem_evidence_digest'],
                             'previous_material_version': previous_version, 'material_version': version}
+                        if reason == 'packet_incomplete':
+                            packet['focused_refresh']['undelivered_keys'] = undelivered
                         packet['evidence'] = _evidence(artifacts, packet)
                         packet['digest'] = digest(packet)
                         continue
