@@ -143,13 +143,21 @@ _PROBLEM_ADJUDICATOR_PROMPT_V1 = (
 _PROBLEM_PROTOCOL = 'exactory-problem-review-v2'
 PROBLEM_PROTOCOL = _PROBLEM_PROTOCOL
 _ANCHOR = problem_rubric.ANCHORS
-_REFERENCE_GRAMMAR = (
-    'Every evidence entry is one reference object: a held artifact descriptor {path,sha256,size,media_type} '
-    'copied from the packet, {kind:"source",link} for a delivered source, or {kind:"record",record_kind,id,digest} '
-    'for a record named in the packet; a bare digest, a path alone or free text is refused. Every evidence array '
-    'that the shape shows is nonempty, including the evidence of an assurance graded not_assessed and of every '
-    'rubric_evidence item; limitations is a nonempty list of sentences. A response that requests sources instead of '
-    'assessing uses the separate source_requests contract below and is not a final assessment. ')
+_LINK_EXAMPLE = ('{"kind":"source","link":{"version_id":"<version id of the delivered source>","source_id":"<source id of the '
+                 'delivery>","artifact":{"path":"<path>","sha256":"<sha256>","size":0,"media_type":"<media type>"},'
+                 '"locator":{"kind":"<as delivered>"}}}')
+_RECORD_EXAMPLE = '{"kind":"record","record_kind":"<record kind>","id":"<record id>","digest":"<digest>"}'
+_EVIDENCE_GRAMMAR = (
+    'Every evidence entry is one reference object, copied from the packet: a held artifact descriptor '
+    '{path,sha256,size,media_type}; a delivered source as ' + _LINK_EXAMPLE + ', where version_id, source_id, '
+    'artifact and locator are copied unchanged from the delivered source (a link with version_id alone is refused as '
+    'source_mismatch); or a record named in the packet as ' + _RECORD_EXAMPLE + '. A bare digest, a path alone or '
+    'free text is refused. ')
+_REVIEW_GRAMMAR = (_EVIDENCE_GRAMMAR +
+    'Every evidence array in the shape is nonempty: value.evidence, the evidence of every assurance including one graded '
+    'not_assessed, of every objection and of every objection_findings entry. The values of rubric_evidence are nonempty '
+    'text, not arrays. limitations is a nonempty list of sentences. A response that requests sources instead of '
+    'assessing uses the source_requests contract that follows and is not a final assessment. ')
 _PROBLEM_PROMPTS = {
     'bar': 'A problem bar is given before any statement, title, candidate or author claim is shown. '
         'Your task is to fix the standard that the field itself sets, so that a later grade of a '
@@ -223,6 +231,16 @@ _PROBLEM_PROMPTS = {
         'own grades even when an adjudication is available. Every prior material objection, from a bar, a '
         'slate review or a result review, requires a finding: resolved, continuing or contested, with its '
         'evidence.'}
+_PROBLEM_BAR_EXAMPLE = (
+    '{"stage":"bar","support":null,"value":{"status":"sufficient","consequence":"...","bar_ids":[],'
+    '"objective_adequacy":"not_assessed","method_adequacy":"not_assessed","reason":"...",'
+    '"evidence":[' + _LINK_EXAMPLE + '],"work_items":[],"assurances":[],"objection_findings":[]},'
+    '"objections":[],"limitations":["..."]}')
+_PROBLEM_BAR_RESPONSE = (
+    ' Return the exact JSON response shape: ' + json.dumps(_RESPONSE_SCHEMA) +
+    '. Support is null. A bar leaves bar_ids, work_items, assurances and objection_findings empty and both adequacies '
+    'not_assessed; value.evidence names the delivered sources your standard rests on. ' + _REVIEW_GRAMMAR +
+    'A valid final response, with the placeholders replaced by the delivered values: ' + _PROBLEM_BAR_EXAMPLE + '.')
 _PROBLEM_RESULT_SCHEMA = copy.deepcopy(_RESPONSE_SCHEMA)
 _PROBLEM_RESULT_SCHEMA['value'].update(
     rubric={'admission': dict.fromkeys(problem_rubric.ADMISSION_ITEMS, 'pass|fail'),
@@ -230,15 +248,14 @@ _PROBLEM_RESULT_SCHEMA['value'].update(
             'attempt': 'pass|fail', 'accessibility': 'E-F|E-A|E-N', 'calibration': 'pass|fail'},
     rubric_evidence=dict.fromkeys(problem_rubric.ITEMS, 'Evidence and reasoning for this item.'))
 _PROBLEM_RESULT_EXAMPLE = (
-    '{"stage":"result","support":null,"value":{"status":"sufficient","consequence":"...","bar_ids":["bar-1","bar-2"],'
+    '{"stage":"result","support":null,"value":{"status":"sufficient","consequence":"...","bar_ids":["<bar id 1>","<bar id 2>"],'
     '"objective_adequacy":"not_assessed","method_adequacy":"not_assessed","reason":"...",'
-    '"evidence":[{"kind":"record","record_kind":"problem_statement","id":"statement-1","digest":"<digest>"}],'
-    '"work_items":[],"assurances":[{"kind":"problem_statement","status":"passed","reason":"...",'
-    '"evidence":[{"kind":"record","record_kind":"problem_statement","id":"statement-1","digest":"<digest>"}]},'
-    '{"kind":"problem_openness","status":"passed","reason":"...","evidence":[{"kind":"record","record_kind":"problem_openness","id":"openness-1","digest":"<digest>"}]},'
-    '{"kind":"problem_value","status":"passed","reason":"...","evidence":[{"kind":"source","link":{"version_id":"arxiv:0000.00000v1"}}]},'
-    '{"kind":"problem_citations","status":"passed","reason":"...","evidence":[{"kind":"source","link":{"version_id":"arxiv:0000.00000v1"}}]},'
-    '{"kind":"stop","status":"not_assessed","reason":"Nothing in the record requires a stop.","evidence":[{"kind":"record","record_kind":"problem_statement","id":"statement-1","digest":"<digest>"}]}],'
+    '"evidence":[' + _RECORD_EXAMPLE + '],"work_items":[],'
+    '"assurances":[{"kind":"problem_statement","status":"passed","reason":"...","evidence":[' + _RECORD_EXAMPLE + ']},'
+    '{"kind":"problem_openness","status":"passed","reason":"...","evidence":[' + _RECORD_EXAMPLE + ']},'
+    '{"kind":"problem_value","status":"passed","reason":"...","evidence":[' + _LINK_EXAMPLE + ']},'
+    '{"kind":"problem_citations","status":"passed","reason":"...","evidence":[' + _LINK_EXAMPLE + ']},'
+    '{"kind":"stop","status":"not_assessed","reason":"Nothing in the record requires a stop.","evidence":[' + _RECORD_EXAMPLE + ']}],'
     '"objection_findings":[],"rubric":{"admission":{"A1":"pass","A2":"pass","A3":"pass","A4":"pass","A5":"pass","A6":"pass"},'
     '"significance":{"B1":2,"B2":1},"priority":2,"attempt":"pass","accessibility":"E-F","calibration":"pass"},'
     '"rubric_evidence":{"A1":"...","A2":"...","A3":"...","A4":"...","A5":"...","A6":"...","B1":"...","B2":"...",'
@@ -252,25 +269,24 @@ _PROBLEM_RESULT_RESPONSE = (
     'nonempty text for exactly A1, A2, A3, A4, A5, A6, B1, B2, priority, attempt, accessibility and '
     'calibration, naming the delivered evidence for each grade. Name the findings and the exact supplied '
     'evidence in reason and evidence. Every prior material objection requires an objection_findings entry '
-    '{id,status:resolved|continuing|contested,reason,evidence}. ' + _REFERENCE_GRAMMAR +
-    'A valid final response, with the digests and the texts replaced by the real ones: ' + _PROBLEM_RESULT_EXAMPLE + '.')
+    '{id,status:resolved|continuing|contested,reason,evidence}. ' + _REVIEW_GRAMMAR +
+    'A valid final response, with the placeholders replaced by the delivered values: ' + _PROBLEM_RESULT_EXAMPLE + '.')
 _PROBLEM_SLATE_SCHEMA = copy.deepcopy(_RESPONSE_SCHEMA)
 _PROBLEM_SLATE_SCHEMA['value']['rubric_potential'] = {
     '<candidate id>': {'significance': dict.fromkeys(problem_rubric.GROUNDS, '0|1|2|3'), 'priority': '0|1|2|3'}}
 _PROBLEM_SLATE_SCHEMA['objections'][0]['candidate_ids'] = []
 _PROBLEM_SLATE_EXAMPLE = (
-    '{"stage":"slate","support":null,"value":{"status":"sufficient","consequence":"...","bar_ids":["bar-1","bar-2"],'
+    '{"stage":"slate","support":null,"value":{"status":"sufficient","consequence":"...","bar_ids":["<bar id 1>","<bar id 2>"],'
     '"objective_adequacy":"not_assessed","method_adequacy":"not_assessed","reason":"...",'
-    '"evidence":[{"kind":"record","record_kind":"problem_candidate","id":"candidate-1","digest":"<digest>"}],'
-    '"work_items":[],"assurances":[{"kind":"problem_statement","status":"not_assessed","reason":"This role grades potential.",'
-    '"evidence":[{"kind":"record","record_kind":"problem_candidate","id":"candidate-1","digest":"<digest>"}]},'
-    '{"kind":"problem_openness","status":"not_assessed","reason":"...","evidence":[{"kind":"record","record_kind":"problem_candidate","id":"candidate-1","digest":"<digest>"}]},'
-    '{"kind":"problem_value","status":"not_assessed","reason":"...","evidence":[{"kind":"record","record_kind":"problem_candidate","id":"candidate-1","digest":"<digest>"}]},'
-    '{"kind":"problem_citations","status":"not_assessed","reason":"...","evidence":[{"kind":"record","record_kind":"problem_candidate","id":"candidate-1","digest":"<digest>"}]},'
-    '{"kind":"stop","status":"not_assessed","reason":"...","evidence":[{"kind":"record","record_kind":"problem_candidate","id":"candidate-1","digest":"<digest>"}]}],'
-    '"objection_findings":[],"rubric_potential":{"candidate-1":{"significance":{"B1":2,"B2":1},"priority":2}}},'
-    '"objections":[{"id":"objection-1","claim":"...","reason":"...","evidence":[{"kind":"record","record_kind":"problem_candidate","id":"candidate-1","digest":"<digest>"}],'
-    '"resolution_condition":"...","candidate_ids":["candidate-1"]}],"limitations":["..."]}')
+    '"evidence":[' + _RECORD_EXAMPLE + '],"work_items":[],'
+    '"assurances":[{"kind":"problem_statement","status":"not_assessed","reason":"This role grades potential.","evidence":[' + _RECORD_EXAMPLE + ']},'
+    '{"kind":"problem_openness","status":"not_assessed","reason":"...","evidence":[' + _RECORD_EXAMPLE + ']},'
+    '{"kind":"problem_value","status":"not_assessed","reason":"...","evidence":[' + _RECORD_EXAMPLE + ']},'
+    '{"kind":"problem_citations","status":"not_assessed","reason":"...","evidence":[' + _RECORD_EXAMPLE + ']},'
+    '{"kind":"stop","status":"not_assessed","reason":"...","evidence":[' + _RECORD_EXAMPLE + ']}],'
+    '"objection_findings":[],"rubric_potential":{"<candidate id>":{"significance":{"B1":2,"B2":1},"priority":2}}},'
+    '"objections":[{"id":"<objection id>","claim":"...","reason":"...","evidence":[' + _RECORD_EXAMPLE + '],'
+    '"resolution_condition":"...","candidate_ids":["<candidate id>"]}],"limitations":["..."]}')
 _PROBLEM_SLATE_RESPONSE = (
     ' Return the exact JSON response shape: ' + json.dumps(_PROBLEM_SLATE_SCHEMA) +
     '. Support is null. Give both established bar review ids in bar_ids, empty work_items, both adequacies '
@@ -280,9 +296,9 @@ _PROBLEM_SLATE_RESPONSE = (
     'each {significance:{B1,B2},priority} with integer levels 0 to 3. Each objection carries candidate_ids, the '
     'ids of the packet candidates it concerns, or an empty list for the slate as a whole. Name the findings and '
     'the exact supplied evidence in reason and evidence. Every prior material objection requires an '
-    'objection_findings entry {id,status:resolved|continuing|contested,reason,evidence}. ' + _REFERENCE_GRAMMAR +
-    'A valid final response, with the digests and the texts replaced by the real ones: ' + _PROBLEM_SLATE_EXAMPLE + '.')
-_PROBLEM_RESPONSES = {'bar': _PROBLEM_RESPONSE_V1, 'slate': _PROBLEM_SLATE_RESPONSE, 'result': _PROBLEM_RESULT_RESPONSE}
+    'objection_findings entry {id,status:resolved|continuing|contested,reason,evidence}. ' + _REVIEW_GRAMMAR +
+    'A valid final response, with the placeholders replaced by the delivered values: ' + _PROBLEM_SLATE_EXAMPLE + '.')
+_PROBLEM_RESPONSES = {'bar': _PROBLEM_BAR_RESPONSE, 'slate': _PROBLEM_SLATE_RESPONSE, 'result': _PROBLEM_RESULT_RESPONSE}
 _PROBLEM_ADJUDICATOR_PROMPT = (
     'Resolve only the named material problem objection or the documented correction; this is not a '
     'third vote on the problem. Examine the preserved original assessments, the original evidence and '
@@ -294,13 +310,16 @@ _PROBLEM_ADJUDICATOR_PROMPT = (
     'corrections are descriptive templates: for an artifact_descriptor, location is the native '
     'artifact path, and sha256, size and media_type keep their native meanings; a template does not '
     'supply an entire original, so honour the recorded locator bounds of mapped passages and do not '
-    'assess unsupplied portions. A rubric objection names one below-threshold grade of one result '
-    'review: the packet delivers both original bar reviews as bar_calibrations and the adjudicated '
-    'item\'s normative definition and threshold as rubric_definition; decide only that shortfall from '
-    'those standards, rubric_grades, the item\'s reasoning and the delivered evidence; do not average '
-    'grades, and do not waive any assurance or any other rubric item. Return exactly objection_id, '
-    'disposition (upheld, not_upheld, unresolved), reason, evidence, and correction_admissible (null '
-    'when no correction is requested, otherwise a boolean). ' + _REFERENCE_GRAMMAR)
+    'assess unsupplied portions. The packet delivers the objection version you decide with the review '
+    'that stated it and the evidence supplied for it. A rubric objection names one below-threshold '
+    'grade of one result review: the packet delivers the original bar reviews those results were graded '
+    'against as bar_calibrations and the adjudicated item\'s normative definition and threshold as '
+    'rubric_definition; decide only that shortfall from those standards, rubric_grades, the item\'s '
+    'reasoning and the delivered evidence; do not average grades, and do not waive any assurance or any '
+    'other rubric item. Return exactly one JSON object with objection_id, disposition (upheld, '
+    'not_upheld, unresolved), reason, evidence, and correction_admissible (null when no correction is '
+    'requested, otherwise a boolean), and no other field: no limitations and no source requests. '
+    + _EVIDENCE_GRAMMAR + 'evidence is a nonempty array of such references.')
 
 
 def _get(records, kind, identifier):

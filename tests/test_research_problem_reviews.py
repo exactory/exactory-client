@@ -168,9 +168,9 @@ class ProblemReviewTests(LiteratureCase):
         self.assertNotIn('not reasons against a question by themselves', protocol.canonical_prompt("bar", orchestration="problem_creation", version=1)["text"])
 
     def test_problem_slate_template_is_version_two_only_and_keeps_bar_and_result_bytes(self):
-        version_two = {"bar": "222c23f7daebfc66954f6240d58ea378bccea6a15337242fb60aff8d2b20def7",
-                       "result": "b344844c66961ebeb35aeb6c868b240a067a10067325d03df77dac9d25554122",
-                       "adjudicator": "f9872eb1d5f6a8b3220a6a8bdcfc403ab3889cf1eaa72f266d507f9b577cc00c"}
+        version_two = {"bar": "18d10e762c4f7ed28a1e46681535fa96e5e202093437e65ecedcb3874a9914dd",
+                       "result": "19de7711580cabaeee94b19e19f10d19cd2445f4168949453c98d52786ef1494",
+                       "adjudicator": "26ce7a7d1dbd57a415c1f54da0277adb73a153cc5bf2b6183b1a3ece030ba99b"}
         for role, expected in version_two.items():
             self.assertEqual(protocol.canonical_prompt(role, orchestration="problem_creation")["template_hash"], expected)
         slate = protocol.canonical_prompt("slate", orchestration="problem_creation")
