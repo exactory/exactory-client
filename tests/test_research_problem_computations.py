@@ -180,10 +180,8 @@ class ProblemFormalGateTests(ProblemToolsCase, ProblemDeliveryCase):
     def prepare_requested_support(self, requested=True):
         plan, observed = self.run_problem()
         self.selected = self.load_problem_module().find_current_statement(self.store.snapshot()["records"])
-        from research_harness.problem_attempt import record_attempt
-        from test_research_problem_attempt import build_attempt, build_native_attempt, put_native_attempt
-        native = build_native_attempt(self.selected["statement"], [], {})
-        self.mutate(record_attempt, build_attempt(native_attempt_digest=put_native_attempt(self, native)))
+        from test_research_problem_attempt import record_solver_attempt
+        record_solver_attempt(self, self.selected)
         ProblemComputationTests.assess_support(self, plan, observed)
         self.observe_openness()
         self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})

@@ -6,6 +6,17 @@ from .graph import obligation
 from .operations import fields, immutable_record, prepared_mutation, text
 from .problem_claims import find_assessment, find_current_statement, find_latest, require_problem
 
+# Normal solver attempt limits from DESIGN.md section 5.
+NORMAL_ATTEMPT_LIMIT = 24
+
+
+def is_native_resolved(native):
+    root = native["contract"]["root_obligation"]
+    return (native["state"]["proof_status"] in ("proved", "disproved")
+            or any(row["id"] == root and row["status"] == "accepted" for row in native["obligations"])
+            or any(row["status"] == "accepted" and row["obligation_id"] == root
+                   and row["outcome"] in ("proof", "counterexample") for row in native["acceptances"]))
+
 
 def find_attempt(records):
     return find_latest(records, "problem_attempt")
@@ -54,11 +65,11 @@ def validate_attempt(records, artifacts, value):
         if native["contract"]["original_claim"]["statement"] != statement["statement"]:
             raise ResearchError("problem_attempt_statement_mismatch", "The native contract must name the exact current statement",
                                 {"attempt_id": value["id"], "statement_id": statement["id"], "native_attempt_digest": identifier})
-        if outcomes["resolved"] != (native["state"]["proof_status"] in ("proved", "disproved")):
-            raise ResearchError("problem_attempt_outcome_mismatch", "Match the native attempt's recorded proof status",
+        if outcomes["resolved"] != is_native_resolved(native):
+            raise ResearchError("problem_attempt_outcome_mismatch", "Match the native attempt's recorded root resolution",
                                 {"attempt_id": value["id"], "native_attempt_digest": identifier})
         totals = native["totals"]
-        if (totals["moves"] > 24 or totals["runs"] > 24) and (reason is None or not reason.strip()):
+        if (totals["moves"] > NORMAL_ATTEMPT_LIMIT or totals["runs"] > NORMAL_ATTEMPT_LIMIT) and (reason is None or not reason.strip()):
             raise ResearchError("problem_attempt_extension_unexplained", "Explain extending the normal attempt limits",
                                 {"totals": totals})
     else:

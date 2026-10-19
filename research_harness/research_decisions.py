@@ -504,11 +504,11 @@ def _assess_problem_coverage(records, artifacts, reviews, expected, evidence_dig
     for review in reviews:
         packets = [packet for _, packet in collect_observed_packets(records, evaluation, review['assignment_id'])]
         current = [packet for packet in packets if packet.get('problem_evidence_digest') == evidence_digest]
+        current_evidence = [packet.get('problem_evidence', {}) for packet in current]
         missing = [key for key in ('claim', 'openness', 'value', 'assessment', 'attempt', 'results', 'citations', 'readings', 'computations', 'formal_checks')
-                   if not any((key not in ('attempt', 'results') or key in packet.get('problem_evidence', {}))
-                              and packet.get('problem_evidence', {}).get(key) == expected[key] for packet in current)]
+                   if not any(key in packet_evidence and packet_evidence[key] == expected[key] for packet_evidence in current_evidence)]
         delivered = find_delivered_readings(records, evaluation, readings,
-            [dict(packet, direction_evidence=packet.get('problem_evidence', {})) for packet in current])
+            [dict(packet, direction_evidence=packet_evidence) for packet, packet_evidence in zip(current, current_evidence)])
         missing_readings = sorted(reading['id'] for reading in readings if reading['id'] not in delivered)
         missing_artifacts = sorted({reference['sha256'] for reference in collect_references(
             [expected['computations'], expected['formal_checks']])

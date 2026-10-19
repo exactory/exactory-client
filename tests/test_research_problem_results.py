@@ -25,9 +25,11 @@ class ProblemResultTests(ProblemCase):
         return {"kind": "result", "attempt_id": identifier, "acceptance_id": acceptance["id"]}
 
     def test_result_evidence_accepted_for_an_accepted_reduction(self):
-        for outcome in ("proof", "reduction", "obstruction"):
-            item = self.bind_result(build_acceptance(outcome=outcome), "attempt-" + outcome)
-            saved = self.mutate(self.load_problem_module().record_value, self.build_value([item], "value-" + outcome))["result"]
+        for outcome, obligation_id in (("proof", "obligation-000002"), ("reduction", "obligation-000002"),
+                                       ("obstruction", "obligation-000002"), ("reduction", "obligation-000001")):
+            identifier = outcome + obligation_id
+            item = self.bind_result(build_acceptance(outcome=outcome, obligation_id=obligation_id), "attempt-" + identifier)
+            saved = self.mutate(self.load_problem_module().record_value, self.build_value([item], "value-" + identifier))["result"]
             self.assertEqual(saved["motivation"][0]["evidence"], [item])
 
     def test_result_evidence_refused_for_an_invalidated_or_hypothesis_acceptance(self):
@@ -41,13 +43,17 @@ class ProblemResultTests(ProblemCase):
                 self.assertEqual(caught.exception.details, {key: item[key] for key in ("attempt_id", "acceptance_id")})
         item = self.bind_result(build_acceptance(), "current")
         item["acceptance_id"] = "absent"
-        self.assert_error("problem_value_result_missing", lambda: self.mutate(
-            self.load_problem_module().record_value, self.build_value([item], "absent-acceptance")))
+        with self.assertRaises(ResearchError) as caught:
+            self.mutate(self.load_problem_module().record_value, self.build_value([item], "absent-acceptance"))
+        self.assertEqual(caught.exception.code, "problem_value_result_missing")
+        self.assertEqual(caught.exception.details, {"attempt_id": "current", "acceptance_id": "absent"})
 
     def test_result_evidence_refused_without_a_current_solver_attempt(self):
         item = {"kind": "result", "attempt_id": "absent", "acceptance_id": "acceptance-1"}
-        self.assert_error("problem_value_result_missing", lambda: self.mutate(
-            self.load_problem_module().record_value, self.build_value([item])))
+        with self.assertRaises(ResearchError) as caught:
+            self.mutate(self.load_problem_module().record_value, self.build_value([item]))
+        self.assertEqual(caught.exception.code, "problem_value_result_missing")
+        self.assertEqual(caught.exception.details, {"attempt_id": "absent", "acceptance_id": "acceptance-1"})
         item = self.bind_result(build_acceptance())
         records = self.store.snapshot()["records"]
         for variant in ("missing-native", "stale", "literature", "another-attempt"):
@@ -63,8 +69,10 @@ class ProblemResultTests(ProblemCase):
                 else:
                     newer = dict(changed["problem_attempt"]["attempt-1"], id="attempt-2", recorded_revision=self.store.revision + 1)
                     changed["problem_attempt"]["attempt-2"] = newer
-                self.assert_error("problem_value_result_missing", lambda: problem_evidence.validate_value(
-                    changed, self.artifacts, self.build_value([item])))
+                with self.assertRaises(ResearchError) as caught:
+                    problem_evidence.validate_value(changed, self.artifacts, self.build_value([item]))
+                self.assertEqual(caught.exception.code, "problem_value_result_missing")
+                self.assertEqual(caught.exception.details, {"attempt_id": "attempt-1", "acceptance_id": "acceptance-1"})
 
 
 class ProblemResultReviewTests(ProblemDeliveryCase):
@@ -72,18 +80,21 @@ class ProblemResultReviewTests(ProblemDeliveryCase):
         self.initialize_problem()
         self.selected = self.select_statement()
         self.observe_bars()
+        keys = ["claim", "openness", "value", "assessment", "attempt", "results", "citations", "readings", "computations", "formal_checks"]
         original = review_protocol.add_problem_evidence
         def omit_fields(records, artifacts, packet):
             original(records, artifacts, packet)
-            self.assertIsNone(packet["problem_evidence"].pop("attempt"))
-            self.assertEqual(packet["problem_evidence"].pop("results"), [])
+            self.assertIsNone(packet["problem_evidence"]["attempt"])
+            self.assertEqual(packet["problem_evidence"]["results"], [])
+            for key in keys:
+                packet["problem_evidence"].pop(key)
         with patch.object(review_protocol, "add_problem_evidence", side_effect=omit_fields):
             for reviewer in ("first", "second"):
                 self.observe("result", reviewer)
         assessed = research_decisions.assess_problem_reviews(self.store.snapshot()["records"], self.artifacts)
         pending = [row for row in assessed["obligations"] if row["code"] == "problem_evidence_unassessed"]
         self.assertEqual(len(pending), 2)
-        self.assertTrue(all(row["missing"] == ["attempt", "results"] for row in pending), pending)
+        self.assertTrue(all(row["missing"] == keys for row in pending), pending)
 
     def test_results_enter_binding_coverage_and_reviewer_evidence(self):
         self.prepare_ready(solver=True)

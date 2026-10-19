@@ -1,6 +1,8 @@
 """Attempts bind the exact problem to delivered findings or full readings."""
 
 import copy
+import json
+from unittest.mock import patch
 
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
@@ -53,6 +55,13 @@ def build_attempt(identifier="attempt-1", native_attempt_digest=None, reading=No
                  "proportion": {"extension_reason": None}}, **changes)
 
 
+def record_solver_attempt(case, statement, identifier="attempt-1"):
+    from research_harness.problem_attempt import record_attempt
+    native = build_native_attempt(statement["statement"], [], {})
+    payload = build_attempt(identifier, put_native_attempt(case, native), statement_id=statement["id"])
+    return case.mutate(record_attempt, payload)["result"]
+
+
 class ProblemAttemptTests(ProblemCase):
     def setUp(self):
         super().setUp()
@@ -91,14 +100,23 @@ class ProblemAttemptTests(ProblemCase):
 
     def test_solver_attempt_refuses_a_statement_mismatch(self):
         native = build_native_attempt(self.statement["statement"] + " ", [], {})
-        self.assert_error("problem_attempt_statement_mismatch", lambda: self.record_attempt(self.solver_payload(native)))
+        payload = self.solver_payload(native)
+        with self.assertRaises(ResearchError) as caught:
+            self.record_attempt(payload)
+        self.assertEqual(caught.exception.code, "problem_attempt_statement_mismatch")
+        self.assertEqual(caught.exception.details, {"attempt_id": "attempt-1", "statement_id": "statement-1",
+            "native_attempt_digest": payload["solver"]["native_attempt_digest"]})
 
     def test_resolved_flag_must_match_the_native_state(self):
         for proof_status, resolved in (("open", False), ("proved", True), ("disproved", True), ("invalidated", False)):
             with self.subTest(proof_status=proof_status):
                 payload = self.solver_payload(build_native_attempt(self.statement["statement"], [], {"proof_status": proof_status}), proof_status)
                 payload["outcomes"]["resolved"] = not resolved
-                self.assert_error("problem_attempt_outcome_mismatch", lambda: self.record_attempt(payload))
+                with self.assertRaises(ResearchError) as caught:
+                    self.record_attempt(payload)
+                self.assertEqual(caught.exception.code, "problem_attempt_outcome_mismatch")
+                self.assertEqual(caught.exception.details, {"attempt_id": proof_status,
+                    "native_attempt_digest": payload["solver"]["native_attempt_digest"]})
                 payload["outcomes"]["resolved"] = resolved
                 self.assertEqual(self.record_attempt(payload)["outcomes"]["resolved"], resolved)
 
@@ -111,6 +129,8 @@ class ProblemAttemptTests(ProblemCase):
                             native = build_native_attempt(self.statement["statement"], [build_acceptance(
                                 outcome=outcome, status=status, obligation_id=obligation_id)], {})
                             payload = self.solver_payload(native, "-".join((section, status, outcome, obligation_id)))
+                            payload["outcomes"]["resolved"] = (status == "accepted" and obligation_id == "obligation-000001"
+                                                                 and outcome in ("proof", "counterexample"))
                             row = {"claim": "A scoped mathematical conclusion.",
                                    "evidence": {"kind": "acceptance", "acceptance_id": "acceptance-1"}}
                             if section == "obstructions":
@@ -124,10 +144,13 @@ class ProblemAttemptTests(ProblemCase):
                                 with self.assertRaises(ResearchError) as caught:
                                     self.record_attempt(payload)
                                 self.assertEqual(caught.exception.code, "problem_attempt_evidence_missing")
-                                self.assertEqual(caught.exception.details["acceptance_id"], "acceptance-1")
+                                self.assertEqual(caught.exception.details, {"acceptance_id": "acceptance-1"})
         payload = self.solver_payload(identifier="absent-acceptance")
         payload["outcomes"]["footholds"] = [{"claim": "Absent support.", "evidence": {"kind": "acceptance", "acceptance_id": "absent"}}]
-        self.assert_error("problem_attempt_evidence_missing", lambda: self.record_attempt(payload))
+        with self.assertRaises(ResearchError) as caught:
+            self.record_attempt(payload)
+        self.assertEqual(caught.exception.code, "problem_attempt_evidence_missing")
+        self.assertEqual(caught.exception.details, {"acceptance_id": "absent"})
 
     def test_extension_reason_required_beyond_the_normal_limits(self):
         for dimension in ("moves", "runs"):
@@ -139,7 +162,7 @@ class ProblemAttemptTests(ProblemCase):
                 with self.assertRaises(ResearchError) as caught:
                     self.record_attempt(payload)
                 self.assertEqual(caught.exception.code, "problem_attempt_extension_unexplained")
-                self.assertEqual(caught.exception.details["totals"], native["totals"])
+                self.assertEqual(caught.exception.details, {"totals": native["totals"]})
             payload["proportion"]["extension_reason"] = "An additional run tests the remaining boundary case."
             self.record_attempt(payload)
         self.record_attempt(self.solver_payload(identifier="at-normal-limits"))
@@ -157,14 +180,20 @@ class ProblemAttemptTests(ProblemCase):
             bad = copy.deepcopy(payload)
             bad["id"] = "unlisted-" + section
             bad["outcomes"][section][0]["evidence"]["reading_id"] = "unlisted"
-            self.assert_error("problem_attempt_evidence_missing", lambda: self.record_attempt(bad))
+            with self.assertRaises(ResearchError) as caught:
+                self.record_attempt(bad)
+            self.assertEqual(caught.exception.code, "problem_attempt_evidence_missing")
+            self.assertEqual(caught.exception.details, {"version_id": reading["version_id"], "reading_id": "unlisted"})
 
     def test_literature_attempt_refuses_an_abstract_reading(self):
         reading = self.record_full_reading()
         self.mutate(record_reading, self.abstract_note(reading["version_id"], "read-abstract"))
         for identifier in ("read-abstract", "absent"):
             payload = build_attempt(reading=dict(reading, reading_id=identifier))
-            self.assert_error("problem_value_reading_missing", lambda: self.record_attempt(payload))
+            with self.assertRaises(ResearchError) as caught:
+                self.record_attempt(payload)
+            self.assertEqual(caught.exception.code, "problem_value_reading_missing")
+            self.assertEqual(caught.exception.details, {"kind": "reading", "version_id": reading["version_id"], "reading_id": identifier})
 
     def test_assess_attempt_reports_missing_stale_and_resolved(self):
         module = self.attempt_module()
@@ -205,8 +234,22 @@ class ProblemAttemptTests(ProblemCase):
         before = claims.compute_problem_evidence_digest(records, self.artifacts)
         self.assertIsNone(describe_binding(records, self.artifacts)["attempt"])
         self.assertIsNone(describe_evidence(records, self.artifacts)["attempt"])
-        native = build_native_attempt(self.statement["statement"], [], {})
+        native = build_native_attempt(self.statement["statement"], [
+            build_acceptance("obstruction", outcome="obstruction", checkpoint_id="checkpoint-obstruction"),
+            build_acceptance("reduction"), build_acceptance("uncited"),
+            build_acceptance("proof", outcome="proof", checkpoint_id="checkpoint-proof")], {})
+        proof_claim = dict(native["contract"]["original_claim"], statement="The first case satisfies the bound.")
+        obstruction_claim = dict(native["contract"]["original_claim"], statement="Unweighted counting loses the sharp constant.")
+        native["checkpoints"].extend([
+            dict(native["checkpoints"][0], id="checkpoint-proof", kind="proof", claim=proof_claim),
+            dict(native["checkpoints"][0], id="checkpoint-obstruction", kind="obstruction", claim=obstruction_claim)])
         payload = self.solver_payload(native)
+        payload["outcomes"]["footholds"] = [
+            {"claim": "The first case holds.", "evidence": {"kind": "acceptance", "acceptance_id": "proof"}},
+            {"claim": "Reduction to balanced sequences.", "evidence": {"kind": "acceptance", "acceptance_id": "reduction"}},
+            {"claim": "Reuse the first case.", "evidence": {"kind": "acceptance", "acceptance_id": "proof"}}]
+        payload["outcomes"]["obstructions"] = [{"claim": "Counting loses the sharp constant.",
+            "scope": "The unweighted counting argument.", "evidence": {"kind": "acceptance", "acceptance_id": "obstruction"}}]
         saved = self.record_attempt(payload)
         records = self.store.snapshot()["records"]
         self.assertNotEqual(before, claims.compute_problem_evidence_digest(records, self.artifacts))
@@ -214,14 +257,18 @@ class ProblemAttemptTests(ProblemCase):
             "id": "attempt-1", "digest": digest(saved), "native_attempt_digest": payload["solver"]["native_attempt_digest"]})
         self.assertEqual(describe_evidence(records, self.artifacts)["attempt"], {
             "kind": "solver", "outcomes": payload["outcomes"], "proportion": payload["proportion"],
-            "state": native["state"], "totals": native["totals"]})
+            "state": native["state"], "totals": native["totals"], "literature": None,
+            "acceptances": [
+                {"acceptance_id": "proof", "claim": proof_claim, "outcome": "proof", "standard": "reviewed"},
+                {"acceptance_id": "reduction", "claim": native["checkpoints"][0]["claim"], "outcome": "reduction", "standard": "reviewed"},
+                {"acceptance_id": "obstruction", "claim": obstruction_claim, "outcome": "obstruction", "standard": "reviewed"}]})
         reading = self.record_full_reading()
         literary = self.record_attempt(build_attempt("literature-2", reading=reading))
         records = self.store.snapshot()["records"]
         self.assertEqual(describe_binding(records, self.artifacts)["attempt"], {
             "id": "literature-2", "digest": digest(literary), "native_attempt_digest": None})
         self.assertEqual(describe_evidence(records, self.artifacts)["attempt"], {
-            key: literary[key] for key in ("kind", "outcomes", "proportion")})
+            **{key: literary[key] for key in ("kind", "outcomes", "proportion", "literature")}, "acceptances": []})
 
     def test_milestone_attempt_and_next_order(self):
         from research_harness.cli import status_report
@@ -274,6 +321,90 @@ class ProblemAttemptTests(ProblemCase):
 
 
 class ProblemAttemptDeliveryTests(ProblemDeliveryCase):
+    def test_accepted_root_support_before_closure_counts_as_resolved(self):
+        from research_harness.problem_attempt import record_attempt
+        from research_harness.gates import gate_state
+        self.prepare_ready(solver=True)
+        self.record_post_decision()
+        for variant in ("root-status", "root-proof", "root-counterexample"):
+            with self.subTest(variant=variant):
+                native = build_native_attempt(self.selected["statement"], [], {})
+                if variant == "root-status":
+                    native["obligations"][0]["status"] = "accepted"
+                else:
+                    native["acceptances"] = [build_acceptance(outcome=variant[5:], obligation_id="obligation-000001")]
+                payload = build_attempt(variant, put_native_attempt(self, native))
+                if variant == "root-proof":
+                    payload["outcomes"]["footholds"] = [{"claim": "The root claim is proved.",
+                        "evidence": {"kind": "acceptance", "acceptance_id": "acceptance-1"}}]
+                self.assertEqual(native["state"]["proof_status"], "open")
+                with self.assertRaises(ResearchError) as caught:
+                    self.mutate(record_attempt, payload)
+                self.assertEqual(caught.exception.code, "problem_attempt_outcome_mismatch")
+                self.assertEqual(caught.exception.details, {"attempt_id": variant,
+                    "native_attempt_digest": payload["solver"]["native_attempt_digest"]})
+                payload["outcomes"]["resolved"] = True
+                saved = self.mutate(record_attempt, payload)["result"]
+                self.assertTrue(saved["outcomes"]["resolved"])
+                records = self.store.snapshot()["records"]
+                records["problem_decision"]["decision"]["problem_evidence_digest"] = self.load_problem_module().compute_problem_evidence_digest(records, self.artifacts)
+                report = gate_state(records, self.artifacts, "post")
+                self.assertEqual({row["code"] for row in report["obligations"]}, {"problem_attempt_resolved"})
+                self.assertEqual(report["obligations"][0]["attempt_id"], variant)
+
+    def test_attempt_readings_are_delivered_covered_and_cited(self):
+        from research_harness import problem_attempt, problem_evidence, research_decisions, review_protocol
+        from research_harness.literature import import_bundle
+        from research_harness.problem_delivery import export_problem
+        self.prepare_ready(solver=True)
+        version = self.metadata(2)
+        bundle = self.bundle(version, bundle_id="attempt-only-body")
+        self.mutate(import_bundle, bundle)
+        self.mutate(record_reading, self.full_note(bundle, "read-attempt-only"))
+        reading = {"kind": "reading", "version_id": version, "reading_id": "read-attempt-only"}
+        self.mutate(problem_attempt.record_attempt, build_attempt("literature-only", reading=reading))
+        records = self.store.snapshot()["records"]
+        saved_reading = records["reading"]["read-attempt-only"]
+        self.assertNotIn(reading, problem_evidence.collect_value_items(self.load_problem_module().find_value(records)))
+        self.assertNotIn(digest(saved_reading), records["problem_openness"]["openness-assignment"]["minimum"]["reading_digests"])
+        self.assertIn({"id": "read-attempt-only", "digest": digest(saved_reading)},
+                      problem_evidence.describe_binding(records, self.artifacts)["readings"])
+        for reviewer in ("first", "second"):
+            identifier = "attempt-reading-" + reviewer
+            self.observe("result", reviewer, identifier=identifier)
+            assignment = self.store.snapshot()["records"]["review_assignment"][identifier]
+            packet = json.loads(self.artifacts.read(assignment["packet"]))
+            self.assertIn("read-attempt-only", [row["id"] for row in packet["problem_evidence"]["readings"]])
+            self.assertIn("read-attempt-only", [row["reading_id"] for row in packet["problem_evidence"]["passages"]])
+            self.assertIn("2601.00002v1", [row["locator"] for row in packet["problem_evidence"]["citations"]])
+        assessed = research_decisions.assess_problem_reviews(self.store.snapshot()["records"], self.artifacts)
+        self.assertTrue(assessed["ready"], assessed["obligations"])
+        self.mutate(self.load_problem_module().record_decision, {"id": "attempt-citations", "action": "post",
+            "review_ids": assessed["review_ids"], "bar_review_ids": assessed["bar_review_ids"],
+            "reason": "The result reviewers received the assessed literature attempt."})
+        export_problem(self.store, self.root / "attempt-export")
+        citations = json.loads((self.root / "attempt-export" / "citations.json").read_text())
+        self.assertIn("2601.00002v1", [row["locator"] for row in citations])
+        stale = copy.deepcopy(self.store.snapshot()["records"])
+        stale["problem_attempt"]["literature-only"]["statement_id"] = "old-statement"
+        self.assertNotIn("read-attempt-only", [row["id"] for row in problem_evidence.collect_readings(stale)])
+        payload = build_attempt("literature-omitted", reading=reading)
+        payload["literature"]["description"] += " The critical assessment also distinguishes the finite cases."
+        self.mutate(problem_attempt.record_attempt, payload)
+        original = review_protocol.add_problem_evidence
+        def omit_reading(records, artifacts, packet):
+            original(records, artifacts, packet)
+            evidence = packet["problem_evidence"]
+            evidence["readings"] = [row for row in evidence["readings"] if row["id"] != "read-attempt-only"]
+            evidence["passages"] = [row for row in evidence["passages"] if row["reading_id"] != "read-attempt-only"]
+        with patch.object(review_protocol, "add_problem_evidence", side_effect=omit_reading):
+            for reviewer in ("first", "second"):
+                self.observe("result", reviewer, identifier="without-reading-" + reviewer)
+        assessed = research_decisions.assess_problem_reviews(self.store.snapshot()["records"], self.artifacts)
+        pending = [row for row in assessed["obligations"] if row["code"] == "problem_evidence_unassessed"]
+        self.assertEqual({row["review_id"] for row in pending}, {"review-without-reading-first", "review-without-reading-second"})
+        self.assertTrue(all(row["missing"] == ["readings"] and row["reading_ids"] == ["read-attempt-only"] for row in pending), pending)
+
     def test_resolved_attempt_blocks_the_post(self):
         from research_harness.problem_attempt import record_attempt
         from research_harness.gates import gate_state
@@ -283,7 +414,9 @@ class ProblemAttemptDeliveryTests(ProblemDeliveryCase):
         payload = build_attempt("resolved", put_native_attempt(self, native))
         payload["outcomes"]["resolved"] = True
         self.mutate(record_attempt, payload)
-        report = gate_state(self.store.snapshot()["records"], self.artifacts, "post")
+        records = self.store.snapshot()["records"]
+        records["problem_decision"]["decision"]["problem_evidence_digest"] = self.load_problem_module().compute_problem_evidence_digest(records, self.artifacts)
+        report = gate_state(records, self.artifacts, "post")
         self.assertFalse(report["ready"])
-        self.assertIn("problem_attempt_resolved", {row["code"] for row in report["obligations"]})
+        self.assertEqual({row["code"] for row in report["obligations"]}, {"problem_attempt_resolved"})
         self.assert_error("problem_minimum_unmet", lambda: self.record_post_decision("resolved-decision"))

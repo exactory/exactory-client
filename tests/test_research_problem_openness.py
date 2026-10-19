@@ -45,10 +45,8 @@ class ProblemOpennessTests(ProblemCase):
     def test_unresolved_and_settled_findings_block_with_actionable_next(self):
         from research_harness.problem_openness import assess_openness
         import test_research_problem_openness_minimum as fixtures
-        from research_harness.problem_attempt import record_attempt
-        from test_research_problem_attempt import build_attempt, build_native_attempt, put_native_attempt
-        native = build_native_attempt(self.selected["statement"], [], {})
-        self.mutate(record_attempt, build_attempt(native_attempt_digest=put_native_attempt(self, native)))
+        from test_research_problem_attempt import record_solver_attempt
+        record_solver_attempt(self, self.selected)
         work = self.metadata()
         reading = fixtures.ProblemOpennessMinimumTests.read(self, work)
         search = fixtures.ProblemOpennessMinimumTests.search(self, [work])
@@ -181,10 +179,8 @@ class ProblemOpennessMinimumSchemaTests(ProblemCase):
         self.initialize_problem()
         self.put_selecting_slate()
         self.selected = self.select_statement(candidate_id="candidate-1")
-        from research_harness.problem_attempt import record_attempt
-        from test_research_problem_attempt import build_attempt, build_native_attempt, put_native_attempt
-        native = build_native_attempt(self.selected["statement"], [], {})
-        self.mutate(record_attempt, build_attempt(native_attempt_digest=put_native_attempt(self, native)))
+        from test_research_problem_attempt import record_solver_attempt
+        record_solver_attempt(self, self.selected)
 
     def prepare_review_route(self):
         from test_research_problem_reviews import ProblemReviewTests

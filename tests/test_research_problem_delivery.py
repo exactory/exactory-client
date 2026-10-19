@@ -45,13 +45,11 @@ class ProblemDeliveryCase(ProblemCase):
             formal_statement={"language": "Lean", "text": "theorem bound : True := by trivial"} if formal else None)
         item = self.record_full_reading()
         from research_harness.problem_attempt import record_attempt
-        from test_research_problem_attempt import build_attempt, build_native_attempt, put_native_attempt
+        from test_research_problem_attempt import build_attempt, record_solver_attempt
         if solver:
-            native = build_native_attempt(self.selected["statement"], [], {})
-            attempt = build_attempt(native_attempt_digest=put_native_attempt(self, native))
+            record_solver_attempt(self, self.selected)
         else:
-            attempt = build_attempt(reading=item)
-        self.mutate(record_attempt, attempt)
+            self.mutate(record_attempt, build_attempt(reading=item))
         self.observe_openness()
         self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})
         self.mutate(self.load_problem_module().record_value, self.build_value([item]))

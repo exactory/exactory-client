@@ -1495,11 +1495,20 @@ For a literature attempt, `solver` is null and `literature` is
 store's full readings and a nonempty critical assessment of the substantive
 attempt on the exact statement. The shared full-reading validator applies;
 abstract, missing, deferred or incomplete readings give
-`problem_value_reading_missing`.
+`problem_value_reading_missing`. Readings of the current literature attempt
+enter the same collection as value readings: their passages are delivered to
+the result reviewers and checked for coverage, and their works are projected
+as citations and exported with the problem, even when no value paragraph or
+openness finding cites them.
 
 `outcomes` is `{resolved, footholds, unresolved, obstructions}`. `resolved` is
-boolean; for a solver it equals `state.proof_status in ("proved", "disproved")`
-(`problem_attempt_outcome_mismatch`). `footholds` is an array of `{claim, evidence}`,
+boolean; a solver attempt is resolved when `state.proof_status` is `proved` or
+`disproved`, the root obligation (`contract.root_obligation`) has status
+`accepted`, or an accepted root acceptance has outcome `proof` or `counterexample`.
+This includes accepted root support delivered before closure while proof status
+is still `open`. A different `resolved` flag gives `problem_attempt_outcome_mismatch`.
+A root reduction remains eligible foothold and result evidence.
+`footholds` is an array of `{claim, evidence}`,
 `unresolved` of `{description}`, and `obstructions` of `{claim, scope, evidence}`.
 These arrays may be empty; their text fields are nonempty. Evidence is either
 `{kind: "acceptance", acceptance_id}` for the solver binding or
@@ -1584,12 +1593,19 @@ threshold and statement currency checks.
 The evidence binding adds `attempt: {id, digest, native_attempt_digest}` (null
 when absent, with a null native digest for literature) and distinct cited
 `results: [{attempt_id, acceptance_id, digest}]`, where each result digest hashes
-the acceptance. Reviewer evidence adds `attempt` with its `kind`, `outcomes` and
-`proportion`, plus native `state` and `totals` for a solver, and
+the acceptance. Reviewer evidence adds `attempt` with its `kind`, `outcomes`,
+`proportion` and `literature` binding (`{description, readings}` as recorded for
+literature, null for a solver), plus native `state` and `totals` for a solver.
+Its `acceptances` array carries `{acceptance_id, claim, outcome, standard}` for
+every acceptance cited by a solver foothold or obstruction, once in order of
+first citation, with the claim taken from its checkpoint; the array is empty
+for literature attempts. The current literature attempt's full readings appear
+in the reviewer readings and passages, coverage check and projected citations.
+Reviewer evidence also includes
 `results: [{attempt_id, acceptance_id, claim, outcome, standard}]`, taking the
-claim from the acceptance's checkpoint. Both result reviewers must receive the
-current `attempt` and `results` fields, including null or empty fields when
-applicable; omissions return `problem_evidence_unassessed`.
+claim from the acceptance's checkpoint. All ten evidence keys must be present
+and equal the current expected values in the observed result packets, including
+null or empty values; omissions return `problem_evidence_unassessed`.
 
 The problem bar uses `exactory-problem-review-v2/bar` and receives `area`,
 `field` and source inventory/deliveries with the statement, title, neighbours and

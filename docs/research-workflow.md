@@ -110,6 +110,10 @@ problem workspace (for example `..` from `<workspace>/attack`), then
 For `kind: "literature"`, use null `solver` and
 `literature: {readings: [{version_id, reading_id}], description}` with full readings
 and a critical assessment of the exact statement. Exactly one binding is non-null.
+The current literature attempt's full readings are delivered with their passages
+to the result reviewers, checked for coverage and cited like value readings.
+Those works are included in the exported problem's citations even when its
+value or openness evidence does not otherwise cite them.
 `outcomes` gives `resolved`, `footholds: [{claim, evidence}]`,
 `unresolved: [{description}]` and `obstructions: [{claim, scope, evidence}]`.
 Evidence names an accepted native acceptance or a listed full reading.
@@ -120,6 +124,10 @@ attempt grade without a current attempt gives `problem_rubric_attempt_unbound`.
 `next` names a missing attempt before missing openness. A resolved candidate
 leaves the open-problem path and is delivered as a result. Unresolved work is
 consideration evidence, never evidence of difficulty or a demonstrated obstruction.
+A solver attempt is resolved by proof status `proved` or `disproved`, an
+`accepted` root obligation, or an accepted root `proof` or `counterexample`
+acceptance, including root support delivered before closure with proof status
+still `open`. A root reduction remains eligible foothold and result evidence.
 
 Tools remain available in any order before posting: set budgets and depth,
 search the field and neighbouring formulations, read sources, preserve access
@@ -139,6 +147,9 @@ or `{kind: "result", attempt_id, acceptance_id}`. A result must be an accepted
 `problem_value_result_missing` identifies the invalid citation. The evidence
 binding and reviewer packet carry `attempt` and `results`; the latter includes
 the acceptance's checkpoint claim, outcome and standard for each cited result.
+The attempt evidence also carries its literature description and reading binding,
+or the checkpoint claims, outcomes and standards of all acceptances cited by its
+solver footholds and obstructions, once in first citation order.
 Both result reviewers must receive these fields (`problem_evidence_unassessed`).
 An unavailable source stays unread. A requested formal check records the exact
 native claim, proof policy and required deliverables before verification. After
