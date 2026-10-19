@@ -176,7 +176,7 @@ class ProblemReviewTests(LiteratureCase):
     def test_problem_slate_template_is_version_two_only_and_keeps_bar_and_result_bytes(self):
         version_two = {"bar": "b0970315305977542a7b2099925a3c770087daf2e9a33a1c34d3660c72069b53",
                        "result": "19de7711580cabaeee94b19e19f10d19cd2445f4168949453c98d52786ef1494",
-                       "adjudicator": "e90b8eacc63d2f9e42d8b20f6fb2fbbd64d4c1bd6ac9e9d8b221edf1530bf69d"}
+                       "adjudicator": "76d75d5e45a8207e47fb9bc317dab4d40ff6de041666f48fc4a7ddbb6937bbe8"}
         for role, expected in version_two.items():
             self.assertEqual(protocol.canonical_prompt(role, orchestration="problem_creation")["template_hash"], expected)
         slate = protocol.canonical_prompt("slate", orchestration="problem_creation")
@@ -184,6 +184,11 @@ class ProblemReviewTests(LiteratureCase):
         for content in ("value.rubric_potential", "not_assessed", "B1", "B2", "priority", "level 1",
                         "neither openness nor significance", "Continue your own bar assessment"):
             self.assertIn(content, slate["text"])
+        # The version keys are promised for a material objection only; a rubric objection's packet carries none.
+        adjudicator = protocol.canonical_prompt("adjudicator", orchestration="problem_creation")["text"]
+        for content in ("For a material objection, the packet delivers", "one entry for every reference the version cites",
+                        "a cited record with its content under record", "A rubric objection carries none of those three keys"):
+            self.assertIn(content, adjudicator)
         with self.assertRaises(ResearchError) as caught:
             protocol.canonical_prompt("slate", orchestration="problem_creation", version=1)
         self.assertEqual(caught.exception.code, "invalid_review_role")
