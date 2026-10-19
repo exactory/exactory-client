@@ -90,6 +90,7 @@ artifact or an `analytical` manifest cannot supply computational proof,
 counterexample or strategy-decision credit (`exploratory_evidence`). A native
 certificate or Lean result must have its admitted verification run and candidate
 interpretation; historical accepted imports replay unchanged.
+Use `search deliver-attempt` to export the current attempt and `search deliver-closure` to export a completed objective through [common-store delivery](SEARCH.md#common-store-delivery).
 
 ### Remaining order conditions
 

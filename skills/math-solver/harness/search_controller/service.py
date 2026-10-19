@@ -60,6 +60,11 @@ class Controller:
                       "Native closure delivery has no mutation routing")
             from .closure_delivery import deliver_closure
             return deliver_closure(self, spec, expected_revision, request_id)
+        if name == "deliver-attempt":
+            s.require(target is None and workspace_root is None and hook_session is None,
+                      "Native attempt delivery has no mutation routing")
+            from .attempt_delivery import deliver_attempt
+            return deliver_attempt(self, spec, expected_revision, request_id)
         if name in {"status", "next", "strategy-context"}:
             s.require(set(spec) <= {"session_id", "focus_request_id", "objective_id", "contract_digest"}, "Unknown read-only validation field")
             state = self.status()
