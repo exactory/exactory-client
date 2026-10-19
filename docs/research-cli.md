@@ -1619,8 +1619,8 @@ evidence. A cited computation requires its admission, reconciled output and an
 assessment that lists and validates that result, with its execution accounting
 and resource obligations satisfied. Whole-objective obligations and obligations
 about other results do not invalidate a supported paragraph. Probe-origin
-outputs retain `exploratory_evidence` and cannot be promoted by citation. An
-uncited computation remains a probe.
+outputs retain `exploratory_evidence` and cannot be promoted by citation; an
+admitted computation keeps its admission whether or not a paragraph cites it.
 
 The attempt projection gives `kind`, `outcomes`, `proportion`, the recorded
 `literature` binding (null for a solver), and `acceptances`: each acceptance cited
@@ -1793,7 +1793,7 @@ records retain nonmanaged dependency composition and empirical meaning.
 | `problem_candidate_unselected` | Formulate a candidate that the latest slate selects, or record a new slate. |
 | `problem_statement_missing` | Select the exact statement and resolution criteria. |
 | `problem_attempt_missing`, `problem_attempt_stale` | Record an attempt for the current statement and criteria; a stale obligation names `attempt_id` and `statement_id`. A superseded native snapshot also names `native_attempt_digest` and `latest_native_attempt_digest`. |
-| `problem_attempt_resolved` | The attempt resolved this statement: deliver it as a result through math-solver and do not post it as open; the obligation names `attempt_id`. |
+| `problem_attempt_resolved` | The attempt resolved this statement, so the candidate leaves the open-problem path: a literature resolution redirects to the established result and its source, a solver resolution follows math-solver's own result delivery; the obligation names `attempt_id`. |
 | `problem_rubric_attempt_unbound` | Bind the passing current assessment's attempt judgment to a current attempt record; the obligation names `assessment_id` and `statement_id`. |
 | `problem_attempt_unbound`, `problem_attempt_statement_mismatch`, `problem_attempt_outcome_mismatch` | Deliver and bind the native attempt from this store with the exact claim and matching resolved outcome. |
 | `problem_attempt_superseded` | Bind the snapshot named by the current pointer for `(attack_root, objective_id)`; both native digests identify the succession. |
@@ -1853,10 +1853,12 @@ An unready export returns `readiness_required`. The deterministic projection is
 `citations.json`, optional `formal-statement.txt`, and `problem-export.json`.
 The manifest contains `{statement_id, statement_digest,
 problem_evidence_digest, decision_id, area, formal_statement_language,
-files: {name: sha256}}`. Citations are projected once per distinct work cited
-by the decisive openness/settling readings and value readings, as
-`{citation, locator}` using metadata citation and DOI, then arXiv id, then the
-read-version bundle's HTTPS URL. Every cited work has a reading in this store.
+files: {name: sha256}}`. Citations are projected once per distinct work among the
+decisive openness and settling readings, the value readings, the readings of the
+current literature attempt and the full readings that the self-assessment's source
+references name, as `{citation, locator}` using metadata citation and DOI, then
+arXiv id, then the read-version bundle's HTTPS URL. Every cited work has a reading
+in this store.
 
 The math-conjecturer delivery section checks the exported citation locators
 and duplicates, runs `exactory post-problem` on the exported files, then records

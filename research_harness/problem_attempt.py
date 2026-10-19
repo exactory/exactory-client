@@ -187,7 +187,10 @@ def assess_attempt(records, artifacts):
             resolved.append(recorded)
     if resolved:
         concerned = max(resolved, key=lambda row: (row["recorded_revision"], row["id"]))
-        pending.append(obligation("problem_attempt_resolved", "The attempt resolved this statement: deliver it as a result through math-solver and do not post it as open.", attempt_id=concerned["id"]))
+        explanation = ("The literature resolved this statement: redirect to the established result and its source; the candidate leaves the open-problem path."
+                       if concerned["kind"] == "literature" else
+                       "The solver resolved this statement: deliver the result through math-solver's own delivery; the candidate leaves the open-problem path.")
+        pending.append(obligation("problem_attempt_resolved", explanation, attempt_id=concerned["id"]))
     assessment = find_assessment(records)
     if (assessment is not None and assessment["statement_id"] == statement_id
             and assessment["grades"]["attempt"] == "pass" and not current):

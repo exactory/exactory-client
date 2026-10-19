@@ -169,7 +169,10 @@ the bar. Several problems from one exploration is the normal case, not an except
 2. Declare in `neighbours` every neighbouring formulation that openness and value must cover:
    strengthenings, relaxations, model versions, siblings and the next parameter. A neighbour
    you do not declare is a neighbour the openness finding does not check.
-3. Where it is useful and feasible, add a `formal_statement` (`{language, text}`).
+3. Where it is useful and feasible, add a `formal_statement` (`{language, text}`). When you
+   supply one, make sure that it expresses the intended mathematics: its correspondence to the
+   statement is assessed under A1, and a passing native check of a weaker formal claim does not
+   establish it.
 4. Record a changed statement or changed criteria under a new statement id. After a change,
    reassess the openness finding, the attempt, the value arguments and the reviews that the
    change affects, and reuse the work that still applies.
@@ -230,11 +233,11 @@ and it is honest about its outcome.
     new attempt record binds the latest snapshot.
 
 Describe unresolved work as consideration of the question, never as evidence of difficulty and
-never as an obstruction; an obstruction has a scope and a demonstration. When the attempt
-resolves the statement, deliver the result through math-solver's own delivery and do not post the
-candidate as an open problem (`problem_attempt_resolved`); the resolution stays on the record even
-when a later attempt is recorded. When the literature already resolves the statement, redirect to
-the established result and its source.
+never as an obstruction; an obstruction has a scope and a demonstration. A resolution takes the
+candidate off the open-problem path (`problem_attempt_resolved`), and it stays on the record even
+when a later attempt is recorded. When a solver attempt resolves the statement, deliver the result
+through math-solver's own delivery. When the literature resolves it, redirect to the established
+result and its source; start no solver work to reproduce an established result.
 
 ## Openness
 
@@ -290,24 +293,46 @@ grade it; the codes and grades stay in the assessment record, out of the public 
 
 ### The rubric
 
-Admission has six items, each `pass` or `fail`. A1 precision: the statement and criteria are
-exact. A2 openness: a current `supported_open` finding covers the statement and each neighbour.
-A3 contribution: the record names what the question adds beyond existing formulations. A4
-clarity: an appropriate researcher can understand the statement. A5 non-routine, considered: the
-record lists the routine routes considered and answers each specific objection of triviality. The
-record certifies nothing about what routine methods cannot do. A6 readiness: the harness read every
-decisive source in full and can state the claim's standing. A decisive source that is unavailable,
-or mathematics the harness cannot assess, fails A6.
+Admission has six items, each `pass` or `fail`. A1 precision: the statement and the criteria are
+exact mathematical statements, and a proof or a disproof meets them without ambiguity; when a
+formal statement is supplied, its correspondence to the intended mathematics is assessed. A2
+openness: a current `supported_open` finding covers the exact statement, with dated coverage and
+the known status recorded for each declared neighbour (a neighbour found settled is a recorded
+status, not a failure), and every decisive source is read in full. A3 contribution: the record
+identifies what the question adds beyond existing formulations; for an equivalence, reduction or
+sharpening of a known open question, the relationship is established by proof or by a full
+reading, the original is named, and the new contribution is distinguished from what remains
+unresolved. A4 clarity: an appropriate researcher can understand the statement. A5 non-routine,
+considered: the record lists the routine routes considered and answers each specific objection of
+triviality. The record certifies nothing about what routine methods cannot do. A6 readiness: the
+harness read every decisive source in full and can state the claim's standing. A decisive source
+that is unavailable, or mathematics the harness cannot assess, fails A6.
 
-Significance has two grounds, B1 (standing in an active line) and B2 (influence). Each is graded
-0 (absent), 1 (asserted), 2 (supported) or 3 (compelling). The significance is the higher of the
-two grades. The grounds never add. Comparative priority is graded 0 (no comparison), 1 (neighbours
-listed), 2 (credible alternatives compared and the strongest objection answered) or 3 (a concrete
+Significance has two grounds, B1 (standing in an active line) and B2 (influence), graded on one
+scale. The significance is the higher of the two grades; the grounds never add. Level 0, absent:
+no specific account. Level 1, asserted: an account is stated, but its established premises lack
+evidence, or its argued part does not answer the strongest objection. Level 2, supported: the
+established premises have appropriate evidence (verified proofs, decisive readings or admitted
+computations); the account identifies a substantial mathematical advance, explains its relevance,
+and answers the strongest objection; the remaining uncertainty is explicit. Level 3, compelling:
+level 2, plus a demonstrated or compellingly argued account that a resolution would remove a
+consequential obstacle, meet an important unmet need, or change an organizing explanation or
+connection, with an explanation of why existing results and nearby alternatives do not already
+provide that gain; a conceptual case need not contain a proved implication. Under B1 the question
+meets an unresolved need of a line the community works on now: the line is active and the
+question's place in it is fixed by a reduction or another mathematical connection; activity alone
+is insufficient, and shared notation is not a connection. Under B2 a resolution changes something
+for mathematics whether or not the line is active, by the carrying criterion below, and the argued
+part says why that change matters. Comparative priority is graded 0 (no comparison), 1 (neighbours
+listed, but the strongest case that the question is uninteresting is not named), 2 (credible
+alternatives compared by mathematical payoff and the strongest objection answered) or 3 (a concrete
 advantage supported by documented mathematical distinctions). The attempt item passes when the
 record holds a bounded attempt or a critical full-reading assessment of an existing attempt on the
 exact statement, with what it proved, left unresolved and demonstrated. Calibration is `pass` or
-`fail`. Accessibility is descriptive: `E-F` (footholds give an entry), `E-A` (a proposed route
-without footholds) or `E-N` (no footholds and no proposed route).
+`fail`. Accessibility is descriptive: `E-F` (relevant footholds give a meaningful entry or partial
+progress, and a smallest unresolved case is identified where applicable, relative to the assessed
+state of knowledge), `E-A` (a proposed route without established footholds) or `E-N` (no footholds
+and no proposed route).
 
 The primary account names one ground and one criterion, `V1` to `V8`. Each criterion has an
 established part, given here, and an argued part: why that change matters. V1 consequence: exact
@@ -348,8 +373,9 @@ evidence the record binds delivered to them.
 
 1. Keep the two bars of the slate for the result reviews and the decision.
 2. Assign one result review to each of the two bar reviewers. Each result review continues that
-   reviewer's bar session; the harness refuses any other reviewer with `review_bar_continuity`
-   and refuses the assignment while a bar is still on the version 1 prompt
+   reviewer's bar session; the harness refuses a reviewer without that session
+   (`review_bar_continuity`), except a replacement that a validated context repair installed in
+   the preserved slot, and refuses the assignment while a bar is still on the version 1 prompt
    (`problem_bar_calibration_required`). When a route is not yet verified, register and test it
    first with `review-route` and `review-probe`.
 3. Assign each result review with `review-assignment`, role `result` and `dossier_id: null`;

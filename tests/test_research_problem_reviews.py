@@ -162,14 +162,14 @@ class ProblemReviewTests(LiteratureCase):
             self.assertIn(content, bar)
         for content in ('are not reasons against a question by themselves',
                         'a question without footholds is admissible when its significance case reaches level 3',
-                        'the explanation the resolution would give is itself the significance', 'Level 2 is a supported claim: a substantial advance and its relevance'):
+                        'the explanation the resolution would give is itself the significance', 'Level 2, supported:'):
             self.assertIn(content, bar)
         self.assertNotIn('not reasons against a question by themselves', protocol.canonical_prompt("bar", orchestration="problem_creation", version=1)["text"])
 
     def test_problem_slate_template_is_version_two_only_and_keeps_bar_and_result_bytes(self):
-        version_two = {"bar": "e8e516d178d4e5516d58a98ad57caa711bd381bfea8ce4f10287ea3567298488",
-                       "result": "15542e9829b0ce4631fbd5754c41aa0f11277c146a14b80cb01b96bf4915a898",
-                       "adjudicator": "909db9012b5ba067fcd9be1c94031b41ef4b36eb400795bcb5ddfffe96a6021a"}
+        version_two = {"bar": "222c23f7daebfc66954f6240d58ea378bccea6a15337242fb60aff8d2b20def7",
+                       "result": "b344844c66961ebeb35aeb6c868b240a067a10067325d03df77dac9d25554122",
+                       "adjudicator": "f9872eb1d5f6a8b3220a6a8bdcfc403ab3889cf1eaa72f266d507f9b577cc00c"}
         for role, expected in version_two.items():
             self.assertEqual(protocol.canonical_prompt(role, orchestration="problem_creation")["template_hash"], expected)
         slate = protocol.canonical_prompt("slate", orchestration="problem_creation")
