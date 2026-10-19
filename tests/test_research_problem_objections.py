@@ -306,11 +306,8 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
                             dict(output, id="review-repaired-refresh", dossier_id=None, assignment_id="repaired-refresh"))["result"]
         self.assertEqual(saved["assignment_id"], "repaired-refresh")
 
-    def test_an_updated_slate_objection_needs_a_resolution_of_its_new_version(self):
-        self.prepare_reviews(slate_reviewer="first")
-        self.refresh_reviews("resolved")
-        self.assertTrue(decisions.assess_problem_reviews(self.store.snapshot()["records"], self.artifacts)["ready"])
-        self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"])
+    def update_slate_objection(self):
+        """After a new candidate, the slate reviewer restates the objection with new evidence: a new material version."""
         self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
         counterexample = self.artifacts.put(b"A counterexample to the earlier resolution.", "text/plain")
         output = self.build_slate_output(["candidate-1", "candidate-2"])
@@ -321,6 +318,47 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         updated = self.observe("slate", "first", output, identifier="slate-first-refreshed")
         self.record_slate("slate-2", deferred=[{"candidate_id": "candidate-2", "evidence_needed": "A documented active line."}],
                           review_ids=[updated["id"]])
+        return updated, counterexample
+
+    def test_a_changed_objection_version_refreshes_the_fixed_adjudicator(self):
+        bars = ["review-bar-first", "review-bar-second"]
+        self.prepare_reviews(slate_reviewer="first")
+        self.refresh_reviews("resolved")
+        self.observe_adjudication(review_ids=bars)
+
+        def reassign(reviewer, identifier):
+            return self.assign("adjudicator", reviewer, identifier=identifier, review_ids=bars,
+                               objection_id="unsupported-implication")
+        self.assert_error("review_adjudicator_fixed", lambda: reassign("focused-third", "focused-unchanged"))
+        self.update_slate_objection()
+        for reviewer, status in (("first", "resolved"), ("second", "contested")):
+            output = self.build_review_output("result")
+            output["value"]["objection_findings"] = [self.make_finding(status)]
+            self.observe("result", reviewer, output, identifier="reassessed-" + reviewer)
+        reviews = decisions.assess_problem_reviews(self.store.snapshot()["records"], self.artifacts)
+        self.assertIn("research_objection_unresolved", {row["code"] for row in reviews["obligations"]})
+        self.assert_error("review_adjudicator_fixed", lambda: reassign("focused-fourth", "focused-other"))
+        self.observe_adjudication(review_ids=bars, identifier="focused-refreshed")
+        records = self.store.snapshot()["records"]
+        previous, refreshed = (json.loads(self.artifacts.read(records["review_assignment"][identifier]["packet"]))
+                               for identifier in ("focused", "focused-refreshed"))
+        current = protocol.build_packet(records, self.artifacts, None, "result", "first")["material_objections"][0]
+        self.assertEqual(refreshed["objection"]["material_version"], current["material_version"])
+        self.assertEqual(refreshed["focused_refresh"], {"assignment_id": "focused",
+            "previous_problem_evidence_digest": previous["problem_evidence_digest"],
+            "problem_evidence_digest": refreshed["problem_evidence_digest"],
+            "previous_material_version": previous["objection"]["material_version"],
+            "material_version": current["material_version"]})
+        self.assertEqual(records["review_assignment"]["focused-refreshed"]["history_assignment_id"], "focused")
+        self.assert_error("review_adjudicator_fixed", lambda: reassign("focused-third", "focused-repeat"))
+        self.assert_delivered()
+
+    def test_an_updated_slate_objection_needs_a_resolution_of_its_new_version(self):
+        self.prepare_reviews(slate_reviewer="first")
+        self.refresh_reviews("resolved")
+        self.assertTrue(decisions.assess_problem_reviews(self.store.snapshot()["records"], self.artifacts)["ready"])
+        self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"])
+        updated, counterexample = self.update_slate_objection()
         records = self.store.snapshot()["records"]
         packet = protocol.build_packet(records, self.artifacts, None, "result", "first")
         [objection] = packet["material_objections"]

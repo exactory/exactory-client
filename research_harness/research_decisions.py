@@ -529,7 +529,7 @@ def _assess_problem_coverage(records, artifacts, reviews, expected, evidence_dig
         assessment_artifacts.extend(reference['record']['artifact'] for reference in expected['assessment_evidence']
                                     if reference.get('kind') == 'record' and reference['record_kind'] == 'local_artifact')
         missing_artifacts = sorted({reference['sha256'] for reference in collect_references(
-            [assessment_artifacts, expected['computations'], expected['formal_checks']])
+            [assessment_artifacts, expected['openness_searches'], expected['computations'], expected['formal_checks']])
             if not any(has_attachment(evaluation, packet, reference) for packet in current)})
         if missing or missing_readings or missing_artifacts:
             obligations.append(obligation('problem_evidence_unassessed',

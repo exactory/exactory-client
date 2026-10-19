@@ -1311,17 +1311,22 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 previous_state = assignment_state(records, artifacts, previous['id'])
                 if problem and not correction and previous_state['ready']:
                     previous_packet = _read_json(artifacts, previous['packet'])
-                    if previous_packet['problem_evidence_digest'] != packet['problem_evidence_digest']:
+                    # A material objection's version changes with its finding even when the evidence digest does not.
+                    previous_version = previous_packet['objection'].get('material_version')
+                    version = packet['objection'].get('material_version')
+                    if (previous_packet['problem_evidence_digest'] != packet['problem_evidence_digest']
+                            or previous_version != version):
                         if (normalized_text(previous['reviewer_id']) != normalized_text(value['reviewer_id'])
                                 or previous['route_id'] != value['route_id']
                                 or normalized_text(previous['author_id']) != normalized_text(value['author_id'])):
-                            raise ResearchError('review_adjudicator_fixed', 'Changed problem evidence continues the same focused adjudicator and route')
+                            raise ResearchError('review_adjudicator_fixed', 'Changed problem evidence or a changed objection version continues the same focused adjudicator and route')
                         focused_parent = previous
                         packet.pop('evidence', None)
                         packet.pop('digest', None)
                         packet['focused_refresh'] = {'assignment_id': previous['id'],
                             'previous_problem_evidence_digest': previous_packet['problem_evidence_digest'],
-                            'problem_evidence_digest': packet['problem_evidence_digest']}
+                            'problem_evidence_digest': packet['problem_evidence_digest'],
+                            'previous_material_version': previous_version, 'material_version': version}
                         packet['evidence'] = _evidence(artifacts, packet)
                         packet['digest'] = digest(packet)
                         continue

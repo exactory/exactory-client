@@ -1776,8 +1776,12 @@ the current version, or an independent focused adjudication of the current
 version must find the objection not upheld; a resolution of an earlier version
 disposes of nothing later, and the changed currency lets the same reviewers
 reassess. Problem adjudication uses the existing review tools
-with `dossier_id: null`; changed value evidence retains the focused adjudicator
-and its observed history rather than opening a new reviewer choice.
+with `dossier_id: null`; changed value evidence, or a changed material version of
+the adjudicated objection, retains the focused adjudicator and its observed history
+rather than opening a new reviewer choice: its next assignment is a
+`focused_refresh` naming the previous and current evidence digests and material
+versions, and under an unchanged digest and version another assignment returns
+`review_adjudicator_fixed`.
 The adjudicator template is `exactory-problem-review-v2/adjudicator`. For a
 below-threshold rubric grade, set `context.objection_id` to
 `rubric:<review_id>:<item>` with both original result review IDs. Items are

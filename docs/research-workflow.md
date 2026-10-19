@@ -118,7 +118,7 @@ context repair also refreshes its slate review there.
 A result review is refused before dispatch while a current or cited bar is on
 the version 1 template, and every result packet carries the current bars, also
 after a context repair. A result reviewer whose completed review was given under
-other evidence, other bars or other applicable slate objections reassesses in the
+other evidence, other bars or other material objection versions reassesses in the
 same session and slot; under the same conditions a repeat is refused.
 
 Formulate a selected candidate with `problem-statement` and its `candidate_id`;

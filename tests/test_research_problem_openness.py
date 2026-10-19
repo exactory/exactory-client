@@ -4,7 +4,7 @@ from pathlib import Path
 
 from test_research_problem_claims import ProblemCase
 from test_research_problem_delivery import ProblemDeliveryCase
-from research_harness import problem_evidence, research_decisions as decisions
+from research_harness import problem_evidence, research_decisions as decisions, review_protocol
 from research_harness.evidence import digest
 from research_harness.literature import record_search
 from unittest.mock import patch
@@ -356,6 +356,21 @@ class ProblemOpennessDeliveryTests(ProblemDeliveryCase):
         self.assertEqual(bound["sources"], [records["source"][row["source_id"]] for row in search["responses"]])
         self.assertTrue(any(entry["artifact"] == bound["sources"][0]["response"] for entry in packet["evidence"]))
         self.assertEqual(self.find_unassessed(), [])
+
+    def test_a_result_without_the_captured_response_bytes_leaves_the_evidence_unassessed(self):
+        real = review_protocol._evidence
+
+        def attach_without_responses(artifacts, value, **options):
+            searches = (value.get("problem_evidence") or {}).get("openness_searches", [])
+            responses = {source["response"]["sha256"] for row in searches for source in row["sources"]}
+            return [entry for entry in real(artifacts, value, **options) if entry["artifact"]["sha256"] not in responses]
+        with patch.object(review_protocol, "_evidence", side_effect=attach_without_responses):
+            self.prepare_ready()
+        records = self.store.snapshot()["records"]
+        search = next(iter(records["literature_search"].values()))
+        response = records["source"][search["responses"][0]["source_id"]]["response"]["sha256"]
+        self.assertEqual({(tuple(row["missing"]), tuple(row["artifact_digests"])) for row in self.find_unassessed()},
+                         {((), (response,))})
 
     def test_a_packet_without_the_openness_keys_leaves_the_evidence_unassessed(self):
         self.prepare_with(self.emulate_truncated_projection(binding=False))
