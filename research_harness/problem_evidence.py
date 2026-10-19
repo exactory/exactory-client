@@ -4,7 +4,7 @@ from .errors import ResearchError
 from .evidence import digest
 from .graph import obligation
 from .operations import fields, strings, text
-from .problem_claims import find_current_statement, find_latest, find_value, compute_statement_digest
+from .problem_claims import find_current_statement, find_latest, find_value, find_assessment, compute_statement_digest
 from .reading import fulltext_coverage, validate_read_evidence
 
 
@@ -281,7 +281,7 @@ def describe_binding(records, artifacts):
     openness, value = find_latest(records, "problem_openness"), find_value(records)
     computations = [validate_computation(records, artifacts, item, recorded_revision=value.get("recorded_revision")) for item in collect_value_items(value)
                     if item["kind"] == "computation"]
-    return {"claim": statement, "openness": openness, "value": value,
+    return {"claim": statement, "openness": openness, "value": value, "assessment": find_assessment(records),
             "readings": [{"id": row["id"], "digest": digest(row)} for row in collect_readings(records)],
             "computations": [{"execution_id": row["execution_id"], "output_id": row["output_id"],
                               **{key: digest(row[key]) for key in ("admission", "execution", "assessment")}} for row in computations],
@@ -294,6 +294,7 @@ def describe_evidence(records, artifacts):
     from .direction_sources import build_reading_passages
     statement, value = find_current_statement(records), find_value(records)
     openness = find_latest(records, "problem_openness")
+    assessment = find_assessment(records)
     readings = collect_readings(records)
     prepared = build_reading_passages(records, artifacts, readings)
     computations = [validate_computation(records, artifacts, item, recorded_revision=value.get("recorded_revision")) for item in collect_value_items(value)
@@ -303,6 +304,7 @@ def describe_evidence(records, artifacts):
                 statement_id=statement["id"], statement_digest=compute_statement_digest(statement)),
             "openness": None if openness is None else {key: openness.get(key) for key in ("id", "outcome", "statement_digest", "minimum")},
             "value": None if value is None else {key: value[key] for key in ("id", "motivation", "current_state")},
+            "assessment": None if assessment is None else {key: assessment[key] for key in ("id", "grades", "items", "primary")},
             "citations": project_citations(records, artifacts),
             "readings": [{"id": row["id"], "version_id": row["version_id"], "digest": digest(row),
                           "depth": row["depth"], "reading": row} for row in readings],

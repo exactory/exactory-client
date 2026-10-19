@@ -9,9 +9,11 @@ from datetime import datetime, timezone
 from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evidence import digest
+from .graph import obligation
 from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .principles import prepare_initialization
 from .strategy import find_orchestration
+from . import problem_rubric, strategy
 
 
 def find_current_statement(records):
@@ -97,6 +99,57 @@ def record_statement(store, payload, *, expected_revision, request_id):
 
 def find_value(records):
     return find_latest(records, "problem_value")
+
+
+def find_assessment(records):
+    return find_latest(records, "problem_assessment")
+
+
+def record_assessment(store, payload, *, expected_revision, request_id):
+    artifacts = ArtifactStore(store.root)
+
+    def prepare(records, value):
+        require_problem(records)
+        fields(value, ("id", "statement_id", "grades", "items", "primary"))
+        text(value["id"], "Problem assessment ID")
+        statement = find_current_statement(records)
+        if statement is None or value["statement_id"] != statement["id"]:
+            raise ResearchError("problem_statement_missing", "Select the exact current problem statement")
+        problem_rubric.validate_grades(value["grades"])
+        for item in problem_rubric.ITEMS:
+            entry = value["items"].get(item) if isinstance(value["items"], dict) else None
+            if not isinstance(entry, dict) or not entry.get("evidence"):
+                raise ResearchError("problem_assessment_evidence_missing", "Give evidence for every rubric item", {"item": item})
+            fields(entry, ("evidence", "note"))
+            strategy.evidence(records, artifacts, entry["evidence"])
+            text(entry["note"], "Rubric item note")
+        fields(value["items"], problem_rubric.ITEMS)
+        fields(value["primary"], ("ground", "criterion"))
+        primary = value["primary"]
+        if (primary["ground"] not in problem_rubric.GROUNDS or primary["criterion"] not in problem_rubric.CRITERIA
+                or value["grades"]["significance"][primary["ground"]] == 0):
+            raise ResearchError("invalid_input", "Name a nonzero significance ground and a criterion V1 to V8")
+        record = dict(value, recorded_revision=expected_revision + 1)
+        return [immutable_record(records, "problem_assessment", value["id"], record)], record
+
+    return prepared_mutation(store, "problem.assessment", payload, prepare,
+                             expected_revision=expected_revision, request_id=request_id)
+
+
+def assess_assessment(records, artifacts):
+    assessment, statement = find_assessment(records), find_current_statement(records)
+    statement_id = None if statement is None else statement["id"]
+    if assessment is None:
+        return [obligation("problem_assessment_missing", "Record an evidence-bound rubric self-assessment.", statement_id=statement_id)]
+    pending = []
+    if assessment["statement_id"] != statement_id:
+        pending.append(obligation("problem_assessment_stale", "Assess the current problem statement.",
+                                  assessment_id=assessment["id"], statement_id=statement_id))
+    shortfalls = problem_rubric.assess_grades(assessment["grades"])
+    if shortfalls:
+        pending.append(obligation("problem_rubric_below_threshold", "Repair the rubric self-assessment shortfalls.",
+                                  source="self", assessment_id=assessment["id"], shortfalls=shortfalls))
+    return pending
 
 
 def record_value(store, payload, *, expected_revision, request_id):

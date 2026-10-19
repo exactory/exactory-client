@@ -15,6 +15,7 @@ from .evidence import digest
 from .graph import obligation
 from .operations import fields, immutable_record, normalized_text, prepared_mutation, strings, text
 from . import strategy
+from . import problem_rubric
 
 
 CONTINUE_CHECKS_V1 = ("impact", "demand", "novelty_risk", "feasibility", "distinctness", "continuity", "grand_challenge")
@@ -63,9 +64,16 @@ def _validate_checks(records, artifacts, values, expected):
 
 
 def _validate_value(records, artifacts, value, stage, dossier, historical=(), *, expected_checks=ALL_CHECKS, problem=None,
-                    problem_objections=()):
+                    problem_objections=(), problem_rubric_required=True):
+    rubric_required = problem is not None and stage == "result" and problem_rubric_required
     fields(value, ("status", "consequence", "bar_ids", "objective_adequacy", "method_adequacy", "reason", "evidence",
-                   "work_items", "assurances", "objection_findings"), code="invalid_value_review")
+                   "work_items", "assurances", "objection_findings") +
+           (("rubric", "rubric_evidence") if rubric_required else ()), code="invalid_value_review")
+    if rubric_required:
+        problem_rubric.validate_grades(value["rubric"])
+        fields(value["rubric_evidence"], problem_rubric.ITEMS, code="invalid_value_review")
+        for item in problem_rubric.ITEMS:
+            text(value["rubric_evidence"][item], "Rubric item evidence", code="invalid_value_review")
     strategy.choice(value["status"], ("sufficient", "insufficient", "unresolved"), "Scientific consequence", "invalid_value_review")
     for key in ("consequence", "reason"):
         text(value[key], "Independent " + key)
@@ -193,6 +201,7 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                            CONTINUE_CHECKS_V1 + ("stop",) if is_previous_prompt(saved_assignment) else ALL_CHECKS)
         _validate_value(records, artifacts, value["value"], value["stage"], dossier, historical,
                         expected_checks=expected_checks, problem=problem,
+                        problem_rubric_required=not is_previous_prompt(saved_assignment),
                         problem_objections=(json.loads(artifacts.read(saved_assignment["packet"])).get("material_objections", [])
                                              if problem is not None and value["stage"] == "result" else ()))
         strings(value["limitations"], "Independent assessment limitations", nonempty=True)
@@ -472,7 +481,7 @@ def _assess_problem_coverage(records, artifacts, reviews, expected, evidence_dig
     for review in reviews:
         packets = [packet for _, packet in collect_observed_packets(records, evaluation, review['assignment_id'])]
         current = [packet for packet in packets if packet.get('problem_evidence_digest') == evidence_digest]
-        missing = [key for key in ('claim', 'openness', 'value', 'citations', 'readings', 'computations', 'formal_checks')
+        missing = [key for key in ('claim', 'openness', 'value', 'assessment', 'citations', 'readings', 'computations', 'formal_checks')
                    if not any(packet.get('problem_evidence', {}).get(key) == expected[key] for packet in current)]
         delivered = find_delivered_readings(records, evaluation, readings,
             [dict(packet, direction_evidence=packet.get('problem_evidence', {})) for packet in current])
@@ -561,9 +570,49 @@ def assess_problem_reviews(records, artifacts, review_ids=None, bar_review_ids=N
         expected = describe_problem_evidence(records, artifacts)
         evidence_digest = compute_problem_evidence_digest(records, artifacts)
         obligations.extend(_assess_problem_coverage(records, artifacts, reviews, expected, evidence_digest))
+    obligations.extend(assess_rubric_reviews(records, artifacts, reviews, evidence_digest))
     obligations.extend(assess_problem_objections(records, artifacts, subject, bars, reviews, evidence_digest))
     return {'ready': not obligations, 'obligations': _obligations(obligations),
             'review_ids': review_ids, 'bar_review_ids': bar_review_ids, 'problem_evidence_digest': evidence_digest}
+
+
+def assess_rubric_reviews(records, artifacts, reviews, evidence_digest):
+    """Require current rubric results and independently adjudicate named shortfalls."""
+    from .review_protocol import adjudication_state
+    obligations = []
+    for review in reviews:
+        assignment = records['review_assignment'][review['assignment_id']]
+        template = assignment['prompt']['template_id']
+        findings = review['payload']['value']
+        if (template not in ('exactory-problem-review-v2/result', 'exactory-problem-review-v2/result/context-repair')
+                or 'rubric' not in findings):
+            obligations.append(obligation('problem_rubric_review_required', 'Obtain a version 2 problem result with rubric grades.',
+                                          review_id=review['id']))
+            continue
+        pending = []
+        for shortfall in problem_rubric.assess_grades(findings['rubric']):
+            identifier = problem_rubric.rubric_objection_id(review['id'], shortfall['item'])
+            saved = max((row for row in records.get('review_adjudication', {}).values()
+                         if row['objection_id'] == identifier and row.get('subject') == review['subject']
+                         and evidence_digest is not None and row.get('problem_evidence_digest') == evidence_digest),
+                        key=lambda row: row['recorded_revision'], default=None)
+            resolved = False
+            if saved is not None:
+                state = adjudication_state(records, artifacts, saved['id'])
+                resolved = state['ready'] and state['disposition'] == 'not_upheld'
+                if resolved:
+                    try:
+                        strategy.evidence(records, artifacts, saved['evidence'])
+                    except ResearchError as error:
+                        resolved = False
+                        obligations.append(obligation(error.code, str(error), review_id=review['id'],
+                                                      objection_id=identifier, adjudication_id=saved['id']))
+            if not resolved:
+                pending.append(shortfall)
+        if pending:
+            obligations.append(obligation('problem_rubric_below_threshold', 'Repair or independently adjudicate each rubric shortfall.',
+                                          source='review', review_id=review['id'], shortfalls=pending))
+    return obligations
 
 
 def _objection_obligations(records, artifacts, dossier, decision, reviews, *, problem_evidence_digest=None):

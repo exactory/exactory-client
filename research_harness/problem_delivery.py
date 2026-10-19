@@ -10,7 +10,7 @@ from .errors import ResearchError
 from .evidence import digest
 from .graph import obligation
 from .operations import fields, immutable_record, strings, text
-from .problem_claims import find_current_statement, find_latest, find_value, compute_problem_evidence_digest, require_problem, compute_statement_digest
+from .problem_claims import find_current_statement, find_latest, find_value, compute_problem_evidence_digest, require_problem, compute_statement_digest, assess_assessment
 from .problem_evidence import assess_formal_checks, project_citations, validate_value
 from .problem_openness import assess_openness
 
@@ -30,6 +30,7 @@ def assess_minimum(records, artifacts):
         except ResearchError as error:
             pending.append(obligation(error.code, error.message, **(error.details or {})))
     pending.extend(assess_formal_checks(records))
+    pending.extend(assess_assessment(records, artifacts))
     try:
         project_citations(records, artifacts)
     except ResearchError as error:

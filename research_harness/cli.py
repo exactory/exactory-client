@@ -34,6 +34,7 @@ OPERATIONS = {
     "problem-statement": problem_claims.record_statement,
     "problem-openness": problem_claims.record_openness,
     "problem-value": problem_claims.record_value,
+    "problem-assessment": problem_claims.record_assessment,
     "problem-formal-check": problem_claims.record_formal_check,
     "problem-decision": problem_claims.record_decision,
     "problem-posted": problem_claims.record_posted,

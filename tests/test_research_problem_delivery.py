@@ -30,6 +30,8 @@ class ProblemDeliveryCase(ProblemCase):
         self.observe_openness()
         self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})
         self.mutate(self.load_problem_module().record_value, self.build_value([item]))
+        from test_research_problem_assessment import build_assessment
+        self.mutate(self.load_problem_module().record_assessment, build_assessment(self.selected))
         self.supporting = self.artifacts.put(b"Field evidence used by the authored review fixture.", "text/plain")
         for role in ("bar", "result"):
             for reviewer in ("first", "second"):

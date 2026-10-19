@@ -188,6 +188,8 @@ class ProblemFormalGateTests(ProblemToolsCase, ProblemDeliveryCase):
         item = dict(ProblemComputationTests.build_computation_evidence(self, observed),
                     formal_check={"claim": self.claim, "required_deliverables": ["range check"]} if requested else None)
         self.mutate(self.load_problem_module().record_value, self.build_value([item]))
+        from test_research_problem_assessment import build_assessment
+        self.mutate(self.load_problem_module().record_assessment, build_assessment(self.selected))
         self.supporting = self.artifacts.put(b"The fixture's observed field standard.", "text/plain")
         for role in ("bar", "result"):
             for reviewer in ("first", "second"):

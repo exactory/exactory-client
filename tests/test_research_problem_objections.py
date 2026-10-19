@@ -27,6 +27,8 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         self.observe_openness()
         self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})
         self.mutate(self.load_problem_module().record_value, self.build_value([self.item]))
+        from test_research_problem_assessment import build_assessment
+        self.mutate(self.load_problem_module().record_assessment, build_assessment(self.selected))
         self.supporting = self.artifacts.put(b"The read comparator states an existential bound only.", "text/plain")
         for reviewer in ("first", "second"):
             output = self.build_review_output("bar")

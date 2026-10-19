@@ -1379,7 +1379,7 @@ already recorded in the configuration.
 
 | Claim | Mechanical minimum | Independent assessment | Currency |
 | --- | --- | --- | --- |
-| Problem: precisely stated, open, worth solving | Exact statement and criteria, current supported openness, evidence-bound value and projected citations | Two observed bar reviews and two observed result reviews | The explicit `problem_evidence_digest` binds the selected claim and decisive evidence. |
+| Problem: precisely stated, open, worth solving | Exact statement and criteria, current supported openness, evidence-bound value, rubric self-assessment and projected citations | Two observed bar reviews and two observed version 2 result reviews meeting the rubric thresholds after focused adjudication | The explicit `problem_evidence_digest` binds the selected claim, assessment and decisive evidence. |
 
 Every mutation below uses `--file FILE --expected-revision REVISION
 --request-id ID`. Read the revision before a new mutation; an interrupted retry
@@ -1392,6 +1392,7 @@ records and move explicit selections.
 | `problem-statement` | `{id, title, area, statement, resolution_criteria, neighbours, formal_statement}` | `problem_statement/<id>` and `problem_selection/current = {statement_id}`. Statement and criteria are nonempty TeX; neighbours are formulation texts, possibly empty. Formal statement is optional, null or `{language, text}`. The area must equal the immutable problem record's area (`problem_area_mismatch`); another subject class requires a new problem record. Any other changed field requires a new statement id and moves the selection. |
 | `problem-openness` | `{assignment_id}` | Records `problem_openness/<id>` from the observed native result review. Every supplied minimum must pass the shared closed-schema validation. `supported_open` advances the claim; `unresolved` records the gap without an evidence audit; `already_solved` redirects to the settling result and blocks posting as open. |
 | `problem-value` | `{id, statement_id, motivation, current_state}` | `problem_value/<id>` contains ordered paragraph arrays, each item `{text, evidence}` with nonempty evidence. |
+| `problem-assessment` | `{id, statement_id, grades, items, primary}` | `problem_assessment/<id>` binds the rubric self-assessment to the current statement, adding `recorded_revision`. Each item has evidence and a note; `primary` names its significance ground and criterion. |
 | `problem-formal-check` | `{evidence: {execution_id, output_id}, native_closure_digest}` | `problem_formal_check/<id>` binds a requested support check to an authenticated native completion in this store. Invalid bindings return `problem_formal_check_unbound`. |
 | `problem-decision` | `{id, action, review_ids, bar_review_ids, reason}` | `problem_decision/<id>` binds the current evidence digest. Action is `post`, `revise` or `withdraw`; `post` requires the minimum and observed review coverage, otherwise `problem_minimum_unmet`. The other actions record the reason. |
 | `problem-posted` | `{problem_id, export_directory}` | Rebuilds the approved export and compares every file byte for byte before recording `problem_post/<id>`. A changed file, even with a changed manifest hash, returns `problem_export_mismatch`. |
@@ -1452,21 +1453,51 @@ When one output has several requested support claims, each exact claim and its
 required deliverables needs its own binding. A binding for another requested
 claim on the same output supplies no formal-check credit.
 
-The problem bar uses `exactory-problem-review-v1/bar` and receives `area`,
+Record the rubric self-assessment with `problem-assessment`. `grades` has exactly
+`{admission: {A1, A2, A3, A4, A5, A6}, significance: {B1, B2}, priority, attempt,
+accessibility, calibration}`. Admission, attempt and calibration verdicts are
+`pass` or `fail`; significance and priority levels are integers 0 to 3;
+accessibility is `E-F`, `E-A` or `E-N`. `items` has exactly `A1` through `A6`,
+`B1`, `B2`, `priority`, `attempt`, `accessibility` and `calibration`, each
+`{evidence: [refs], note}` with nonempty evidence and a nonempty text note.
+References use the shared strategy evidence shapes: a held artifact descriptor
+`{path, sha256, size, media_type}`, `{kind: "source", link}` for a full reading,
+or `{kind: "record", record_kind, id, digest}` for an exact record. A mismatched
+record digest returns `strategy_evidence_stale`. A missing item or empty item
+evidence returns `problem_assessment_evidence_missing` naming `item`; malformed
+grades return `invalid_rubric_grades`. `primary` is `{ground: "B1"|"B2",
+criterion: "V1"|...|"V8"}`; the named ground must have a nonzero grade
+(`invalid_input`). The latest assessment by recorded revision enters the
+evidence digest and the reviewer evidence as `{id, grades, items, primary}`.
+A statement change requires a new assessment for that statement.
+
+Posting requires every admission item `pass`, `max(B1, B2) >= 2` (at least 3
+for `E-A` or `E-N`), priority at least 2, attempt `pass` and calibration `pass`.
+Grounds never add. The harness's self-assessment must meet these thresholds.
+The attempt grade records a judgment; this operation creates no attempt record.
+
+The problem bar uses `exactory-problem-review-v2/bar` and receives `area`,
 `field` and source inventory/deliveries with the statement, title, neighbours and
 value withheld. The selected statement must retain the record's area, so the
 bars remain established for their original scope; a statement in another area
 is refused during bar assessment with `review_bar_mismatch`. Another subject
 class requires a new problem record and its own bars. Two observed bars are
 required before a result packet. The result template
-`exactory-problem-review-v1/result` receives `problem_evidence`
-with the claim, openness, value, citations, delivered readings/passages,
+`exactory-problem-review-v2/result` receives `problem_evidence`
+with the claim, openness, value, assessment, citations, delivered readings/passages,
 admissions/executions/assessments/output validations and bound native closures.
 Both result reviews must pass exactly `problem_statement`, `problem_openness`,
 `problem_value`, `problem_citations` and `stop`. A marker author cannot be a
 reviewer (`review_not_independent`); an assignment's unknown author is refused
 with `problem_author_unknown`. Existing route probes, source-request
 continuations, assignment currency and independence checks apply.
+The blind bar also states the specialist's meaning of levels 2 and 3 of B1,
+B2 and comparative priority for the field and line. Each version 2 result adds
+`value.rubric` with the same full grades shape and `value.rubric_evidence` with
+nonempty evidence-and-reasoning text for exactly the assessment item keys.
+Both result reviews must meet the thresholds after any focused adjudication.
+Recorded version 1 problem assignments retain their exact authenticated prompt
+and remain verified; posting requires version 2 result reviews.
 
 Material objections from both bars and both observed result histories remain
 post obligations (`research_objection_unresolved`), including predecessor
@@ -1475,6 +1506,19 @@ evidence-backed resolutions, or an independent focused adjudication must find
 the objection not upheld. Problem adjudication uses the existing review tools
 with `dossier_id: null`; changed value evidence retains the focused adjudicator
 and its observed history rather than opening a new reviewer choice.
+The adjudicator template is `exactory-problem-review-v2/adjudicator`. For a
+below-threshold rubric grade, set `context.objection_id` to
+`rubric:<review_id>:<item>` with both original result review IDs. Items are
+`A1` through `A6`, `significance`, `priority`, `attempt` or `calibration`.
+The packet identifies the grade and required threshold and carries both
+results' `rubric_grades`. An observed, ready `not_upheld` adjudication resolves
+only that item for the same subject and current `problem_evidence_digest`.
+The original grades remain visible. An old-evidence adjudication, a resolution
+of another item, or a material-objection finding cannot waive the shortfall;
+the five independent assurances still have to pass.
+If an id identifies both a rubric shortfall and an explicit material objection,
+disambiguate the findings before focused adjudication (`review_objection_missing`).
+A material objection with a rubric-shaped id remains valid when no grade collides.
 
 `gate post` is the only applicable gate in a problem workspace. Every other
 gate reports `gate_inapplicable`, as does `post` outside this orchestration.
@@ -1493,6 +1537,10 @@ records retain nonmanaged dependency composition and empirical meaning.
 | `problem_already_solved` | Redirect to the named established result or record a new statement. |
 | `problem_openness_stale` | Refresh the finding for the changed formulation, search or reading. |
 | `problem_value_missing`, `problem_value_reading_missing`, `problem_value_computation_missing` | Supply ordered value paragraphs with valid full readings or admitted, reconciled, assessed computation support. |
+| `problem_assessment_missing` | Record the rubric self-assessment with evidence for every item. |
+| `problem_assessment_stale` | Record a new assessment for the current statement; the obligation names both ids. |
+| `problem_rubric_below_threshold` | Repair self-assessment shortfalls, or repair or independently adjudicate the named review shortfalls. `source` distinguishes `self` and `review`; ids and `{item, required, graded}` shortfalls identify the judgment. |
+| `problem_rubric_review_required` | Obtain a version 2 result review with full rubric grades for the named review. |
 | `exploratory_evidence` | Preserve the probe observation and obtain admissible support for the claim. |
 | `problem_formal_check_missing`, `problem_formal_check_stale` | Bind the requested check for the current value evidence to its authenticated native completion. |
 | `problem_citation_locator_missing` | Record a DOI, arXiv id or read-version bundle HTTPS locator for the cited work. |
@@ -1505,8 +1553,10 @@ records retain nonmanaged dependency composition and empirical meaning.
 
 `status` and `next` compute milestones from records: `exploration` at
 initialization, `formulation` with a statement, `openness` with current
-`supported_open`, `value` with valid value evidence, both bars, both passed
-result reviews and a current post decision, and `post` with a recorded post.
+`supported_open`, `value` with valid value evidence and a passing current
+rubric self-assessment, both bars, both version 2 result reviews passing the
+assurances and rubric after adjudication, and a current post decision, and
+`post` with a recorded post.
 `next` names the first missing condition in the order statement, openness,
 value, reviews, decision, export. Milestones impose no tool order. `status`
 lists the current depth plan under `limits` and no cohort policy counts; those

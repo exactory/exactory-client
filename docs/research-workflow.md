@@ -71,14 +71,14 @@ payload, record and post obligation.
 
 | Claim | Minimum | Independent assessment | Currency |
 | --- | --- | --- | --- |
-| Problem: precisely stated, open, worth solving | Exact statement and criteria, current supported openness, bound value evidence and citations | Two observed bars followed by two observed result reviews | Current selected statement and decisive evidence bound by `problem_evidence_digest`. |
+| Problem: precisely stated, open, worth solving | Exact statement and criteria, current supported openness, bound value evidence, rubric self-assessment and citations | Two observed bars followed by two observed version 2 result reviews | Current selected statement, assessment and decisive evidence bound by `problem_evidence_digest`. |
 
 | Milestone | Condition computed from records |
 | --- | --- |
 | `exploration` | `problem-init` records the area, field and immutable authors and adopts the constitution. |
 | `formulation` | `problem-statement` selects the exact statement, resolution criteria, neighbours and optional formal statement. |
 | `openness` | An observed native openness review records a current `supported_open` finding with the shared search and full-reading minimum. |
-| `value` | Value evidence validates, both observed bars and both passed result reviews cover it, and the current decision is `post`. |
+| `value` | Value evidence validates and `problem-assessment` binds a current self-assessment meeting the rubric thresholds; both observed bars and both version 2 result reviews cover the evidence and pass the assurances and rubric after adjudication; the current decision is `post`. |
 | `post` | `problem-posted` records the confirmed server id against the rebuilt approved export. |
 
 Tools remain available in any order before posting: set budgets and depth,
@@ -100,11 +100,25 @@ math-solver completes that contract, deliver its authenticated closure to this
 store with `exactory-math search deliver-closure`, then bind it with
 `problem-formal-check`.
 
+Record the rubric with `problem-assessment`: an evidence reference and note
+for every item, a primary ground B1 or B2 and a criterion V1 to V8. All six
+admission items must pass, `max(B1, B2) >= 2` (at least 3 for accessibility
+`E-A` or `E-N`), priority must be at least 2, and attempt and calibration must
+pass. Levels are integers 0 to 3 and the grounds never add. This assessment
+records the attempt judgment without creating an attempt record. A statement
+change requires reassessment.
+
 Use the existing verified review routes. Both bar reviewers receive the field,
-area and source context before the statement is shown. Both result reviewers
-receive the exact claim, openness minimum, value evidence, citations and
+area and source context before the statement is shown, and calibrate levels
+2 and 3 of both significance grounds and comparative priority. Both result reviewers
+receive the exact claim, openness minimum, value evidence, rubric assessment, citations and
 delivered source/computation/check content. They assess precision, openness,
-value, citations and stopping. Reviewers must be independent of every recorded
+value, citations and stopping, plus every rubric item through `value.rubric`
+and `value.rubric_evidence`. A below-threshold result grade blocks posting
+until repaired or resolved by a ready focused `not_upheld` adjudication of
+`rubric:<review_id>:<item>` for the same subject and current evidence digest.
+Original grades remain visible. Version 1 assignments stay verified, while
+the post gate requires version 2 result reviews. Reviewers must be independent of every recorded
 author, and pending source requests remain obligations. Record a `post`
 decision only after the current minimum and observed pair pass. `unresolved`
 openness blocks; `already_solved` redirects to the established result or a new

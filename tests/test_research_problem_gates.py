@@ -26,6 +26,22 @@ class ProblemGateTests(ProblemDeliveryCase):
         records.pop("problem_selection")
         self.assertIn("problem_statement_missing", self.collect_gate_codes(records))
 
+    def test_missing_or_stale_assessment_blocks_the_post_gate(self):
+        records = self.store.snapshot()["records"]
+        records.pop("problem_assessment")
+        self.update_decision_evidence_digest(records)
+        self.assertEqual(self.collect_gate_codes(records), {"problem_assessment_missing"})
+        records = self.store.snapshot()["records"]
+        records["problem_assessment"]["assessment-1"]["statement_id"] = "old-statement"
+        self.update_decision_evidence_digest(records)
+        self.assertEqual(self.collect_gate_codes(records), {"problem_assessment_stale"})
+
+    def test_below_threshold_self_assessment_blocks_the_post_gate(self):
+        records = self.store.snapshot()["records"]
+        records["problem_assessment"]["assessment-1"]["grades"]["priority"] = 1
+        self.update_decision_evidence_digest(records)
+        self.assertEqual(self.collect_gate_codes(records), {"problem_rubric_below_threshold"})
+
     def test_unresolved_openness_is_the_only_missing_condition(self):
         records = self.store.snapshot()["records"]
         records["problem_openness"]["openness-assignment"]["outcome"] = "unresolved"
