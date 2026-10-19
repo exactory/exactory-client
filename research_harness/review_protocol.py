@@ -707,11 +707,17 @@ VERSION_EVIDENCE_KEYS = ('version_review', 'version_evidence', 'version_source_m
 
 
 def _list_packet_records(packet):
-    """Each record that a problem packet projects for its reviewer, as (record_kind, id, digest, projection). An id
-    of None takes the cited id: the projection is the stored record itself, so its own digest binds it. A digest of
-    None takes the stored record's digest: the projection names the record but carries part of it."""
+    """Each record that a problem packet projects for its reviewer, as (record_kind, id, digest, projection), where the
+    projection is the entry that carried the record and the digest is the stored record's digest that the entry
+    exposes. A review payload exposes no digest, so its digest is None and the stored record's digest decides. An id
+    of None takes the cited id: the projection is the stored record itself, so its own digest binds it. A kind that no
+    problem packet projects is never yielded, so a citation of it stays undelivered."""
     for entry in packet.get('candidates', []):
         yield 'problem_candidate', entry['id'], entry['digest'], entry
+    # A first slate or result packet wraps each historical review with its independence; a continuation does not.
+    for payload in packet.get('bars', []) + packet.get('own_bars', []) + [
+            entry.get('review', entry) for entry in packet.get('historical_reviews', [])]:
+        yield 'value_review', payload['id'], None, payload
     evidence = packet.get('problem_evidence') or {}
     for entry in evidence.get('readings', []):
         yield 'reading', entry['id'], entry['digest'], entry
@@ -719,47 +725,60 @@ def _list_packet_records(packet):
         if entry.get('kind') == 'record':
             yield entry['record_kind'], entry['id'], entry['digest'], entry
     for key, kind, field in (('claim', 'problem_statement', 'statement_id'), ('openness', 'problem_openness', 'id'),
-                             ('value', 'problem_value', 'id'), ('assessment', 'problem_assessment', 'id')):
-        if evidence.get(key) is not None:
-            yield kind, evidence[key][field], None, evidence[key]
+                             ('value', 'problem_value', 'id'), ('assessment', 'problem_assessment', 'id'),
+                             ('attempt', 'problem_attempt', 'id')):
+        entry = evidence.get(key)
+        if entry is not None and entry.get(field) is not None:
+            yield kind, entry[field], entry.get('digest'), entry
     for entry in evidence.get('formal_checks', []):
-        yield 'problem_formal_check', entry['id'], None, entry
+        yield 'problem_formal_check', entry['id'], entry.get('digest'), entry
+    for entry in [evidence.get('attempt') or {}] + evidence.get('formal_checks', []) + evidence.get('computations', []):
+        for reference in entry.get('record_references', []):
+            yield reference['record_kind'], reference['id'], reference['digest'], entry
     for row in evidence.get('openness_searches', []):
         yield 'literature_search', None, digest(row['search']), row['search']
         for source in row['sources']:
             yield 'source', None, digest(source), source
-    for row in evidence.get('computations', []):
-        for key, kind in (('admission', 'execution_admission'), ('execution', 'execution'), ('assessment', 'cycle_assessment')):
-            yield kind, None, digest(row[key]), row[key]
+
+
+def collect_carried_records(records, artifacts, assignment_id):
+    """The records that the observed packets of an assignment's lineage carried, as rows of _list_packet_records."""
+    from .direction_reviews import collect_observed_packets
+    return [row for _, observed in collect_observed_packets(records, artifacts, assignment_id)
+            for row in _list_packet_records(observed)]
+
+
+def find_carried_record(records, carried, reference):
+    """The projection that carried rows hold for a record reference at its digest, or None. The stored record is read
+    only for its digest, where a projection exposes none."""
+    stored = records.get(reference['record_kind'], {}).get(reference['id'])
+    stored_digest = None if stored is None else digest(stored)
+    return next((projection for kind, identifier, recorded_digest, projection in carried
+                 if kind == reference['record_kind'] and identifier in (None, reference['id'])
+                 and (recorded_digest or stored_digest) == reference['digest']), None)
 
 
 def describe_version_evidence(records, artifacts, version):
     """What an adjudicator receives for one material objection version, apart from the original pair's correction
     evidence, under VERSION_EVIDENCE_KEYS: the review that stated the version, one version_evidence entry for each
-    reference the version cites, and the source passages that the stating review's packets delivered for the cited
-    artifacts.
+    reference the version cites, except an artifact that the stating review's packets delivered only as passages,
+    which is delivered through version_source_mappings, and those passages for the cited artifacts.
 
-    An artifact or a source link is delivered as the artifact descriptor that the stating review's packets supplied,
-    or, for a source link, through those passages alone. A record is delivered as {kind, record_kind, id, digest,
-    record, artifacts}: the projection that one of the stating review's observed packets carried for that record at
-    that digest, never the stored record, with artifact references as templates, and the descriptors of its artifacts
-    that those packets supplied. A reference that cannot be delivered (a record no observed packet carried at that
-    digest, or an artifact those packets did not supply) is an entry {kind: undelivered, identity, reference}."""
-    from .direction_reviews import collect_observed_packets
+    An artifact or a source link is delivered as the artifact descriptor that the stating review's packets supplied.
+    A record is delivered as {kind, record_kind, id, digest, record, artifacts}: the projection that one of the
+    stating review's observed packets carried for that record at that digest, never the stored record, with artifact
+    references as templates, and the descriptors of its artifacts that those packets supplied. A reference that
+    cannot be delivered (a record no observed packet carried at that digest, or an artifact those packets did not
+    supply) is an entry {kind: undelivered, identity, reference}."""
     review = _get(records, 'value_review', version['review_id'])
     supplied, mappings = supplied_evidence.supplied_context(records, artifacts, [review['assignment_id']])
     mapped = {mapping['origin']['artifact_descriptor']['sha256'] for mapping in mappings}
-    carried = [row for _, observed in collect_observed_packets(records, artifacts, review['assignment_id'])
-               for row in _list_packet_records(observed)]
+    carried = collect_carried_records(records, artifacts, review['assignment_id'])
     entries, cited = [], set()
     for reference in version['evidence']:
         if reference.get('kind') == 'record':
             identity = reference['record_kind'] + ':' + reference['id']
-            stored = records.get(reference['record_kind'], {}).get(reference['id'])
-            stored_digest = None if stored is None else digest(stored)
-            projection = next((projection for kind, identifier, recorded_digest, projection in carried
-                               if kind == reference['record_kind'] and identifier in (None, reference['id'])
-                               and (recorded_digest or stored_digest) == reference['digest']), None)
+            projection = find_carried_record(records, carried, reference)
             if projection is not None:
                 content = {item['sha256']: supplied[item['sha256']] for item in collect_references(projection)
                            if item['sha256'] in supplied}
@@ -772,7 +791,7 @@ def describe_version_evidence(records, artifacts, version):
             if identity in supplied:
                 entries.append(supplied[identity])
                 continue
-            if reference.get('kind') == 'source' and identity in mapped:
+            if identity in mapped:
                 continue
         entries.append({'kind': 'undelivered', 'identity': identity, 'reference': _reference_templates(reference)})
     return dict(zip(VERSION_EVIDENCE_KEYS, (

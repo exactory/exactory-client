@@ -135,8 +135,8 @@ class ProblemAssessmentTests(ProblemCase):
         after = claims.compute_problem_evidence_digest(records, self.artifacts)
         self.assertNotEqual(before, after)
         self.assertEqual(describe_binding(records, self.artifacts)['assessment'], saved)
-        self.assertEqual(describe_evidence(records, self.artifacts)['assessment'], {
-            key: saved[key] for key in ('id', 'grades', 'items', 'primary')})
+        self.assertEqual(describe_evidence(records, self.artifacts)['assessment'], dict(
+            {key: saved[key] for key in ('id', 'grades', 'items', 'primary')}, digest=digest(saved)))
         newer = build_assessment(self.statement, 'assessment-2')
         newer['items']['B1']['note'] = 'A more detailed account of the mathematical payoff.'
         self.record_assessment(newer)
