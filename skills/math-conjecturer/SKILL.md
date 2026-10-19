@@ -168,7 +168,9 @@ in turn. Post each one that meets the bar.
    `literature: {readings, description}`. Write a critical assessment of the attempt on the
    exact statement in `description`.
 3. Otherwise run one math-solver objective with the `math-solver` skill. Make its contract
-   claim statement the exact statement text of the current statement record.
+   claim statement the exact statement text of the current statement record, with a `named`
+   scope. A claim restricted to `case_ids` or an `integer_interval` is not an attempt on the
+   statement (`problem_attempt_scope_restricted`).
 4. Place the attack root under the problem workspace, for example `<workspace>/attack`.
    Set `review_workspace` in the proposal delivery to the problem workspace, for example `..`.
 5. Use the normal proposal limits,
@@ -183,11 +185,12 @@ in turn. Post each one that meets the bar.
      --expected-revision N --request-id deliver-attempt --json
    ```
 
-8. For a solver attempt, use a claim whose scope is `named`. Record
-   `exactory-research problem-attempt` with `kind: "solver"`,
-   `solver: {native_attempt_digest, applicability}` and `literature: null`.
-   In `applicability`, state how the native claim's quantifiers, assumptions and
-   scope match the statement and the resolution criteria.
+8. Record `exactory-research problem-attempt` with `kind: "solver"`,
+   `solver: {native_attempt_digest, applicability}` and `literature: null`. Bind the
+   `native_attempt_digest` that the delivery returned: the harness binds only the snapshot that
+   the attack root's current pointer names, and refuses an earlier one
+   (`problem_attempt_superseded`). In `applicability`, state how the native claim's
+   quantifiers, assumptions and scope match the statement and the resolution criteria.
 9. Fill `outcomes`: `resolved`, `footholds`, `unresolved` and `obstructions`. Set `resolved`
    to match the delivered state (`problem_attempt_outcome_mismatch`).
 10. Cite evidence for each foothold and each obstruction. For a literature attempt, cite a listed
