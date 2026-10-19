@@ -71,6 +71,9 @@ class ProblemCandidateTests(ProblemCase):
 
     def test_previous_must_exist_and_supersedes(self):
         self.assert_error("problem_candidate_missing", lambda: self.record_candidate(build_candidate(previous="absent")))
+        for previous in ([], {}):
+            with self.subTest(previous=previous):
+                self.assert_error("invalid_input", lambda: self.record_candidate(build_candidate(previous=previous)))
         first = self.record_candidate(build_candidate())
         other = self.record_candidate(build_candidate("candidate-2", statement="Does the bound hold for odd $n$?"))
         revised = self.record_candidate(build_candidate("candidate-1b", previous="candidate-1",

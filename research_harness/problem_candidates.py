@@ -36,9 +36,11 @@ def record_candidate(store, payload, *, expected_revision, request_id):
                        "disposition"))
         for key in ("id", "statement", "observation"):
             text(value[key], "Candidate " + key)
-        if value["previous"] is not None and value["previous"] not in records.get("problem_candidate", {}):
-            raise ResearchError("problem_candidate_missing", "Name an existing candidate as the previous version",
-                                {"candidate_id": value["previous"]})
+        if value["previous"] is not None:
+            text(value["previous"], "Previous candidate ID")
+            if value["previous"] not in records.get("problem_candidate", {}):
+                raise ResearchError("problem_candidate_missing", "Name an existing candidate as the previous version",
+                                    {"candidate_id": value["previous"]})
         source = value["source"]
         fields(source, ("kind", "reference", "evidence"))
         strategy.choice(source["kind"], SOURCE_KINDS, "Candidate source kind", "invalid_input")
@@ -133,7 +135,8 @@ def record_slate(store, payload, *, expected_revision, request_id):
         fields(value, ("id", "selected", "deferred", "rejected", "bar_review_ids", "review_ids", "comparison", "reason"))
         text(value["id"], "Slate ID")
         text(value["comparison"], "Candidate comparison")
-        strings(value["selected"], "Selected candidates")
+        for identifier in strategy.items(value["selected"], "Selected candidates", code="invalid_input"):
+            text(identifier, "Selected candidate ID")
         for entry in strategy.items(value["deferred"], "Deferred candidates", code="invalid_input"):
             fields(entry, ("candidate_id", "evidence_needed"))
             text(entry["candidate_id"], "Deferred candidate ID")
@@ -172,6 +175,11 @@ def assess_slate(records, artifacts):
     slate = find_slate(records)
     if slate is None:
         return [obligation("problem_slate_missing", "Compare the current candidates and record the selection decision.")]
+    current = sorted(find_current_candidates(records))
+    if slate["candidate_ids"] != current:
+        return [obligation("problem_slate_stale", "Record a new slate that disposes of every current candidate.",
+                           slate_id=slate["id"], missing=sorted(set(current) - set(slate["candidate_ids"])),
+                           extra=sorted(set(slate["candidate_ids"]) - set(current)))]
     statement = find_current_statement(records)
     if statement is None or statement.get("candidate_id") in slate["selected"]:
         return []

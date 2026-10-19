@@ -63,7 +63,8 @@ class ProblemSlateTests(ProblemDeliveryCase):
                   [], ["candidate-2"]),
                  (build_slate(deferred=deferred, rejected=[{"candidate_id": "candidate-1", "reason": "Also rejected."}]),
                   [], ["candidate-1"]),
-                 (build_slate(selected=["candidate-1", "absent"], deferred=deferred), [], ["absent"]))
+                 (build_slate(selected=["candidate-1", "absent"], deferred=deferred), [], ["absent"]),
+                 (build_slate(selected=["candidate-1", "candidate-1"], deferred=deferred), [], ["candidate-1"]))
         for payload, missing, extra in cases:
             with self.subTest(missing=missing, extra=extra):
                 with self.assertRaises(ResearchError) as caught:
@@ -246,3 +247,63 @@ class ProblemSlateTests(ProblemDeliveryCase):
         review = self.mutate(decisions.record_value_review,
                              dict(final, id="review-slate-first", dossier_id=None, assignment_id=continued["id"]))["result"]
         self.assertEqual(self.record_slate(review_ids=[review["id"]])["review_ids"], ["review-slate-first"])
+
+    def test_slate_review_context_repair_keeps_the_bars_and_candidates(self):
+        self.record_candidate()
+        self.observe_bars()
+        original = self.observe("slate", "first", self.build_slate_output(["candidate-1"]))
+        self.mutate(protocol.record_context_event, {"id": "exposure", "assignment_id": "slate-first",
+            "kind": "contamination", "source": "author_history", "reason": "The slate reviewer received author advocacy.",
+            "evidence": [self.supporting]})
+        self.assert_error("problem_slate_review_unverified", lambda: self.record_slate(review_ids=[original["id"]]))
+
+        def respond_to_probe(route, request, credential):
+            packet = json.loads(request["input"][0]["content"])
+            return self.build_provider_response({"allowed_control": packet["allowed_control"],
+                "evidence_control": packet["evidence_control"], "excluded_controls": []})
+        with patch("research_harness.review_transport.send_request", side_effect=respond_to_probe):
+            self.mutate(protocol.probe_route, {"id": "repair-probe", "route_id": "route"}, credential="test-only")
+        repaired = self.assign("slate", "repaired-first", identifier="repaired-slate", context_repair={
+            "assignment_id": "slate-first", "event_ids": ["exposure"], "probe_id": "repair-probe",
+            "reason": "Reassess the slate in a verified independent context.", "evidence": [self.supporting]})
+        first = json.loads(self.artifacts.read(self.read_records()["review_assignment"]["slate-first"]["packet"]))
+        packet = json.loads(self.artifacts.read(repaired["packet"]))
+        self.assertEqual((packet["bar_ids"], packet["candidates"]), (first["bar_ids"], first["candidates"]))
+        output = self.build_slate_output(["candidate-1"])
+        output["reassessment"] = {"assignment_id": "slate-first", "findings": [{"review_id": original["id"],
+            "disposition": "revised", "reason": "The reassessed potential follows the supplied candidates.",
+            "evidence": [self.supporting]}]}
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {"id": "attempt-repaired-slate", "assignment_id": repaired["id"]},
+                        credential="test-only")
+        review = self.mutate(decisions.record_value_review,
+                             dict(output, id="review-repaired-slate", dossier_id=None, assignment_id=repaired["id"]))["result"]
+        self.assertEqual(self.record_slate(review_ids=[review["id"]])["review_ids"], ["review-repaired-slate"])
+
+
+class ProblemSlateCurrencyTests(ProblemDeliveryCase):
+    def test_gate_reports_slate_stale_after_a_new_or_superseded_candidate(self):
+        self.prepare_ready()
+        self.record_post_decision()
+        self.assertTrue(status_report(self.store)["ready"])
+        explanation = "Record a new slate that disposes of every current candidate."
+        self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
+        report = status_report(self.store)
+        expected = {"code": "problem_slate_stale", "explanation": explanation, "slate_id": "slate-1",
+                    "missing": ["candidate-2"], "extra": []}
+        self.assertEqual(([row for row in report["obligations"] if row["code"] == "problem_slate_stale"], report["next"]),
+                         ([expected], expected))
+        deferred = {"candidate_id": "candidate-2", "evidence_needed": "A documented active line for odd lengths."}
+        self.record_slate("slate-2", deferred=[deferred])
+        report = status_report(self.store)
+        self.assertTrue(report["ready"], report["obligations"])
+        self.record_candidate("candidate-1b", previous="candidate-1", statement=r"For every $n \geq 3$, does $B(n)\leq n^2$ hold?")
+        report = status_report(self.store)
+        expected = {"code": "problem_slate_stale", "explanation": explanation, "slate_id": "slate-2",
+                    "missing": ["candidate-1b"], "extra": ["candidate-1"]}
+        self.assertEqual(([row for row in report["obligations"] if row["code"] == "problem_slate_stale"], report["next"]),
+                         ([expected], expected))
+        self.record_slate("slate-3", selected=["candidate-1b"], deferred=[deferred])
+        codes = {row["code"] for row in status_report(self.store)["obligations"]}
+        self.assertNotIn("problem_slate_stale", codes)
+        self.assertIn("problem_candidate_unselected", codes)

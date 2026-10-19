@@ -77,7 +77,7 @@ payload, record and post obligation.
 | --- | --- |
 | `exploration` | `problem-init` records the area, field and immutable authors and adopts the constitution. No slate exists yet. |
 | `slate` | `problem-slate` records the selection over every current candidate, bound to two observed blind bars; no statement exists yet, or the latest slate selects no candidate. |
-| `formulation` | After a slate that selects a candidate, `problem-statement` selects the exact statement, resolution criteria, neighbours, optional formal statement and the candidate it formulates. |
+| `formulation` | The latest slate selects a candidate and `problem-statement` has selected a statement: the exact statement, resolution criteria, neighbours, optional formal statement and the candidate it formulates. |
 | `attempt` | Passed through until the problem record holds an attempt record. |
 | `openness` | An observed native openness review records a current `supported_open` finding with the shared search and full-reading minimum. |
 | `value` | Value evidence validates and `problem-assessment` binds a current self-assessment meeting the rubric thresholds; both observed bars and both version 2 result reviews cover the evidence and pass the assurances and rubric after adjudication; the current decision is `post`. |
@@ -97,7 +97,9 @@ establishes neither openness nor significance. A slate that selects no candidate
 records the reason and is the legitimate no-post outcome: `next` reports
 `problem_no_post` until a new slate selects a candidate. Formulate a selected
 candidate with `problem-statement` and its `candidate_id`; the post gate requires
-the latest slate to select the current statement's candidate.
+the latest slate to select the current statement's candidate. The latest slate
+must still cover exactly the current candidates; otherwise the gate reports
+`problem_slate_stale` until a new slate is recorded.
 
 Tools remain available in any order before posting: set budgets and depth,
 search the field and neighbouring formulations, read sources, preserve access

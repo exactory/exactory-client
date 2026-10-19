@@ -1389,7 +1389,7 @@ records and move explicit selections.
 | Command | JSON payload | Records and behavior |
 | --- | --- | --- |
 | `problem-init` | `{slug, area, field, authors}` | Creates the orchestration marker and initial configuration. |
-| `problem-candidate` | `{id, previous, statement, source, observation, neighbours, potential, notes, disposition}` | `problem_candidate/<id>` records a tentative question, adding `recorded_revision`. `previous` is null or an existing candidate id (`problem_candidate_missing`); a candidate that a later candidate names as `previous` is no longer current. `source` is `{kind, reference, evidence}`: kind `own_record`, `literature`, `computation`, `section` or `user`, a nonempty reference and a possibly empty list of evidence references. `potential` holds the provisional grades `{significance: {B1, B2}, priority}` with an optional `readiness` verdict (`invalid_rubric_grades`). `notes` is a string, possibly empty. `disposition` is `{status, reason, evidence_needed}` with status `open`, `selected`, `deferred` or `rejected` and `evidence_needed` text or null. |
+| `problem-candidate` | `{id, previous, statement, source, observation, neighbours, potential, notes, disposition}` | `problem_candidate/<id>` records a tentative question, adding `recorded_revision`. `previous` is null or an existing candidate id (`problem_candidate_missing`); a candidate that a later candidate names as `previous` is no longer current. `source` is `{kind, reference, evidence}`: kind `own_record`, `literature`, `computation`, `section` or `user`, a nonempty reference and a possibly empty list of evidence references. `potential` holds the provisional grades `{significance: {B1, B2}, priority}` with an optional `readiness` verdict (`invalid_rubric_grades`). `notes` is a string, possibly empty. `disposition` is `{status, reason, evidence_needed}` with status `open`, `selected`, `deferred` or `rejected` and `evidence_needed` text or null. It is the author's provisional disposition when the candidate is recorded; the slate's lists are the decision of record, may differ from it, and are the only dispositions the gate reads. |
 | `problem-slate` | `{id, selected, deferred, rejected, bar_review_ids, review_ids, comparison, reason}` | `problem_slate/<id>` records the selection decision over every current candidate, adding the computed `candidate_ids` and `recorded_revision`. The latest slate by recorded revision is current. |
 | `problem-statement` | `{id, title, area, statement, resolution_criteria, neighbours, formal_statement, candidate_id}` | `problem_statement/<id>` and `problem_selection/current = {statement_id}`. Statement and criteria are nonempty TeX; neighbours are formulation texts, possibly empty. Formal statement is optional, null or `{language, text}`. `candidate_id` is optional, null or the id of a current candidate that the statement formulates (`problem_candidate_missing`). The area must equal the immutable problem record's area (`problem_area_mismatch`); another subject class requires a new problem record. Any other changed field requires a new statement id and moves the selection. |
 | `problem-openness` | `{assignment_id}` | Records `problem_openness/<id>` from the observed native result review. Every supplied minimum must pass the shared closed-schema validation. `supported_open` advances the claim; `unresolved` records the gap without an evidence audit; `already_solved` redirects to the settling result and blocks posting as open. |
@@ -1438,7 +1438,13 @@ Formulate a selected candidate with `problem-statement` and its `candidate_id`.
 The post gate requires a slate (`problem_slate_missing`) and a current statement
 whose candidate the latest slate selects (`problem_candidate_unselected`, naming
 `statement_id` and `candidate_id`). A statement recorded before the slate is a
-preliminary formulation and is permitted.
+preliminary formulation and is permitted. The latest slate must still cover
+exactly the current candidates: a candidate recorded after it, or one that
+supersedes a candidate it disposed of, gives `problem_slate_stale` with
+`{slate_id, missing, extra}` until a new slate is recorded. A statement recorded
+in a 0.53.0 store before candidates existed carries no `candidate_id`; formulate
+it again under a new statement id with `candidate_id`, because re-selecting it
+unchanged gives `record_conflict`.
 
 The statement digest hashes `{statement, resolution_criteria}`. Declared
 neighbours also bind openness currency: adding a neighbour requires searches for
@@ -1576,6 +1582,7 @@ records retain nonmanaged dependency composition and empirical meaning.
 | Post obligation codes | Required action |
 | --- | --- |
 | `problem_slate_missing` | Compare the current candidates and record the selection with `problem-slate`. |
+| `problem_slate_stale` | Record a new slate that disposes of every current candidate; `missing` names current candidates outside the latest slate and `extra` names its candidates that are no longer current. |
 | `problem_candidate_unselected` | Formulate a candidate that the latest slate selects, or record a new slate. |
 | `problem_statement_missing` | Select the exact statement and resolution criteria. |
 | `problem_openness_missing`, `problem_openness_unresolved` | Obtain an observed supported openness finding with the audited minimum. |
@@ -1598,17 +1605,19 @@ records retain nonmanaged dependency composition and empirical meaning.
 
 `status` and `next` compute milestones from records: `exploration` before
 any slate, `slate` with a slate and no statement or with a latest slate that
-selects no candidate, `formulation` with a statement after a slate that selects
-a candidate, `attempt` (passed through until the problem record holds an attempt
-record), `openness` with current `supported_open`, `value` with valid value
-evidence and a passing current rubric self-assessment, both bars, both version 2
-result reviews passing the assurances and rubric after adjudication, and a
-current post decision, and `post` with a recorded post.
+selects no candidate, `formulation` when the latest slate selects a candidate
+and a statement is selected, `attempt` (passed through until the problem record
+holds an attempt record), `openness` with current `supported_open`, `value` with
+valid value evidence and a passing current rubric self-assessment, both bars,
+both version 2 result reviews passing the assurances and rubric after
+adjudication, and a current post decision, and `post` with a recorded post.
 `next` names the first missing condition in the order slate, statement,
 attempt, openness, value, reviews, decision, export. When the latest slate
 selects no candidate, `next` is `{code: "problem_no_post", reason, explanation}`
 with the slate's reason: the exploration ends without a post unless a new slate
-selects a candidate. Milestones impose no tool order. `status` also reports
+selects a candidate. The full `status` and `next` reports carry that reason; the
+`--summary` views show the code and the explanation only. Milestones impose no
+tool order. `status` also reports
 `candidates: {current, selected, deferred, rejected}`, the number of current
 candidates and the lengths of the latest slate's lists, and `slate_id`, the
 latest slate or null. It lists the current depth plan under `limits` and no
