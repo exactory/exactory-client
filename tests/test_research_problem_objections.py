@@ -347,7 +347,7 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
             for identifier in bars + ["review-reassessed-first", "review-reassessed-second"]])
         self.assertEqual(current["review_id"], "review-reassessed-second")
         self.assertEqual(refreshed["objection"]["material_version"], current["material_version"])
-        self.assertEqual(refreshed["focused_refresh"], {"assignment_id": "focused",
+        self.assertEqual(refreshed["focused_refresh"], {"assignment_id": "focused", "reason": "version_changed",
             "previous_problem_evidence_digest": previous["problem_evidence_digest"],
             "problem_evidence_digest": refreshed["problem_evidence_digest"],
             "previous_material_version": previous["objection"]["material_version"],
@@ -407,6 +407,49 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
             self.observe("result", reviewer, output, identifier="reassessed-" + reviewer)
             assignment = self.store.snapshot()["records"]["review_assignment"]["reassessed-" + reviewer]
             self.assertEqual(assignment["context"], {"prior_assignment_id": "refreshed-" + reviewer})
+        self.assert_delivered()
+
+    def reassess_on_the_same_evidence(self, *, bar_reviewer=None, result_reviewer=None, first_status="resolved"):
+        """A slate objection o2 changes the currency, so both result reviewers reassess on the same evidence."""
+        self.prepare_reviews(bar_reviewer=bar_reviewer, result_reviewer=result_reviewer)
+        self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
+        output = self.build_slate_output(["candidate-1", "candidate-2"])
+        output["objections"] = [dict(self.make_objection(), id="o2", claim="The bound restates a known estimate.",
+                                     candidate_ids=["candidate-1"])]
+        slate = self.observe("slate", "first", output)
+        self.record_slate("slate-2", deferred=[{"candidate_id": "candidate-2", "evidence_needed": "A documented active line."}],
+                          review_ids=[slate["id"]])
+        for reviewer in ("first", "second"):
+            output = self.build_review_output("result")
+            findings = [dict(self.make_finding("resolved"), id="o2")]
+            if bar_reviewer is not None or reviewer == result_reviewer:
+                findings.append(self.make_finding(first_status if reviewer == "first" else "resolved"))
+            output["value"]["objection_findings"] = findings
+            self.observe("result", reviewer, output, identifier="reassessed-" + reviewer)
+            assignment = self.store.snapshot()["records"]["review_assignment"]["reassessed-" + reviewer]
+            self.assertEqual(assignment["context"], {"prior_assignment_id": "result-" + reviewer})
+        records = self.store.snapshot()["records"]
+        return decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]
+            for identifier in ("review-bar-first", "review-bar-second", "review-reassessed-first", "review-reassessed-second")])
+
+    def test_a_superseded_finding_on_the_same_evidence_is_history(self):
+        """The wave review's I1 reproduction (R37): the earlier results kept O1 continuing in their own words."""
+        objections = self.reassess_on_the_same_evidence(bar_reviewer="first")
+        current = {objection["id"]: objection for objection in objections}["unsupported-implication"]
+        self.assertEqual(current["review_id"], "review-bar-first")
+        self.assertEqual([row["review_id"] for row in current["history"]], ["review-result-first", "review-result-second"])
+        self.assert_delivered()
+
+    def test_a_continuing_finding_of_the_latest_result_still_blocks(self):
+        objections = self.reassess_on_the_same_evidence(bar_reviewer="first", first_status="continuing")
+        current = {objection["id"]: objection for objection in objections}["unsupported-implication"]
+        self.assertEqual(current["review_id"], "review-reassessed-first")
+        self.assert_blocked_delivery()
+
+    def test_an_objection_of_a_superseded_result_on_the_same_evidence_is_history(self):
+        """The stated variant: the reviewer withdraws its own objection when it reassesses on the same evidence."""
+        objections = self.reassess_on_the_same_evidence(result_reviewer="first")
+        self.assertEqual([objection["id"] for objection in objections], ["o2"])
         self.assert_delivered()
 
     def prepare_version_evidence(self):
@@ -472,9 +515,60 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
             identifier="focused-other", review_ids=original_pair, objection_id="unsupported-implication"))
         self.observe_adjudication(review_ids=original_pair, identifier="focused-complete")
         refreshed = self.store.snapshot()["records"]["review_assignment"]["focused-complete"]
-        self.assertEqual((refreshed["history_assignment_id"], json.loads(self.artifacts.read(refreshed["packet"]))["focused_refresh"]["assignment_id"]),
-                         ("focused", "focused"))
+        refresh = json.loads(self.artifacts.read(refreshed["packet"]))["focused_refresh"]
+        self.assertEqual((refreshed["history_assignment_id"], refresh["assignment_id"], refresh["reason"], refresh["undelivered_keys"]),
+                         ("focused", "focused", "packet_incomplete", ["version_evidence", "version_review", "version_source_mappings"]))
+        self.assertEqual(refresh["material_version"], refresh["previous_material_version"])
         self.assert_delivered()
+
+    def replace_first_bar(self):
+        """A legitimate context repair replaces the first bar by another reviewer's bar."""
+        self.mutate(protocol.record_context_event, {"id": "exposure", "assignment_id": "bar-first",
+            "kind": "contamination", "source": "author_history", "reason": "Author advocacy entered the bar context.",
+            "evidence": [self.supporting]})
+        def respond_to_probe(route, request, credential):
+            packet = json.loads(request["input"][0]["content"])
+            return self.build_provider_response({"allowed_control": packet["allowed_control"],
+                "evidence_control": packet["evidence_control"], "excluded_controls": []})
+        with patch("research_harness.review_transport.send_request", side_effect=respond_to_probe):
+            self.mutate(protocol.probe_route, {"id": "repair-probe", "route_id": "route"}, credential="test-only")
+        self.assign("bar", "replacement", identifier="bar-replaced", context_repair={
+            "assignment_id": "bar-first", "event_ids": ["exposure"], "probe_id": "repair-probe",
+            "reason": "Reassess the field bar in a verified independent context.", "evidence": [self.supporting]})
+        output = self.build_review_output("bar")
+        output["reassessment"] = {"assignment_id": "bar-first", "findings": [{"review_id": "review-bar-first",
+            "disposition": "revised", "reason": "The independent context gives the same field standard.",
+            "evidence": [self.supporting]}]}
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {"id": "attempt-bar-replaced", "assignment_id": "bar-replaced"},
+                        credential="test-only")
+        self.mutate(decisions.record_value_review, dict(output, id="review-bar-replaced", dossier_id=None,
+                                                        assignment_id="bar-replaced"))
+
+    def test_a_complete_adjudication_of_an_unchanged_version_is_not_sampled_again_after_a_bar_repair(self):
+        """R38: other original calibrations of another pair do not make the earlier complete packet incomplete."""
+        self.prepare_reviews(bar_reviewer="second", results=False)
+        self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"])
+        self.replace_first_bar()
+        records = self.store.snapshot()["records"]
+        [objection] = decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]
+            for identifier in ("review-bar-replaced", "review-bar-second")])
+        previous = json.loads(self.artifacts.read(records["review_assignment"]["focused"]["packet"]))
+        self.assertEqual(objection["material_version"], previous["objection"]["material_version"])
+        self.assert_error("review_adjudicator_fixed", lambda: self.assign("adjudicator", "focused-third",
+            identifier="focused-after-repair", review_ids=["review-bar-replaced", "review-bar-second"],
+            objection_id="unsupported-implication"))
+
+    def test_changed_evidence_refreshes_the_fixed_adjudicator_and_names_the_reason(self):
+        self.prepare_reviews(result_reviewer="first")
+        self.observe_adjudication("upheld")
+        self.mutate(self.load_problem_module().record_value, self.build_value([self.item], identifier="value-copy"))
+        self.observe_adjudication("upheld", identifier="refreshed-focused")
+        records = self.store.snapshot()["records"]
+        refresh = json.loads(self.artifacts.read(records["review_assignment"]["refreshed-focused"]["packet"]))["focused_refresh"]
+        self.assertEqual((refresh["reason"], refresh["material_version"]), ("evidence_changed", refresh["previous_material_version"]))
+        self.assertNotEqual(refresh["problem_evidence_digest"], refresh["previous_problem_evidence_digest"])
+        self.assertNotIn("undelivered_keys", refresh)
 
     def test_a_material_adjudication_without_the_bar_calibrations_does_not_resolve(self):
         self.prepare_reviews(bar_reviewer="second")

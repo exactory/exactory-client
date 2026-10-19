@@ -675,17 +675,20 @@ def resolve_original_calibrations(records, artifacts, review_ids):
     return [calibrations[identifier] for identifier in sorted(calibrations)]
 
 
+VERSION_EVIDENCE_KEYS = ('version_review', 'version_evidence', 'version_source_mappings')
+
+
 def describe_version_evidence(records, artifacts, version):
     """What an adjudicator receives for one material objection version, apart from the original pair's correction
-    evidence: the review that stated the version, and the artifacts and source passages that the stating review's
-    packets delivered for the evidence the version cites."""
+    evidence, under VERSION_EVIDENCE_KEYS: the review that stated the version, and the artifacts and source passages
+    that the stating review's packets delivered for the evidence the version cites."""
     review = _get(records, 'value_review', version['review_id'])
     supplied, mappings = supplied_evidence.supplied_context(records, artifacts, [review['assignment_id']])
     cited = {reference['sha256'] for reference in collect_references(version['evidence'])}
-    return {'version_review': _reference_templates(_payload(review)),
-            'version_evidence': [supplied[sha256] for sha256 in sorted(cited & supplied.keys())],
-            'version_source_mappings': [mapping for mapping in mappings
-                                        if mapping['origin']['artifact_descriptor']['sha256'] in cited]}
+    return dict(zip(VERSION_EVIDENCE_KEYS, (
+        _reference_templates(_payload(review)),
+        [supplied[sha256] for sha256 in sorted(cited & supplied.keys())],
+        [mapping for mapping in mappings if mapping['origin']['artifact_descriptor']['sha256'] in cited])))
 
 
 def build_rubric_objection(records, artifacts, saved, context, packet, sources):
@@ -1305,12 +1308,6 @@ def _initial_slot(records, value):
     return value['id']
 
 
-# What the post gate requires of an observed problem adjudicator packet; an earlier packet that differs in one of
-# them is refreshed by the same adjudicator.
-_ADJUDICATION_DELIVERY_KEYS = ('bar_calibrations', 'rubric_definition', 'version_review', 'version_evidence',
-                               'version_source_mappings')
-
-
 def record_assignment(store, payload, *, expected_revision, request_id):
     artifacts = ArtifactStore(store.root)
     def prepare(records, value):
@@ -1373,14 +1370,19 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                     continue
                 previous_state = assignment_state(records, artifacts, previous['id'])
                 if problem and not correction and previous_state['ready']:
+                    from .research_decisions import find_undelivered_adjudication_keys
                     previous_packet = _read_json(artifacts, previous['packet'])
                     # A material objection's version changes with its finding even when the evidence digest does not.
                     previous_version = previous_packet['objection'].get('material_version')
                     version = packet['objection'].get('material_version')
-                    # A packet that lacked what the gate requires leaves its adjudication incomplete.
-                    if (previous_packet['problem_evidence_digest'] != packet['problem_evidence_digest']
-                            or previous_version != version
-                            or any(previous_packet.get(key) != packet.get(key) for key in _ADJUDICATION_DELIVERY_KEYS)):
+                    # The new packet carries the current version's evidence; the earlier one is held to the gate's rule.
+                    undelivered = find_undelivered_adjudication_keys(records, artifacts, previous['id'],
+                        rubric='rubric_definition' in packet,
+                        version_evidence={key: packet[key] for key in VERSION_EVIDENCE_KEYS if key in packet})
+                    reason = ('version_changed' if previous_version != version else
+                              'evidence_changed' if previous_packet['problem_evidence_digest'] != packet['problem_evidence_digest'] else
+                              'packet_incomplete' if undelivered else None)
+                    if reason is not None:
                         if (normalized_text(previous['reviewer_id']) != normalized_text(value['reviewer_id'])
                                 or previous['route_id'] != value['route_id']
                                 or normalized_text(previous['author_id']) != normalized_text(value['author_id'])):
@@ -1388,10 +1390,12 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                         focused_parent = previous
                         packet.pop('evidence', None)
                         packet.pop('digest', None)
-                        packet['focused_refresh'] = {'assignment_id': previous['id'],
+                        packet['focused_refresh'] = {'assignment_id': previous['id'], 'reason': reason,
                             'previous_problem_evidence_digest': previous_packet['problem_evidence_digest'],
                             'problem_evidence_digest': packet['problem_evidence_digest'],
                             'previous_material_version': previous_version, 'material_version': version}
+                        if reason == 'packet_incomplete':
+                            packet['focused_refresh']['undelivered_keys'] = undelivered
                         packet['evidence'] = _evidence(artifacts, packet)
                         packet['digest'] = digest(packet)
                         continue

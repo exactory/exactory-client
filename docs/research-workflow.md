@@ -257,11 +257,14 @@ A material objection is resolved in its latest material version: a restated
 objection and a `continuing` or `contested` finding with a new reason or new
 evidence are new versions, a resolution or an adjudication of an earlier version
 leaves a changed objection open, and the same reviewers reassess it in their
-sessions. The adjudicator of a version receives the review that stated it and the
-evidence that review received for it, apart from the original pair's evidence,
-and the post gate accepts the adjudication only when its packet delivered them.
-The same adjudicator reassesses after a changed version or an incomplete earlier
-packet.
+sessions. Only the latest review of a reviewer's lineage holds versions current; a
+review that a later review of the same lineage superseded, for a result on the
+same evidence, is history. The adjudicator of a version receives the review that
+stated it and the evidence that review received for it, apart from the original
+pair's evidence, and the post gate accepts the adjudication only when its packet
+delivered them. The same adjudicator reassesses only after a changed version,
+changed evidence or an incomplete earlier packet, and the refresh names its
+reason.
 Original grades remain visible. Version 1 assignments stay verified, while
 the post gate requires version 2 result reviews. Reviewers must be independent of every recorded
 author, and pending source requests remain obligations. Record a `post`

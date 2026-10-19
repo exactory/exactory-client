@@ -1773,29 +1773,39 @@ version: the digest of its finding content (`claim`, `reason`, `evidence`,
 `resolution_condition` and, for a slate objection, `candidate_ids`) with the id
 and recorded revision of the review that stated it. An entry of `objection_findings`
 in an observed bar, slate or result review with status `continuing` or `contested`
-whose `reason` or `evidence` differs from the latest version of that objection is
-also a new version: it keeps the `claim`, the `resolution_condition` and the
-`candidate_ids` of the version it continues, and it takes the finding's `reason`
-and `evidence` and the id and recorded revision of its review. A finding that
-repeats the latest reason and evidence adds no version. Versions follow the
-recorded order of the reviews. Per objection id, packets
-deliver the latest version with `material_version`, `review_id`,
-`recorded_revision` and the earlier versions in `history`. Both result reviewers
+whose `reason` or `evidence` differs from the version it continues is also a new
+version: it keeps the `claim`, the `resolution_condition` and the `candidate_ids`
+of that version, and it takes the finding's `reason` and `evidence` and the id
+and recorded revision of its review. A finding that repeats the reason and
+evidence of the version it continues adds no version. Versions follow the
+recorded order of the reviews. Only the latest review of a lineage (the same
+stage, reviewer, session and slot; for a result, also the same problem evidence)
+holds versions current, by stating them or by continuing them in its findings. A
+review that a later review of its lineage superseded states no current version:
+its objections and findings are history. Per objection id, packets
+deliver the latest current version with `material_version`, `review_id`,
+`recorded_revision` and the other versions in `history`. Both result reviewers
 must record evidence-backed resolutions, each in a review whose packet delivered
 the current version, or an independent focused adjudication of the current
 version must find the objection not upheld; a resolution or an adjudication of an
 earlier version disposes of nothing later, and the changed currency lets the same
-reviewers reassess. A result packet does not show a current peer result, so a new
-version from the current peer's finding is resolved by an adjudication or by a
-reassessment under changed evidence. Problem adjudication uses the existing review tools
+reviewers reassess. The `material_objections` of a result packet leave out the
+results given on the current problem evidence: the other current result review
+and the superseded reviews of both lineages. A refreshed reviewer sees its own
+earlier reviews in `historical_reviews`. A new version from the other current
+result review's finding is resolved by an adjudication or by a reassessment under
+changed evidence. Problem adjudication uses the existing review tools
 with `dossier_id: null`; changed value evidence, a changed material version of
-the adjudicated objection, or an earlier packet without the calibrations, the
-rubric definition or the version evidence that the post gate verifies (below)
-retains the focused adjudicator and its observed history
-rather than opening a new reviewer choice: its next assignment is a
-`focused_refresh` naming the previous and current evidence digests and material
-versions, and under an unchanged digest and version and a complete earlier
-packet another assignment returns `review_adjudicator_fixed`.
+the adjudicated objection, or an earlier adjudicator packet that lacked a delivery
+that the post gate requires of it (below) retains the focused adjudicator and its
+observed history rather than opening a new reviewer choice: its next assignment is
+a `focused_refresh` naming the previous and current evidence digests and material
+versions and its `reason`, `version_changed`, `evidence_changed` or
+`packet_incomplete`, the last with the lacking keys in `undelivered_keys`. Under
+an unchanged digest and version and a complete earlier packet, another assignment
+returns `review_adjudicator_fixed`, also when a delivery that the gate does not
+require of the earlier packet differs, such as the calibrations of another pair
+or `current_bar_calibrations`.
 The adjudicator template is `exactory-problem-review-v2/adjudicator`. For a
 below-threshold rubric grade, set `context.objection_id` to
 `rubric:<review_id>:<item>` with both original result review IDs. Items are
