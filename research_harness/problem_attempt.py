@@ -7,10 +7,12 @@ from .operations import fields, immutable_record, prepared_mutation, text
 from .problem_claims import find_assessment, find_current_statement, find_latest, require_problem
 
 # Normal solver attempt limits from DESIGN.md section 5.
-NORMAL_ATTEMPT_LIMIT = 24
+NORMAL_ATTEMPT_LIMITS = {"moves": 24, "runs": 24, "workers": 1, "timeout_seconds": 300}
 
 
 def is_native_resolved(native):
+    if native["state"]["proof_status"] == "invalidated":
+        return False
     root = native["contract"]["root_obligation"]
     return (native["state"]["proof_status"] in ("proved", "disproved")
             or any(row["id"] == root and row["status"] == "accepted" for row in native["obligations"])
@@ -20,6 +22,18 @@ def is_native_resolved(native):
 
 def find_attempt(records):
     return find_latest(records, "problem_attempt")
+
+
+def find_current_attempt(records):
+    attempt, statement = find_attempt(records), find_current_statement(records)
+    return attempt if (attempt is not None and statement is not None
+                       and attempt["statement_id"] == statement["id"]) else None
+
+
+def find_latest_native_attempt(records, objective_id):
+    return max(((identifier, native) for identifier, native in records.get("native_attempt", {}).items()
+                if native["objective_id"] == objective_id),
+               key=lambda pair: (pair[1].get("recorded_revision", 0), pair[0]), default=(None, None))
 
 
 def validate_attempt(records, artifacts, value):
@@ -55,13 +69,22 @@ def validate_attempt(records, artifacts, value):
         raise ResearchError("invalid_input", "The extension reason must be text or null")
     native, readings = None, []
     if kind == "solver":
-        fields(value["solver"], ("native_attempt_digest",))
+        fields(value["solver"], ("native_attempt_digest", "applicability"))
+        text(value["solver"]["applicability"], "Applicability to the statement and resolution criteria")
         identifier = value["solver"]["native_attempt_digest"]
         text(identifier, "Native attempt digest")
         native = records.get("native_attempt", {}).get(identifier)
         if native is None:
             raise ResearchError("problem_attempt_unbound", "Deliver the native attempt into this problem store",
                                 {"native_attempt_digest": identifier, "expected_store": str(artifacts.root)})
+        latest_digest, _ = find_latest_native_attempt(records, native["objective_id"])
+        if identifier != latest_digest:
+            raise ResearchError("problem_attempt_superseded", "Bind the latest delivered snapshot of this objective",
+                                {"native_attempt_digest": identifier, "latest_native_attempt_digest": latest_digest})
+        scope = native["contract"]["original_claim"]["scope"]
+        if scope["kind"] != "named":
+            raise ResearchError("problem_attempt_scope_restricted", "Use a named scope covering the exact statement",
+                                {"native_attempt_digest": identifier, "scope": scope})
         if native["contract"]["original_claim"]["statement"] != statement["statement"]:
             raise ResearchError("problem_attempt_statement_mismatch", "The native contract must name the exact current statement",
                                 {"attempt_id": value["id"], "statement_id": statement["id"], "native_attempt_digest": identifier})
@@ -69,9 +92,10 @@ def validate_attempt(records, artifacts, value):
             raise ResearchError("problem_attempt_outcome_mismatch", "Match the native attempt's recorded root resolution",
                                 {"attempt_id": value["id"], "native_attempt_digest": identifier})
         totals = native["totals"]
-        if (totals["moves"] > NORMAL_ATTEMPT_LIMIT or totals["runs"] > NORMAL_ATTEMPT_LIMIT) and (reason is None or not reason.strip()):
+        exceeded = [name for name, limit in NORMAL_ATTEMPT_LIMITS.items() if totals[name] > limit]
+        if exceeded and (reason is None or not reason.strip()):
             raise ResearchError("problem_attempt_extension_unexplained", "Explain extending the normal attempt limits",
-                                {"totals": totals})
+                                {"totals": totals, "exceeded": exceeded})
     else:
         fields(value["literature"], ("readings", "description"))
         text(value["literature"]["description"], "Critical assessment of the literature attempt")
@@ -132,10 +156,28 @@ def assess_attempt(records, artifacts):
         try:
             validate_attempt(records, artifacts, attempt)
         except ResearchError as error:
-            pending.append(obligation(error.code, error.message, attempt_id=attempt["id"],
-                                      **{key: value for key, value in (error.details or {}).items() if key != "attempt_id"}))
-        if attempt["outcomes"]["resolved"]:
-            pending.append(obligation("problem_attempt_resolved", "Deliver the resolved candidate as a result.", attempt_id=attempt["id"]))
+            if error.code == "problem_attempt_superseded":
+                pending.append(obligation("problem_attempt_stale",
+                    "Record a new attempt bound to the latest delivered snapshot of this objective.",
+                    attempt_id=attempt["id"], statement_id=statement_id, **error.details))
+            else:
+                pending.append(obligation(error.code, error.message, attempt_id=attempt["id"],
+                                          **{key: value for key, value in (error.details or {}).items() if key != "attempt_id"}))
+    resolved = []
+    for recorded in records.get("problem_attempt", {}).values():
+        if statement is None or recorded["statement_id"] != statement_id:
+            continue
+        if recorded["kind"] == "literature":
+            established = recorded["outcomes"]["resolved"]
+        else:
+            native = records.get("native_attempt", {}).get(recorded["solver"]["native_attempt_digest"])
+            latest = None if native is None else find_latest_native_attempt(records, native["objective_id"])[1]
+            established = latest is not None and is_native_resolved(latest)
+        if established:
+            resolved.append(recorded)
+    if resolved:
+        concerned = max(resolved, key=lambda row: (row["recorded_revision"], row["id"]))
+        pending.append(obligation("problem_attempt_resolved", "Deliver the resolved candidate as a result.", attempt_id=concerned["id"]))
     assessment = find_assessment(records)
     if (assessment is not None and assessment["statement_id"] == statement_id
             and assessment["grades"]["attempt"] == "pass" and not current):

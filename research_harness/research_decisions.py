@@ -505,13 +505,14 @@ def _assess_problem_coverage(records, artifacts, reviews, expected, evidence_dig
         packets = [packet for _, packet in collect_observed_packets(records, evaluation, review['assignment_id'])]
         current = [packet for packet in packets if packet.get('problem_evidence_digest') == evidence_digest]
         current_evidence = [packet.get('problem_evidence', {}) for packet in current]
-        missing = [key for key in ('claim', 'openness', 'value', 'assessment', 'attempt', 'results', 'citations', 'readings', 'computations', 'formal_checks')
+        missing = [key for key in ('claim', 'openness', 'value', 'assessment', 'assessment_evidence', 'attempt', 'results', 'citations', 'readings', 'computations', 'formal_checks')
                    if not any(key in packet_evidence and packet_evidence[key] == expected[key] for packet_evidence in current_evidence)]
         delivered = find_delivered_readings(records, evaluation, readings,
             [dict(packet, direction_evidence=packet_evidence) for packet, packet_evidence in zip(current, current_evidence)])
         missing_readings = sorted(reading['id'] for reading in readings if reading['id'] not in delivered)
+        assessment_artifacts = [reference for reference in expected['assessment_evidence'] if 'kind' not in reference]
         missing_artifacts = sorted({reference['sha256'] for reference in collect_references(
-            [expected['computations'], expected['formal_checks']])
+            [assessment_artifacts, expected['computations'], expected['formal_checks']])
             if not any(has_attachment(evaluation, packet, reference) for packet in current)})
         if missing or missing_readings or missing_artifacts:
             obligations.append(obligation('problem_evidence_unassessed',

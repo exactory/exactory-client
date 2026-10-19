@@ -33,20 +33,22 @@ def build_native_attempt(statement_text, acceptances, state):
                              "claim": dict(claim, statement="The bound reduces to the balanced case."),
                              "verification_status": "accepted", "origin_kind": "local"}],
             "acceptances": copy.deepcopy(acceptances), "retreats": [], "failed_strategies": [], "nodes": [],
-            "totals": {"moves": 24, "runs": 24, "elapsed_seconds": None, "workers": 1, "historical_usage": "known"},
+            "totals": {"moves": 24, "runs": 24, "elapsed_seconds": None, "workers": 1, "timeout_seconds": 300, "historical_usage": "known"},
             "provenance": {"source": "operator", "actor_id": "search-controller",
                            "attestation_id": "filesystem-audit:deliver-attempt"}}
 
 
 def put_native_attempt(case, native):
-    identifier = digest({key: value for key, value in native.items() if key != "provenance"})
-    case.put("native_attempt", identifier, native)
+    identifier = digest({key: value for key, value in native.items() if key not in ("provenance", "recorded_revision")})
+    if identifier not in case.store.snapshot()["records"].get("native_attempt", {}):
+        case.put("native_attempt", identifier, dict(native, recorded_revision=case.store.revision + 1))
     return identifier
 
 
 def build_attempt(identifier="attempt-1", native_attempt_digest=None, reading=None, **changes):
     return dict({"id": identifier, "statement_id": "statement-1", "kind": "solver" if reading is None else "literature",
-                 "solver": {"native_attempt_digest": native_attempt_digest} if reading is None else None,
+                 "solver": {"native_attempt_digest": native_attempt_digest,
+                            "applicability": "The quantifiers cover every n, with no added assumptions and named scope matching the statement and resolution criteria."} if reading is None else None,
                  "literature": None if reading is None else {
                      "readings": [{key: reading[key] for key in ("version_id", "reading_id")}],
                      "description": "Critically assessed the exact bound and the routes tried in the full source."},
@@ -128,7 +130,8 @@ class ProblemAttemptTests(ProblemCase):
                         with self.subTest(section=section, status=status, outcome=outcome, obligation_id=obligation_id):
                             native = build_native_attempt(self.statement["statement"], [build_acceptance(
                                 outcome=outcome, status=status, obligation_id=obligation_id)], {})
-                            payload = self.solver_payload(native, "-".join((section, status, outcome, obligation_id)))
+                            native["objective_id"] = "-".join((section, status, outcome, obligation_id))
+                            payload = self.solver_payload(native, native["objective_id"])
                             payload["outcomes"]["resolved"] = (status == "accepted" and obligation_id == "obligation-000001"
                                                                  and outcome in ("proof", "counterexample"))
                             row = {"claim": "A scoped mathematical conclusion.",
@@ -153,19 +156,70 @@ class ProblemAttemptTests(ProblemCase):
         self.assertEqual(caught.exception.details, {"acceptance_id": "absent"})
 
     def test_extension_reason_required_beyond_the_normal_limits(self):
-        for dimension in ("moves", "runs"):
+        for dimension, limit in (("moves", 24), ("runs", 24), ("workers", 1), ("timeout_seconds", 300)):
             native = build_native_attempt(self.statement["statement"], [], {})
-            native["totals"][dimension] = 25
+            native["totals"].update(moves=1, runs=1)
+            native["totals"][dimension] = {"workers": 8, "timeout_seconds": 600}.get(dimension, limit + 1)
             payload = self.solver_payload(native, dimension)
             for reason in (None, "", "  "):
                 payload["proportion"]["extension_reason"] = reason
                 with self.assertRaises(ResearchError) as caught:
                     self.record_attempt(payload)
                 self.assertEqual(caught.exception.code, "problem_attempt_extension_unexplained")
-                self.assertEqual(caught.exception.details, {"totals": native["totals"]})
+                self.assertEqual(caught.exception.details, {"totals": native["totals"], "exceeded": [dimension]})
             payload["proportion"]["extension_reason"] = "An additional run tests the remaining boundary case."
             self.record_attempt(payload)
         self.record_attempt(self.solver_payload(identifier="at-normal-limits"))
+
+    def test_solver_scope_must_be_named_and_applicability_nonempty(self):
+        scopes = [{"kind": "case_ids", "case_ids": ["n=1"]},
+                  {"kind": "integer_interval", "lower": 1, "upper": 10,
+                   "lower_inclusive": True, "upper_inclusive": True}]
+        for scope in scopes:
+            with self.subTest(scope=scope):
+                native = build_native_attempt(self.statement["statement"], [], {})
+                native["contract"]["original_claim"]["scope"] = scope
+                payload = self.solver_payload(native)
+                with self.assertRaises(ResearchError) as caught:
+                    self.record_attempt(payload)
+                self.assertEqual(caught.exception.code, "problem_attempt_scope_restricted")
+                self.assertEqual(caught.exception.details, {
+                    "native_attempt_digest": payload["solver"]["native_attempt_digest"], "scope": scope})
+        payload = self.solver_payload()
+        for variant in (None, "", "  ", "missing"):
+            with self.subTest(applicability=variant):
+                bad = copy.deepcopy(payload)
+                if variant == "missing":
+                    del bad["solver"]["applicability"]
+                else:
+                    bad["solver"]["applicability"] = variant
+                with self.assertRaises(ResearchError) as caught:
+                    self.record_attempt(bad)
+                self.assertEqual(caught.exception.code, "invalid_input")
+                self.assertIsNone(caught.exception.details)
+
+    def test_native_snapshot_order_uses_revision_then_digest(self):
+        native = build_native_attempt(self.statement["statement"], [], {})
+        payload = self.solver_payload(native)
+        records = self.store.snapshot()["records"]
+        identifier = payload["solver"]["native_attempt_digest"]
+        for later_id, revision, superseded in (("0" * 64, 0, False),
+                                                ("f" * 64, 0, True),
+                                                ("0" * 64, 1, True)):
+            with self.subTest(later_id=later_id, revision=revision):
+                changed = copy.deepcopy(records)
+                changed["native_attempt"][identifier]["recorded_revision"] = 0
+                changed["native_attempt"][later_id] = dict(native, recorded_revision=revision)
+                # A later delivery from a different objective does not supersede this one.
+                changed["native_attempt"]["other"] = dict(native, objective_id="other", recorded_revision=100)
+                if superseded:
+                    with self.assertRaises(ResearchError) as caught:
+                        self.attempt_module().validate_attempt(changed, self.artifacts, payload)
+                    self.assertEqual(caught.exception.code, "problem_attempt_superseded")
+                    self.assertEqual(caught.exception.details, {
+                        "native_attempt_digest": identifier, "latest_native_attempt_digest": later_id})
+                else:
+                    self.attempt_module().validate_attempt(changed, self.artifacts, payload)
 
     def test_records_a_literature_attempt_on_full_readings(self):
         reading = self.record_full_reading()
@@ -258,6 +312,8 @@ class ProblemAttemptTests(ProblemCase):
         self.assertEqual(describe_evidence(records, self.artifacts)["attempt"], {
             "kind": "solver", "outcomes": payload["outcomes"], "proportion": payload["proportion"],
             "state": native["state"], "totals": native["totals"], "literature": None,
+            "applicability": payload["solver"]["applicability"],
+            **{key: native[key] for key in ("contract", "obligations", "failed_strategies", "retreats", "nodes")},
             "acceptances": [
                 {"acceptance_id": "proof", "claim": proof_claim, "outcome": "proof", "standard": "reviewed"},
                 {"acceptance_id": "reduction", "claim": native["checkpoints"][0]["claim"], "outcome": "reduction", "standard": "reviewed"},
@@ -404,6 +460,61 @@ class ProblemAttemptDeliveryTests(ProblemDeliveryCase):
         pending = [row for row in assessed["obligations"] if row["code"] == "problem_evidence_unassessed"]
         self.assertEqual({row["review_id"] for row in pending}, {"review-without-reading-first", "review-without-reading-second"})
         self.assertTrue(all(row["missing"] == ["readings"] and row["reading_ids"] == ["read-attempt-only"] for row in pending), pending)
+
+    def test_native_snapshot_succession_preserves_resolution_until_invalidation(self):
+        from research_harness.gates import gate_state
+        from research_harness import problem_attempt
+        self.prepare_ready(solver=True)
+        records = self.store.snapshot()["records"]
+        old_digest = records["problem_attempt"]["attempt-1"]["solver"]["native_attempt_digest"]
+        native = build_native_attempt(self.selected["statement"], [], {"proof_status": "proved"})
+        latest_digest = put_native_attempt(self, native)
+        resolved = {"code": "problem_attempt_resolved", "explanation": "Deliver the resolved candidate as a result.",
+                    "attempt_id": "attempt-1"}
+        def attempt_obligations():
+            return [row for row in gate_state(self.store.snapshot()["records"], self.artifacts, "post")["obligations"]
+                    if row["code"].startswith("problem_attempt_")]
+        self.assertEqual(attempt_obligations(), [{
+            "code": "problem_attempt_stale",
+            "explanation": "Record a new attempt bound to the latest delivered snapshot of this objective.",
+            "attempt_id": "attempt-1", "statement_id": "statement-1",
+            "native_attempt_digest": old_digest, "latest_native_attempt_digest": latest_digest}, resolved])
+        with self.assertRaises(ResearchError) as caught:
+            self.mutate(problem_attempt.record_attempt, build_attempt("old-again", old_digest))
+        self.assertEqual(caught.exception.code, "problem_attempt_superseded")
+        self.assertEqual(caught.exception.details, {
+            "native_attempt_digest": old_digest, "latest_native_attempt_digest": latest_digest})
+        payload = build_attempt("resolved-latest", latest_digest)
+        with self.assertRaises(ResearchError) as caught:
+            self.mutate(problem_attempt.record_attempt, payload)
+        self.assertEqual(caught.exception.code, "problem_attempt_outcome_mismatch")
+        self.assertEqual(caught.exception.details, {"attempt_id": "resolved-latest", "native_attempt_digest": latest_digest})
+        payload["outcomes"]["resolved"] = True
+        self.mutate(problem_attempt.record_attempt, payload)
+        resolved["attempt_id"] = "resolved-latest"
+        self.assertEqual(attempt_obligations(), [resolved])
+        reading = {"version_id": self.store.snapshot()["records"]["reading"]["read-full"]["version_id"],
+                   "reading_id": "read-full"}
+        self.mutate(problem_attempt.record_attempt, build_attempt("literature-later", reading=reading))
+        self.assertEqual(attempt_obligations(), [resolved])
+        invalidated = copy.deepcopy(native)
+        invalidated["state"]["proof_status"] = "invalidated"
+        invalidated["obligations"][0]["status"] = "accepted"
+        invalidated["acceptances"] = [build_acceptance(outcome="proof", obligation_id="obligation-000001")]
+        put_native_attempt(self, invalidated)
+        self.assertEqual(attempt_obligations(), [])
+        literary = build_attempt("literature-resolved", reading=reading)
+        literary["outcomes"]["resolved"] = True
+        self.mutate(problem_attempt.record_attempt, literary)
+        self.mutate(problem_attempt.record_attempt, build_attempt("literature-unresolved", reading=reading))
+        self.assertEqual(attempt_obligations(), [dict(resolved, attempt_id="literature-resolved")])
+        self.select_statement(identifier="statement-2")
+        self.assertEqual(attempt_obligations(), [{"code": "problem_attempt_stale",
+            "explanation": "Reassess the attempt for the current statement and criteria.",
+            "attempt_id": "literature-unresolved", "statement_id": "statement-2"}])
+        self.mutate(problem_attempt.record_attempt,
+                    build_attempt("second-statement", reading=reading, statement_id="statement-2"))
+        self.assertEqual(attempt_obligations(), [])
 
     def test_resolved_attempt_blocks_the_post(self):
         from research_harness.problem_attempt import record_attempt

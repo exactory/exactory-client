@@ -107,10 +107,20 @@ must still cover exactly the current candidates; otherwise the gate reports
 
 Record the attempt with `problem-attempt`: `{id, statement_id, kind, solver,
 literature, outcomes, proportion}` becomes immutable `problem_attempt/<id>` with
-`recorded_revision`. For `kind: "solver"`, use `solver: {native_attempt_digest}`
+`recorded_revision`. For `kind: "solver"`, use `solver: {native_attempt_digest, applicability}`
 and null `literature`; the math-solver proposal sets `review_workspace` to this
 problem workspace (for example `..` from `<workspace>/attack`), then
 `search deliver-attempt` delivers `native_attempt/<digest(summary)>` to this store.
+`applicability` is nonempty text explaining how the native claim's quantifiers,
+assumption ids and scope match the statement and resolution criteria
+(`invalid_input` when missing or blank). The native scope must be `named`;
+`case_ids` and `integer_interval` return `problem_attempt_scope_restricted` with
+the digest and scope. Bind the objective's latest delivered snapshot, ordered
+by common-store `recorded_revision` then digest id (legacy missing revisions
+sort at zero). Earlier bindings return `problem_attempt_superseded` with both
+native digests. The gate reports `problem_attempt_stale` for such a binding,
+naming both digests, the attempt and the statement, and asks for a new attempt
+bound to the latest delivered snapshot of the objective.
 For `kind: "literature"`, use null `solver` and
 `literature: {readings: [{version_id, reading_id}], description}` with full readings
 and a critical assessment of the exact statement. Exactly one binding is non-null.
@@ -121,7 +131,12 @@ value or openness evidence does not otherwise cite them.
 `outcomes` gives `resolved`, `footholds: [{claim, evidence}]`,
 `unresolved: [{description}]` and `obstructions: [{claim, scope, evidence}]`.
 Evidence names an accepted native acceptance or a listed full reading.
-`proportion: {extension_reason}` explains consumed solver moves or runs above 24.
+`proportion: {extension_reason}` explains any total above the normal limits:
+24 moves, 24 runs, one admitted worker or 300 admitted timeout seconds.
+`problem_attempt_extension_unexplained` names `totals` and `exceeded`, listing
+moves, runs, workers and timeout_seconds in that order when exceeded. Delivered
+totals retain null elapsed duration and the largest admitted worker and timeout
+bounds; unknown historical usage is not inferred.
 Missing, stale and resolved attempts block posting as `problem_attempt_missing`,
 `problem_attempt_stale` and `problem_attempt_resolved`. A passing current rubric
 attempt grade without a current attempt gives `problem_rubric_attempt_unbound`.
@@ -131,7 +146,13 @@ consideration evidence, never evidence of difficulty or a demonstrated obstructi
 A solver attempt is resolved by proof status `proved` or `disproved`, an
 `accepted` root obligation, or an accepted root `proof` or `counterexample`
 acceptance, including root support delivered before closure with proof status
-still `open`. A root reduction remains eligible foothold and result evidence.
+still `open`. An `invalidated` native snapshot is unresolved. The gate examines
+all attempts for this statement: a resolved literature attempt persists, and
+each solver attempt uses its objective's latest delivered snapshot. An unresolved
+later attempt cannot erase a resolution. A later invalidated snapshot lifts that
+objective's resolution; a new statement id starts clean. The resolution blocker
+names the latest attempt establishing it. A root reduction remains eligible
+foothold and result evidence.
 
 Tools remain available in any order before posting: set budgets and depth,
 search the field and neighbouring formulations, read sources, preserve access
@@ -154,6 +175,11 @@ the acceptance's checkpoint claim, outcome and standard for each cited result.
 The attempt evidence also carries its literature description and reading binding,
 or the checkpoint claims, outcomes and standards of all acceptances cited by its
 solver footholds and obstructions, once in first citation order.
+A solver attempt additionally carries `applicability`, its complete delivered
+`contract`, `obligations`, `failed_strategies`, `retreats` and `nodes`, alongside
+`state`, `totals` and the cited acceptances. If the latest attempt belongs to
+another statement, both the digest binding and the reviewer projection carry
+`attempt: null` and `results: []`; the gate retains the stale-attempt obligation.
 Both result reviewers must receive these fields (`problem_evidence_unassessed`).
 An unavailable source stays unread. A requested formal check records the exact
 native claim, proof policy and required deliverables before verification. After
@@ -167,7 +193,16 @@ admission items must pass, `max(B1, B2) >= 2` (at least 3 for accessibility
 `E-A` or `E-N`), priority must be at least 2, and attempt and calibration must
 pass. Levels are integers 0 to 3 and the grounds never add. This assessment
 records the attempt judgment without creating an attempt record. A statement
-change requires reassessment.
+change requires reassessment. `assessment_evidence` resolves distinct item
+references in item order and then reference order: record references carry their
+stored content with the bound digest, source references carry their link and
+matching full reading ids, and artifact descriptors retain their attached bytes.
+The digest binding omits the record contents from this list. Missing or changed
+records return `problem_assessment_evidence_missing {item, record_kind, id}`;
+a source without a matching full reading returns that code with `{item, link}`.
+Assessment source readings join value readings for passage delivery, coverage,
+citations and export. Both result reviewers must receive `assessment_evidence`
+(`problem_evidence_unassessed`).
 
 Use the existing verified review routes. Both bar reviewers receive the field,
 area and source context before the statement is shown, and calibrate levels

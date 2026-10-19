@@ -269,12 +269,48 @@ def assess_formal_checks(records):
     return pending
 
 
+def resolve_assessment_evidence(records):
+    from .problem_rubric import ITEMS
+    assessment, statement = find_assessment(records), find_current_statement(records)
+    if assessment is None or statement is None or assessment["statement_id"] != statement["id"]:
+        return []
+    seen, resolved = set(), []
+    for item in ITEMS:
+        for reference in assessment["items"][item]["evidence"]:
+            identity = digest(reference)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            if reference.get("kind") == "record":
+                affected = {key: reference[key] for key in ("record_kind", "id")}
+                record = records.get(reference["record_kind"], {}).get(reference["id"])
+                if record is None or digest(record) != reference["digest"]:
+                    raise ResearchError("problem_assessment_evidence_missing",
+                                        "Deliver the exact record cited by this assessment", dict(item=item, **affected))
+                resolved.append(dict(reference, record=record))
+            elif reference.get("kind") == "source":
+                link = reference["link"]
+                readings = [identifier for identifier, reading in sorted(records.get("reading", {}).items())
+                            if reading["depth"] == "fulltext" and (reading["version_id"] == link["version_id"]
+                                or any(inspection["link"] == link for inspection in reading["inspections"]))]
+                if not readings:
+                    raise ResearchError("problem_assessment_evidence_missing",
+                                        "Deliver full readings of the source cited by this assessment", {"item": item, "link": link})
+                resolved.append(dict(reference, reading_ids=readings))
+            else:
+                resolved.append(reference)
+    return resolved
+
+
 def collect_readings(records):
     from .problem_attempt import find_attempt
     openness = find_latest(records, "problem_openness")
     minimum = (openness or {}).get("minimum") or {}
     digests = set(minimum.get("reading_digests", []))
     identifiers = {item["reading_id"] for item in collect_value_items(find_value(records)) if item["kind"] == "reading"}
+    for reference in resolve_assessment_evidence(records):
+        if reference.get("kind") == "source":
+            identifiers.update(reference["reading_ids"])
     attempt, statement = find_attempt(records), find_current_statement(records)
     if (attempt is not None and statement is not None and attempt["statement_id"] == statement["id"]
             and attempt["kind"] == "literature"):
@@ -310,17 +346,19 @@ def project_citations(records, artifacts):
 
 
 def describe_binding(records, artifacts):
-    from .problem_attempt import find_attempt
+    from .problem_attempt import find_current_attempt
     statement = find_current_statement(records)
-    attempt = find_attempt(records)
+    attempt = find_current_attempt(records)
     openness, value = find_latest(records, "problem_openness"), find_value(records)
     computations = [validate_computation(records, artifacts, item, recorded_revision=value.get("recorded_revision")) for item in collect_value_items(value)
                     if item["kind"] == "computation"]
     return {"claim": statement, "openness": openness, "value": value, "assessment": find_assessment(records),
+            "assessment_evidence": [{key: value for key, value in row.items() if key != "record"}
+                                    for row in resolve_assessment_evidence(records)],
             "attempt": None if attempt is None else {"id": attempt["id"], "digest": digest(attempt),
                 "native_attempt_digest": None if attempt["solver"] is None else attempt["solver"]["native_attempt_digest"]},
             "results": [{"attempt_id": attempt_id, "acceptance_id": acceptance["id"], "digest": digest(acceptance)}
-                        for attempt_id, acceptance in collect_results(records)],
+                        for attempt_id, acceptance in ([] if attempt is None else collect_results(records))],
             "readings": [{"id": row["id"], "digest": digest(row)} for row in collect_readings(records)],
             "computations": [{"execution_id": row["execution_id"], "output_id": row["output_id"],
                               **{key: digest(row[key]) for key in ("admission", "execution", "assessment")}} for row in computations],
@@ -331,18 +369,20 @@ def describe_binding(records, artifacts):
 
 def describe_evidence(records, artifacts):
     from .direction_sources import build_reading_passages
-    from .problem_attempt import find_attempt
+    from .problem_attempt import find_current_attempt
     statement, value = find_current_statement(records), find_value(records)
     openness = find_latest(records, "problem_openness")
     assessment = find_assessment(records)
-    attempt = find_attempt(records)
+    attempt = find_current_attempt(records)
     attempt_evidence = None
     if attempt is not None:
         attempt_evidence = dict({key: attempt[key] for key in ("kind", "outcomes", "proportion")},
                                 literature=attempt["literature"], acceptances=[])
         if attempt["kind"] == "solver":
             native = records["native_attempt"][attempt["solver"]["native_attempt_digest"]]
-            attempt_evidence.update({key: native[key] for key in ("state", "totals")})
+            attempt_evidence["applicability"] = attempt["solver"]["applicability"]
+            attempt_evidence.update({key: native[key] for key in (
+                "state", "totals", "contract", "obligations", "failed_strategies", "retreats", "nodes")})
             cited = [row["evidence"]["acceptance_id"] for section in ("footholds", "obstructions")
                      for row in attempt["outcomes"][section]]
             for identifier in dict.fromkeys(cited):
@@ -355,7 +395,7 @@ def describe_evidence(records, artifacts):
     computations = [validate_computation(records, artifacts, item, recorded_revision=value.get("recorded_revision")) for item in collect_value_items(value)
                     if item["kind"] == "computation"]
     results = []
-    for attempt_id, acceptance in collect_results(records):
+    for attempt_id, acceptance in ([] if attempt is None else collect_results(records)):
         native = records["native_attempt"][records["problem_attempt"][attempt_id]["solver"]["native_attempt_digest"]]
         checkpoint = next(row for row in native["checkpoints"] if row["id"] == acceptance["checkpoint_id"])
         results.append({"attempt_id": attempt_id, "acceptance_id": acceptance["id"], "claim": checkpoint["claim"],
@@ -366,6 +406,7 @@ def describe_evidence(records, artifacts):
             "openness": None if openness is None else {key: openness.get(key) for key in ("id", "outcome", "statement_digest", "minimum")},
             "value": None if value is None else {key: value[key] for key in ("id", "motivation", "current_state")},
             "assessment": None if assessment is None else {key: assessment[key] for key in ("id", "grades", "items", "primary")},
+            "assessment_evidence": resolve_assessment_evidence(records),
             "attempt": attempt_evidence,
             "results": results,
             "citations": project_citations(records, artifacts),

@@ -1,13 +1,9 @@
 """Deliver actual native completion as immutable evidence in its common store."""
 
 import copy
-from types import SimpleNamespace
-
-from research_harness.errors import ResearchError
-from research_harness.operations import immutable_record, prepared_mutation
-from research_harness.storage import Store as CommonStore
 
 from . import schema as s
+from .attempt_delivery import deliver_snapshot
 from .errors import SearchError
 from .evidence import audit_state
 from .reviewer import common_root, PREFIX
@@ -39,32 +35,5 @@ def deliver_closure(controller, spec, expected_revision, request_id):
                  "provenance": controller.provenance("deliver-closure")}
         result = {"objective_id": state["objective_id"], "attack_root": str(controller.root),
                   "native_closure_digest": identity, "workspace": str(common)}
-        try:
-            store = CommonStore(common)
-
-            def prepare(records, payload):
-                # Audit the exact common snapshot that the mutation's revision
-                # check protects, without holding a read lock across its commit.
-                snapshot = SimpleNamespace(root=common, snapshot=lambda: {"records": records})
-                audit_content = ContentSink(controller.store)
-                failures = audit_state(controller.root, state, audit_content, common_guard=snapshot, fresh=True)
-                s.require(not failures, "Accepted native completion audit failed", "audit_failed")
-                return [immutable_record(records, "native_closure", identity, payload)], result
-
-            while True:
-                snapshot = store.snapshot()
-                # An exact repeat publishes neither another record nor a receipt.
-                existing = snapshot["records"].get("native_closure", {}).get(identity)
-                if existing is not None:
-                    prepare(snapshot["records"], value)
-                    return result
-                try:
-                    prepared_mutation(store, "native_math.deliver_closure", value, prepare,
-                                      expected_revision=snapshot["revision"],
-                                      request_id="native-closure:" + identity)
-                    return result
-                except ResearchError as error:
-                    if error.code != "stale_revision":
-                        raise
-        except ResearchError as error:
-            raise SearchError(error.code, error.message, error.details) from error
+        return deliver_snapshot(controller, state, common, "native_closure", identity, value, result,
+                                audit_state, "Accepted native completion audit failed")

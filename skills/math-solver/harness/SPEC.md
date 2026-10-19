@@ -71,6 +71,20 @@ An interrupted export may recover missing common bytes from exact staged or
 native originals after checking the committed raw descriptor. This read-only
 fallback never publishes during assessment.
 
+## Common-store attempt delivery
+
+`search deliver-attempt` exports `native_attempt` evidence without requiring
+closure; see `../SEARCH.md`, Common-store delivery. Its totals are exactly
+`{moves, runs, elapsed_seconds, workers, timeout_seconds, historical_usage}`.
+Moves and runs are consumed totals; elapsed duration is null. Workers and
+`timeout_seconds` are the largest admitted limits across nodes with an admission,
+or zero without one. Historical usage remains as recorded. The record adds its
+first common-store `recorded_revision` outside the summary digest so successive
+deliveries of an objective can be ordered. Exact repeats retain that revision.
+Both attempt and closure delivery freshly audit acceptance evidence, including
+on repeats and after competing common writes; `audit_failed` details retain the
+failures map keyed by acceptance id.
+
 ## Workspace
 
 `attack/<slug>/` holds:

@@ -114,6 +114,45 @@ class DeliverClosureTests(SearchCLIWorkspace, unittest.TestCase):
         self.assertEqual(result["error"]["code"], "audit_failed")
         self.assertNotIn("native_closure", common.snapshot()["records"])
 
+    def test_altered_evidence_reports_acceptance_failures_for_new_and_repeat_delivery(self):
+        controller = self.complete_objective()
+        proof_digest = controller.store.put_artifact((self.root / "proof.md").read_bytes())
+        artifact = self.root / ".search" / "artifacts" / proof_digest
+        original = artifact.read_bytes()
+        common = CommonStore(common_root(self.root, controller.status()))
+        before_native = controller.store.read()
+        for repeat in (False, True):
+            with self.subTest(repeat=repeat):
+                if repeat:
+                    self.search("deliver-closure", {}, revision=4)
+                before = common.snapshot()
+                artifact.write_text("Altered evidence after acceptance")
+                result = self.search("deliver-closure", {}, revision=4, success=False)
+                self.assertEqual(result["error"]["code"], "audit_failed")
+                self.assertEqual(result["error"]["details"], {"acceptance-000001": {
+                    "code": "corrupt_artifact", "message": "artifact digest does not match its name"}})
+                self.assertEqual(common.snapshot(), before)
+                self.assertEqual(controller.store.read(), before_native)
+                artifact.write_bytes(original)
+
+    def test_repeated_deliveries_preserve_immutable_record_conflicts(self):
+        controller = self.complete_objective()
+        common = CommonStore(common_root(self.root, controller.status()))
+        for command, kind, key in (("deliver-attempt", "native_attempt", "native_attempt_digest"),
+                                   ("deliver-closure", "native_closure", "native_closure_digest")):
+            with self.subTest(command=command):
+                delivered = self.search(command, {}, revision=4)
+                identity = delivered[key]
+                record = common.snapshot()["records"][kind][identity]
+                common.mutate("fixture.alter_native_record", {"kind": kind},
+                    lambda tx: tx.put(kind, identity, dict(record, schema_version=99)),
+                    expected_revision=common.revision, request_id="alter-" + command)
+                before = common.snapshot()
+                result = self.search(command, {}, revision=4, success=False)
+                self.assertEqual(result["error"]["code"], "record_conflict")
+                self.assertEqual(result["error"]["details"], {"kind": kind, "id": identity})
+                self.assertEqual(common.snapshot(), before)
+
     def test_delivery_rejects_a_stale_native_revision(self):
         controller = self.complete_objective()
         before = CommonStore(common_root(self.root, controller.status())).snapshot()
