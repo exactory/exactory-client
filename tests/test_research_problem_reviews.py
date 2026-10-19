@@ -176,7 +176,7 @@ class ProblemReviewTests(LiteratureCase):
     def test_problem_slate_template_is_version_two_only_and_keeps_bar_and_result_bytes(self):
         version_two = {"bar": "b0970315305977542a7b2099925a3c770087daf2e9a33a1c34d3660c72069b53",
                        "result": "19de7711580cabaeee94b19e19f10d19cd2445f4168949453c98d52786ef1494",
-                       "adjudicator": "76d75d5e45a8207e47fb9bc317dab4d40ff6de041666f48fc4a7ddbb6937bbe8"}
+                       "adjudicator": "359cda77714574caf4e9ff97ad7e184ced2f0515535a1196876a16f08b3bb45a"}
         for role, expected in version_two.items():
             self.assertEqual(protocol.canonical_prompt(role, orchestration="problem_creation")["template_hash"], expected)
         slate = protocol.canonical_prompt("slate", orchestration="problem_creation")
@@ -187,7 +187,9 @@ class ProblemReviewTests(LiteratureCase):
         # The version keys are promised for a material objection only; a rubric objection's packet carries none.
         adjudicator = protocol.canonical_prompt("adjudicator", orchestration="problem_creation")["text"]
         for content in ("For a material objection, the packet delivers", "one entry for every reference the version cites",
-                        "a cited record with its content under record", "A rubric objection carries none of those three keys"):
+                        "a cited record as the projection its stating reviewer received", "descriptors of its artifacts under artifacts",
+                        "an undelivered entry, which means the packet is incomplete",
+                        "except an artifact delivered only as passages", "A rubric objection carries none of those three keys"):
             self.assertIn(content, adjudicator)
         with self.assertRaises(ResearchError) as caught:
             protocol.canonical_prompt("slate", orchestration="problem_creation", version=1)
