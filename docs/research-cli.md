@@ -1836,13 +1836,17 @@ delivered as the artifact descriptor that the stating review's packets supplied,
 whose bytes the packet delivers; a source link whose artifact those packets
 delivered only as passages is delivered through `version_source_mappings`. A
 cited record `{kind: "record", record_kind, id, digest}` is delivered as
-`{kind: "record", record_kind, id, digest, record, artifacts}`: `record` is the
-stored record at that digest, with artifact references as templates, and
+`{kind: "record", record_kind, id, digest, record, artifacts}`. `record` is the
+projection that one of the stating review's observed packets carried for that
+record at that digest, not the stored record: for a candidate, the slate
+packet's `candidates` entry, which has no author notes and no disposition; for
+a record that a result packet projects, the entry of the `problem_evidence`
+list that carried it. Artifact references in `record` are templates, and
 `artifacts` holds the descriptors of its artifacts that the stating review's
 packets supplied, whose bytes the packet delivers. A reference that cannot be
-delivered, a record that no longer has that digest or an artifact that the
-stating review's packets did not supply, is an entry `{kind: "undelivered",
-identity, reference}`, and the packet is incomplete. `current_evidence`, the
+delivered, a record that no observed packet of the stating review carried at
+that digest or an artifact that those packets did not supply, is an entry
+`{kind: "undelivered", identity, reference}`, and the packet is incomplete. `current_evidence`, the
 version evidence and the original evidence used for a correction
 (`original_evidence` and `supplied_source_mappings`) stay distinct. An observed, ready
 `not_upheld` adjudication resolves only that item for the same subject and current

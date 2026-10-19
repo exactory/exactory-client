@@ -5,7 +5,6 @@ from unittest.mock import patch
 
 from research_harness import research_decisions as decisions, review_protocol as protocol
 from research_harness.errors import ResearchError
-from research_harness.evidence import digest
 from research_harness.problem_delivery import export_problem, assess_post
 import test_research_problem_delivery as fixtures
 import test_research_problem_slate as slate_fixtures
@@ -659,21 +658,14 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
 
     def test_a_complete_adjudication_of_an_unchanged_version_is_not_sampled_again_after_a_bar_repair(self):
         """R38: other original calibrations of another pair do not make the earlier complete packet incomplete."""
-        self.prepare_problem_evidence()
-        # The bar cites a record, which the adjudicator receives in full; the fixture's artifact never reached the bar.
-        reading = self.store.snapshot()["records"]["reading"][self.item["reading_id"]]
-        cited = {"kind": "record", "record_kind": "reading", "id": self.item["reading_id"], "digest": digest(reading)}
-        for reviewer in ("first", "second"):
-            output = self.build_review_output("bar")
-            if reviewer == "second":
-                output["objections"] = [dict(self.make_objection(), evidence=[cited])]
-            self.observe("bar", reviewer, output)
-        self.record_slate(review_ids=[])
+        # A slate objection is adjudicated with the bars; its evidence reached the slate reviewer through the bars.
+        self.prepare_reviews(slate_reviewer="second", results=False)
         self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"])
         records = self.store.snapshot()["records"]
+        [adjudicated] = decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]
+            for identifier in ("review-bar-first", "review-bar-second")])
         self.assertEqual(decisions.find_undelivered_adjudication_keys(records, self.artifacts, "focused",
-            version_evidence={key: json.loads(self.artifacts.read(records["review_assignment"]["focused"]["packet"]))[key]
-                              for key in protocol.VERSION_EVIDENCE_KEYS}), [])
+            version_evidence=protocol.describe_version_evidence(records, self.artifacts, adjudicated)), [])
         self.replace_first_bar()
         records = self.store.snapshot()["records"]
         [objection] = decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]

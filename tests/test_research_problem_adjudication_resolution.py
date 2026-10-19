@@ -89,23 +89,38 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
                         <= {item["code"] for item in assessment["obligations"]})
         self.assert_blocked_delivery("artifact_missing")
 
-    def contest_with_a_candidate_record(self):
+    def cite_candidate(self, identifier):
+        candidate = self.store.snapshot()["records"]["problem_candidate"][identifier]
+        return {"kind": "record", "record_kind": "problem_candidate", "id": identifier, "digest": digest(candidate)}
+
+    def contest_with_a_candidate_record(self, late_candidate=False):
         """Astra's F1 reproduction: O1 is resolved against candidate-1; candidate-2 holds a counterexample in its
         observation; the refreshed slate review contests O1 citing candidate-2's exact record reference; the slate
-        selects candidate-1 and defers candidate-2."""
+        selects candidate-1 and defers candidate-2. With late_candidate, candidate-3 is recorded after the slate
+        review's packet and is cited too, so no packet of that review carried it."""
         self.prepare_reviews(slate_reviewer="first")
         self.refresh_reviews("resolved")
         self.assertTrue(decisions.assess_problem_reviews(self.store.snapshot()["records"], self.artifacts)["ready"])
         self.counterexample_text = "The sequence 1, 3, 2 violates the stated bound at n = 3."
         self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?", observation=self.counterexample_text)
-        candidate = self.store.snapshot()["records"]["problem_candidate"]["candidate-2"]
-        self.cited = {"kind": "record", "record_kind": "problem_candidate", "id": "candidate-2", "digest": digest(candidate)}
+        self.cited = self.cite_candidate("candidate-2")
+        assignment = self.assign("slate", "first", identifier="slate-first-refreshed")
+        deferred = [{"candidate_id": "candidate-2", "evidence_needed": "A documented active line."}]
+        evidence = [self.cited]
+        if late_candidate:
+            self.record_candidate("candidate-3", statement="Does the bound hold for prime $n$?")
+            evidence.append(self.cite_candidate("candidate-3"))
+            deferred.append({"candidate_id": "candidate-3", "evidence_needed": "A slate review of this candidate."})
         output = self.build_slate_output(["candidate-1", "candidate-2"])
-        output["value"]["objection_findings"] = [dict(self.make_finding("contested"), evidence=[self.cited],
+        output["value"]["objection_findings"] = [dict(self.make_finding("contested"), evidence=evidence,
             reason="The candidate-2 observation is a counterexample to the resolution.")]
-        review = self.observe("slate", "first", output, identifier="slate-first-refreshed")
-        self.record_slate("slate-2", deferred=[{"candidate_id": "candidate-2", "evidence_needed": "A documented active line."}],
-                          review_ids=[review["id"]])
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {"id": "attempt-" + assignment["id"], "assignment_id": assignment["id"]},
+                        credential="test-only")
+        review = self.mutate(decisions.record_value_review, dict(output, id="review-slate-first-refreshed",
+                                                                 dossier_id=None, assignment_id=assignment["id"]))["result"]
+        # A review that did not assess candidate-3 cannot support the slate, but it still binds the post.
+        self.record_slate("slate-2", deferred=deferred, review_ids=[] if late_candidate else [review["id"]])
         self.assert_blocked_delivery()
         records = self.store.snapshot()["records"]
         current = decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]
@@ -122,7 +137,11 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         records = self.store.snapshot()["records"]
         [entry] = self.read_packet("focused")["version_evidence"]
         self.assertEqual({key: entry[key] for key in self.cited}, self.cited)
-        self.assertEqual((entry["record"]["observation"], entry["artifacts"]), (self.counterexample_text, []))
+        # R42: the record is the slate packet's projection, without the author's notes and disposition.
+        [projected] = [row for row in self.read_packet("slate-first-refreshed")["candidates"] if row["id"] == "candidate-2"]
+        self.assertEqual((entry["record"], entry["artifacts"]), (projected, []))
+        self.assertEqual(entry["record"]["observation"], self.counterexample_text)
+        self.assertEqual({"notes", "disposition"} & set(entry["record"]), set())
         self.assertEqual(digest(records["problem_candidate"]["candidate-2"]), entry["digest"])
         self.assertEqual(decisions.find_undelivered_adjudication_keys(records, self.artifacts, "focused",
             version_evidence=protocol.describe_version_evidence(records, self.artifacts, self.version)), [])
@@ -149,3 +168,18 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         self.assertEqual((refresh["assignment_id"], refresh["reason"], refresh["undelivered_keys"]),
                          ("focused", "packet_incomplete", ["version_evidence:problem_candidate:candidate-2"]))
         self.assert_delivered()
+
+    def test_a_cited_record_that_no_packet_of_the_stating_review_carried_is_undelivered(self):
+        """R42: candidate-3 is in the store at the cited digest, but the stating slate review never received it."""
+        self.contest_with_a_candidate_record(late_candidate=True)
+        records = self.store.snapshot()["records"]
+        self.assertNotIn("candidate-3", {row["id"] for row in self.read_packet("slate-first-refreshed")["candidates"]})
+        self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"])
+        records = self.store.snapshot()["records"]
+        delivered, undelivered = self.read_packet("focused")["version_evidence"]
+        self.assertEqual((delivered["kind"], delivered["id"]), ("record", "candidate-2"))
+        self.assertEqual((undelivered["kind"], undelivered["identity"]), ("undelivered", "problem_candidate:candidate-3"))
+        self.assertEqual(decisions.find_undelivered_adjudication_keys(records, self.artifacts, "focused",
+            version_evidence=protocol.describe_version_evidence(records, self.artifacts, self.version)),
+            ["version_evidence:problem_candidate:candidate-3"])
+        self.assert_blocked_delivery()

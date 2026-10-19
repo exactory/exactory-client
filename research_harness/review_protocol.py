@@ -706,6 +706,33 @@ def resolve_original_calibrations(records, artifacts, review_ids):
 VERSION_EVIDENCE_KEYS = ('version_review', 'version_evidence', 'version_source_mappings')
 
 
+def _list_packet_records(packet):
+    """Each record that a problem packet projects for its reviewer, as (record_kind, id, digest, projection). An id
+    of None takes the cited id: the projection is the stored record itself, so its own digest binds it. A digest of
+    None takes the stored record's digest: the projection names the record but carries part of it."""
+    for entry in packet.get('candidates', []):
+        yield 'problem_candidate', entry['id'], entry['digest'], entry
+    evidence = packet.get('problem_evidence') or {}
+    for entry in evidence.get('readings', []):
+        yield 'reading', entry['id'], entry['digest'], entry
+    for entry in evidence.get('assessment_evidence', []):
+        if entry.get('kind') == 'record':
+            yield entry['record_kind'], entry['id'], entry['digest'], entry
+    for key, kind, field in (('claim', 'problem_statement', 'statement_id'), ('openness', 'problem_openness', 'id'),
+                             ('value', 'problem_value', 'id'), ('assessment', 'problem_assessment', 'id')):
+        if evidence.get(key) is not None:
+            yield kind, evidence[key][field], None, evidence[key]
+    for entry in evidence.get('formal_checks', []):
+        yield 'problem_formal_check', entry['id'], None, entry
+    for row in evidence.get('openness_searches', []):
+        yield 'literature_search', None, digest(row['search']), row['search']
+        for source in row['sources']:
+            yield 'source', None, digest(source), source
+    for row in evidence.get('computations', []):
+        for key, kind in (('admission', 'execution_admission'), ('execution', 'execution'), ('assessment', 'cycle_assessment')):
+            yield kind, None, digest(row[key]), row[key]
+
+
 def describe_version_evidence(records, artifacts, version):
     """What an adjudicator receives for one material objection version, apart from the original pair's correction
     evidence, under VERSION_EVIDENCE_KEYS: the review that stated the version, one version_evidence entry for each
@@ -714,20 +741,29 @@ def describe_version_evidence(records, artifacts, version):
 
     An artifact or a source link is delivered as the artifact descriptor that the stating review's packets supplied,
     or, for a source link, through those passages alone. A record is delivered as {kind, record_kind, id, digest,
-    record, artifacts}: its stored content at that digest with artifact references as templates, and the descriptors
-    of its artifacts that those packets supplied. A reference that cannot be delivered (no record at that digest, or
-    an artifact those packets did not supply) is an entry {kind: undelivered, identity, reference}."""
+    record, artifacts}: the projection that one of the stating review's observed packets carried for that record at
+    that digest, never the stored record, with artifact references as templates, and the descriptors of its artifacts
+    that those packets supplied. A reference that cannot be delivered (a record no observed packet carried at that
+    digest, or an artifact those packets did not supply) is an entry {kind: undelivered, identity, reference}."""
+    from .direction_reviews import collect_observed_packets
     review = _get(records, 'value_review', version['review_id'])
     supplied, mappings = supplied_evidence.supplied_context(records, artifacts, [review['assignment_id']])
     mapped = {mapping['origin']['artifact_descriptor']['sha256'] for mapping in mappings}
+    carried = [row for _, observed in collect_observed_packets(records, artifacts, review['assignment_id'])
+               for row in _list_packet_records(observed)]
     entries, cited = [], set()
     for reference in version['evidence']:
         if reference.get('kind') == 'record':
             identity = reference['record_kind'] + ':' + reference['id']
-            saved = records.get(reference['record_kind'], {}).get(reference['id'])
-            if saved is not None and digest(saved) == reference['digest']:
-                content = {item['sha256']: supplied[item['sha256']] for item in collect_references(saved) if item['sha256'] in supplied}
-                entries.append(dict(reference, record=_reference_templates(saved), artifacts=list(content.values())))
+            stored = records.get(reference['record_kind'], {}).get(reference['id'])
+            stored_digest = None if stored is None else digest(stored)
+            projection = next((projection for kind, identifier, recorded_digest, projection in carried
+                               if kind == reference['record_kind'] and identifier in (None, reference['id'])
+                               and (recorded_digest or stored_digest) == reference['digest']), None)
+            if projection is not None:
+                content = {item['sha256']: supplied[item['sha256']] for item in collect_references(projection)
+                           if item['sha256'] in supplied}
+                entries.append(dict(reference, record=_reference_templates(projection), artifacts=list(content.values())))
                 continue
         else:
             artifact = reference['link']['artifact'] if reference.get('kind') == 'source' else reference
