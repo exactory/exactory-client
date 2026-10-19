@@ -3,9 +3,10 @@
 import json
 from pathlib import Path
 
+from test_research_problem_candidates import build_candidate, build_slate
 from test_research_problem_claims import ProblemCase
 import test_research_problem_reviews as reviewers
-from research_harness import research_decisions, review_protocol
+from research_harness import problem_candidates, research_decisions, review_protocol
 from research_harness.cli import status_report
 from research_harness.gates import gate_state
 from research_harness.evidence import digest
@@ -23,19 +24,33 @@ class ProblemDeliveryCase(ProblemCase):
             "route_id": "route", "dossier_id": None, "role": role, "reviewer_id": reviewer,
             "author_id": author, "context": context})["result"]
 
+    def record_candidate(self, identifier="candidate-1", **changes):
+        return self.mutate(problem_candidates.record_candidate, build_candidate(identifier, **changes))["result"]
+
+    def record_slate(self, identifier="slate-1", **changes):
+        return self.mutate(problem_candidates.record_slate, build_slate(identifier, **changes))["result"]
+
+    def observe_bars(self):
+        self.supporting = self.artifacts.put(b"Field evidence used by the authored review fixture.", "text/plain")
+        self.prepare_review_route()
+        for reviewer in ("first", "second"):
+            self.observe("bar", reviewer)
+
     def prepare_ready(self, formal=False):
         self.initialize_problem()
-        self.selected = self.select_statement(formal_statement={"language": "Lean", "text": "theorem bound : True := by trivial"} if formal else None)
+        self.record_candidate()
+        self.observe_bars()
+        self.record_slate()
+        self.selected = self.select_statement(candidate_id="candidate-1",
+            formal_statement={"language": "Lean", "text": "theorem bound : True := by trivial"} if formal else None)
         item = self.record_full_reading()
         self.observe_openness()
         self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})
         self.mutate(self.load_problem_module().record_value, self.build_value([item]))
         from test_research_problem_assessment import build_assessment
         self.mutate(self.load_problem_module().record_assessment, build_assessment(self.selected))
-        self.supporting = self.artifacts.put(b"Field evidence used by the authored review fixture.", "text/plain")
-        for role in ("bar", "result"):
-            for reviewer in ("first", "second"):
-                self.observe(role, reviewer)
+        for reviewer in ("first", "second"):
+            self.observe("result", reviewer)
 
     def record_post_decision(self, identifier="decision"):
         return self.mutate(self.load_problem_module().record_decision, {"id": identifier, "action": "post",

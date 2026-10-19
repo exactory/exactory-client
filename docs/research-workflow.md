@@ -71,15 +71,33 @@ payload, record and post obligation.
 
 | Claim | Minimum | Independent assessment | Currency |
 | --- | --- | --- | --- |
-| Problem: precisely stated, open, worth solving | Exact statement and criteria, current supported openness, bound value evidence, rubric self-assessment and citations | Two observed bars followed by two observed version 2 result reviews | Current selected statement, assessment and decisive evidence bound by `problem_evidence_digest`. |
+| Problem: precisely stated, open, worth solving | A slate that selects the statement's candidate, exact statement and criteria, current supported openness, bound value evidence, rubric self-assessment and citations | Two observed bars followed by two observed version 2 result reviews | Current selected statement, assessment and decisive evidence bound by `problem_evidence_digest`. |
 
 | Milestone | Condition computed from records |
 | --- | --- |
-| `exploration` | `problem-init` records the area, field and immutable authors and adopts the constitution. |
-| `formulation` | `problem-statement` selects the exact statement, resolution criteria, neighbours and optional formal statement. |
+| `exploration` | `problem-init` records the area, field and immutable authors and adopts the constitution. No slate exists yet. |
+| `slate` | `problem-slate` records the selection over every current candidate, bound to two observed blind bars; no statement exists yet, or the latest slate selects no candidate. |
+| `formulation` | After a slate that selects a candidate, `problem-statement` selects the exact statement, resolution criteria, neighbours, optional formal statement and the candidate it formulates. |
+| `attempt` | Passed through until the problem record holds an attempt record. |
 | `openness` | An observed native openness review records a current `supported_open` finding with the shared search and full-reading minimum. |
 | `value` | Value evidence validates and `problem-assessment` binds a current self-assessment meeting the rubric thresholds; both observed bars and both version 2 result reviews cover the evidence and pass the assurances and rubric after adjudication; the current decision is `post`. |
 | `post` | `problem-posted` records the confirmed server id against the rebuilt approved export. |
+
+Explore an area with any tools, then record each candidate question with
+`problem-candidate`: its tentative statement, its source (the harness's own
+research records, the literature, computation, the Mathematics section or the
+user's material) and the observation that produced it, its declared neighbours,
+the provisional potential grades and a disposition. Obtain two blind problem
+bars, then compare the candidates with `problem-slate`. The slate gives every
+current candidate one disposition: selected, deferred with the evidence that
+would raise it, or rejected with the reason. A selected candidate needs
+`max(B1, B2) >= 2` and readiness `pass` in its potential grades. A focused slate
+review by a bar reviewer is optional. Selection authorizes further research; it
+establishes neither openness nor significance. A slate that selects no candidate
+records the reason and is the legitimate no-post outcome: `next` reports
+`problem_no_post` until a new slate selects a candidate. Formulate a selected
+candidate with `problem-statement` and its `candidate_id`; the post gate requires
+the latest slate to select the current statement's candidate.
 
 Tools remain available in any order before posting: set budgets and depth,
 search the field and neighbouring formulations, read sources, preserve access
@@ -125,8 +143,10 @@ openness blocks; `already_solved` redirects to the established result or a new
 statement. Changed formulations or material evidence require reassessment.
 
 The only gate is `exactory-research gate post`. `status` and `next` compute the
-milestone and first missing condition in the order statement, openness, value,
-reviews, decision, export. They store no milestone projection. Once ready,
+milestone and first missing condition in the order slate, statement, attempt,
+openness, value, reviews, decision, export. They store no milestone projection.
+`status` also counts the current candidates and the latest slate's selected,
+deferred and rejected candidates, and names the latest slate. Once ready,
 `exactory-research export --kind problem --destination problem-export` writes
 the approved parts, projected citations and digest manifest. Check the exported
 citation locators and duplicates, pass those files to `exactory post-problem`,

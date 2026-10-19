@@ -8,7 +8,8 @@ import sys
 
 from development_fixtures import DevelopmentCase, PROGRAM
 from integration_fixtures import admit_lab
-from research_harness import depth, development, execution, literature, probe, reading, resources
+from research_harness import depth, development, execution, literature, probe, problem_candidates, reading, resources
+from test_research_problem_candidates import build_candidate
 from test_research_problem_claims import ProblemCase
 from test_research_probe_lifecycle import build_probe_intent, build_probe_outcome
 from test_research_source_deferrals import DeferralCase
@@ -21,7 +22,8 @@ PLUGIN = Path(__file__).resolve().parents[1]
 class ProblemToolsCase(ProblemCase, DevelopmentCase):
     def prepare_problem(self):
         self.initialize_problem()
-        statement = self.select_statement(statement=
+        self.mutate(problem_candidates.record_candidate, build_candidate())
+        statement = self.select_statement(candidate_id="candidate-1", statement=
             "For every integer n in [0, 3], n squared is at most 9, with equality at n = 3.")
         self.objective = {"id": statement["id"], "statement": statement["statement"]}
         self.links = [self.read_source()]

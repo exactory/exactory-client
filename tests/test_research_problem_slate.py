@@ -1,0 +1,248 @@
+"""The slate gives every current candidate one disposition and binds the selection to two blind bars."""
+
+import copy
+import json
+from unittest.mock import patch
+
+from research_harness import problem_candidates, research_decisions as decisions, review_protocol as protocol
+from research_harness.cli import status_report
+from research_harness.errors import ResearchError
+from research_harness.gates import gate_state
+from research_harness.report_views import next_summary, status_summary
+from test_research_problem_candidates import build_slate
+from test_research_problem_delivery import ProblemDeliveryCase
+
+
+class ProblemSlateTests(ProblemDeliveryCase):
+    def setUp(self):
+        super().setUp()
+        self.initialize_problem()
+
+    def read_records(self):
+        return self.store.snapshot()["records"]
+
+    def collect_gate_codes(self):
+        return [row["code"] for row in gate_state(self.read_records(), self.artifacts, "post")["obligations"]]
+
+    def build_slate_output(self, candidate_ids):
+        output = self.build_review_output("slate")
+        for check in output["value"]["assurances"]:
+            check["status"] = "not_assessed"
+        output["value"]["rubric_potential"] = {identifier: {"significance": {"B1": 2, "B2": 1}, "priority": 2}
+                                               for identifier in candidate_ids}
+        return output
+
+    def test_slate_needs_two_ready_bars(self):
+        self.record_candidate()
+        self.assert_error("problem_bar_pending", lambda: self.record_slate())
+        self.supporting = self.artifacts.put(b"A captured field standard.", "text/plain")
+        self.prepare_review_route()
+        self.observe("bar", "first")
+        for bar_review_ids in (["review-bar-first", "review-bar-second"], ["review-bar-first", "review-bar-first"],
+                               ["review-bar-first"], "review-bar-first"):
+            with self.subTest(bar_review_ids=bar_review_ids):
+                with self.assertRaises(ResearchError) as caught:
+                    self.record_slate(bar_review_ids=bar_review_ids)
+                self.assertEqual((caught.exception.code, caught.exception.details),
+                                 ("problem_bar_pending", {"bar_review_ids": bar_review_ids}))
+        self.observe("bar", "second")
+        self.mutate(protocol.record_context_event, {"id": "exposure", "assignment_id": "bar-second",
+            "kind": "contamination", "source": "author_history", "reason": "The bar reviewer received author advocacy.",
+            "evidence": [self.supporting]})
+        self.assert_error("review_context_contaminated", lambda: self.record_slate())
+        self.assertNotIn("problem_slate", self.read_records())
+
+    def test_every_current_candidate_has_one_disposition(self):
+        self.record_candidate()
+        self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
+        self.record_candidate("candidate-3", previous="candidate-2", statement=r"Does the bound hold for odd $n \geq 3$?")
+        self.observe_bars()
+        deferred = [{"candidate_id": "candidate-3", "evidence_needed": "A documented active line for odd lengths."}]
+        cases = ((build_slate(), ["candidate-3"], []),
+                 (build_slate(deferred=deferred, rejected=[{"candidate_id": "candidate-2", "reason": "Superseded."}]),
+                  [], ["candidate-2"]),
+                 (build_slate(deferred=deferred, rejected=[{"candidate_id": "candidate-1", "reason": "Also rejected."}]),
+                  [], ["candidate-1"]),
+                 (build_slate(selected=["candidate-1", "absent"], deferred=deferred), [], ["absent"]))
+        for payload, missing, extra in cases:
+            with self.subTest(missing=missing, extra=extra):
+                with self.assertRaises(ResearchError) as caught:
+                    self.mutate(problem_candidates.record_slate, payload)
+                self.assertEqual((caught.exception.code, caught.exception.details),
+                                 ("problem_slate_incomplete", {"missing": missing, "extra": extra}))
+        revision = self.store.revision
+        saved = self.record_slate(deferred=deferred)
+        self.assertEqual(saved, dict(build_slate(deferred=deferred), candidate_ids=["candidate-1", "candidate-3"],
+                                     recorded_revision=revision + 1))
+        self.assertEqual(problem_candidates.find_slate(self.read_records()), saved)
+
+    def test_selected_candidate_needs_potential_at_threshold(self):
+        self.record_candidate()
+        self.record_candidate("candidate-low", potential={"significance": {"B1": 1, "B2": 1}, "priority": 3, "readiness": "pass"})
+        self.record_candidate("candidate-unready", potential={"significance": {"B1": 0, "B2": 3}, "priority": 2})
+        self.observe_bars()
+        rest = [{"candidate_id": "candidate-low", "evidence_needed": "A reduction that fixes its place in the line."},
+                {"candidate_id": "candidate-unready", "evidence_needed": "Full readings of the decisive sources."}]
+        cases = (("candidate-low", [{"item": "significance", "required": "max(B1, B2) >= 2", "graded": {"B1": 1, "B2": 1}}]),
+                 ("candidate-unready", [{"item": "readiness", "required": "pass", "graded": None}]))
+        for candidate_id, shortfalls in cases:
+            with self.subTest(candidate_id=candidate_id):
+                payload = build_slate(selected=["candidate-1", candidate_id],
+                                      deferred=[row for row in rest if row["candidate_id"] != candidate_id])
+                with self.assertRaises(ResearchError) as caught:
+                    self.mutate(problem_candidates.record_slate, payload)
+                self.assertEqual((caught.exception.code, caught.exception.details),
+                                 ("problem_slate_candidate_below_threshold", {"candidate_id": candidate_id, "shortfalls": shortfalls}))
+        self.assertEqual(self.record_slate(deferred=rest)["selected"], ["candidate-1"])
+
+    def test_empty_selection_needs_a_reason_and_reports_no_post(self):
+        self.record_candidate()
+        self.observe_bars()
+        rejected = [{"candidate_id": "candidate-1", "reason": "A parameter increment of a settled case."}]
+        for reason in ("", "   ", None):
+            with self.subTest(reason=reason):
+                self.assert_error("problem_slate_reason_missing",
+                                  lambda: self.record_slate(selected=[], rejected=rejected, reason=reason))
+        self.assert_error("invalid_input", lambda: self.record_slate(reason=None))
+        reason = "No candidate reaches potential level 2; the exploration ends without a post."
+        saved = self.record_slate(selected=[], rejected=rejected, reason=reason)
+        self.assertEqual(saved["selected"], [])
+        report = status_report(self.store)
+        self.assertFalse(report["ready"])
+        self.assertEqual(report["milestone"], "slate")
+        self.assertEqual(report["next"]["code"], "problem_no_post")
+        self.assertEqual(report["next"]["reason"], reason)
+        self.assertEqual(report["candidates"], {"current": 1, "selected": 0, "deferred": 0, "rejected": 1})
+        self.assertEqual(report["slate_id"], "slate-1")
+        self.select_statement(candidate_id="candidate-1")
+        report = status_report(self.store)
+        self.assertEqual((report["milestone"], report["next"]["code"]), ("slate", "problem_no_post"))
+        summary = status_summary(report)
+        self.assertEqual((summary["candidates"], summary["slate_id"]), (report["candidates"], "slate-1"))
+        for view in (summary, next_summary(report)):
+            self.assertEqual(view["next_hint"]["code"], "problem_no_post")
+
+    def test_statement_candidate_must_be_selected_in_the_latest_slate(self):
+        self.record_candidate()
+        self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
+        self.record_candidate("candidate-old", statement="An earlier formulation.")
+        self.record_candidate("candidate-new", previous="candidate-old", statement="A revised formulation.")
+        self.observe_bars()
+        later = [{"candidate_id": "candidate-new", "evidence_needed": "A documented active line."}]
+        self.record_slate(deferred=[{"candidate_id": "candidate-2", "evidence_needed": "A documented active line."}] + later)
+        for candidate_id in ("absent", "candidate-old"):
+            with self.subTest(candidate_id=candidate_id):
+                self.assert_error("problem_candidate_missing", lambda: self.select_statement(candidate_id=candidate_id))
+        self.assertEqual(self.select_statement()["candidate_id"], None)
+        for identifier, candidate_id in (("statement-1", None), ("statement-2", "candidate-2")):
+            if candidate_id is not None:
+                self.select_statement(identifier=identifier, candidate_id=candidate_id)
+            self.assertEqual(problem_candidates.assess_slate(self.read_records(), self.artifacts), [{
+                "code": "problem_candidate_unselected", "statement_id": identifier, "candidate_id": candidate_id,
+                "explanation": "Formulate a candidate that the latest slate selects."}])
+        self.select_statement(identifier="statement-3", candidate_id="candidate-1")
+        self.assertEqual(problem_candidates.assess_slate(self.read_records(), self.artifacts), [])
+        self.assertNotIn("problem_candidate_unselected", self.collect_gate_codes())
+        self.record_slate("slate-2", selected=["candidate-2"],
+                          deferred=[{"candidate_id": "candidate-1", "evidence_needed": "The decisive readings."}] + later)
+        self.assertIn("problem_candidate_unselected", self.collect_gate_codes())
+
+    def test_gate_reports_slate_missing_before_any_slate(self):
+        self.assertEqual(self.collect_gate_codes()[:2], ["problem_slate_missing", "problem_statement_missing"])
+        self.record_candidate()
+        self.select_statement(candidate_id="candidate-1")
+        codes = self.collect_gate_codes()
+        self.assertEqual(codes[0], "problem_slate_missing")
+        self.assertNotIn("problem_candidate_unselected", codes)
+        self.assert_error("problem_minimum_unmet", lambda: self.mutate(self.load_problem_module().record_decision, {
+            "id": "decision", "action": "post", "review_ids": [], "bar_review_ids": [], "reason": "Ready."}))
+
+    def test_milestones_and_next_order(self):
+        report = status_report(self.store)
+        self.assertEqual((report["milestone"], report["next"]["code"]), ("exploration", "problem_slate_missing"))
+        self.assertEqual((report["candidates"], report["slate_id"]),
+                         ({"current": 0, "selected": 0, "deferred": 0, "rejected": 0}, None))
+        self.record_candidate()
+        self.observe_bars()
+        self.record_slate()
+        report = status_report(self.store)
+        self.assertEqual((report["milestone"], report["next"]["code"]), ("slate", "problem_statement_missing"))
+        self.assertEqual(report["candidates"], {"current": 1, "selected": 1, "deferred": 0, "rejected": 0})
+        self.select_statement(candidate_id="candidate-1")
+        report = status_report(self.store)
+        self.assertEqual((report["milestone"], report["next"]["code"]), ("formulation", "problem_openness_missing"))
+
+    def test_optional_slate_review_packet_and_response(self):
+        self.record_candidate()
+        self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?",
+                              notes="PRIVATE_CANDIDATE_NOTE", source={"kind": "computation",
+                              "reference": "Probe of the first twelve odd lengths.", "evidence": []})
+        self.observe_bars()
+        self.select_statement(candidate_id="candidate-1", title="PRIVATE_TITLE")
+        payload = self.observe("slate", "first", self.build_slate_output(["candidate-1"]), record=False)
+        records = self.read_records()
+        assignment = records["review_assignment"][payload["assignment_id"]]
+        packet = json.loads(self.artifacts.read(assignment["packet"]))
+        self.assertEqual(assignment["prompt"]["template_id"], "exactory-problem-review-v2/slate")
+        self.assertEqual(assignment["subject"], {"kind": "problem", "statement_id": None})
+        self.assertEqual(assignment["history_assignment_id"], "bar-first")
+        self.assertEqual((packet["protocol"], packet["subject"]), ("exactory-problem-review-v2", assignment["subject"]))
+        self.assertEqual(sorted(packet["bar_ids"]), ["review-bar-first", "review-bar-second"])
+        self.assertEqual(sorted(bar["id"] for bar in packet["bars"]), sorted(packet["bar_ids"]))
+        self.assertEqual(packet["candidates"], [{"id": identifier, "statement": row["statement"],
+            "source": {"kind": row["source"]["kind"], "reference": row["source"]["reference"]},
+            "observation": row["observation"], "neighbours": row["neighbours"], "potential": row["potential"]}
+            for identifier, row in sorted(records["problem_candidate"].items())])
+        for withheld in ("PRIVATE_CANDIDATE_NOTE", "PRIVATE_TITLE", "disposition"):
+            self.assertNotIn(withheld, json.dumps(packet))
+        self.assert_error("invalid_value_review", lambda: self.mutate(decisions.record_value_review, payload))
+        marker = records["workspace"]["problem"]
+        complete = self.build_slate_output(["candidate-1", "candidate-2"])
+        assured = copy.deepcopy(complete)
+        assured["value"]["assurances"][0]["status"] = "passed"
+        ready = copy.deepcopy(complete)
+        ready["value"]["rubric_potential"]["candidate-1"]["readiness"] = "pass"
+        excessive = copy.deepcopy(complete)
+        excessive["value"]["rubric_potential"]["candidate-2"]["priority"] = 4
+        other_bars = dict(packet, bar_ids=["review-bar-first", "review-bar-other"])
+        for name, output, supplied in (("assured", assured, packet), ("readiness", ready, packet),
+                                       ("level", excessive, packet), ("bars", complete, other_bars)):
+            with self.subTest(output=name):
+                self.assert_error("invalid_value_review", lambda: decisions._validate_value(
+                    records, self.artifacts, output["value"], "slate", None, expected_checks=decisions.PROBLEM_CHECKS,
+                    problem=marker, slate_packet=supplied))
+        review = self.observe("slate", "second", complete)
+        self.assertEqual(review["subject"], {"kind": "problem", "statement_id": None})
+        deferred = [{"candidate_id": "candidate-2", "evidence_needed": "A documented active line."}]
+        for review_ids in (["review-slate-first"], [review["id"], review["id"]], ["review-bar-first"]):
+            with self.subTest(review_ids=review_ids):
+                code = "invalid_input" if len(review_ids) != len(set(review_ids)) else "problem_slate_review_unverified"
+                self.assert_error(code, lambda: self.record_slate(deferred=deferred, review_ids=review_ids))
+        saved = self.record_slate(deferred=deferred, review_ids=[review["id"]])
+        self.assertEqual(saved["review_ids"], ["review-slate-second"])
+        self.record_candidate("candidate-3", statement="A third formulation found after the review.")
+        with self.assertRaises(ResearchError) as caught:
+            self.record_slate("slate-2", deferred=[{"candidate_id": identifier, "evidence_needed": "A documented active line."}
+                                                    for identifier in ("candidate-2", "candidate-3")], review_ids=[review["id"]])
+        self.assertEqual((caught.exception.code, caught.exception.details),
+                         ("problem_slate_review_unverified", {"review_id": "review-slate-second"}))
+
+    def test_slate_review_source_request_continues_with_the_same_bars_and_candidates(self):
+        self.record_candidate()
+        self.observe_bars()
+        request = self.build_slate_output(["candidate-1"])
+        request["value"]["status"] = "unresolved"
+        request["source_requests"] = [{"id": "page", "kind": "inventory_page", "page": 0}]
+        self.observe("slate", "first", request, record=False)
+        continued = self.assign("slate", "first", identifier="slate-first-continued", prior_assignment_id="slate-first")
+        first = json.loads(self.artifacts.read(self.read_records()["review_assignment"]["slate-first"]["packet"]))
+        packet = json.loads(self.artifacts.read(continued["packet"]))
+        self.assertEqual((packet["bar_ids"], packet["candidates"]), (first["bar_ids"], first["candidates"]))
+        self.assertEqual((packet["subject"], packet["pending_source_requests"]), (first["subject"], []))
+        final = self.build_slate_output(["candidate-1"])
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(final)):
+            self.mutate(protocol.invoke_assignment, {"id": "attempt-continued", "assignment_id": continued["id"]},
+                        credential="test-only")
+        review = self.mutate(decisions.record_value_review,
+                             dict(final, id="review-slate-first", dossier_id=None, assignment_id=continued["id"]))["result"]
+        self.assertEqual(self.record_slate(review_ids=[review["id"]])["review_ids"], ["review-slate-first"])

@@ -9,6 +9,7 @@ from unittest.mock import patch
 from literature_fixtures import LiteratureCase
 from research_harness import review_protocol as protocol
 from research_harness import research_decisions as decisions
+from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 from research_harness.problem_rubric import ITEMS, rubric_objection_id
 from test_research_problem_claims import ProblemCase
@@ -158,6 +159,24 @@ class ProblemReviewTests(LiteratureCase):
         bar = protocol.canonical_prompt("bar", orchestration="problem_creation")["text"]
         for content in ('levels 2 and 3', 'B1', 'B2', 'priority', 'what a resolution would give', 'uninteresting'):
             self.assertIn(content, bar)
+
+    def test_problem_slate_template_is_version_two_only_and_keeps_bar_and_result_bytes(self):
+        version_two = {"bar": "7c491ac770a4bcb5386a270cb629cc06e4fd3e749245464f68abe63cc6ecfc20",
+                       "result": "6d1a94ac326b5e1e364b7d2618594cc1f14ee436f504975fc28886fa379e0b87",
+                       "adjudicator": "6cb910b6a89b1b17e3a55ede4dee68e528eaa3db0bac7ede4f3d6b22712ba54a"}
+        for role, expected in version_two.items():
+            self.assertEqual(protocol.canonical_prompt(role, orchestration="problem_creation")["template_hash"], expected)
+        slate = protocol.canonical_prompt("slate", orchestration="problem_creation")
+        self.assertEqual(slate["template_id"], "exactory-problem-review-v2/slate")
+        for content in ("value.rubric_potential", "not_assessed", "B1", "B2", "priority", "potential level 1",
+                        "neither openness nor significance", "Continue your own bar assessment"):
+            self.assertIn(content, slate["text"])
+        with self.assertRaises(ResearchError) as caught:
+            protocol.canonical_prompt("slate", orchestration="problem_creation", version=1)
+        self.assertEqual(caught.exception.code, "invalid_review_role")
+        assignment = {"role": "slate", "subject": {"kind": "problem", "statement_id": None}, "prompt": slate}
+        self.assertTrue(protocol._prompt_matches(assignment))
+        self.assertFalse(protocol.is_previous_prompt(assignment))
 
     def test_version_one_problem_assignment_stays_verified_and_gate_requires_version_two_result(self):
         original = protocol.canonical_prompt
@@ -597,7 +616,8 @@ class ProblemOpennessReviewTests(ProblemCase):
     def setUp(self):
         super().setUp()
         self.initialize_problem()
-        self.selected = self.select_statement()
+        self.put_selecting_slate()
+        self.selected = self.select_statement(candidate_id="candidate-1")
 
     def observe_openness(self, outcome="supported_open", change_output=None):
         from research_harness.literature import record_search
@@ -609,7 +629,8 @@ class ProblemOpennessReviewTests(ProblemCase):
             "minimum": {"searches": [{"formulation": self.selected["statement"], "search_id": search["id"]}],
                 "settling_work_id": None, "duplicate_resolutions": []}}, self.root / "openness-packet")
         native = json.loads(self.artifacts.read(exported["native_packet"]))
-        self.prepare_review_route()
+        if "route" not in self.store.snapshot()["records"].get("review_route", {}):
+            self.prepare_review_route()
         self.mutate(protocol.record_assignment, {"id": "openness-assignment", "route_id": "route", "dossier_id": None,
             "role": "native_math", "reviewer_id": "native-reviewer", "author_id": "problem-author",
             "context": {"native_packet": exported["native_packet"]}})

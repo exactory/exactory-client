@@ -73,8 +73,9 @@ def initialize_problem(store, payload, *, expected_revision, request_id):
 def record_statement(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
         marker = require_problem(records)
-        fields(value, ("id", "title", "area", "statement", "resolution_criteria", "neighbours"), ("formal_statement",))
-        value = dict(value, formal_statement=value.get("formal_statement"))
+        fields(value, ("id", "title", "area", "statement", "resolution_criteria", "neighbours"),
+               ("formal_statement", "candidate_id"))
+        value = dict(value, formal_statement=value.get("formal_statement"), candidate_id=value.get("candidate_id"))
         for key in ("id", "title", "statement", "resolution_criteria"):
             text(value[key], "Problem " + key)
         validate_area(value["area"])
@@ -87,6 +88,12 @@ def record_statement(store, payload, *, expected_revision, request_id):
             fields(formal, ("language", "text"))
             text(formal["language"], "Formal statement language")
             text(formal["text"], "Formal statement")
+        if value["candidate_id"] is not None:
+            from .problem_candidates import find_current_candidates
+            text(value["candidate_id"], "Formulated candidate ID")
+            if value["candidate_id"] not in find_current_candidates(records):
+                raise ResearchError("problem_candidate_missing", "Formulate a current candidate",
+                                    {"candidate_id": value["candidate_id"]})
         saved = records.get("problem_statement", {}).get(value["id"])
         revision = saved["recorded_revision"] if saved else expected_revision + 1
         record = dict(value, recorded_revision=revision)

@@ -22,7 +22,8 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
 
     def prepare_reviews(self, *, bar_reviewer=None, result_reviewer=None):
         self.initialize_problem()
-        self.selected = self.select_statement()
+        self.record_candidate()
+        self.selected = self.select_statement(candidate_id="candidate-1")
         self.item = self.record_full_reading()
         self.observe_openness()
         self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})
@@ -35,6 +36,7 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
             if reviewer == bar_reviewer:
                 output["objections"] = [self.make_objection()]
             self.observe("bar", reviewer, output)
+        self.record_slate()
         for reviewer in ("first", "second"):
             output = self.build_review_output("result")
             if bar_reviewer is not None:

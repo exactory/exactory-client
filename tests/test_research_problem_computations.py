@@ -191,9 +191,11 @@ class ProblemFormalGateTests(ProblemToolsCase, ProblemDeliveryCase):
         from test_research_problem_assessment import build_assessment
         self.mutate(self.load_problem_module().record_assessment, build_assessment(self.selected))
         self.supporting = self.artifacts.put(b"The fixture's observed field standard.", "text/plain")
-        for role in ("bar", "result"):
-            for reviewer in ("first", "second"):
-                self.observe(role, reviewer)
+        for reviewer in ("first", "second"):
+            self.observe("bar", reviewer)
+        self.record_slate()
+        for reviewer in ("first", "second"):
+            self.observe("result", reviewer)
         return observed, item
 
     def test_new_probe_origin_is_an_explicit_post_gate_obligation(self):

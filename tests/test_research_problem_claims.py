@@ -33,6 +33,13 @@ class ProblemCase(LiteratureCase):
     def select_statement(self, **changes):
         return self.mutate(self.load_problem_module().record_statement, self.build_statement(**changes))["result"]
 
+    def put_selecting_slate(self):
+        """Stand in for a recorded slate that selects candidate-1; the slate tests record validated slates."""
+        from test_research_problem_candidates import build_candidate, build_slate
+        self.put("problem_candidate", "candidate-1", dict(build_candidate(), recorded_revision=self.store.revision + 1))
+        self.put("problem_slate", "slate-1", dict(build_slate(), candidate_ids=["candidate-1"],
+                                                  recorded_revision=self.store.revision + 1))
+
     def put(self, kind, key, value):
         self.sequence += 1
         return self.store.mutate("test.record", {"kind": kind, "key": key, "value": value},
@@ -148,8 +155,10 @@ class ProblemRecordTests(ProblemCase):
         report = status_report(self.store)
         self.assertEqual(report["orchestration"], "problem_creation")
         self.assertEqual(report["milestone"], "exploration")
-        self.assertEqual(report["next"]["code"], "problem_statement_missing")
-        self.select_statement()
+        self.assertEqual(report["next"]["code"], "problem_slate_missing")
+        self.put_selecting_slate()
+        self.assertEqual(status_report(self.store)["next"]["code"], "problem_statement_missing")
+        self.select_statement(candidate_id="candidate-1")
         report = status_report(self.store)
         self.assertEqual(report["milestone"], "formulation")
         self.assertEqual(report["next"]["code"], "problem_openness_missing")

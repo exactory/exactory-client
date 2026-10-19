@@ -63,12 +63,33 @@ def _validate_checks(records, artifacts, values, expected):
         raise ResearchError("invalid_value_review", "Address all phase-required independent assurances", {"required": list(expected)})
 
 
+def _validate_slate_potential(value, packet):
+    """A problem slate review assesses no statement and grades the potential of exactly the packet's candidates."""
+    if set(value["bar_ids"]) != set(packet["bar_ids"]):
+        raise ResearchError("invalid_value_review", "Assess both bars of the slate packet", {"bar_ids": packet["bar_ids"]})
+    if any(check["status"] != "not_assessed" for check in value["assurances"]):
+        raise ResearchError("invalid_value_review", "A slate precedes the statement; leave every problem assurance not_assessed")
+    candidate_ids = sorted(candidate["id"] for candidate in packet["candidates"])
+    potential = value["rubric_potential"]
+    if not isinstance(potential, dict) or sorted(potential) != candidate_ids:
+        raise ResearchError("invalid_value_review", "Grade the potential of exactly the packet's candidates",
+                            {"candidate_ids": candidate_ids})
+    for candidate_id, grades in sorted(potential.items()):
+        fields(grades, ("significance", "priority"), code="invalid_value_review")
+        try:
+            problem_rubric.validate_grades(grades, potential=True)
+        except ResearchError as error:
+            raise ResearchError("invalid_value_review", error.message, {"candidate_id": candidate_id}) from error
+
+
 def _validate_value(records, artifacts, value, stage, dossier, historical=(), *, expected_checks=ALL_CHECKS, problem=None,
-                    problem_objections=(), problem_rubric_required=True):
+                    problem_objections=(), problem_rubric_required=True, slate_packet=None):
     rubric_required = problem is not None and stage == "result" and problem_rubric_required
+    potential_required = problem is not None and stage == "slate"
     fields(value, ("status", "consequence", "bar_ids", "objective_adequacy", "method_adequacy", "reason", "evidence",
                    "work_items", "assurances", "objection_findings") +
-           (("rubric", "rubric_evidence") if rubric_required else ()), code="invalid_value_review")
+           (("rubric", "rubric_evidence") if rubric_required else ()) +
+           (("rubric_potential",) if potential_required else ()), code="invalid_value_review")
     if rubric_required:
         problem_rubric.validate_grades(value["rubric"])
         fields(value["rubric_evidence"], problem_rubric.ITEMS, code="invalid_value_review")
@@ -101,6 +122,8 @@ def _validate_value(records, artifacts, value, stage, dossier, historical=(), *,
             if bar["payload"]["stage"] != "bar" or bar_dossier["payload"]["intent_id"] != dossier["payload"]["intent_id"]:
                 raise ResearchError("review_bar_mismatch", "Use bar findings for the current actual intent")
     _validate_checks(records, artifacts, value["assurances"], expected)
+    if potential_required:
+        _validate_slate_potential(value, slate_packet)
     work_ids = set()
     for finding in strategy.items(value["work_items"], "Independent work-item classifications"):
         fields(finding, ("id", "classification", "status", "reason", "evidence"), code="invalid_value_review")
@@ -163,9 +186,8 @@ def record_value_review(store, payload, *, expected_revision, request_id):
         saved_assignment = records["review_assignment"][value["assignment_id"]]
         if problem is not None:
             from .review_protocol import build_problem_subject
-            if (value["dossier_id"] is not None or value["stage"] not in ("bar", "result")
-                    or saved_assignment.get("subject", {}).get("kind") != "problem"
-                    or (value["stage"] == "result" and saved_assignment["subject"] != build_problem_subject(records))):
+            if (value["dossier_id"] is not None or saved_assignment.get("subject", {}).get("kind") != "problem"
+                    or (value["stage"] != "bar" and saved_assignment["subject"] != build_problem_subject(records, value["stage"]))):
                 raise ResearchError("value_review_assignment_mismatch", "Record the exact assigned problem statement and role")
             if normalized_text(saved_assignment["author_id"]) not in {normalized_text(author) for author in problem["authors"]}:
                 raise ResearchError("problem_author_unknown", "Use an assignment by one of the immutable problem authors")
@@ -203,7 +225,8 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                         expected_checks=expected_checks, problem=problem,
                         problem_rubric_required=not is_previous_prompt(saved_assignment),
                         problem_objections=(json.loads(artifacts.read(saved_assignment["packet"])).get("material_objections", [])
-                                             if problem is not None and value["stage"] == "result" else ()))
+                                             if problem is not None and value["stage"] == "result" else ()),
+                        slate_packet=packet)
         strings(value["limitations"], "Independent assessment limitations", nonempty=True)
         objection_ids = set()
         for objection in strategy.items(value["objections"], "Material objections"):

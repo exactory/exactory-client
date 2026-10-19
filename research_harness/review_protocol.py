@@ -152,6 +152,16 @@ _PROBLEM_PROMPTS = {
         'compares credible alternatives by mathematical payoff and answers the strongest objection; '
         'level 3 supports a concrete advantage with documented mathematical distinctions. '
         'Accessibility is descriptive and supplies no value. Assess no withheld candidate.',
+    'slate': 'Continue your own bar assessment. The packet lists every current candidate of the slate with '
+        'its tentative statement, the kind and reference of its source, the observation that produced it, '
+        'its declared neighbours and the author\'s provisional potential grades. Before any attempt or openness '
+        'finding, grade the potential of each candidate against your bar: significance on ground B1 (standing '
+        'in an active line) and ground B2 (influence), and comparative priority, each at levels 0 to 3 with '
+        'the meanings your bar states. Selection authorizes further research on a candidate; it establishes '
+        'neither openness nor significance. A candidate at potential level 1 is deferred with the evidence '
+        'that would raise it. Compare the candidates with each other and with their declared neighbours, and '
+        'explain materially different judgments as objections. Never sum the grounds and do not copy the '
+        'author grades.',
     'result': _PROBLEM_PROMPTS_V1['result'] +
         ' Grade every item of RUBRIC.md against the specialist\'s bar and delivered evidence: '
         'A1 precision, A2 openness, A3 contribution beyond existing formulations, A4 clarity to an '
@@ -183,6 +193,19 @@ _PROBLEM_RESULT_RESPONSE = _PROBLEM_RESPONSE_V1.replace(
     ' Return value.rubric with integer levels 0 to 3 and verdicts pass or fail, and '
     'value.rubric_evidence with nonempty text for exactly A1, A2, A3, A4, A5, A6, B1, B2, '
     'priority, attempt, accessibility and calibration, naming the delivered evidence for each grade.')
+_PROBLEM_SLATE_SCHEMA = copy.deepcopy(_RESPONSE_SCHEMA)
+_PROBLEM_SLATE_SCHEMA['value']['rubric_potential'] = {
+    '<candidate id>': {'significance': dict.fromkeys(problem_rubric.GROUNDS, '0|1|2|3'), 'priority': '0|1|2|3'}}
+_PROBLEM_SLATE_RESPONSE = (
+    ' Return the exact JSON response shape: ' + json.dumps(_PROBLEM_SLATE_SCHEMA) +
+    '. Support is null. Slate includes both established bar review IDs of bar_ids, empty work_items, and '
+    'exactly the assurances problem_statement, problem_openness, problem_value, problem_citations and stop, '
+    'each {kind,status:not_assessed,reason,evidence}: no statement exists before the selection. '
+    'value.rubric_potential has exactly one entry for each candidate id of the packet, each '
+    '{significance:{B1,B2},priority} with integer levels 0 to 3. Identify findings and exact supplied '
+    'evidence in reason and evidence. Every prior material objection requires an objection_findings entry '
+    '{id,status:resolved|continuing|contested,reason,evidence}.')
+_PROBLEM_RESPONSES = {'bar': _PROBLEM_RESPONSE_V1, 'slate': _PROBLEM_SLATE_RESPONSE, 'result': _PROBLEM_RESULT_RESPONSE}
 _PROBLEM_ADJUDICATOR_PROMPT = _PROBLEM_ADJUDICATOR_PROMPT_V1 + (
     ' A rubric objection identifies one below-threshold grade in the original results. Use '
     'rubric_grades, the item reasoning and delivered evidence to decide only that named shortfall; '
@@ -311,7 +334,9 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=3, orchestrati
                 'text': prompt}
     if orchestration == 'problem_creation' and role in _PROBLEM_PROMPTS:
         prompts = _PROBLEM_PROMPTS_V1 if version == 1 else _PROBLEM_PROMPTS
-        response = _PROBLEM_RESULT_RESPONSE if version != 1 and role == 'result' else _PROBLEM_RESPONSE_V1
+        if role not in prompts:
+            raise ResearchError('invalid_review_role', 'The problem slate review begins with version 2')
+        response = _PROBLEM_RESPONSE_V1 if version == 1 else _PROBLEM_RESPONSES[role]
         prompt = _COMMON + prompts[role] + response.replace('ROLE', role) + bar_sources.PROMPT
         parameters = {'role': role, 'orchestration': orchestration}
         suffix = ''
@@ -373,10 +398,10 @@ def _bars(records, artifacts, intent_id, *, subject=None):
     return selected
 
 
-def build_problem_subject(records):
-    """Name the selected claim without revealing its scientific text to a bar."""
+def build_problem_subject(records, role=None):
+    """Name the selected claim without revealing its scientific text to a bar; a slate precedes every claim."""
     from .problem_claims import find_current_statement
-    statement = find_current_statement(records)
+    statement = None if role == 'slate' else find_current_statement(records)
     return {'kind': 'problem', 'statement_id': None if statement is None else statement['id']}
 
 
@@ -581,8 +606,8 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
     problem = find_orchestration(records) == 'problem_creation' and role in bar_sources.ROLES + ('adjudicator',)
     if problem:
         if (role not in _PROBLEM_PROMPTS and role != 'adjudicator') or dossier_id is not None:
-            raise ResearchError('invalid_review_context', 'A problem review uses bar or result and its explicit problem subject')
-        packet.update(protocol=_PROBLEM_PROTOCOL, subject=build_problem_subject(records))
+            raise ResearchError('invalid_review_context', 'A problem review uses bar, slate or result and its explicit problem subject')
+        packet.update(protocol=_PROBLEM_PROTOCOL, subject=build_problem_subject(records, role))
     projected = False
     if role in bar_sources.ROLES:
         fields(context, (), ('source_links', 'prior_assignment_id') if role == 'bar' else ('prior_assignment_id',), code='invalid_review_context')
@@ -614,6 +639,8 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                 elif 'problem_refresh' in packet:
                     packet['problem_refresh'] = dict(packet['problem_refresh'],
                         problem_evidence_digest=packet['problem_evidence_digest'])
+            elif problem and role == 'slate':
+                packet.update(bar_ids=previous['bar_ids'], candidates=previous['candidates'])
             elif role in ('slate', 'result'):
                 add_direction_evidence(records, artifacts, packet, dossier_id)
             packet['evidence'] = _evidence(artifacts, packet)
@@ -633,20 +660,24 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
         else:
             bars = _bars(records, artifacts, None, subject=packet['subject'])
             if len({normalized_text(state['reviewer_id']) for _, state in bars}) < 2:
-                raise ResearchError('review_bar_pending', 'Persist both independent problem bars before releasing the statement')
+                raise ResearchError('review_bar_pending', 'Persist both independent problem bars before releasing the candidates or the statement')
             validate_problem_bars(records, artifacts, [review for review, _ in bars])
             own = [(review, state) for review, state in bars
                    if normalized_text(state['reviewer_id']) == normalized_text(reviewer_id)]
             if not own:
-                raise ResearchError('review_bar_continuity', 'The problem result must continue the same reviewer bar session')
+                raise ResearchError('review_bar_continuity', 'The problem slate or result review must continue the same reviewer bar session')
             packet['bar_ids'] = [review['id'] for review, _ in bars]
             packet['bars'] = [_payload(review) for review, _ in bars]
             packet['own_bars'] = [_payload(review) for review, _ in own]
             packet['historical_reviews'] = [{'review': _payload(review), 'independence': 'no_longer_qualified'}
                 for review in context_repair.historical_reviews(records, None, role)
                 if review.get('subject') == packet['subject']]
-            add_problem_evidence(records, artifacts, packet)
-            add_problem_objections(records, artifacts, packet, [review for review, _ in bars])
+            if role == 'slate':
+                from .problem_candidates import describe_candidates
+                packet['candidates'] = describe_candidates(records)
+            else:
+                add_problem_evidence(records, artifacts, packet)
+                add_problem_objections(records, artifacts, packet, [review for review, _ in bars])
     elif role == 'native_math':
         fields(context, ('native_packet',))
         if dossier_id is not None:
@@ -910,8 +941,9 @@ def is_previous_prompt(assignment):
     repair = assignment.get('reassessment_required') is True
     if (assignment.get('subject', {}).get('kind') == 'problem'
             and assignment['role'] in tuple(_PROBLEM_PROMPTS) + ('adjudicator',)):
-        if assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair,
-                                                    version=1, orchestration='problem_creation'):
+        if (assignment['role'] in tuple(_PROBLEM_PROMPTS_V1) + ('adjudicator',)
+                and assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair,
+                                                             version=1, orchestration='problem_creation')):
             return True
         if assignment['role'] != 'adjudicator':
             return False
@@ -966,7 +998,7 @@ def _repair_packet(records, artifacts, value, repair):
         bars = _bars(records, artifacts, None, subject=packet['subject'])
         validate_problem_bars(records, artifacts, [review for review, _ in bars])
         add_problem_objections(records, artifacts, packet, [review for review, _ in bars])
-    elif value['role'] in ('slate', 'result'):
+    elif value['role'] in ('slate', 'result') and not problem:
         add_direction_evidence(records, artifacts, packet, value['dossier_id'])
     packet['evidence'] = _evidence(artifacts, packet)
     packet['digest'] = digest(packet)
@@ -1058,7 +1090,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             if normalized_text(value['author_id']) not in authors:
                 raise ResearchError('problem_author_unknown', 'The assignment author must be one of the immutable problem authors')
             if value['role'] in bar_sources.ROLES + ('adjudicator',):
-                value = dict(value, subject=build_problem_subject(records))
+                value = dict(value, subject=build_problem_subject(records, value['role']))
         if normalized_text(value['reviewer_id']) == normalized_text(value['author_id']):
             raise ResearchError('review_not_independent', 'The author cannot provide an independent assessment')
         route = _get(records, 'review_route', value['route_id'])

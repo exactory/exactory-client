@@ -26,6 +26,16 @@ class ProblemGateTests(ProblemDeliveryCase):
         records.pop("problem_selection")
         self.assertIn("problem_statement_missing", self.collect_gate_codes(records))
 
+    def test_missing_slate_or_unselected_candidate_blocks_the_post_gate(self):
+        records = self.store.snapshot()["records"]
+        records.pop("problem_slate")
+        self.assertEqual(self.collect_gate_codes(records), {"problem_slate_missing"})
+        records = self.store.snapshot()["records"]
+        slate = records["problem_slate"]["slate-1"]
+        slate.update(selected=[], rejected=[{"candidate_id": "candidate-1", "reason": "A later comparison rejects it."}],
+                     reason="No candidate remains selected.")
+        self.assertEqual(self.collect_gate_codes(records), {"problem_candidate_unselected"})
+
     def test_missing_or_stale_assessment_blocks_the_post_gate(self):
         records = self.store.snapshot()["records"]
         records.pop("problem_assessment")

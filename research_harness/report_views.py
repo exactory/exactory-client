@@ -126,6 +126,8 @@ def status_summary(report):
                    "limits": limits,
                    "round": report.get("round"), "evaluation": report.get("evaluation"),
                    "grand_challenge": _summarize_grand_challenge(report.get("grand_challenge"))})
+    if report.get("orchestration") == "problem_creation":
+        result.update(candidates=report["candidates"], slate_id=_short(report["slate_id"], 64))
     result["source_deferrals"] = dict(Counter(item["status"] for item in report.get("source_deferrals", [])))
     result["deferred_obligations"] = _obligations(report.get("deferred_obligations", []))
     if "probes" in report:

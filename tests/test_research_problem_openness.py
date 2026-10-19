@@ -13,7 +13,8 @@ class ProblemOpennessTests(ProblemCase):
     def setUp(self):
         super().setUp()
         self.initialize_problem()
-        self.selected = self.select_statement()
+        self.put_selecting_slate()
+        self.selected = self.select_statement(candidate_id="candidate-1")
 
     def export(self, searches=()):
         from research_harness.problem_openness import export_openness
@@ -174,7 +175,8 @@ class ProblemOpennessMinimumSchemaTests(ProblemCase):
     def setUp(self):
         super().setUp()
         self.initialize_problem()
-        self.selected = self.select_statement()
+        self.put_selecting_slate()
+        self.selected = self.select_statement(candidate_id="candidate-1")
 
     def prepare_review_route(self):
         from test_research_problem_reviews import ProblemReviewTests
