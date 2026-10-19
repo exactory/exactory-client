@@ -170,7 +170,7 @@ class ProblemReviewTests(LiteratureCase):
     def test_problem_slate_template_is_version_two_only_and_keeps_bar_and_result_bytes(self):
         version_two = {"bar": "18d10e762c4f7ed28a1e46681535fa96e5e202093437e65ecedcb3874a9914dd",
                        "result": "19de7711580cabaeee94b19e19f10d19cd2445f4168949453c98d52786ef1494",
-                       "adjudicator": "26ce7a7d1dbd57a415c1f54da0277adb73a153cc5bf2b6183b1a3ece030ba99b"}
+                       "adjudicator": "e90b8eacc63d2f9e42d8b20f6fb2fbbd64d4c1bd6ac9e9d8b221edf1530bf69d"}
         for role, expected in version_two.items():
             self.assertEqual(protocol.canonical_prompt(role, orchestration="problem_creation")["template_hash"], expected)
         slate = protocol.canonical_prompt("slate", orchestration="problem_creation")
