@@ -1,9 +1,13 @@
 """Problem reviewers can resolve an objection independently of an unused adjudication."""
 
+import json
+from unittest.mock import patch
+
 import test_research_problem_delivery as delivery_fixtures
 import test_research_problem_objections as objection_fixtures
 
 from research_harness import research_decisions as decisions, review_protocol as protocol
+from research_harness.evidence import digest
 
 
 class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
@@ -14,6 +18,8 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
     observe_adjudication = objection_fixtures.ProblemObjectionTests.observe_adjudication
     assert_delivered = objection_fixtures.ProblemObjectionTests.assert_delivered
     assert_blocked_delivery = objection_fixtures.ProblemObjectionTests.assert_blocked_delivery
+    refresh_reviews = objection_fixtures.ProblemObjectionTests.refresh_reviews
+    build_slate_output = objection_fixtures.ProblemObjectionTests.build_slate_output
 
     def prepare_bar_adjudication(self):
         self.prepare_reviews(bar_reviewer="second")
@@ -82,3 +88,64 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         self.assertTrue({"artifact_missing", "review_output_unavailable", "research_objection_unresolved"}
                         <= {item["code"] for item in assessment["obligations"]})
         self.assert_blocked_delivery("artifact_missing")
+
+    def contest_with_a_candidate_record(self):
+        """Astra's F1 reproduction: O1 is resolved against candidate-1; candidate-2 holds a counterexample in its
+        observation; the refreshed slate review contests O1 citing candidate-2's exact record reference; the slate
+        selects candidate-1 and defers candidate-2."""
+        self.prepare_reviews(slate_reviewer="first")
+        self.refresh_reviews("resolved")
+        self.assertTrue(decisions.assess_problem_reviews(self.store.snapshot()["records"], self.artifacts)["ready"])
+        self.counterexample_text = "The sequence 1, 3, 2 violates the stated bound at n = 3."
+        self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?", observation=self.counterexample_text)
+        candidate = self.store.snapshot()["records"]["problem_candidate"]["candidate-2"]
+        self.cited = {"kind": "record", "record_kind": "problem_candidate", "id": "candidate-2", "digest": digest(candidate)}
+        output = self.build_slate_output(["candidate-1", "candidate-2"])
+        output["value"]["objection_findings"] = [dict(self.make_finding("contested"), evidence=[self.cited],
+            reason="The candidate-2 observation is a counterexample to the resolution.")]
+        review = self.observe("slate", "first", output, identifier="slate-first-refreshed")
+        self.record_slate("slate-2", deferred=[{"candidate_id": "candidate-2", "evidence_needed": "A documented active line."}],
+                          review_ids=[review["id"]])
+        self.assert_blocked_delivery()
+        records = self.store.snapshot()["records"]
+        current = decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]
+            for identifier in ("review-bar-first", "review-bar-second", "review-refreshed-first", "review-refreshed-second")])
+        [self.version] = [objection for objection in current if objection["id"] == "unsupported-implication"]
+        self.assertEqual(self.version["review_id"], review["id"])
+
+    def read_packet(self, identifier):
+        return json.loads(self.artifacts.read(self.store.snapshot()["records"]["review_assignment"][identifier]["packet"]))
+
+    def test_the_adjudicator_receives_a_cited_record_with_its_content(self):
+        self.contest_with_a_candidate_record()
+        self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"])
+        records = self.store.snapshot()["records"]
+        [entry] = self.read_packet("focused")["version_evidence"]
+        self.assertEqual({key: entry[key] for key in self.cited}, self.cited)
+        self.assertEqual((entry["record"]["observation"], entry["artifacts"]), (self.counterexample_text, []))
+        self.assertEqual(digest(records["problem_candidate"]["candidate-2"]), entry["digest"])
+        self.assertEqual(decisions.find_undelivered_adjudication_keys(records, self.artifacts, "focused",
+            version_evidence=protocol.describe_version_evidence(records, self.artifacts, self.version)), [])
+        self.assert_delivered()
+
+    def test_an_adjudication_without_the_cited_record_is_incomplete_and_refreshes(self):
+        self.contest_with_a_candidate_record()
+        real = protocol.add_focused_adjudication
+
+        def build_before_records_were_delivered(*arguments, **options):
+            real(*arguments, **options)
+            packet = arguments[2]
+            packet["version_evidence"] = [entry for entry in packet["version_evidence"] if entry.get("kind") != "record"]
+        with patch.object(protocol, "add_focused_adjudication", side_effect=build_before_records_were_delivered):
+            saved = self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"])
+        self.assertEqual((saved["disposition"], self.read_packet("focused")["version_evidence"]), ("not_upheld", []))
+        records = self.store.snapshot()["records"]
+        self.assertEqual(decisions.find_undelivered_adjudication_keys(records, self.artifacts, "focused",
+            version_evidence=protocol.describe_version_evidence(records, self.artifacts, self.version)),
+            ["version_evidence:problem_candidate:candidate-2"])
+        self.assert_blocked_delivery()
+        self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"], identifier="focused-complete")
+        refresh = self.read_packet("focused-complete")["focused_refresh"]
+        self.assertEqual((refresh["assignment_id"], refresh["reason"], refresh["undelivered_keys"]),
+                         ("focused", "packet_incomplete", ["version_evidence:problem_candidate:candidate-2"]))
+        self.assert_delivered()

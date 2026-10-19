@@ -1829,18 +1829,32 @@ bars that are not among them, which a context repair installed; it is empty when
 no bar was replaced. For a material objection the packet also carries the
 evidence of the adjudicated version: `version_review`, the payload of the review
 that stated the version, with artifact references as templates;
-`version_evidence`, the artifacts that the stating review's packets delivered for
-the evidence the version cites, whose bytes the packet delivers; and
-`version_source_mappings`, the source passages that those packets delivered for
-the cited artifacts. `current_evidence`, the version evidence and the original
-evidence used for a correction (`original_evidence` and
-`supplied_source_mappings`) stay distinct. An observed, ready
+`version_evidence`, one entry for each reference that the version cites; and
+`version_source_mappings`, the source passages that the stating review's packets
+delivered for the cited artifacts. A cited artifact descriptor or source link is
+delivered as the artifact descriptor that the stating review's packets supplied,
+whose bytes the packet delivers; a source link whose artifact those packets
+delivered only as passages is delivered through `version_source_mappings`. A
+cited record `{kind: "record", record_kind, id, digest}` is delivered as
+`{kind: "record", record_kind, id, digest, record, artifacts}`: `record` is the
+stored record at that digest, with artifact references as templates, and
+`artifacts` holds the descriptors of its artifacts that the stating review's
+packets supplied, whose bytes the packet delivers. A reference that cannot be
+delivered, a record that no longer has that digest or an artifact that the
+stating review's packets did not supply, is an entry `{kind: "undelivered",
+identity, reference}`, and the packet is incomplete. `current_evidence`, the
+version evidence and the original evidence used for a correction
+(`original_evidence` and `supplied_source_mappings`) stay distinct. An observed, ready
 `not_upheld` adjudication resolves only that item for the same subject and current
 `problem_evidence_digest`, and only when its packet carried exactly the original
 `bar_calibrations` and the `rubric_definition`; a material objection's
 adjudication needs exactly the original `bar_calibrations` and the
 `version_review`, `version_evidence` and `version_source_mappings` of the current
-version.
+version, with every cited reference delivered. A cited reference that the packet
+lacks or cannot deliver is named in `undelivered_keys` as
+`version_evidence:<record_kind>:<id>` or `version_evidence:<sha256>`; the post
+gate does not count that adjudication, and the same adjudicator refreshes with
+reason `packet_incomplete`.
 The original grades remain visible. An old-evidence adjudication, a resolution
 of another item, or a material-objection finding cannot waive the shortfall;
 the five independent assurances still have to pass.

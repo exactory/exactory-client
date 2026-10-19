@@ -708,14 +708,39 @@ VERSION_EVIDENCE_KEYS = ('version_review', 'version_evidence', 'version_source_m
 
 def describe_version_evidence(records, artifacts, version):
     """What an adjudicator receives for one material objection version, apart from the original pair's correction
-    evidence, under VERSION_EVIDENCE_KEYS: the review that stated the version, and the artifacts and source passages
-    that the stating review's packets delivered for the evidence the version cites."""
+    evidence, under VERSION_EVIDENCE_KEYS: the review that stated the version, one version_evidence entry for each
+    reference the version cites, and the source passages that the stating review's packets delivered for the cited
+    artifacts.
+
+    An artifact or a source link is delivered as the artifact descriptor that the stating review's packets supplied,
+    or, for a source link, through those passages alone. A record is delivered as {kind, record_kind, id, digest,
+    record, artifacts}: its stored content at that digest with artifact references as templates, and the descriptors
+    of its artifacts that those packets supplied. A reference that cannot be delivered (no record at that digest, or
+    an artifact those packets did not supply) is an entry {kind: undelivered, identity, reference}."""
     review = _get(records, 'value_review', version['review_id'])
     supplied, mappings = supplied_evidence.supplied_context(records, artifacts, [review['assignment_id']])
-    cited = {reference['sha256'] for reference in collect_references(version['evidence'])}
+    mapped = {mapping['origin']['artifact_descriptor']['sha256'] for mapping in mappings}
+    entries, cited = [], set()
+    for reference in version['evidence']:
+        if reference.get('kind') == 'record':
+            identity = reference['record_kind'] + ':' + reference['id']
+            saved = records.get(reference['record_kind'], {}).get(reference['id'])
+            if saved is not None and digest(saved) == reference['digest']:
+                content = {item['sha256']: supplied[item['sha256']] for item in collect_references(saved) if item['sha256'] in supplied}
+                entries.append(dict(reference, record=_reference_templates(saved), artifacts=list(content.values())))
+                continue
+        else:
+            artifact = reference['link']['artifact'] if reference.get('kind') == 'source' else reference
+            identity = artifact['sha256']
+            cited.add(identity)
+            if identity in supplied:
+                entries.append(supplied[identity])
+                continue
+            if reference.get('kind') == 'source' and identity in mapped:
+                continue
+        entries.append({'kind': 'undelivered', 'identity': identity, 'reference': _reference_templates(reference)})
     return dict(zip(VERSION_EVIDENCE_KEYS, (
-        _reference_templates(_payload(review)),
-        [supplied[sha256] for sha256 in sorted(cited & supplied.keys())],
+        _reference_templates(_payload(review)), entries,
         [mapping for mapping in mappings if mapping['origin']['artifact_descriptor']['sha256'] in cited])))
 
 

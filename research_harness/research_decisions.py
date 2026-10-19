@@ -633,13 +633,23 @@ def read_assignment_packet(records, artifacts, assignment_id):
 def find_undelivered_adjudication_keys(records, artifacts, assignment_id, *, rubric=False, version_evidence=None):
     """The required deliveries that the observed adjudicator packet lacks: the original bar calibrations of its
     adjudicated pair, for a rubric shortfall the item's definition and threshold, and for a material objection the
-    given stating review and evidence of the version."""
+    given stating review and evidence of the version. A cited reference that the packet lacks, or that cannot be
+    delivered, is named as version_evidence:<record_kind>:<id> or version_evidence:<sha256>."""
     from .review_protocol import resolve_original_calibrations
     assignment = records['review_assignment'][assignment_id]
     packet = read_assignment_packet(records, artifacts, assignment_id)
     expected = dict(version_evidence or {},
                     bar_calibrations=resolve_original_calibrations(records, artifacts, assignment['context']['review_ids']))
+    entries = expected.pop('version_evidence', None)
     undelivered = [key for key, value in expected.items() if packet.get(key) != value]
+    if entries is not None:
+        delivered = packet.get('version_evidence') or []
+        # An undelivered entry names its reference; a record entry its kind and id; an artifact its sha256.
+        missing = ['version_evidence:' + (entry['identity'] if entry.get('kind') == 'undelivered' else
+                                          entry['record_kind'] + ':' + entry['id'] if entry.get('kind') == 'record' else
+                                          entry['sha256'])
+                   for entry in entries if entry.get('kind') == 'undelivered' or entry not in delivered]
+        undelivered.extend(missing or (['version_evidence'] if delivered != entries else []))
     if rubric and not packet.get('rubric_definition'):
         undelivered.append('rubric_definition')
     return sorted(undelivered)
