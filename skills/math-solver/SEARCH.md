@@ -1963,7 +1963,7 @@ from controller records; it copies no local file contents:
   retreats: [as recorded],
   failed_strategies: [as recorded],
   nodes: [{id, status, cashout_action, finish_receipt: {id, post_digest} | null}],
-  totals: {moves, runs, elapsed_seconds, workers}
+  totals: {moves, runs, elapsed_seconds, workers, historical_usage}
 }
 ```
 
@@ -1986,7 +1986,8 @@ false; `evidence_digests` comes from its recorded audit.
 
 `moves` and `runs` are the controller's cumulative consumed totals across accounts
 (`used_moves` and `used_runs`), excluding reservations and allowance limits.
-Unknown historical work is not inferred. `elapsed_seconds` is null because native
+`historical_usage` copies the controller's `known` or `unknown` accounting status;
+unknown historical work is not inferred. `elapsed_seconds` is null because native
 records do not account elapsed duration. `workers` is the largest admitted worker
 limit, or zero without an admission; it is an allocation bound. Delivery preserves
 the objective's current findings and decides no proof credit, difficulty, renewal

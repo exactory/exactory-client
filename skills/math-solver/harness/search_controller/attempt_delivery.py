@@ -14,7 +14,7 @@ from .reviewer import common_root
 from .storage import ContentSink
 
 
-def attempt_summary(controller, state):
+def build_attempt_summary(controller, state):
     """Project recorded findings and accounted usage without reading local files."""
     openness = state.get("openness")
     closure = state["control"]["closure"]
@@ -50,7 +50,8 @@ def attempt_summary(controller, state):
                    # Native records do not account elapsed duration. Preserve that gap.
                    "elapsed_seconds": None,
                    "workers": max((node["admission"]["limits"]["workers"] for node in state["nodes"].values()
-                                   if node["admission"] is not None), default=0)},
+                                   if node["admission"] is not None), default=0),
+                   "historical_usage": state["totals"]["historical_usage"]},
     }
     return copy.deepcopy(summary)
 
@@ -67,12 +68,12 @@ def deliver_attempt(controller, spec, expected_revision, request_id):
                               {"expected": expected_revision, "actual": state["revision"]})
         s.require(state["control"]["state_error"] is None,
                   "Reconcile pending native state before delivering its attempt", "native_state_pending")
-        summary = attempt_summary(controller, state)
-        identity = s.digest(summary)
+        summary = build_attempt_summary(controller, state)
+        attempt_digest = s.digest(summary)
         common = common_root(controller.root, state)
         value = dict(summary, provenance=controller.provenance("deliver-attempt"))
         result = {"objective_id": state["objective_id"], "attack_root": str(controller.root),
-                  "native_attempt_digest": identity, "workspace": str(common), "state": summary["state"]}
+                  "native_attempt_digest": attempt_digest, "workspace": str(common), "state": summary["state"]}
         try:
             store = CommonStore(common)
 
@@ -81,20 +82,21 @@ def deliver_attempt(controller, spec, expected_revision, request_id):
                 snapshot = SimpleNamespace(root=common, snapshot=lambda: {"records": records})
                 content = ContentSink(controller.store)
                 failures = audit_state(controller.root, state, content, common_guard=snapshot, fresh=True)
-                s.require(not failures, "Accepted native attempt audit failed", "audit_failed")
-                return [immutable_record(records, "native_attempt", identity, payload)], result
+                if failures:
+                    raise SearchError("audit_failed", "Accepted native attempt audit failed", failures)
+                return [immutable_record(records, "native_attempt", attempt_digest, payload)], result
 
             while True:
                 snapshot = store.snapshot()
                 # An identical summary re-audits without adding a record or receipt.
-                existing = snapshot["records"].get("native_attempt", {}).get(identity)
+                existing = snapshot["records"].get("native_attempt", {}).get(attempt_digest)
                 if existing is not None:
                     prepare(snapshot["records"], value)
                     return result
                 try:
                     prepared_mutation(store, "native_math.deliver_attempt", value, prepare,
                                       expected_revision=snapshot["revision"],
-                                      request_id="native-attempt:" + identity)
+                                      request_id="native-attempt:" + attempt_digest)
                     return result
                 except ResearchError as error:
                     if error.code != "stale_revision":
