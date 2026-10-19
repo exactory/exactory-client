@@ -141,6 +141,7 @@ _PROBLEM_ADJUDICATOR_PROMPT_V1 = (
     '(null when no correction is requested, otherwise a boolean).')
 
 _PROBLEM_PROTOCOL = 'exactory-problem-review-v2'
+PROBLEM_PROTOCOL = _PROBLEM_PROTOCOL
 _PROBLEM_PROMPTS = {
     'bar': _PROBLEM_PROMPTS_V1['bar'] +
         ' State the specialist\'s bar for levels 2 and 3 of significance on each ground B1 '
@@ -470,6 +471,36 @@ def add_direction_evidence(records, artifacts, packet, dossier_id):
     packet['direction_evidence'] = build_direction_evidence(records, artifacts, describe_direction(records, artifacts), dossier)
 
 
+def build_rubric_objection(records, artifacts, saved, context, packet):
+    """Build the named problem objection from material findings or rubric shortfalls."""
+    from .research_decisions import collect_problem_objections
+    objections = [objection for objection in collect_problem_objections(records, artifacts, saved)
+                  if objection['id'] == context.get('objection_id') and 'claim' in objection]
+    rubric_id = problem_rubric.parse_rubric_objection_id(context.get('objection_id'))
+    if rubric_id is not None:
+        review_id, item = rubric_id
+        for review in saved:
+            grades = review['payload']['value'].get('rubric')
+            if review['id'] != review_id or grades is None or review['payload']['stage'] != 'result':
+                continue
+            shortfall = next((row for row in problem_rubric.assess_grades(grades) if row['item'] == item), None)
+            if shortfall is not None:
+                if objections:
+                    raise ResearchError('review_objection_missing', 'Disambiguate the rubric grade and explicit material objection before adjudication')
+                if any('rubric' not in row['payload']['value'] for row in saved):
+                    raise ResearchError('review_objection_missing', 'Rubric adjudication requires both original result rubrics')
+                findings = review['payload']['value']
+                evidence_items = problem_rubric.GROUNDS if item == 'significance' else (item,)
+                graded = shortfall['graded']
+                graded = json.dumps(graded, sort_keys=True) if isinstance(graded, dict) else str(graded)
+                objections = [{'id': context['objection_id'],
+                    'claim': item + ' graded ' + graded + ' by ' + review['reviewer_id'] + '; required ' + shortfall['required'],
+                    'reason': ' '.join(findings['rubric_evidence'][key] for key in evidence_items),
+                    'evidence': findings['evidence'], 'resolution_condition': shortfall['required']}]
+                packet['rubric_grades'] = [row['payload']['value']['rubric'] for row in saved]
+    return objections
+
+
 def add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id, context, *, problem=False):
     """Supply the exact disputed assessments and evidence for one focused finding."""
     packet['protocol'] = supplied_evidence.PROTOCOL
@@ -481,7 +512,7 @@ def add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id
         raise ResearchError('review_packet_mismatch', 'Both reviews must concern the adjudicated dossier')
     if problem:
         from .direction_reviews import collect_observed_packets
-        from .research_decisions import _pair, _response, collect_problem_objections
+        from .research_decisions import _pair, _response
         saved = _pair(records, ids, packet['subject'], reviews[0]['stage'])
         for review in saved:
             observed = {assignment['id'] for assignment, _ in collect_observed_packets(records, artifacts, review['assignment_id'])}
@@ -501,28 +532,7 @@ def add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id
         raise ResearchError('review_not_independent', 'An initial assessor cannot adjudicate its own dispute')
     objections = [o for r in reviews for o in r.get('objections', []) if o['id'] == context.get('objection_id')]
     if problem:
-        objections = [objection for objection in collect_problem_objections(records, artifacts, saved)
-                      if objection['id'] == context.get('objection_id') and 'claim' in objection]
-        rubric_id = problem_rubric.parse_rubric_objection_id(context.get('objection_id'))
-        if rubric_id is not None:
-            review_id, item = rubric_id
-            for review in saved:
-                grades = review['payload']['value'].get('rubric')
-                if review['id'] != review_id or grades is None or review['payload']['stage'] != 'result':
-                    continue
-                shortfall = next((row for row in problem_rubric.assess_grades(grades) if row['item'] == item), None)
-                if shortfall is not None:
-                    if objections:
-                        raise ResearchError('review_objection_missing', 'Disambiguate the rubric grade and explicit material objection before adjudication')
-                    if any('rubric' not in row['payload']['value'] for row in saved):
-                        raise ResearchError('review_objection_missing', 'Rubric adjudication requires both original result rubrics')
-                    findings = review['payload']['value']
-                    evidence_items = problem_rubric.GROUNDS if item == 'significance' else (item,)
-                    objections = [{'id': context['objection_id'],
-                        'claim': item + ' graded ' + str(shortfall['graded']) + ' by ' + review['reviewer_id'] + '; required ' + shortfall['required'],
-                        'reason': ' '.join(findings['rubric_evidence'][key] for key in evidence_items),
-                        'evidence': findings['evidence'], 'resolution_condition': shortfall['required']}]
-                    packet['rubric_grades'] = [row['payload']['value']['rubric'] for row in saved]
+        objections = build_rubric_objection(records, artifacts, saved, context, packet)
     if not objections:
         raise ResearchError('review_objection_missing', 'The focused objection must exist in the original assessments')
     correction = context.get('correction')

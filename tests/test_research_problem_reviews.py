@@ -234,6 +234,18 @@ class ProblemReviewTests(LiteratureCase):
         second = self.observe('result', 'second', output, record=False)
         self.assert_error('invalid_value_review', lambda: self.mutate(decisions.record_value_review, second))
 
+    def test_rubric_review_templates_follow_the_current_problem_protocol(self):
+        self.observe_result_reviews()
+        records = self.read_records()
+        review = records['value_review']['review-result-first']
+        assignment = records['review_assignment'][review['assignment_id']]
+        with patch.object(protocol, 'PROBLEM_PROTOCOL', 'exactory-problem-review-next'):
+            for suffix in ('/result', '/result/context-repair'):
+                with self.subTest(suffix=suffix):
+                    assignment['prompt']['template_id'] = protocol.PROBLEM_PROTOCOL + suffix
+                    self.assertEqual(decisions.assess_rubric_reviews(
+                        records, self.artifacts, [review], digest(self.expected)), [])
+
     def prepare_below_threshold_reviews(self):
         self.observe_bar_reviews()
         output = self.build_review_output('result')
@@ -291,28 +303,45 @@ class ProblemReviewTests(LiteratureCase):
         below = next(row for row in state['obligations'] if row['code'] == 'problem_rubric_below_threshold')
         self.assertEqual([row['item'] for row in below['shortfalls']], ['calibration'])
 
+    def test_rubric_significance_objection_claim_uses_sorted_json(self):
+        self.observe_bar_reviews()
+        output = self.build_review_output('result')
+        output['value']['rubric']['significance'] = {'B2': 1, 'B1': 1}
+        self.observe('result', 'first', output)
+        self.observe('result', 'second')
+        assignment = self.assign('adjudicator', 'focused-third', identifier='significance-focused',
+            review_ids=['review-result-first', 'review-result-second'],
+            objection_id=rubric_objection_id('review-result-first', 'significance'))
+        packet = json.loads(self.artifacts.read(assignment['packet']))
+        self.assertEqual(packet['objection']['claim'],
+            'significance graded {"B1": 1, "B2": 1} by first; required max(B1, B2) >= 2')
+
     def test_rubric_adjudication_requires_a_ready_not_upheld_finding_for_the_same_subject(self):
         self.prepare_below_threshold_reviews()
         self.observe_rubric_adjudication('upheld')
         records = self.read_records()
-        self.assertTrue(decisions.assess_rubric_reviews(records, self.artifacts,
-            [records['value_review']['review-result-first']], digest(self.expected)))
+        self.assertEqual([row['code'] for row in decisions.assess_rubric_reviews(records, self.artifacts,
+            [records['value_review']['review-result-first']], digest(self.expected))],
+            ['problem_rubric_below_threshold'])
         # A matching disposition string cannot substitute for the observed response.
         records['review_adjudication']['rubric-finding']['disposition'] = 'not_upheld'
-        self.assertTrue(decisions.assess_rubric_reviews(records, self.artifacts,
-            [records['value_review']['review-result-first']], digest(self.expected)))
+        self.assertEqual([row['code'] for row in decisions.assess_rubric_reviews(records, self.artifacts,
+            [records['value_review']['review-result-first']], digest(self.expected))],
+            ['problem_rubric_below_threshold'])
 
     def test_rubric_adjudication_for_another_subject_or_without_held_evidence_does_not_resolve(self):
         self.prepare_below_threshold_reviews()
         self.observe_rubric_adjudication()
         records = self.read_records()
         records['review_adjudication']['rubric-finding']['subject']['statement_id'] = 'another-statement'
-        self.assertTrue(decisions.assess_rubric_reviews(records, self.artifacts,
-            [records['value_review']['review-result-first']], digest(self.expected)))
+        self.assertEqual([row['code'] for row in decisions.assess_rubric_reviews(records, self.artifacts,
+            [records['value_review']['review-result-first']], digest(self.expected))],
+            ['problem_rubric_below_threshold'])
         (self.root / self.supporting['path']).unlink()
         records = self.read_records()
-        self.assertTrue(decisions.assess_rubric_reviews(records, self.artifacts,
-            [records['value_review']['review-result-first']], digest(self.expected)))
+        self.assertEqual([row['code'] for row in decisions.assess_rubric_reviews(records, self.artifacts,
+            [records['value_review']['review-result-first']], digest(self.expected))],
+            ['artifact_missing', 'problem_rubric_below_threshold'])
 
     def test_focused_rubric_objection_must_name_an_original_below_threshold_grade(self):
         self.prepare_below_threshold_reviews()

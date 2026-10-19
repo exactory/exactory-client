@@ -578,14 +578,13 @@ def assess_problem_reviews(records, artifacts, review_ids=None, bar_review_ids=N
 
 def assess_rubric_reviews(records, artifacts, reviews, evidence_digest):
     """Require current rubric results and independently adjudicate named shortfalls."""
-    from .review_protocol import adjudication_state
+    from .review_protocol import PROBLEM_PROTOCOL, adjudication_state
     obligations = []
     for review in reviews:
         assignment = records['review_assignment'][review['assignment_id']]
         template = assignment['prompt']['template_id']
         findings = review['payload']['value']
-        if (template not in ('exactory-problem-review-v2/result', 'exactory-problem-review-v2/result/context-repair')
-                or 'rubric' not in findings):
+        if template not in (PROBLEM_PROTOCOL + '/result', PROBLEM_PROTOCOL + '/result/context-repair'):
             obligations.append(obligation('problem_rubric_review_required', 'Obtain a version 2 problem result with rubric grades.',
                                           review_id=review['id']))
             continue
