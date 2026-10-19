@@ -123,8 +123,9 @@ Keep the negative findings in the record.
    Record the observed review with `value-review`.
 9. Record the selection with `exactory-research problem-slate`. Give every current candidate
    exactly one disposition: `selected`, `deferred` with the evidence that raises it, or
-   `rejected` with the reason. Name both bars in `bar_review_ids`. Put the id of a recorded slate
-   review in `review_ids`, or leave `review_ids` empty. Write the `comparison`.
+   `rejected` with the reason. Name both bars in `bar_review_ids`. When slate reviews were
+   recorded, put their ids in `review_ids` (at most two, from distinct reviewers). Otherwise
+   leave `review_ids` empty. Write the `comparison`.
 10. Select only a candidate whose potential grades reach `max(B1, B2) >= 2` with readiness `pass`.
     Defer a candidate at potential level 1 with the evidence that raises it.
 11. When the evidence that raises a deferred candidate is recorded, reconsider the candidate.
@@ -209,8 +210,9 @@ the statement, redirect to the established result and its source.
    `{assignment_id}`.
 7. On `unresolved`, fill the recorded gap and obtain a new finding.
 8. On `already_solved`, redirect to the settling result, or record a new statement.
-9. When a neighbour is added, a material search is new or a bound reading changes, refresh the
-   finding (`problem_openness_stale`).
+9. When a neighbour is added, a new material search is not bound, a bound search or reading
+   changes, or the finding no longer covers the current formulation, refresh the finding
+   (`problem_openness_stale`).
 
 ## Value and the rubric
 
@@ -283,8 +285,8 @@ preference never admits a candidate that the thresholds refuse.
 ## Reviews and the decision
 
 1. Keep the two bars of the slate for the result reviews and the decision.
-2. Assign each of the two result reviews to one of the two bar reviewers. Each result review
-   continues that reviewer's bar session. The harness refuses any other reviewer with
+2. Assign one result review to each of the two bar reviewers. Each result review continues that
+   reviewer's bar session. The harness refuses any other reviewer with
    `review_bar_continuity`. When a route is not yet verified, register and test it first with
    `review-route` and `review-probe`.
 3. Assign each result review with `review-assignment`, role `result` and `dossier_id: null`.
@@ -306,7 +308,8 @@ preference never admits a candidate that the thresholds refuse.
 8. Resolve every material objection of both bars and both result reviews with evidence, or with
    a focused adjudication that finds it not upheld.
 9. Record the decision with `exactory-research problem-decision`: `post`, `revise` or
-   `withdraw`, with the `review_ids`, the `bar_review_ids` and the reason.
+   `withdraw`, with the `review_ids`, the `bar_review_ids` and the reason. Record `revise` for a
+   shortfall that evidence can repair, and `withdraw` for a refused candidate (see "The rubric").
 10. When the current minimum and the observed review pair pass, record `post`.
 11. Run `exactory-research gate post`. When it reports ready, continue with "Compose and post a
     problem".
