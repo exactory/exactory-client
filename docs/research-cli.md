@@ -1464,23 +1464,24 @@ slate assignment for that reviewer returns `review_resampling_forbidden`.
 
 The material objections of observed slate reviews bind the post like the bars'
 objections, whether or not the latest slate cites the review; `review_ids` names
-the reviews that the selection rests on. An objection that names candidates
-applies while every named candidate is current with the record digest that the
-review's packet carried, and it concerns the statement that formulates one of
-them. An objection with empty `candidate_ids` applies while the reviewed
-candidate set (`candidate_set_digest`) is current and concerns every statement.
-A change of the bars erases no objection, and an objection that names only other
-candidates does not block the current statement. The applicable objections that
-concern the current statement join the result packets' `material_objections`,
+the reviews that the selection rests on. A named candidate stays the same
+candidate along its `previous` lineage, whatever a later version changes: an
+objection concerns the statement that formulates a named candidate or one of its
+later versions, and its projection names the current versions. An objection with
+empty `candidate_ids` concerns the slate as a whole and every statement. Adding or
+revising candidates and changing the bars erase no objection, and an objection
+whose named lineages are all other candidates does not block the current
+statement. A slate review recorded before objections named candidates (no
+`candidate_set_digest` in its packet or no `candidate_ids`) is not counted. The
+objections that concern the current statement join the result packets'
+`material_objections`,
 so each result review needs an `objection_findings` entry for them
 (`review_objection_history_incomplete`), and they remain post obligations
 (`research_objection_unresolved`) until both result reviews record an evidenced
 resolution or a focused adjudication finds them not upheld. Adjudicate a
 slate-review objection with the two bar review ids in `context.review_ids`, as
 for a bar objection; the adjudicator packet's `assessments` add the slate reviews
-that raised it. An objection that no longer applies leaves the post path; its
-findings stay in its reviewer's history, and a result review that keeps them
-`continuing` or `contested` keeps them material.
+that raised it.
 
 Formulate a selected candidate with `problem-statement` and its `candidate_id`.
 The post gate requires a slate (`problem_slate_missing`) and a current statement
@@ -1723,8 +1724,10 @@ required before a result packet, and a result assignment, its source-request
 continuations, refreshes and context repairs are refused before dispatch while a
 current bar or a bar that the latest slate cites was recorded on the version 1
 template (`problem_bar_calibration_required` naming `review_id`). Every result
-packet, including a continuation or a refresh, carries the current `bar_ids`,
-`bars` and the reviewer's `own_bars`. A result review names only bars whose
+packet, including a continuation, a refresh or a context repair, carries the
+current `bar_ids`, `bars` and `own_bars`: the reviewer's own bar, or for a
+reviewer that holds the slot through a context repair, the current bar of that
+slot. A result review names only bars whose
 content an observed packet of its lineage delivered: `value-review` refuses
 another with `review_bar_mismatch` naming `bar_ids`, and the post gate reports
 the same code for a recorded review. Each result packet also carries

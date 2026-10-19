@@ -246,6 +246,66 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         self.assertEqual(packet["material_objections"], [])
         self.assert_delivered()
 
+    def test_a_slate_objection_follows_new_versions_of_the_selected_candidate(self):
+        self.prepare_reviews(slate_reviewer="first", results=False)
+        for identifier, previous, changes in (
+                ("candidate-1b", "candidate-1", {"notes": "A note that no reviewer receives."}),
+                ("candidate-1c", "candidate-1b", {"statement": r"For every $n \geq 3$, does $B(n)\leq n^2$ hold?"})):
+            with self.subTest(candidate=identifier):
+                self.record_candidate(identifier, previous=previous, **changes)
+                self.record_slate("slate-" + identifier, selected=[identifier])
+                self.select_statement(identifier="statement-" + identifier, candidate_id=identifier)
+                packet = protocol.build_packet(self.store.snapshot()["records"], self.artifacts, None, "result", "first")
+                self.assertEqual([(row["id"], row["candidate_ids"]) for row in packet["material_objections"]],
+                                 [("unsupported-implication", [identifier])])
+
+    def test_a_whole_slate_objection_survives_an_added_candidate(self):
+        self.prepare_reviews(results=False)
+        output = self.build_slate_output(["candidate-1"])
+        output["objections"] = [dict(self.make_objection(), candidate_ids=[])]
+        self.observe("slate", "first", output)
+        self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
+        self.record_slate("slate-2", deferred=[{"candidate_id": "candidate-2", "evidence_needed": "A documented active line."}])
+        packet = protocol.build_packet(self.store.snapshot()["records"], self.artifacts, None, "result", "first")
+        self.assertEqual([(row["id"], row["candidate_ids"]) for row in packet["material_objections"]],
+                         [("unsupported-implication", [])])
+
+    def test_a_slate_objection_on_a_rejected_lineage_does_not_block_the_selected_statement(self):
+        self.prepare_reviews(results=False)
+        self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
+        output = self.build_slate_output(["candidate-1", "candidate-2"])
+        output["objections"] = [dict(self.make_objection(), candidate_ids=["candidate-2"])]
+        self.observe("slate", "first", output)
+        self.record_slate("slate-2", rejected=[{"candidate_id": "candidate-2", "reason": "A restatement of a known question."}],
+                          review_ids=["review-slate-first"])
+        for reviewer in ("first", "second"):
+            self.observe("result", reviewer)
+        packet = json.loads(self.artifacts.read(self.store.snapshot()["records"]["review_assignment"]["result-first"]["packet"]))
+        self.assertEqual(packet["material_objections"], [])
+        self.assert_delivered()
+
+    def test_a_repaired_result_reviewer_refreshes_with_the_current_bars(self):
+        self.prepare_contested_repair()
+        changed = self.build_value([self.item], identifier="value-2")
+        changed["motivation"][0]["text"] = "A narrower implication follows from the supplied comparator."
+        self.mutate(self.load_problem_module().record_value, changed)
+        refreshed = self.assign("result", "repaired-second", identifier="repaired-refresh")
+        packet = json.loads(self.artifacts.read(refreshed["packet"]))
+        self.assertEqual(refreshed["context"], {"prior_assignment_id": "repaired-result"})
+        self.assertEqual((sorted(packet["bar_ids"]), [bar["id"] for bar in packet["own_bars"]]),
+                         (["review-bar-first", "review-bar-second"], ["review-bar-second"]))
+        output = self.build_review_output("result")
+        output["value"]["objection_findings"] = [self.make_finding("resolved")]
+        output["reassessment"] = {"assignment_id": "result-second", "findings": [{
+            "review_id": "review-result-second", "disposition": "revised",
+            "reason": "The changed paragraph narrows the implication to the supplied comparator.", "evidence": [self.supporting]}]}
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {"id": "repaired-refresh-attempt", "assignment_id": "repaired-refresh"},
+                        credential="test-only")
+        saved = self.mutate(decisions.record_value_review,
+                            dict(output, id="review-repaired-refresh", dossier_id=None, assignment_id="repaired-refresh"))["result"]
+        self.assertEqual(saved["assignment_id"], "repaired-refresh")
+
     def test_a_later_slate_objection_permits_the_result_reviewers_to_reassess(self):
         self.prepare_reviews()
         for reviewer in ("first", "second"):

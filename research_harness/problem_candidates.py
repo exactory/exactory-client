@@ -84,31 +84,46 @@ def find_current_slate(records):
     return slate
 
 
-def collect_applicable_slate_objections(records, artifacts):
-    """Each material objection of an observed slate review that still concerns the current statement, with its review.
+def _collect_candidate_lineage(records, identifiers):
+    """The named candidates and every later version that descends from them through `previous`."""
+    children = {}
+    for identifier, row in records.get("problem_candidate", {}).items():
+        if row["previous"] is not None:
+            children.setdefault(row["previous"], []).append(identifier)
+    lineage, pending = set(), list(identifiers)
+    while pending:
+        identifier = pending.pop()
+        if identifier not in lineage:
+            lineage.add(identifier)
+            pending.extend(children.get(identifier, ()))
+    return lineage
 
-    An objection that names candidates applies while every named candidate is current with the record digest that the
-    review's packet carried, and concerns the statement that formulates one of them. An objection that names no
-    candidate concerns the slate as a whole and applies while the reviewed candidate set is current. A change of the
-    bars erases no objection."""
+
+def collect_applicable_slate_objections(records, artifacts):
+    """Each material objection of an observed slate review that concerns the current statement, with its review.
+
+    A named candidate stays the same candidate along its `previous` lineage, whatever a later version changes; the
+    projected objection names the current versions. Candidates are never removed, so every named lineage keeps a
+    current version. An objection concerns the statement that formulates a candidate of a named lineage; an objection
+    that names no candidate concerns the slate as a whole and every statement. Only evidence or an adjudication
+    resolves an objection. A slate review recorded before candidates were bound to objections is not current."""
     statement = find_current_statement(records)
     candidate_id = None if statement is None else statement.get("candidate_id")
-    current = {identifier: digest(row) for identifier, row in find_current_candidates(records).items()}
-    candidate_set_digest = compute_candidate_set_digest(records)
+    current = set(find_current_candidates(records))
     applicable = []
     for review in sorted(records.get("value_review", {}).values(), key=lambda row: (row["recorded_revision"], row["id"])):
         if review["payload"]["stage"] != "slate" or review.get("subject", {}).get("kind") != "problem":
             continue
         packet = json.loads(artifacts.read(records["review_assignment"][review["assignment_id"]]["packet"]))
-        reviewed = {candidate["id"]: candidate["digest"] for candidate in packet["candidates"]}
+        if "candidate_set_digest" not in packet:
+            continue
         for objection in review["payload"]["objections"]:
-            named = objection["candidate_ids"]
-            if named:
-                applies = candidate_id in named and all(current.get(identifier) == reviewed[identifier] for identifier in named)
-            else:
-                applies = packet["candidate_set_digest"] == candidate_set_digest
-            if applies:
-                applicable.append((review, objection))
+            if "candidate_ids" not in objection:
+                continue
+            lineage = _collect_candidate_lineage(records, objection["candidate_ids"])
+            if objection["candidate_ids"] and candidate_id not in lineage:
+                continue
+            applicable.append((review, dict(objection, candidate_ids=sorted(lineage & current))))
     return applicable
 
 

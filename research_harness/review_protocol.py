@@ -461,14 +461,16 @@ def compute_problem_review_currency(records, artifacts):
                                                   in collect_applicable_slate_objections(records, artifacts)})})
 
 
-def add_problem_bars(records, artifacts, packet, reviewer_id):
-    """Bind a slate or result packet to both current field bars and the reviewer's own bar session."""
+def add_problem_bars(records, artifacts, packet, reviewer_id, slot=None):
+    """Bind a slate or result packet to both current field bars and the reviewer's own bar session: its own bar, or
+    for a review that continues a slot, the bar of that slot, which a reviewer holds through a context repair."""
     bars = _bars(records, artifacts, None, subject=packet['subject'])
     if len({normalized_text(state['reviewer_id']) for _, state in bars}) < 2:
         raise ResearchError('review_bar_pending', 'Persist both independent problem bars before releasing the candidates or the statement')
     validate_problem_bars(records, artifacts, [review for review, _ in bars])
     own = [(review, state) for review, state in bars
-           if normalized_text(state['reviewer_id']) == normalized_text(reviewer_id)]
+           if normalized_text(state['reviewer_id']) == normalized_text(reviewer_id)
+           or (slot is not None and context_repair.slot_id(records, records['review_assignment'][review['assignment_id']]) == slot)]
     if not own:
         raise ResearchError('review_bar_continuity', 'The problem slate or result review must continue the same reviewer bar session')
     packet['bar_ids'] = [review['id'] for review, _ in bars]
@@ -700,7 +702,7 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                 if role != 'bar':
                     packet['historical_reviews'] = [_payload(review) for review in historical]
             if problem and role == 'result':
-                bars = add_problem_bars(records, artifacts, packet, reviewer_id)
+                bars = add_problem_bars(records, artifacts, packet, reviewer_id, slot=context_repair.slot_id(records, prior))
                 require_calibrated_bars(records, bars)
                 add_problem_evidence(records, artifacts, packet)
                 add_problem_objections(records, artifacts, packet, bars)
@@ -1075,8 +1077,7 @@ def _repair_packet(records, artifacts, value, repair):
             'independence_basis': 'The harness verifies the new actual route, canonical packet, invocation and exact contamination-repair provenance.'}
     if problem and value['role'] == 'result':
         add_problem_evidence(records, artifacts, packet)
-        bars = [review for review, _ in _bars(records, artifacts, None, subject=packet['subject'])]
-        validate_problem_bars(records, artifacts, bars)
+        bars = add_problem_bars(records, artifacts, packet, value['reviewer_id'], slot=repair['slot_id'])
         require_calibrated_bars(records, bars)
         add_problem_objections(records, artifacts, packet, bars)
         packet['problem_review_currency'] = compute_problem_review_currency(records, artifacts)

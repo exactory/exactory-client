@@ -408,6 +408,28 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assertEqual([row["id"] for row in packet["material_objections"]], ["restated"])
         self.assertEqual(sorted(packet["bar_ids"]), ["review-bar-first-v2", "review-bar-second-v2"])
 
+    def test_a_slate_review_recorded_before_candidate_binding_is_ignored(self):
+        self.record_candidate()
+        self.observe_bars()
+        output = self.build_slate_output(["candidate-1"])
+        output["objections"] = [{"id": "restated", "claim": "The slate restates a known question.",
+            "reason": "The read survey states it.", "evidence": [self.supporting],
+            "resolution_condition": "Show what the slate adds to the known question.", "candidate_ids": []}]
+        self.observe("slate", "first", output)
+        self.select_statement(candidate_id="candidate-1")
+        records = self.read_records()
+        self.assertEqual(len(problem_candidates.collect_applicable_slate_objections(records, self.artifacts)), 1)
+        without_ids = copy.deepcopy(records)
+        del without_ids["value_review"]["review-slate-first"]["payload"]["objections"][0]["candidate_ids"]
+        without_digest = copy.deepcopy(records)
+        assignment = without_digest["review_assignment"]["slate-first"]
+        packet = json.loads(self.artifacts.read(assignment["packet"]))
+        del packet["candidate_set_digest"]
+        assignment["packet"] = self.artifacts.put(json.dumps(packet).encode(), "application/json")
+        for name, changed in (("candidate_ids", without_ids), ("candidate_set_digest", without_digest)):
+            with self.subTest(missing=name):
+                self.assertEqual(problem_candidates.collect_applicable_slate_objections(changed, self.artifacts), [])
+
     def test_a_stale_slate_counts_as_no_slate_for_next_and_the_milestone(self):
         self.record_candidate()
         self.observe_bars()
@@ -521,10 +543,39 @@ class ProblemResultCalibrationTests(ProblemDeliveryCase):
         report = gate_state(self.store.snapshot()["records"], self.artifacts, "post")
         self.assertTrue(report["ready"], report["obligations"])
 
+    def test_a_result_repair_after_a_bar_refresh_receives_the_calibrated_bars(self):
+        self.prepare_legacy_results()
+        self.mutate(protocol.record_context_event, {"id": "exposure", "assignment_id": "result-first",
+            "kind": "contamination", "source": "author_history", "reason": "The result reviewer received author advocacy.",
+            "evidence": [self.supporting]})
+
+        def respond_to_probe(route, request, credential):
+            supplied = json.loads(request["input"][0]["content"])
+            return self.build_provider_response({"allowed_control": supplied["allowed_control"],
+                "evidence_control": supplied["evidence_control"], "excluded_controls": []})
+        with patch("research_harness.review_transport.send_request", side_effect=respond_to_probe):
+            self.mutate(protocol.probe_route, {"id": "repair-probe", "route_id": "route"}, credential="test-only")
+        repaired = self.assign("result", "repaired-first", identifier="repaired-result", context_repair={
+            "assignment_id": "result-first", "event_ids": ["exposure"], "probe_id": "repair-probe",
+            "reason": "Reassess the result in a verified independent context.", "evidence": [self.supporting]})
+        packet = json.loads(self.artifacts.read(repaired["packet"]))
+        self.assertEqual((sorted(packet["bar_ids"]), sorted(bar["id"] for bar in packet["bars"]),
+                          [bar["id"] for bar in packet["own_bars"]]),
+                         (self.version_two_bar_ids, self.version_two_bar_ids, ["review-bar-first-v2"]))
+        output = self.build_calibrated_result()
+        output["reassessment"] = {"assignment_id": "result-first", "findings": [{"review_id": "review-result-first",
+            "disposition": "revised", "reason": "The calibrated bars change the grading scale.", "evidence": [self.supporting]}]}
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {"id": "repaired-attempt", "assignment_id": "repaired-result"},
+                        credential="test-only")
+        saved = self.mutate(decisions.record_value_review,
+                            dict(output, id="review-repaired-result", dossier_id=None, assignment_id="repaired-result"))["result"]
+        self.assertEqual(saved["payload"]["value"]["bar_ids"], self.version_two_bar_ids)
+
     def test_a_result_naming_bars_never_delivered_is_refused_and_blocks_the_gate(self):
         self.prepare_legacy_results()
 
-        def build_bars_without_delivery(records, artifacts, packet, reviewer_id):
+        def build_bars_without_delivery(records, artifacts, packet, reviewer_id, slot=None):
             """The result continuation of the previous wave, which listed no bars."""
             return [review for review, _ in protocol._bars(records, artifacts, None, subject=packet["subject"])]
         with patch.object(protocol, "add_problem_bars", side_effect=build_bars_without_delivery):
