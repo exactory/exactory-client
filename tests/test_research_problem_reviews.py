@@ -154,27 +154,27 @@ class ProblemReviewTests(LiteratureCase):
             self.assertEqual(prompt["template_id"], "exactory-problem-review-v2/" + role)
         self.assertIn("nearest known problems", protocol.canonical_prompt("bar", orchestration="problem_creation")["text"])
         result = protocol.canonical_prompt("result", orchestration="problem_creation")["text"]
-        for kind in CHECKS + ITEMS + ('value.rubric', 'value.rubric_evidence', 'max(B1, B2) >= 2',
-                                     'E-A', 'E-N', '>= 3', 'priority >= 2', 'pass'):
+        for kind in CHECKS + ITEMS + ('value.rubric', 'value.rubric_evidence', 'max(B1, B2) at least 2',
+                                     'E-A', 'E-N', 'at least 3', 'priority at least 2', 'pass'):
             self.assertIn(kind, result)
         bar = protocol.canonical_prompt("bar", orchestration="problem_creation")["text"]
-        for content in ('levels 2 and 3', 'B1', 'B2', 'priority', 'what a resolution would give', 'uninteresting'):
+        for content in ('levels 2 and 3', 'B1', 'B2', 'priority', 'what a resolution of each would give', 'uninteresting'):
             self.assertIn(content, bar)
-        for content in ('"No route to progress" and "settles nothing else" are not by themselves reasons against a problem',
-                        'accessibility E-N) is admissible on a level-3 significance case',
-                        'explanatory significance counts', 'Level 2 requires a substantial mathematical advance and its relevance'):
+        for content in ('are not reasons against a question by themselves',
+                        'a question without footholds is admissible when its significance case reaches level 3',
+                        'the explanation the resolution would give is itself the significance', 'Level 2 is a supported claim: a substantial advance and its relevance'):
             self.assertIn(content, bar)
-        self.assertNotIn('not by themselves reasons', protocol.canonical_prompt("bar", orchestration="problem_creation", version=1)["text"])
+        self.assertNotIn('not reasons against a question by themselves', protocol.canonical_prompt("bar", orchestration="problem_creation", version=1)["text"])
 
     def test_problem_slate_template_is_version_two_only_and_keeps_bar_and_result_bytes(self):
-        version_two = {"bar": "32d0f7d5b6728a2c8052fbea04db5e8c0b6d092e2d75f795997f688fe98400b0",
-                       "result": "f84acc0b4c2e70eefed9699849e072be767d7a8b6ce54200832923d6bb9ef611",
-                       "adjudicator": "6cb910b6a89b1b17e3a55ede4dee68e528eaa3db0bac7ede4f3d6b22712ba54a"}
+        version_two = {"bar": "e8e516d178d4e5516d58a98ad57caa711bd381bfea8ce4f10287ea3567298488",
+                       "result": "15542e9829b0ce4631fbd5754c41aa0f11277c146a14b80cb01b96bf4915a898",
+                       "adjudicator": "909db9012b5ba067fcd9be1c94031b41ef4b36eb400795bcb5ddfffe96a6021a"}
         for role, expected in version_two.items():
             self.assertEqual(protocol.canonical_prompt(role, orchestration="problem_creation")["template_hash"], expected)
         slate = protocol.canonical_prompt("slate", orchestration="problem_creation")
         self.assertEqual(slate["template_id"], "exactory-problem-review-v2/slate")
-        for content in ("value.rubric_potential", "not_assessed", "B1", "B2", "priority", "potential level 1",
+        for content in ("value.rubric_potential", "not_assessed", "B1", "B2", "priority", "level 1",
                         "neither openness nor significance", "Continue your own bar assessment"):
             self.assertIn(content, slate["text"])
         with self.assertRaises(ResearchError) as caught:
