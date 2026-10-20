@@ -93,6 +93,23 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
                         <= {item["code"] for item in assessment["obligations"]})
         self.assert_blocked_delivery("artifact_missing")
 
+    def test_missing_problem_evidence_raises_a_typed_error_during_adjudication_coverage(self):
+        """Removing a stored assessment attachment must not leak FileNotFoundError."""
+        self.prepare_reviews(result_reviewer="first")
+        self.observe_adjudication(review_ids=["review-result-first", "review-result-second"])
+        records = self.store.snapshot()["records"]
+        self.assertIn(self.supporting, records["problem_assessment"]["assessment-1"]["items"]["priority"]["evidence"])
+        [version] = decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]
+            for identifier in ("review-result-first", "review-result-second")])
+        self.assertEqual(decisions.find_undelivered_adjudication_keys(records, self.artifacts, "focused",
+            version_evidence=protocol.describe_version_evidence(records, self.artifacts, version)), [])
+        (self.root / self.supporting["path"]).unlink()
+        with self.assertRaises(ResearchError) as caught:
+            decisions.find_undelivered_adjudication_keys(records, self.artifacts, "focused",
+                version_evidence=protocol.describe_version_evidence(records, self.artifacts, version))
+        self.assertEqual((caught.exception.code, caught.exception.details),
+                         ("artifact_missing", {"path": self.supporting["path"]}))
+
     def cite_candidate(self, identifier):
         candidate = self.store.snapshot()["records"]["problem_candidate"][identifier]
         return {"kind": "record", "record_kind": "problem_candidate", "id": identifier, "digest": digest(candidate)}
@@ -197,6 +214,47 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
             version_evidence=protocol.describe_version_evidence(records, self.artifacts, self.version)),
             ["version_evidence:problem_candidate:candidate-3"])
         self.assert_blocked_delivery()
+
+    def test_a_legacy_review_citing_an_unsupplied_artifact_is_undelivered(self):
+        """R51 rejects new citations like this; a pre-R51 record still yields an incomplete version delivery."""
+        self.prepare_reviews(results=False)
+        unsupplied = self.artifacts.put(b"Evidence that no packet of the stating review delivered.", "text/plain")
+        output = self.build_review_output("result")
+        output["objections"] = [dict(self.make_objection(), evidence=[unsupplied])]
+        payload = self.observe("result", "first", output, record=False)
+        with self.assertRaises(ResearchError) as caught:
+            self.mutate(decisions.record_value_review, payload)
+        self.assertEqual((caught.exception.code, caught.exception.details),
+                         ("review_evidence_undelivered", {"sha256": unsupplied["sha256"]}))
+        records = self.store.snapshot()["records"]
+        assignment = records["review_assignment"][payload["assignment_id"]]
+        state = protocol.assignment_state(records, self.artifacts, assignment["id"])
+        # Write the historical record directly, preserving its actual observed output and assignment binding.
+        saved = dict(id=payload["id"], payload=payload, digest=digest(payload), recorded_revision=self.store.revision + 1,
+            dossier_id=None, dossier_digest=None, assignment_id=assignment["id"], reviewer_id=state["reviewer_id"],
+            packet_digest=assignment["packet_digest"], prompt_hash=assignment["prompt_hash"],
+            output_digest=state["output_digest"], support=None, independence_at_recording=state["context_status"],
+            subject=assignment["subject"])
+        self.put("value_review", saved["id"], saved)
+        self.observe("result", "second")
+        records = self.store.snapshot()["records"]
+        version = decisions.state_objection(saved, output["objections"][0])
+        expected = {"kind": "undelivered", "identity": unsupplied["sha256"], "reference": {"artifact_descriptor": {
+            "location": unsupplied["path"], "sha256": unsupplied["sha256"], "size": unsupplied["size"],
+            "media_type": "text/plain", "extensions": {}}}}
+        delivery = protocol.describe_version_evidence(records, self.artifacts, version)
+        self.assertEqual(delivery["version_evidence"], [expected])
+        self.assertNotIn(unsupplied, [entry["artifact"] for entry in self.read_packet("result-first")["evidence"]])
+        self.observe_adjudication(review_ids=["review-result-first", "review-result-second"])
+        self.assertEqual(self.read_packet("focused")["version_evidence"], [expected])
+        records = self.store.snapshot()["records"]
+        missing = ["version_evidence:" + unsupplied["sha256"]]
+        self.assertEqual(decisions.find_undelivered_adjudication_keys(records, self.artifacts, "focused",
+            version_evidence=delivery), missing)
+        self.assert_blocked_delivery()
+        self.observe_adjudication(review_ids=["review-result-first", "review-result-second"], identifier="focused-refresh")
+        refresh = self.read_packet("focused-refresh")["focused_refresh"]
+        self.assertEqual((refresh["reason"], refresh["undelivered_keys"]), ("packet_incomplete", missing))
 
     def cite_record(self, kind, identifier):
         record = self.store.snapshot()["records"][kind][identifier]
