@@ -1743,7 +1743,8 @@ template (`problem_bar_calibration_required` naming `review_id`). Every result
 packet, including a continuation, a refresh or a context repair, carries the
 current `bar_ids`, `bars` and `own_bars`: the reviewer's own bar, or for a
 reviewer that holds the slot through a context repair, the current bar of that
-slot. A result review names only bars whose
+slot. The bar payloads keep their grades and standards readable, with artifact
+references as templates. A result review names only bars whose
 content an observed packet of its lineage delivered: `value-review` refuses
 another with `review_bar_mismatch` naming `bar_ids`, and the post gate reports
 the same code for a recorded review. Each result packet also carries
@@ -1764,11 +1765,17 @@ checks), and a projection that carries further records (the attempt's native
 attempt, a formal check's native closure, a computation's admission, execution
 and assessment) lists them in `record_references`. A reviewer cites any of them
 as `{kind: "record", record_kind, id, digest}`. Each review payload that a
-problem packet delivers (`bars`, `own_bars`, `historical_reviews`, the
-calibrations) carries `record_reference`, the exact reference of the stored
-review. Each entry of a result packet's `material_objections` carries
-`version_evidence`, the evidence of its current version in the adjudicator's
-shape (below), so the reviewer receives the content of the records it cites. A
+problem packet delivers (`bars`, `own_bars` and `historical_reviews` of the bar,
+slate and result packets, and the calibrations) carries `record_reference`, the
+exact reference of the stored review, and its artifact references as templates,
+so a payload that cites a source attaches none of its bytes. Each entry of a
+result packet's `material_objections` carries its own references as templates
+and `version_evidence`, the evidence of its current version in the
+adjudicator's shape (below), so the reviewer receives the content of the records
+it cites. Bytes reach a reviewer only through the problem evidence, the
+delivered sources and passages with their bounds, a material objection's
+`version_evidence` and the reviewer's own session history; a reviewer that needs
+a source that another review cites requests it with `source_requests`. A
 bar, slate or result review cites a record only when one of its observed packets
 carried that record at the cited digest as content; a reference that the
 reviewer received only inside a finding, or as an undelivered entry, does not
@@ -1873,7 +1880,10 @@ kind that no problem packet projects is never delivered. Artifact references in 
 packets supplied, whose bytes the packet delivers. A reference that cannot be
 delivered, a record that no observed packet of the stating review carried at
 that digest or an artifact that those packets did not supply, is an entry
-`{kind: "undelivered", identity, reference}`, and the packet is incomplete. `current_evidence`, the
+`{kind: "undelivered", identity, reference}`, and the packet is incomplete. An
+artifact that the stating reviewer saw only inside a review payload, such as a
+bar's evidence, was not supplied to it, so a version that cites it is
+undelivered. `current_evidence`, the
 version evidence and the original evidence used for a correction
 (`original_evidence` and `supplied_source_mappings`) stay distinct. An observed, ready
 `not_upheld` adjudication resolves only that item for the same subject and current

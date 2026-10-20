@@ -36,8 +36,11 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})
         self.mutate(self.load_problem_module().record_value, self.build_value([self.item]))
         from test_research_problem_assessment import build_assessment
-        self.mutate(self.load_problem_module().record_assessment, build_assessment(self.selected))
         self.supporting = self.artifacts.put(b"The read comparator states an existential bound only.", "text/plain")
+        # The reviewers cite this artifact, so the problem evidence delivers it (R49: a bar payload attaches no bytes).
+        assessment = build_assessment(self.selected)
+        assessment["items"]["priority"]["evidence"].append(self.supporting)
+        self.mutate(self.load_problem_module().record_assessment, assessment)
 
     def prepare_reviews(self, *, bar_reviewer=None, result_reviewer=None, slate_reviewer=None, results=True):
         self.prepare_problem_evidence()
@@ -369,7 +372,9 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         records = self.store.snapshot()["records"]
         packet = protocol.build_packet(records, self.artifacts, None, "result", "first")
         [objection] = packet["material_objections"]
-        self.assertEqual((objection["review_id"], objection["evidence"]), (updated["id"], [counterexample]))
+        # R49: a material objection's own references travel as templates.
+        self.assertEqual((objection["review_id"], objection["evidence"]),
+                         (updated["id"], protocol._reference_templates([counterexample])))
         # The first results' continuing finding gave its own reason, so it is the version between the two statements.
         self.assertEqual([row["review_id"] for row in objection["history"]], ["review-slate-first", "review-result-first"])
         reviews = decisions.assess_problem_reviews(records, self.artifacts)
@@ -400,7 +405,8 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         records = self.store.snapshot()["records"]
         [objection] = protocol.build_packet(records, self.artifacts, None, "result", "first")["material_objections"]
         stated = dict(self.make_objection(), candidate_ids=["candidate-1"])
-        self.assertEqual({key: objection[key] for key in stated}, dict(stated, reason=finding["reason"], evidence=[counterexample]))
+        self.assertEqual({key: objection[key] for key in stated}, protocol._reference_templates(
+            dict(stated, reason=finding["reason"], evidence=[counterexample])))
         self.assertEqual((objection["review_id"], objection["recorded_revision"]), (updated["id"], updated["recorded_revision"]))
         self.assertEqual([row["review_id"] for row in objection["history"]], ["review-slate-first", "review-result-first"])
         self.assertIn("research_objection_unresolved",
@@ -514,11 +520,11 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
             with self.subTest(reviewer=reviewer):
                 packet = json.loads(self.artifacts.read(records["review_assignment"]["bar-" + reviewer + "-v2"]["packet"]))
                 saved = records["value_review"]["review-bar-" + reviewer]
-                self.assertEqual(packet["historical_reviews"], [dict(saved["payload"], record_reference={"kind": "record",
-                    "record_kind": "value_review", "id": saved["id"], "digest": digest(saved)})])
+                self.assertEqual(packet["historical_reviews"], [dict(protocol._reference_templates(saved["payload"]),
+                    record_reference={"kind": "record", "record_kind": "value_review", "id": saved["id"], "digest": digest(saved)})])
                 self.assertEqual(sorted(packet["problem_refresh"]), ["assignment_id", "previous_template_id", "template_id"])
         packet = json.loads(self.artifacts.read(records["review_assignment"]["bar-first-v2"]["packet"]))
-        self.assertEqual(packet["historical_reviews"][0]["objections"], [self.make_objection()])
+        self.assertEqual(packet["historical_reviews"][0]["objections"], [protocol._reference_templates(self.make_objection())])
         self.assertEqual(records["value_review"]["review-bar-first-v2"]["payload"]["value"]["objection_findings"],
                          [self.make_finding("continuing")])
 
@@ -661,8 +667,13 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
 
     def test_a_complete_adjudication_of_an_unchanged_version_is_not_sampled_again_after_a_bar_repair(self):
         """R38: other original calibrations of another pair do not make the earlier complete packet incomplete."""
-        # A slate objection is adjudicated with the bars; its evidence reached the slate reviewer through the bars.
-        self.prepare_reviews(slate_reviewer="second", results=False)
+        # A slate objection is adjudicated with the bars; it cites the candidate that the slate packet delivered.
+        self.prepare_reviews(results=False)
+        candidate = self.store.snapshot()["records"]["problem_candidate"]["candidate-1"]
+        output = self.build_slate_output(["candidate-1"])
+        output["objections"] = [dict(self.make_objection(), candidate_ids=["candidate-1"], evidence=[{"kind": "record",
+            "record_kind": "problem_candidate", "id": "candidate-1", "digest": digest(candidate)}])]
+        self.observe("slate", "second", output)
         self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"])
         records = self.store.snapshot()["records"]
         [adjudicated] = decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]
@@ -785,7 +796,7 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         packet = self.prepare_repaired_result(changed=True)
         self.assertEqual(packet["problem_evidence"]["value"]["id"], "value-copy")
         [objection] = packet["material_objections"]
-        self.assertEqual({key: objection[key] for key in self.make_objection()}, self.make_objection())
+        self.assertEqual({key: objection[key] for key in self.make_objection()}, protocol._reference_templates(self.make_objection()))
         self.assertEqual((objection["review_id"], objection["history"]), ("review-result-second", []))
 
     def test_result_context_repair_withholds_the_current_peer_assessment(self):
@@ -823,8 +834,16 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
 
     def test_a_recorded_resolution_requires_its_evidence_to_remain_available(self):
         self.prepare_reviews(result_reviewer="first")
-        self.refresh_reviews("resolved")
-        (self.root / self.supporting["path"]).unlink()
+        # Only the resolutions cite this artifact; the fixture's supporting artifact is also problem evidence.
+        resolution = self.artifacts.put(b"The supplied comparator settles the disputed implication.", "text/plain")
+        changed = self.build_value([self.item], identifier="value-2")
+        changed["motivation"][0]["text"] = "A narrower implication follows from the supplied comparator."
+        self.mutate(self.load_problem_module().record_value, changed)
+        for reviewer in ("first", "second"):
+            output = self.build_review_output("result")
+            output["value"]["objection_findings"] = [dict(self.make_finding("resolved"), evidence=[resolution])]
+            self.observe("result", reviewer, output, identifier="refreshed-" + reviewer)
+        (self.root / resolution["path"]).unlink()
         self.assert_blocked_delivery("artifact_missing")
 
     def test_an_adjudication_without_evidence_cannot_clear_the_objection(self):

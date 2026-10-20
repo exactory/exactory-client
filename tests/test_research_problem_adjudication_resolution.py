@@ -268,6 +268,20 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         """The second bar receives the first half of a fully read source unit as prior context, without the rest of
         the unit, and states O1 citing it, as the source link or as the raw artifact descriptor of the same artifact;
         the bar pair is adjudicated. With unbound, the source is not in the current problem evidence."""
+        mapping = self.state_a_bar_objection_on_a_passage(raw, unbound)
+        self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"])
+        records = self.store.snapshot()["records"]
+        [version] = decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]
+            for identifier in ("review-bar-first", "review-bar-second")])
+        self.assertEqual(version["review_id"], "review-bar-second")
+        self.assertNotIn(self.unread_tail, json.dumps(self.read_packet("bar-second")))
+        packet = self.read_packet("focused")
+        self.assertEqual((packet["version_evidence"], packet["version_source_mappings"]), ([], [mapping]))
+        self.assertEqual(decisions.find_undelivered_adjudication_keys(records, self.artifacts, "focused",
+            version_evidence=protocol.describe_version_evidence(records, self.artifacts, version)), [])
+
+    def state_a_bar_objection_on_a_passage(self, raw, unbound=False):
+        """The second bar states O1 on a passage-only artifact; returns the bar packet's passage mapping."""
         self.prepare_problem_evidence()
         unit = (self.add_unbound_full_source() if unbound else
                 self.store.snapshot()["records"]["reading"][self.item["reading_id"]]["inspections"][0]["link"])
@@ -287,16 +301,7 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         self.mutate(decisions.record_value_review, dict(output, id="review-bar-second", dossier_id=None,
                                                         assignment_id="bar-second"))
         self.record_slate(review_ids=[])
-        self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"])
-        records = self.store.snapshot()["records"]
-        [version] = decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]
-            for identifier in ("review-bar-first", "review-bar-second")])
-        self.assertEqual(version["review_id"], "review-bar-second")
-        self.assertNotIn(self.unread_tail, json.dumps(self.read_packet("bar-second")))
-        packet = self.read_packet("focused")
-        self.assertEqual((packet["version_evidence"], packet["version_source_mappings"]), ([], [mapping]))
-        self.assertEqual(decisions.find_undelivered_adjudication_keys(records, self.artifacts, "focused",
-            version_evidence=protocol.describe_version_evidence(records, self.artifacts, version)), [])
+        return mapping
 
     def test_a_bar_version_citing_a_delivered_passage_is_adjudicated_complete(self):
         self.adjudicate_a_bar_objection_on_a_passage(raw=False)
@@ -405,3 +410,64 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
                                      ("review_evidence_undelivered", "candidate-3"))
                 else:
                     self.assertEqual(self.mutate(decisions.record_value_review, payload)["result"]["id"], "review-reassessed-second")
+
+    def test_a_bar_payload_that_cites_a_passage_attaches_none_of_its_source(self):
+        """R49: the other reviewer's slate and result packets carry the bar readable, without the cited source."""
+        self.state_a_bar_objection_on_a_passage(raw=False, unbound=True)
+        stored = self.store.snapshot()["records"]["value_review"]["review-bar-second"]["payload"]
+        for role in ("slate", "result"):
+            with self.subTest(role=role):
+                packet = json.loads(self.artifacts.read(self.assign(role, "first", identifier=role + "-first")["packet"]))
+                self.assertNotIn(self.unit["artifact"]["sha256"], {entry["artifact"]["sha256"] for entry in packet["evidence"]})
+                [bar] = [row for row in packet["bars"] if row["id"] == "review-bar-second"]
+                self.assertEqual((bar["value"]["consequence"], bar["objections"][0]["claim"]),
+                                 (stored["value"]["consequence"], stored["objections"][0]["claim"]))
+                link = bar["objections"][0]["evidence"][0]["link"]
+                self.assertEqual((link["artifact_reference_template"]["artifact_descriptor"]["sha256"], "artifact" in link),
+                                 (self.unit["artifact"]["sha256"], False))
+
+    def test_a_result_version_citing_an_artifact_seen_only_inside_a_bar_is_undelivered(self):
+        """R49: a bar payload delivers no bytes, so the result reviewer did not receive what only the bar cites."""
+        self.prepare_problem_evidence()
+        bar_only = self.artifacts.put(b"A field standard that only the first bar cites.", "text/plain")
+        for reviewer in ("first", "second"):
+            output = self.build_review_output("bar")
+            if reviewer == "first":
+                output["value"]["evidence"] = [bar_only]
+            self.observe("bar", reviewer, output)
+        self.record_slate(review_ids=[])
+        for reviewer in ("first", "second"):
+            output = self.build_review_output("result")
+            if reviewer == "first":
+                output["objections"] = [dict(self.make_objection(), evidence=[bar_only])]
+            self.observe("result", reviewer, output)
+        self.assertNotIn(bar_only["sha256"], {entry["artifact"]["sha256"] for entry in self.read_packet("result-first")["evidence"]})
+        self.observe_adjudication(review_ids=["review-result-first", "review-result-second"])
+        records = self.store.snapshot()["records"]
+        [version] = decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]
+            for identifier in ("review-result-first", "review-result-second")])
+        [entry] = self.read_packet("focused")["version_evidence"]
+        self.assertEqual((entry["kind"], entry["identity"]), ("undelivered", bar_only["sha256"]))
+        self.assertEqual(decisions.find_undelivered_adjudication_keys(records, self.artifacts, "focused",
+            version_evidence=protocol.describe_version_evidence(records, self.artifacts, version)),
+            ["version_evidence:" + bar_only["sha256"]])
+        self.assert_blocked_delivery()
+
+    def test_result_packets_stored_with_raw_review_payloads_stay_complete(self):
+        """Results observed on packets built before R49 (raw payloads, no record_reference) are judged the same way."""
+        self.prepare_reviews(results=False)
+        with patch.object(protocol, "deliver_review", side_effect=lambda records, payload: payload):
+            for reviewer in ("first", "second"):
+                output = self.build_review_output("result")
+                if reviewer == "first":
+                    output["objections"] = [self.make_objection()]
+                self.observe("result", reviewer, output)
+        bar = self.read_packet("result-first")["bars"][0]
+        self.assertEqual(("record_reference" in bar, bar["value"]["evidence"]), (False, [self.supporting]))
+        self.observe_adjudication(review_ids=["review-result-first", "review-result-second"])
+        records = self.store.snapshot()["records"]
+        [version] = decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]
+            for identifier in ("review-result-first", "review-result-second")])
+        self.assertEqual(decisions.find_undelivered_adjudication_keys(records, self.artifacts, "focused",
+            version_evidence=protocol.describe_version_evidence(records, self.artifacts, version)), [])
+        self.assert_delivered()

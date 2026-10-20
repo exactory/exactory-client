@@ -611,10 +611,11 @@ def add_problem_bars(records, artifacts, packet, reviewer_id, slot=None):
 
 
 def deliver_review(records, payload):
-    """A review payload as a problem packet delivers it, with the exact reference by which a reviewer cites that
-    review: the digest of the stored record, which record references are checked against."""
-    return dict(payload, record_reference={'kind': 'record', 'record_kind': 'value_review', 'id': payload['id'],
-                                           'digest': digest(_get(records, 'value_review', payload['id']))})
+    """A review payload as a problem packet delivers it: its content with artifact references as templates, so that a
+    payload which cites a source attaches none of its bytes, and the exact reference by which a reviewer cites that
+    review, the digest of the stored record, which record references are checked against."""
+    return dict(_reference_templates(payload), record_reference={'kind': 'record', 'record_kind': 'value_review',
+        'id': payload['id'], 'digest': digest(_get(records, 'value_review', payload['id']))})
 
 
 def describe_calibration(payload):
@@ -907,7 +908,7 @@ def add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id
         # The adjudicated grades answer the standards the pair was graded against; a bar that replaced one is apart.
         packet['bar_calibrations'] = [deliver_review(records, bar) for bar in resolve_original_calibrations(records, artifacts, ids)]
         originals = {bar['id'] for bar in packet['bar_calibrations']}
-        packet['current_bar_calibrations'] = [deliver_review(records, describe_calibration(_payload(review)))
+        packet['current_bar_calibrations'] = [deliver_review(records, _payload(review))
                                               for review, _ in _bars(records, artifacts, None, subject=packet['subject'])
                                               if review['id'] not in originals]
         if objections and 'review_id' in objections[0]:
@@ -939,11 +940,12 @@ def add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id
 
 
 def add_problem_objections(records, artifacts, packet, bars):
-    """Supply prior material findings without exposing a current peer result. Each objection carries, under
-    version_evidence, the evidence of its current version as an adjudicator receives it, so that the reviewer holds
-    the content of the records it cites and can cite them in turn."""
+    """Supply prior material findings without exposing a current peer result. An objection's own references travel as
+    templates; its evidence arrives under version_evidence, as an adjudicator receives the current version, so that
+    the reviewer holds the content it cites and can cite it in turn."""
     packet['material_objections'] = [
-        dict(objection, version_evidence=describe_version_evidence(records, artifacts, objection)['version_evidence'])
+        dict(_reference_templates(objection),
+             version_evidence=describe_version_evidence(records, artifacts, objection)['version_evidence'])
         for objection in collect_result_objections(records, artifacts, packet['subject'], packet['problem_evidence_digest'], bars)]
 
 
@@ -1347,6 +1349,10 @@ def _repair_packet(records, artifacts, value, repair):
     problem = value.get('subject', {}).get('kind') == 'problem'
     if problem:
         packet['protocol'] = _PROBLEM_PROTOCOL
+        # A predecessor packet stored with raw review payloads is delivered again with templates.
+        for key in ('bars', 'own_bars'):
+            if key in packet:
+                packet[key] = [deliver_review(records, payload) for payload in packet[key]]
     if value['role'] == 'result' and not problem:
         provenance = {'protocol': bar_sources.PROTOCOL, 'role': value['role'], 'reviewer_id': value['reviewer_id'],
                       'dossier_id': value['dossier_id'], 'context_repair': packet['context_repair']}
