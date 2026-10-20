@@ -1042,6 +1042,225 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         self.assertEqual(caught.exception.code, "review_objection_history_incomplete")
 
 
+class RecordedReviewEvidenceTests(delivery_fixtures.ProblemDeliveryCase):
+    """R65 audits legacy records and refreshes only their affected reviewer slots."""
+
+    prepare_reviews = objection_fixtures.ProblemObjectionTests.prepare_reviews
+    prepare_problem_evidence = objection_fixtures.ProblemObjectionTests.prepare_problem_evidence
+    make_objection = objection_fixtures.ProblemObjectionTests.make_objection
+    make_finding = objection_fixtures.ProblemObjectionTests.make_finding
+    build_slate_output = objection_fixtures.ProblemObjectionTests.build_slate_output
+    observe_adjudication = objection_fixtures.ProblemObjectionTests.observe_adjudication
+    add_unbound_full_source = ProblemAdjudicationResolutionTests.add_unbound_full_source
+    read_packet = ProblemAdjudicationResolutionTests.read_packet
+    invoke_focused = ProblemAdjudicationResolutionTests.invoke_focused
+
+    def record_observed(self, assignment, output, *, legacy=False):
+        self.invoke_focused(output, assignment['id'])
+        payload = dict(output, id='review-' + assignment['id'], dossier_id=None, assignment_id=assignment['id'])
+        if legacy:
+            # The 0.55.0 path accepted this exact observation without the delivery check or an R60 refusal.
+            with patch('research_harness.review_supplied_evidence.undelivered_references', return_value=[]):
+                return self.mutate(decisions.record_value_review, payload)['result']
+        return self.mutate(decisions.record_value_review, payload)['result']
+
+    def prepare_legacy_reassessment(self):
+        objection_fixtures.ProblemObjectionTests.prepare_repaired_result(self, changed=False, slot='second')
+        link = self.add_unbound_full_source()
+        reference = {'kind': 'source', 'link': link}
+        output = self.build_review_output('result')
+        output['value']['objection_findings'] = [dict(self.make_finding('continuing'), reason=self.make_objection()['reason'])]
+        output['reassessment'] = {'assignment_id': 'result-second', 'findings': [{
+            'review_id': 'review-result-second', 'disposition': 'revised',
+            'reason': 'The earlier assessment remains supported.', 'evidence': [reference]}]}
+        assignment = self.store.snapshot()['records']['review_assignment']['repaired-result']
+        saved = self.record_observed(assignment, output, legacy=True)
+        self.observe_adjudication(review_ids=['review-result-first', 'review-repaired-result'])
+        records = self.store.snapshot()['records']
+        request = json.loads(self.artifacts.read(records['review_attempt']['repaired-result-attempt']['request']))
+        self.assertNotIn(link['artifact']['sha256'], json.dumps(request))
+        self.assertNotIn(self.artifacts.read(link['artifact']).decode(), json.dumps(request))
+        return saved, {'sha256': link['artifact']['sha256'], 'locator': link['locator']}
+
+    def prepare_legacy_value(self, stage):
+        self.prepare_problem_evidence()
+        legacy = None
+        for reviewer in ('first', 'second'):
+            context = self.deliver_supporting(reviewer)
+            assignment = self.assign('bar', reviewer, **context)
+            output = self.build_review_output('bar')
+            if stage == 'bar' and reviewer == 'first':
+                artifact = self.artifacts.put(b'Undelivered legacy bar evidence.', 'text/plain')
+                output['value']['evidence'] = [artifact]
+                legacy = self.record_observed(assignment, output, legacy=True)
+            else:
+                self.record_observed(assignment, output)
+        if stage == 'slate':
+            assignment = self.assign('slate', 'first')
+            artifact = self.artifacts.put(b'Undelivered legacy slate evidence.', 'text/plain')
+            output = self.build_slate_output(['candidate-1'])
+            output['value']['evidence'] = [artifact]
+            legacy = self.record_observed(assignment, output, legacy=True)
+        self.record_slate(review_ids=[] if stage == 'bar' else [legacy['id']])
+        for reviewer in ('first', 'second'):
+            self.observe('result', reviewer)
+        return legacy, {'sha256': artifact['sha256']}
+
+    def seed_legacy_post_decision(self):
+        from research_harness.problem_claims import compute_problem_evidence_digest
+        records = self.store.snapshot()['records']
+        state = decisions.assess_problem_reviews(records, self.artifacts)
+        self.put('problem_decision', 'legacy-decision', {'id': 'legacy-decision', 'action': 'post',
+            'review_ids': state['review_ids'], 'bar_review_ids': state['bar_review_ids'],
+            'problem_evidence_digest': compute_problem_evidence_digest(records, self.artifacts),
+            'reason': 'The legacy post decision accepted the recorded pair.', 'recorded_revision': self.store.revision + 1})
+
+    def assert_audited(self, review, details):
+        from research_harness.gates import gate_state
+        from research_harness.cli import status_report
+        before = self.store.snapshot()
+        records = before['records']
+        reports = (decisions.assess_problem_reviews(records, self.artifacts),
+                   gate_state(records, self.artifacts, 'post'), status_report(self.store))
+        for report in reports:
+            with self.subTest(report=report.get('orchestration', 'assessment')):
+                self.assertFalse(report['ready'])
+                matching = [row for row in report['obligations'] if row['code'] == 'review_evidence_undelivered']
+                self.assertEqual([(row['review_id'], row['undelivered_references']) for row in matching],
+                                 [(review['id'], [details])])
+        self.assertEqual(self.store.snapshot(), before)
+        self.assertEqual(records['value_review'][review['id']], review)
+        self.assertEqual(records.get('review_output_refusal', {}), {})
+
+    def refresh(self, review):
+        records = self.store.snapshot()['records']
+        prior = records['review_assignment'][review['assignment_id']]
+        refreshed = self.assign(prior['role'], prior['reviewer_id'], identifier='evidence-refresh')
+        packet = self.read_packet(refreshed['id'])
+        self.assertEqual((refreshed['session_id'], refreshed['slot_id'], refreshed['history_assignment_id']),
+                         (prior['session_id'], prior['slot_id'], prior['id']))
+        self.assertEqual(packet['problem_refresh']['reason'], 'evidence_undelivered')
+        self.assertIn(review['id'], packet['problem_refresh']['review_ids'])
+        self.assertIn(review['id'], [row.get('payload', row)['id'] for row in packet['historical_reviews']])
+        output = (self.build_slate_output(['candidate-1']) if prior['role'] == 'slate'
+                  else self.build_review_output(prior['role']))
+        if prior['role'] != 'bar':
+            output['value']['bar_ids'] = packet['bar_ids']
+        if prior['role'] == 'result':
+            output['value']['objection_findings'] = [dict(self.make_finding('continuing'), reason=self.make_objection()['reason'])]
+            output['reassessment'] = {'assignment_id': 'result-second', 'findings': [{
+                'review_id': 'review-result-second', 'disposition': 'revised',
+                'reason': 'The delivered comparator supports this finding.', 'evidence': [self.supporting]}]}
+        saved = self.record_observed(refreshed, output)
+        self.assertEqual(self.store.snapshot()['records']['value_review'][review['id']], review)
+        self.assert_error('review_resampling_forbidden', lambda: self.assign(
+            prior['role'], prior['reviewer_id'], identifier='unneeded-evidence-refresh'))
+        return saved
+
+    def assert_ready_post(self):
+        from research_harness.gates import gate_state
+        records = self.store.snapshot()['records']
+        state = decisions.assess_problem_reviews(records, self.artifacts)
+        self.assertTrue(state['ready'], state['obligations'])
+        self.mutate(self.load_problem_module().record_decision, {'id': 'delivered-decision', 'action': 'post',
+            'review_ids': state['review_ids'], 'bar_review_ids': state['bar_review_ids'],
+            'reason': 'The refreshed pair uses delivered evidence.'})
+        report = gate_state(self.store.snapshot()['records'], self.artifacts, 'post')
+        self.assertTrue(report['ready'], report['obligations'])
+
+    def test_legacy_reassessment_evidence_blocks_assessment_and_post_without_a_refusal(self):
+        review, details = self.prepare_legacy_reassessment()
+        self.seed_legacy_post_decision()
+        self.assert_audited(review, details)
+
+    def test_undelivered_result_refresh_preserves_session_and_history_then_clears_obligation(self):
+        review, _ = self.prepare_legacy_reassessment()
+        saved = self.refresh(review)
+        state = decisions.assess_problem_reviews(self.store.snapshot()['records'], self.artifacts)
+        self.assertIn(saved['id'], state['review_ids'])
+        self.assertNotIn(review['id'], state['review_ids'])
+        self.assert_ready_post()
+
+    def test_legacy_bar_value_evidence_blocks_assessment_and_post(self):
+        review, details = self.prepare_legacy_value('bar')
+        self.seed_legacy_post_decision()
+        self.assert_audited(review, details)
+
+    def test_undelivered_bar_refresh_recovers_and_forbids_another_sample(self):
+        review, _ = self.prepare_legacy_value('bar')
+        saved = self.refresh(review)
+        for reviewer in ('first', 'second'):
+            output = self.build_review_output('result')
+            output['value']['bar_ids'] = [saved['id'], 'review-bar-second']
+            self.observe('result', reviewer, output, identifier='bar-refresh-result-' + reviewer)
+        self.assert_ready_post()
+
+    def test_legacy_slate_value_evidence_blocks_assessment_and_post(self):
+        review, details = self.prepare_legacy_value('slate')
+        self.seed_legacy_post_decision()
+        self.assert_audited(review, details)
+
+    def test_undelivered_slate_refresh_recovers_and_forbids_another_sample(self):
+        review, _ = self.prepare_legacy_value('slate')
+        self.refresh(review)
+        self.assert_ready_post()
+
+    def test_delivered_current_reviews_forbid_refresh_while_legacy_evidence_is_audited(self):
+        self.prepare_reviews()
+        state = decisions.assess_problem_reviews(self.store.snapshot()['records'], self.artifacts)
+        self.assertTrue(state['ready'], state['obligations'])
+        for stage in ('bar', 'result'):
+            self.assert_error('review_resampling_forbidden', lambda: self.assign(stage, 'first', identifier='extra-' + stage))
+        output = self.build_slate_output(['candidate-1'])
+        self.observe('slate', 'first', output)
+        self.assert_error('review_resampling_forbidden', lambda: self.assign('slate', 'first', identifier='extra-slate'))
+        assignment = self.assign('slate', 'second')
+        artifact = self.artifacts.put(b'Undelivered second slate evidence.', 'text/plain')
+        output['value']['evidence'] = [artifact]
+        review = self.record_observed(assignment, output, legacy=True)
+        self.seed_legacy_post_decision()
+        self.assert_audited(review, {'sha256': artifact['sha256']})
+
+    def test_audit_uses_frozen_delivery_after_current_readings_are_removed_or_added(self):
+        self.prepare_problem_evidence()
+        link = self.add_unbound_full_source()
+        context = self.deliver_supporting('first')
+        assignment = self.assign('bar', 'first', source_links=context['source_links'] + [link])
+        output = self.build_review_output('bar')
+        output['value']['evidence'] = [{'kind': 'source', 'link': link}]
+        self.record_observed(assignment, output)
+        self.observe('bar', 'second')
+        self.record_slate()
+        for reviewer in ('first', 'second'):
+            self.observe('result', reviewer)
+        records = self.store.snapshot()['records']
+        before = decisions.assess_problem_reviews(records, self.artifacts)
+        self.assertTrue(before['ready'], before['obligations'])
+        records['reading'].pop('read-unbound')
+        self.assertEqual(decisions.assess_problem_reviews(records, self.artifacts), before)
+        # A new reading cannot expand a different review's already frozen delivery.
+        assignment = self.assign('slate', 'first')
+        from research_harness import literature, reading
+        version = self.metadata(3)
+        capture = self.capture(version, body='A newly read source absent from the slate packet. References: none.')
+        bundle = self.bundle(version, capture=capture, bundle_id='late-frozen-source')
+        self.mutate(literature.import_bundle, bundle)
+        self.mutate(reading.record_reading, self.full_note(bundle, 'late-frozen-reading'))
+        late_reading = self.store.snapshot()['records']['reading']['late-frozen-reading']
+        late_link = late_reading['inspections'][0]['link']
+        output = self.build_slate_output(['candidate-1'])
+        output['value']['evidence'] = [{'kind': 'source', 'link': late_link}]
+        review = self.record_observed(assignment, output, legacy=True)
+        current = self.store.snapshot()['records']
+        current['reading'].pop('late-frozen-reading')
+        missing = decisions.assess_problem_reviews(current, self.artifacts)
+        current['reading']['late-frozen-reading'] = late_reading
+        self.assertEqual(decisions.assess_problem_reviews(current, self.artifacts), missing)
+        self.assertEqual([(row['review_id'], row['undelivered_references']) for row in missing['obligations']
+                          if row['code'] == 'review_evidence_undelivered'],
+                         [(review['id'], [{'sha256': late_link['artifact']['sha256'], 'locator': late_link['locator']}])])
+
+
 class ReviewOutputRefusalTests(delivery_fixtures.ProblemDeliveryCase):
     """R60 recovery uses authenticated observed bytes, frozen delivery and two refused outputs."""
 

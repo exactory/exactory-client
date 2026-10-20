@@ -735,6 +735,21 @@ def find_undelivered_bar_ids(records, artifacts, assignment_id, bar_ids, *, pack
     return sorted(set(bar_ids) - delivered)
 
 
+def find_undelivered_review_references(records, artifacts, review):
+    """Audit a recorded problem review against its frozen assignment delivery."""
+    from . import review_supplied_evidence
+    from .review_protocol import collect_carried_records
+    if review.get('subject', {}).get('kind') != 'problem':
+        return []
+    assignment_id = review['assignment_id']
+    packets = review_supplied_evidence.lineage_packets(records, artifacts, [assignment_id])
+    carried = collect_carried_records(records, artifacts, assignment_id, packets=packets)
+    supplied, mappings = review_supplied_evidence.supplied_context(records, artifacts, [assignment_id], frozen=True)
+    evidence = [reference for array in evidence_arrays(review['payload']) for reference in array]
+    return review_supplied_evidence.undelivered_references(
+        records, artifacts, evidence, carried, supplied, mappings, frozen=True)
+
+
 def assess_problem_objections(records, artifacts, subject, bars, reviews, evidence_digest):
     """Apply the common evidenced-resolution rule without a strategic dossier. A result finding or a focused
     adjudication resolves only the material version that its observed packet delivered."""
@@ -776,6 +791,20 @@ def assess_problem_reviews(records, artifacts, review_ids=None, bar_review_ids=N
             pairs[stage] = []
         obligations.extend(_independence(records, artifacts, pairs[stage]))
     bars, reviews = pairs['bar'], pairs['result']
+    slate_ids = _collect_problem_reviews(records, 'slate', build_problem_subject(records, 'slate'))
+    for identifier in dict.fromkeys(bar_review_ids + review_ids + slate_ids):
+        review = records.get('value_review', {}).get(identifier)
+        if review is None:
+            continue
+        try:
+            missing = find_undelivered_review_references(records, artifacts, review)
+        except ResearchError as error:
+            obligations.append(obligation(error.code, str(error), review_id=identifier, **(error.details or {})))
+            continue
+        if missing:
+            obligations.append(obligation('review_evidence_undelivered',
+                'The review cites content that its packets did not deliver. Assign the same reviewer and role again with an empty context to refresh it.',
+                review_id=identifier, undelivered_references=missing))
     if bars:
         try:
             validate_problem_bars(records, artifacts, bars)

@@ -1084,6 +1084,14 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                     'template_id': canonical_prompt('bar', orchestration='problem_creation')['template_id']}
             elif role in ('slate', 'result'):
                 add_direction_evidence(records, artifacts, packet, dossier_id)
+            if problem and refreshed:
+                from .research_decisions import find_undelivered_review_references
+                unsupported = [review['id'] for review in historical if review['assignment_id'] == prior['id']
+                               and find_undelivered_review_references(records, artifacts, review)]
+                if unsupported:
+                    named = packet['problem_refresh'].get('review_ids', [])
+                    packet['problem_refresh'].update(reason='evidence_undelivered',
+                                                     review_ids=named + [i for i in unsupported if i not in named])
             packet['evidence'] = _evidence(artifacts, packet)
             packet['digest'] = digest(packet)
             return packet
@@ -1479,7 +1487,11 @@ def _source_parent(records, artifacts, identifier, dossier_id, reviewer_id, role
 def _is_problem_refresh(records, artifacts, prior, previous):
     """Whether a completed problem review no longer binds the current record: a result's review currency changed, a
     slate's candidates or bars changed, or a bar was recorded on the version 1 template, which lacks the rubric
-    calibration."""
+    calibration. Undelivered recorded evidence also permits reassessment in the same session and slot."""
+    from .research_decisions import find_undelivered_review_references
+    if any(review['assignment_id'] == prior['id'] and find_undelivered_review_references(records, artifacts, review)
+           for review in records.get('value_review', {}).values()):
+        return True
     if prior['role'] == 'result':
         return previous.get('problem_review_currency') != compute_problem_review_currency(records, artifacts)
     if prior['role'] == 'slate':

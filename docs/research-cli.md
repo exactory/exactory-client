@@ -1457,7 +1457,8 @@ an `objection_findings` entry for every material objection of the version 1 bar
 stay current. Cite the refreshed bars
 in the slate; the slate and result reviews then continue the version 2 sessions,
 because only the latest bar of each slot is current. A reviewer whose latest bar
-is on version 2 cannot be assigned another bar (`review_resampling_forbidden`).
+is on version 2 cannot be assigned another bar (`review_resampling_forbidden`),
+unless its latest bar carries `review_evidence_undelivered` (the refresh below).
 
 A focused slate review is optional. `review_ids` lists zero to two observed
 problem slate reviews from distinct reviewers and slots. Each must assess exactly
@@ -1489,7 +1490,8 @@ findings in `historical_reviews`, and adds `problem_refresh` with `{assignment_i
 previous_candidate_set_digest, candidate_set_digest, previous_bar_ids, bar_ids,
 review_ids}`. The new response covers the earlier material objections in
 `objection_findings`. While the candidate set and the bars are unchanged, another
-slate assignment for that reviewer returns `review_resampling_forbidden`.
+slate assignment for that reviewer returns `review_resampling_forbidden`, unless
+its latest slate review carries `review_evidence_undelivered`.
 
 The material objections of observed slate reviews bind the post like the bars'
 objections, whether or not the latest slate cites the review; `review_ids` names
@@ -1778,7 +1780,8 @@ the packet delivers, its id and material version). A new result assignment for a
 whose completed result review was given under another currency continues that
 reviewer's session and slot as a refresh, and its `problem_refresh` adds
 `previous_problem_review_currency` and `problem_review_currency`; under the same
-currency it returns `review_resampling_forbidden`. The result template
+currency it returns `review_resampling_forbidden`, unless the reviewer's latest
+result review carries `review_evidence_undelivered`. The result template
 `exactory-problem-review-v2/result` receives `problem_evidence`
 with the claim, attempt, accepted results, openness, value, assessment, resolved
 `assessment_evidence`, citations, delivered readings/passages,
@@ -1974,6 +1977,23 @@ names that obligation and the disposition cannot resolve the objection or make
 the post gate ready. A focused refresh with reason `disposition_unsupported`
 lets the same adjudicator reassess it; a later ready adjudication supplies the
 current disposition.
+At assessment time the post gate also audits every current recorded bar, slate
+and result review of the problem against the frozen delivery of the review's
+assignment lineage, reassessment findings included. A review that cites content
+its packets did not deliver stays in the record and carries
+`review_evidence_undelivered` with `review_id` and `undelivered_references`,
+the details of the `value-review` refusal. The pair is not ready, and no refusal
+record is written for a recorded review. The audit reads the delivery as the
+packets recorded it, so a current reading added or removed after the record
+changes nothing. The same reviewer refreshes the review in its session and
+slot: a new assignment of the same role with an empty `context`. Its packet
+carries `problem_refresh` with `reason: "evidence_undelivered"` and `review_ids`
+naming the superseded review, which `historical_reviews` delivers so that the
+new output gives its findings on the same objections. The refreshed review
+supersedes the audited one and ends the obligation. Another refresh under the
+same currency is refused with `review_resampling_forbidden`. A post decision
+that names the superseded pair needs a new post decision with the refreshed
+reviews. The audit and the refresh apply to problem reviews only.
 The original grades remain visible. An old-evidence adjudication, a resolution
 of another item, or a material-objection finding cannot waive the shortfall;
 the five independent assurances still have to pass.
@@ -2021,6 +2041,7 @@ records retain nonmanaged dependency composition and empirical meaning.
 | `problem_bar_pending`, `review_bar_mismatch` | Obtain both current field/area bars. |
 | `problem_review_pair_required`, `problem_evidence_unassessed`, `problem_assurance_pending` | Obtain the independent observed pair with delivered current evidence and all five assurances passed. |
 | `research_objection_unresolved` | Resolve the named material objection with evidence or a focused independent adjudication. |
+| `review_evidence_undelivered` | The named recorded review cites content that its packets did not deliver (`review_id`, `undelivered_references`). Assign the same reviewer and role again with an empty context to refresh it. |
 | `problem_decision_missing`, `problem_decision_stale` | Record a `post` decision covering the current evidence digest. |
 | `review_sources_pending` | Resolve the reviewers' pending source requests. |
 | `problem_already_posted` | Retain the existing confirmed post; the same statement cannot be posted twice. |
