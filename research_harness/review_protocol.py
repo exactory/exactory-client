@@ -741,10 +741,11 @@ def _list_packet_records(packet):
         else:
             # A packet built before reviews carried their reference: the stored record's digest decides.
             yield 'value_review', payload['id'], None, payload
-    for objection in packet.get('material_objections', []):
+    # A record delivered with an objection, as the projection that its stating reviewer received.
+    for objection in supplied_evidence.list_delivered_objections(packet):
         for entry in objection.get('version_evidence', []):
             if entry.get('kind') == 'record':
-                yield entry['record_kind'], entry['id'], entry['digest'], entry
+                yield entry['record_kind'], entry['id'], entry['digest'], entry['record']
     evidence = packet.get('problem_evidence') or {}
     for entry in evidence.get('readings', []):
         yield 'reading', entry['id'], entry['digest'], entry
@@ -941,12 +942,29 @@ def add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id
 
 def add_problem_objections(records, artifacts, packet, bars):
     """Supply prior material findings without exposing a current peer result. An objection's own references travel as
-    templates; its evidence arrives under version_evidence, as an adjudicator receives the current version, so that
-    the reviewer holds the content it cites and can cite it in turn."""
+    templates; its evidence arrives with it (describe_objection_delivery), so that the reviewer holds the content it
+    cites and can cite it in turn."""
     packet['material_objections'] = [
-        dict(_reference_templates(objection),
-             version_evidence=describe_version_evidence(records, artifacts, objection)['version_evidence'])
+        dict(_reference_templates(objection), **describe_objection_delivery(records, artifacts, objection))
         for objection in collect_result_objections(records, artifacts, packet['subject'], packet['problem_evidence_digest'], bars)]
+
+
+def describe_objection_delivery(records, artifacts, version):
+    """What a reviewer receives with an objection it gives a finding on, as an adjudicator receives that version: the
+    cited records and supplied artifacts under version_evidence, and the passages under version_source_mappings,
+    whose excerpts are the only bytes of a source delivered as passages."""
+    delivery = describe_version_evidence(records, artifacts, version)
+    return {key: delivery[key] for key in ('version_evidence', 'version_source_mappings')}
+
+
+def deliver_historical_review(records, artifacts, review):
+    """A review of another lineage that a first slate or result packet delivers, with the evidence of each of its
+    objections, on which the reviewer gives a finding."""
+    from .research_decisions import state_objection
+    payload = deliver_review(records, _payload(review))
+    for delivered, objection in zip(payload['objections'], review['payload']['objections']):
+        delivered.update(describe_objection_delivery(records, artifacts, state_objection(review, objection)))
+    return payload
 
 
 def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
@@ -1030,7 +1048,8 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
             packet['prior_context'] = bar_sources.prior_context(records, artifacts, context.get('source_links', []))
         else:
             bars = add_problem_bars(records, artifacts, packet, reviewer_id)
-            packet['historical_reviews'] = [{'review': deliver_review(records, _payload(review)), 'independence': 'no_longer_qualified'}
+            packet['historical_reviews'] = [{'review': deliver_historical_review(records, artifacts, review),
+                                             'independence': 'no_longer_qualified'}
                 for review in context_repair.historical_reviews(records, None, role)
                 if review.get('subject') == packet['subject']]
             if role == 'slate':
@@ -1342,7 +1361,7 @@ def _repair_packet(records, artifacts, value, repair):
         'event_ids': repair['event_ids'], 'probe_id': repair['probe_id'],
         'historical_review_ids': [review['id'] for review in repair['historical_reviews']]}
     packet['scientific_history'] = _reference_templates(repair['scientific_history'])
-    packet['historical_reviews'] = [deliver_review(records, review) for review in _reference_templates(repair['historical_reviews'])]
+    packet['historical_reviews'] = _reference_templates(repair['historical_reviews'])
     supplied = {digest(entry['artifact']): entry['artifact']
                 for turn in repair['scientific_history'] for entry in turn['packet'].get('evidence', [])}
     packet['previously_supplied_evidence'] = [supplied[key] for key in sorted(supplied)]
@@ -1350,7 +1369,7 @@ def _repair_packet(records, artifacts, value, repair):
     if problem:
         packet['protocol'] = _PROBLEM_PROTOCOL
         # A predecessor packet stored with raw review payloads is delivered again with templates.
-        for key in ('bars', 'own_bars'):
+        for key in ('bars', 'own_bars', 'historical_reviews'):
             if key in packet:
                 packet[key] = [deliver_review(records, payload) for payload in packet[key]]
     if value['role'] == 'result' and not problem:

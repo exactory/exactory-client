@@ -1769,13 +1769,22 @@ problem packet delivers (`bars`, `own_bars` and `historical_reviews` of the bar,
 slate and result packets, and the calibrations) carries `record_reference`, the
 exact reference of the stored review, and its artifact references as templates,
 so a payload that cites a source attaches none of its bytes. Each entry of a
-result packet's `material_objections` carries its own references as templates
-and `version_evidence`, the evidence of its current version in the
-adjudicator's shape (below), so the reviewer receives the content of the records
-it cites. Bytes reach a reviewer only through the problem evidence, the
-delivered sources and passages with their bounds, a material objection's
-`version_evidence` and the reviewer's own session history; a reviewer that needs
-a source that another review cites requests it with `source_requests`. A
+result packet's `material_objections`, and each objection of a review in the
+`historical_reviews` of a first slate or result packet (another slot's
+contaminated or repaired lineage, on whose objections the reviewer also gives a
+finding), carries its own references as templates and two delivery keys in the
+adjudicator's shape (below): `version_evidence`, the cited records as content and
+the supplied artifacts, and `version_source_mappings`, the passages that its
+stating reviewer received for the cited sources, in the mapping form whose link
+a reviewer can copy. The packet attaches only the bounded excerpts of those
+passages, and a link within a passage's bounds that the reviewer copies is
+delivered when an adjudicator receives the reviewer's version. Bytes reach a
+reviewer only through the problem evidence, the delivered sources and passages
+with their bounds, an objection's `version_evidence` and
+`version_source_mappings`, a context-repair packet's
+`previously_supplied_evidence` and the reviewer's own session history; a
+reviewer that needs a source that another review cites requests it with
+`source_requests`. A
 bar, slate or result review cites a record only when one of its observed packets
 carried that record at the cited digest as content; a reference that the
 reviewer received only inside a finding, or as an undelivered entry, does not
