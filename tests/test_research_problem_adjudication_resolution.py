@@ -290,3 +290,26 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
 
     def test_a_raw_descriptor_of_a_passage_only_artifact_is_delivered_through_its_passages(self):
         self.adjudicate_a_bar_objection_on_a_passage(raw=True)
+
+    def test_a_malformed_objection_gets_its_typed_refusal_before_the_record_citation_check(self):
+        """The record-time citation check reads only references that passed the shape checks."""
+        self.prepare_reviews(results=False)
+        cited = self.cite_record("reading", self.item["reading_id"])
+        malformed = {"first": ({key: value for key, value in self.make_objection().items() if key != "evidence"},
+                               "invalid_value_review"),
+                     "second": (dict(self.make_objection(), evidence=[{key: cited[key] for key in ("kind", "record_kind", "id")}]),
+                                "invalid_strategy")}
+        for reviewer, (objection, code) in malformed.items():
+            with self.subTest(reviewer=reviewer):
+                output = self.build_review_output("result")
+                output["objections"] = [objection]
+                with self.assertRaises(ResearchError) as caught:
+                    self.observe("result", reviewer, output)
+                self.assertEqual(caught.exception.code, code)
+        # A slate packet carries no reading, so a well-formed citation of one still meets the record-time rule.
+        output = self.build_slate_output(["candidate-1"])
+        output["objections"] = [dict(self.make_objection(), evidence=[cited], candidate_ids=["candidate-1"])]
+        with self.assertRaises(ResearchError) as caught:
+            self.observe("slate", "first", output)
+        self.assertEqual((caught.exception.code, caught.exception.details), ("review_evidence_undelivered",
+                         {key: cited[key] for key in ("record_kind", "id", "digest")}))

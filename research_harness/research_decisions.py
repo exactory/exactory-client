@@ -229,18 +229,6 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                         problem_objections=(json.loads(artifacts.read(saved_assignment["packet"])).get("material_objections", [])
                                              if problem is not None and value["stage"] == "result" else ()),
                         slate_packet=packet)
-        if problem is not None:
-            # A review cites a record only as content that its own observed packets delivered.
-            from .review_protocol import collect_carried_records, find_carried_record
-            carried = collect_carried_records(records, artifacts, value["assignment_id"])
-            for evidence in [value["value"]["evidence"]] + [row["evidence"] for row in (
-                    value["objections"] + value["value"]["objection_findings"] + value["value"]["assurances"])]:
-                for reference in evidence:
-                    if reference.get("kind") == "record" and find_carried_record(records, carried, reference) is None:
-                        raise ResearchError("review_evidence_undelivered",
-                            "Cite only content that this review received: no packet of the review delivered "
-                            + reference["record_kind"] + " " + reference["id"] + " at the cited digest",
-                            {key: reference[key] for key in ("record_kind", "id", "digest")})
         if problem is not None and value["stage"] == "result":
             undelivered = find_undelivered_bar_ids(records, artifacts, value["assignment_id"], value["value"]["bar_ids"])
             if undelivered:
@@ -268,6 +256,19 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                 for earlier in saved["payload"]["objections"]:
                     if earlier["id"] == objection["id"] and earlier["claim"] != objection["claim"]:
                         raise ResearchError("research_objection_identity_conflict", "A stable objection ID cannot name a different contested claim")
+        if problem is not None:
+            # A review cites a record only as content that its own observed packets delivered; every reference
+            # read here has passed the shape checks above.
+            from .review_protocol import collect_carried_records, find_carried_record
+            carried = collect_carried_records(records, artifacts, value["assignment_id"])
+            for evidence in [value["value"]["evidence"]] + [row["evidence"] for row in (
+                    value["objections"] + value["value"]["objection_findings"] + value["value"]["assurances"])]:
+                for reference in evidence:
+                    if reference.get("kind") == "record" and find_carried_record(records, carried, reference) is None:
+                        raise ResearchError("review_evidence_undelivered",
+                            "Cite only content that this review received: no packet of the review delivered "
+                            + reference["record_kind"] + " " + reference["id"] + " at the cited digest",
+                            {key: reference[key] for key in ("record_kind", "id", "digest")})
         changes, support = [], None
         if problem is not None:
             if value["support"] is not None:
