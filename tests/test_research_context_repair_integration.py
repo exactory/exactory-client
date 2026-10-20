@@ -82,6 +82,8 @@ class ContextRepairIntegrationTests(StrategyCase):
         self.assertIn("explicit reassessment", saved["prompt"]["text"])
         self.assertEqual(packet["historical_reviews"][0]["id"], "bar-a")
         self.assertEqual(packet["historical_reviews"][0]["payload"]["value"]["status"], "insufficient")
+        # A record reference belongs to problem packets only (M3).
+        self.assertNotIn("record_reference", packet["historical_reviews"][0])
         self.assertIn(self.objection["reason"], json.dumps(packet["scientific_history"]))
         self.assertFalse(review_protocol.assignment_state(self.store.snapshot()["records"], self.artifacts,
             "assignment-bar-a")["ready"])

@@ -96,7 +96,8 @@ class ProblemReviewTests(LiteratureCase):
         return output
 
     def observe(self, stage, reviewer, output=None, record=True, identifier=None):
-        assignment = self.assign(stage, reviewer, identifier=identifier)
+        context = self.deliver_supporting(reviewer) if stage == "bar" else {}
+        assignment = self.assign(stage, reviewer, identifier=identifier, **context)
         output = output or self.build_review_output(stage)
         with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
             self.mutate(protocol.invoke_assignment, {"id": "attempt-" + assignment["id"],
@@ -105,6 +106,24 @@ class ProblemReviewTests(LiteratureCase):
         if record:
             return self.mutate(decisions.record_value_review, payload)["result"]
         return payload
+
+    def deliver_supporting(self, reviewer):
+        """The context by which a reviewer's first bar receives self.supporting, which the bar outputs cite, through
+        the harness's own delivery path (R53): a source link of a recorded source whose abstract is that text, read
+        in full. A later bar of the reviewer continues the session that received it."""
+        from research_harness.reading import record_reading
+        records = self.store.snapshot()["records"]
+        if any(row["role"] == "bar" and row["reviewer_id"] == reviewer for row in records.get("review_assignment", {}).values()):
+            return {}
+        if not hasattr(self, "supporting_links"):
+            self.supporting_links = {}
+        if self.supporting["sha256"] not in self.supporting_links:
+            number = 77000 + len(self.supporting_links)
+            source = self.metadata(number, abstract=self.artifacts.read(self.supporting).decode())
+            self.mutate(record_reading, self.abstract_note(source, note_id="supporting-" + str(number)))
+            abstract = self.store.snapshot()["records"]["work"][source]["abstracts"][0]
+            self.supporting_links[self.supporting["sha256"]] = self.link(source, abstract["source_id"], abstract["artifact"])
+        return {"source_links": [self.supporting_links[self.supporting["sha256"]]]}
 
     def observe_bar_reviews(self):
         self.supporting = self.artifacts.put(b"A captured field standard.", "text/plain")
@@ -347,11 +366,18 @@ class ProblemReviewTests(LiteratureCase):
             for identifier in ('review-result-first', 'review-result-second')])
         self.assertEqual(saved['problem_evidence_digest'], digest(self.expected))
 
+    def deliver_calibration(self, records, identifier):
+        """A bar standard as the adjudicator packet carries it (R47, R48): artifact references as templates, and the
+        exact reference of the stored review."""
+        saved = records['value_review'][identifier]
+        return dict(protocol._reference_templates(saved['payload']), record_reference={
+            'kind': 'record', 'record_kind': 'value_review', 'id': identifier, 'digest': digest(saved)})
+
     def test_adjudicator_packet_carries_both_bar_calibrations_and_the_rubric_definition(self):
         self.prepare_below_threshold_reviews()
         _, packet = self.observe_rubric_adjudication()
         records = self.read_records()
-        self.assertEqual(packet['bar_calibrations'], [records['value_review'][identifier]['payload']
+        self.assertEqual(packet['bar_calibrations'], [self.deliver_calibration(records, identifier)
                                                      for identifier in ('review-bar-first', 'review-bar-second')])
         anchor = problem_rubric.ANCHORS['priority']
         self.assertEqual(packet['rubric_definition'], {'item': 'priority', 'definition': anchor['definition'],
@@ -407,9 +433,9 @@ class ProblemReviewTests(LiteratureCase):
         self.replace_first_bar()
         _, packet = self.observe_rubric_adjudication()
         records = self.read_records()
-        self.assertEqual(packet['bar_calibrations'], [records['value_review'][identifier]['payload']
+        self.assertEqual(packet['bar_calibrations'], [self.deliver_calibration(records, identifier)
                                                      for identifier in ('review-bar-first', 'review-bar-second')])
-        self.assertEqual(packet['current_bar_calibrations'], [records['value_review']['review-bar-replaced']['payload']])
+        self.assertEqual(packet['current_bar_calibrations'], [self.deliver_calibration(records, 'review-bar-replaced')])
         # The replaced bar retires the original pair from the current gate, so assess that pair by name.
         state = decisions.assess_problem_reviews(records, self.artifacts, review_ids=['review-result-first', 'review-result-second'])
         self.assertNotIn('problem_rubric_below_threshold', {row['code'] for row in state['obligations']})
@@ -731,6 +757,7 @@ class ProblemOpennessReviewTests(ProblemCase):
     read_records = ProblemReviewTests.read_records
     build_review_output = ProblemReviewTests.build_review_output
     observe = ProblemReviewTests.observe
+    deliver_supporting = ProblemReviewTests.deliver_supporting
 
     def assign(self, role, reviewer, author="problem-author", identifier=None, **context):
         return ProblemReviewTests.assign(self, role, reviewer, author, identifier, **context)

@@ -260,15 +260,26 @@ def record_value_review(store, payload, *, expected_revision, request_id):
             # A review cites a record only as content that its own observed packets delivered; every reference
             # read here has passed the shape checks above.
             from .review_protocol import collect_carried_records, find_carried_record
+            from .review_supplied_evidence import supplied_context
             carried = collect_carried_records(records, artifacts, value["assignment_id"])
+            supplied, mappings = supplied_context(records, artifacts, [value["assignment_id"]])
+            delivered = set(supplied) | {mapping["origin"]["artifact_descriptor"]["sha256"] for mapping in mappings}
             for evidence in [value["value"]["evidence"]] + [row["evidence"] for row in (
                     value["objections"] + value["value"]["objection_findings"] + value["value"]["assurances"])]:
                 for reference in evidence:
-                    if reference.get("kind") == "record" and find_carried_record(records, carried, reference) is None:
+                    if reference.get("kind") == "record":
+                        if find_carried_record(records, carried, reference) is None:
+                            raise ResearchError("review_evidence_undelivered",
+                                "Cite only content that this review received: no packet of the review delivered "
+                                + reference["record_kind"] + " " + reference["id"] + " at the cited digest",
+                                {key: reference[key] for key in ("record_kind", "id", "digest")})
+                        continue
+                    # An artifact counts as received when its bytes or one of its passages were delivered.
+                    artifact = reference["link"]["artifact"] if reference.get("kind") == "source" else reference
+                    if artifact["sha256"] not in delivered:
                         raise ResearchError("review_evidence_undelivered",
-                            "Cite only content that this review received: no packet of the review delivered "
-                            + reference["record_kind"] + " " + reference["id"] + " at the cited digest",
-                            {key: reference[key] for key in ("record_kind", "id", "digest")})
+                            "Cite only content that this review received: no packet of the review delivered artifact "
+                            + artifact["sha256"], {"sha256": artifact["sha256"]})
         changes, support = [], None
         if problem is not None:
             if value["support"] is not None:
@@ -648,13 +659,16 @@ def find_undelivered_adjudication_keys(records, artifacts, assignment_id, *, rub
     adjudicated pair, for a rubric shortfall the item's definition and threshold, and for a material objection the
     given stating review and evidence of the version. A cited reference that the packet lacks, or that cannot be
     delivered, is named as version_evidence:<record_kind>:<id> or version_evidence:<sha256>."""
-    from .review_protocol import resolve_original_calibrations
+    from .review_protocol import describe_calibration, resolve_original_calibrations
     assignment = records['review_assignment'][assignment_id]
     packet = read_assignment_packet(records, artifacts, assignment_id)
-    expected = dict(version_evidence or {},
-                    bar_calibrations=resolve_original_calibrations(records, artifacts, assignment['context']['review_ids']))
+    expected = dict(version_evidence or {})
     entries = expected.pop('version_evidence', None)
     undelivered = [key for key, value in expected.items() if packet.get(key) != value]
+    # The standards compare as an adjudicator weighs them, so a packet that delivered them raw still covers them.
+    if ([describe_calibration(bar) for bar in packet.get('bar_calibrations') or []]
+            != resolve_original_calibrations(records, artifacts, assignment['context']['review_ids'])):
+        undelivered.append('bar_calibrations')
     if entries is not None:
         delivered = packet.get('version_evidence') or []
         # An undelivered entry names its reference; a record entry its kind and id; an artifact its sha256.

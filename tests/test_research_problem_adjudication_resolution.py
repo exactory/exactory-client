@@ -21,6 +21,7 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
     assert_blocked_delivery = objection_fixtures.ProblemObjectionTests.assert_blocked_delivery
     refresh_reviews = objection_fixtures.ProblemObjectionTests.refresh_reviews
     build_slate_output = objection_fixtures.ProblemObjectionTests.build_slate_output
+    cite_a_requested_source = objection_fixtures.ProblemObjectionTests.cite_a_requested_source
 
     def prepare_bar_adjudication(self):
         self.prepare_reviews(bar_reviewer="second")
@@ -30,17 +31,18 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         return self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"])
 
     def observe_later_resolutions(self, first_status="resolved", *, new_continuing_evidence=False):
-        """Later results resolve with new evidence. A continuing finding repeats the adjudicated version unless it
-        carries the new evidence, which makes it a new version."""
-        self.resolution_evidence = self.artifacts.put(
-            b"The exact implication follows from the comparator's stated hypotheses.", "text/plain")
+        """Later results resolve with new evidence, which each reviewer requests as a source and receives (R51). A
+        continuing finding repeats the adjudicated version unless it carries the new evidence, which makes it a new
+        version."""
+        def build_findings(status, delivered):
+            finding = self.make_finding(status)
+            if status == "resolved" or new_continuing_evidence:
+                finding["evidence"] = [delivered]
+            return [finding]
         for reviewer in ("first", "second"):
-            output = self.build_review_output("result")
-            finding = self.make_finding(first_status if reviewer == "first" else "resolved")
-            if finding["status"] == "resolved" or new_continuing_evidence:
-                finding["evidence"] = [self.resolution_evidence]
-            output["value"]["objection_findings"] = [finding]
-            self.observe("result", reviewer, output, identifier="resolved-" + reviewer)
+            status = first_status if reviewer == "first" else "resolved"
+            self.resolution_evidence = self.cite_a_requested_source(reviewer, "resolved-" + reviewer,
+                lambda delivered, status=status: build_findings(status, delivered))
 
     def remove_adjudication_response(self):
         response = self.store.snapshot()["records"]["review_attempt"]["focused-attempt"]["response"]
@@ -253,27 +255,22 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
                                                           for key in ("record_kind", "id", "digest")}))
         self.assertIn("problem_candidate candidate-1", caught.exception.message)
 
-    def adjudicate_a_bar_objection_on_a_passage(self, raw):
+    def add_unbound_full_source(self):
+        """A fully read source that the current problem evidence does not cite; returns the link of its first unit."""
+        from research_harness import literature, reading
+        version = self.metadata(2)
+        capture = self.capture(version, body="The bound fails for the sequence 1, 3, 2 at n = 3, which the comparator "
+                               "misses. The rest of this unit discusses unrelated constructions at length. References: none.")
+        bundle = self.bundle(version, capture=capture, bundle_id="unbound-source")
+        self.mutate(literature.import_bundle, bundle)
+        self.mutate(reading.record_reading, self.full_note(bundle, "read-unbound"))
+        return self.store.snapshot()["records"]["reading"]["read-unbound"]["inspections"][0]["link"]
+
+    def adjudicate_a_bar_objection_on_a_passage(self, raw, unbound=False):
         """The second bar receives the first half of a fully read source unit as prior context, without the rest of
         the unit, and states O1 citing it, as the source link or as the raw artifact descriptor of the same artifact;
-        the bar pair is adjudicated."""
-        self.prepare_problem_evidence()
-        unit = self.store.snapshot()["records"]["reading"][self.item["reading_id"]]["inspections"][0]["link"]
-        content = self.artifacts.read(unit["artifact"]).decode()
-        self.unread_tail = content[len(content) // 2:]
-        link = self.link(unit["version_id"], unit["source_id"], unit["artifact"], content[:len(content) // 2])
-        cited = link["artifact"] if raw else {"kind": "source", "link": link}
-        self.observe("bar", "first")
-        assignment = self.assign("bar", "second", source_links=[link])
-        [mapping] = json.loads(self.artifacts.read(assignment["packet"]))["prior_context"]
-        output = self.build_review_output("bar")
-        output["objections"] = [dict(self.make_objection(), evidence=[cited])]
-        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
-            self.mutate(protocol.invoke_assignment, {"id": "attempt-bar-second", "assignment_id": "bar-second"},
-                        credential="test-only")
-        self.mutate(decisions.record_value_review, dict(output, id="review-bar-second", dossier_id=None,
-                                                        assignment_id="bar-second"))
-        self.record_slate(review_ids=[])
+        the bar pair is adjudicated. With unbound, the source is not in the current problem evidence."""
+        mapping = self.state_a_bar_objection_on_a_passage(raw, unbound)
         self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"])
         records = self.store.snapshot()["records"]
         [version] = decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]
@@ -284,6 +281,31 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         self.assertEqual((packet["version_evidence"], packet["version_source_mappings"]), ([], [mapping]))
         self.assertEqual(decisions.find_undelivered_adjudication_keys(records, self.artifacts, "focused",
             version_evidence=protocol.describe_version_evidence(records, self.artifacts, version)), [])
+
+    def state_a_bar_objection_on_a_passage(self, raw, unbound=False):
+        """The second bar states O1 on a passage-only artifact; returns the bar packet's passage mapping."""
+        self.prepare_problem_evidence()
+        unit = (self.add_unbound_full_source() if unbound else
+                self.store.snapshot()["records"]["reading"][self.item["reading_id"]]["inspections"][0]["link"])
+        self.unit = unit
+        content = self.artifacts.read(unit["artifact"]).decode()
+        self.unread_tail = content[len(content) // 2:]
+        link = self.passage_link = self.link(unit["version_id"], unit["source_id"], unit["artifact"], content[:len(content) // 2])
+        cited = link["artifact"] if raw else {"kind": "source", "link": link}
+        self.observe("bar", "first")
+        # The bar also receives self.supporting, which its output cites (R51, R53).
+        assignment = self.assign("bar", "second", source_links=[link] + self.deliver_supporting("second")["source_links"])
+        [mapping] = [row for row in json.loads(self.artifacts.read(assignment["packet"]))["prior_context"]
+                     if row["origin"]["artifact_descriptor"]["sha256"] == unit["artifact"]["sha256"]]
+        output = self.build_review_output("bar")
+        output["objections"] = [dict(self.make_objection(), evidence=[cited])]
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {"id": "attempt-bar-second", "assignment_id": "bar-second"},
+                        credential="test-only")
+        self.mutate(decisions.record_value_review, dict(output, id="review-bar-second", dossier_id=None,
+                                                        assignment_id="bar-second"))
+        self.record_slate(review_ids=[])
+        return mapping
 
     def test_a_bar_version_citing_a_delivered_passage_is_adjudicated_complete(self):
         self.adjudicate_a_bar_objection_on_a_passage(raw=False)
@@ -313,3 +335,231 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
             self.observe("slate", "first", output)
         self.assertEqual((caught.exception.code, caught.exception.details), ("review_evidence_undelivered",
                          {key: cited[key] for key in ("record_kind", "id", "digest")}))
+
+    def test_the_bar_standards_attach_no_bytes_beyond_a_supplied_passage(self):
+        """Astra's F3 reproduction: the adjudicator receives a passage-only source within its bounds."""
+        self.adjudicate_a_bar_objection_on_a_passage(raw=False, unbound=True)
+        packet = self.read_packet("focused")
+        attached = {entry["artifact"]["sha256"] for entry in packet["evidence"]}
+        self.assertNotIn(self.unit["artifact"]["sha256"], attached)
+        self.assertNotIn(self.unit["artifact"], packet["current_evidence"] + packet["original_evidence"])
+        cited = packet["bar_calibrations"][1]["objections"][0]["evidence"][0]["link"]
+        self.assertEqual((cited["artifact_reference_template"]["artifact_descriptor"]["sha256"], "artifact" in cited),
+                         (self.unit["artifact"]["sha256"], False))
+        self.assertEqual([bar["id"] for bar in packet["bar_calibrations"]], ["review-bar-first", "review-bar-second"])
+
+    def test_an_adjudication_on_raw_calibrations_stays_complete(self):
+        """A packet built before the standards travelled as templates still covers them."""
+        self.prepare_reviews(result_reviewer="first")
+        real = protocol.add_focused_adjudication
+
+        def build_with_raw_calibrations(*arguments, **options):
+            real(*arguments, **options)
+            records, packet = arguments[0], arguments[2]
+            packet["bar_calibrations"] = [records["value_review"][bar["id"]]["payload"] for bar in packet["bar_calibrations"]]
+        with patch.object(protocol, "add_focused_adjudication", side_effect=build_with_raw_calibrations):
+            self.observe_adjudication(review_ids=["review-result-first", "review-result-second"])
+        records = self.store.snapshot()["records"]
+        self.assertNotIn("record_reference", self.read_packet("focused")["bar_calibrations"][0])
+        [version] = decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]
+            for identifier in ("review-result-first", "review-result-second")])
+        self.assertEqual(decisions.find_undelivered_adjudication_keys(records, self.artifacts, "focused",
+            version_evidence=protocol.describe_version_evidence(records, self.artifacts, version)), [])
+        self.assert_delivered()
+
+    def test_a_result_review_cites_a_bar_by_the_reference_its_packet_exposes(self):
+        """R48: the packet alone gives the exact reference of a delivered review."""
+        self.prepare_reviews(results=False)
+        assignment = self.assign("result", "first")
+        [bar] = [row for row in json.loads(self.artifacts.read(assignment["packet"]))["bars"] if row["id"] == "review-bar-second"]
+        reference = bar["record_reference"]
+        self.assertEqual(reference, self.cite_record("value_review", "review-bar-second"))
+        output = self.build_review_output("result")
+        output["objections"] = [dict(self.make_objection(), evidence=[reference])]
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {"id": "attempt-result-first", "assignment_id": "result-first"},
+                        credential="test-only")
+        self.mutate(decisions.record_value_review, dict(output, id="review-result-first", dossier_id=None,
+                                                        assignment_id="result-first"))
+        self.observe("result", "second")
+        self.observe_adjudication(review_ids=["review-result-first", "review-result-second"])
+        [entry] = self.read_packet("focused")["version_evidence"]
+        self.assertEqual((entry["record_kind"], entry["record"]["id"], entry["record"]["stage"], entry["record"]["record_reference"]),
+                         ("value_review", "review-bar-second", "bar", reference))
+        self.assert_delivered()
+
+    def test_a_refreshed_result_reviewer_cites_the_records_its_material_objection_delivered(self):
+        """Astra's F4 reproduction: the result packet carries the objection's cited records as content."""
+        self.contest_with_a_candidate_record(late_candidate=True)
+        late = self.cite_candidate("candidate-3")
+        [projected] = [row for row in self.read_packet("slate-first-refreshed")["candidates"] if row["id"] == "candidate-2"]
+        for reviewer, cited in (("first", late), ("second", self.cited)):
+            with self.subTest(reviewer=reviewer):
+                assignment = self.assign("result", reviewer, identifier="reassessed-" + reviewer)
+                [objection] = json.loads(self.artifacts.read(assignment["packet"]))["material_objections"]
+                delivered, undelivered = objection["version_evidence"]
+                self.assertEqual((delivered["kind"], delivered["id"], delivered["record"]),
+                                 ("record", "candidate-2", projected))
+                self.assertEqual((undelivered["kind"], undelivered["identity"]), ("undelivered", "problem_candidate:candidate-3"))
+                output = self.build_review_output("result")
+                output["value"]["objection_findings"] = [dict(self.make_finding("contested"), evidence=[cited])]
+                with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+                    self.mutate(protocol.invoke_assignment, {"id": "attempt-" + assignment["id"], "assignment_id": assignment["id"]},
+                                credential="test-only")
+                payload = dict(output, id="review-" + assignment["id"], dossier_id=None, assignment_id=assignment["id"])
+                if cited is late:
+                    with self.assertRaises(ResearchError) as caught:
+                        self.mutate(decisions.record_value_review, payload)
+                    self.assertEqual((caught.exception.code, caught.exception.details["id"]),
+                                     ("review_evidence_undelivered", "candidate-3"))
+                else:
+                    self.assertEqual(self.mutate(decisions.record_value_review, payload)["result"]["id"], "review-reassessed-second")
+
+    def test_a_bar_payload_that_cites_a_passage_attaches_none_of_its_source(self):
+        """R49: the other reviewer's slate and result packets carry the bar readable, without the cited source."""
+        self.state_a_bar_objection_on_a_passage(raw=False, unbound=True)
+        stored = self.store.snapshot()["records"]["value_review"]["review-bar-second"]["payload"]
+        for role in ("slate", "result"):
+            with self.subTest(role=role):
+                packet = json.loads(self.artifacts.read(self.assign(role, "first", identifier=role + "-first")["packet"]))
+                self.assertNotIn(self.unit["artifact"]["sha256"], {entry["artifact"]["sha256"] for entry in packet["evidence"]})
+                [bar] = [row for row in packet["bars"] if row["id"] == "review-bar-second"]
+                self.assertEqual((bar["value"]["consequence"], bar["objections"][0]["claim"]),
+                                 (stored["value"]["consequence"], stored["objections"][0]["claim"]))
+                link = bar["objections"][0]["evidence"][0]["link"]
+                self.assertEqual((link["artifact_reference_template"]["artifact_descriptor"]["sha256"], "artifact" in link),
+                                 (self.unit["artifact"]["sha256"], False))
+
+    def test_a_result_review_citing_an_artifact_it_never_received_is_refused(self):
+        """R51: an artifact that no packet of the review delivered, as bytes or as a passage, is refused at record
+        time, after the shape checks."""
+        self.prepare_reviews(results=False)
+        never_received = self.artifacts.put(b"A field standard that no packet delivered.", "text/plain")
+        malformed = {key: value for key, value in dict(self.make_objection(), evidence=[never_received]).items() if key != "reason"}
+        for reviewer, objection, code in (("first", malformed, "invalid_value_review"),
+                                          ("second", dict(self.make_objection(), evidence=[never_received]),
+                                           "review_evidence_undelivered")):
+            with self.subTest(reviewer=reviewer):
+                output = self.build_review_output("result")
+                output["objections"] = [objection]
+                with self.assertRaises(ResearchError) as caught:
+                    self.observe("result", reviewer, output)
+                self.assertEqual(caught.exception.code, code)
+        self.assertEqual(caught.exception.details, {"sha256": never_received["sha256"]})
+        self.assertNotIn(never_received["sha256"], {entry["artifact"]["sha256"] for entry in self.read_packet("result-second")["evidence"]})
+
+    def test_result_packets_stored_with_raw_review_payloads_stay_complete(self):
+        """Results observed on packets built before R49 (raw payloads, no record_reference) are judged the same way."""
+        self.prepare_reviews(results=False)
+        with patch.object(protocol, "deliver_review", side_effect=lambda records, payload: payload):
+            for reviewer in ("first", "second"):
+                output = self.build_review_output("result")
+                if reviewer == "first":
+                    output["objections"] = [self.make_objection()]
+                self.observe("result", reviewer, output)
+        bar = self.read_packet("result-first")["bars"][0]
+        self.assertEqual(("record_reference" in bar, bar["value"]["evidence"]), (False, [self.supporting]))
+        self.observe_adjudication(review_ids=["review-result-first", "review-result-second"])
+        records = self.store.snapshot()["records"]
+        [version] = decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]
+            for identifier in ("review-result-first", "review-result-second")])
+        self.assertEqual(decisions.find_undelivered_adjudication_keys(records, self.artifacts, "focused",
+            version_evidence=protocol.describe_version_evidence(records, self.artifacts, version)), [])
+        self.assert_delivered()
+
+    def record_result(self, reviewer, output, identifier=None):
+        """Assign, invoke and record one result review of the given output."""
+        assignment = self.assign("result", reviewer, identifier=identifier)
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {"id": "attempt-" + assignment["id"], "assignment_id": assignment["id"]},
+                        credential="test-only")
+        return self.mutate(decisions.record_value_review, dict(output, id="review-" + assignment["id"], dossier_id=None,
+                                                               assignment_id=assignment["id"]))["result"]
+
+    def test_a_result_reviewer_copies_the_passage_link_of_a_material_objection(self):
+        """R50: O1's passage reaches the result reviewer within its bounds, and a copied link is delivered."""
+        self.copy_the_passage_of_a_material_objection(lambda mapping: {"kind": "source", "link": self.passage_link})
+
+    def test_a_result_reviewer_cites_the_full_descriptor_of_a_passage_it_received(self):
+        """R44 and R50: the descriptor that the passage's template names is delivered through the passages."""
+        def build_descriptor(mapping):
+            template = mapping["origin"]["artifact_descriptor"]
+            return {"path": template["location"], **{key: template[key] for key in ("sha256", "size", "media_type")}}
+        self.copy_the_passage_of_a_material_objection(build_descriptor)
+
+    def copy_the_passage_of_a_material_objection(self, build_citation):
+        """The second bar states O1 on a passage of an unbound source; the first result reviewer contests O1 citing
+        what the citation builder makes of O1's delivered passage, and the result pair is adjudicated."""
+        mapping = self.state_a_bar_objection_on_a_passage(raw=False, unbound=True)
+        packet = json.loads(self.artifacts.read(self.assign("result", "first")["packet"]))
+        [objection] = packet["material_objections"]
+        cited = build_citation(objection["version_source_mappings"][0])
+        self.assertEqual((objection["version_evidence"], objection["version_source_mappings"]), ([], [mapping]))
+        attached = {entry["artifact"]["sha256"] for entry in packet["evidence"]}
+        self.assertEqual((self.unit["artifact"]["sha256"] in attached, mapping["excerpt"]["sha256"] in attached), (False, True))
+        for reviewer, finding in (("first", dict(self.make_finding("contested"), evidence=[cited])),
+                                  ("second", self.make_finding("resolved"))):
+            output = self.build_review_output("result")
+            output["value"]["objection_findings"] = [finding]
+            if reviewer == "first":
+                with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+                    self.mutate(protocol.invoke_assignment, {"id": "attempt-result-first", "assignment_id": "result-first"},
+                                credential="test-only")
+                self.mutate(decisions.record_value_review, dict(output, id="review-result-first", dossier_id=None,
+                                                                assignment_id="result-first"))
+            else:
+                self.record_result(reviewer, output)
+        self.observe_adjudication(review_ids=["review-result-first", "review-result-second"])
+        records = self.store.snapshot()["records"]
+        [version] = decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]
+            for identifier in ("review-bar-first", "review-bar-second", "review-result-first", "review-result-second")])
+        self.assertEqual(version["review_id"], "review-result-first")
+        adjudicator = self.read_packet("focused")
+        self.assertEqual((adjudicator["version_evidence"], adjudicator["version_source_mappings"]), ([], [mapping]))
+        self.assertEqual(decisions.find_undelivered_adjudication_keys(records, self.artifacts, "focused",
+            version_evidence=protocol.describe_version_evidence(records, self.artifacts, version)), [])
+        for identifier in ("bar-second", "result-first", "result-second", "focused"):
+            self.assertNotIn(self.unread_tail, json.dumps(self.read_packet(identifier)))
+
+    def test_a_first_result_packet_delivers_the_evidence_of_a_contaminated_lineage(self):
+        """R52: an objection of another slot's contaminated review arrives with its passage, and a finding copying its
+        link is recorded and deliverable."""
+        mapping = self.state_a_bar_objection_on_a_passage(raw=False, unbound=True)
+        cited = {"kind": "source", "link": self.passage_link}
+        output = self.build_review_output("result")
+        output["objections"] = [dict(self.make_objection(), id="o2", claim="The passage leaves the bound unproved.",
+                                     evidence=[cited])]
+        output["value"]["objection_findings"] = [dict(self.make_finding("contested"), evidence=[cited])]
+        self.record_result("second", output)
+        self.mutate(protocol.record_context_event, {"id": "exposure", "assignment_id": "result-second",
+            "kind": "contamination", "source": "author_history", "reason": "The assessor received author advocacy.",
+            "evidence": [self.supporting]})
+        packet = json.loads(self.artifacts.read(self.assign("result", "first")["packet"]))
+        [historical] = packet["historical_reviews"]
+        [stated] = historical["review"]["objections"]
+        self.assertEqual((stated["id"], stated["version_evidence"], stated["version_source_mappings"]), ("o2", [], [mapping]))
+        output = self.build_review_output("result")
+        output["value"]["objection_findings"] = [self.make_finding("resolved"),
+                                                 dict(self.make_finding("contested"), id="o2", evidence=[cited])]
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {"id": "attempt-result-first", "assignment_id": "result-first"},
+                        credential="test-only")
+        saved = self.mutate(decisions.record_value_review, dict(output, id="review-result-first", dossier_id=None,
+                                                                assignment_id="result-first"))["result"]
+        records = self.store.snapshot()["records"]
+        version = decisions.state_objection(saved, dict(self.make_finding("contested"), id="o2", evidence=[cited]))
+        delivery = protocol.describe_version_evidence(records, self.artifacts, version)
+        self.assertEqual((delivery["version_evidence"], delivery["version_source_mappings"]), ([], [mapping]))
+
+    def test_a_result_version_citing_a_record_of_a_material_objection_delivers_its_projection(self):
+        """M1: the adjudicator receives the slate's candidate projection itself, without the delivery entry around it."""
+        self.contest_with_a_candidate_record()
+        [projected] = [row for row in self.read_packet("slate-first-refreshed")["candidates"] if row["id"] == "candidate-2"]
+        for reviewer, finding in (("first", self.make_finding("resolved")),
+                                  ("second", dict(self.make_finding("contested"), evidence=[self.cited]))):
+            output = self.build_review_output("result")
+            output["value"]["objection_findings"] = [finding]
+            self.record_result(reviewer, output, identifier="reassessed-" + reviewer)
+        self.observe_adjudication(review_ids=["review-reassessed-first", "review-reassessed-second"])
+        [entry] = self.read_packet("focused")["version_evidence"]
+        self.assertEqual((entry["kind"], entry["id"], entry["record"]), ("record", "candidate-2", projected))

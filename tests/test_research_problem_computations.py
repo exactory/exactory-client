@@ -157,8 +157,10 @@ class ProblemComputationTests(ProblemToolsCase):
         self.supporting = self.artifacts.put(b"The authored field standard used by both bar fixtures.", "text/plain")
         for reviewer in ("first", "second"):
             identifier = "bar-" + reviewer
+            # The bar receives self.supporting, which its output cites (R51, R53).
             self.mutate(review_protocol.record_assignment, {"id": identifier, "route_id": "route", "dossier_id": None,
-                "role": "bar", "reviewer_id": reviewer, "author_id": "problem-author", "context": {}})
+                "role": "bar", "reviewer_id": reviewer, "author_id": "problem-author",
+                "context": review_fixtures.ProblemReviewTests.deliver_supporting(self, reviewer)})
             output = review_fixtures.ProblemReviewTests.build_review_output(self, "bar")
             with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
                 self.mutate(review_protocol.invoke_assignment, {"id": "attempt-" + identifier,

@@ -17,6 +17,7 @@ class ProblemDeliveryCase(ProblemCase):
     build_provider_response = reviewers.ProblemReviewTests.build_provider_response
     build_review_output = reviewers.ProblemReviewTests.build_review_output
     observe = reviewers.ProblemReviewTests.observe
+    deliver_supporting = reviewers.ProblemReviewTests.deliver_supporting
     observe_openness = reviewers.ProblemOpennessReviewTests.observe_openness
 
     def assign(self, role, reviewer, author="problem-author", identifier=None, **context):
