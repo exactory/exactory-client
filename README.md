@@ -35,6 +35,17 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.55.0](docs/releases/0.55.0.md) adds the research half of
+`math-conjecturer`: the harness creates an open mathematical problem as
+research before it posts it. A problem record holds an exploration with its
+candidates and the slate that selected some of them, an attempt on the exact
+statement with math-solver or from full readings, and a rubric self-assessment
+graded by two independent result reviews, in addition to the statement, the
+openness finding, the value evidence and the post decision of 0.53.0. The
+operations of the Mathematics section move to the new skill `math-section`,
+and `search deliver-attempt` delivers a math-solver attempt, resolved or not,
+into the problem record.
+
 Version [0.54.0](docs/releases/0.54.0.md) follows the Mathematics section of
 exactory.ai, where the ORCID iD became optional. Any signed-in account writes,
 and a write from an account with a linked ORCID iD carries that iD. `exactory
