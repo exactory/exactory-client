@@ -307,10 +307,17 @@ class TestProbeLifecycle(_InsideWorkspaceTestCase):
                 "--question", "Lifecycle check?", "--script", str(path), "--timeout", timeout]
 
     def wait_for_file(self, path):
+        # The child scripts write their markers with Path.write_text, which creates the file before it
+        # writes the content, so the wait ends only once the file has content.
         deadline = time.monotonic() + 10
-        while not path.exists() and time.monotonic() < deadline:
+        while time.monotonic() < deadline:
+            try:
+                if path.stat().st_size > 0:
+                    return
+            except FileNotFoundError:
+                pass
             time.sleep(0.01)
-        self.assertTrue(path.exists(), str(path))
+        self.fail("no complete file at " + str(path))
 
     def test_failed_worker_start_records_terminal_cost_and_releases_reservation(self):
         from research_harness.integration import current_store
