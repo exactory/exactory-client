@@ -1769,16 +1769,25 @@ problem packet delivers (`bars`, `own_bars` and `historical_reviews` of the bar,
 slate and result packets, and the calibrations) carries `record_reference`, the
 exact reference of the stored review, and its artifact references as templates,
 so a payload that cites a source attaches none of its bytes. Each entry of a
-result packet's `material_objections`, and each objection of a review in the
-`historical_reviews` of a first slate or result packet (another slot's
-contaminated or repaired lineage, on whose objections the reviewer also gives a
-finding), carries its own references as templates and two delivery keys in the
-adjudicator's shape (below): `version_evidence`, the cited records as content and
-the supplied artifacts, and `version_source_mappings`, the passages that its
-stating reviewer received for the cited sources, in the mapping form whose link
-a reviewer can copy. The packet attaches only the bounded excerpts of those
-passages, and a link within a passage's bounds that the reviewer copies is
-delivered when an adjudicator receives the reviewer's version. Bytes reach a
+result packet's `material_objections`, each entry of a slate packet's
+`material_objections` (first, continuation and context repair), and each
+objection of a review in the `historical_reviews` of a first slate or result
+packet (another slot's contaminated or repaired lineage, on whose objections the
+reviewer also gives a finding), carries its own references as templates and two
+delivery keys in the adjudicator's shape (below): `version_evidence`, the cited
+records as content and the supplied artifacts, and `version_source_mappings`,
+the passages that its stating reviewer received for the cited sources. The
+`material_objections` of slate and result packets include every objection of a
+historical bar review (a contaminated or repaired bar lineage) as the version
+its review stated: the same collection from which `value-review` requires a
+finding on each such objection. Every delivered passage mapping (`prior_context`,
+`version_source_mappings`, `supplied_source_mappings` and the mappings under an
+objection) carries `citation`, a complete, valid source link
+`{version_id, source_id, artifact, locator}` for exactly that passage, which a
+reviewer copies verbatim to cite it; the citation names its original without
+attaching it. The packet attaches only the bounded excerpts of those passages,
+and a link within a passage's bounds that the reviewer copies is delivered when
+an adjudicator receives the reviewer's version. Bytes reach a
 reviewer only through the problem evidence, the delivered sources and passages
 with their bounds, an objection's `version_evidence` and
 `version_source_mappings`, a context-repair packet's
@@ -1788,11 +1797,15 @@ reviewer that needs a source that another review cites requests it with
 bar, slate or result review cites a record only when one of its observed packets
 carried that record at the cited digest as content; a reference that the
 reviewer received only inside a finding, or as an undelivered entry, does not
-count. It cites an artifact, as a descriptor or as a source link, only when its
-observed packets delivered that artifact's bytes or one of its passages; the
-descriptor of an artifact received only as a passage counts. `value-review`
-refuses another citation, after the shape checks, with
-`review_evidence_undelivered`, naming the record or the artifact's `sha256`.
+count. It cites an artifact as a descriptor only when its observed packets
+delivered that artifact's bytes or one of its passages; the descriptor of an
+artifact received only as passages names those passages and does not widen
+their bounds. It cites a source link only when its packets delivered the
+artifact in full, or when the link's locator lies within a delivered passage of
+the same artifact (a text locator by its offsets; a locator of another kind
+equal to the passage's). `value-review` refuses another citation, after the
+shape checks, with `review_evidence_undelivered`, naming the record, or the
+artifact's `sha256` and, for a source link, its `locator`.
 Both result reviews must pass exactly `problem_statement`, `problem_openness`,
 `problem_value`, `problem_citations` and `stop`. A marker author cannot be a
 reviewer (`review_not_independent`); an assignment's unknown author is refused
@@ -1886,10 +1899,15 @@ a record that a result packet projects, the entry of the `problem_evidence`
 list that carried it, or the projection whose `record_references` list it; for
 a review, its payload in `bars`, `own_bars` or `historical_reviews`, matched by
 its `record_reference`; for a record that a material objection's
-`version_evidence` delivered to a result reviewer, that entry. A record
+`version_evidence` delivered to a reviewer, the inner projection of that entry,
+together with the artifacts that the delivery supplied with it. A record
 kind that no problem packet projects is never delivered. Artifact references in `record` are templates, and
 `artifacts` holds the descriptors of its artifacts that the stating review's
-packets supplied, whose bytes the packet delivers. A reference that cannot be
+packets supplied, including those a delivery supplied with the record, whose
+bytes the packet delivers; the gate compares each entry with its artifacts, so
+a packet without one of them is incomplete. A source link citation outside the
+bounds of the passages its stating reviewer received is undelivered, also for a
+version recorded before that rule. A reference that cannot be
 delivered, a record that no observed packet of the stating review carried at
 that digest or an artifact that those packets did not supply, is an entry
 `{kind: "undelivered", identity, reference}`, and the packet is incomplete. An

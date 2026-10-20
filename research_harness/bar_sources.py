@@ -142,9 +142,11 @@ def prior_context(records, artifacts, links):
         else:
             location.update(start=link['locator']['start'], end=link['locator']['end'])
         location['sha256'] = hashlib.sha256(data).hexdigest()
-        result.append({'version_id': link['version_id'], 'inspection': inspection,
+        entry = {'version_id': link['version_id'], 'inspection': inspection,
             'origin': {'source_id': link['source_id'], 'artifact_descriptor': descriptor(link['artifact']), 'locator': location},
-            'excerpt': artifacts.put(data, media), 'scientific_truth_certified': False})
+            'excerpt': artifacts.put(data, media), 'scientific_truth_certified': False}
+        from .review_supplied_evidence import cite_passage
+        result.append(dict(entry, citation=cite_passage(artifacts, entry)))
     return result
 
 

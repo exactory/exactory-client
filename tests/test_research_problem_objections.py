@@ -670,8 +670,9 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         self.assertEqual(refresh["material_version"], refresh["previous_material_version"])
         self.assert_delivered()
 
-    def replace_first_bar(self):
-        """A legitimate context repair replaces the first bar by another reviewer's bar."""
+    def replace_first_bar(self, findings=()):
+        """A legitimate context repair replaces the first bar by another reviewer's bar, which gives the given findings
+        on the first bar's objections."""
         self.mutate(protocol.record_context_event, {"id": "exposure", "assignment_id": "bar-first",
             "kind": "contamination", "source": "author_history", "reason": "Author advocacy entered the bar context.",
             "evidence": [self.supporting]})
@@ -685,6 +686,7 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
             "assignment_id": "bar-first", "event_ids": ["exposure"], "probe_id": "repair-probe",
             "reason": "Reassess the field bar in a verified independent context.", "evidence": [self.supporting]})
         output = self.build_review_output("bar")
+        output["value"]["objection_findings"] = list(findings)
         output["reassessment"] = {"assignment_id": "bar-first", "findings": [{"review_id": "review-bar-first",
             "disposition": "revised", "reason": "The independent context gives the same field standard.",
             "evidence": [self.supporting]}]}
