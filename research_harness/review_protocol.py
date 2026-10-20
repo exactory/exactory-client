@@ -151,8 +151,11 @@ _EVIDENCE_GRAMMAR = (
     'Every evidence entry is one reference object, copied from the packet: a held artifact descriptor '
     '{path,sha256,size,media_type}; a delivered source as ' + _LINK_EXAMPLE + ', where version_id, source_id, '
     'artifact and locator are copied unchanged from the delivered source (a link with version_id alone is refused as '
-    'source_mismatch); or a record named in the packet as ' + _RECORD_EXAMPLE + '. A bare digest, a path alone or '
-    'free text is refused. ')
+    'source_mismatch); or a record whose content the packet delivered to you, cited as ' + _RECORD_EXAMPLE + ' with '
+    'record_kind, id and digest copied from the delivery (an entry of the packet\'s own lists, or a record delivered '
+    'under a material objection\'s version_evidence). A reference that appears inside a prior objection or finding '
+    'without its content is not delivered content: citing it is refused as review_evidence_undelivered. A bare '
+    'digest, a path alone or free text is refused. ')
 _REVIEW_GRAMMAR = (_EVIDENCE_GRAMMAR +
     'Every evidence array in the shape is nonempty: value.evidence, the evidence of every assurance including one graded '
     'not_assessed, of every objection and of every objection_findings entry. The values of rubric_evidence are nonempty '

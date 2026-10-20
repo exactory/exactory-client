@@ -172,11 +172,19 @@ class ProblemReviewTests(LiteratureCase):
         version_one_bar = protocol.canonical_prompt("bar", orchestration="problem_creation", version=1)["text"]
         self.assertNotIn('not reasons against a question by themselves', version_one_bar)
         self.assertNotIn('problem_refresh', version_one_bar)
+        # The evidence grammar of every version 2 role permits only records delivered as content (R45, R46).
+        for role in ("bar", "slate", "result", "adjudicator"):
+            text_of_role = protocol.canonical_prompt(role, orchestration="problem_creation")["text"]
+            for content in ("a record whose content the packet delivered to you",
+                            "a record delivered under a material objection's version_evidence",
+                            "without its content is not delivered content", "review_evidence_undelivered"):
+                self.assertIn(content, text_of_role)
+            self.assertNotIn("a record named in the packet", text_of_role)
 
     def test_problem_slate_template_is_version_two_only_and_keeps_bar_and_result_bytes(self):
-        version_two = {"bar": "b0970315305977542a7b2099925a3c770087daf2e9a33a1c34d3660c72069b53",
-                       "result": "19de7711580cabaeee94b19e19f10d19cd2445f4168949453c98d52786ef1494",
-                       "adjudicator": "359cda77714574caf4e9ff97ad7e184ced2f0515535a1196876a16f08b3bb45a"}
+        version_two = {"bar": "26c71d20bb408c750cd0df82943bc0a9447a804104b3c2c34319e6b895b93d9f",
+                       "result": "feffc300422eb33cef07498918b88515e8d64e94c7d18ceb164492316ac36fc2",
+                       "adjudicator": "5ca58f2b8bb771b8a9469d062ac90fbe5e07bb05c964b0dbaa08ed32c972794a"}
         for role, expected in version_two.items():
             self.assertEqual(protocol.canonical_prompt(role, orchestration="problem_creation")["template_hash"], expected)
         slate = protocol.canonical_prompt("slate", orchestration="problem_creation")
