@@ -1758,6 +1758,15 @@ currency it returns `review_resampling_forbidden`. The result template
 with the claim, attempt, accepted results, openness, value, assessment, resolved
 `assessment_evidence`, citations, delivered readings/passages,
 admissions/executions/assessments/output validations and bound native closures.
+Each record that a problem packet projects carries the stored record's `id` and
+`digest` (the claim, openness, value, assessment, attempt, readings and formal
+checks), and a projection that carries further records (the attempt's native
+attempt, a formal check's native closure, a computation's admission, execution
+and assessment) lists them in `record_references`. A reviewer cites any of them
+as `{kind: "record", record_kind, id, digest}`. A bar, slate or result review
+cites a record only when one of its observed packets carried that record at the
+cited digest; `value-review` refuses another with `review_evidence_undelivered`,
+naming the record.
 Both result reviews must pass exactly `problem_statement`, `problem_openness`,
 `problem_value`, `problem_citations` and `stop`. A marker author cannot be a
 reviewer (`review_not_independent`); an assignment's unknown author is refused
@@ -1829,18 +1838,42 @@ bars that are not among them, which a context repair installed; it is empty when
 no bar was replaced. For a material objection the packet also carries the
 evidence of the adjudicated version: `version_review`, the payload of the review
 that stated the version, with artifact references as templates;
-`version_evidence`, the artifacts that the stating review's packets delivered for
-the evidence the version cites, whose bytes the packet delivers; and
+`version_evidence`, one entry for each reference that the version cites, except
+an artifact that the stating review's packets delivered only as passages; and
 `version_source_mappings`, the source passages that those packets delivered for
-the cited artifacts. `current_evidence`, the version evidence and the original
-evidence used for a correction (`original_evidence` and
-`supplied_source_mappings`) stay distinct. An observed, ready
+the cited artifacts. A cited artifact descriptor or source link is delivered as
+the artifact descriptor that the stating review's packets supplied, whose bytes
+the packet delivers. An artifact that those packets delivered only as passages,
+cited as a source link or as its artifact descriptor, has no `version_evidence`
+entry and is delivered through `version_source_mappings`. A
+cited record `{kind: "record", record_kind, id, digest}` is delivered as
+`{kind: "record", record_kind, id, digest, record, artifacts}`. `record` is the
+projection that one of the stating review's observed packets carried for that
+record at that digest, not the stored record: for a candidate, the slate
+packet's `candidates` entry, which has no author notes and no disposition; for
+a record that a result packet projects, the entry of the `problem_evidence`
+list that carried it, or the projection whose `record_references` list it; for
+a review, its payload in `bars`, `own_bars` or `historical_reviews`. A record
+kind that no problem packet projects is never delivered. Artifact references in `record` are templates, and
+`artifacts` holds the descriptors of its artifacts that the stating review's
+packets supplied, whose bytes the packet delivers. A reference that cannot be
+delivered, a record that no observed packet of the stating review carried at
+that digest or an artifact that those packets did not supply, is an entry
+`{kind: "undelivered", identity, reference}`, and the packet is incomplete. `current_evidence`, the
+version evidence and the original evidence used for a correction
+(`original_evidence` and `supplied_source_mappings`) stay distinct. An observed, ready
 `not_upheld` adjudication resolves only that item for the same subject and current
 `problem_evidence_digest`, and only when its packet carried exactly the original
 `bar_calibrations` and the `rubric_definition`; a material objection's
 adjudication needs exactly the original `bar_calibrations` and the
 `version_review`, `version_evidence` and `version_source_mappings` of the current
-version.
+version, with every cited reference delivered. A cited reference that the packet
+lacks or cannot deliver is named in `undelivered_keys` as
+`version_evidence:<record_kind>:<id>` or `version_evidence:<sha256>`, and as
+`version_evidence` alone when the packet has every expected entry but its list
+differs, for example by an extra entry; the post gate does not count that
+adjudication, and the same adjudicator refreshes with reason
+`packet_incomplete`.
 The original grades remain visible. An old-evidence adjudication, a resolution
 of another item, or a material-objection finding cannot waive the shortfall;
 the five independent assurances still have to pass.

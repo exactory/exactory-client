@@ -627,7 +627,8 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         refreshed = self.store.snapshot()["records"]["review_assignment"]["focused-complete"]
         refresh = json.loads(self.artifacts.read(refreshed["packet"]))["focused_refresh"]
         self.assertEqual((refreshed["history_assignment_id"], refresh["assignment_id"], refresh["reason"], refresh["undelivered_keys"]),
-                         ("focused", "focused", "packet_incomplete", ["version_evidence", "version_review", "version_source_mappings"]))
+                         ("focused", "focused", "packet_incomplete",
+                          ["version_evidence:" + self.counterexample["sha256"], "version_review", "version_source_mappings"]))
         self.assertEqual(refresh["material_version"], refresh["previous_material_version"])
         self.assert_delivered()
 
@@ -657,8 +658,14 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
 
     def test_a_complete_adjudication_of_an_unchanged_version_is_not_sampled_again_after_a_bar_repair(self):
         """R38: other original calibrations of another pair do not make the earlier complete packet incomplete."""
-        self.prepare_reviews(bar_reviewer="second", results=False)
+        # A slate objection is adjudicated with the bars; its evidence reached the slate reviewer through the bars.
+        self.prepare_reviews(slate_reviewer="second", results=False)
         self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"])
+        records = self.store.snapshot()["records"]
+        [adjudicated] = decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]
+            for identifier in ("review-bar-first", "review-bar-second")])
+        self.assertEqual(decisions.find_undelivered_adjudication_keys(records, self.artifacts, "focused",
+            version_evidence=protocol.describe_version_evidence(records, self.artifacts, adjudicated)), [])
         self.replace_first_bar()
         records = self.store.snapshot()["records"]
         [objection] = decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]

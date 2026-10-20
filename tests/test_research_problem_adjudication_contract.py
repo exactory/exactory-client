@@ -78,6 +78,31 @@ class ProblemAdjudicationContractTests(delivery_fixtures.ProblemDeliveryCase):
         self.assertFalse(protocol._prompt_matches(dict(problem, prompt=changed)))
         self.assertFalse(protocol._prompt_matches({"role": "adjudicator", "prompt": prompt}))
 
+    def test_material_and_rubric_adjudicator_packets_carry_their_own_deliveries(self):
+        """The two packet variants that the adjudicator prompt describes."""
+        from research_harness.problem_rubric import rubric_objection_id
+        self.prepare_reviews(results=False)
+        for reviewer in ("first", "second"):
+            output = self.build_review_output("result")
+            if reviewer == "first":
+                output["objections"] = [self.make_objection()]
+                output["value"]["rubric"]["priority"] = 1
+            self.observe("result", reviewer, output)
+        pair = ["review-result-first", "review-result-second"]
+        packets = {name: json.loads(self.artifacts.read(self.assign("adjudicator", "focused-third", identifier="focused-" + name,
+                       review_ids=pair, objection_id=objection_id)["packet"]))
+                   for name, objection_id in (("material", "unsupported-implication"),
+                                              ("rubric", rubric_objection_id("review-result-first", "priority")))}
+        version_keys = set(protocol.VERSION_EVIDENCE_KEYS)
+        material, rubric = packets["material"], packets["rubric"]
+        self.assertEqual(version_keys - set(material), set())
+        self.assertEqual((material["version_review"]["id"], material["version_review"]["objections"][0]["id"]),
+                         ("review-result-first", "unsupported-implication"))
+        self.assertEqual((material["version_evidence"], material["version_source_mappings"]), ([self.supporting], []))
+        self.assertEqual(version_keys & set(rubric), set())
+        self.assertEqual({"bar_calibrations", "current_bar_calibrations", "rubric_grades", "rubric_definition"} - set(rubric), set())
+        self.assertEqual({"rubric_grades", "rubric_definition"} & set(material), set())
+
     def test_focused_problem_adjudication_cannot_be_a_bar_context_repair(self):
         self.assert_error("invalid_review_context", lambda: protocol.canonical_prompt(
             "adjudicator", orchestration="problem_creation", repair=True))

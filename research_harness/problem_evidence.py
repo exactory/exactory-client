@@ -404,10 +404,12 @@ def describe_evidence(records, artifacts):
     attempt = find_current_attempt(records)
     attempt_evidence = None
     if attempt is not None:
-        attempt_evidence = dict({key: attempt[key] for key in ("kind", "outcomes", "proportion")},
-                                literature=attempt["literature"], acceptances=[])
+        attempt_evidence = dict({key: attempt[key] for key in ("id", "kind", "outcomes", "proportion")},
+                                digest=digest(attempt), literature=attempt["literature"], acceptances=[])
         if attempt["kind"] == "solver":
             native = records["native_attempt"][attempt["solver"]["native_attempt_digest"]]
+            attempt_evidence["record_references"] = [
+                cite_record("native_attempt", attempt["solver"]["native_attempt_digest"], native)]
             attempt_evidence["applicability"] = attempt["solver"]["applicability"]
             attempt_evidence.update({key: native[key] for key in (
                 "state", "totals", "contract", "obligations", "failed_strategies", "retreats", "nodes")})
@@ -428,20 +430,35 @@ def describe_evidence(records, artifacts):
         checkpoint = next(row for row in native["checkpoints"] if row["id"] == acceptance["checkpoint_id"])
         results.append({"attempt_id": attempt_id, "acceptance_id": acceptance["id"], "claim": checkpoint["claim"],
                         "outcome": acceptance["outcome"], "standard": acceptance["standard"]})
+    # Each projected record carries the stored record's id and digest, so that a reviewer can cite it exactly.
     return {"claim": None if statement is None else dict(
                 {key: statement[key] for key in ("title", "area", "statement", "resolution_criteria", "formal_statement")},
+                id=statement["id"], digest=digest(statement),
                 statement_id=statement["id"], statement_digest=compute_statement_digest(statement)),
-            "openness": None if openness is None else {key: openness.get(key) for key in (
+            "openness": None if openness is None else dict({key: openness.get(key) for key in (
                 "id", "outcome", "statement_digest", "reason", "coverage", "searched_at", "evidence", "minimum")},
+                digest=digest(openness)),
             "openness_searches": describe_openness_searches(records, openness),
-            "value": None if value is None else {key: value[key] for key in ("id", "motivation", "current_state")},
-            "assessment": None if assessment is None else {key: assessment[key] for key in ("id", "grades", "items", "primary")},
+            "value": None if value is None else dict({key: value[key] for key in ("id", "motivation", "current_state")},
+                                                     digest=digest(value)),
+            "assessment": None if assessment is None else dict(
+                {key: assessment[key] for key in ("id", "grades", "items", "primary")}, digest=digest(assessment)),
             "assessment_evidence": resolve_assessment_evidence(records),
             "attempt": attempt_evidence,
             "results": results,
             "citations": project_citations(records, artifacts),
             "readings": [{"id": row["id"], "version_id": row["version_id"], "digest": digest(row),
                           "depth": row["depth"], "reading": row} for row in readings],
-            "passages": [passage for passage, _ in prepared], "computations": computations,
-            "formal_checks": [dict(row, native_closure=records["native_closure"][row["native_closure_digest"]])
+            "passages": [passage for passage, _ in prepared],
+            "computations": [dict(row, record_references=[cite_record(kind, row[key]["id"], row[key]) for key, kind in (
+                ("admission", "execution_admission"), ("execution", "execution"), ("assessment", "cycle_assessment"))])
+                for row in computations],
+            "formal_checks": [dict(row, digest=digest(row), native_closure=records["native_closure"][row["native_closure_digest"]],
+                                   record_references=[cite_record("native_closure", row["native_closure_digest"],
+                                                                  records["native_closure"][row["native_closure_digest"]])])
                               for row in find_formal_checks(records)]}
+
+
+def cite_record(kind, identifier, record):
+    """The exact reference by which a reviewer cites a stored record that a packet carries."""
+    return {"kind": "record", "record_kind": kind, "id": identifier, "digest": digest(record)}

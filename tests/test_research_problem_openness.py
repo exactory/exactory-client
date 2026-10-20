@@ -348,8 +348,9 @@ class ProblemOpennessDeliveryTests(ProblemDeliveryCase):
         records = self.store.snapshot()["records"]
         finding = records["problem_openness"]["openness-assignment"]
         packet = json.loads(self.artifacts.read(records["review_assignment"]["result-first"]["packet"]))
-        self.assertEqual(packet["problem_evidence"]["openness"], {key: finding[key] for key in (
-            "id", "outcome", "statement_digest", "reason", "coverage", "searched_at", "evidence", "minimum")})
+        self.assertEqual(packet["problem_evidence"]["openness"], dict({key: finding[key] for key in (
+            "id", "outcome", "statement_digest", "reason", "coverage", "searched_at", "evidence", "minimum")},
+            digest=digest(finding)))
         [bound] = packet["problem_evidence"]["openness_searches"]
         search = next(row for row in records["literature_search"].values() if digest(row) == bound["search_digest"])
         self.assertEqual((bound["formulation"], bound["search"]), (self.selected["statement"], search))
