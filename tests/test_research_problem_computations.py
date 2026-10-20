@@ -157,8 +157,10 @@ class ProblemComputationTests(ProblemToolsCase):
         self.supporting = self.artifacts.put(b"The authored field standard used by both bar fixtures.", "text/plain")
         for reviewer in ("first", "second"):
             identifier = "bar-" + reviewer
+            # The bar receives self.supporting, which its output cites (R51, R53).
             self.mutate(review_protocol.record_assignment, {"id": identifier, "route_id": "route", "dossier_id": None,
-                "role": "bar", "reviewer_id": reviewer, "author_id": "problem-author", "context": {}})
+                "role": "bar", "reviewer_id": reviewer, "author_id": "problem-author",
+                "context": review_fixtures.ProblemReviewTests.deliver_supporting(self, reviewer)})
             output = review_fixtures.ProblemReviewTests.build_review_output(self, "bar")
             with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
                 self.mutate(review_protocol.invoke_assignment, {"id": "attempt-" + identifier,
@@ -180,6 +182,8 @@ class ProblemFormalGateTests(ProblemToolsCase, ProblemDeliveryCase):
     def prepare_requested_support(self, requested=True):
         plan, observed = self.run_problem()
         self.selected = self.load_problem_module().find_current_statement(self.store.snapshot()["records"])
+        from test_research_problem_attempt import record_solver_attempt
+        record_solver_attempt(self, self.selected)
         ProblemComputationTests.assess_support(self, plan, observed)
         self.observe_openness()
         self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})
@@ -188,10 +192,14 @@ class ProblemFormalGateTests(ProblemToolsCase, ProblemDeliveryCase):
         item = dict(ProblemComputationTests.build_computation_evidence(self, observed),
                     formal_check={"claim": self.claim, "required_deliverables": ["range check"]} if requested else None)
         self.mutate(self.load_problem_module().record_value, self.build_value([item]))
+        from test_research_problem_assessment import build_assessment
+        self.mutate(self.load_problem_module().record_assessment, build_assessment(self.selected))
         self.supporting = self.artifacts.put(b"The fixture's observed field standard.", "text/plain")
-        for role in ("bar", "result"):
-            for reviewer in ("first", "second"):
-                self.observe(role, reviewer)
+        for reviewer in ("first", "second"):
+            self.observe("bar", reviewer)
+        self.record_slate()
+        for reviewer in ("first", "second"):
+            self.observe("result", reviewer)
         return observed, item
 
     def test_new_probe_origin_is_an_explicit_post_gate_obligation(self):

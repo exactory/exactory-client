@@ -26,6 +26,47 @@ class ProblemGateTests(ProblemDeliveryCase):
         records.pop("problem_selection")
         self.assertIn("problem_statement_missing", self.collect_gate_codes(records))
 
+    def test_missing_stale_and_resolved_attempts_block_the_post_gate(self):
+        for variant, expected in (("missing", {"problem_attempt_missing", "problem_rubric_attempt_unbound"}),
+                                  ("stale", {"problem_attempt_stale", "problem_rubric_attempt_unbound"}),
+                                  ("resolved", {"problem_attempt_resolved"})):
+            with self.subTest(variant=variant):
+                records = self.store.snapshot()["records"]
+                if variant == "missing":
+                    records.pop("problem_attempt")
+                elif variant == "stale":
+                    records["problem_attempt"]["attempt-1"]["statement_id"] = "old-statement"
+                else:
+                    records["problem_attempt"]["attempt-1"]["outcomes"]["resolved"] = True
+                self.update_decision_evidence_digest(records)
+                self.assertEqual(self.collect_gate_codes(records), expected)
+
+    def test_missing_slate_or_unselected_candidate_blocks_the_post_gate(self):
+        records = self.store.snapshot()["records"]
+        records.pop("problem_slate")
+        self.assertEqual(self.collect_gate_codes(records), {"problem_slate_missing"})
+        records = self.store.snapshot()["records"]
+        slate = records["problem_slate"]["slate-1"]
+        slate.update(selected=[], rejected=[{"candidate_id": "candidate-1", "reason": "A later comparison rejects it."}],
+                     reason="No candidate remains selected.")
+        self.assertEqual(self.collect_gate_codes(records), {"problem_candidate_unselected"})
+
+    def test_missing_or_stale_assessment_blocks_the_post_gate(self):
+        records = self.store.snapshot()["records"]
+        records.pop("problem_assessment")
+        self.update_decision_evidence_digest(records)
+        self.assertEqual(self.collect_gate_codes(records), {"problem_assessment_missing"})
+        records = self.store.snapshot()["records"]
+        records["problem_assessment"]["assessment-1"]["statement_id"] = "old-statement"
+        self.update_decision_evidence_digest(records)
+        self.assertEqual(self.collect_gate_codes(records), {"problem_assessment_stale"})
+
+    def test_below_threshold_self_assessment_blocks_the_post_gate(self):
+        records = self.store.snapshot()["records"]
+        records["problem_assessment"]["assessment-1"]["grades"]["priority"] = 1
+        self.update_decision_evidence_digest(records)
+        self.assertEqual(self.collect_gate_codes(records), {"problem_rubric_below_threshold"})
+
     def test_unresolved_openness_is_the_only_missing_condition(self):
         records = self.store.snapshot()["records"]
         records["problem_openness"]["openness-assignment"]["outcome"] = "unresolved"
@@ -35,6 +76,12 @@ class ProblemGateTests(ProblemDeliveryCase):
     def test_changed_neighbours_make_openness_stale_at_the_gate(self):
         records = self.store.snapshot()["records"]
         records["problem_statement"]["statement-1"]["neighbours"] = ["A newly declared formulation"]
+        assessment = copy.deepcopy(records["problem_assessment"]["assessment-1"])
+        assessment.update(id="assessment-neighbours", recorded_revision=self.store.revision + 1)
+        for item in assessment["items"].values():
+            for reference in item["evidence"]:
+                reference["digest"] = digest(records["problem_statement"]["statement-1"])
+        records["problem_assessment"][assessment["id"]] = assessment
         self.update_decision_evidence_digest(records)
         self.assertEqual(self.collect_gate_codes(records), {"problem_openness_stale"})
 

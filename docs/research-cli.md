@@ -1379,7 +1379,7 @@ already recorded in the configuration.
 
 | Claim | Mechanical minimum | Independent assessment | Currency |
 | --- | --- | --- | --- |
-| Problem: precisely stated, open, worth solving | Exact statement and criteria, current supported openness, evidence-bound value and projected citations | Two observed bar reviews and two observed result reviews | The explicit `problem_evidence_digest` binds the selected claim and decisive evidence. |
+| Problem: precisely stated, open, worth solving | A slate that selects the statement's candidate, exact statement and criteria, current unresolved attempt, current supported openness, evidence-bound value, rubric self-assessment and projected citations | Two observed bar reviews and two observed version 2 result reviews meeting the rubric thresholds after focused adjudication | The explicit `problem_evidence_digest` binds the selected claim, attempt, accepted results, assessment and decisive evidence. |
 
 Every mutation below uses `--file FILE --expected-revision REVISION
 --request-id ID`. Read the revision before a new mutation; an interrupted retry
@@ -1389,12 +1389,120 @@ records and move explicit selections.
 | Command | JSON payload | Records and behavior |
 | --- | --- | --- |
 | `problem-init` | `{slug, area, field, authors}` | Creates the orchestration marker and initial configuration. |
-| `problem-statement` | `{id, title, area, statement, resolution_criteria, neighbours, formal_statement}` | `problem_statement/<id>` and `problem_selection/current = {statement_id}`. Statement and criteria are nonempty TeX; neighbours are formulation texts, possibly empty. Formal statement is optional, null or `{language, text}`. The area must equal the immutable problem record's area (`problem_area_mismatch`); another subject class requires a new problem record. Any other changed field requires a new statement id and moves the selection. |
+| `problem-candidate` | `{id, previous, statement, source, observation, neighbours, potential, notes, disposition}` | `problem_candidate/<id>` records a tentative question, adding `recorded_revision`. `previous` is null or an existing candidate id (`problem_candidate_missing`); a candidate that a later candidate names as `previous` is no longer current. `source` is `{kind, reference, evidence}`: kind `own_record`, `literature`, `computation`, `section` or `user`, a nonempty reference and a possibly empty list of evidence references. `potential` holds the provisional grades `{significance: {B1, B2}, priority}` with an optional `readiness` verdict (`invalid_rubric_grades`). `notes` is a string, possibly empty. `disposition` is `{status, reason, evidence_needed}` with status `open`, `selected`, `deferred` or `rejected` and `evidence_needed` text or null. It is the author's provisional disposition when the candidate is recorded; the slate's lists are the decision of record, may differ from it, and are the only dispositions the gate reads. |
+| `problem-slate` | `{id, selected, deferred, rejected, bar_review_ids, review_ids, comparison, reason}` | `problem_slate/<id>` records the selection decision over every current candidate, adding the computed `candidate_ids` and `recorded_revision`. The latest slate by recorded revision is current. |
+| `problem-statement` | `{id, title, area, statement, resolution_criteria, neighbours, formal_statement, candidate_id}` | `problem_statement/<id>` and `problem_selection/current = {statement_id}`. Statement and criteria are nonempty TeX; neighbours are formulation texts, possibly empty. Formal statement is optional, null or `{language, text}`. `candidate_id` is optional, null or the id of a current candidate that the statement formulates (`problem_candidate_missing`). The area must equal the immutable problem record's area (`problem_area_mismatch`); another subject class requires a new problem record. Any other changed field requires a new statement id and moves the selection. |
+| `problem-attempt` | `{id, statement_id, kind, solver, literature, outcomes, proportion}` | Appends `problem_attempt/<id>`, adding `recorded_revision`. Binds the current statement to a solver attempt delivered in this store or a critically assessed full-reading literature attempt. The latest record by recorded revision is current; a resolved attempt blocks posting as an open problem. |
 | `problem-openness` | `{assignment_id}` | Records `problem_openness/<id>` from the observed native result review. Every supplied minimum must pass the shared closed-schema validation. `supported_open` advances the claim; `unresolved` records the gap without an evidence audit; `already_solved` redirects to the settling result and blocks posting as open. |
 | `problem-value` | `{id, statement_id, motivation, current_state}` | `problem_value/<id>` contains ordered paragraph arrays, each item `{text, evidence}` with nonempty evidence. |
+| `problem-assessment` | `{id, statement_id, grades, items, primary}` | `problem_assessment/<id>` binds the rubric self-assessment to the current statement, adding `recorded_revision`. Each item has evidence and a note; `primary` names its significance ground and criterion. |
 | `problem-formal-check` | `{evidence: {execution_id, output_id}, native_closure_digest}` | `problem_formal_check/<id>` binds a requested support check to an authenticated native completion in this store. Invalid bindings return `problem_formal_check_unbound`. |
 | `problem-decision` | `{id, action, review_ids, bar_review_ids, reason}` | `problem_decision/<id>` binds the current evidence digest. Action is `post`, `revise` or `withdraw`; `post` requires the minimum and observed review coverage, otherwise `problem_minimum_unmet`. The other actions record the reason. |
 | `problem-posted` | `{problem_id, export_directory}` | Rebuilds the approved export and compares every file byte for byte before recording `problem_post/<id>`. A changed file, even with a changed manifest hash, returns `problem_export_mismatch`. |
+
+An exploration records its candidates with `problem-candidate` and compares
+them in a slate with `problem-slate`. The slate gives every current candidate
+exactly one disposition: `selected` lists candidate ids, `deferred` is
+`[{candidate_id, evidence_needed}]` and `rejected` is `[{candidate_id, reason}]`.
+A missing, unknown, superseded or repeated candidate returns
+`problem_slate_incomplete` with `{missing, extra}`. A selected candidate needs
+potential grades with `max(B1, B2) >= 2` and readiness `pass`; otherwise
+`problem_slate_candidate_below_threshold` names `candidate_id` and its
+`{item, required, graded}` shortfalls. Defer such a candidate with the evidence
+that would raise it. `comparison` is the nonempty comparison of the candidates.
+A slate that selects no candidate is the no-post outcome and needs a nonempty
+`reason` (`problem_slate_reason_missing`); with a selection, `reason` is a string
+and can be empty. `bar_review_ids` names two observed problem bars from distinct
+reviewers and slots. A missing or invalid pair returns `problem_bar_pending` with
+`{bar_review_ids}`, a bar recorded on the version 1 template returns
+`problem_bar_calibration_required` with `{review_id}`, a bar for another area or
+field returns `review_bar_mismatch`, and a bar whose observed context no longer
+qualifies returns the code of its first assignment obligation. Selection
+authorizes further research expenditure; it establishes neither openness nor
+significance.
+
+A version 1 bar lacks the calibration of levels 2 and 3. Assign the bar again to
+the same reviewer with an empty `context`: the assignment refreshes the version 1
+bar on the version 2 template. It continues that reviewer's bar session and slot,
+the version 1 bar stays in its history, and the packet carries `problem_refresh`
+with `{assignment_id, previous_template_id, template_id}`. The refresh packet also
+carries `historical_reviews` with the version 1 bar, whose objections the refreshed
+bar addresses. The refreshed bar gives
+an `objection_findings` entry for every material objection of the version 1 bar
+(`review_objection_history_incomplete`); until it is recorded, those objections
+stay current. Cite the refreshed bars
+in the slate; the slate and result reviews then continue the version 2 sessions,
+because only the latest bar of each slot is current. A reviewer whose latest bar
+is on version 2 cannot be assigned another bar (`review_resampling_forbidden`).
+
+A focused slate review is optional. `review_ids` lists zero to two observed
+problem slate reviews from distinct reviewers and slots. Each must assess exactly
+the slate's bars and current candidates and keep its observed independence;
+otherwise `problem_slate_review_unverified` names `review_id`. Assign a slate
+review with `review-assignment`, role `slate` and `dossier_id: null`, to one of
+the two bar reviewers: it continues that reviewer's bar session and slot
+(`review_bar_continuity`). The template is `exactory-problem-review-v2/slate` and
+the subject is `{kind: "problem", statement_id: null}`. The packet carries the
+area, field, source inventory, `bar_ids`, `bars`, the reviewer's own bars and
+`candidates`: the id, record digest, statement, source kind and reference,
+observation, neighbours and potential grades of every current candidate. Notes
+and dispositions are withheld. The response names both packet bars in `bar_ids`,
+leaves `work_items` empty, reports the five problem assurances as `not_assessed`
+and adds `value.rubric_potential`, one `{significance: {B1, B2}, priority}` entry
+for exactly each packet candidate. Each material objection of a slate review also
+carries `candidate_ids`: the distinct packet candidates it concerns, or an empty
+list for an objection against the slate as a whole. Any other shape returns
+`invalid_value_review`.
+
+The slate packet also carries `candidate_set_digest`, the digest of the sorted
+`{id, digest}` of every current candidate, and a cited review must have assessed
+the current set: the same candidate ids and the same digest, and the current bars.
+After a candidate is added or superseded, or after a bar is refreshed or replaced,
+assign the slate again to the same reviewer with an empty `context`. The
+assignment refreshes the completed slate review: it continues that reviewer's
+session and slot, lists the current candidates and bars, carries the earlier slate
+findings in `historical_reviews`, and adds `problem_refresh` with `{assignment_id,
+previous_candidate_set_digest, candidate_set_digest, previous_bar_ids, bar_ids,
+review_ids}`. The new response covers the earlier material objections in
+`objection_findings`. While the candidate set and the bars are unchanged, another
+slate assignment for that reviewer returns `review_resampling_forbidden`.
+
+The material objections of observed slate reviews bind the post like the bars'
+objections, whether or not the latest slate cites the review; `review_ids` names
+the reviews that the selection rests on. A named candidate stays the same
+candidate along its `previous` lineage, whatever a later version changes: an
+objection concerns the statement that formulates a named candidate or one of its
+later versions, and its projection names the current versions. An objection with
+empty `candidate_ids` concerns the slate as a whole and every statement. Adding or
+revising candidates and changing the bars erase no objection, and an objection
+whose named lineages are all other candidates does not block the current
+statement. A slate review recorded before objections named candidates (no
+`candidate_set_digest` in its packet or no `candidate_ids`) is not counted. The
+objections that concern the current statement join the result packets'
+`material_objections`,
+so each result review needs an `objection_findings` entry for them
+(`review_objection_history_incomplete`), and they remain post obligations
+(`research_objection_unresolved`) until both result reviews record an evidenced
+resolution or a focused adjudication finds them not upheld. A refreshed slate
+review that marks such an objection `continuing` or `contested` with a new
+`reason` or new `evidence` states a new material version of it, with the same
+candidates (see the material versions below). Adjudicate a
+slate-review objection with the two bar review ids in `context.review_ids`, as
+for a bar objection; the adjudicator packet's `assessments` add the slate reviews
+that raised it.
+
+Formulate a selected candidate with `problem-statement` and its `candidate_id`.
+The post gate requires a slate (`problem_slate_missing`) and a current statement
+whose candidate the latest slate selects (`problem_candidate_unselected`, naming
+`statement_id` and `candidate_id`). A statement recorded before the slate is a
+preliminary formulation and is permitted. The latest slate must still cover
+exactly the current candidates: a candidate recorded after it, or one that
+supersedes a candidate it disposed of, gives `problem_slate_stale` with
+`{slate_id, missing, extra}` until a new slate is recorded. A stale slate counts
+as no slate for the milestone and for `problem_no_post`. A statement recorded
+in a 0.53.0 store before candidates existed carries no `candidate_id`; formulate
+it again under a new statement id with `candidate_id`, because re-selecting it
+unchanged gives `record_conflict`.
 
 The statement digest hashes `{statement, resolution_criteria}`. Declared
 neighbours also bind openness currency: adding a neighbour requires searches for
@@ -1423,15 +1531,115 @@ observed result through `problem-openness`. A new unbound material search,
 changed bound reading/search or missing current formulation makes the finding
 stale (`problem_openness_stale`).
 
+Record an attempt with `problem-attempt --file attempt.json
+--expected-revision N --request-id ID`. `kind` is `solver` or `literature`;
+exactly the matching binding is non-null (`invalid_input`). For a solver attempt,
+`solver` is `{native_attempt_digest, applicability}` and `literature` is null.
+`applicability` is nonempty text explaining how the native claim's `quantifiers`,
+`assumption_ids` and `scope` match the statement and resolution criteria; missing
+or blank text returns `invalid_input`. The math-solver
+proposal sets `review_workspace` to the problem record's workspace, for example
+`..` from `<workspace>/attack`, so that `search deliver-attempt` writes into this
+store. Deliver with `exactory-math --attack-root attack search deliver-attempt
+--file empty.json --expected-revision N --request-id deliver-attempt --json`,
+where `empty.json` contains `{}` and N is the native controller revision.
+It writes an immutable `native_attempt/<digest(summary)>` containing the contract,
+state, obligations, checkpoints, acceptances, retreats, failed strategies, nodes,
+totals and delivery provenance. The research harness reads only this common-store
+record and its current pointer. Attempt delivery maintains the mutable record
+`native_attempt_current/<digest({attack_root, objective_id})>` with
+`{attack_root, objective_id, native_attempt_digest, recorded_revision}` through
+the common prepared mutation. The pair `(attack_root, objective_id)` identifies
+one succession; different attack roots remain independent even when their
+objective ids coincide. Every delivery declares the current digest, including
+an exact repeat of an earlier snapshot. Such a repeat moves the pointer without
+adding or rewriting an immutable snapshot. Closure delivery writes no pointer.
+Missing delivery or a missing pointer returns `problem_attempt_unbound` with
+`{native_attempt_digest, expected_store}`. Its `contract.original_claim.statement`
+must equal the current statement text exactly (`problem_attempt_statement_mismatch`).
+Its scope must have `kind: "named"`; `case_ids` and `integer_interval` return
+`problem_attempt_scope_restricted` with `{native_attempt_digest, scope}`.
+Bind the native snapshot named by this succession's current pointer in this
+store. Native delivery preserves its first common-store `recorded_revision`
+outside the summary digest; record order does not determine succession.
+Binding another snapshot returns `problem_attempt_superseded`
+with `{native_attempt_digest, latest_native_attempt_digest}`. At the gate it is
+`problem_attempt_stale`, also naming `attempt_id` and `statement_id`, with the
+explanation "Record a new attempt bound to the latest delivered snapshot of this objective."
+
+For a literature attempt, `solver` is null and `literature` is
+`{readings: [{version_id, reading_id}], description}`: a nonempty list of this
+store's full readings and a nonempty critical assessment of the substantive
+attempt on the exact statement. The shared full-reading validator applies;
+abstract, missing, deferred or incomplete readings give
+`problem_value_reading_missing`. Readings of the current literature attempt
+enter the same collection as value readings: their passages are delivered to
+the result reviewers and checked for coverage, and their works are projected
+as citations and exported with the problem, even when no value paragraph or
+openness finding cites them.
+
+`outcomes` is `{resolved, footholds, unresolved, obstructions}`. `resolved` is
+boolean; an `invalidated` native proof status is unresolved. Otherwise a solver attempt is resolved when `state.proof_status` is `proved` or
+`disproved`, the root obligation (`contract.root_obligation`) has status
+`accepted`, or an accepted root acceptance has outcome `proof` or `counterexample`.
+This includes accepted root support delivered before closure while proof status
+is still `open`. A different `resolved` flag gives `problem_attempt_outcome_mismatch`.
+A root reduction remains eligible foothold and result evidence.
+`footholds` is an array of `{claim, evidence}`,
+`unresolved` of `{description}`, and `obstructions` of `{claim, scope, evidence}`.
+These arrays may be empty; their text fields are nonempty. Evidence is either
+`{kind: "acceptance", acceptance_id}` for the solver binding or
+`{kind: "reading", version_id, reading_id}` for a reading in the literature
+binding. Solver footholds require accepted `proof` or `reduction` acceptances;
+obstructions require accepted `obstruction` or `counterexample` acceptances on an
+obligation other than `contract.root_obligation`. Invalid support returns
+`problem_attempt_evidence_missing`, naming the acceptance or reading ids.
+An unresolved inventory describes unfinished work and supplies no obstruction
+or difficulty claim.
+
+`proportion` is `{extension_reason}` with text or null. When
+any delivered total exceeds the normal limits of 24 moves, 24 runs, one worker
+or 300 timeout seconds, give a nonempty reason
+(`problem_attempt_extension_unexplained`, with `{totals, exceeded}`, where
+`exceeded` lists the names in moves, runs, workers, timeout_seconds order).
+Totals preserve `moves`, `runs`, `elapsed_seconds` (null), `workers`,
+`timeout_seconds` and `historical_usage`;
+the harness infers no elapsed time or unknown historical usage. A new statement
+id requires a new attempt record even when only the resolution criteria changed.
+A resolved literature or solver attempt redirects to the established result
+and blocks the open-problem post (`problem_attempt_resolved`). The gate examines
+every attempt for the current statement: a literature resolution persists, and
+each solver attempt uses its `(attack_root, objective_id)` pointer's snapshot to determine
+resolution. A later unresolved literature attempt cannot erase that finding.
+An `invalidated` latest native snapshot lifts that objective's resolution; a new
+statement id starts a separate resolution history. The blocker names the latest
+attempt among those establishing a resolution.
+
 Value evidence is `{kind: "reading", version_id, reading_id}` for a full reading,
-or `{kind: "computation", execution_id, output_id, formal_check}`. Abstract and
+`{kind: "computation", execution_id, output_id, formal_check}`, or
+`{kind: "result", attempt_id, acceptance_id}` for an accepted mathematical result.
+The result must belong to the current solver attempt on the current statement,
+with acceptance status `accepted` and outcome `proof`, `reduction` or `obstruction`;
+otherwise `problem_value_result_missing` names `{attempt_id, acceptance_id}`.
+Invalidated acceptances and hypotheses supply no result evidence. Abstract and
 passage readings, availability qualifications and deferrals supply no value
 evidence. A cited computation requires its admission, reconciled output and an
 assessment that lists and validates that result, with its execution accounting
 and resource obligations satisfied. Whole-objective obligations and obligations
 about other results do not invalidate a supported paragraph. Probe-origin
-outputs retain `exploratory_evidence` and cannot be promoted by citation. An
-uncited computation remains a probe.
+outputs retain `exploratory_evidence` and cannot be promoted by citation; an
+admitted computation keeps its admission whether or not a paragraph cites it.
+
+The attempt projection gives `kind`, `outcomes`, `proportion`, the recorded
+`literature` binding (null for a solver), and `acceptances`: each acceptance cited
+by a solver foothold or obstruction, once in first citation order, as
+`{acceptance_id, claim, outcome, standard}` with its checkpoint claim. Literature
+attempts have an empty acceptance list. Solver evidence also gives
+`applicability`, `contract`, `obligations`, `failed_strategies`, `retreats` and
+`nodes` as delivered, alongside `state` and `totals`. Both the binding and the
+reviewer evidence project only an attempt for the current statement. When the
+latest attempt belongs to a previous statement they give `attempt: null` and
+`results: []`; the gate still reports the stale attempt.
 
 The value's recorded revision fixes the immutable assessment used for each cited
 execution. A later assessment enters the claim through a new value record;
@@ -1452,29 +1660,283 @@ When one output has several requested support claims, each exact claim and its
 required deliverables needs its own binding. A binding for another requested
 claim on the same output supplies no formal-check credit.
 
-The problem bar uses `exactory-problem-review-v1/bar` and receives `area`,
+Record the rubric self-assessment with `problem-assessment`. `grades` has exactly
+`{admission: {A1, A2, A3, A4, A5, A6}, significance: {B1, B2}, priority, attempt,
+accessibility, calibration}`. Admission, attempt and calibration verdicts are
+`pass` or `fail`; significance and priority levels are integers 0 to 3;
+accessibility is `E-F`, `E-A` or `E-N`. `items` has exactly `A1` through `A6`,
+`B1`, `B2`, `priority`, `attempt`, `accessibility` and `calibration`, each
+`{evidence: [refs], note}` with nonempty evidence and a nonempty text note.
+References use the shared strategy evidence shapes: a held artifact descriptor
+`{path, sha256, size, media_type}`, `{kind: "source", link}` for a full reading,
+or `{kind: "record", record_kind, id, digest}` for an exact record. An absent
+record or mismatched digest returns `problem_assessment_evidence_missing`
+with `{item, record_kind, id}` at recording and projection. Matching mutable
+records, including `configuration/research`, are accepted; after a record
+changes, re-record the assessment with its current digest. A missing item or empty item
+evidence returns `problem_assessment_evidence_missing` naming `item`; malformed
+grades return `invalid_rubric_grades`. `primary` is `{ground: "B1"|"B2",
+criterion: "V1"|...|"V8"}`; the named ground must have a nonzero grade
+(`invalid_input`). The latest assessment by recorded revision enters the
+evidence digest and the reviewer evidence as `{id, grades, items, primary}`.
+`assessment_evidence` resolves each distinct current assessment reference in
+item order, then reference order. A record reference becomes
+`{kind: "record", record_kind, id, digest, record}` with the stored record's
+content. If the record is absent or its digest differs, evidence projection
+returns `problem_assessment_evidence_missing {item, record_kind, id}`.
+A source reference becomes `{kind: "source", link, reading_ids}` naming this
+store's full readings whose version or inspected link matches the reference;
+none gives `problem_assessment_evidence_missing {item, link}`. These readings
+join value readings for passage delivery, coverage, citations and export.
+Artifact descriptors remain unchanged and their bytes are attached as packet
+evidence. A `local_artifact` record reference also requires its artifact bytes
+to reach both reviewers; an unattached SHA gives `problem_evidence_unassessed`.
+The digest binding carries the same `assessment_evidence` list with
+record contents omitted; both result packets must carry the resolved list
+(`problem_evidence_unassessed`). A statement change requires a new assessment
+for that statement.
+
+Posting requires every admission item `pass`, `max(B1, B2) >= 2` (at least 3
+for `E-A` or `E-N`), priority at least 2, attempt `pass` and calibration `pass`.
+Grounds never add. The harness's self-assessment must meet these thresholds.
+The attempt grade records a judgment; this operation creates no attempt record.
+`assess_attempt` checks the latest assessment: a passing attempt grade on the
+current statement without a current attempt gives `problem_rubric_attempt_unbound`
+with `assessment_id` and `statement_id`. `assess_assessment` retains its rubric
+threshold and statement currency checks.
+
+The evidence binding adds `attempt: {id, digest, native_attempt_digest}` (null
+when absent, with a null native digest for literature) and distinct cited
+`results: [{attempt_id, acceptance_id, digest}]`, where each result digest hashes
+the acceptance. Reviewer evidence adds `attempt` with its `kind`, `outcomes`,
+`proportion` and `literature` binding (`{description, readings}` as recorded for
+literature, null for a solver), plus native `state` and `totals` for a solver.
+Its `acceptances` array carries `{acceptance_id, claim, outcome, standard}` for
+every acceptance cited by a solver foothold or obstruction, once in order of
+first citation, with the claim taken from its checkpoint; the array is empty
+for literature attempts. The current literature attempt's full readings appear
+in the reviewer readings and passages, coverage check and projected citations.
+Reviewer evidence also includes
+`results: [{attempt_id, acceptance_id, claim, outcome, standard}]`, taking the
+claim from the acceptance's checkpoint. Reviewer evidence carries the openness
+finding as recorded, `{id, outcome, statement_digest, reason, coverage,
+searched_at, evidence, minimum}`, and `openness_searches`: for every search that
+its minimum binds, `{formulation, search_digest, search, sources}` with the search
+record and its captured source records, whose response bytes are attached to the
+packet. The evidence binding adds `openness_searches: [{formulation,
+search_digest, source_digests}]`. The twelve evidence keys `claim`, `openness`,
+`openness_searches`, `value`, `assessment`, `assessment_evidence`, `attempt`,
+`results`, `citations`, `readings`, `computations` and `formal_checks` must be
+present and equal the current expected values in the observed result packets,
+including null or empty values; omissions return `problem_evidence_unassessed`.
+
+The problem bar uses `exactory-problem-review-v2/bar` and receives `area`,
 `field` and source inventory/deliveries with the statement, title, neighbours and
 value withheld. The selected statement must retain the record's area, so the
 bars remain established for their original scope; a statement in another area
 is refused during bar assessment with `review_bar_mismatch`. Another subject
 class requires a new problem record and its own bars. Two observed bars are
-required before a result packet. The result template
-`exactory-problem-review-v1/result` receives `problem_evidence`
-with the claim, openness, value, citations, delivered readings/passages,
+required before a result packet, and a result assignment, its source-request
+continuations, refreshes and context repairs are refused before dispatch while a
+current bar or a bar that the latest slate cites was recorded on the version 1
+template (`problem_bar_calibration_required` naming `review_id`). Every result
+packet, including a continuation, a refresh or a context repair, carries the
+current `bar_ids`, `bars` and `own_bars`: the reviewer's own bar, or for a
+reviewer that holds the slot through a context repair, the current bar of that
+slot. The bar payloads keep their grades and standards readable, with artifact
+references as templates. A result review names only bars whose
+content an observed packet of its lineage delivered: `value-review` refuses
+another with `review_bar_mismatch` naming `bar_ids`, and the post gate reports
+the same code for a recorded review. Each result packet also carries
+`problem_review_currency`, the digest of `{problem_evidence_digest, bar_ids,
+objection_versions}` (the sorted current bars and, for each material objection
+the packet delivers, its id and material version). A new result assignment for a reviewer
+whose completed result review was given under another currency continues that
+reviewer's session and slot as a refresh, and its `problem_refresh` adds
+`previous_problem_review_currency` and `problem_review_currency`; under the same
+currency it returns `review_resampling_forbidden`. The result template
+`exactory-problem-review-v2/result` receives `problem_evidence`
+with the claim, attempt, accepted results, openness, value, assessment, resolved
+`assessment_evidence`, citations, delivered readings/passages,
 admissions/executions/assessments/output validations and bound native closures.
+Each record that a problem packet projects carries the stored record's `id` and
+`digest` (the claim, openness, value, assessment, attempt, readings and formal
+checks), and a projection that carries further records (the attempt's native
+attempt, a formal check's native closure, a computation's admission, execution
+and assessment) lists them in `record_references`. A reviewer cites any of them
+as `{kind: "record", record_kind, id, digest}`. Each review payload that a
+problem packet delivers (`bars`, `own_bars` and `historical_reviews` of the bar,
+slate and result packets, and the calibrations) carries `record_reference`, the
+exact reference of the stored review, and its artifact references as templates,
+so a payload that cites a source attaches none of its bytes. Each entry of a
+result packet's `material_objections`, each entry of a slate packet's
+`material_objections` (first, continuation and context repair), and each
+objection of a review in the `historical_reviews` of a first slate or result
+packet (another slot's contaminated or repaired lineage, on whose objections the
+reviewer also gives a finding), carries its own references as templates and two
+delivery keys in the adjudicator's shape (below): `version_evidence`, the cited
+records as content and the supplied artifacts, and `version_source_mappings`,
+the passages that its stating reviewer received for the cited sources. The
+`material_objections` of slate and result packets include every objection of a
+historical bar review (a contaminated or repaired bar lineage) as the version
+its review stated: the same collection from which `value-review` requires a
+finding on each such objection. Every delivered passage mapping (`prior_context`,
+`version_source_mappings`, `supplied_source_mappings` and the mappings under an
+objection) carries `citation`, a complete, valid source link
+`{version_id, source_id, artifact, locator}` for exactly that passage, which a
+reviewer copies verbatim to cite it; the citation names its original without
+attaching it. A JSON passage mapping in a bar, slate or result packet carries no
+`citation` and is delivered for reading only, because source evidence in a
+review needs a full-text reading; every mapping in an adjudicator packet carries
+its `citation` for a correction to cite. The packet attaches only the bounded excerpts of those passages,
+and a link within a passage's bounds that the reviewer copies is delivered when
+an adjudicator receives the reviewer's version. Bytes reach a
+reviewer only through the problem evidence, the delivered sources and passages
+with their bounds, an objection's `version_evidence` and
+`version_source_mappings`, a context-repair packet's
+`previously_supplied_evidence` and the reviewer's own session history; a
+reviewer that needs a source that another review cites requests it with
+`source_requests`. A
+bar, slate or result review cites a record only when one of its observed packets
+carried that record at the cited digest as content; a reference that the
+reviewer received only inside a finding, or as an undelivered entry, does not
+count. It cites an artifact as a descriptor only when its observed packets
+delivered that artifact's bytes or one of its passages; the descriptor of an
+artifact received only as passages names those passages and does not widen
+their bounds. It cites a source link only when its packets delivered the
+artifact in full, or when the link's locator lies within a delivered passage of
+the same artifact (a text locator by its offsets; a locator of another kind
+equal to the passage's). `value-review` refuses another citation, after the
+shape checks, with `review_evidence_undelivered`, naming the record, or the
+artifact's `sha256` and, for a source link, its `locator`.
 Both result reviews must pass exactly `problem_statement`, `problem_openness`,
 `problem_value`, `problem_citations` and `stop`. A marker author cannot be a
 reviewer (`review_not_independent`); an assignment's unknown author is refused
 with `problem_author_unknown`. Existing route probes, source-request
 continuations, assignment currency and independence checks apply.
+The blind bar also states the specialist's meaning of levels 2 and 3 of B1,
+B2 and comparative priority for the field and line. Each version 2 result adds
+`value.rubric` with the same full grades shape and `value.rubric_evidence` with
+nonempty evidence-and-reasoning text for exactly the assessment item keys.
+Both result reviews must meet the thresholds after any focused adjudication.
+Recorded version 1 problem assignments retain their exact authenticated prompt
+and remain verified; posting requires version 2 result reviews.
 
 Material objections from both bars and both observed result histories remain
 post obligations (`research_objection_unresolved`), including predecessor
-findings marked `continuing` or `contested`. Both result reviewers must record
-evidence-backed resolutions, or an independent focused adjudication must find
-the objection not upheld. Problem adjudication uses the existing review tools
-with `dossier_id: null`; changed value evidence retains the focused adjudicator
-and its observed history rather than opening a new reviewer choice.
+findings marked `continuing` or `contested`. Each objection carries a material
+version: the digest of its finding content (`claim`, `reason`, `evidence`,
+`resolution_condition` and, for a slate objection, `candidate_ids`) with the id
+and recorded revision of the review that stated it. An entry of `objection_findings`
+in an observed bar, slate or result review with status `continuing` or `contested`
+whose `reason` or `evidence` differs from the version it continues is also a new
+version: it keeps the `claim`, the `resolution_condition` and the `candidate_ids`
+of that version, and it takes the finding's `reason` and `evidence` and the id
+and recorded revision of its review. A finding that repeats the reason and
+evidence of the version it continues adds no version. Versions follow the
+recorded order of the reviews. Only the latest review of a lineage (the same
+stage, reviewer, session and slot; for a result, also the same problem evidence)
+holds versions current, by stating them or by continuing them in its findings. A
+review that a later review of its lineage superseded states no current version:
+its objections and findings are history. A refreshed bar, slate or result review
+therefore gives an `objection_findings` entry for every material objection of the
+review it supersedes (`review_objection_history_incomplete`), and until it is
+recorded those objections stay current. Per objection id, packets
+deliver the latest current version with `material_version`, `review_id`,
+`recorded_revision` and the other versions in `history`. Both result reviewers
+must record evidence-backed resolutions, each in a review whose packet delivered
+the current version, or an independent focused adjudication of the current
+version must find the objection not upheld; a resolution or an adjudication of an
+earlier version disposes of nothing later, and the changed currency lets the same
+reviewers reassess. The `material_objections` of a result packet leave out the
+results given on the current problem evidence: the other current result review
+and the superseded reviews of both lineages. A refreshed reviewer sees its own
+earlier reviews in `historical_reviews`. A new version from the other current
+result review's finding is resolved by an adjudication or by a reassessment under
+changed evidence. Problem adjudication uses the existing review tools
+with `dossier_id: null`; changed value evidence, a changed material version of
+the adjudicated objection, or an earlier adjudicator packet that lacked a delivery
+that the post gate requires of it (below) retains the focused adjudicator and its
+observed history rather than opening a new reviewer choice: its next assignment is
+a `focused_refresh` naming the previous and current evidence digests and material
+versions and its `reason`, `version_changed`, `evidence_changed` or
+`packet_incomplete`, the last with the lacking keys in `undelivered_keys`. Under
+an unchanged digest and version and a complete earlier packet, another assignment
+returns `review_adjudicator_fixed`, also when a delivery that the gate does not
+require of the earlier packet differs, such as the calibrations of another pair
+or `current_bar_calibrations`.
+The adjudicator template is `exactory-problem-review-v2/adjudicator`. For a
+below-threshold rubric grade, set `context.objection_id` to
+`rubric:<review_id>:<item>` with both original result review IDs. Items are
+`A1` through `A6`, `significance`, `priority`, `attempt` or `calibration`.
+The packet identifies the grade and required threshold and carries both
+results' `rubric_grades` and `rubric_definition`, `{item, definition, threshold}`
+of the adjudicated item. Every problem adjudicator packet carries
+`bar_calibrations`, the payloads of the original bar reviews that the adjudicated
+pair was graded against, sorted by id: for a bar pair the two bars, and for a
+result pair the bars that the results' recorded `bar_ids` name, as the results'
+observed packets delivered them. `current_bar_calibrations` carries the current
+bars that are not among them, which a context repair installed; it is empty when
+no bar was replaced. Both keep the content and the `record_reference` of each
+bar, with artifact references as templates, so the standards attach no source
+bytes; bytes reach the adjudicator only through `current_evidence`,
+`original_evidence`, `version_evidence` and the passages with their bounds. The
+gate compares the calibrations in that templated form, so a packet that
+delivered them as raw payloads still covers them. For a material objection the packet also carries the
+evidence of the adjudicated version: `version_review`, the payload of the review
+that stated the version, with artifact references as templates;
+`version_evidence`, one entry for each reference that the version cites, except
+an artifact that the stating review's packets delivered only as passages; and
+`version_source_mappings`, the source passages that those packets delivered for
+the cited artifacts. A cited artifact descriptor or source link is delivered as
+the artifact descriptor that the stating review's packets supplied, whose bytes
+the packet delivers. An artifact that those packets delivered only as passages,
+cited as a source link or as its artifact descriptor, has no `version_evidence`
+entry and is delivered through `version_source_mappings`. A
+cited record `{kind: "record", record_kind, id, digest}` is delivered as
+`{kind: "record", record_kind, id, digest, record, artifacts}`. `record` is the
+projection that one of the stating review's observed packets carried for that
+record at that digest, not the stored record: for a candidate, the slate
+packet's `candidates` entry, which has no author notes and no disposition; for
+a record that a result packet projects, the entry of the `problem_evidence`
+list that carried it, or the projection whose `record_references` list it; for
+a review, its payload in `bars`, `own_bars` or `historical_reviews`, matched by
+its `record_reference`; for a record that a material objection's
+`version_evidence` delivered to a reviewer, the inner projection of that entry,
+together with the artifacts that the delivery supplied with it. A record
+kind that no problem packet projects is never delivered. Artifact references in `record` are templates, and
+`artifacts` holds the descriptors of its artifacts that the stating review's
+packets supplied, including those a delivery supplied with the record, whose
+bytes the packet delivers; the gate compares each entry with its artifacts, so
+a packet without one of them is incomplete. A source link citation outside the
+bounds of the passages its stating reviewer received is undelivered, also for a
+version recorded before that rule. A reference that cannot be
+delivered, a record that no observed packet of the stating review carried at
+that digest or an artifact that those packets did not supply, is an entry
+`{kind: "undelivered", identity, reference}`, and the packet is incomplete. An
+artifact that the stating reviewer saw only inside a review payload, such as a
+bar's evidence, was not supplied to it, so a version that cites it is
+undelivered. `current_evidence`, the
+version evidence and the original evidence used for a correction
+(`original_evidence` and `supplied_source_mappings`) stay distinct. An observed, ready
+`not_upheld` adjudication resolves only that item for the same subject and current
+`problem_evidence_digest`, and only when its packet carried exactly the original
+`bar_calibrations` and the `rubric_definition`; a material objection's
+adjudication needs exactly the original `bar_calibrations` and the
+`version_review`, `version_evidence` and `version_source_mappings` of the current
+version, with every cited reference delivered. A cited reference that the packet
+lacks or cannot deliver is named in `undelivered_keys` as
+`version_evidence:<record_kind>:<id>` or `version_evidence:<sha256>`, and as
+`version_evidence` alone when the packet has every expected entry but its list
+differs, for example by an extra entry; the post gate does not count that
+adjudication, and the same adjudicator refreshes with reason
+`packet_incomplete`.
+The original grades remain visible. An old-evidence adjudication, a resolution
+of another item, or a material-objection finding cannot waive the shortfall;
+the five independent assurances still have to pass.
+If an id identifies both a rubric shortfall and an explicit material objection,
+disambiguate the findings before focused adjudication (`review_objection_missing`).
+A material objection with a rubric-shaped id remains valid when no grade collides.
 
 `gate post` is the only applicable gate in a problem workspace. Every other
 gate reports `gate_inapplicable`, as does `post` outside this orchestration.
@@ -1488,11 +1950,28 @@ records retain nonmanaged dependency composition and empirical meaning.
 
 | Post obligation codes | Required action |
 | --- | --- |
+| `problem_slate_missing` | Compare the current candidates and record the selection with `problem-slate`. |
+| `problem_slate_stale` | Record a new slate that disposes of every current candidate; `missing` names current candidates outside the latest slate and `extra` names its candidates that are no longer current. |
+| `problem_candidate_unselected` | Formulate a candidate that the latest slate selects, or record a new slate. |
 | `problem_statement_missing` | Select the exact statement and resolution criteria. |
+| `problem_attempt_missing`, `problem_attempt_stale` | Record an attempt for the current statement and criteria; a stale obligation names `attempt_id` and `statement_id`. A superseded native snapshot also names `native_attempt_digest` and `latest_native_attempt_digest`. |
+| `problem_attempt_resolved` | The attempt resolved this statement, so the candidate leaves the open-problem path: a literature resolution redirects to the established result and its source, a solver resolution follows math-solver's own result delivery; the obligation names `attempt_id`. |
+| `problem_rubric_attempt_unbound` | Bind the passing current assessment's attempt judgment to a current attempt record; the obligation names `assessment_id` and `statement_id`. |
+| `problem_attempt_unbound`, `problem_attempt_statement_mismatch`, `problem_attempt_outcome_mismatch` | Deliver and bind the native attempt from this store with the exact claim and matching resolved outcome. |
+| `problem_attempt_superseded` | Bind the snapshot named by the current pointer for `(attack_root, objective_id)`; both native digests identify the succession. |
+| `problem_attempt_scope_restricted` | Use a named scope covering the statement; `native_attempt_digest` and `scope` identify the restricted native claim. |
+| `problem_attempt_evidence_missing` | Cite an appropriate accepted acceptance or a listed full reading for the named finding. |
+| `problem_attempt_extension_unexplained` | Explain an attempt exceeding 24 moves, 24 runs, one admitted worker or 300 admitted timeout seconds; `totals` gives usage and admitted bounds, and `exceeded` lists the limit names. |
 | `problem_openness_missing`, `problem_openness_unresolved` | Obtain an observed supported openness finding with the audited minimum. |
 | `problem_already_solved` | Redirect to the named established result or record a new statement. |
 | `problem_openness_stale` | Refresh the finding for the changed formulation, search or reading. |
 | `problem_value_missing`, `problem_value_reading_missing`, `problem_value_computation_missing` | Supply ordered value paragraphs with valid full readings or admitted, reconciled, assessed computation support. |
+| `problem_value_result_missing` | Cite an accepted proof, reduction or obstruction of the current solver attempt; the obligation names `attempt_id` and `acceptance_id`. |
+| `problem_assessment_missing` | Record the rubric self-assessment with evidence for every item. |
+| `problem_assessment_evidence_missing` | Supply item evidence with the exact stored record digest at recording and projection, or at least one matching full source reading at projection; names `item` and the record ids or `link`. Re-record an assessment after a mutable record changes. |
+| `problem_assessment_stale` | Record a new assessment for the current statement; the obligation names both ids. |
+| `problem_rubric_below_threshold` | Repair self-assessment shortfalls, or repair or independently adjudicate the named review shortfalls. `source` distinguishes `self` and `review`; ids and `{item, required, graded}` shortfalls identify the judgment. |
+| `problem_rubric_review_required` | Obtain a version 2 result review with full rubric grades for the named review. |
 | `exploratory_evidence` | Preserve the probe observation and obtain admissible support for the claim. |
 | `problem_formal_check_missing`, `problem_formal_check_stale` | Bind the requested check for the current value evidence to its authenticated native completion. |
 | `problem_citation_locator_missing` | Record a DOI, arXiv id or read-version bundle HTTPS locator for the cited work. |
@@ -1503,14 +1982,27 @@ records retain nonmanaged dependency composition and empirical meaning.
 | `review_sources_pending` | Resolve the reviewers' pending source requests. |
 | `problem_already_posted` | Retain the existing confirmed post; the same statement cannot be posted twice. |
 
-`status` and `next` compute milestones from records: `exploration` at
-initialization, `formulation` with a statement, `openness` with current
-`supported_open`, `value` with valid value evidence, both bars, both passed
-result reviews and a current post decision, and `post` with a recorded post.
-`next` names the first missing condition in the order statement, openness,
-value, reviews, decision, export. Milestones impose no tool order. `status`
-lists the current depth plan under `limits` and no cohort policy counts; those
-belong to ai-science.
+`status` and `next` compute milestones from records: `exploration` before
+any slate or while the latest slate is stale, `slate` with a current slate and no
+statement or with a current slate that selects no candidate, `formulation` when
+the current slate selects a candidate and a statement is selected, `attempt` when
+`assess_attempt` returns no obligations,
+`openness` after that with current `supported_open`, `value` with
+valid value evidence and a passing current rubric self-assessment, both bars,
+both version 2 result reviews passing the assurances and rubric after
+adjudication, and a current post decision, and `post` with a recorded post.
+`next` names the first missing condition in the order slate, statement,
+attempt, openness, value, reviews, decision, export. A stale slate leads with
+`problem_slate_stale`. When the current slate selects no candidate, `next` is
+`{code: "problem_no_post", reason, explanation}`
+with the slate's reason: the exploration ends without a post unless a new slate
+selects a candidate. The full `status` and `next` reports carry that reason; the
+`--summary` views show the code and the explanation only. Milestones impose no
+tool order. `status` also reports
+`candidates: {current, selected, deferred, rejected}`, the number of current
+candidates and the lengths of the latest slate's lists, and `slate_id`, the
+latest slate or null. It lists the current depth plan under `limits` and no
+cohort policy counts; those belong to ai-science.
 
 After `gate post` reports ready, run:
 
@@ -1523,10 +2015,12 @@ An unready export returns `readiness_required`. The deterministic projection is
 `citations.json`, optional `formal-statement.txt`, and `problem-export.json`.
 The manifest contains `{statement_id, statement_digest,
 problem_evidence_digest, decision_id, area, formal_statement_language,
-files: {name: sha256}}`. Citations are projected once per distinct work cited
-by the decisive openness/settling readings and value readings, as
-`{citation, locator}` using metadata citation and DOI, then arXiv id, then the
-read-version bundle's HTTPS URL. Every cited work has a reading in this store.
+files: {name: sha256}}`. Citations are projected once per distinct work among the
+decisive openness and settling readings, the value readings, the readings of the
+current literature attempt and the full readings that the self-assessment's source
+references name, as `{citation, locator}` using metadata citation and DOI, then
+arXiv id, then the read-version bundle's HTTPS URL. Every cited work has a reading
+in this store.
 
 The math-conjecturer delivery section checks the exported citation locators
 and duplicates, runs `exactory post-problem` on the exported files, then records
@@ -1534,8 +2028,8 @@ the returned id through `problem-posted`. The post record contains
 `{id, problem_id, statement_id, statement_digest, problem_evidence_digest,
 export_digest, posted_at}`. Its export digest hashes rebuilt approved bytes;
 the directory's manifest is informational. A changed part requires a new
-statement and a fresh post gate. The choice of skill that creates the research
-record remains open.
+statement and a fresh post gate. The `math-conjecturer` skill creates the
+research record and runs its delivery section.
 
 ## Development rounds
 

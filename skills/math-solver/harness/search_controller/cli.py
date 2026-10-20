@@ -59,7 +59,7 @@ def install_parser(commands, strategies_default):
     targets = {"admit", "begin", "run", "accept", "retreat", "amend-computation", "amend-foundation", "interpret"}
     for name in ["init", "adopt", "propose", "review", "admit", "begin", "run", "reconcile",
                  "checkpoint", "accept", "retreat", "replan", "focus", "pause", "resume",
-                 "audit", "status", "next", "hook-stop", "render", "complete", "amend-computation", "amend-foundation", "interpret", "strategy-context", "reassess", "review-packet", "deliver-closure"]:
+                 "audit", "status", "next", "hook-stop", "render", "complete", "amend-computation", "amend-foundation", "interpret", "strategy-context", "reassess", "review-packet", "deliver-closure", "deliver-attempt"]:
         parser = nested.add_parser(name)
         if name in {"init", "focus", "resume"}:
             parser.add_argument("--workspace-root", type=Path)
@@ -72,7 +72,7 @@ def install_parser(commands, strategies_default):
             parser.add_argument("target")
         elif name == "checkpoint":
             parser.add_argument("target", nargs="?")
-        if name == "deliver-closure":
+        if name in {"deliver-closure", "deliver-attempt"}:
             parser.add_argument("--file", "--spec", dest="spec", type=Path, required=True)
         elif name in specs:
             parser.add_argument("--spec", type=Path, required=True)

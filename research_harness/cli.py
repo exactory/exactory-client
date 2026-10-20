@@ -26,14 +26,18 @@ from .workspace import find_workspace, strict_json
 from . import research_decisions, review_protocol, strategy
 from .depth import record_depth
 from .probe import record_probe_intent, record_probe, summarize_probes
-from . import problem_claims
+from . import problem_attempt, problem_candidates, problem_claims
 
 
 OPERATIONS = {
     "problem-init": problem_claims.initialize_problem,
+    "problem-candidate": problem_candidates.record_candidate,
+    "problem-slate": problem_candidates.record_slate,
     "problem-statement": problem_claims.record_statement,
+    "problem-attempt": problem_attempt.record_attempt,
     "problem-openness": problem_claims.record_openness,
     "problem-value": problem_claims.record_value,
+    "problem-assessment": problem_claims.record_assessment,
     "problem-formal-check": problem_claims.record_formal_check,
     "problem-decision": problem_claims.record_decision,
     "problem-posted": problem_claims.record_posted,
@@ -296,11 +300,20 @@ def status_report(store, *, counters=False):
     evaluation = Evaluation(records, ArtifactStore(store.root))
     if "problem" in records.get("workspace", {}):
         report = gate_state(records, evaluation, "post")
+        slate, current_slate = problem_candidates.find_slate(records), problem_candidates.find_current_slate(records)
+        # A stale slate decides nothing; its stale obligation leads the report instead.
+        if current_slate is not None and not current_slate["selected"]:
+            upcoming = {"code": "problem_no_post", "reason": current_slate["reason"],
+                        "explanation": "The latest slate selects no candidate; a new slate that selects one reopens the post path."}
+        elif report["obligations"]:
+            upcoming = report["obligations"][0]
+        else:
+            upcoming = {"code": "problem_export_required", "explanation": "Export the reviewed parts with exactory-research export --kind problem, then post and record the delivery."}
         return dict(report, revision=snapshot["revision"], profile="research", runtime=runtime_provenance(),
                     problem=records["workspace"]["problem"], resources=resources.account_report(records, "research"),
                     limits={"depth": describe_depth(records)}, source_deferrals=assess_deferrals(records, evaluation, "research"),
-                    next=report["obligations"][0] if report["obligations"] else
-                        {"code": "problem_export_required", "explanation": "Export the reviewed parts with exactory-research export --kind problem, then post and record the delivery."})
+                    candidates=problem_candidates.count_candidates(records), slate_id=None if slate is None else slate["id"],
+                    next=upcoming)
     config = records.get("configuration", {}).get("research")
     profile = config["profile"] if config else "research"
     study = records.get("workspace", {}).get("study")

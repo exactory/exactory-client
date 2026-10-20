@@ -5,6 +5,31 @@
     "field": "Extremal sequence bounds and their neighbouring formulations",
     "authors": ["problem-author"]
   },
+  "problem-candidate": {
+    "id": "problem-candidate-1",
+    "previous": null,
+    "statement": "For every admissible sequence of length $n$, does $B(n) \\leq n^2$ hold?",
+    "source": {
+      "kind": "literature",
+      "reference": "The cited survey states the bound as open beyond its checked range.",
+      "evidence": [{"kind": "record", "record_kind": "reading", "id": "full-reading-1", "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]
+    },
+    "observation": "The survey proves the bound for small lengths and leaves the general case open.",
+    "neighbours": ["For every admissible sequence of length $n$, does $B(n) \\leq 2n^2$ hold?"],
+    "potential": {"significance": {"B1": 2, "B2": 1}, "priority": 2, "readiness": "pass"},
+    "notes": "The construction of the survey gives the matching lower bound.",
+    "disposition": {"status": "open", "reason": "Compare it with the other candidates of the slate.", "evidence_needed": null}
+  },
+  "problem-slate": {
+    "id": "problem-slate-1",
+    "selected": ["problem-candidate-1"],
+    "deferred": [{"candidate_id": "problem-candidate-2", "evidence_needed": "Recent results that cite the open question."}],
+    "rejected": [{"candidate_id": "problem-candidate-3", "reason": "A parameter increment of a settled case without a new mechanism."}],
+    "bar_review_ids": ["problem-bar-first", "problem-bar-second"],
+    "review_ids": [],
+    "comparison": "The first candidate removes the obstacle that the survey names; the second lacks documented activity; the third repeats a settled case.",
+    "reason": "The selected candidate meets both bars at potential level 2 and has the strongest documented payoff."
+  },
   "problem-statement": {
     "id": "statement-1",
     "title": "An extremal sequence bound",
@@ -12,7 +37,25 @@
     "statement": "For every admissible sequence of length $n$, does $B(n) \\leq n^2$ hold?",
     "resolution_criteria": "Prove the bound for every admissible sequence or exhibit a counterexample.",
     "neighbours": [],
-    "formal_statement": null
+    "formal_statement": null,
+    "candidate_id": "problem-candidate-1"
+  },
+  "problem-attempt": {
+    "id": "problem-attempt-1",
+    "statement_id": "statement-1",
+    "kind": "solver",
+    "solver": {
+      "native_attempt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "applicability": "The claim quantifies over every n, has no additional assumptions, and its named scope covers exactly the statement and its resolution criteria."
+    },
+    "literature": null,
+    "outcomes": {
+      "resolved": false,
+      "footholds": [{"claim": "The bound reduces to the balanced case.", "evidence": {"kind": "acceptance", "acceptance_id": "acceptance-1"}}],
+      "unresolved": [{"description": "The bound for general length remains unresolved."}],
+      "obstructions": []
+    },
+    "proportion": {"extension_reason": null}
   },
   "problem-openness": {
     "assignment_id": "problem-openness-review"
@@ -28,6 +71,66 @@
       "text": "The cited source establishes the bounded examples within its stated assumptions.",
       "evidence": [{"kind": "reading", "version_id": "arxiv:2601.00001v1", "reading_id": "full-reading-1"}]
     }]
+  },
+  "problem-assessment": {
+    "id": "problem-assessment-1",
+    "statement_id": "statement-1",
+    "grades": {
+      "admission": {"A1": "pass", "A2": "pass", "A3": "pass", "A4": "pass", "A5": "pass", "A6": "pass"},
+      "significance": {"B1": 2, "B2": 0},
+      "priority": 2, "attempt": "pass", "accessibility": "E-F", "calibration": "pass"
+    },
+    "items": {
+      "A1": {
+        "evidence": [{"kind": "record", "record_kind": "reading", "id": "full-reading-1", "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}],
+        "note": "The cited evidence supports this judgment within its recorded scope."
+      },
+      "A2": {
+        "evidence": [{"kind": "record", "record_kind": "reading", "id": "full-reading-1", "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}],
+        "note": "The cited evidence supports this judgment within its recorded scope."
+      },
+      "A3": {
+        "evidence": [{"kind": "record", "record_kind": "reading", "id": "full-reading-1", "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}],
+        "note": "The cited evidence supports this judgment within its recorded scope."
+      },
+      "A4": {
+        "evidence": [{"kind": "record", "record_kind": "reading", "id": "full-reading-1", "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}],
+        "note": "The cited evidence supports this judgment within its recorded scope."
+      },
+      "A5": {
+        "evidence": [{"kind": "record", "record_kind": "reading", "id": "full-reading-1", "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}],
+        "note": "The cited evidence supports this judgment within its recorded scope."
+      },
+      "A6": {
+        "evidence": [{"kind": "record", "record_kind": "reading", "id": "full-reading-1", "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}],
+        "note": "The cited evidence supports this judgment within its recorded scope."
+      },
+      "B1": {
+        "evidence": [{"kind": "record", "record_kind": "reading", "id": "full-reading-1", "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}],
+        "note": "The cited evidence supports this judgment within its recorded scope."
+      },
+      "B2": {
+        "evidence": [{"kind": "record", "record_kind": "reading", "id": "full-reading-1", "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}],
+        "note": "The cited evidence supports this judgment within its recorded scope."
+      },
+      "priority": {
+        "evidence": [{"kind": "record", "record_kind": "reading", "id": "full-reading-1", "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}],
+        "note": "The cited evidence supports this judgment within its recorded scope."
+      },
+      "attempt": {
+        "evidence": [{"kind": "record", "record_kind": "reading", "id": "full-reading-1", "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}],
+        "note": "The cited evidence supports this judgment within its recorded scope."
+      },
+      "accessibility": {
+        "evidence": [{"kind": "record", "record_kind": "reading", "id": "full-reading-1", "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}],
+        "note": "The cited evidence supports this judgment within its recorded scope."
+      },
+      "calibration": {
+        "evidence": [{"kind": "record", "record_kind": "reading", "id": "full-reading-1", "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}],
+        "note": "The cited evidence supports this judgment within its recorded scope."
+      }
+    },
+    "primary": {"ground": "B1", "criterion": "V3"}
   },
   "problem-formal-check": {
     "evidence": {"execution_id": "execution-1", "output_id": "result"},

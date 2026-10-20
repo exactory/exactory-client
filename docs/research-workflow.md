@@ -67,19 +67,123 @@ A problem research record has its own `problem_creation` orchestration in the
 shared research store. It holds the claim that the problem is precisely stated,
 open and worth solving. It does not inherit ai-science's direction contract.
 See [Problem creation](research-cli.md#problem-creation) for every command,
-payload, record and post obligation.
+payload, record and post obligation. The
+[math-conjecturer skill](../skills/math-conjecturer/SKILL.md) is the entry point:
+it opens the record, runs the research and posts the approved problem. The
+[math-section skill](../skills/math-section/SKILL.md) covers the other
+operations of the Mathematics section.
 
 | Claim | Minimum | Independent assessment | Currency |
 | --- | --- | --- | --- |
-| Problem: precisely stated, open, worth solving | Exact statement and criteria, current supported openness, bound value evidence and citations | Two observed bars followed by two observed result reviews | Current selected statement and decisive evidence bound by `problem_evidence_digest`. |
+| Problem: precisely stated, open, worth solving | A slate that selects the statement's candidate, exact statement and criteria, current unresolved attempt, current supported openness, bound value evidence, rubric self-assessment and citations | Two observed bars followed by two observed version 2 result reviews | Current selected statement, attempt, accepted results, assessment and decisive evidence bound by `problem_evidence_digest`. |
 
 | Milestone | Condition computed from records |
 | --- | --- |
-| `exploration` | `problem-init` records the area, field and immutable authors and adopts the constitution. |
-| `formulation` | `problem-statement` selects the exact statement, resolution criteria, neighbours and optional formal statement. |
-| `openness` | An observed native openness review records a current `supported_open` finding with the shared search and full-reading minimum. |
-| `value` | Value evidence validates, both observed bars and both passed result reviews cover it, and the current decision is `post`. |
+| `exploration` | `problem-init` records the area, field and immutable authors and adopts the constitution. No current slate exists: none is recorded, or the latest slate no longer covers exactly the current candidates. |
+| `slate` | `problem-slate` records the selection over every current candidate, bound to two observed blind version 2 bars; no statement exists yet, or the current slate selects no candidate. |
+| `formulation` | The current slate selects a candidate and `problem-statement` has selected a statement: the exact statement, resolution criteria, neighbours, optional formal statement and the candidate it formulates. |
+| `attempt` | `problem-attempt` records a current, proportionate unresolved solver or critically assessed literature attempt; `assess_attempt` returns no obligations. |
+| `openness` | The attempt passes and an observed native openness review records a current `supported_open` finding with the shared search and full-reading minimum. |
+| `value` | Value evidence validates and `problem-assessment` binds a current self-assessment meeting the rubric thresholds; both observed bars and both version 2 result reviews cover the evidence and pass the assurances and rubric after adjudication; the current decision is `post`. |
 | `post` | `problem-posted` records the confirmed server id against the rebuilt approved export. |
+
+The exploration records each candidate question with `problem-candidate`: its
+tentative statement, its source (the harness's own research records, the
+literature, a computation, the Mathematics section or the user's material), the
+observation that produced it, its declared neighbours, the provisional potential
+grades and a provisional disposition. Two blind problem bars fix the field's
+standard before any candidate is shown to a reviewer, and the slate
+(`problem-slate`) records the decision: every current candidate is selected,
+deferred with the evidence that would raise it, or rejected with the reason. A
+selected candidate needs `max(B1, B2) >= 2` and readiness `pass` in its potential
+grades. Selection authorizes further research; it establishes neither openness
+nor significance. A slate that selects no candidate records the reason and is the
+legitimate no-post outcome: `next` reports `problem_no_post` until a new slate
+selects a candidate.
+
+The slate cites version 2 bars. A bar recorded on the version 1 template returns
+`problem_bar_calibration_required`; assigning the bar again to the same reviewer
+refreshes it on version 2 in the same session and slot. A focused slate review by
+a bar reviewer is optional and is bound to the exact candidate set and the current
+bars; after a candidate is added or superseded, or a bar is refreshed, assigning
+the slate again to the same reviewer refreshes the review in its session, with the
+earlier findings in the history. A slate objection names the candidates it
+concerns, or none for the slate as a whole. It binds the result reviews and the
+post like the bars' objections, whether or not the slate cites the review: it
+follows each named candidate through its later versions, a whole-slate objection
+binds every statement, and it stays until evidence or an adjudication resolves
+it. A refreshed slate review that keeps such an objection `continuing` or
+`contested` with a new reason or new evidence states a new version of it for the
+same candidates. It is adjudicated with the two bars. A reviewer installed in a
+slate slot by a context repair also refreshes its slate review there.
+
+A result review is refused before dispatch while a current or cited bar is on
+the version 1 template, and every result packet carries the current bars, also
+after a context repair. A result reviewer whose completed review was given under
+other evidence, other bars or other material objection versions reassesses in the
+same session and slot; under the same conditions a repeat is refused.
+
+Formulate a selected candidate with `problem-statement` and its `candidate_id`;
+the post gate requires the latest slate to select the current statement's
+candidate. The latest slate must still cover exactly the current candidates;
+otherwise the gate reports `problem_slate_stale`, `next` names it instead of
+`problem_no_post`, and the milestone is `exploration` until a new slate is
+recorded.
+
+Record the attempt with `problem-attempt`: `{id, statement_id, kind, solver,
+literature, outcomes, proportion}` becomes immutable `problem_attempt/<id>` with
+`recorded_revision`. For `kind: "solver"`, use `solver: {native_attempt_digest, applicability}`
+and null `literature`; the math-solver proposal sets `review_workspace` to this
+problem workspace (for example `..` from `<workspace>/attack`), then
+`search deliver-attempt` delivers `native_attempt/<digest(summary)>` to this store.
+`applicability` is nonempty text explaining how the native claim's quantifiers,
+assumption ids and scope match the statement and resolution criteria
+(`invalid_input` when missing or blank). The native scope must be `named`;
+`case_ids` and `integer_interval` return `problem_attempt_scope_restricted` with
+the digest and scope. Each delivery declares the current snapshot for the pair
+`(attack_root, objective_id)` through the mutable common-store record
+`native_attempt_current/<digest({attack_root, objective_id})>` containing
+`{attack_root, objective_id, native_attempt_digest, recorded_revision}`. Bind
+the snapshot named by this pointer; an absent pointer gives
+`problem_attempt_unbound`. Re-delivering an earlier digest moves the pointer
+without rewriting or adding an immutable snapshot. Record order does not
+declare succession, and different attack roots remain independent. Closure
+delivery writes no pointer. Other bindings return `problem_attempt_superseded` with both
+native digests. The gate reports `problem_attempt_stale` for such a binding,
+naming both digests, the attempt and the statement, and asks for a new attempt
+bound to the latest delivered snapshot of the objective.
+For `kind: "literature"`, use null `solver` and
+`literature: {readings: [{version_id, reading_id}], description}` with full readings
+and a critical assessment of the exact statement. Exactly one binding is non-null.
+The current literature attempt's full readings are delivered with their passages
+to the result reviewers, checked for coverage and cited like value readings.
+Those works are included in the exported problem's citations even when its
+value or openness evidence does not otherwise cite them.
+`outcomes` gives `resolved`, `footholds: [{claim, evidence}]`,
+`unresolved: [{description}]` and `obstructions: [{claim, scope, evidence}]`.
+Evidence names an accepted native acceptance or a listed full reading.
+`proportion: {extension_reason}` explains any total above the normal limits:
+24 moves, 24 runs, one admitted worker or 300 admitted timeout seconds.
+`problem_attempt_extension_unexplained` names `totals` and `exceeded`, listing
+moves, runs, workers and timeout_seconds in that order when exceeded. Delivered
+totals retain null elapsed duration and the largest admitted worker and timeout
+bounds; unknown historical usage is not inferred.
+Missing, stale and resolved attempts block posting as `problem_attempt_missing`,
+`problem_attempt_stale` and `problem_attempt_resolved`. A passing current rubric
+attempt grade without a current attempt gives `problem_rubric_attempt_unbound`.
+`next` names a missing attempt before missing openness. A resolved candidate
+leaves the open-problem path and is delivered as a result. Unresolved work is
+consideration evidence, never evidence of difficulty or a demonstrated obstruction.
+A solver attempt is resolved by proof status `proved` or `disproved`, an
+`accepted` root obligation, or an accepted root `proof` or `counterexample`
+acceptance, including root support delivered before closure with proof status
+still `open`. An `invalidated` native snapshot is unresolved. The gate examines
+all attempts for this statement: a resolved literature attempt persists, and
+each solver attempt uses its `(attack_root, objective_id)` pointer's snapshot. An unresolved
+later attempt cannot erase a resolution. A later invalidated snapshot lifts that
+objective's resolution; a new statement id starts clean. The resolution blocker
+names the latest attempt establishing it. A root reduction remains eligible
+foothold and result evidence.
 
 Tools remain available in any order before posting: set budgets and depth,
 search the field and neighbouring formulations, read sources, preserve access
@@ -93,34 +197,93 @@ mathematical proof or formal check. Probe origin remains visible and is refused
 as cited value evidence.
 
 Record motivation and current-state paragraphs with `problem-value`. Every
-paragraph names full readings or admitted, reconciled and assessed results.
+paragraph names full readings, admitted, reconciled and assessed computations,
+or `{kind: "result", attempt_id, acceptance_id}`. A result must be an accepted
+`proof`, `reduction` or `obstruction` from the current solver attempt, otherwise
+`problem_value_result_missing` identifies the invalid citation. The evidence
+binding and reviewer packet carry `attempt` and `results`; the latter includes
+the acceptance's checkpoint claim, outcome and standard for each cited result.
+The attempt evidence also carries its literature description and reading binding,
+or the checkpoint claims, outcomes and standards of all acceptances cited by its
+solver footholds and obstructions, once in first citation order.
+A solver attempt additionally carries `applicability`, its complete delivered
+`contract`, `obligations`, `failed_strategies`, `retreats` and `nodes`, alongside
+`state`, `totals` and the cited acceptances. If the latest attempt belongs to
+another statement, both the digest binding and the reviewer projection carry
+`attempt: null` and `results: []`; the gate retains the stale-attempt obligation.
+Both result reviewers must receive these fields (`problem_evidence_unassessed`).
 An unavailable source stays unread. A requested formal check records the exact
 native claim, proof policy and required deliverables before verification. After
 math-solver completes that contract, deliver its authenticated closure to this
 store with `exactory-math search deliver-closure`, then bind it with
 `problem-formal-check`.
 
+Record the rubric with `problem-assessment`: an evidence reference and note
+for every item, a primary ground B1 or B2 and a criterion V1 to V8. All six
+admission items must pass, `max(B1, B2) >= 2` (at least 3 for accessibility
+`E-A` or `E-N`), priority must be at least 2, and attempt and calibration must
+pass. Levels are integers 0 to 3 and the grounds never add. This assessment
+records the attempt judgment without creating an attempt record. A statement
+change requires reassessment. `assessment_evidence` resolves distinct item
+references in item order and then reference order: record references carry their
+stored content with the bound digest, source references carry their link and
+matching full reading ids, and artifact descriptors retain their attached bytes.
+The digest binding omits the record contents from this list. Missing or changed
+records return `problem_assessment_evidence_missing {item, record_kind, id}`
+at recording and projection. Matching mutable records, including
+`configuration/research`, are accepted; when their digests change, re-record
+the assessment with the current digests. A source without a matching full
+reading returns that code with `{item, link}`.
+Assessment source readings join value readings for passage delivery, coverage,
+citations and export. References to `local_artifact` records also require
+delivery of their artifact bytes to both reviewers. Both result reviewers must
+receive `assessment_evidence`
+(`problem_evidence_unassessed`).
+
 Use the existing verified review routes. Both bar reviewers receive the field,
-area and source context before the statement is shown. Both result reviewers
-receive the exact claim, openness minimum, value evidence, citations and
+area and source context before the statement is shown, and calibrate levels
+2 and 3 of both significance grounds and comparative priority. Both result reviewers
+receive the exact claim, the complete openness finding with the searches its
+minimum binds and their captured sources, value evidence, rubric assessment, citations and
 delivered source/computation/check content. They assess precision, openness,
-value, citations and stopping. Reviewers must be independent of every recorded
+value, citations and stopping, plus every rubric item through `value.rubric`
+and `value.rubric_evidence`. A below-threshold result grade blocks posting
+until repaired or resolved by a ready focused `not_upheld` adjudication of
+`rubric:<review_id>:<item>` for the same subject and current evidence digest,
+whose packet carried the original calibrations, that is the bars the adjudicated
+results were graded against, and the item's rubric definition. A bar that a
+context repair installed later reaches the adjudicator apart from them.
+A material objection is resolved in its latest material version: a restated
+objection and a `continuing` or `contested` finding with a new reason or new
+evidence are new versions, a resolution or an adjudication of an earlier version
+leaves a changed objection open, and the same reviewers reassess it in their
+sessions. Only the latest review of a reviewer's lineage holds versions current; a
+review that a later review of the same lineage superseded, for a result on the
+same evidence, is history. The adjudicator of a version receives the review that
+stated it and the evidence that review received for it, apart from the original
+pair's evidence, and the post gate accepts the adjudication only when its packet
+delivered them. The same adjudicator reassesses only after a changed version,
+changed evidence or an incomplete earlier packet, and the refresh names its
+reason.
+Original grades remain visible. Version 1 assignments stay verified, while
+the post gate requires version 2 result reviews. Reviewers must be independent of every recorded
 author, and pending source requests remain obligations. Record a `post`
 decision only after the current minimum and observed pair pass. `unresolved`
 openness blocks; `already_solved` redirects to the established result or a new
 statement. Changed formulations or material evidence require reassessment.
 
 The only gate is `exactory-research gate post`. `status` and `next` compute the
-milestone and first missing condition in the order statement, openness, value,
-reviews, decision, export. They store no milestone projection. Once ready,
+milestone and first missing condition in the order slate, statement, attempt,
+openness, value, reviews, decision, export. They store no milestone projection.
+`status` also counts the current candidates and the latest slate's selected,
+deferred and rejected candidates, and names the latest slate. Once ready,
 `exactory-research export --kind problem --destination problem-export` writes
 the approved parts, projected citations and digest manifest. Check the exported
 citation locators and duplicates, pass those files to `exactory post-problem`,
 then record `{problem_id, export_directory}` with `problem-posted`. Its byte
 comparison rebuilds the projection from the records. A part changed after
 export requires a new statement and starts the gate again. A repeated post of
-the same statement is refused. The research record's skill entry point remains
-the user's open decision.
+the same statement is refused.
 
 ## Initiate and resume
 
@@ -936,9 +1099,11 @@ minimums and Q1 findings apply at the next relevant commitment. Existing approve
 tranches keep their authority; reconcile pending executions once under their
 frozen authority. Scientific work is repeated only when required validation needs it.
 
-Verification workspaces retain Version 6. Conversion of verify, grand-challenge
-and math-conjecturer orchestrations, and Version 7 adoption compatibility for
+Verification workspaces retain Version 6. Conversion of verify and
+grand-challenge orchestrations, and Version 7 adoption compatibility for
 verification and native verification nodes, are out of scope for this release.
+The problem-creation orchestration of `math-conjecturer` adopts Version 7 when
+`problem-init` creates its configuration.
 
 ## Verification and native mathematics
 

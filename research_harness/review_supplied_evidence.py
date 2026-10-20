@@ -39,22 +39,54 @@ def lineage_packets(records, artifacts, assignment_ids):
     return result
 
 
+def list_delivered_objections(packet):
+    """The objections that a packet delivers with their evidence: its material objections and the objections of its
+    historical reviews. A first slate or result packet wraps each historical review with its independence."""
+    return packet.get('material_objections', []) + [objection for entry in packet.get('historical_reviews', [])
+                                                    for objection in entry.get('review', entry).get('objections', [])]
+
+
 def supplied_context(records, artifacts, assignment_ids):
+    """The artifacts that the packets of the assignments' lineages attached, by sha256, and the passage mappings they
+    delivered: a bar's prior context and the passages delivered with an objection that the reviewer gives a finding
+    on (a material objection, or an objection of a historical review)."""
     references, mappings = {}, []
     for packet in lineage_packets(records, artifacts, assignment_ids):
         for entry in packet.get('evidence', []):
             reference = entry['artifact']
             artifacts.read(reference)
             references[reference['sha256']] = reference
-        for entry in packet.get('prior_context', []):
+        delivered = packet.get('prior_context', []) + [mapping for objection in list_delivered_objections(packet)
+                                                       for mapping in objection.get('version_source_mappings', [])]
+        for entry in delivered:
             if 'origin' not in entry or 'excerpt' not in entry:
+                continue
+            # A mapping stored before passages carried their citation is delivered with one.
+            entry = entry if 'citation' in entry else dict(entry, citation=cite_passage(artifacts, entry))
+            # A passage that a bar session and an objection both delivered counts once.
+            if entry in mappings:
                 continue
             artifacts.read(entry['excerpt'])
             mappings.append(entry)
     return references, mappings
 
 
-def _mapped_link(artifacts, mapping):
+def is_received(records, reference, references, mappings):
+    """Whether a cited artifact descriptor or source link names content that the given delivery supplied: the
+    artifact in full, or, for a source link, a locator within a supplied passage of the same artifact (text locators
+    by offsets; another kind equal to the passage's). A raw descriptor of an artifact delivered only as passages names
+    those passages, without widening their bounds."""
+    artifact = reference['link']['artifact'] if reference.get('kind') == 'source' else reference
+    if artifact['sha256'] in references:
+        return True
+    passages = [mapping for mapping in mappings if mapping['origin']['artifact_descriptor']['sha256'] == artifact['sha256']]
+    if reference.get('kind') != 'source':
+        return bool(passages)
+    return any(contains(mapping['citation'], reference['link'], records) for mapping in passages)
+
+
+def cite_passage(artifacts, mapping):
+    """The complete, valid source link of exactly one delivered passage, which a reviewer copies to cite it."""
     origin = mapping['origin']
     descriptor = origin['artifact_descriptor']
     artifact = {'path': descriptor['location'], **{key: descriptor[key] for key in ('sha256', 'size', 'media_type')}}
@@ -83,7 +115,7 @@ def validate_correction(records, artifacts, evidence, references, mappings):
                 if supplied != value['artifact']:
                     allowed = False
                     for mapping in mappings:
-                        outer = _mapped_link(artifacts, mapping)
+                        outer = cite_passage(artifacts, mapping)
                         validate_link(records, artifacts, outer)
                         if contains(outer, value, records):
                             allowed = True

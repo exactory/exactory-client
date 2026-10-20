@@ -11,6 +11,7 @@ from research_harness import literature, reading, research_decisions as decision
 class ProblemAdjudicationContractTests(delivery_fixtures.ProblemDeliveryCase):
     make_objection = objection_fixtures.ProblemObjectionTests.make_objection
     make_finding = objection_fixtures.ProblemObjectionTests.make_finding
+    prepare_problem_evidence = objection_fixtures.ProblemObjectionTests.prepare_problem_evidence
     prepare_reviews = objection_fixtures.ProblemObjectionTests.prepare_reviews
 
     def read_records(self):
@@ -53,8 +54,8 @@ class ProblemAdjudicationContractTests(delivery_fixtures.ProblemDeliveryCase):
         new_source = self.add_new_source()
         assignment = self.assign_focused_review()
         packet = json.loads(self.artifacts.read(assignment["packet"]))
-        self.assertEqual(assignment["prompt"]["template_id"], "exactory-problem-review-v1/adjudicator")
-        self.assertEqual(packet["protocol"], "exactory-problem-review-v1")
+        self.assertEqual(assignment["prompt"]["template_id"], "exactory-problem-review-v2/adjudicator")
+        self.assertEqual(packet["protocol"], "exactory-problem-review-v2")
         self.assertIn("current_evidence", assignment["prompt"]["text"])
         self.assertNotIn("Assess only original_evidence", assignment["prompt"]["text"])
         self.assertIn(new_source, packet["current_evidence"])
@@ -76,6 +77,34 @@ class ProblemAdjudicationContractTests(delivery_fixtures.ProblemDeliveryCase):
         changed = dict(prompt, text=prompt["text"] + " Widen correction admissibility.")
         self.assertFalse(protocol._prompt_matches(dict(problem, prompt=changed)))
         self.assertFalse(protocol._prompt_matches({"role": "adjudicator", "prompt": prompt}))
+
+    def test_material_and_rubric_adjudicator_packets_carry_their_own_deliveries(self):
+        """The two packet variants that the adjudicator prompt describes."""
+        from research_harness.problem_rubric import rubric_objection_id
+        self.prepare_reviews(results=False)
+        for reviewer in ("first", "second"):
+            output = self.build_review_output("result")
+            if reviewer == "first":
+                output["objections"] = [self.make_objection()]
+                output["value"]["rubric"]["priority"] = 1
+            self.observe("result", reviewer, output)
+        pair = ["review-result-first", "review-result-second"]
+        packets = {name: json.loads(self.artifacts.read(self.assign("adjudicator", "focused-third", identifier="focused-" + name,
+                       review_ids=pair, objection_id=objection_id)["packet"]))
+                   for name, objection_id in (("material", "unsupported-implication"),
+                                              ("rubric", rubric_objection_id("review-result-first", "priority")))}
+        version_keys = set(protocol.VERSION_EVIDENCE_KEYS)
+        material, rubric = packets["material"], packets["rubric"]
+        self.assertEqual(version_keys - set(material), set())
+        self.assertEqual((material["version_review"]["id"], material["version_review"]["objections"][0]["id"]),
+                         ("review-result-first", "unsupported-implication"))
+        # The first result reviewer's own bar session delivered self.supporting as a passage too (R53).
+        session = json.loads(self.artifacts.read(self.store.snapshot()["records"]["review_assignment"]["bar-first"]["packet"]))
+        self.assertEqual((material["version_evidence"], material["version_source_mappings"]),
+                         ([self.supporting], session["prior_context"]))
+        self.assertEqual(version_keys & set(rubric), set())
+        self.assertEqual({"bar_calibrations", "current_bar_calibrations", "rubric_grades", "rubric_definition"} - set(rubric), set())
+        self.assertEqual({"rubric_grades", "rubric_definition"} & set(material), set())
 
     def test_focused_problem_adjudication_cannot_be_a_bar_context_repair(self):
         self.assert_error("invalid_review_context", lambda: protocol.canonical_prompt(

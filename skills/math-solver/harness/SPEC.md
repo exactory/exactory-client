@@ -71,6 +71,29 @@ An interrupted export may recover missing common bytes from exact staged or
 native originals after checking the committed raw descriptor. This read-only
 fallback never publishes during assessment.
 
+## Common-store attempt delivery
+
+`search deliver-attempt` exports `native_attempt` evidence without requiring
+closure; see `../SEARCH.md`, Common-store delivery. Its totals are exactly
+`{moves, runs, elapsed_seconds, workers, timeout_seconds, historical_usage}`.
+Moves and runs are consumed totals; elapsed duration is null. Workers and
+`timeout_seconds` are the largest admitted limits across nodes with an admission,
+or zero without one. Historical usage remains as recorded. The record adds its
+first common-store `recorded_revision` outside the summary digest; repeats retain
+that revision. Current succession is keyed
+by `(attack_root, objective_id)` and declared by the mutable pointer
+`native_attempt_current/<digest({attack_root, objective_id})>` containing
+`{attack_root, objective_id, native_attempt_digest, recorded_revision}`. Attempt
+delivery updates this pointer through the common prepared mutation whenever it
+names another digest or is absent. Re-delivering an earlier digest moves the
+pointer without adding or rewriting an immutable snapshot; an already current
+repeat writes nothing. Pointer-only updates use
+`native-attempt:<digest(summary)>:current:<next-common-revision>` rather than
+replaying the first delivery's content receipt. Closure delivery writes no pointer.
+Both attempt and closure delivery freshly audit acceptance evidence, including
+on repeats and after competing common writes; `audit_failed` details retain the
+failures map keyed by acceptance id.
+
 ## Workspace
 
 `attack/<slug>/` holds:
@@ -293,7 +316,7 @@ signals since the last `fail`.
 | `verify lean <slug> <step-dir>` | after managed input review, routes the exact requested declaration and type through the frozen controller executor, runs the bounded build and independent axiom inspection, and publishes `result.json`; local pass is evidence pending policy audit and acceptance |
 | `verify certificate <slug> <step-dir>` | after managed input review, routes the executable checker and complete declared inputs through the frozen controller executor and publishes `result.json`; local pass is evidence pending completeness review and acceptance |
 | `stall <slug>` | refuses while no cash-out rule holds (a stall is due, or the plan admitted no opening); otherwise writes the inventory skeleton (`units/INVENTORY.md`): the walk, then every journal move grouped by strategy, marking the ones whose failure signal fired and the one that closed the attack, and names the rule |
-| `check-unit <slug> <n>` | refuses before the inventory exists; validates that `units/<n>/unit.json` has statement, form (one of the seven publication forms plus `full-proof` and `second-proof`), evidence path that exists (with a `result.json` when it is a deterministic run), novelty record, journal move numbers, and `costs`, the ledger its evidence carries; refuses a form the evidence or the ledger rules out (a run that did not pass is evidence; a closing form carries neither `object` nor `obligations`; `algorithm` and `counterexample` carry no `constructivity`); writes `check-unit.json` with the digest of the record on success and removes any stamp first |
+| `check-unit <slug> <n>` | refuses before the inventory exists; validates that `units/<n>/unit.json` has statement, form (one of `conditional-or-special-case`, `quantitative-improvement`, `reduction-or-equivalence`, `barrier`, `counterexample-or-computational-evidence`, `new-machinery`, `survey-or-problem-paper`, `counterexample`, `algorithm`, `formalisation`, `formal-proof-write-up`, `full-proof`, or `second-proof`), evidence path that exists (with a `result.json` when it is a deterministic run), novelty record, journal move numbers, and `costs`, the ledger its evidence carries; refuses a form the evidence or the ledger rules out (a run that did not pass is evidence; a closing form carries neither `object` nor `obligations`; `algorithm` and `counterexample` carry no `constructivity`); writes `check-unit.json` with the digest of the record on success and removes any stamp first |
 | `finish <slug>` | refuses before the inventory exists, while any `units/<n>/` lacks a stamp matching its `unit.json`, a non-empty `draft.md`, or a non-empty `evaluation.md`, and while any child attack is open; writes `units/FINISHED.json` with the unit numbers. With no move and no inventory it is the stage 3 exit: it needs a non-empty `study/problem.md` and `novelty.md` and records the local outcome `solved-in-literature`. Neither form closes the controller root |
 | `status <slug>` | prints where the attack stands, derived from the record: the stage, the parent or the children when there are any, the problem, the study, the plan, the ranking, the walk, the budget, the cash-out state with what each unit still needs, the open tasks, the last three activity entries, and the next step |
 | `task add <slug> <text>` | appends an open task to `tasks.json`, numbered, stamped with the time and the move count |

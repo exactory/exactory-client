@@ -39,7 +39,7 @@ class ProblemCliTests(ProblemCase):
         for view in (next_summary(report), status_summary(report)):
             self.assertEqual(view["orchestration"], "problem_creation")
             self.assertEqual(view["milestone"], "exploration")
-            self.assertEqual(view["next_hint"]["code"], "problem_statement_missing")
+            self.assertEqual(view["next_hint"]["code"], "problem_slate_missing")
             self.assertGreater(view["post_obligations"]["total"], 0)
 
     def test_other_orchestrations_keep_the_same_summary_schema(self):

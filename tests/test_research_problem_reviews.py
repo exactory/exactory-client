@@ -8,9 +8,12 @@ from unittest.mock import patch
 
 from literature_fixtures import LiteratureCase
 from research_harness import review_protocol as protocol
-from research_harness import research_decisions as decisions
+from research_harness import problem_rubric, research_decisions as decisions
+from research_harness.errors import ResearchError
 from research_harness.evidence import digest
+from research_harness.problem_rubric import ITEMS, rubric_objection_id
 from test_research_problem_claims import ProblemCase
+from test_research_problem_rubric import install_rubric_anchors, passing_grades
 
 
 CHECKS = ("problem_statement", "problem_openness", "problem_value", "problem_citations", "stop")
@@ -30,9 +33,10 @@ class ProblemReviewTests(LiteratureCase):
         self.expected = {"claim": {"statement_id": self.statement["id"],
             "statement_digest": digest({key: self.statement[key] for key in ("statement", "resolution_criteria")}),
             **{key: self.statement[key] for key in ("title", "area", "statement", "resolution_criteria", "formal_statement")}},
-            "openness": {"id": "open-1", "outcome": "supported_open", "minimum": {}},
+            "openness": {"id": "open-1", "outcome": "supported_open", "minimum": {}}, "openness_searches": [],
             "value": {"id": "value-1", "motivation": [{"text": "PRIVATE_VALUE", "evidence": []}], "current_state": []},
-            "citations": [], "readings": [], "passages": [], "computations": [], "formal_checks": []}
+            "assessment": None, "assessment_evidence": [], "attempt": None, "results": [], "citations": [], "readings": [],
+            "passages": [], "computations": [], "formal_checks": []}
         # Isolate the review contract from the independently implemented claim validator.
         claims = types.ModuleType("research_harness.problem_claims")
         claims.find_current_statement = lambda records: records.get("problem_statement", {}).get(
@@ -42,6 +46,7 @@ class ProblemReviewTests(LiteratureCase):
         replacement = patch.dict(sys.modules, {"research_harness.problem_claims": claims})
         replacement.start()
         self.addCleanup(replacement.stop)
+        install_rubric_anchors(self)
 
     def put(self, kind, identifier, value):
         self.sequence += 1
@@ -75,7 +80,7 @@ class ProblemReviewTests(LiteratureCase):
             "author_id": author, "context": context})["result"]
 
     def build_review_output(self, stage, checks=CHECKS):
-        return {"stage": stage, "support": None, "value": {"status": "sufficient",
+        output = {"stage": stage, "support": None, "value": {"status": "sufficient",
             "consequence": "A new connection between extremal bounds.",
             "bar_ids": [] if stage == "bar" else ["review-bar-first", "review-bar-second"],
             "objective_adequacy": "not_assessed" if stage == "bar" else "adequate",
@@ -85,9 +90,14 @@ class ProblemReviewTests(LiteratureCase):
                 {"kind": kind, "status": "passed", "reason": "Checked the exact supplied evidence.",
                  "evidence": [self.supporting]} for kind in checks], "objection_findings": []},
             "objections": [], "limitations": ["Assessment is limited to the delivered evidence."]}
+        if stage == "result":
+            output["value"].update(rubric=passing_grades(), rubric_evidence={
+                item: "The delivered evidence supports this grade within its recorded scope." for item in ITEMS})
+        return output
 
     def observe(self, stage, reviewer, output=None, record=True, identifier=None):
-        assignment = self.assign(stage, reviewer, identifier=identifier)
+        context = self.deliver_supporting(reviewer) if stage == "bar" else {}
+        assignment = self.assign(stage, reviewer, identifier=identifier, **context)
         output = output or self.build_review_output(stage)
         with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
             self.mutate(protocol.invoke_assignment, {"id": "attempt-" + assignment["id"],
@@ -96,6 +106,24 @@ class ProblemReviewTests(LiteratureCase):
         if record:
             return self.mutate(decisions.record_value_review, payload)["result"]
         return payload
+
+    def deliver_supporting(self, reviewer):
+        """The context by which a reviewer's first bar receives self.supporting, which the bar outputs cite, through
+        the harness's own delivery path (R53): a source link of a recorded source whose abstract is that text, read
+        in full. A later bar of the reviewer continues the session that received it."""
+        from research_harness.reading import record_reading
+        records = self.store.snapshot()["records"]
+        if any(row["role"] == "bar" and row["reviewer_id"] == reviewer for row in records.get("review_assignment", {}).values()):
+            return {}
+        if not hasattr(self, "supporting_links"):
+            self.supporting_links = {}
+        if self.supporting["sha256"] not in self.supporting_links:
+            number = 77000 + len(self.supporting_links)
+            source = self.metadata(number, abstract=self.artifacts.read(self.supporting).decode())
+            self.mutate(record_reading, self.abstract_note(source, note_id="supporting-" + str(number)))
+            abstract = self.store.snapshot()["records"]["work"][source]["abstracts"][0]
+            self.supporting_links[self.supporting["sha256"]] = self.link(source, abstract["source_id"], abstract["artifact"])
+        return {"source_links": [self.supporting_links[self.supporting["sha256"]]]}
 
     def observe_bar_reviews(self):
         self.supporting = self.artifacts.put(b"A captured field standard.", "text/plain")
@@ -134,21 +162,115 @@ class ProblemReviewTests(LiteratureCase):
                 "audit": {"subject_digest": "checked-subject"}}}}]
         return output, validation
 
-    def test_problem_prompts_are_separate_and_existing_prompt_bytes_are_preserved(self):
+    def test_problem_templates_are_version_two_and_other_prompts_unchanged(self):
         hashes = {"bar": "88b53e388fa267f8aa5f72da297b28ebdab5ac6e020f81b4be6c2b756d30f3ca",
             "slate": "38fed1d12ce4376f4144d3dd6c57e2e9475db73a30b7a86c8471f00c84588312",
             "result": "236703cb1f256d93b60cfa4c82ea7e2eb76fcd7a66c9984542767c675e4e32bc",
             "native_math": "911fd529e31ca9bf8efba3c743ecdd4d9c7e4cfe11ed7d97ed830e7002c81872"}
         for role, expected in hashes.items():
             self.assertEqual(protocol.canonical_prompt(role)["template_hash"], expected)
-        for role in ("bar", "result"):
+        for role in ("bar", "result", "adjudicator"):
             prompt = protocol.canonical_prompt(role, orchestration="problem_creation")
-            self.assertEqual(prompt["template_id"], "exactory-problem-review-v1/" + role)
+            self.assertEqual(prompt["template_id"], "exactory-problem-review-v2/" + role)
         self.assertIn("nearest known problems", protocol.canonical_prompt("bar", orchestration="problem_creation")["text"])
-        for kind in CHECKS:
-            self.assertIn(kind, protocol.canonical_prompt("result", orchestration="problem_creation")["text"])
+        result = protocol.canonical_prompt("result", orchestration="problem_creation")["text"]
+        for kind in CHECKS + ITEMS + ('value.rubric', 'value.rubric_evidence', 'max(B1, B2) at least 2',
+                                     'E-A', 'E-N', 'at least 3', 'priority at least 2', 'pass'):
+            self.assertIn(kind, result)
+        bar = protocol.canonical_prompt("bar", orchestration="problem_creation")["text"]
+        for content in ('levels 2 and 3', 'B1', 'B2', 'priority', 'what a resolution of each would give', 'uninteresting'):
+            self.assertIn(content, bar)
+        for content in ('are not reasons against a question by themselves',
+                        'a question without footholds is admissible when its significance case reaches level 3',
+                        'the explanation the resolution would give is itself the significance', 'Level 2, supported:'):
+            self.assertIn(content, bar)
+        # A refreshed bar (the packet carries problem_refresh) gives a finding on every objection its earlier bar stated.
+        for content in ('objection_findings is empty for a first bar', 'When the packet carries problem_refresh',
+                        'for every objection that earlier bar stated'):
+            self.assertIn(content, bar)
+        version_one_bar = protocol.canonical_prompt("bar", orchestration="problem_creation", version=1)["text"]
+        self.assertNotIn('not reasons against a question by themselves', version_one_bar)
+        self.assertNotIn('problem_refresh', version_one_bar)
+        # The evidence grammar of every version 2 role permits only records delivered as content (R45, R46).
+        for role in ("bar", "slate", "result", "adjudicator"):
+            text_of_role = protocol.canonical_prompt(role, orchestration="problem_creation")["text"]
+            for content in ("a record whose content the packet delivered to you",
+                            "a record delivered under a material objection's version_evidence",
+                            "is cited by copying the citation given with its mapping unchanged",
+                            "a link to any other span of the same source is refused",
+                            "A mapping delivered without a citation is for reading and cannot be cited in this role",
+                            "templates (artifact_reference_template, artifact_descriptor)",
+                            "reached you only as a template or inside a prior finding is not delivered content",
+                            "review_evidence_undelivered"):
+                self.assertIn(content, text_of_role)
+            self.assertNotIn("a record named in the packet", text_of_role)
+        # The slate and result reviewers are told that each material objection arrives with the content it cites.
+        for role in ("slate", "result"):
+            self.assertIn("under version_evidence and version_source_mappings, which you may cite",
+                          protocol.canonical_prompt(role, orchestration="problem_creation")["text"])
 
-    def test_bar_packet_withholds_statement_title_neighbours_value_and_criteria(self):
+    def test_problem_slate_template_is_version_two_only_and_keeps_bar_and_result_bytes(self):
+        version_two = {"bar": "e402dcf92926adac0a536d702e93a6e0d33c317f8ec5ff9440028731f695703b",
+                       "result": "4ac669f17499b113cb9fcea6a091045bfe39f637b99c03eaeb8360051c0f273e",
+                       "adjudicator": "80a3eeb2a0cd65f1edf434c74a245b68cc8bb33a2edffffcdadbd562a35dd346"}
+        for role, expected in version_two.items():
+            self.assertEqual(protocol.canonical_prompt(role, orchestration="problem_creation")["template_hash"], expected)
+        slate = protocol.canonical_prompt("slate", orchestration="problem_creation")
+        self.assertEqual(slate["template_id"], "exactory-problem-review-v2/slate")
+        for content in ("value.rubric_potential", "not_assessed", "B1", "B2", "priority", "level 1",
+                        "neither openness nor significance", "Continue your own bar assessment"):
+            self.assertIn(content, slate["text"])
+        # The version keys are promised for a material objection only; a rubric objection's packet carries none.
+        adjudicator = protocol.canonical_prompt("adjudicator", orchestration="problem_creation")["text"]
+        for content in ("For a material objection, the packet delivers", "one entry for every reference the version cites",
+                        "a cited record as the projection its stating reviewer received", "descriptors of its artifacts under artifacts",
+                        "an undelivered entry, which means the packet is incomplete",
+                        "except an artifact delivered only as passages", "A rubric objection carries none of those three keys"):
+            self.assertIn(content, adjudicator)
+        with self.assertRaises(ResearchError) as caught:
+            protocol.canonical_prompt("slate", orchestration="problem_creation", version=1)
+        self.assertEqual(caught.exception.code, "invalid_review_role")
+        assignment = {"role": "slate", "subject": {"kind": "problem", "statement_id": None}, "prompt": slate}
+        self.assertTrue(protocol._prompt_matches(assignment))
+        self.assertFalse(protocol.is_previous_prompt(assignment))
+
+    def test_version_one_problem_assignment_stays_verified_and_gate_requires_version_two_result(self):
+        original = protocol.canonical_prompt
+        hashes = {'bar': '818b715d1acdfcd10db45e60d70ce6ef5f864dcdcbd82be9312125cf0fe42fca',
+                  'result': '31a44bac73484c1aaf62a02199623a147e71a57902ee6d50d61973166a28364b',
+                  'adjudicator': 'b355755fc920543576e40a154051c5405f5d7d53f1f92831c934dec316585e37'}
+        for role, expected in hashes.items():
+            self.assertEqual(original(role, orchestration='problem_creation', version=1)['template_hash'], expected)
+        def previous_prompt(role, **options):
+            if options.get('orchestration') == 'problem_creation':
+                options['version'] = 1
+            return original(role, **options)
+        # A 0.53.0 store recorded these results before version 1 bars were refused at result assignment.
+        with patch.object(protocol, 'canonical_prompt', side_effect=previous_prompt), \
+                patch.object(protocol, 'require_calibrated_bars', return_value=None):
+            self.observe_bar_reviews()
+            for reviewer in ('first', 'second'):
+                output = self.build_review_output('result')
+                del output['value']['rubric']
+                del output['value']['rubric_evidence']
+                self.observe('result', reviewer, output)
+        records = self.read_records()
+        for identifier, assignment in records['review_assignment'].items():
+            self.assertTrue(protocol.is_previous_prompt(assignment))
+            state = protocol.assignment_state(records, self.artifacts, identifier)
+            self.assertTrue(state['ready'], state['obligations'])
+        assessment = decisions.assess_problem_reviews(records, self.artifacts)
+        self.assertEqual({(row['code'], row['review_id']) for row in assessment['obligations']}, {
+            ('problem_rubric_review_required', 'review-result-first'),
+            ('problem_rubric_review_required', 'review-result-second')})
+        for role in hashes:
+            assignment = {'role': role, 'subject': {'kind': 'problem'},
+                          'prompt': original(role, orchestration='problem_creation', version=1)}
+            self.assertTrue(protocol._prompt_matches(assignment))
+            assignment['prompt']['template_hash'] = '0' * 64
+            self.assertFalse(protocol._prompt_matches(assignment))
+
+    def test_bar_packet_still_withholds_statement_title_neighbours_value_and_criteria(self):
         packet = protocol.build_packet(self.read_records(), self.artifacts, None, "bar", "first")
         self.assertEqual((packet["area"], packet["field"]), ("math.CO", "Extremal bounded sequences"))
         self.assertEqual(packet["subject"], {"kind": "problem", "statement_id": "statement-1"})
@@ -156,6 +278,314 @@ class ProblemReviewTests(LiteratureCase):
             self.assertNotIn(forbidden, json.dumps(packet))
         self.assertIn("source_inventory", packet)
         self.assertIn("source_deliveries", packet)
+
+    def test_result_review_without_rubric_is_refused(self):
+        self.observe_bar_reviews()
+        output = self.build_review_output('result')
+        del output['value']['rubric']
+        del output['value']['rubric_evidence']
+        payload = self.observe('result', 'first', output, record=False)
+        self.assert_error('invalid_value_review', lambda: self.mutate(decisions.record_value_review, payload))
+
+    def test_result_review_rubric_evidence_must_cover_every_item(self):
+        self.observe_bar_reviews()
+        output = self.build_review_output('result')
+        payload = self.observe('result', 'first', output, record=False)
+        # Exercise the validator directly for each malformed response after one
+        # observed assignment supplies the real bar records and held evidence.
+        for item in ITEMS:
+            for bad in ('missing', '', [], None):
+                findings = copy.deepcopy(output['value'])
+                if bad == 'missing':
+                    del findings['rubric_evidence'][item]
+                else:
+                    findings['rubric_evidence'][item] = bad
+                with self.subTest(item=item, bad=bad):
+                    self.assert_error('invalid_value_review', lambda: decisions._validate_value(
+                        self.read_records(), self.artifacts, findings, 'result', None,
+                        expected_checks=CHECKS, problem=self.read_records()['workspace']['problem']))
+        del payload['value']['rubric_evidence']['A1']
+        # Observe the malformed output itself so output equality cannot mask the
+        # schema refusal in the public mutation.
+        output['value'] = payload['value']
+        second = self.observe('result', 'second', output, record=False)
+        self.assert_error('invalid_value_review', lambda: self.mutate(decisions.record_value_review, second))
+
+    def test_rubric_review_templates_follow_the_current_problem_protocol(self):
+        self.observe_result_reviews()
+        records = self.read_records()
+        review = records['value_review']['review-result-first']
+        assignment = records['review_assignment'][review['assignment_id']]
+        with patch.object(protocol, 'PROBLEM_PROTOCOL', 'exactory-problem-review-next'):
+            for suffix in ('/result', '/result/context-repair'):
+                with self.subTest(suffix=suffix):
+                    assignment['prompt']['template_id'] = protocol.PROBLEM_PROTOCOL + suffix
+                    self.assertEqual(decisions.assess_rubric_reviews(
+                        records, self.artifacts, [review], digest(self.expected)), [])
+
+    def prepare_below_threshold_reviews(self):
+        self.observe_bar_reviews()
+        output = self.build_review_output('result')
+        output['value']['rubric']['priority'] = 1
+        self.observe('result', 'first', output)
+        self.observe('result', 'second')
+
+    def observe_rubric_adjudication(self, disposition='not_upheld'):
+        identifier = rubric_objection_id('review-result-first', 'priority')
+        assignment = self.assign('adjudicator', 'focused-third', identifier='rubric-focused',
+            review_ids=['review-result-first', 'review-result-second'], objection_id=identifier)
+        output = {'objection_id': identifier, 'disposition': disposition,
+                  'reason': 'The delivered mathematical distinction supports the comparative priority.',
+                  'evidence': [self.supporting], 'correction_admissible': None}
+        with patch('research_harness.review_transport.send_request', return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {'id': 'rubric-attempt', 'assignment_id': assignment['id']}, credential='test-only')
+        saved = self.mutate(protocol.record_adjudication, dict(output, id='rubric-finding', assignment_id=assignment['id']))['result']
+        return saved, json.loads(self.artifacts.read(assignment['packet']))
+
+    def test_below_threshold_grade_blocks_until_adjudicated(self):
+        self.prepare_below_threshold_reviews()
+        pending = decisions.assess_problem_reviews(self.read_records(), self.artifacts)
+        below = [row for row in pending['obligations'] if row['code'] == 'problem_rubric_below_threshold']
+        self.assertEqual(len(below), 1)
+        self.assertEqual((below[0]['source'], below[0]['review_id']), ('review', 'review-result-first'))
+        self.assertEqual(below[0]['shortfalls'], [{'item': 'priority', 'required': '>= 2', 'graded': 1}])
+        self.observe_rubric_adjudication()
+        state = decisions.assess_problem_reviews(self.read_records(), self.artifacts)
+        self.assertTrue(state['ready'], state['obligations'])
+
+    def test_rubric_adjudication_under_old_evidence_does_not_resolve(self):
+        self.prepare_below_threshold_reviews()
+        self.observe_rubric_adjudication()
+        self.expected['value']['motivation'][0]['text'] = 'Changed mathematical payoff.'
+        state = decisions.assess_problem_reviews(self.read_records(), self.artifacts)
+        self.assertIn('problem_rubric_below_threshold', {row['code'] for row in state['obligations']})
+
+    def test_adjudicator_packet_carries_the_rubric_grades_for_a_rubric_objection(self):
+        self.prepare_below_threshold_reviews()
+        saved, packet = self.observe_rubric_adjudication()
+        self.assertEqual(packet['objection']['id'], 'rubric:review-result-first:priority')
+        self.assertEqual(packet['objection']['claim'], 'priority graded 1 by first; required >= 2')
+        self.assertEqual(packet['rubric_grades'], [self.read_records()['value_review'][identifier]['payload']['value']['rubric']
+            for identifier in ('review-result-first', 'review-result-second')])
+        self.assertEqual(saved['problem_evidence_digest'], digest(self.expected))
+
+    def deliver_calibration(self, records, identifier):
+        """A bar standard as the adjudicator packet carries it (R47, R48): artifact references as templates, and the
+        exact reference of the stored review."""
+        saved = records['value_review'][identifier]
+        return dict(protocol._reference_templates(saved['payload']), record_reference={
+            'kind': 'record', 'record_kind': 'value_review', 'id': identifier, 'digest': digest(saved)})
+
+    def test_adjudicator_packet_carries_both_bar_calibrations_and_the_rubric_definition(self):
+        self.prepare_below_threshold_reviews()
+        _, packet = self.observe_rubric_adjudication()
+        records = self.read_records()
+        self.assertEqual(packet['bar_calibrations'], [self.deliver_calibration(records, identifier)
+                                                     for identifier in ('review-bar-first', 'review-bar-second')])
+        anchor = problem_rubric.ANCHORS['priority']
+        self.assertEqual(packet['rubric_definition'], {'item': 'priority', 'definition': anchor['definition'],
+                                                       'threshold': anchor['threshold']})
+
+    def test_rubric_adjudication_without_the_bar_calibrations_does_not_clear_the_shortfall(self):
+        self.assert_incomplete_rubric_adjudication_keeps_the_shortfall('bar_calibrations')
+
+    def test_rubric_adjudication_without_the_rubric_definition_does_not_clear_the_shortfall(self):
+        self.assert_incomplete_rubric_adjudication_keeps_the_shortfall('rubric_definition')
+
+    def assert_incomplete_rubric_adjudication_keeps_the_shortfall(self, key):
+        """A not_upheld finding from a packet without one of the standards leaves the shortfall open."""
+        self.prepare_below_threshold_reviews()
+        real = protocol.add_focused_adjudication
+
+        def build_without(*arguments, **options):
+            real(*arguments, **options)
+            arguments[2].pop(key)
+        with patch.object(protocol, 'add_focused_adjudication', side_effect=build_without):
+            _, packet = self.observe_rubric_adjudication()
+        self.assertNotIn(key, packet)
+        state = decisions.assess_problem_reviews(self.read_records(), self.artifacts)
+        below = [row for row in state['obligations'] if row['code'] == 'problem_rubric_below_threshold']
+        self.assertEqual([row['shortfalls'] for row in below], [[{'item': 'priority', 'required': '>= 2', 'graded': 1}]])
+
+    def replace_first_bar(self):
+        """A legitimate context repair replaces the first bar B1 by B1' after both results were graded against B1."""
+        self.mutate(protocol.record_context_event, {'id': 'exposure', 'assignment_id': 'bar-first',
+            'kind': 'contamination', 'source': 'author_history', 'reason': 'Author advocacy entered the bar context.',
+            'evidence': [self.supporting]})
+        def respond_to_probe(route, request, credential):
+            packet = json.loads(request['input'][0]['content'])
+            return self.build_provider_response({'allowed_control': packet['allowed_control'],
+                'evidence_control': packet['evidence_control'], 'excluded_controls': []})
+        with patch('research_harness.review_transport.send_request', side_effect=respond_to_probe):
+            self.mutate(protocol.probe_route, {'id': 'repair-probe', 'route_id': 'route'}, credential='test-only')
+        self.assign('bar', 'replacement', identifier='bar-replaced', context_repair={
+            'assignment_id': 'bar-first', 'event_ids': ['exposure'], 'probe_id': 'repair-probe',
+            'reason': 'Reassess the field bar in a verified independent context.', 'evidence': [self.supporting]})
+        output = self.build_review_output('bar')
+        output['reassessment'] = {'assignment_id': 'bar-first', 'findings': [{'review_id': 'review-bar-first',
+            'disposition': 'revised', 'reason': 'The independent context gives the same field standard.',
+            'evidence': [self.supporting]}]}
+        with patch('research_harness.review_transport.send_request', return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {'id': 'attempt-bar-replaced', 'assignment_id': 'bar-replaced'},
+                        credential='test-only')
+        self.mutate(decisions.record_value_review, dict(output, id='review-bar-replaced', dossier_id=None,
+                                                        assignment_id='bar-replaced'))
+
+    def test_adjudicator_packet_keeps_the_original_bars_after_a_bar_repair(self):
+        self.prepare_below_threshold_reviews()
+        self.replace_first_bar()
+        _, packet = self.observe_rubric_adjudication()
+        records = self.read_records()
+        self.assertEqual(packet['bar_calibrations'], [self.deliver_calibration(records, identifier)
+                                                     for identifier in ('review-bar-first', 'review-bar-second')])
+        self.assertEqual(packet['current_bar_calibrations'], [self.deliver_calibration(records, 'review-bar-replaced')])
+        # The replaced bar retires the original pair from the current gate, so assess that pair by name.
+        state = decisions.assess_problem_reviews(records, self.artifacts, review_ids=['review-result-first', 'review-result-second'])
+        self.assertNotIn('problem_rubric_below_threshold', {row['code'] for row in state['obligations']})
+
+    def test_rubric_adjudication_against_a_replaced_bar_does_not_clear_the_shortfall(self):
+        self.prepare_below_threshold_reviews()
+        self.replace_first_bar()
+        real = protocol.add_focused_adjudication
+
+        def build_with_the_current_bars(*arguments, **options):
+            real(*arguments, **options)
+            packet = arguments[2]
+            packet['bar_calibrations'] = sorted(packet['current_bar_calibrations'] + [
+                bar for bar in packet['bar_calibrations'] if bar['id'] != 'review-bar-first'], key=lambda bar: bar['id'])
+        with patch.object(protocol, 'add_focused_adjudication', side_effect=build_with_the_current_bars):
+            _, packet = self.observe_rubric_adjudication()
+        self.assertEqual([bar['id'] for bar in packet['bar_calibrations']], ['review-bar-replaced', 'review-bar-second'])
+        state = decisions.assess_problem_reviews(self.read_records(), self.artifacts,
+                                                 review_ids=['review-result-first', 'review-result-second'])
+        below = [row for row in state['obligations'] if row['code'] == 'problem_rubric_below_threshold']
+        self.assertEqual([row['shortfalls'] for row in below], [[{'item': 'priority', 'required': '>= 2', 'graded': 1}]])
+
+    def test_rubric_adjudication_cannot_waive_an_assurance_or_another_item(self):
+        self.prepare_below_threshold_reviews()
+        self.observe_rubric_adjudication()
+        records = self.read_records()
+        records['value_review']['review-result-first']['payload']['value']['assurances'][0]['status'] = 'failed'
+        records['value_review']['review-result-first']['payload']['value']['rubric']['calibration'] = 'fail'
+        state = decisions.assess_problem_reviews(records, self.artifacts)
+        self.assertIn('problem_assurance_pending', {row['code'] for row in state['obligations']})
+        below = next(row for row in state['obligations'] if row['code'] == 'problem_rubric_below_threshold')
+        self.assertEqual([row['item'] for row in below['shortfalls']], ['calibration'])
+
+    def test_rubric_significance_objection_claim_uses_sorted_json(self):
+        self.observe_bar_reviews()
+        output = self.build_review_output('result')
+        output['value']['rubric']['significance'] = {'B2': 1, 'B1': 1}
+        self.observe('result', 'first', output)
+        self.observe('result', 'second')
+        assignment = self.assign('adjudicator', 'focused-third', identifier='significance-focused',
+            review_ids=['review-result-first', 'review-result-second'],
+            objection_id=rubric_objection_id('review-result-first', 'significance'))
+        packet = json.loads(self.artifacts.read(assignment['packet']))
+        self.assertEqual(packet['objection']['claim'],
+            'significance graded {"B1": 1, "B2": 1} by first; required max(B1, B2) >= 2')
+
+    def test_rubric_adjudication_requires_a_ready_not_upheld_finding_for_the_same_subject(self):
+        self.prepare_below_threshold_reviews()
+        self.observe_rubric_adjudication('upheld')
+        records = self.read_records()
+        self.assertEqual([row['code'] for row in decisions.assess_rubric_reviews(records, self.artifacts,
+            [records['value_review']['review-result-first']], digest(self.expected))],
+            ['problem_rubric_below_threshold'])
+        # A matching disposition string cannot substitute for the observed response.
+        records['review_adjudication']['rubric-finding']['disposition'] = 'not_upheld'
+        self.assertEqual([row['code'] for row in decisions.assess_rubric_reviews(records, self.artifacts,
+            [records['value_review']['review-result-first']], digest(self.expected))],
+            ['problem_rubric_below_threshold'])
+
+    def test_rubric_adjudication_for_another_subject_or_without_held_evidence_does_not_resolve(self):
+        self.prepare_below_threshold_reviews()
+        self.observe_rubric_adjudication()
+        records = self.read_records()
+        records['review_adjudication']['rubric-finding']['subject']['statement_id'] = 'another-statement'
+        self.assertEqual([row['code'] for row in decisions.assess_rubric_reviews(records, self.artifacts,
+            [records['value_review']['review-result-first']], digest(self.expected))],
+            ['problem_rubric_below_threshold'])
+        (self.root / self.supporting['path']).unlink()
+        records = self.read_records()
+        self.assertEqual([row['code'] for row in decisions.assess_rubric_reviews(records, self.artifacts,
+            [records['value_review']['review-result-first']], digest(self.expected))],
+            ['artifact_missing', 'problem_rubric_below_threshold'])
+
+    def test_focused_rubric_objection_must_name_an_original_below_threshold_grade(self):
+        self.prepare_below_threshold_reviews()
+        for identifier in ('rubric:absent:priority', 'rubric:review-result-first:B1',
+                           'rubric:review-result-second:priority'):
+            with self.subTest(identifier=identifier):
+                self.assert_error('review_objection_missing', lambda: self.assign('adjudicator', 'focused-third',
+                    review_ids=['review-result-first', 'review-result-second'], objection_id=identifier))
+
+    def test_both_observed_results_must_cover_the_assessment(self):
+        self.observe_result_reviews()
+        evidence_digest = digest(self.expected)
+        self.expected['assessment'] = {'id': 'new-assessment', 'grades': passing_grades(),
+                                       'items': {}, 'primary': {'ground': 'B1', 'criterion': 'V3'}}
+        reviews = [row for row in self.read_records()['value_review'].values() if row['payload']['stage'] == 'result']
+        pending = decisions._assess_problem_coverage(self.read_records(), self.artifacts, reviews,
+                                                     self.expected, evidence_digest)
+        self.assertEqual({row['review_id'] for row in pending}, {'review-result-first', 'review-result-second'})
+        self.assertTrue(all(row['missing'] == ['assessment'] for row in pending))
+
+    def test_rubric_adjudication_refuses_a_pair_without_both_original_rubrics(self):
+        self.observe_bar_reviews()
+        output = self.build_review_output('result')
+        output['value']['rubric']['priority'] = 1
+        self.observe('result', 'first', output)
+        original = protocol.canonical_prompt
+        def previous_result(role, **options):
+            if role == 'result' and options.get('orchestration') == 'problem_creation':
+                options['version'] = 1
+            return original(role, **options)
+        output = self.build_review_output('result')
+        del output['value']['rubric']
+        del output['value']['rubric_evidence']
+        with patch.object(protocol, 'canonical_prompt', side_effect=previous_result):
+            self.observe('result', 'second', output)
+        self.assert_error('review_objection_missing', lambda: self.assign('adjudicator', 'focused-third',
+            review_ids=['review-result-first', 'review-result-second'],
+            objection_id='rubric:review-result-first:priority'))
+
+    def test_rubric_id_cannot_replace_an_explicit_material_objection(self):
+        self.observe_bar_reviews()
+        identifier = 'rubric:review-result-first:priority'
+        output = self.build_review_output('result')
+        output['value']['rubric']['priority'] = 1
+        output['objections'] = [{'id': identifier, 'claim': 'The cited implication has an unsupported hypothesis.',
+            'reason': 'The original source does not establish that hypothesis.', 'evidence': [self.supporting],
+            'resolution_condition': 'Establish the missing hypothesis or narrow the claim.'}]
+        self.observe('result', 'first', output)
+        self.observe('result', 'second')
+        self.assert_error('review_objection_missing', lambda: self.assign('adjudicator', 'focused-third',
+            review_ids=['review-result-first', 'review-result-second'], objection_id=identifier))
+
+    def test_material_bar_objection_can_keep_a_rubric_shaped_id(self):
+        self.supporting = self.artifacts.put(b'The field comparison needs an additional hypothesis.', 'text/plain')
+        self.prepare_review_route()
+        identifier = 'rubric:review-bar-first:priority'
+        output = self.build_review_output('bar')
+        output['objections'] = [{'id': identifier, 'claim': 'The field comparison needs an additional hypothesis.',
+            'reason': 'The supplied source requires it.', 'evidence': [self.supporting],
+            'resolution_condition': 'Establish or state the extra hypothesis.'}]
+        self.observe('bar', 'first', output)
+        self.observe('bar', 'second')
+        assignment = self.assign('adjudicator', 'focused-third',
+            review_ids=['review-bar-first', 'review-bar-second'], objection_id=identifier)
+        packet = json.loads(self.artifacts.read(assignment['packet']))
+        self.assertEqual(packet['objection']['claim'], output['objections'][0]['claim'])
+        self.assertNotIn('rubric_grades', packet)
+
+    def test_problem_adjudication_keeps_generic_previous_prompt_authentication(self):
+        for legacy in (False, True):
+            assignment = {'role': 'adjudicator', 'subject': {'kind': 'problem', 'statement_id': 'statement-1'},
+                          'prompt': protocol.canonical_prompt('adjudicator', legacy=legacy, version=1)}
+            with self.subTest(legacy=legacy):
+                self.assertTrue(protocol.is_previous_prompt(assignment))
+                self.assertTrue(protocol._prompt_matches(assignment))
 
     def test_bar_can_precede_a_statement(self):
         records = self.read_records()
@@ -298,6 +728,7 @@ class ProblemReviewTests(LiteratureCase):
         packet = json.loads(self.artifacts.read(assignment["packet"]))
         self.assertEqual(packet["subject"], {"kind": "problem", "statement_id": "statement-1"})
         self.assertEqual(packet["pending_source_requests"], [])
+        self.assertEqual(packet["historical_reviews"], [])
         self.assertEqual(packet["source_deliveries"][0]["status"], "delivered")
         self.assertNotIn("PRIVATE_STATEMENT", json.dumps(packet))
         final = self.build_review_output("bar")
@@ -329,6 +760,7 @@ class ProblemOpennessReviewTests(ProblemCase):
     read_records = ProblemReviewTests.read_records
     build_review_output = ProblemReviewTests.build_review_output
     observe = ProblemReviewTests.observe
+    deliver_supporting = ProblemReviewTests.deliver_supporting
 
     def assign(self, role, reviewer, author="problem-author", identifier=None, **context):
         return ProblemReviewTests.assign(self, role, reviewer, author, identifier, **context)
@@ -336,7 +768,8 @@ class ProblemOpennessReviewTests(ProblemCase):
     def setUp(self):
         super().setUp()
         self.initialize_problem()
-        self.selected = self.select_statement()
+        self.put_selecting_slate()
+        self.selected = self.select_statement(candidate_id="candidate-1")
 
     def observe_openness(self, outcome="supported_open", change_output=None):
         from research_harness.literature import record_search
@@ -348,7 +781,8 @@ class ProblemOpennessReviewTests(ProblemCase):
             "minimum": {"searches": [{"formulation": self.selected["statement"], "search_id": search["id"]}],
                 "settling_work_id": None, "duplicate_resolutions": []}}, self.root / "openness-packet")
         native = json.loads(self.artifacts.read(exported["native_packet"]))
-        self.prepare_review_route()
+        if "route" not in self.store.snapshot()["records"].get("review_route", {}):
+            self.prepare_review_route()
         self.mutate(protocol.record_assignment, {"id": "openness-assignment", "route_id": "route", "dossier_id": None,
             "role": "native_math", "reviewer_id": "native-reviewer", "author_id": "problem-author",
             "context": {"native_packet": exported["native_packet"]}})
@@ -417,7 +851,12 @@ class ProblemOpennessReviewTests(ProblemCase):
         self.observe_openness()
         self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})
         item = self.record_full_reading()
+        from research_harness.problem_attempt import record_attempt
+        from test_research_problem_attempt import build_attempt
+        self.mutate(record_attempt, build_attempt(reading=item))
         self.mutate(self.load_problem_module().record_value, self.build_value([item]))
+        from test_research_problem_assessment import build_assessment
+        self.mutate(self.load_problem_module().record_assessment, build_assessment(self.selected))
         self.supporting = self.artifacts.put(b"The exact earlier result comparison.", "text/plain")
         for reviewer in ("first", "second"):
             self.observe("bar", reviewer)

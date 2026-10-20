@@ -10,16 +10,19 @@ from .errors import ResearchError
 from .evidence import digest
 from .graph import obligation
 from .operations import fields, immutable_record, strings, text
-from .problem_claims import find_current_statement, find_latest, find_value, compute_problem_evidence_digest, require_problem, compute_statement_digest
+from .problem_attempt import assess_attempt
+from .problem_candidates import assess_slate, find_current_slate
+from .problem_claims import find_current_statement, find_latest, find_value, compute_problem_evidence_digest, require_problem, compute_statement_digest, assess_assessment
 from .problem_evidence import assess_formal_checks, project_citations, validate_value
 from .problem_openness import assess_openness
 
 
 def assess_minimum(records, artifacts):
-    pending = []
+    pending = assess_slate(records, artifacts)
     statement, value = find_current_statement(records), find_value(records)
     if statement is None:
         pending.append(obligation("problem_statement_missing", "Record the exact statement and resolution criteria."))
+    pending.extend(assess_attempt(records, artifacts))
     pending.extend(assess_openness(records, artifacts))
     if value is None or statement is None or value["statement_id"] != statement["id"]:
         pending.append(obligation("problem_value_missing", "Bind motivation and current-state paragraphs to this statement's evidence.",
@@ -30,6 +33,7 @@ def assess_minimum(records, artifacts):
         except ResearchError as error:
             pending.append(obligation(error.code, error.message, **(error.details or {})))
     pending.extend(assess_formal_checks(records))
+    pending.extend(assess_assessment(records, artifacts))
     try:
         project_citations(records, artifacts)
     except ResearchError as error:
@@ -92,11 +96,16 @@ def assess_post(records, artifacts):
     if posted is not None:
         pending.append(obligation("problem_already_posted", "This exact statement already has a recorded post.", post_id=posted["id"], problem_id=posted["problem_id"]))
     unique = list({digest(row): row for row in pending}.values())
+    slate = find_current_slate(records)
     milestone = "exploration"
-    if statement is not None:
-        milestone = "formulation"
-        if not assess_openness(records, artifacts):
-            milestone = "openness"
+    if slate is not None:
+        milestone = "slate"
+        if slate["selected"] and statement is not None:
+            milestone = "formulation"
+            if not assess_attempt(records, artifacts):
+                milestone = "attempt"
+                if not assess_openness(records, artifacts):
+                    milestone = "openness"
     if not minimum and reviews is not None and reviews["ready"] and decision is not None and decision["action"] == "post" and decision["problem_evidence_digest"] == evidence_digest:
         milestone = "value"
     if posted is not None:
