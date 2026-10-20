@@ -684,26 +684,31 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
             ["version_evidence:" + link["artifact"]["sha256"]])
         self.assert_blocked_delivery()
 
-    def test_a_correction_cites_a_json_passage_by_the_citation_its_mapping_carries(self):
-        """R56: the citation of a JSON passage, copied from the bar packet, is a valid link within that passage."""
+    def read_a_json_passage(self):
+        """A recorded JSON metadata response read through an inspection of its /title field; returns that JSON link."""
         from research_harness.reading import record_reading
-        self.prepare_problem_evidence()
         version = self.metadata(78001, references=[{"title": "A cited comparator", "year": 2020}])
         records = self.store.snapshot()["records"]
         [source_id] = [identifier for identifier in records["work"][version]["source_ids"]
                        if records["source"][identifier]["response"]["media_type"] == "application/json"]
         response = records["source"][source_id]["response"]
-        title = json.loads(self.artifacts.read(response))["title"]
         link = {"version_id": version, "source_id": source_id, "artifact": response,
-                "locator": {"kind": "json", "pointer": "/title", "value": title}}
+                "locator": {"kind": "json", "pointer": "/title", "value": json.loads(self.artifacts.read(response))["title"]}}
         note = self.abstract_note(version, note_id="json-note")
         note["inspections"].append({"unit_id": None, "link": link, "note": "Read the title field of the response."})
         self.mutate(record_reading, note)
+        return link
+
+    def test_a_correction_cites_a_json_passage_by_the_citation_its_mapping_carries(self):
+        """R56, R58: the bar receives the JSON passage without a citation; the adjudicator's mapping of it carries the
+        valid link, which a correction records."""
+        self.prepare_problem_evidence()
+        link = self.read_a_json_passage()
         self.observe("bar", "first")
         assignment = self.assign("bar", "second", source_links=[link] + self.deliver_supporting("second")["source_links"])
         [mapping] = [row for row in json.loads(self.artifacts.read(assignment["packet"]))["prior_context"]
                      if row["origin"]["locator"]["kind"] == "json"]
-        self.assertEqual(mapping["citation"], link)
+        self.assertNotIn("citation", mapping)
         output = self.build_review_output("bar")
         output["objections"] = [self.make_objection()]
         with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
@@ -713,13 +718,60 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
                                                         assignment_id="bar-second"))
         self.record_slate(review_ids=[])
         correction = {"kind": "omission", "claim": "The comparator's title field was overlooked.",
-                      "reason": "The supplied passage names the comparator.", "evidence": [mapping["citation"]],
+                      "reason": "The supplied passage names the comparator.", "evidence": [link],
                       "prior_adjudication_id": None, "new_error_explanation": None}
         focused = self.assign("adjudicator", "focused-third", identifier="focused", review_ids=["review-bar-first", "review-bar-second"],
                               objection_id="unsupported-implication", correction=correction)
         packet = json.loads(self.artifacts.read(focused["packet"]))
-        self.assertIn(mapping, packet["supplied_source_mappings"])
-        self.assertNotIn(response["sha256"], {row["artifact"]["sha256"] for row in packet["evidence"]})
+        self.assertIn(dict(mapping, citation=link), packet["supplied_source_mappings"])
+        self.assertNotIn(link["artifact"]["sha256"], {row["artifact"]["sha256"] for row in packet["evidence"]})
+
+    def test_a_result_packet_offers_a_citation_only_for_a_passage_a_review_can_record(self):
+        """R58: O1 cites a text passage and a JSON passage; the result packet carries a citation for the text passage
+        only. A link built to the JSON passage is refused with the typed reading code; the text citation is recorded."""
+        self.prepare_problem_evidence()
+        json_link = self.read_a_json_passage()
+        unit = self.add_unbound_full_source()
+        content = self.artifacts.read(unit["artifact"]).decode()
+        text_link = self.link(unit["version_id"], unit["source_id"], unit["artifact"], content[:len(content) // 2])
+        self.observe("bar", "first")
+        assignment = self.assign("bar", "second", source_links=[text_link, json_link]
+                                 + self.deliver_supporting("second")["source_links"])
+        prior = {row["origin"]["artifact_descriptor"]["sha256"]: row
+                 for row in json.loads(self.artifacts.read(assignment["packet"]))["prior_context"]}
+        output = self.build_review_output("bar")
+        output["objections"] = [dict(self.make_objection(), evidence=[
+            {"kind": "source", "link": prior[unit["artifact"]["sha256"]]["citation"]}, json_link["artifact"]])]
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {"id": "attempt-bar-second", "assignment_id": "bar-second"},
+                        credential="test-only")
+        self.mutate(decisions.record_value_review, dict(output, id="review-bar-second", dossier_id=None,
+                                                        assignment_id="bar-second"))
+        self.record_slate(review_ids=[])
+        packet = json.loads(self.artifacts.read(self.assign("result", "first")["packet"]))
+        [objection] = packet["material_objections"]
+        mappings = {row["origin"]["locator"]["kind"]: row for row in objection["version_source_mappings"]}
+        self.assertEqual(("citation" in mappings["text"], "citation" in mappings["json"]), (True, False))
+        template = mappings["json"]["origin"]["artifact_descriptor"]
+        built = {"version_id": mappings["json"]["version_id"], "source_id": mappings["json"]["origin"]["source_id"],
+                 "artifact": {"path": template["location"], **{key: template[key] for key in ("sha256", "size", "media_type")}},
+                 "locator": {"kind": "json", "pointer": mappings["json"]["origin"]["locator"]["pointer"],
+                             "value": self.artifacts.read(mappings["json"]["excerpt"]).decode()}}
+        for reviewer, cited in (("first", {"kind": "source", "link": built}),
+                                ("second", {"kind": "source", "link": mappings["text"]["citation"]})):
+            output = self.build_review_output("result")
+            output["value"]["objection_findings"] = [dict(self.make_finding("contested"), evidence=[cited])]
+            with self.subTest(reviewer=reviewer):
+                if reviewer == "first":
+                    with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+                        self.mutate(protocol.invoke_assignment, {"id": "attempt-result-first", "assignment_id": "result-first"},
+                                    credential="test-only")
+                    with self.assertRaises(ResearchError) as caught:
+                        self.mutate(decisions.record_value_review, dict(output, id="review-result-first", dossier_id=None,
+                                                                        assignment_id="result-first"))
+                    self.assertEqual(caught.exception.code, "reading_missing")
+                else:
+                    self.assertEqual(self.record_result(reviewer, output)["id"], "review-result-second")
 
     def repair_the_first_bar_that_stated_o1(self):
         """Astra's F9 reproduction: the first bar states O1 and is repaired; the replacement resolves O1. Returns the

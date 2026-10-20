@@ -1785,7 +1785,10 @@ finding on each such objection. Every delivered passage mapping (`prior_context`
 objection) carries `citation`, a complete, valid source link
 `{version_id, source_id, artifact, locator}` for exactly that passage, which a
 reviewer copies verbatim to cite it; the citation names its original without
-attaching it. The packet attaches only the bounded excerpts of those passages,
+attaching it. A JSON passage mapping in a bar, slate or result packet carries no
+`citation` and is delivered for reading only, because source evidence in a
+review needs a full-text reading; every mapping in an adjudicator packet carries
+its `citation` for a correction to cite. The packet attaches only the bounded excerpts of those passages,
 and a link within a passage's bounds that the reviewer copies is delivered when
 an adjudicator receives the reviewer's version. Bytes reach a
 reviewer only through the problem evidence, the delivered sources and passages

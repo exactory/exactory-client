@@ -994,7 +994,12 @@ def describe_objection_delivery(records, artifacts, version):
     cited records and supplied artifacts under version_evidence, and the passages under version_source_mappings,
     whose excerpts are the only bytes of a source delivered as passages."""
     delivery = describe_version_evidence(records, artifacts, version)
-    return {key: delivery[key] for key in ('version_evidence', 'version_source_mappings')}
+    # A reviewer cannot cite a JSON passage (source evidence in a review needs a full-text reading), so its mapping is
+    # delivered for reading without a citation; an adjudicator's mappings keep theirs for a correction.
+    mappings = [{key: value for key, value in mapping.items() if key != 'citation'}
+                if mapping['origin']['locator']['kind'] == 'json' else mapping
+                for mapping in delivery['version_source_mappings']]
+    return {'version_evidence': delivery['version_evidence'], 'version_source_mappings': mappings}
 
 
 def deliver_historical_review(records, artifacts, review):
