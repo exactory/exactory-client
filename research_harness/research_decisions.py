@@ -202,7 +202,8 @@ def record_value_review(store, payload, *, expected_revision, request_id):
         if value["stage"] != "bar" and problem is not None:
             historical.extend(review for review in review_context_repair.historical_reviews(records, None, value["stage"])
                               if review.get("subject") == saved_assignment["subject"])
-            historical.extend(review_context_repair.historical_reviews(records, None, "bar"))
+            from .review_protocol import find_historical_bar_reviews
+            historical.extend(find_historical_bar_reviews(records))
         elif value["stage"] != "bar":
             for previous_dossier in records.get("strategy_dossier", {}).values():
                 if previous_dossier["payload"]["intent_id"] == dossier["payload"]["intent_id"]:
@@ -260,10 +261,9 @@ def record_value_review(store, payload, *, expected_revision, request_id):
             # A review cites a record only as content that its own observed packets delivered; every reference
             # read here has passed the shape checks above.
             from .review_protocol import collect_carried_records, find_carried_record
-            from .review_supplied_evidence import supplied_context
+            from .review_supplied_evidence import is_received, supplied_context
             carried = collect_carried_records(records, artifacts, value["assignment_id"])
             supplied, mappings = supplied_context(records, artifacts, [value["assignment_id"]])
-            delivered = set(supplied) | {mapping["origin"]["artifact_descriptor"]["sha256"] for mapping in mappings}
             for evidence in [value["value"]["evidence"]] + [row["evidence"] for row in (
                     value["objections"] + value["value"]["objection_findings"] + value["value"]["assurances"])]:
                 for reference in evidence:
@@ -274,12 +274,15 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                                 + reference["record_kind"] + " " + reference["id"] + " at the cited digest",
                                 {key: reference[key] for key in ("record_kind", "id", "digest")})
                         continue
-                    # An artifact counts as received when its bytes or one of its passages were delivered.
-                    artifact = reference["link"]["artifact"] if reference.get("kind") == "source" else reference
-                    if artifact["sha256"] not in delivered:
+                    # An artifact counts as received in full or as its passages; a source link only within them.
+                    if not is_received(records, reference, supplied, mappings):
+                        artifact = reference["link"]["artifact"] if reference.get("kind") == "source" else reference
+                        details = {"sha256": artifact["sha256"]}
+                        if reference.get("kind") == "source":
+                            details["locator"] = reference["link"]["locator"]
                         raise ResearchError("review_evidence_undelivered",
                             "Cite only content that this review received: no packet of the review delivered artifact "
-                            + artifact["sha256"], {"sha256": artifact["sha256"]})
+                            + artifact["sha256"] + (" within the cited locator" if "locator" in details else ""), details)
         changes, support = [], None
         if problem is not None:
             if value["support"] is not None:

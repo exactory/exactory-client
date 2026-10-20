@@ -22,6 +22,7 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
     refresh_reviews = objection_fixtures.ProblemObjectionTests.refresh_reviews
     build_slate_output = objection_fixtures.ProblemObjectionTests.build_slate_output
     cite_a_requested_source = objection_fixtures.ProblemObjectionTests.cite_a_requested_source
+    replace_first_bar = objection_fixtures.ProblemObjectionTests.replace_first_bar
 
     def prepare_bar_adjudication(self):
         self.prepare_reviews(bar_reviewer="second")
@@ -478,7 +479,8 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
 
     def test_a_result_reviewer_copies_the_passage_link_of_a_material_objection(self):
         """R50: O1's passage reaches the result reviewer within its bounds, and a copied link is delivered."""
-        self.copy_the_passage_of_a_material_objection(lambda mapping: {"kind": "source", "link": self.passage_link})
+        # R56: the citation is built from the received mapping alone.
+        self.copy_the_passage_of_a_material_objection(lambda mapping: {"kind": "source", "link": mapping["citation"]})
 
     def test_a_result_reviewer_cites_the_full_descriptor_of_a_passage_it_received(self):
         """R44 and R50: the descriptor that the passage's template names is delivered through the passages."""
@@ -563,3 +565,254 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         self.observe_adjudication(review_ids=["review-reassessed-first", "review-reassessed-second"])
         [entry] = self.read_packet("focused")["version_evidence"]
         self.assertEqual((entry["kind"], entry["id"], entry["record"]), ("record", "candidate-2", projected))
+
+    def cite_an_assessment_through_an_objection(self):
+        """Astra's F6 reproduction: the first results contest O1 citing assessment S1, which attaches A; S2 without A
+        replaces S1; the refreshed second result receives S1 and A through O1's version_evidence and contests O1
+        citing S1."""
+        from test_research_problem_assessment import build_assessment
+        self.prepare_reviews(bar_reviewer="second", results=False)
+        self.attachment = self.artifacts.put(b"A table of the extremal values that only assessment S1 attaches.", "text/plain")
+        first = build_assessment(self.selected, identifier="assessment-s1")
+        first["items"]["priority"]["evidence"] += [self.supporting, self.attachment]
+        self.mutate(self.load_problem_module().record_assessment, first)
+        contested = dict(self.make_finding("contested"), evidence=[self.cite_record("problem_assessment", "assessment-s1")],
+                         reason="Assessment S1 attaches the decisive table.")
+        for reviewer in ("first", "second"):
+            output = self.build_review_output("result")
+            output["value"]["objection_findings"] = [contested]
+            self.observe("result", reviewer, output)
+        second = build_assessment(self.selected, identifier="assessment-s2")
+        second["items"]["priority"]["evidence"].append(self.supporting)
+        self.mutate(self.load_problem_module().record_assessment, second)
+        for reviewer, finding in (("first", self.make_finding("resolved")),
+                                  ("second", dict(contested, reason="The table of S1 still refutes the resolution."))):
+            output = self.build_review_output("result")
+            output["value"]["objection_findings"] = [finding]
+            self.record_result(reviewer, output, identifier="refreshed-" + reviewer)
+        [objection] = self.read_packet("refreshed-second")["material_objections"]
+        [entry] = objection["version_evidence"]
+        self.assertIn(self.attachment, entry["artifacts"])
+
+    def test_a_record_cited_through_an_objection_keeps_its_attachments(self):
+        """R54: the adjudicator of the second hop receives S1 with its attachment A, which no current evidence holds."""
+        self.cite_an_assessment_through_an_objection()
+        self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"])
+        packet = self.read_packet("focused")
+        [entry] = packet["version_evidence"]
+        self.assertEqual((entry["id"], self.attachment in entry["artifacts"]), ("assessment-s1", True))
+        self.assertIn(self.attachment["sha256"], {row["artifact"]["sha256"] for row in packet["evidence"]})
+        self.assertNotIn(self.attachment, packet["current_evidence"] + packet["original_evidence"])
+        self.assert_delivered()
+
+    def test_an_adjudication_without_a_record_attachment_is_incomplete_and_refreshes(self):
+        self.cite_an_assessment_through_an_objection()
+        real = protocol.add_focused_adjudication
+
+        def build_without_the_attachment(*arguments, **options):
+            real(*arguments, **options)
+            for entry in arguments[2]["version_evidence"]:
+                entry["artifacts"] = [artifact for artifact in entry["artifacts"] if artifact != self.attachment]
+        with patch.object(protocol, "add_focused_adjudication", side_effect=build_without_the_attachment):
+            self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"])
+        records = self.store.snapshot()["records"]
+        [version] = [row for row in decisions.collect_problem_post_objections(records, self.artifacts, [
+            records["value_review"][identifier] for identifier in ("review-bar-first", "review-bar-second",
+                                                                   "review-refreshed-first", "review-refreshed-second")])]
+        self.assertEqual(decisions.find_undelivered_adjudication_keys(records, self.artifacts, "focused",
+            version_evidence=protocol.describe_version_evidence(records, self.artifacts, version)),
+            ["version_evidence:problem_assessment:assessment-s1"])
+        self.assert_blocked_delivery()
+        self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"], identifier="focused-complete")
+        refresh = self.read_packet("focused-complete")["focused_refresh"]
+        self.assertEqual((refresh["reason"], refresh["undelivered_keys"]),
+                         ("packet_incomplete", ["version_evidence:problem_assessment:assessment-s1"]))
+        self.assert_delivered()
+
+    def contest_on_a_span_of_the_unbound_unit(self, start, end):
+        """The second bar states O1 on the first half of an unbound source unit; returns the first result's output that
+        contests O1 citing the given span of that unit by offsets and hash, with the cited link."""
+        from research_harness.source_links import span_locator
+        self.state_a_bar_objection_on_a_passage(raw=False, unbound=True)
+        content = self.artifacts.read(self.unit["artifact"]).decode()
+        link = {key: self.unit[key] for key in ("version_id", "source_id", "artifact")}
+        link["locator"] = span_locator(content, start(content), end(content))
+        output = self.build_review_output("result")
+        output["value"]["objection_findings"] = [dict(self.make_finding("contested"), evidence=[{"kind": "source", "link": link}])]
+        return output, link
+
+    def adjudicate_the_result_pair(self):
+        output = self.build_review_output("result")
+        output["value"]["objection_findings"] = [self.make_finding("resolved")]
+        self.record_result("second", output)
+        self.observe_adjudication(review_ids=["review-result-first", "review-result-second"])
+        records = self.store.snapshot()["records"]
+        [version] = decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]
+            for identifier in ("review-bar-first", "review-bar-second", "review-result-first", "review-result-second")])
+        self.assertEqual(version["review_id"], "review-result-first")
+        return records, version
+
+    def test_a_citation_beyond_a_supplied_passage_is_refused(self):
+        """R55: Astra's reproduction; the first half of the unit was supplied, the second half is cited."""
+        output, link = self.contest_on_a_span_of_the_unbound_unit(lambda text: len(text) // 2, len)
+        with self.assertRaises(ResearchError) as caught:
+            self.observe("result", "first", output)
+        self.assertEqual((caught.exception.code, caught.exception.details),
+                         ("review_evidence_undelivered", {"sha256": link["artifact"]["sha256"], "locator": link["locator"]}))
+
+    def test_a_citation_within_a_supplied_passage_is_recorded_and_delivered(self):
+        output, _ = self.contest_on_a_span_of_the_unbound_unit(lambda text: 0, lambda text: len(text) // 4)
+        self.observe("result", "first", output)
+        records, version = self.adjudicate_the_result_pair()
+        packet = self.read_packet("focused")
+        self.assertEqual(packet["version_evidence"], [])
+        self.assertEqual([row["origin"]["artifact_descriptor"]["sha256"] for row in packet["version_source_mappings"]],
+                         [self.unit["artifact"]["sha256"]])
+        self.assertEqual(decisions.find_undelivered_adjudication_keys(records, self.artifacts, "focused",
+            version_evidence=protocol.describe_version_evidence(records, self.artifacts, version)), [])
+
+    def test_a_legacy_citation_beyond_a_supplied_passage_is_undelivered(self):
+        """R55: a version recorded before the bounds check, citing beyond the passage, stays undelivered."""
+        output, link = self.contest_on_a_span_of_the_unbound_unit(lambda text: len(text) // 2, len)
+        with patch("research_harness.review_supplied_evidence.is_received", return_value=True):
+            self.observe("result", "first", output)
+        records, version = self.adjudicate_the_result_pair()
+        [entry] = self.read_packet("focused")["version_evidence"]
+        self.assertEqual((entry["kind"], entry["identity"]), ("undelivered", link["artifact"]["sha256"]))
+        self.assertEqual(decisions.find_undelivered_adjudication_keys(records, self.artifacts, "focused",
+            version_evidence=protocol.describe_version_evidence(records, self.artifacts, version)),
+            ["version_evidence:" + link["artifact"]["sha256"]])
+        self.assert_blocked_delivery()
+
+    def read_a_json_passage(self):
+        """A recorded JSON metadata response read through an inspection of its /title field; returns that JSON link."""
+        from research_harness.reading import record_reading
+        version = self.metadata(78001, references=[{"title": "A cited comparator", "year": 2020}])
+        records = self.store.snapshot()["records"]
+        [source_id] = [identifier for identifier in records["work"][version]["source_ids"]
+                       if records["source"][identifier]["response"]["media_type"] == "application/json"]
+        response = records["source"][source_id]["response"]
+        link = {"version_id": version, "source_id": source_id, "artifact": response,
+                "locator": {"kind": "json", "pointer": "/title", "value": json.loads(self.artifacts.read(response))["title"]}}
+        note = self.abstract_note(version, note_id="json-note")
+        note["inspections"].append({"unit_id": None, "link": link, "note": "Read the title field of the response."})
+        self.mutate(record_reading, note)
+        return link
+
+    def test_a_correction_cites_a_json_passage_by_the_citation_its_mapping_carries(self):
+        """R56, R58: the bar receives the JSON passage without a citation; the adjudicator's mapping of it carries the
+        valid link, which a correction records."""
+        self.prepare_problem_evidence()
+        link = self.read_a_json_passage()
+        self.observe("bar", "first")
+        assignment = self.assign("bar", "second", source_links=[link] + self.deliver_supporting("second")["source_links"])
+        [mapping] = [row for row in json.loads(self.artifacts.read(assignment["packet"]))["prior_context"]
+                     if row["origin"]["locator"]["kind"] == "json"]
+        self.assertNotIn("citation", mapping)
+        output = self.build_review_output("bar")
+        output["objections"] = [self.make_objection()]
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {"id": "attempt-bar-second", "assignment_id": "bar-second"},
+                        credential="test-only")
+        self.mutate(decisions.record_value_review, dict(output, id="review-bar-second", dossier_id=None,
+                                                        assignment_id="bar-second"))
+        self.record_slate(review_ids=[])
+        correction = {"kind": "omission", "claim": "The comparator's title field was overlooked.",
+                      "reason": "The supplied passage names the comparator.", "evidence": [link],
+                      "prior_adjudication_id": None, "new_error_explanation": None}
+        focused = self.assign("adjudicator", "focused-third", identifier="focused", review_ids=["review-bar-first", "review-bar-second"],
+                              objection_id="unsupported-implication", correction=correction)
+        packet = json.loads(self.artifacts.read(focused["packet"]))
+        self.assertIn(dict(mapping, citation=link), packet["supplied_source_mappings"])
+        self.assertNotIn(link["artifact"]["sha256"], {row["artifact"]["sha256"] for row in packet["evidence"]})
+
+    def test_a_result_packet_offers_a_citation_only_for_a_passage_a_review_can_record(self):
+        """R58: O1 cites a text passage and a JSON passage; the result packet carries a citation for the text passage
+        only. A link built to the JSON passage is refused with the typed reading code; the text citation is recorded."""
+        self.prepare_problem_evidence()
+        json_link = self.read_a_json_passage()
+        unit = self.add_unbound_full_source()
+        content = self.artifacts.read(unit["artifact"]).decode()
+        text_link = self.link(unit["version_id"], unit["source_id"], unit["artifact"], content[:len(content) // 2])
+        self.observe("bar", "first")
+        assignment = self.assign("bar", "second", source_links=[text_link, json_link]
+                                 + self.deliver_supporting("second")["source_links"])
+        prior = {row["origin"]["artifact_descriptor"]["sha256"]: row
+                 for row in json.loads(self.artifacts.read(assignment["packet"]))["prior_context"]}
+        output = self.build_review_output("bar")
+        output["objections"] = [dict(self.make_objection(), evidence=[
+            {"kind": "source", "link": prior[unit["artifact"]["sha256"]]["citation"]}, json_link["artifact"]])]
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {"id": "attempt-bar-second", "assignment_id": "bar-second"},
+                        credential="test-only")
+        self.mutate(decisions.record_value_review, dict(output, id="review-bar-second", dossier_id=None,
+                                                        assignment_id="bar-second"))
+        self.record_slate(review_ids=[])
+        packet = json.loads(self.artifacts.read(self.assign("result", "first")["packet"]))
+        [objection] = packet["material_objections"]
+        mappings = {row["origin"]["locator"]["kind"]: row for row in objection["version_source_mappings"]}
+        self.assertEqual(("citation" in mappings["text"], "citation" in mappings["json"]), (True, False))
+        template = mappings["json"]["origin"]["artifact_descriptor"]
+        built = {"version_id": mappings["json"]["version_id"], "source_id": mappings["json"]["origin"]["source_id"],
+                 "artifact": {"path": template["location"], **{key: template[key] for key in ("sha256", "size", "media_type")}},
+                 "locator": {"kind": "json", "pointer": mappings["json"]["origin"]["locator"]["pointer"],
+                             "value": self.artifacts.read(mappings["json"]["excerpt"]).decode()}}
+        for reviewer, cited in (("first", {"kind": "source", "link": built}),
+                                ("second", {"kind": "source", "link": mappings["text"]["citation"]})):
+            output = self.build_review_output("result")
+            output["value"]["objection_findings"] = [dict(self.make_finding("contested"), evidence=[cited])]
+            with self.subTest(reviewer=reviewer):
+                if reviewer == "first":
+                    with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+                        self.mutate(protocol.invoke_assignment, {"id": "attempt-result-first", "assignment_id": "result-first"},
+                                    credential="test-only")
+                    with self.assertRaises(ResearchError) as caught:
+                        self.mutate(decisions.record_value_review, dict(output, id="review-result-first", dossier_id=None,
+                                                                        assignment_id="result-first"))
+                    self.assertEqual(caught.exception.code, "reading_missing")
+                else:
+                    self.assertEqual(self.record_result(reviewer, output)["id"], "review-result-second")
+
+    def repair_the_first_bar_that_stated_o1(self):
+        """Astra's F9 reproduction: the first bar states O1 and is repaired; the replacement resolves O1. Returns the
+        second reviewer's first slate assignment."""
+        self.prepare_problem_evidence()
+        output = self.build_review_output("bar")
+        output["objections"] = [self.make_objection()]
+        self.observe("bar", "first", output)
+        self.observe("bar", "second")
+        self.replace_first_bar(findings=[self.make_finding("resolved")])
+        return self.assign("slate", "second")
+
+    def test_a_first_slate_after_another_bar_repair_receives_the_historical_objection(self):
+        """R57: the slate packet delivers the objection on which the slate review must give a finding."""
+        assignment = self.repair_the_first_bar_that_stated_o1()
+        [objection] = json.loads(self.artifacts.read(assignment["packet"]))["material_objections"]
+        stated = self.make_objection()
+        self.assertEqual({key: objection[key] for key in ("id", "claim", "reason", "resolution_condition")},
+                         {key: stated[key] for key in ("id", "claim", "reason", "resolution_condition")})
+        self.assertEqual((objection["review_id"], objection["version_evidence"], objection["version_source_mappings"]),
+                         ("review-bar-first", [self.supporting], json.loads(self.artifacts.read(
+                             self.store.snapshot()["records"]["review_assignment"]["bar-first"]["packet"]))["prior_context"]))
+        self.assertIn("material_version", objection)
+        output = self.build_slate_output(["candidate-1"])
+        output["value"]["bar_ids"] = json.loads(self.artifacts.read(assignment["packet"]))["bar_ids"]
+        output["value"]["objection_findings"] = [self.make_finding("resolved")]
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {"id": "attempt-slate-second", "assignment_id": "slate-second"},
+                        credential="test-only")
+        saved = self.mutate(decisions.record_value_review, dict(output, id="review-slate-second", dossier_id=None,
+                                                                assignment_id="slate-second"))["result"]
+        self.assertEqual(saved["payload"]["value"]["objection_findings"], [self.make_finding("resolved")])
+
+    def test_a_first_slate_without_a_finding_on_the_historical_objection_is_refused(self):
+        assignment = self.repair_the_first_bar_that_stated_o1()
+        output = self.build_slate_output(["candidate-1"])
+        output["value"]["bar_ids"] = json.loads(self.artifacts.read(assignment["packet"]))["bar_ids"]
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {"id": "attempt-slate-second", "assignment_id": "slate-second"},
+                        credential="test-only")
+        with self.assertRaises(ResearchError) as caught:
+            self.mutate(decisions.record_value_review, dict(output, id="review-slate-second", dossier_id=None,
+                                                            assignment_id="slate-second"))
+        self.assertEqual(caught.exception.code, "review_objection_history_incomplete")

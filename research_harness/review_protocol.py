@@ -370,12 +370,14 @@ def _read_json(artifacts, reference):
 
 
 def collect_references(value):
+    """The artifact references in a value. A passage's citation names its original without delivering it."""
     if isinstance(value, dict):
         if {'path', 'sha256', 'media_type'} <= value.keys():
             yield value
         else:
-            for item in value.values():
-                yield from collect_references(item)
+            for key, item in value.items():
+                if key != 'citation':
+                    yield from collect_references(item)
     elif isinstance(value, list):
         for item in value:
             yield from collect_references(item)
@@ -740,11 +742,24 @@ VERSION_EVIDENCE_KEYS = ('version_review', 'version_evidence', 'version_source_m
 
 
 def _list_packet_records(packet):
-    """Each record that a problem packet projects for its reviewer, as (record_kind, id, digest, projection), where the
-    projection is the entry that carried the record and the digest is the stored record's digest that the entry
-    exposes. A digest of None takes the stored record's digest. An id of None takes the cited id: the projection is
-    the stored record itself, so its own digest binds it. A kind that no problem packet projects is never yielded, so
-    a citation of it stays undelivered."""
+    """Each record that a problem packet projects for its reviewer, as (record_kind, id, digest, projection,
+    artifacts), where the projection is the entry that carried the record, the digest is the stored record's digest
+    that the entry exposes, and the artifacts are descriptors that a delivery supplied with the record. A digest of
+    None takes the stored record's digest. An id of None takes the cited id: the projection is the stored record
+    itself, so its own digest binds it. A kind that no problem packet projects is never yielded, so a citation of it
+    stays undelivered."""
+    for kind, identifier, recorded_digest, projection in _list_projected_records(packet):
+        yield kind, identifier, recorded_digest, projection, []
+    # A record delivered with an objection, as the projection that its stating reviewer received, keeps the artifacts
+    # that the delivery supplied with it.
+    for objection in supplied_evidence.list_delivered_objections(packet):
+        for entry in objection.get('version_evidence', []):
+            if entry.get('kind') == 'record':
+                yield entry['record_kind'], entry['id'], entry['digest'], entry['record'], entry['artifacts']
+
+
+def _list_projected_records(packet):
+    """The records that a problem packet projects itself, as (record_kind, id, digest, projection)."""
     for entry in packet.get('candidates', []):
         yield 'problem_candidate', entry['id'], entry['digest'], entry
     # A first slate or result packet wraps each historical review with its independence; a continuation does not.
@@ -755,11 +770,6 @@ def _list_packet_records(packet):
         else:
             # A packet built before reviews carried their reference: the stored record's digest decides.
             yield 'value_review', payload['id'], None, payload
-    # A record delivered with an objection, as the projection that its stating reviewer received.
-    for objection in supplied_evidence.list_delivered_objections(packet):
-        for entry in objection.get('version_evidence', []):
-            if entry.get('kind') == 'record':
-                yield entry['record_kind'], entry['id'], entry['digest'], entry['record']
     evidence = packet.get('problem_evidence') or {}
     for entry in evidence.get('readings', []):
         yield 'reading', entry['id'], entry['digest'], entry
@@ -791,11 +801,11 @@ def collect_carried_records(records, artifacts, assignment_id):
 
 
 def find_carried_record(records, carried, reference):
-    """The projection that carried rows hold for a record reference at its digest, or None. The stored record is read
-    only for its digest, where a projection exposes none."""
+    """The (projection, artifacts) that carried rows hold for a record reference at its digest, or None. The stored
+    record is read only for its digest, where a projection exposes none."""
     stored = records.get(reference['record_kind'], {}).get(reference['id'])
     stored_digest = None if stored is None else digest(stored)
-    return next((projection for kind, identifier, recorded_digest, projection in carried
+    return next(((projection, supplied) for kind, identifier, recorded_digest, projection, supplied in carried
                  if kind == reference['record_kind'] and identifier in (None, reference['id'])
                  and (recorded_digest or stored_digest) == reference['digest']), None)
 
@@ -814,15 +824,15 @@ def describe_version_evidence(records, artifacts, version):
     supply) is an entry {kind: undelivered, identity, reference}."""
     review = _get(records, 'value_review', version['review_id'])
     supplied, mappings = supplied_evidence.supplied_context(records, artifacts, [review['assignment_id']])
-    mapped = {mapping['origin']['artifact_descriptor']['sha256'] for mapping in mappings}
     carried = collect_carried_records(records, artifacts, review['assignment_id'])
     entries, cited = [], set()
     for reference in version['evidence']:
         if reference.get('kind') == 'record':
             identity = reference['record_kind'] + ':' + reference['id']
-            projection = find_carried_record(records, carried, reference)
-            if projection is not None:
-                content = {item['sha256']: supplied[item['sha256']] for item in collect_references(projection)
+            found = find_carried_record(records, carried, reference)
+            if found is not None:
+                projection, delivered = found
+                content = {item['sha256']: supplied[item['sha256']] for item in list(collect_references(projection)) + delivered
                            if item['sha256'] in supplied}
                 entries.append(dict(reference, record=_reference_templates(projection), artifacts=list(content.values())))
                 continue
@@ -833,7 +843,8 @@ def describe_version_evidence(records, artifacts, version):
             if identity in supplied:
                 entries.append(supplied[identity])
                 continue
-            if identity in mapped:
+            # A passage-only artifact is delivered through its passages, a source link only within their bounds.
+            if supplied_evidence.is_received(records, reference, supplied, mappings):
                 continue
         entries.append({'kind': 'undelivered', 'identity': identity, 'reference': _reference_templates(reference)})
     return dict(zip(VERSION_EVIDENCE_KEYS, (
@@ -955,12 +966,30 @@ def add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id
 
 
 def add_problem_objections(records, artifacts, packet, bars):
-    """Supply prior material findings without exposing a current peer result. An objection's own references travel as
-    templates; its evidence arrives with it (describe_objection_delivery), so that the reviewer holds the content it
-    cites and can cite it in turn."""
-    packet['material_objections'] = [
-        dict(_reference_templates(objection), **describe_objection_delivery(records, artifacts, objection))
-        for objection in collect_result_objections(records, artifacts, packet['subject'], packet['problem_evidence_digest'], bars)]
+    """Supply prior material findings without exposing a current peer result, and every historical bar objection that
+    the review gives a finding on. An objection's own references travel as templates; its evidence arrives with it
+    (describe_objection_delivery), so that the reviewer holds the content it cites and can cite it in turn."""
+    current = [dict(_reference_templates(objection), **describe_objection_delivery(records, artifacts, objection))
+               for objection in collect_result_objections(records, artifacts, packet['subject'], packet['problem_evidence_digest'], bars)]
+    present = {objection['id'] for objection in current}
+    packet['material_objections'] = current + [objection for objection in collect_historical_bar_objections(records, artifacts)
+                                               if objection['id'] not in present]
+
+
+def find_historical_bar_reviews(records):
+    """The bar reviews whose independence was lost or reassessed: every slate and result review gives a finding on
+    their objections, and its packet delivers them (collect_historical_bar_objections)."""
+    return context_repair.historical_reviews(records, None, 'bar')
+
+
+def collect_historical_bar_objections(records, artifacts):
+    """The objections of the historical bar reviews, one per id as its latest stated version, with the evidence that
+    an adjudicator of that version receives."""
+    from .research_decisions import state_objection
+    versions = {objection['id']: state_objection(review, objection) for review in find_historical_bar_reviews(records)
+                for objection in review['payload']['objections']}
+    return [dict(_reference_templates(version), **describe_objection_delivery(records, artifacts, version))
+            for _, version in sorted(versions.items())]
 
 
 def describe_objection_delivery(records, artifacts, version):
@@ -968,7 +997,12 @@ def describe_objection_delivery(records, artifacts, version):
     cited records and supplied artifacts under version_evidence, and the passages under version_source_mappings,
     whose excerpts are the only bytes of a source delivered as passages."""
     delivery = describe_version_evidence(records, artifacts, version)
-    return {key: delivery[key] for key in ('version_evidence', 'version_source_mappings')}
+    # A reviewer cannot cite a JSON passage (source evidence in a review needs a full-text reading), so its mapping is
+    # delivered for reading without a citation; an adjudicator's mappings keep theirs for a correction.
+    mappings = [{key: value for key, value in mapping.items() if key != 'citation'}
+                if mapping['origin']['locator']['kind'] == 'json' else mapping
+                for mapping in delivery['version_source_mappings']]
+    return {'version_evidence': delivery['version_evidence'], 'version_source_mappings': mappings}
 
 
 def deliver_historical_review(records, artifacts, review):
@@ -1033,6 +1067,7 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
             elif problem and role == 'slate' and refreshed:
                 add_problem_bars(records, artifacts, packet, reviewer_id, slot=context_repair.slot_id(records, prior))
                 add_problem_candidates(records, packet)
+                packet['material_objections'] = collect_historical_bar_objections(records, artifacts)
                 packet['problem_refresh'] = {'assignment_id': prior['id'],
                     'previous_candidate_set_digest': previous['candidate_set_digest'],
                     'candidate_set_digest': packet['candidate_set_digest'],
@@ -1040,6 +1075,7 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                     'review_ids': [review['id'] for review in historical]}
             elif problem and role == 'slate':
                 packet.update({key: previous[key] for key in ('bar_ids', 'candidates', 'candidate_set_digest')})
+                packet['material_objections'] = collect_historical_bar_objections(records, artifacts)
             elif problem and role == 'bar' and refreshed:
                 packet['problem_refresh'] = {'assignment_id': prior['id'],
                     'previous_template_id': prior['prompt']['template_id'],
@@ -1068,6 +1104,7 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                 if review.get('subject') == packet['subject']]
             if role == 'slate':
                 add_problem_candidates(records, packet)
+                packet['material_objections'] = collect_historical_bar_objections(records, artifacts)
             else:
                 require_calibrated_bars(records, bars)
                 add_problem_evidence(records, artifacts, packet)
@@ -1392,6 +1429,8 @@ def _repair_packet(records, artifacts, value, repair):
         packet['assessor'] = {'id': value['reviewer_id'], 'kind': 'agent', 'provenance': _put_json(artifacts, provenance),
             'relationship': 'Assigned independent context reassessor',
             'independence_basis': 'The harness verifies the new actual route, canonical packet, invocation and exact contamination-repair provenance.'}
+    if problem and value['role'] == 'slate':
+        packet['material_objections'] = collect_historical_bar_objections(records, artifacts)
     if problem and value['role'] == 'result':
         add_problem_evidence(records, artifacts, packet)
         bars = add_problem_bars(records, artifacts, packet, value['reviewer_id'], slot=repair['slot_id'])
