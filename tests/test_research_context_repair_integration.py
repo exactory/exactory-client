@@ -3,6 +3,8 @@
 import json
 from unittest.mock import patch
 
+from research_harness.errors import ResearchError
+
 from strategy_fixtures import StrategyCase
 from research_harness import research_decisions, review_context_repair, review_protocol
 
@@ -104,17 +106,28 @@ class ContextRepairIntegrationTests(StrategyCase):
 
     def test_reassessment_must_be_in_the_actual_observed_output(self):
         self.prepare_repair()
-        response = self.review_response("bar")
+        response = self.final_response()
+        del response["reassessment"]  # Isolate reassessment from the earlier frozen-objection contract check.
         self.invoke(response)
-        self.error("review_reassessment_missing", lambda: self.record_final(response))
-        self.error("value_review_output_mismatch", lambda: self.record_final(self.final_response()))
+        with self.assertRaises(ResearchError) as caught:
+            self.record_final(response)
+        self.assertEqual(caught.exception.code, "review_reassessment_missing")
+        self.assertEqual(self.store.snapshot()["records"]["review_output_refusal"]["attempt-repair-a"]["code"],
+                         "review_reassessment_missing")
+        self.error("review_output_pending", lambda: self.record_final(self.final_response()))
 
     def test_historical_objection_cannot_disappear_from_the_repaired_finding(self):
         self.prepare_repair()
         response = self.final_response()
         response["value"]["objection_findings"] = []
         self.invoke(response)
-        self.error("review_objection_history_incomplete", lambda: self.record_final(response))
+        revision = self.store.revision
+        with self.assertRaises(ResearchError) as caught:
+            self.record_final(response)
+        self.assertEqual(caught.exception.code, "review_objection_history_incomplete")
+        self.assertEqual(self.store.revision, revision + 1)  # The refused observed output is now audited.
+        self.assertEqual(self.store.snapshot()["records"]["review_output_refusal"]["attempt-repair-a"]["code"],
+                         "review_objection_history_incomplete")
 
     def test_final_repair_preserves_old_objections_in_the_later_slate_packet(self):
         self.prepare_repair()

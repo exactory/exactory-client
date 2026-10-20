@@ -141,7 +141,8 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         payload = dict(output, id="review-slate-first-refreshed", dossier_id=None, assignment_id=assignment["id"])
         if late_candidate:
             # R45 refuses the citation at record time; a review recorded before that rule still reaches the adjudicator.
-            with self.assertRaises(ResearchError) as caught:
+            # Model pre-R60 history: the old rejection probe wrote no refusal certificate.
+            with patch("research_harness.review_refusal._record_refusal"), self.assertRaises(ResearchError) as caught:
                 self.mutate(decisions.record_value_review, payload)
             self.assertEqual((caught.exception.code, caught.exception.details["id"]),
                              ("review_evidence_undelivered", "candidate-3"))
@@ -222,7 +223,8 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         output = self.build_review_output("result")
         output["objections"] = [dict(self.make_objection(), evidence=[unsupplied])]
         payload = self.observe("result", "first", output, record=False)
-        with self.assertRaises(ResearchError) as caught:
+        # Model a pre-R60 record; the historical refusal probe created no certificate.
+        with patch("research_harness.review_refusal._record_refusal"), self.assertRaises(ResearchError) as caught:
             self.mutate(decisions.record_value_review, payload)
         self.assertEqual((caught.exception.code, caught.exception.details),
                          ("review_evidence_undelivered", {"sha256": unsupplied["sha256"]}))
@@ -1038,3 +1040,522 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
             self.mutate(decisions.record_value_review, dict(output, id="review-slate-second", dossier_id=None,
                                                             assignment_id="slate-second"))
         self.assertEqual(caught.exception.code, "review_objection_history_incomplete")
+
+
+class ReviewOutputRefusalTests(delivery_fixtures.ProblemDeliveryCase):
+    """R60 recovery uses authenticated observed bytes, frozen delivery and two refused outputs."""
+
+    prepare_reviews = objection_fixtures.ProblemObjectionTests.prepare_reviews
+    prepare_problem_evidence = objection_fixtures.ProblemObjectionTests.prepare_problem_evidence
+    make_objection = objection_fixtures.ProblemObjectionTests.make_objection
+    make_finding = objection_fixtures.ProblemObjectionTests.make_finding
+    build_slate_output = objection_fixtures.ProblemObjectionTests.build_slate_output
+
+    def records(self):
+        return self.store.snapshot()["records"]
+
+    def prepare_resolved_bar_refresh(self, *, historical=False, source_request=False):
+        """Retain a legacy result's packet after its delivered bar objection is resolved."""
+        objection_fixtures.ProblemObjectionTests.prepare_version_one_bar_objection(self)
+        original = protocol.canonical_prompt
+
+        def previous_prompt(role, **options):
+            if options.get("orchestration") == "problem_creation":
+                options["version"] = 1
+            return original(role, **options)
+
+        with patch.object(protocol, "canonical_prompt", side_effect=previous_prompt), \
+                patch.object(protocol, "require_calibrated_bars", return_value=None):
+            for reviewer in ("second", "first"):
+                output = self.build_review_output("result")
+                del output["value"]["rubric"]
+                del output["value"]["rubric_evidence"]
+                output["value"]["objection_findings"] = [self.make_finding("continuing")]
+                if historical and reviewer == "second":
+                    output["objections"] = [dict(self.make_objection(), id="historical-result",
+                        claim="The historical result leaves the boundary case unproved.")]
+                if historical and reviewer == "first":
+                    output["value"]["objection_findings"].append(
+                        dict(self.make_finding("continuing"), id="historical-result"))
+                if source_request and reviewer == "first":
+                    output["source_requests"] = [{"id": "page", "kind": "inventory_page", "page": 0}]
+                    output["value"]["status"] = "unresolved"
+                self.observe("result", reviewer, output, record=not (source_request and reviewer == "first"))
+                if historical and reviewer == "second":
+                    self.mutate(protocol.record_context_event, {"id": "result-exposure", "assignment_id": "result-second",
+                        "kind": "contamination", "source": "author_history", "reason": "The assessor received author advocacy.",
+                        "evidence": [self.supporting]})
+        self.assertEqual(objection_fixtures.ProblemObjectionTests.refresh_version_one_bars(
+            self, [self.make_finding("resolved")]), [])
+
+    def calibrated_result(self):
+        return objection_fixtures.ProblemObjectionTests.build_calibrated_result(self)
+
+    def test_refreshed_results_omit_resolved_material_objection_and_are_ready(self):
+        self.prepare_resolved_bar_refresh()
+        first_packet = json.loads(self.artifacts.read(self.records()["review_assignment"]["result-first"]["packet"]))
+        self.assertEqual([row["id"] for row in first_packet["material_objections"]], ["unsupported-implication"])
+        outcomes = {}
+        for reviewer in ("first", "second"):
+            payload = self.observe("result", reviewer, self.calibrated_result(), record=False,
+                                   identifier="refreshed-" + reviewer)
+            packet = json.loads(self.artifacts.read(self.records()["review_assignment"][payload["assignment_id"]]["packet"]))
+            self.assertEqual(packet["material_objections"], [])
+            self.assertEqual(payload["value"]["objection_findings"], [])
+            try:
+                self.mutate(decisions.record_value_review, payload)
+                outcomes[reviewer] = "recorded"
+            except ResearchError as error:
+                outcomes[reviewer] = error.code
+        self.assertEqual(outcomes, {"first": "recorded", "second": "recorded"})
+        self.assertEqual(self.records().get("review_output_refusal", {}), {})
+        assessment = decisions.assess_problem_reviews(self.records(), self.artifacts)
+        self.assertTrue(assessment["ready"], assessment["obligations"])
+
+    def check_retained_historical_result(self, *, source_request):
+        self.prepare_resolved_bar_refresh(historical=True, source_request=source_request)
+        first = self.records()["review_assignment"]["result-first"]
+        first_packet = json.loads(self.artifacts.read(first["packet"]))
+        [historical] = first_packet["historical_reviews"]
+        self.assertEqual([row["id"] for row in historical["review"]["objections"]], ["historical-result"])
+        if source_request:
+            assignment = self.assign("result", "first", identifier="continued-first", prior_assignment_id=first["id"])
+        else:
+            assignment = self.assign("result", "first", identifier="refreshed-first")
+        packet = json.loads(self.artifacts.read(assignment["packet"]))
+        self.assertEqual(packet["material_objections"], [])
+        self.assertFalse(any(review.get("review", review).get("objections") for review in packet.get("historical_reviews", [])))
+        if source_request:
+            self.assertEqual(packet.get("historical_reviews", []), [])
+        output = self.calibrated_result()
+        with self.assertRaises(ResearchError) as caught:
+            decisions.validate_review_contract(self.records(), self.artifacts, assignment, output)
+        self.assertEqual(caught.exception.code, "review_objection_history_incomplete")
+        output["value"]["objection_findings"] = [dict(self.make_finding("resolved"), id="historical-result")]
+        self.invoke_output(output, assignment["id"])
+        self.assertIsNone(self.classifier()(self.records(), self.artifacts, "refused-1"))
+        self.record_cli(output, assignment["id"])
+        self.assertEqual(self.records().get("review_output_refusal", {}), {})
+
+    def test_refreshed_result_retains_other_slots_delivered_historical_objection(self):
+        self.check_retained_historical_result(source_request=False)
+
+    def test_result_source_continuation_retains_first_packets_historical_objection(self):
+        self.check_retained_historical_result(source_request=True)
+
+    def test_status_refusal_listing_matches_state_without_evaluating_assignments(self):
+        from research_harness import cli
+        output = self.prepare_bar()
+        self.refuse(output, attempt="z-first")
+        self.refuse(output, attempt="a-second")
+        records = self.records()
+        expected = protocol.assignment_state(records, self.artifacts, "bar-first")["refused_attempts"]
+        self.assertEqual(expected, [{"attempt_id": "z-first", "code": "review_evidence_undelivered"},
+                                    {"attempt_id": "a-second", "code": "review_evidence_undelivered"}])
+        self.assertEqual(cli.status_report(self.store)["review"]["assignments"]["bar-first"]["refused_attempts"], expected)
+        with patch.object(protocol, "assignment_state", wraps=protocol.assignment_state) as state:
+            report = cli._review_status(records, self.artifacts)
+        self.assertEqual(state.call_count, 0, "_review_status must avoid assignment_state")
+        state.assert_not_called()
+        self.assertEqual(report["assignments"]["bar-first"]["refused_attempts"], expected)
+
+    def prepare_bar(self):
+        from research_harness import literature, reading
+        self.initialize_problem()
+        self.prepare_review_route()
+        version = self.metadata(78001)
+        bundle = self.bundle(version)
+        self.mutate(literature.import_bundle, bundle)
+        self.mutate(reading.record_reading, self.full_note(bundle))
+        full = bundle["units"][0]["link"]
+        self.supporting = full["artifact"]
+        self.inside = self.link(version, full["source_id"], self.supporting, "The finite example")
+        self.outside = self.link(version, full["source_id"], self.supporting, "References: none.")
+        self.assign("bar", "first", source_links=[self.inside])
+        output = self.build_review_output("bar")
+        output["value"]["evidence"] = [{"kind": "source", "link": self.outside}]
+        return output
+
+    def invoke_output(self, output, assignment="bar-first", attempt="refused-1"):
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+            return self.mutate(protocol.invoke_assignment, {"id": attempt, "assignment_id": assignment}, credential="test-only")
+
+    def record_cli(self, output, assignment="bar-first", command="value-review", request=None):
+        from research_harness import cli
+        payload = dict(output, id="finding-" + assignment, assignment_id=assignment)
+        if command == "value-review":
+            payload["dossier_id"] = None
+        self.sequence += 1
+        path = self.root / "refusal-payload.json"
+        path.write_text(json.dumps(payload))
+        args = cli.build_parser().parse_args([command, "--workspace", str(self.root), "--file", str(path),
+            "--expected-revision", str(self.store.revision), "--request-id", request or "refusal-cli-" + str(self.sequence)])
+        return cli.run(args)
+
+    def refuse(self, output, assignment="bar-first", attempt="refused-1", command="value-review"):
+        self.invoke_output(output, assignment, attempt)
+        with self.assertRaises(ResearchError) as caught:
+            self.record_cli(output, assignment, command)
+        return caught.exception
+
+    def assert_refused(self, attempts, assignment="bar-first"):
+        state = protocol.assignment_state(self.records(), self.artifacts, assignment)
+        self.assertEqual(state.get("refused_attempts"), [
+            {"attempt_id": identifier, "code": "review_evidence_undelivered"} for identifier in attempts])
+        self.assertIsNone(state["attempt_id"])
+        self.assertIsNone(state["output"])
+        self.assertIn("review_output_refused", {item["code"] for item in state["obligations"]})
+        self.assertNotIn("review_output_pending", {item["code"] for item in state["obligations"]})
+        return state
+
+    def test_bar_refusal_is_immutable_and_repeated_recording_keeps_original_error(self):
+        output = self.prepare_bar()
+        error = self.refuse(output)
+        self.assertEqual(error.code, "review_evidence_undelivered")
+        records = self.records()
+        refusal = records.get("review_output_refusal", {}).get("refused-1")
+        self.assertIsNotNone(refusal)
+        self.assertEqual((refusal["id"], refusal["assignment_id"], refusal["attempt_id"], refusal["code"]),
+                         ("refused-1", "bar-first", "refused-1", "review_evidence_undelivered"))
+        self.assertEqual(refusal["output_digest"], digest(output))
+        self.assertEqual(refusal["request_digest"], records["review_attempt"]["refused-1"]["request_digest"])
+        self.assertTrue(refusal["check"])
+        self.assertTrue(refusal["protocol"])
+        revision = self.store.revision
+        with self.assertRaises(ResearchError):
+            self.record_cli(output)
+        self.assertEqual(self.store.revision, revision)
+        self.assertEqual(self.records()["review_output_refusal"], {"refused-1": refusal})
+        self.assertEqual(records["literature_operation"]["refusal-cli-" + str(self.sequence - 1) + ":refusal"]["operation"],
+                         "review.refusal")
+
+    def test_refused_bar_has_no_binding_attempt(self):
+        self.refuse(self.prepare_bar())
+        self.assert_refused(["refused-1"])
+
+    def test_retry_reuses_exact_request_then_records_valid_output_and_keeps_refusal(self):
+        output = self.prepare_bar()
+        self.refuse(output)
+        valid = json.loads(json.dumps(output))
+        valid["value"]["evidence"] = [{"kind": "source", "link": self.inside}]
+        self.invoke_output(valid, attempt="valid-2")
+        attempts = self.records()["review_attempt"]
+        self.assertEqual(attempts["refused-1"]["request_digest"], attempts["valid-2"]["request_digest"])
+        self.assertEqual(attempts["refused-1"]["request"], attempts["valid-2"]["request"])
+        self.record_cli(valid)
+        state = protocol.assignment_state(self.records(), self.artifacts, "bar-first")
+        self.assertEqual((state["attempt_id"], state["output"]), ("valid-2", valid))
+        self.assertEqual(state["refused_attempts"], [{"attempt_id": "refused-1", "code": "review_evidence_undelivered"}])
+        self.assertEqual(set(self.records()["review_output_refusal"]), {"refused-1"})
+
+    def test_two_refused_outputs_exhaust_invocation(self):
+        output = self.prepare_bar()
+        self.refuse(output)
+        self.refuse(output, attempt="refused-2")
+        self.assert_refused(["refused-1", "refused-2"])
+        with self.assertRaises(ResearchError) as caught:
+            self.invoke_output(output, attempt="forbidden-3")
+        self.assertEqual(caught.exception.code, "review_slot_exhausted")
+        self.assertNotIn("forbidden-3", self.records()["review_invocation"])
+
+    def test_exhausted_initial_bar_accepts_new_reviewer_but_never_same_reviewer(self):
+        output = self.prepare_bar()
+        self.refuse(output)
+        self.refuse(output, attempt="refused-2")
+        with self.assertRaises(ResearchError) as caught:
+            self.assign("bar", " FIRST ", identifier="same-reviewer")
+        self.assertEqual(caught.exception.code, "review_resampling_forbidden")
+        replacement = self.assign("bar", "new-reviewer", identifier="replacement")
+        self.assertEqual(replacement["slot_id"], "bar-first")
+        self.assertEqual(len(self.records()["review_attempt"]), 2)
+
+    def test_failed_only_initial_slot_also_prohibits_same_reviewer(self):
+        output = self.prepare_bar()
+        with patch("research_harness.review_transport.send_request", side_effect=TimeoutError("offline")):
+            self.mutate(protocol.invoke_assignment, {"id": "failed", "assignment_id": "bar-first"}, credential="test-only")
+        with self.assertRaises(ResearchError) as caught:
+            self.assign("bar", "first", identifier="same-reviewer")
+        self.assertEqual(caught.exception.code, "review_resampling_forbidden")
+        self.assertEqual(self.assign("bar", "new-reviewer")["slot_id"], "bar-first")
+
+    def exhaust_later_role(self, role):
+        self.prepare_reviews(results=False)
+        output = self.build_slate_output(["candidate-1"]) if role == "slate" else self.build_review_output(role)
+        late = self.artifacts.put(b"Content created after freezing the scientific review inputs.", "text/plain")
+        output["value"]["evidence"] = [late]
+        assignment = self.assign(role, "first")["id"]
+        self.refuse(output, assignment)
+        self.refuse(output, assignment, "refused-2")
+        self.assert_refused(["refused-1", "refused-2"], assignment)
+        with self.assertRaises(ResearchError) as caught:
+            self.assign(role, "third", identifier="replacement")
+        self.assertEqual(caught.exception.code, "review_bar_continuity")
+        self.assertNotIn("replacement", self.records()["review_assignment"])
+
+    def test_exhausted_slate_preserves_bar_continuity(self):
+        self.exhaust_later_role("slate")
+
+    def test_exhausted_result_preserves_bar_continuity(self):
+        self.exhaust_later_role("result")
+
+    def test_adjudicator_undelivered_output_is_refused_and_retried_via_cli(self):
+        self.prepare_reviews(result_reviewer="first")
+        self.assign("adjudicator", "third", identifier="focused", review_ids=["review-result-first", "review-result-second"],
+                    objection_id="unsupported-implication")
+        output = {"objection_id": "unsupported-implication", "disposition": "not_upheld", "reason": "Exact evidence resolves it.",
+            "evidence": [self.artifacts.put(b"Undelivered adjudicator content.", "text/plain")], "correction_admissible": None}
+        self.assertEqual(self.refuse(output, "focused", command="review-adjudication").code, "review_evidence_undelivered")
+        self.assert_refused(["refused-1"], "focused")
+        output["evidence"] = [self.supporting]
+        self.invoke_output(output, "focused", "valid-2")
+        self.record_cli(output, "focused", "review-adjudication")
+        self.assertIn("finding-focused", self.records()["review_adjudication"])
+        attempts = self.records()["review_attempt"]
+        self.assertEqual(attempts["refused-1"]["request_digest"], attempts["valid-2"]["request_digest"])
+        with self.assertRaises(ResearchError) as caught:
+            self.assign("adjudicator", "fourth", identifier="replacement", review_ids=["review-result-first", "review-result-second"],
+                        objection_id="unsupported-implication")
+        self.assertEqual(caught.exception.code, "review_adjudicator_fixed")
+
+    def test_missing_saved_request_is_never_a_refusal_or_retry(self):
+        self.prepare_reviews(results=False)
+        output = self.build_review_output("result")
+        self.assign("result", "first")
+        self.invoke_output(output, "result-first")
+        saved = self.records()["review_attempt"]["refused-1"]
+        (self.root / saved["request"]["path"]).unlink()
+        with self.assertRaises(ResearchError):
+            self.record_cli(output, "result-first")
+        self.assertEqual(self.records().get("review_output_refusal", {}), {})
+        with self.assertRaises(ResearchError) as caught:
+            self.invoke_output(output, "result-first", "forbidden-2")
+        self.assertEqual(caught.exception.code, "review_resampling_forbidden")
+        self.assertTrue(hasattr(protocol, "authenticate_attempt"), "R60 requires shared exact-attempt authentication")
+        self.assertFalse(protocol.authenticate_attempt(self.records(), self.artifacts,
+            self.records()["review_assignment"]["result-first"], saved))
+
+    def test_malformed_observed_output_is_classified_from_stored_bytes(self):
+        import importlib.util
+        self.prepare_bar()
+        output = {"stage": "bar", "value": {}}
+        self.invoke_output(output)
+        with self.assertRaises(ResearchError) as caught:
+            self.record_cli({"stage": "bar", "value": {"operator": "substitution"}})
+        self.assertEqual(caught.exception.code, "invalid_value_review")
+        self.assertIsNotNone(importlib.util.find_spec("research_harness.review_refusal"), "R60 classifier missing")
+        from research_harness.review_refusal import classify_observed_output
+        failure = classify_observed_output(self.records(), self.artifacts, "refused-1")
+        self.assertEqual(failure["code"], "invalid_value_review")
+        self.assertEqual(self.records()["review_output_refusal"]["refused-1"]["output_digest"], digest(output))
+
+    def test_status_lists_refused_attempts_and_usage_counts_both_calls(self):
+        from research_harness.cli import status_report
+        output = self.prepare_bar()
+        self.refuse(output)
+        self.refuse(output, attempt="refused-2")
+        report = status_report(self.store)
+        self.assertEqual(report["review"]["assignments"]["bar-first"]["refused_attempts"], [
+            {"attempt_id": "refused-1", "code": "review_evidence_undelivered"},
+            {"attempt_id": "refused-2", "code": "review_evidence_undelivered"}])
+        usage = protocol.usage_report(self.records())
+        self.assertEqual(usage["calls"], 3)  # One route probe, both observed refusals.
+        self.assertEqual(usage["observed"]["input_tokens"], 111)
+
+    def test_recheck_restores_binding_and_requires_recording_if_contract_becomes_recordable(self):
+        """Frozen packets cannot legitimately change in place. Simulate a future pure-validator correction only."""
+        output = self.prepare_bar()
+        self.refuse(output)
+        self.assert_refused(["refused-1"])
+        # No packet, output, response or request is changed; this is the direct classification recheck R60 requests.
+        from research_harness.review_refusal import classify_observed_output
+        with patch.object(decisions, "validate_review_contract", return_value=None):
+            self.assertIsNone(classify_observed_output(self.records(), self.artifacts, "refused-1"))
+            state = protocol.assignment_state(self.records(), self.artifacts, "bar-first")
+            self.assertEqual((state["attempt_id"], state["output"], state["refused_attempts"]), ("refused-1", output, []))
+            with self.assertRaises(ResearchError) as caught:
+                self.invoke_output(output, attempt="forbidden-2")
+            self.assertEqual(caught.exception.code, "review_resampling_forbidden")
+            self.assertIn("record the observed output", str(caught.exception).lower())
+        self.assertIn("refused-1", self.records()["review_output_refusal"])
+
+    def test_classifier_excludes_current_readings_and_never_uses_own_assignment_state(self):
+        import importlib.util
+        output = self.prepare_bar()
+        output["value"]["evidence"] = [{"kind": "source", "link": self.inside}]
+        self.invoke_output(output)
+        records = self.records()
+        records["reading"] = {}
+        self.assertIsNotNone(importlib.util.find_spec("research_harness.review_refusal"), "R60 classifier missing")
+        from research_harness.review_refusal import classify_observed_output
+        with patch.object(protocol, "assignment_state", side_effect=AssertionError("recursive own state")):
+            self.assertIsNone(classify_observed_output(records, self.artifacts, "refused-1"))
+        with self.assertRaises(ResearchError) as caught:
+            from research_harness.strategy import evidence
+            evidence(records, self.artifacts, output["value"]["evidence"])
+        self.assertEqual(caught.exception.code, "reading_missing")
+
+    def test_valid_pending_source_request_is_not_a_refusal(self):
+        import importlib.util
+        output = self.prepare_bar()
+        output["value"].update(status="unresolved", evidence=[])
+        output["source_requests"] = [{"id": "next", "kind": "inventory_page", "page": 0}]
+        self.invoke_output(output)
+        with self.assertRaises(ResearchError) as caught:
+            self.record_cli(output)
+        self.assertEqual(caught.exception.code, "review_sources_pending")
+        self.assertEqual(self.records().get("review_output_refusal", {}), {})
+        self.assertIsNotNone(importlib.util.find_spec("research_harness.review_refusal"), "R60 classifier missing")
+        from research_harness.review_refusal import classify_observed_output
+        self.assertIsNone(classify_observed_output(self.records(), self.artifacts, "refused-1"))
+
+    def classifier(self):
+        import importlib.util
+        self.assertIsNotNone(importlib.util.find_spec("research_harness.review_refusal"), "R60 classifier missing")
+        from research_harness.review_refusal import classify_observed_output
+        return classify_observed_output
+
+    def test_classifier_covers_source_request_shape(self):
+        output = self.prepare_bar()
+        output["source_requests"] = "not-an-array"
+        self.invoke_output(output)
+        classify = self.classifier()
+        self.assertEqual(classify(self.records(), self.artifacts, "refused-1")["code"], "invalid_review_source_request")
+
+    def classify_result_change(self, change):
+        self.prepare_reviews(bar_reviewer="first", results=False)
+        self.assign("result", "first")
+        output = self.build_review_output("result")
+        output["value"]["objection_findings"] = [self.make_finding("continuing")]
+        change(output)
+        self.invoke_output(output, "result-first")
+        return self.classifier()(self.records(), self.artifacts, "refused-1")
+
+    def test_classifier_covers_rubric_ranges(self):
+        failure = self.classify_result_change(lambda value: value["value"]["rubric"].update(priority=9))
+        self.assertEqual(failure["code"], "invalid_rubric_grades")
+
+    def test_classifier_requires_two_delivered_bars(self):
+        failure = self.classify_result_change(lambda value: value["value"].update(bar_ids=["review-bar-first"]))
+        self.assertEqual(failure["code"], "review_bar_pending")
+
+    def test_classifier_rejects_bar_ids_outside_frozen_packet(self):
+        failure = self.classify_result_change(lambda value: value["value"].update(bar_ids=["review-bar-first", "unknown"]))
+        self.assertEqual(failure["code"], "review_bar_mismatch")
+
+    def test_classifier_requires_findings_on_delivered_objections(self):
+        failure = self.classify_result_change(lambda value: value["value"].update(objection_findings=[]))
+        self.assertEqual(failure["code"], "review_objection_history_incomplete")
+
+    def test_classifier_uses_frozen_work_item_contract_without_lookup(self):
+        failure = self.classify_result_change(lambda value: value["value"].update(work_items=[{
+            "id": "unknown", "classification": "validity", "status": "accepted", "reason": "Not a delivered work item.",
+            "evidence": [self.supporting]}]))
+        self.assertEqual(failure["code"], "review_work_items_incomplete")
+
+    def test_classifier_does_not_turn_missing_delivered_bytes_into_locator_refusal(self):
+        output = self.prepare_bar()
+        output["value"]["evidence"] = [{"kind": "source", "link": self.inside}]
+        output["value"]["evidence"][0]["link"] = dict(self.inside, locator={"kind": "span", "start": 0, "end": 999999, "sha256": "bad"})
+        self.invoke_output(output)
+        classify = self.classifier()
+        self.assertEqual(classify(self.records(), self.artifacts, "refused-1")["code"], "invalid_locator")
+        (self.root / self.supporting["path"]).unlink()
+        self.assertIsNone(classify(self.records(), self.artifacts, "refused-1"))
+
+    def test_malformed_work_item_id_is_a_refusal_without_live_lookup(self):
+        output = self.prepare_bar()
+        output["value"]["evidence"] = [{"kind": "source", "link": self.inside}]
+        output["value"]["work_items"] = [{"id": [], "classification": "validity", "status": "accepted",
+            "reason": "Malformed observed identity.", "evidence": [self.supporting]}]
+        error = self.refuse(output)
+        self.assertEqual(error.code, "invalid_value_review")
+        self.assertEqual(self.records()["review_output_refusal"]["refused-1"]["code"], "invalid_value_review")
+
+    def test_malformed_record_reference_id_is_a_refusal_without_live_lookup(self):
+        output = self.prepare_bar()
+        output["value"]["evidence"] = [{"kind": "record", "record_kind": "value_review", "id": [], "digest": "bad"}]
+        error = self.refuse(output)
+        self.assertEqual(error.code, "invalid_strategy")
+        self.assertEqual(self.records()["review_output_refusal"]["refused-1"]["code"], "invalid_strategy")
+
+    def test_delivery_classification_uses_frozen_bounds_when_live_work_lookup_changes(self):
+        self.refuse(self.prepare_bar())
+        classify = self.classifier()
+        records = self.records()
+        records["work"] = {}
+        self.assertEqual(classify(records, self.artifacts, "refused-1")["code"], "review_evidence_undelivered")
+
+    def test_retry_checks_completed_request_digest_before_reserving(self):
+        output = self.prepare_bar()
+        self.refuse(output)
+        attempt = self.records()["review_attempt"]["refused-1"]
+        self.put("review_attempt", "refused-1", dict(attempt, request_digest="different-request"))
+        with self.assertRaises(ResearchError) as caught:
+            self.invoke_output(output, attempt="forbidden-2")
+        self.assertEqual(caught.exception.code, "review_request_changed")
+        self.assertNotIn("forbidden-2", self.records()["review_invocation"])
+
+    def test_malformed_artifact_descriptor_is_refused_before_byte_availability(self):
+        output = self.prepare_bar()
+        output["value"]["evidence"] = [dict(self.supporting, size="bad-size")]
+        self.assertEqual(self.refuse(output).code, "invalid_input")
+        self.assertEqual(self.records()["review_output_refusal"]["refused-1"]["code"], "invalid_input")
+        output["value"]["evidence"] = [{"kind": "source", "link": dict(self.inside,
+            artifact=dict(self.inside["artifact"], size="bad-size"))}]
+        self.assertEqual(self.refuse(output, attempt="refused-2").code, "invalid_input")
+        self.assertEqual(self.records()["review_output_refusal"]["refused-2"]["code"], "invalid_input")
+
+    def test_malformed_source_identity_is_classified_before_record_lookup(self):
+        output = self.prepare_bar()
+        output["value"]["evidence"] = [{"kind": "source", "link": dict(self.inside, source_id=[])}]
+        self.assertEqual(self.refuse(output).code, "source_mismatch")
+        self.assertEqual(self.records()["review_output_refusal"]["refused-1"]["code"], "source_mismatch")
+
+    def test_native_adjudicator_retry_preserves_existing_evidence_contract(self):
+        import test_research_review_protocol as native
+        case = native.ReviewProtocolTests("test_inadmissible_correction_is_preserved_without_clearing_the_finding")
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        p = case.protocol()
+        case.bar_reviews()
+        case.mutate(p.record_assignment, {"id": "focused", "route_id": "route", "dossier_id": "dossier", "role": "adjudicator",
+            "reviewer_id": "third", "author_id": "author", "context": {"review_ids": ["review-first", "review-second"],
+                "objection_id": "objection-first"}})
+        output = {"objection_id": "wrong-objection", "disposition": "unresolved", "reason": "The focused finding remains unresolved.",
+            "evidence": [], "correction_admissible": None}
+        case.invoke(output, "bad-native", "focused")
+        with self.assertRaises(ResearchError) as caught:
+            case.mutate(p.record_adjudication, dict(output, id="finding", assignment_id="focused"))
+        self.assertEqual(caught.exception.code, "review_adjudication_mismatch")
+        self.assertIn("bad-native", case.records().get("review_output_refusal", {}))
+        output["objection_id"] = "objection-first"
+        case.invoke(output, "valid-native", "focused")
+        case.mutate(p.record_adjudication, dict(output, id="finding", assignment_id="focused"))
+        self.assertEqual(case.records()["review_adjudication"]["finding"]["evidence"], [])
+
+    def test_legacy_record_lookup_failure_cannot_create_a_pure_refusal(self):
+        self.prepare_reviews(results=False)
+        with patch.object(protocol, "deliver_review", side_effect=lambda records, payload: payload):
+            self.assign("result", "first")
+        bar = self.records()["value_review"]["review-bar-second"]
+        output = self.build_review_output("result")
+        output["value"]["evidence"] = [{"kind": "record", "record_kind": "value_review", "id": bar["id"], "digest": digest(bar)}]
+        self.invoke_output(output, "result-first")
+        classify = self.classifier()
+        self.assertIsNone(classify(self.records(), self.artifacts, "refused-1"))
+        records = self.records()
+        del records["value_review"][bar["id"]]
+        self.assertIsNone(classify(records, self.artifacts, "refused-1"))
+
+    def test_generic_pdf_format_qualification_is_not_an_output_refusal(self):
+        self.classifier()
+        from research_harness.review_refusal import validate_evidence_contract
+        original = self.artifacts.put(b"%PDF-1.4\n% Authored generic-binary fixture.\n%%EOF", "application/octet-stream")
+        page_map = self.artifacts.put(b"One extracted page.", "text/plain")
+        link = {"version_id": "arxiv:2601.78001v1", "source_id": "original", "artifact": original,
+            "locator": {"kind": "pdf", "page_index": 0, "printed_page": None, "region": [0, 0, 1, 1]}}
+        packet = {"source_deliveries": [{"request": {"version_id": link["version_id"]}, "evidence": [original, page_map],
+            "source_provenance": [{"source_id": "original", "original_descriptor": {"sha256": original["sha256"]},
+                "delivered_sha256": [original["sha256"], page_map["sha256"]]}]}]}
+        # The frozen delivery has no format-inference qualification. Current native capture qualification remains state.
+        self.assertIsNone(validate_evidence_contract({}, self.artifacts, [{"kind": "source", "link": link}], packets=[packet]))

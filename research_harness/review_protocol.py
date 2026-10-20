@@ -11,7 +11,7 @@ import copy
 import json
 import uuid
 
-from .artifacts import ArtifactStore, describe_artifact
+from .artifacts import ArtifactStore, describe_artifact, validate_reference
 from .errors import ResearchError
 from .evidence import digest
 from .graph import obligation
@@ -21,6 +21,7 @@ from . import bar_sources
 from . import review_context_repair as context_repair
 from . import review_supplied_evidence as supplied_evidence
 from . import problem_rubric
+from .review_refusal import record_refusal_on_error
 
 ROLES = ('bar', 'slate', 'result', 'adjudicator', 'manuscript', 'standalone', 'verification', 'native_math')
 PAPER_ROLES = ('manuscript', 'standalone')
@@ -796,21 +797,24 @@ def _list_projected_records(packet):
             yield 'source', None, digest(source), source
 
 
-def collect_carried_records(records, artifacts, assignment_id):
+def collect_carried_records(records, artifacts, assignment_id, *, packets=None):
     """The records that the observed packets of an assignment's lineage carried, as rows of _list_packet_records."""
-    from .direction_reviews import collect_observed_packets
-    return [row for _, observed in collect_observed_packets(records, artifacts, assignment_id)
-            for row in _list_packet_records(observed)]
+    if packets is None:
+        from .direction_reviews import collect_observed_packets
+        packets = [observed for _, observed in collect_observed_packets(records, artifacts, assignment_id)]
+    return [row for observed in packets for row in _list_packet_records(observed)]
 
 
-def find_carried_record(records, carried, reference):
+def find_carried_record(records, carried, reference, *, frozen=False):
     """The (projection, artifacts) that carried rows hold for a record reference at its digest, or None. The stored
-    record is read only for its digest, where a projection exposes none."""
-    stored = records.get(reference['record_kind'], {}).get(reference['id'])
+    record is read only for its digest, where a projection exposes none. Frozen validation leaves that legacy
+    digest qualification to record-time evidence checks; it cannot infer non-delivery from a missing record."""
+    stored = None if frozen else records.get(reference['record_kind'], {}).get(reference['id'])
     stored_digest = None if stored is None else digest(stored)
     return next(((projection, supplied) for kind, identifier, recorded_digest, projection, supplied in carried
                  if kind == reference['record_kind'] and identifier in (None, reference['id'])
-                 and (recorded_digest or stored_digest) == reference['digest']), None)
+                 and ((frozen and recorded_digest is None)
+                      or (recorded_digest or stored_digest) == reference['digest'])), None)
 
 
 def describe_version_evidence(records, artifacts, version):
@@ -1498,25 +1502,29 @@ def _find_problem_refresh_parent(records, artifacts, value):
     return prior['id'] if _is_problem_refresh(records, artifacts, prior, _read_json(artifacts, prior['packet'])) else None
 
 
-def _initial_slot(records, value):
+def _initial_slot(records, artifacts, value):
     slots = {}
     for prior in records.get('review_assignment', {}).values():
         if (prior['dossier_id'] == value['dossier_id'] and prior['role'] == value['role']
                 and context_repair.is_same_subject(prior, value)):
             slots.setdefault(context_repair.slot_id(records, prior), []).append(prior)
+    from .review_refusal import refused_attempts
     replaceable = []
     for identifier, members in slots.items():
-        failed_only = True
+        if any(normalized_text(prior['reviewer_id']) == normalized_text(value['reviewer_id']) for prior in members):
+            raise ResearchError('review_resampling_forbidden', 'Retain the assigned or completed initial reviewer; record its observed output, or invoke its assignment again after a refusal')
+        replaceable_members = True
         for prior in members:
             attempts = [a for a in records.get('review_attempt', {}).values() if a['assignment_id'] == prior['id']]
             pending = any(a['assignment_id'] == prior['id'] and a['id'] not in records.get('review_attempt', {})
                           for a in records.get('review_invocation', {}).values())
-            if pending or not attempts or any(a['status'] not in ('failed', 'incomplete') for a in attempts):
-                failed_only = False
-        if failed_only:
+            completed = [a for a in attempts if a['status'] == 'completed']
+            exhausted = (value['role'] == 'bar' and len(completed) >= 2
+                         and len(refused_attempts(records, artifacts, completed)) == len(completed))
+            if pending or not attempts or (completed and not exhausted):
+                replaceable_members = False
+        if replaceable_members:
             replaceable.append((min(p['recorded_revision'] for p in members), identifier))
-        elif any(normalized_text(prior['reviewer_id']) == normalized_text(value['reviewer_id']) for prior in members):
-            raise ResearchError('review_resampling_forbidden', 'Retain the assigned or completed initial reviewer; correct a recorded error instead')
     if replaceable:
         return min(replaceable)[1]
     if len(slots) >= 2:
@@ -1563,7 +1571,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         slot_identifier = None
         if value['role'] in bar_sources.ROLES:
             slot_identifier = (context_repair.slot_id(records, parent) if parent is not None else
-                               repair['slot_id'] if repair is not None else _initial_slot(records, value))
+                               repair['slot_id'] if repair is not None else _initial_slot(records, artifacts, value))
         packet = (_repair_packet(records, artifacts, value, repair) if repair is not None else
                   build_packet(records, artifacts, value['dossier_id'], value['role'], value['reviewer_id'], **value['context']))
         if value['role'] == 'native_math':
@@ -1698,7 +1706,12 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         completed = [a for a in records.get('review_attempt', {}).values()
                      if a['assignment_id'] == value['assignment_id'] and a['status'] == 'completed']
         if completed:
-            raise ResearchError('review_resampling_forbidden', 'A completed review cannot be replaced by another sampled output')
+            from .review_refusal import refused_attempts
+            refused = refused_attempts(records, artifacts, completed)
+            if len(refused) != len(completed):
+                raise ResearchError('review_resampling_forbidden', 'A completed output that is recordable, or whose provenance is unverified, cannot be sampled again; record the observed output')
+            if len(refused) >= 2:
+                raise ResearchError('review_slot_exhausted', 'Two refused outputs exhaust this assignment; an exhausted initial bar slot takes a new reviewer')
         context_repair.require_current_slot(records, assignment)
         pending = [a for a in records.get('review_invocation', {}).values()
                    if a['assignment_id'] == value['assignment_id'] and a['id'] not in records.get('review_attempt', {})]
@@ -1716,6 +1729,8 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         if history_parent is not None and not assignment_state(records, artifacts, history_parent)['ready']:
             raise ResearchError('review_source_continuation_unverified', 'The exact earlier scientific history must remain verified before dispatch')
         request = transport.request_body(route, assignment['prompt']['text'], packet, assignment.get('history', ()))
+        if any(attempt.get('request_digest') != digest(request) for attempt in completed):
+            raise ResearchError('review_request_changed', 'A retry must retain the exact request of every completed attempt')
         invocation = dict(value, request=_put_json(artifacts, request), route_id=assignment['route_id'],
                           route_digest=digest(route), packet_digest=assignment['packet_digest'],
                           prompt_hash=assignment['prompt_hash'], invocation_mode='explicit-bar-continuation' if assignment.get('history') else 'fresh-explicit-input',
@@ -1731,15 +1746,35 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
                         expected_revision=expected_revision, request_id=request_id, credential=credential)
 
 
+def authenticate_attempt(records, artifacts, assignment, attempt):
+    """Authenticate one exact observation independently of effective attempt selection."""
+    try:
+        route = records['review_route'][assignment['route_id']]
+        request = _read_json(artifacts, attempt['request']) if attempt.get('request') else None
+        packet = _read_json(artifacts, assignment['packet'])
+        output = _read_json(artifacts, attempt['output'])
+        response = _read_json(artifacts, attempt['response'])
+        return (attempt.get('origin') == 'instrumented' and request is not None
+                and attempt.get('runtime') == transport.runtime(route)
+                and attempt.get('route_digest') == digest(route)
+                and request == transport.request_body(route, assignment['prompt']['text'], packet, assignment.get('history', ()))
+                and attempt.get('packet_digest') == assignment['packet_digest']
+                and attempt.get('prompt_hash') == assignment['prompt_hash']
+                and transport.response_output(response) == output
+                and transport.context_verified(route, request, response))
+    except (ResearchError, ValueError, TypeError, KeyError):
+        return False
+
+
 def assignment_state(records, artifacts, assignment_id):
     assignment = records.get('review_assignment', {}).get(assignment_id)
     if assignment is None:
         return {'ready': False, 'obligations': [obligation('review_assignment_missing', 'Record the independent assignment.')],
-                'reviewer_id': None, 'output': None, 'context_status': 'unverified'}
+                'reviewer_id': None, 'output': None, 'attempt_id': None, 'refused_attempts': [], 'context_status': 'unverified'}
     state = dict(route_state(records, artifacts, assignment['route_id']), ready=False, obligations=[],
                  reviewer_id=assignment['reviewer_id'], dossier_id=assignment['dossier_id'], role=assignment['role'],
                  stage=assignment['role'], packet_digest=assignment['packet_digest'], prompt_hash=assignment['prompt_hash'],
-                 output=None, output_digest=None, attempt_id=None)
+                 output=None, output_digest=None, attempt_id=None, refused_attempts=[])
     events = [event for event in records.get('review_context_event', {}).values()
               if event['assignment_id'] == assignment_id and event['kind'] == 'contamination']
     if assignment['context_state']['context_status'] != 'verified_for_route':
@@ -1767,26 +1802,29 @@ def assignment_state(records, artifacts, assignment_id):
     attempts = sorted((a for a in records.get('review_attempt', {}).values() if a['assignment_id'] == assignment_id),
                       key=lambda a: a['recorded_revision'])
     completed = [a for a in attempts if a['status'] == 'completed']
-    if completed:
-        attempt = completed[0]
+    from .review_refusal import refused_attempts
+    state['refused_attempts'] = refused_attempts(records, artifacts, completed)
+    refused_ids = {item['attempt_id'] for item in state['refused_attempts']}
+    binding = next((attempt for attempt in completed if attempt['id'] not in refused_ids), None)
+    if binding is not None:
+        attempt = binding
         state['attempt_id'] = attempt['id']
         try:
             state['output'] = _read_json(artifacts, attempt['output'])
             state['output_digest'] = digest(state['output'])
-            request = _read_json(artifacts, attempt['request']) if attempt.get('request') else None
-            packet = _read_json(artifacts, assignment['packet'])
-            valid = (attempt.get('origin') == 'instrumented' and request is not None
-                     and attempt.get('runtime') == transport.runtime(route)
-                     and attempt.get('route_digest') == digest(route)
-                     and request == transport.request_body(route, assignment['prompt']['text'], packet, assignment.get('history', ()))
-                     and attempt.get('packet_digest') == assignment['packet_digest']
-                     and attempt.get('prompt_hash') == assignment['prompt_hash']
-                     and transport.response_output(_read_json(artifacts, attempt['response'])) == state['output']
-                     and transport.context_verified(route, request, _read_json(artifacts, attempt['response'])))
-            if not valid:
+            # Retain the existing availability diagnostic separately from the boolean authentication.
+            if attempt.get('request'):
+                _read_json(artifacts, attempt['request'])
+            _read_json(artifacts, assignment['packet'])
+            if attempt.get('response'):
+                _read_json(artifacts, attempt['response'])
+            if not authenticate_attempt(records, artifacts, assignment, attempt):
                 state['obligations'].append(obligation('review_invocation_unverified', 'Imported or mismatched invocation provenance cannot approve.'))
         except (ResearchError, ValueError, TypeError, KeyError):
             state['obligations'].append(obligation('review_output_unavailable', 'Verify the exact packet, request, and output artifact bytes.'))
+    elif completed:
+        state['obligations'].append(obligation('review_output_refused', 'Every observed output of this assignment failed its output contract; invoke the assignment again.',
+                                               refused_attempts=state['refused_attempts']))
     else:
         state['obligations'].append(obligation('review_output_pending', 'A complete observed reviewer response is required.'))
     if assignment['role'] in bar_sources.ROLES:
@@ -1828,6 +1866,36 @@ def record_context_event(store, payload, *, expected_revision, request_id):
     return prepared_mutation(store, 'review.context_event', payload, prepare, expected_revision=expected_revision, request_id=request_id)
 
 
+def validate_adjudication_contract(records, artifacts, assignment, packet, output):
+    """Validate only the focused output and the adjudicator's frozen delivery."""
+    from .review_refusal import contract_check, validate_evidence_contract
+    packets = supplied_evidence.lineage_packets(records, artifacts, [assignment['id']])
+    with contract_check('adjudication.shape'):
+        fields(output, ('objection_id', 'disposition', 'reason', 'evidence', 'correction_admissible'))
+        if packet['objection']['id'] != output['objection_id']:
+            raise ResearchError('review_adjudication_mismatch', 'Disposition must concern the assigned objection')
+        if output['disposition'] not in ('upheld', 'not_upheld', 'unresolved'):
+            raise ResearchError('invalid_review_adjudication', 'Use a focused objection disposition, not a third vote')
+        if output['correction_admissible'] is not None and type(output['correction_admissible']) is not bool:
+            raise ResearchError('invalid_review_adjudication', 'Correction admissibility must be null or a boolean finding')
+        text(output['reason'], 'Adjudication reason')
+        if packet.get('subject', {}).get('kind') == 'problem':
+            validate_evidence_contract(records, artifacts, output['evidence'], packets=packets)
+        else:
+            # Generic focused findings retain their existing recursive artifact-evidence contract.
+            # Artifact availability is still checked by _evidence when recording.
+            for reference in collect_references(output['evidence']):
+                validate_reference(reference)
+    if packet.get('subject', {}).get('kind') == 'problem':
+        missing = supplied_evidence.adjudicator_undelivered_references(records, artifacts, assignment['id'],
+                                                                     output['evidence'], frozen=True)
+        if missing:
+            with contract_check('adjudication.evidence_delivery'):
+                raise ResearchError('review_evidence_undelivered',
+                    'Cite only content that this adjudicator received in its own packets.', missing[0])
+
+
+@record_refusal_on_error
 def record_adjudication(store, payload, *, expected_revision, request_id):
     artifacts = ArtifactStore(store.root)
     def prepare(records, value):
@@ -1837,23 +1905,13 @@ def record_adjudication(store, payload, *, expected_revision, request_id):
             raise ResearchError('review_adjudication_unverified', 'A fresh verified focused adjudicator must return the disposition')
         assignment = _get(records, 'review_assignment', value['assignment_id'])
         packet = _read_json(artifacts, assignment['packet'])
-        if packet['objection']['id'] != value['objection_id']:
-            raise ResearchError('review_adjudication_mismatch', 'Disposition must concern the assigned objection')
-        if value['disposition'] not in ('upheld', 'not_upheld', 'unresolved'):
-            raise ResearchError('invalid_review_adjudication', 'Use a focused objection disposition, not a third vote')
-        if value['correction_admissible'] is not None and type(value['correction_admissible']) is not bool:
-            raise ResearchError('invalid_review_adjudication', 'Correction admissibility must be null or a boolean finding')
         response = {k: v for k, v in value.items() if k not in ('id', 'assignment_id')}
         if response != state['output']:
             raise ResearchError('review_output_mismatch', 'Record the exact observed adjudicator response')
-        text(value['reason'], 'Adjudication reason')
+        validate_adjudication_contract(records, artifacts, assignment, packet, response)
         if packet.get('subject', {}).get('kind') == 'problem':
             from .strategy import evidence
             evidence(records, artifacts, value['evidence'])
-            missing = supplied_evidence.adjudicator_undelivered_references(records, artifacts, assignment['id'], value['evidence'])
-            if missing:
-                raise ResearchError('review_evidence_undelivered',
-                    'Cite only content that this adjudicator received in its own packets.', missing[0])
         _evidence(artifacts, value['evidence'])
         record = dict(value, dossier_id=state['dossier_id'], recorded_revision=expected_revision + 1)
         if packet.get('subject', {}).get('kind') == 'problem':

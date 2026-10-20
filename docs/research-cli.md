@@ -69,11 +69,11 @@ All new mutations use the normal `--file`, `--expected-revision` and
 | `review-route` | Register the explicit instrumented provider, model and resource configuration. |
 | `review-probe` | Execute and retain the input-boundary positive-control test. A failed test establishes no independence. |
 | `review-assignment` | Freeze the canonical role, exact allowed packet, reviewer identity and current verified route. |
-| `review-run` | Execute that assignment once, retaining actual output, usage and failed or interrupted attempts. |
+| `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. After a refused output, one retry with the same request is permitted. |
 | `review-attempt` | Preserve imported output or failure history; imported assertions never establish verified independence. |
 | `review-context` | Record evidence of later contamination or other context observations. |
-| `review-adjudication` | Bind the observed fresh assessor's focused objection or correction finding. |
-| `value-review` | Record the exact observed bar, slate or combined support/value result. |
+| `review-adjudication` | Record the exact observed focused finding. An output that fails its output contract leaves a refusal record. |
+| `value-review` | Record the exact observed bar, slate or combined support/value result. An output that fails its output contract leaves a refusal record. |
 | `research-decision` | Select the canonical scientific action, artifact disposition and full-goal status. |
 | `source-impact` | Bind an explicit impact classification for the complete source delta since the selected decision. |
 
@@ -116,6 +116,30 @@ native evidence and preserves that assessor's own history. Keep all ancestor
 source gaps and charge the continuation to the same allowance. A request response
 remains unresolved and cannot be recorded with `value-review`; a final phase
 assessment cannot use this interface to obtain a replacement answer.
+
+A final assessment binds its assignment. `value-review` and `review-adjudication`
+check the observed output against its output contract: the shape of the payload,
+its locators against the delivered bytes, its citations against the delivered
+content, its bar ids against the delivered bars, its findings on the objections
+that its own packet delivered and on the historical reviews of its lineage, a
+reassessment against its frozen predecessor, and the adjudicator's objection id
+and disposition. When the output fails one of these checks, the command returns
+the error and writes one immutable `review_output_refusal` record for the
+attempt, with the code, the details and the name of the check. A check that
+depends on the store (a pending source request, a reading that is not current, a
+conflict with a stored review) writes no record. An output whose provenance does
+not authenticate is never refused. While every completed attempt of an
+assignment is refused, and each refused output still fails its check,
+`review-run` invokes the assignment again with the same packet, prompt, route
+and request, and the reviewer receives nothing about the refusal. A refused
+output that has become recordable binds again, and `review-run` refuses the
+retry with `review_resampling_forbidden`. After two refused outputs,
+`review-run` refuses the next invocation with `review_slot_exhausted`. A new
+reviewer can take an exhausted initial bar slot; the same reviewer is refused.
+A slate or result slot keeps its bar continuity, and the adjudicator stays
+fixed, so those roles recover through the retry only. `status` lists the
+refused attempts of each assignment under `review.assignments`, and
+`usage_report` counts them as calls.
 
 After recorded context contamination, first record every actual observed final
 assessment in the inherited history with `value-review`, retaining the exact

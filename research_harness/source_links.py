@@ -150,11 +150,18 @@ def read_locator(artifacts, artifact, locator, *, capture=None):
     raise ResearchError("invalid_locator", "Unsupported source locator kind")
 
 
+def validate_link_fields(link, *, locator=True):
+    """The source-link grammar shared by current reading and frozen-output checks."""
+    fields(link, ("version_id", "source_id", "artifact", "locator"), code="source_mismatch")
+    normalize_identifier(link["version_id"])
+    text(link["source_id"], "Source ID", code="source_mismatch")
+    if locator and not isinstance(link["locator"], dict):
+        raise ResearchError("invalid_locator", "A source locator object is required")
+
+
 def validate_link(records, artifacts, link):
     """Verify bytes, exact-work membership and locator; return its source context."""
-    fields(link, ("version_id", "source_id", "artifact", "locator"), code="source_mismatch")
-    if not isinstance(link["locator"], dict):
-        raise ResearchError("invalid_locator", "A source locator object is required")
+    validate_link_fields(link)
     artifacts.read(link["artifact"])
     work = exact_work(records, link["version_id"])
     source = captured_source(records, artifacts, link["source_id"])
@@ -257,7 +264,11 @@ def contains(outer, inner, records):
     inner_capture = fulltext_capture(work, inner["source_id"])
     if compute_binding_identity(outer_capture) != compute_binding_identity(inner_capture):
         return False
-    a, b = outer["locator"], inner["locator"]
+    return contains_locator(outer["locator"], inner["locator"])
+
+
+def contains_locator(a, b):
+    """Containment of already validated locators, independent of current source bindings."""
     if a["kind"] in TEXT_KINDS and b["kind"] in TEXT_KINDS:
         return a["start"] <= b["start"] < b["end"] <= a["end"]
     if a["kind"] != b["kind"]:
