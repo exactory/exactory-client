@@ -1763,10 +1763,17 @@ Each record that a problem packet projects carries the stored record's `id` and
 checks), and a projection that carries further records (the attempt's native
 attempt, a formal check's native closure, a computation's admission, execution
 and assessment) lists them in `record_references`. A reviewer cites any of them
-as `{kind: "record", record_kind, id, digest}`. A bar, slate or result review
-cites a record only when one of its observed packets carried that record at the
-cited digest; `value-review` refuses another with `review_evidence_undelivered`,
-naming the record.
+as `{kind: "record", record_kind, id, digest}`. Each review payload that a
+problem packet delivers (`bars`, `own_bars`, `historical_reviews`, the
+calibrations) carries `record_reference`, the exact reference of the stored
+review. Each entry of a result packet's `material_objections` carries
+`version_evidence`, the evidence of its current version in the adjudicator's
+shape (below), so the reviewer receives the content of the records it cites. A
+bar, slate or result review cites a record only when one of its observed packets
+carried that record at the cited digest as content; a reference that the
+reviewer received only inside a finding, or as an undelivered entry, does not
+count. `value-review` refuses another citation with
+`review_evidence_undelivered`, naming the record.
 Both result reviews must pass exactly `problem_statement`, `problem_openness`,
 `problem_value`, `problem_citations` and `stop`. A marker author cannot be a
 reviewer (`review_not_independent`); an assignment's unknown author is refused
@@ -1835,7 +1842,12 @@ pair was graded against, sorted by id: for a bar pair the two bars, and for a
 result pair the bars that the results' recorded `bar_ids` name, as the results'
 observed packets delivered them. `current_bar_calibrations` carries the current
 bars that are not among them, which a context repair installed; it is empty when
-no bar was replaced. For a material objection the packet also carries the
+no bar was replaced. Both keep the content and the `record_reference` of each
+bar, with artifact references as templates, so the standards attach no source
+bytes; bytes reach the adjudicator only through `current_evidence`,
+`original_evidence`, `version_evidence` and the passages with their bounds. The
+gate compares the calibrations in that templated form, so a packet that
+delivered them as raw payloads still covers them. For a material objection the packet also carries the
 evidence of the adjudicated version: `version_review`, the payload of the review
 that stated the version, with artifact references as templates;
 `version_evidence`, one entry for each reference that the version cites, except
@@ -1853,7 +1865,9 @@ record at that digest, not the stored record: for a candidate, the slate
 packet's `candidates` entry, which has no author notes and no disposition; for
 a record that a result packet projects, the entry of the `problem_evidence`
 list that carried it, or the projection whose `record_references` list it; for
-a review, its payload in `bars`, `own_bars` or `historical_reviews`. A record
+a review, its payload in `bars`, `own_bars` or `historical_reviews`, matched by
+its `record_reference`; for a record that a material objection's
+`version_evidence` delivered to a result reviewer, that entry. A record
 kind that no problem packet projects is never delivered. Artifact references in `record` are templates, and
 `artifacts` holds the descriptors of its artifacts that the stating review's
 packets supplied, whose bytes the packet delivers. A reference that cannot be

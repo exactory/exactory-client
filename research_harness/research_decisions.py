@@ -648,13 +648,16 @@ def find_undelivered_adjudication_keys(records, artifacts, assignment_id, *, rub
     adjudicated pair, for a rubric shortfall the item's definition and threshold, and for a material objection the
     given stating review and evidence of the version. A cited reference that the packet lacks, or that cannot be
     delivered, is named as version_evidence:<record_kind>:<id> or version_evidence:<sha256>."""
-    from .review_protocol import resolve_original_calibrations
+    from .review_protocol import describe_calibration, resolve_original_calibrations
     assignment = records['review_assignment'][assignment_id]
     packet = read_assignment_packet(records, artifacts, assignment_id)
-    expected = dict(version_evidence or {},
-                    bar_calibrations=resolve_original_calibrations(records, artifacts, assignment['context']['review_ids']))
+    expected = dict(version_evidence or {})
     entries = expected.pop('version_evidence', None)
     undelivered = [key for key, value in expected.items() if packet.get(key) != value]
+    # The standards compare as an adjudicator weighs them, so a packet that delivered them raw still covers them.
+    if ([describe_calibration(bar) for bar in packet.get('bar_calibrations') or []]
+            != resolve_original_calibrations(records, artifacts, assignment['context']['review_ids'])):
+        undelivered.append('bar_calibrations')
     if entries is not None:
         delivered = packet.get('version_evidence') or []
         # An undelivered entry names its reference; a record entry its kind and id; an artifact its sha256.

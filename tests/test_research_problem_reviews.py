@@ -333,11 +333,18 @@ class ProblemReviewTests(LiteratureCase):
             for identifier in ('review-result-first', 'review-result-second')])
         self.assertEqual(saved['problem_evidence_digest'], digest(self.expected))
 
+    def deliver_calibration(self, records, identifier):
+        """A bar standard as the adjudicator packet carries it (R47, R48): artifact references as templates, and the
+        exact reference of the stored review."""
+        saved = records['value_review'][identifier]
+        return dict(protocol._reference_templates(saved['payload']), record_reference={
+            'kind': 'record', 'record_kind': 'value_review', 'id': identifier, 'digest': digest(saved)})
+
     def test_adjudicator_packet_carries_both_bar_calibrations_and_the_rubric_definition(self):
         self.prepare_below_threshold_reviews()
         _, packet = self.observe_rubric_adjudication()
         records = self.read_records()
-        self.assertEqual(packet['bar_calibrations'], [records['value_review'][identifier]['payload']
+        self.assertEqual(packet['bar_calibrations'], [self.deliver_calibration(records, identifier)
                                                      for identifier in ('review-bar-first', 'review-bar-second')])
         anchor = problem_rubric.ANCHORS['priority']
         self.assertEqual(packet['rubric_definition'], {'item': 'priority', 'definition': anchor['definition'],
@@ -393,9 +400,9 @@ class ProblemReviewTests(LiteratureCase):
         self.replace_first_bar()
         _, packet = self.observe_rubric_adjudication()
         records = self.read_records()
-        self.assertEqual(packet['bar_calibrations'], [records['value_review'][identifier]['payload']
+        self.assertEqual(packet['bar_calibrations'], [self.deliver_calibration(records, identifier)
                                                      for identifier in ('review-bar-first', 'review-bar-second')])
-        self.assertEqual(packet['current_bar_calibrations'], [records['value_review']['review-bar-replaced']['payload']])
+        self.assertEqual(packet['current_bar_calibrations'], [self.deliver_calibration(records, 'review-bar-replaced')])
         # The replaced bar retires the original pair from the current gate, so assess that pair by name.
         state = decisions.assess_problem_reviews(records, self.artifacts, review_ids=['review-result-first', 'review-result-second'])
         self.assertNotIn('problem_rubric_below_threshold', {row['code'] for row in state['obligations']})

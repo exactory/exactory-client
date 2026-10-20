@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from research_harness import research_decisions as decisions, review_protocol as protocol
 from research_harness.errors import ResearchError
+from research_harness.evidence import digest
 from research_harness.problem_delivery import export_problem, assess_post
 import test_research_problem_delivery as fixtures
 import test_research_problem_slate as slate_fixtures
@@ -512,7 +513,9 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         for reviewer in ("first", "second"):
             with self.subTest(reviewer=reviewer):
                 packet = json.loads(self.artifacts.read(records["review_assignment"]["bar-" + reviewer + "-v2"]["packet"]))
-                self.assertEqual(packet["historical_reviews"], [records["value_review"]["review-bar-" + reviewer]["payload"]])
+                saved = records["value_review"]["review-bar-" + reviewer]
+                self.assertEqual(packet["historical_reviews"], [dict(saved["payload"], record_reference={"kind": "record",
+                    "record_kind": "value_review", "id": saved["id"], "digest": digest(saved)})])
                 self.assertEqual(sorted(packet["problem_refresh"]), ["assignment_id", "previous_template_id", "template_id"])
         packet = json.loads(self.artifacts.read(records["review_assignment"]["bar-first-v2"]["packet"]))
         self.assertEqual(packet["historical_reviews"][0]["objections"], [self.make_objection()])
