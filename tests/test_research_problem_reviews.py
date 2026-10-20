@@ -198,6 +198,7 @@ class ProblemReviewTests(LiteratureCase):
                             "a record delivered under a material objection's version_evidence",
                             "is cited by copying the citation given with its mapping unchanged",
                             "a link to any other span of the same source is refused",
+                            "A mapping delivered without a citation is for reading and cannot be cited in this role",
                             "templates (artifact_reference_template, artifact_descriptor)",
                             "reached you only as a template or inside a prior finding is not delivered content",
                             "review_evidence_undelivered"):
@@ -209,9 +210,9 @@ class ProblemReviewTests(LiteratureCase):
                           protocol.canonical_prompt(role, orchestration="problem_creation")["text"])
 
     def test_problem_slate_template_is_version_two_only_and_keeps_bar_and_result_bytes(self):
-        version_two = {"bar": "d1a680b495ba1ea07e9e58ff9c20bb86c4ff66ddda81e22bfbedd79f50164126",
-                       "result": "5cf579aeae5f2e19e60b0bd38a47143bee899a3e124123f1dc3c5e18853b315c",
-                       "adjudicator": "ddffa369f4f379e128ddcf7adc36aea35078630eba2d7c1db9d26a279c10618e"}
+        version_two = {"bar": "e402dcf92926adac0a536d702e93a6e0d33c317f8ec5ff9440028731f695703b",
+                       "result": "4ac669f17499b113cb9fcea6a091045bfe39f637b99c03eaeb8360051c0f273e",
+                       "adjudicator": "80a3eeb2a0cd65f1edf434c74a245b68cc8bb33a2edffffcdadbd562a35dd346"}
         for role, expected in version_two.items():
             self.assertEqual(protocol.canonical_prompt(role, orchestration="problem_creation")["template_hash"], expected)
         slate = protocol.canonical_prompt("slate", orchestration="problem_creation")
