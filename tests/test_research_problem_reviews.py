@@ -196,7 +196,9 @@ class ProblemReviewTests(LiteratureCase):
             text_of_role = protocol.canonical_prompt(role, orchestration="problem_creation")["text"]
             for content in ("a record whose content the packet delivered to you",
                             "a record delivered under a material objection's version_evidence",
-                            "is cited by the link of that passage", "templates (artifact_reference_template, artifact_descriptor)",
+                            "is cited by copying the citation given with its mapping unchanged",
+                            "a link to any other span of the same source is refused",
+                            "templates (artifact_reference_template, artifact_descriptor)",
                             "reached you only as a template or inside a prior finding is not delivered content",
                             "review_evidence_undelivered"):
                 self.assertIn(content, text_of_role)
@@ -207,9 +209,9 @@ class ProblemReviewTests(LiteratureCase):
                           protocol.canonical_prompt(role, orchestration="problem_creation")["text"])
 
     def test_problem_slate_template_is_version_two_only_and_keeps_bar_and_result_bytes(self):
-        version_two = {"bar": "eec00e55d2ed36ab837f8cff7cc265c1685971a67c4847b08fc35714bcf96d03",
-                       "result": "ca53255ec1becb85708b093056af99c9dbda87ede405d8ad3c1335b4455f6147",
-                       "adjudicator": "58905d67ce7e5d37fe6092c778cc11e78967b3af30b7ea41a97205a32fa531c1"}
+        version_two = {"bar": "d1a680b495ba1ea07e9e58ff9c20bb86c4ff66ddda81e22bfbedd79f50164126",
+                       "result": "5cf579aeae5f2e19e60b0bd38a47143bee899a3e124123f1dc3c5e18853b315c",
+                       "adjudicator": "ddffa369f4f379e128ddcf7adc36aea35078630eba2d7c1db9d26a279c10618e"}
         for role, expected in version_two.items():
             self.assertEqual(protocol.canonical_prompt(role, orchestration="problem_creation")["template_hash"], expected)
         slate = protocol.canonical_prompt("slate", orchestration="problem_creation")
