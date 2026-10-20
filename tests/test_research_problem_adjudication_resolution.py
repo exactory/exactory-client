@@ -21,6 +21,7 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
     assert_blocked_delivery = objection_fixtures.ProblemObjectionTests.assert_blocked_delivery
     refresh_reviews = objection_fixtures.ProblemObjectionTests.refresh_reviews
     build_slate_output = objection_fixtures.ProblemObjectionTests.build_slate_output
+    cite_a_requested_source = objection_fixtures.ProblemObjectionTests.cite_a_requested_source
 
     def prepare_bar_adjudication(self):
         self.prepare_reviews(bar_reviewer="second")
@@ -30,17 +31,18 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         return self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"])
 
     def observe_later_resolutions(self, first_status="resolved", *, new_continuing_evidence=False):
-        """Later results resolve with new evidence. A continuing finding repeats the adjudicated version unless it
-        carries the new evidence, which makes it a new version."""
-        self.resolution_evidence = self.artifacts.put(
-            b"The exact implication follows from the comparator's stated hypotheses.", "text/plain")
+        """Later results resolve with new evidence, which each reviewer requests as a source and receives (R51). A
+        continuing finding repeats the adjudicated version unless it carries the new evidence, which makes it a new
+        version."""
+        def build_findings(status, delivered):
+            finding = self.make_finding(status)
+            if status == "resolved" or new_continuing_evidence:
+                finding["evidence"] = [delivered]
+            return [finding]
         for reviewer in ("first", "second"):
-            output = self.build_review_output("result")
-            finding = self.make_finding(first_status if reviewer == "first" else "resolved")
-            if finding["status"] == "resolved" or new_continuing_evidence:
-                finding["evidence"] = [self.resolution_evidence]
-            output["value"]["objection_findings"] = [finding]
-            self.observe("result", reviewer, output, identifier="resolved-" + reviewer)
+            status = first_status if reviewer == "first" else "resolved"
+            self.resolution_evidence = self.cite_a_requested_source(reviewer, "resolved-" + reviewer,
+                lambda delivered, status=status: build_findings(status, delivered))
 
     def remove_adjudication_response(self):
         response = self.store.snapshot()["records"]["review_attempt"]["focused-attempt"]["response"]
@@ -291,8 +293,10 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         link = self.passage_link = self.link(unit["version_id"], unit["source_id"], unit["artifact"], content[:len(content) // 2])
         cited = link["artifact"] if raw else {"kind": "source", "link": link}
         self.observe("bar", "first")
-        assignment = self.assign("bar", "second", source_links=[link])
-        [mapping] = json.loads(self.artifacts.read(assignment["packet"]))["prior_context"]
+        # The bar also receives self.supporting, which its output cites (R51, R53).
+        assignment = self.assign("bar", "second", source_links=[link] + self.deliver_supporting("second")["source_links"])
+        [mapping] = [row for row in json.loads(self.artifacts.read(assignment["packet"]))["prior_context"]
+                     if row["origin"]["artifact_descriptor"]["sha256"] == unit["artifact"]["sha256"]]
         output = self.build_review_output("bar")
         output["objections"] = [dict(self.make_objection(), evidence=[cited])]
         with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
@@ -426,32 +430,23 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
                 self.assertEqual((link["artifact_reference_template"]["artifact_descriptor"]["sha256"], "artifact" in link),
                                  (self.unit["artifact"]["sha256"], False))
 
-    def test_a_result_version_citing_an_artifact_seen_only_inside_a_bar_is_undelivered(self):
-        """R49: a bar payload delivers no bytes, so the result reviewer did not receive what only the bar cites."""
-        self.prepare_problem_evidence()
-        bar_only = self.artifacts.put(b"A field standard that only the first bar cites.", "text/plain")
-        for reviewer in ("first", "second"):
-            output = self.build_review_output("bar")
-            if reviewer == "first":
-                output["value"]["evidence"] = [bar_only]
-            self.observe("bar", reviewer, output)
-        self.record_slate(review_ids=[])
-        for reviewer in ("first", "second"):
-            output = self.build_review_output("result")
-            if reviewer == "first":
-                output["objections"] = [dict(self.make_objection(), evidence=[bar_only])]
-            self.observe("result", reviewer, output)
-        self.assertNotIn(bar_only["sha256"], {entry["artifact"]["sha256"] for entry in self.read_packet("result-first")["evidence"]})
-        self.observe_adjudication(review_ids=["review-result-first", "review-result-second"])
-        records = self.store.snapshot()["records"]
-        [version] = decisions.collect_problem_post_objections(records, self.artifacts, [records["value_review"][identifier]
-            for identifier in ("review-result-first", "review-result-second")])
-        [entry] = self.read_packet("focused")["version_evidence"]
-        self.assertEqual((entry["kind"], entry["identity"]), ("undelivered", bar_only["sha256"]))
-        self.assertEqual(decisions.find_undelivered_adjudication_keys(records, self.artifacts, "focused",
-            version_evidence=protocol.describe_version_evidence(records, self.artifacts, version)),
-            ["version_evidence:" + bar_only["sha256"]])
-        self.assert_blocked_delivery()
+    def test_a_result_review_citing_an_artifact_it_never_received_is_refused(self):
+        """R51: an artifact that no packet of the review delivered, as bytes or as a passage, is refused at record
+        time, after the shape checks."""
+        self.prepare_reviews(results=False)
+        never_received = self.artifacts.put(b"A field standard that no packet delivered.", "text/plain")
+        malformed = {key: value for key, value in dict(self.make_objection(), evidence=[never_received]).items() if key != "reason"}
+        for reviewer, objection, code in (("first", malformed, "invalid_value_review"),
+                                          ("second", dict(self.make_objection(), evidence=[never_received]),
+                                           "review_evidence_undelivered")):
+            with self.subTest(reviewer=reviewer):
+                output = self.build_review_output("result")
+                output["objections"] = [objection]
+                with self.assertRaises(ResearchError) as caught:
+                    self.observe("result", reviewer, output)
+                self.assertEqual(caught.exception.code, code)
+        self.assertEqual(caught.exception.details, {"sha256": never_received["sha256"]})
+        self.assertNotIn(never_received["sha256"], {entry["artifact"]["sha256"] for entry in self.read_packet("result-second")["evidence"]})
 
     def test_result_packets_stored_with_raw_review_payloads_stay_complete(self):
         """Results observed on packets built before R49 (raw payloads, no record_reference) are judged the same way."""

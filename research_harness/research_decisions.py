@@ -260,15 +260,26 @@ def record_value_review(store, payload, *, expected_revision, request_id):
             # A review cites a record only as content that its own observed packets delivered; every reference
             # read here has passed the shape checks above.
             from .review_protocol import collect_carried_records, find_carried_record
+            from .review_supplied_evidence import supplied_context
             carried = collect_carried_records(records, artifacts, value["assignment_id"])
+            supplied, mappings = supplied_context(records, artifacts, [value["assignment_id"]])
+            delivered = set(supplied) | {mapping["origin"]["artifact_descriptor"]["sha256"] for mapping in mappings}
             for evidence in [value["value"]["evidence"]] + [row["evidence"] for row in (
                     value["objections"] + value["value"]["objection_findings"] + value["value"]["assurances"])]:
                 for reference in evidence:
-                    if reference.get("kind") == "record" and find_carried_record(records, carried, reference) is None:
+                    if reference.get("kind") == "record":
+                        if find_carried_record(records, carried, reference) is None:
+                            raise ResearchError("review_evidence_undelivered",
+                                "Cite only content that this review received: no packet of the review delivered "
+                                + reference["record_kind"] + " " + reference["id"] + " at the cited digest",
+                                {key: reference[key] for key in ("record_kind", "id", "digest")})
+                        continue
+                    # An artifact counts as received when its bytes or one of its passages were delivered.
+                    artifact = reference["link"]["artifact"] if reference.get("kind") == "source" else reference
+                    if artifact["sha256"] not in delivered:
                         raise ResearchError("review_evidence_undelivered",
-                            "Cite only content that this review received: no packet of the review delivered "
-                            + reference["record_kind"] + " " + reference["id"] + " at the cited digest",
-                            {key: reference[key] for key in ("record_kind", "id", "digest")})
+                            "Cite only content that this review received: no packet of the review delivered artifact "
+                            + artifact["sha256"], {"sha256": artifact["sha256"]})
         changes, support = [], None
         if problem is not None:
             if value["support"] is not None:

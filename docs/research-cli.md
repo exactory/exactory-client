@@ -1788,8 +1788,11 @@ reviewer that needs a source that another review cites requests it with
 bar, slate or result review cites a record only when one of its observed packets
 carried that record at the cited digest as content; a reference that the
 reviewer received only inside a finding, or as an undelivered entry, does not
-count. `value-review` refuses another citation with
-`review_evidence_undelivered`, naming the record.
+count. It cites an artifact, as a descriptor or as a source link, only when its
+observed packets delivered that artifact's bytes or one of its passages; the
+descriptor of an artifact received only as a passage counts. `value-review`
+refuses another citation, after the shape checks, with
+`review_evidence_undelivered`, naming the record or the artifact's `sha256`.
 Both result reviews must pass exactly `problem_statement`, `problem_openness`,
 `problem_value`, `problem_citations` and `stop`. A marker author cannot be a
 reviewer (`review_not_independent`); an assignment's unknown author is refused

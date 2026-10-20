@@ -313,10 +313,40 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
                             dict(output, id="review-repaired-refresh", dossier_id=None, assignment_id="repaired-refresh"))["result"]
         self.assertEqual(saved["assignment_id"], "repaired-refresh")
 
+    def record_counterexample_candidate(self):
+        """Candidate-2, whose observation holds a counterexample; returns its exact record reference."""
+        self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?",
+                              observation="A counterexample to the earlier resolution.")
+        candidate = self.store.snapshot()["records"]["problem_candidate"]["candidate-2"]
+        return {"kind": "record", "record_kind": "problem_candidate", "id": "candidate-2", "digest": digest(candidate)}
+
+    def cite_a_requested_source(self, reviewer, identifier, build_findings):
+        """A result reviewer requests a recorded source, receives it in the continuation of its session and records
+        findings that cite it (R51): the harness's own delivery path for evidence outside the problem evidence.
+        Returns the delivered artifact."""
+        if not hasattr(self, "requested_source"):
+            self.requested_source = self.metadata(77100, abstract="The exact implication follows from the comparator's stated hypotheses.")
+        request = self.build_review_output("result")
+        request["value"]["status"] = "unresolved"
+        request["source_requests"] = [{"id": "requested-source", "kind": "source", "version_id": self.requested_source,
+                                       "depth": "abstract"}]
+        self.observe("result", reviewer, request, record=False, identifier=identifier + "-request")
+        continued = self.assign("result", reviewer, identifier=identifier, prior_assignment_id=identifier + "-request")
+        [delivery] = json.loads(self.artifacts.read(continued["packet"]))["source_deliveries"]
+        [delivered] = delivery["evidence"]
+        output = self.build_review_output("result")
+        output["value"]["objection_findings"] = build_findings(delivered)
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {"id": "attempt-" + identifier, "assignment_id": identifier},
+                        credential="test-only")
+        self.mutate(decisions.record_value_review, dict(output, id="review-" + identifier, dossier_id=None,
+                                                        assignment_id=identifier))
+        return delivered
+
     def update_slate_objection(self):
         """After a new candidate, the slate reviewer restates the objection with new evidence: a new material version."""
-        self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
-        counterexample = self.artifacts.put(b"A counterexample to the earlier resolution.", "text/plain")
+        # The counterexample reaches the slate reviewer in candidate-2, which its packet carries (R51).
+        counterexample = self.record_counterexample_candidate()
         output = self.build_slate_output(["candidate-1", "candidate-2"])
         output["objections"] = [dict(self.make_objection(), candidate_ids=["candidate-1"], evidence=[counterexample],
             reason="The supplied counterexample refutes the earlier resolution.",
@@ -392,8 +422,7 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         self.prepare_reviews(slate_reviewer="first")
         self.refresh_reviews("resolved")
         self.assertTrue(decisions.assess_problem_reviews(self.store.snapshot()["records"], self.artifacts)["ready"])
-        self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
-        counterexample = self.artifacts.put(b"A counterexample to the earlier resolution.", "text/plain")
+        counterexample = self.record_counterexample_candidate()
         finding = dict(self.make_finding("contested"), evidence=[counterexample],
                        reason="The supplied counterexample refutes the earlier resolution.")
         output = self.build_slate_output(["candidate-1", "candidate-2"])
@@ -834,15 +863,13 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
 
     def test_a_recorded_resolution_requires_its_evidence_to_remain_available(self):
         self.prepare_reviews(result_reviewer="first")
-        # Only the resolutions cite this artifact; the fixture's supporting artifact is also problem evidence.
-        resolution = self.artifacts.put(b"The supplied comparator settles the disputed implication.", "text/plain")
+        # Only the resolutions cite this artifact, which each reviewer requested as a source (R51).
         changed = self.build_value([self.item], identifier="value-2")
         changed["motivation"][0]["text"] = "A narrower implication follows from the supplied comparator."
         self.mutate(self.load_problem_module().record_value, changed)
         for reviewer in ("first", "second"):
-            output = self.build_review_output("result")
-            output["value"]["objection_findings"] = [dict(self.make_finding("resolved"), evidence=[resolution])]
-            self.observe("result", reviewer, output, identifier="refreshed-" + reviewer)
+            resolution = self.cite_a_requested_source(reviewer, "refreshed-" + reviewer,
+                lambda delivered: [dict(self.make_finding("resolved"), evidence=[delivered])])
         (self.root / resolution["path"]).unlink()
         self.assert_blocked_delivery("artifact_missing")
 

@@ -98,7 +98,10 @@ class ProblemAdjudicationContractTests(delivery_fixtures.ProblemDeliveryCase):
         self.assertEqual(version_keys - set(material), set())
         self.assertEqual((material["version_review"]["id"], material["version_review"]["objections"][0]["id"]),
                          ("review-result-first", "unsupported-implication"))
-        self.assertEqual((material["version_evidence"], material["version_source_mappings"]), ([self.supporting], []))
+        # The first result reviewer's own bar session delivered self.supporting as a passage too (R53).
+        session = json.loads(self.artifacts.read(self.store.snapshot()["records"]["review_assignment"]["bar-first"]["packet"]))
+        self.assertEqual((material["version_evidence"], material["version_source_mappings"]),
+                         ([self.supporting], session["prior_context"]))
         self.assertEqual(version_keys & set(rubric), set())
         self.assertEqual({"bar_calibrations", "current_bar_calibrations", "rubric_grades", "rubric_definition"} - set(rubric), set())
         self.assertEqual({"rubric_grades", "rubric_definition"} & set(material), set())
