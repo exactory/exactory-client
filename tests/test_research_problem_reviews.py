@@ -177,14 +177,20 @@ class ProblemReviewTests(LiteratureCase):
             text_of_role = protocol.canonical_prompt(role, orchestration="problem_creation")["text"]
             for content in ("a record whose content the packet delivered to you",
                             "a record delivered under a material objection's version_evidence",
-                            "without its content is not delivered content", "review_evidence_undelivered"):
+                            "is cited by the link of that passage", "templates (artifact_reference_template, artifact_descriptor)",
+                            "reached you only as a template or inside a prior finding is not delivered content",
+                            "review_evidence_undelivered"):
                 self.assertIn(content, text_of_role)
             self.assertNotIn("a record named in the packet", text_of_role)
+        # The slate and result reviewers are told that each material objection arrives with the content it cites.
+        for role in ("slate", "result"):
+            self.assertIn("under version_evidence and version_source_mappings, which you may cite",
+                          protocol.canonical_prompt(role, orchestration="problem_creation")["text"])
 
     def test_problem_slate_template_is_version_two_only_and_keeps_bar_and_result_bytes(self):
-        version_two = {"bar": "26c71d20bb408c750cd0df82943bc0a9447a804104b3c2c34319e6b895b93d9f",
-                       "result": "feffc300422eb33cef07498918b88515e8d64e94c7d18ceb164492316ac36fc2",
-                       "adjudicator": "5ca58f2b8bb771b8a9469d062ac90fbe5e07bb05c964b0dbaa08ed32c972794a"}
+        version_two = {"bar": "eec00e55d2ed36ab837f8cff7cc265c1685971a67c4847b08fc35714bcf96d03",
+                       "result": "ca53255ec1becb85708b093056af99c9dbda87ede405d8ad3c1335b4455f6147",
+                       "adjudicator": "58905d67ce7e5d37fe6092c778cc11e78967b3af30b7ea41a97205a32fa531c1"}
         for role, expected in version_two.items():
             self.assertEqual(protocol.canonical_prompt(role, orchestration="problem_creation")["template_hash"], expected)
         slate = protocol.canonical_prompt("slate", orchestration="problem_creation")
