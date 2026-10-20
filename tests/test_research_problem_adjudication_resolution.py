@@ -757,9 +757,8 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         self.mutate(record_reading, note)
         return link
 
-    def test_a_correction_cites_a_json_passage_by_the_citation_its_mapping_carries(self):
-        """R56, R58: the bar receives the JSON passage without a citation; the adjudicator's mapping of it carries the
-        valid link, which a correction records."""
+    def test_a_correction_cites_a_json_passage_without_offering_an_output_citation(self):
+        """R61: JSON is admissible correction input, independently of adjudicator output evidence."""
         self.prepare_problem_evidence()
         link = self.read_a_json_passage()
         self.observe("bar", "first")
@@ -781,8 +780,173 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         focused = self.assign("adjudicator", "focused-third", identifier="focused", review_ids=["review-bar-first", "review-bar-second"],
                               objection_id="unsupported-implication", correction=correction)
         packet = json.loads(self.artifacts.read(focused["packet"]))
-        self.assertIn(dict(mapping, citation=link), packet["supplied_source_mappings"])
+        self.assertIn(mapping, packet["supplied_source_mappings"])
+        self.assertTrue(all("citation" not in row for row in packet["supplied_source_mappings"]
+                            if row["origin"]["locator"]["kind"] == "json"))
         self.assertNotIn(link["artifact"]["sha256"], {row["artifact"]["sha256"] for row in packet["evidence"]})
+        output = self.adjudication_output([self.supporting], correction_admissible=True)
+        self.invoke_focused(output)
+        saved = self.mutate(protocol.record_adjudication,
+            dict(output, id="focused-finding", assignment_id="focused"))["result"]
+        self.assertTrue(protocol.adjudication_state(self.store.snapshot()["records"], self.artifacts, saved["id"])["ready"])
+
+    def test_legacy_passage_mappings_offer_only_recordable_citations(self):
+        from research_harness.review_supplied_evidence import supplied_context
+        self.prepare_problem_evidence()
+        full = self.add_unbound_full_source()
+        json_link = self.read_a_json_passage()
+        assignment = self.assign("bar", "first", source_links=[full, json_link]
+                                 + self.deliver_supporting("first")["source_links"])
+        packet = json.loads(self.artifacts.read(assignment["packet"]))
+        for mapping in packet["prior_context"]:
+            mapping.pop("citation", None)
+        self.put("review_assignment", assignment["id"], dict(assignment, packet=protocol._put_json(self.artifacts, packet)))
+        _, mappings = supplied_context(self.store.snapshot()["records"], self.artifacts, [assignment["id"]])
+        self.assertEqual(["citation" in row for row in mappings], [True, False, False])
+        # Stored legacy citations are subject to the same rule on subsequent delivery.
+        for mapping, link in zip(packet["prior_context"], [full, json_link, self.supporting_links[self.supporting["sha256"]]]):
+            mapping["citation"] = link
+        self.put("review_assignment", assignment["id"], dict(assignment, packet=protocol._put_json(self.artifacts, packet)))
+        _, mappings = supplied_context(self.store.snapshot()["records"], self.artifacts, [assignment["id"]])
+        self.assertEqual(["citation" in row for row in mappings], [True, False, False])
+
+    def adjudication_output(self, evidence, correction_admissible=None):
+        return {"objection_id": "unsupported-implication", "disposition": "not_upheld",
+                "reason": "The delivered evidence resolves the exact disputed implication.",
+                "evidence": evidence, "correction_admissible": correction_admissible}
+
+    def invoke_focused(self, output, identifier="focused"):
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {"id": identifier + "-attempt", "assignment_id": identifier},
+                        credential="test-only")
+
+    def test_adjudication_refuses_a_fully_read_source_absent_from_every_input(self):
+        self.prepare_reviews(result_reviewer="first")
+        link = self.add_unbound_full_source()
+        self.assign("adjudicator", "focused-third", identifier="focused",
+                    review_ids=["review-result-first", "review-result-second"], objection_id="unsupported-implication")
+        self.assertNotIn(link["artifact"]["sha256"], json.dumps(self.read_packet("focused")))
+        output = self.adjudication_output([{"kind": "source", "link": link}])
+        self.invoke_focused(output)
+        with self.assertRaises(ResearchError) as caught:
+            self.mutate(protocol.record_adjudication, dict(output, id="focused-finding", assignment_id="focused"))
+        self.assertEqual((caught.exception.code, caught.exception.details),
+                         ("review_evidence_undelivered", {"sha256": link["artifact"]["sha256"], "locator": link["locator"]}))
+
+    def test_adjudication_refuses_an_artifact_absent_from_every_input(self):
+        self.prepare_reviews(result_reviewer="first")
+        artifact = self.artifacts.put(b"Held bytes absent from the adjudicator's inputs.", "text/plain")
+        self.assign("adjudicator", "focused-third", identifier="focused",
+                    review_ids=["review-result-first", "review-result-second"], objection_id="unsupported-implication")
+        output = self.adjudication_output([artifact])
+        self.invoke_focused(output)
+        with self.assertRaises(ResearchError) as caught:
+            self.mutate(protocol.record_adjudication, dict(output, id="focused-finding", assignment_id="focused"))
+        self.assertEqual((caught.exception.code, caught.exception.details),
+                         ("review_evidence_undelivered", {"sha256": artifact["sha256"]}))
+
+    def test_adjudication_refuses_a_record_absent_from_every_input(self):
+        self.prepare_reviews(result_reviewer="first")
+        reference = self.cite_candidate("candidate-1")
+        self.assign("adjudicator", "focused-third", identifier="focused",
+                    review_ids=["review-result-first", "review-result-second"], objection_id="unsupported-implication")
+        output = self.adjudication_output([reference])
+        self.invoke_focused(output)
+        with self.assertRaises(ResearchError) as caught:
+            self.mutate(protocol.record_adjudication, dict(output, id="focused-finding", assignment_id="focused"))
+        self.assertEqual((caught.exception.code, caught.exception.details), ("review_evidence_undelivered",
+                         {key: reference[key] for key in ("record_kind", "id", "digest")}))
+
+    def test_adjudication_refuses_a_source_locator_outside_its_delivered_passage(self):
+        from research_harness.source_links import span_locator
+        self.state_a_bar_objection_on_a_passage(raw=False, unbound=True)
+        self.assign("adjudicator", "focused-third", identifier="focused",
+                    review_ids=["review-bar-first", "review-bar-second"], objection_id="unsupported-implication")
+        content = self.artifacts.read(self.unit["artifact"]).decode()
+        link = dict(self.unit, locator=span_locator(content, len(content) // 2, len(content)))
+        output = self.adjudication_output([{"kind": "source", "link": link}])
+        self.invoke_focused(output)
+        with self.assertRaises(ResearchError) as caught:
+            self.mutate(protocol.record_adjudication, dict(output, id="focused-finding", assignment_id="focused"))
+        self.assertEqual((caught.exception.code, caught.exception.details),
+                         ("review_evidence_undelivered", {"sha256": link["artifact"]["sha256"], "locator": link["locator"]}))
+
+    def test_reassessment_findings_refuse_a_source_added_after_the_packet_was_frozen(self):
+        objection_fixtures.ProblemObjectionTests.prepare_repaired_result(self, changed=False)
+        link = self.add_unbound_full_source()
+        packet = self.read_packet("repaired-result")
+        self.assertNotIn(link["artifact"]["sha256"], json.dumps(packet))
+        output = self.build_review_output("result")
+        output["reassessment"] = {"assignment_id": "result-first", "findings": [{
+            "review_id": "review-result-first", "disposition": "revised",
+            "reason": "The previously recorded grade remains supported.", "evidence": [{"kind": "source", "link": link}]}]}
+        self.invoke_focused(output, "repaired-result")
+        with self.assertRaises(ResearchError) as caught:
+            self.mutate(decisions.record_value_review,
+                dict(output, id="review-repaired-result", dossier_id=None, assignment_id="repaired-result"))
+        self.assertEqual((caught.exception.code, caught.exception.details),
+                         ("review_evidence_undelivered", {"sha256": link["artifact"]["sha256"], "locator": link["locator"]}))
+
+    def test_legacy_undelivered_adjudication_blocks_post_and_refreshes_the_fixed_adjudicator(self):
+        from research_harness.cli import status_report
+        from research_harness.problem_delivery import assess_post
+        from research_harness.source_links import span_locator
+        # Only the objection's passages deliver this source, independently of the current problem evidence.
+        self.state_a_bar_objection_on_a_passage(raw=False, unbound=True)
+        for reviewer in ("first", "second"):
+            output = self.build_review_output("result")
+            output["value"]["objection_findings"] = [self.make_finding("continuing")]
+            self.observe("result", reviewer, output)
+        self.assign("adjudicator", "focused-third", identifier="focused",
+                    review_ids=["review-bar-first", "review-bar-second"], objection_id="unsupported-implication")
+        artifact = self.artifacts.put(b"Unsupported historical disposition evidence.", "text/plain")
+        candidate = self.cite_candidate("candidate-1")
+        content = self.artifacts.read(self.unit["artifact"]).decode()
+        outside = dict(self.unit, locator=span_locator(content, len(content) // 2, len(content)))
+        output = self.adjudication_output([artifact, candidate, {"kind": "source", "link": outside}])
+        self.invoke_focused(output)
+        packet = self.read_packet("focused")
+        saved = dict(output, id="legacy-finding", assignment_id="focused", dossier_id=None,
+                     subject=packet["subject"], problem_evidence_digest=packet["problem_evidence_digest"],
+                     recorded_revision=self.store.revision + 1)
+        self.put("review_adjudication", saved["id"], saved)
+        records = self.store.snapshot()["records"]
+        state = protocol.adjudication_state(records, self.artifacts, saved["id"])
+        self.assertFalse(state["ready"])
+        [pending] = [item for item in state["obligations"] if item["code"] == "review_adjudication_evidence_undelivered"]
+        references = [{"sha256": artifact["sha256"]}, {key: candidate[key] for key in ("record_kind", "id", "digest")},
+                      {"sha256": outside["artifact"]["sha256"], "locator": outside["locator"]}]
+        self.assertEqual(pending["undelivered_references"], references)
+        self.assertFalse(assess_post(records, self.artifacts)["ready"])
+        self.assertIn(pending["code"], {item["code"] for item in status_report(self.store)["obligations"]})
+        self.assert_blocked_delivery()
+        context = {"review_ids": ["review-bar-first", "review-bar-second"], "objection_id": "unsupported-implication"}
+        # Each part of the fixed identity remains mandatory.
+        self.assert_error("review_adjudicator_fixed", lambda: self.assign("adjudicator", "another-third",
+                          identifier="wrong-reviewer", **context))
+        self.put("workspace", "problem", dict(records["workspace"]["problem"], authors=["problem-author", "coauthor"]))
+        self.assert_error("review_adjudicator_fixed", lambda: self.assign("adjudicator", "focused-third", author="coauthor",
+                          identifier="wrong-author", **context))
+        route = dict(records["review_route"]["route"], id="another-route")
+        self.put("review_route", route["id"], route)
+        self.assert_error("review_adjudicator_fixed", lambda: self.mutate(protocol.record_assignment, {
+            "id": "wrong-route", "route_id": route["id"], "dossier_id": None, "role": "adjudicator",
+            "reviewer_id": "focused-third", "author_id": "problem-author", "context": context}))
+        refreshed = self.assign("adjudicator", "focused-third", identifier="focused-refreshed", **context)
+        refresh = self.read_packet(refreshed["id"])["focused_refresh"]
+        self.assertEqual((refresh["reason"], refresh["undelivered_references"]), ("disposition_unsupported", references))
+        self.assertEqual(refreshed["history_assignment_id"], "focused")
+        inside = dict(self.unit, locator=span_locator(content, 0, len(content) // 4))
+        statement = self.store.snapshot()["records"]["problem_statement"][self.selected["id"]]
+        statement_ref = {"kind": "record", "record_kind": "problem_statement", "id": statement["id"], "digest": digest(statement)}
+        # The objection's version artifact, its bounded passage and a projected problem record all remain usable.
+        output = self.adjudication_output([self.unit["artifact"], {"kind": "source", "link": inside}, statement_ref])
+        self.invoke_focused(output, refreshed["id"])
+        self.mutate(protocol.record_adjudication, dict(output, id="refreshed-finding", assignment_id=refreshed["id"]))
+        self.assertEqual(self.store.snapshot()["records"]["review_adjudication"][saved["id"]], saved)
+        self.assert_error("review_adjudicator_fixed", lambda: self.assign("adjudicator", "focused-third",
+                          identifier="unneeded-refresh", **context))
+        self.assert_delivered()
 
     def test_a_result_packet_offers_a_citation_only_for_a_passage_a_review_can_record(self):
         """R58: O1 cites a text passage and a JSON passage; the result packet carries a citation for the text passage

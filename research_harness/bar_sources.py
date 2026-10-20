@@ -145,9 +145,8 @@ def prior_context(records, artifacts, links):
         entry = {'version_id': link['version_id'], 'inspection': inspection,
             'origin': {'source_id': link['source_id'], 'artifact_descriptor': descriptor(link['artifact']), 'locator': location},
             'excerpt': artifacts.put(data, media), 'scientific_truth_certified': False}
-        # A bar cannot cite a JSON passage: source evidence in a review needs a full-text reading.
-        from .review_supplied_evidence import cite_passage
-        result.append(entry if kind == 'json' else dict(entry, citation=cite_passage(artifacts, entry)))
+        from .review_supplied_evidence import deliver_passage
+        result.append(deliver_passage(records, artifacts, entry))
     return result
 
 

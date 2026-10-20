@@ -1782,13 +1782,15 @@ historical bar review (a contaminated or repaired bar lineage) as the version
 its review stated: the same collection from which `value-review` requires a
 finding on each such objection. Every delivered passage mapping (`prior_context`,
 `version_source_mappings`, `supplied_source_mappings` and the mappings under an
-objection) carries `citation`, a complete, valid source link
+objection) carries `citation` only when its text or span link passes the receiving
+role's evidence validator, requiring a current full-text reading whose inspections
+contain the passage. The citation is a complete, valid source link
 `{version_id, source_id, artifact, locator}` for exactly that passage, which a
 reviewer copies verbatim to cite it; the citation names its original without
-attaching it. A JSON passage mapping in a bar, slate or result packet carries no
-`citation` and is delivered for reading only, because source evidence in a
-review needs a full-text reading; every mapping in an adjudicator packet carries
-its `citation` for a correction to cite. The packet attaches only the bounded excerpts of those passages,
+attaching it. An abstract-only text passage or a JSON passage carries no
+`citation` in a review or adjudicator packet and is delivered for reading.
+A correction may still cite any delivered passage, including JSON: correction
+input and adjudicator output evidence have separate requirements. The packet attaches only the bounded excerpts of those passages,
 and a link within a passage's bounds that the reviewer copies is delivered when
 an adjudicator receives the reviewer's version. Bytes reach a
 reviewer only through the problem evidence, the delivered sources and passages
@@ -1797,7 +1799,7 @@ with their bounds, an objection's `version_evidence` and
 `previously_supplied_evidence` and the reviewer's own session history; a
 reviewer that needs a source that another review cites requests it with
 `source_requests`. A
-bar, slate or result review cites a record only when one of its observed packets
+bar, slate or result review, or a problem adjudicator, cites a record only when one of its observed packets
 carried that record at the cited digest as content; a reference that the
 reviewer received only inside a finding, or as an undelivered entry, does not
 count. It cites an artifact as a descriptor only when its observed packets
@@ -1806,7 +1808,8 @@ artifact received only as passages names those passages and does not widen
 their bounds. It cites a source link only when its packets delivered the
 artifact in full, or when the link's locator lies within a delivered passage of
 the same artifact (a text locator by its offsets; a locator of another kind
-equal to the passage's). `value-review` refuses another citation, after the
+equal to the passage's). These delivery checks also cover `reassessment.findings[].evidence`.
+`value-review` and `review-adjudication` refuse another citation, after the
 shape checks, with `review_evidence_undelivered`, naming the record, or the
 artifact's `sha256` and, for a source link, its `locator`.
 Both result reviews must pass exactly `problem_statement`, `problem_openness`,
@@ -1859,9 +1862,14 @@ the adjudicated objection, or an earlier adjudicator packet that lacked a delive
 that the post gate requires of it (below) retains the focused adjudicator and its
 observed history rather than opening a new reviewer choice: its next assignment is
 a `focused_refresh` naming the previous and current evidence digests and material
-versions and its `reason`, `version_changed`, `evidence_changed` or
+versions and its `reason`, `version_changed`, `evidence_changed`,
+`disposition_unsupported` or
 `packet_incomplete`, the last with the lacking keys in `undelivered_keys`. Under
-an unchanged digest and version and a complete earlier packet, another assignment
+`disposition_unsupported`, `undelivered_references` names the evidence that the
+previous recorded adjudication cited without receiving it. The reviewer, route
+and author must remain the same. Under
+an unchanged digest and version, a complete earlier packet and a disposition
+whose evidence was delivered, another assignment
 returns `review_adjudicator_fixed`, also when a delivery that the gate does not
 require of the earlier packet differs, such as the calibrations of another pair
 or `current_bar_calibrations`.
@@ -1931,6 +1939,17 @@ lacks or cannot deliver is named in `undelivered_keys` as
 differs, for example by an extra entry; the post gate does not count that
 adjudication, and the same adjudicator refreshes with reason
 `packet_incomplete`.
+The adjudicator's own output evidence must have reached it through its packet
+lineage: the problem evidence, projected records, the objection's `version_evidence`
+and attachments, or the original and version passage mappings, including deliveries
+retained through a correction or focused refresh. A record reference merely named
+in a prior finding supplies no record content. An earlier saved adjudication
+that cites undelivered content retains its history but carries
+`review_adjudication_evidence_undelivered`, with `undelivered_references`; status
+names that obligation and the disposition cannot resolve the objection or make
+the post gate ready. A focused refresh with reason `disposition_unsupported`
+lets the same adjudicator reassess it; a later ready adjudication supplies the
+current disposition.
 The original grades remain visible. An old-evidence adjudication, a resolution
 of another item, or a material-objection finding cannot waive the shortfall;
 the five independent assurances still have to pass.

@@ -752,7 +752,7 @@ def _list_packet_records(packet):
         yield kind, identifier, recorded_digest, projection, []
     # A record delivered with an objection, as the projection that its stating reviewer received, keeps the artifacts
     # that the delivery supplied with it.
-    for objection in supplied_evidence.list_delivered_objections(packet):
+    for objection in [packet] + supplied_evidence.list_delivered_objections(packet):
         for entry in objection.get('version_evidence', []):
             if entry.get('kind') == 'record':
                 yield entry['record_kind'], entry['id'], entry['digest'], entry['record'], entry['artifacts']
@@ -763,7 +763,10 @@ def _list_projected_records(packet):
     for entry in packet.get('candidates', []):
         yield 'problem_candidate', entry['id'], entry['digest'], entry
     # A first slate or result packet wraps each historical review with its independence; a continuation does not.
-    for payload in packet.get('bars', []) + packet.get('own_bars', []) + [
+    for payload in (packet.get('bars', []) + packet.get('own_bars', [])
+                    + packet.get('assessments', []) + packet.get('bar_calibrations', [])
+                    + packet.get('current_bar_calibrations', [])
+                    + ([packet['version_review']] if 'version_review' in packet else [])) + [
             entry.get('review', entry) for entry in packet.get('historical_reviews', [])]:
         if 'record_reference' in payload:
             yield 'value_review', payload['id'], payload['record_reference']['digest'], payload
@@ -844,7 +847,7 @@ def describe_version_evidence(records, artifacts, version):
                 entries.append(supplied[identity])
                 continue
             # A passage-only artifact is delivered through its passages, a source link only within their bounds.
-            if supplied_evidence.is_received(records, reference, supplied, mappings):
+            if supplied_evidence.is_received(records, reference, supplied, mappings, artifacts=artifacts):
                 continue
         entries.append({'kind': 'undelivered', 'identity': identity, 'reference': _reference_templates(reference)})
     return dict(zip(VERSION_EVIDENCE_KEYS, (
@@ -997,12 +1000,7 @@ def describe_objection_delivery(records, artifacts, version):
     cited records and supplied artifacts under version_evidence, and the passages under version_source_mappings,
     whose excerpts are the only bytes of a source delivered as passages."""
     delivery = describe_version_evidence(records, artifacts, version)
-    # A reviewer cannot cite a JSON passage (source evidence in a review needs a full-text reading), so its mapping is
-    # delivered for reading without a citation; an adjudicator's mappings keep theirs for a correction.
-    mappings = [{key: value for key, value in mapping.items() if key != 'citation'}
-                if mapping['origin']['locator']['kind'] == 'json' else mapping
-                for mapping in delivery['version_source_mappings']]
-    return {'version_evidence': delivery['version_evidence'], 'version_source_mappings': mappings}
+    return {key: delivery[key] for key in ('version_evidence', 'version_source_mappings')}
 
 
 def deliver_historical_review(records, artifacts, review):
@@ -1406,6 +1404,9 @@ def _repair_packet(records, artifacts, value, repair):
     packet.pop('evidence', None)
     packet.pop('digest', None)
     packet.update(protocol=bar_sources.PROTOCOL, reviewer_id=value['reviewer_id'])
+    if 'prior_context' in packet:
+        packet['prior_context'] = [supplied_evidence.deliver_passage(records, artifacts, mapping)
+                                   for mapping in packet['prior_context']]
     packet['pending_source_requests'] = bar_sources.pending(
         repair['packet'], repair['scientific_history'][-1]['observed_output'])
     packet['context_repair'] = {'assignment_id': repair['predecessor']['id'], 'slot_id': repair['slot_id'],
@@ -1594,14 +1595,23 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                     undelivered = find_undelivered_adjudication_keys(records, artifacts, previous['id'],
                         rubric='rubric_definition' in packet,
                         version_evidence={key: packet[key] for key in VERSION_EVIDENCE_KEYS if key in packet})
-                    reason = ('version_changed' if previous_version != version else
+                    previous_adjudication = max((saved for saved in records.get('review_adjudication', {}).values()
+                        if saved['assignment_id'] == previous['id']), key=lambda saved: saved['recorded_revision'], default=None)
+                    unsupported = []
+                    if previous_adjudication is not None:
+                        prior_state = adjudication_state(records, artifacts, previous_adjudication['id'])
+                        unsupported = [reference for item in prior_state['obligations']
+                            if item['code'] == 'review_adjudication_evidence_undelivered'
+                            for reference in item['undelivered_references']]
+                    reason = ('disposition_unsupported' if unsupported else
+                              'version_changed' if previous_version != version else
                               'evidence_changed' if previous_packet['problem_evidence_digest'] != packet['problem_evidence_digest'] else
                               'packet_incomplete' if undelivered else None)
                     if reason is not None:
                         if (normalized_text(previous['reviewer_id']) != normalized_text(value['reviewer_id'])
                                 or previous['route_id'] != value['route_id']
                                 or normalized_text(previous['author_id']) != normalized_text(value['author_id'])):
-                            raise ResearchError('review_adjudicator_fixed', 'Changed problem evidence, a changed objection version or an incomplete earlier packet continues the same focused adjudicator and route')
+                            raise ResearchError('review_adjudicator_fixed', 'A focused refresh continues the same adjudicator, route and author')
                         focused_parent = previous
                         packet.pop('evidence', None)
                         packet.pop('digest', None)
@@ -1611,6 +1621,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                             'previous_material_version': previous_version, 'material_version': version}
                         if reason == 'packet_incomplete':
                             packet['focused_refresh']['undelivered_keys'] = undelivered
+                        if reason == 'disposition_unsupported':
+                            packet['focused_refresh']['undelivered_references'] = unsupported
                         packet['evidence'] = _evidence(artifacts, packet)
                         packet['digest'] = digest(packet)
                         continue
@@ -1838,6 +1850,10 @@ def record_adjudication(store, payload, *, expected_revision, request_id):
         if packet.get('subject', {}).get('kind') == 'problem':
             from .strategy import evidence
             evidence(records, artifacts, value['evidence'])
+            missing = supplied_evidence.adjudicator_undelivered_references(records, artifacts, assignment['id'], value['evidence'])
+            if missing:
+                raise ResearchError('review_evidence_undelivered',
+                    'Cite only content that this adjudicator received in its own packets.', missing[0])
         _evidence(artifacts, value['evidence'])
         record = dict(value, dossier_id=state['dossier_id'], recorded_revision=expected_revision + 1)
         if packet.get('subject', {}).get('kind') == 'problem':
@@ -1856,6 +1872,11 @@ def adjudication_state(records, artifacts, adjudication_id):
     response = {k: saved[k] for k in ('objection_id', 'disposition', 'reason', 'evidence', 'correction_admissible')}
     obligations = list(state['obligations'])
     assignment = records.get('review_assignment', {}).get(saved['assignment_id'], {})
+    if assignment.get('subject', {}).get('kind') == 'problem':
+        missing = supplied_evidence.adjudicator_undelivered_references(records, artifacts, saved['assignment_id'], saved['evidence'])
+        if missing:
+            obligations.append(obligation('review_adjudication_evidence_undelivered',
+                'Reassess the disposition using evidence delivered to the focused adjudicator.', undelivered_references=missing))
     correction = assignment.get('context', {}).get('correction')
     if correction is not None and saved['correction_admissible'] is not True:
         obligations.append(obligation('review_correction_inadmissible', 'A correction cannot change a finding until its material error is admitted.'))

@@ -265,7 +265,8 @@ def record_value_review(store, payload, *, expected_revision, request_id):
             carried = collect_carried_records(records, artifacts, value["assignment_id"])
             supplied, mappings = supplied_context(records, artifacts, [value["assignment_id"]])
             for evidence in [value["value"]["evidence"]] + [row["evidence"] for row in (
-                    value["objections"] + value["value"]["objection_findings"] + value["value"]["assurances"])]:
+                    value["objections"] + value["value"]["objection_findings"] + value["value"]["assurances"]
+                    + assignment["output"].get("reassessment", {}).get("findings", []))]:
                 for reference in evidence:
                     if reference.get("kind") == "record":
                         if find_carried_record(records, carried, reference) is None:
@@ -275,7 +276,7 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                                 {key: reference[key] for key in ("record_kind", "id", "digest")})
                         continue
                     # An artifact counts as received in full or as its passages; a source link only within them.
-                    if not is_received(records, reference, supplied, mappings):
+                    if not is_received(records, reference, supplied, mappings, artifacts=artifacts):
                         artifact = reference["link"]["artifact"] if reference.get("kind") == "source" else reference
                         details = {"sha256": artifact["sha256"]}
                         if reference.get("kind") == "source":
@@ -793,15 +794,17 @@ def assess_rubric_reviews(records, artifacts, reviews, evidence_digest):
                         key=lambda row: row['recorded_revision'], default=None)
             resolved = False
             if saved is not None:
-                state = adjudication_state(records, artifacts, saved['id'])
-                resolved = state['ready'] and state['disposition'] == 'not_upheld'
-                if resolved:
-                    try:
+                try:
+                    state = adjudication_state(records, artifacts, saved['id'])
+                    obligations.extend(item for item in state['obligations']
+                                       if item['code'] == 'review_adjudication_evidence_undelivered')
+                    resolved = state['ready'] and state['disposition'] == 'not_upheld'
+                    if resolved:
                         strategy.evidence(records, artifacts, saved['evidence'])
-                    except ResearchError as error:
-                        resolved = False
-                        obligations.append(obligation(error.code, str(error), review_id=review['id'],
-                                                      objection_id=identifier, adjudication_id=saved['id']))
+                except ResearchError as error:
+                    resolved = False
+                    obligations.append(obligation(error.code, str(error), review_id=review['id'],
+                                                  objection_id=identifier, adjudication_id=saved['id']))
             if not resolved:
                 pending.append(shortfall)
         if pending:
