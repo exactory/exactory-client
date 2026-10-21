@@ -70,7 +70,7 @@ class SlateSourceRequestTests(StrategicSourceHelpers, StrategyCase):
         self.assertEqual(continued["history"], observed_input + [{"role": "assistant", "content": json.dumps(output, sort_keys=True)}])
         packet = self.packet("source-b")
         self.assertEqual(packet["source_inventory"], self.packet()["source_inventory"])
-        self.assertEqual(json.loads(observed_input[-1]["content"])["dossier"], self.packet()["dossier"])
+        self.assertEqual(json.loads(observed_input[-1]["content"].removeprefix("The packet below is JSON.\n"))["dossier"], self.packet()["dossier"])
         self.assertIn("The exact requested primary comparator.", json.dumps(packet))
         self.assertEqual(packet["source_deliveries"][0]["status"], "delivered")
         final = self.review_response("slate")
@@ -185,7 +185,7 @@ class ResultSourceRequestTests(StrategicSourceHelpers, DevelopmentCase):
         attempt = self.store.snapshot()["records"]["review_attempt"]["attempt-source-a"]
         observed_input = json.loads(self.artifacts.read(attempt["request"]))["input"]
         self.assertEqual(continued["history"], observed_input + [{"role": "assistant", "content": json.dumps(output, sort_keys=True)}])
-        self.assertEqual(json.loads(observed_input[-1]["content"])["readiness"], self.packet()["readiness"])
+        self.assertEqual(json.loads(observed_input[-1]["content"].removeprefix("The packet below is JSON.\n"))["readiness"], self.packet()["readiness"])
         self.assertEqual(packet["pending_source_requests"], [])
         final = self.supported_response()
         self.invoke(final, "source-b")
