@@ -36,8 +36,6 @@ FLAGS = ('-p', '--safe-mode', '--tools', '', '--strict-mcp-config', '--mcp-confi
 ENVIRONMENT = ('PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'TMPDIR', 'CLAUDE_CONFIG_DIR')
 SYSTEM_PROMPT_FILE = 'system-prompt.txt'
 OUTPUT_CONTENT_TYPES = ('text', 'thinking', 'redacted_thinking')
-# Binary evidence is named in the packet without its bytes; the text extraction of a work is its own evidence entry.
-OMITS_BINARY_EVIDENCE = True
 
 
 def clean_environment(environment):

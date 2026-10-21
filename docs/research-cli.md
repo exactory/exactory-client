@@ -66,7 +66,7 @@ All new mutations use the normal `--file`, `--expected-revision` and
 | `strategy` | Freeze a comparative prospective, result or post-measurement dossier, exact dependencies and a bounded question. |
 | `work-item` | Retain one stable reviewer request or development obligation, classification, actual execution state and lineage. |
 | `research-lead` | Preserve an earlier discrepancy and its original provenance, verification status and next check. |
-| `review-route` | Register the explicit instrumented provider, model and resource configuration. |
+| `review-route` | Register the explicit instrumented provider, model and resource configuration: `claude_cli_v1` at `claude://local` (the reviewer of a Claude Code session, run as an isolated `claude -p` process on the owner's subscription), `codex_cli_v1` at `codex://local` (the reviewer of a Codex session), or `openai_responses_v1` at an HTTPS endpoint with an API credential. |
 | `review-probe` | Execute and retain the input-boundary positive-control test. A failed test establishes no independence. |
 | `review-assignment` | Freeze the canonical role, exact allowed packet, reviewer identity and current verified route. |
 | `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. After a refused output, one retry with the same request is permitted. |

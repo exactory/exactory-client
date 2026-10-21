@@ -26,6 +26,9 @@ class CodexTransportTests(unittest.TestCase):
         self.native = patch.object(module, 'NATIVE_DECLARATIONS', ())
         self.native.start()
         self.addCleanup(self.native.stop)
+        self.native_sets = patch.object(module, 'NATIVE_DECLARATION_SETS', {()})
+        self.native_sets.start()
+        self.addCleanup(self.native_sets.stop)
     def module(self):
         from research_harness import review_codex_transport
         return review_codex_transport

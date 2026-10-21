@@ -43,14 +43,14 @@ def _frozen_pdf_capture(link, packets):
     return None
 
 
-def validate_evidence_contract(records, artifacts, values, *, required=True, packets=()):
+def validate_evidence_contract(records, artifacts, values, *, required=True, packets=(), review_binding=False):
     """Shared evidence grammar and locators over exact bytes; no live source/reading lookup."""
     from . import strategy
     from .source_links import read_locator, validate_link_fields
     with contract_check('evidence.shape'):
         references = strategy.items(values, 'Evidence', nonempty=required)
         for reference in references:
-            strategy.evidence_fields(reference)
+            strategy.evidence_fields(reference, review_binding=review_binding)
             if {'path', 'sha256', 'size', 'media_type'} <= reference.keys():
                 validate_reference(reference)
             elif reference.get('kind') == 'source':

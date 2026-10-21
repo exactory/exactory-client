@@ -201,7 +201,8 @@ class ClaudeDispatchTests(unittest.TestCase):
         content = request['input'][-1]['content']
         self.assertIsInstance(content, str)
         self.assertNotIn('QUJD', content)
-        delivered = json.loads(content)['evidence']
+        self.assertTrue(content.startswith(review_transport.PACKET_LABEL))
+        delivered = json.loads(content[len(review_transport.PACKET_LABEL):])['evidence']
         self.assertEqual(delivered[0]['encoding'], 'omitted')
         self.assertEqual(delivered[1]['content'], 'hello')
 

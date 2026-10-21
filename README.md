@@ -282,6 +282,13 @@ manuscript-development decisions require `q1_venue` passed in both reviews.
 Both reviewers receive the complete inspected ranges and named image assets
 behind the decisive evidence. Tool records alone grant no approval.
 
+A review runs on a registered route: in a Claude Code session the
+`claude_cli_v1` route runs the Claude Code CLI itself as an isolated reviewer
+on the owner's subscription, in a Codex session the `codex_cli_v1` route runs
+the Codex CLI, and the `openai_responses_v1` route calls the Responses API with
+a credential. Every route is probed before use, and the harness verifies the
+observed input of each invocation rather than the reviewer's self-report.
+
 Investigations execute prospectively admitted cycles. The manuscript receives
 separate blind measurement and publication reviews. One canonical decision
 serves target, cycle, writing, publication and round boundaries; `round-admit`

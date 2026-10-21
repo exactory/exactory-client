@@ -30,6 +30,17 @@ NATIVE_DECLARATIONS = (
     '47091490938505958b0c22ff42db6fd79b272a2af6923166f4c2cc53c4fe0df4',
     '6ded806e3cdbb35599ecaf8742574bc5274908472b1729090010c404c2151e8e',
 )
+# Codex 0.162.1 (audited 2026-10-20 on the rollout of probe-codex-astra, thread
+# 01a15ae2-2d7d-7070-a9ac-8cc9931e4c7c): the three developer messages are the
+# <skills_instructions> list of the .system skills with <collaboration_mode>, the
+# <multi_agent_role> text and the <multi_agent_mode> text; no project, user or
+# plugin context appears in them.
+NATIVE_DECLARATIONS_0162 = (
+    '696b6c75d877084ce308423c72f77f2e8cdb93a2f4ac9ede6e1c3379e7ea8bab',
+    '3edd51083129388f52e881435e93e4b981e00c5ee3d62ab5d32e22c428fd504b',
+    '6ded806e3cdbb35599ecaf8742574bc5274908472b1729090010c404c2151e8e',
+)
+NATIVE_DECLARATION_SETS = {NATIVE_DECLARATIONS, NATIVE_DECLARATIONS_0162}
 NATIVE_ENVIRONMENTS = {'722c613b0eff734b92f076c866ff2eb55f6298c54180d9d414868d070a6c3ae8'}
 CONTROLS = (
     'project_doc_max_bytes=0', 'developer_instructions=""',
@@ -38,7 +49,7 @@ CONTROLS = (
     'features.shell_tool=false', 'features.multi_agent=false',
     'features.browser_use=false', 'features.computer_use=false',
     'features.skip_host_skill_discovery=true', 'features.skill_search=false',
-    'web_search="disabled"', 'mcp_servers={}', 'model_reasoning_effort="low"',
+    'web_search="disabled"', 'mcp_servers={}', 'model_reasoning_effort="high"',
 )
 TERMINATION_GRACE_SECONDS = 1.0
 
@@ -195,7 +206,7 @@ def inspect_rollout(events, request, thread_id, directory, excluded_controls):
             else:
                 users.append(text)
                 packet_seen = text == expected
-    if tuple(developer_digests) != NATIVE_DECLARATIONS:
+    if tuple(developer_digests) not in NATIVE_DECLARATION_SETS:
         issues.append('unknown_developer_input')
     if len(environment_digests) > 1:
         issues.append('repeated_environment_input')

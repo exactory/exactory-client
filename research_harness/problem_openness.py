@@ -55,7 +55,13 @@ def prepare_openness(records, artifacts, value, revision):
         raise ResearchError("invalid_input", "Use a native openness outcome")
     iso_date(finding["searched_at"])
     text(finding["reason"], "Openness finding reason")
-    text(finding["coverage"], "Openness coverage", code="invalid_record")
+    # The observed finding is recorded as given; a reviewer that reports the dated coverage per formulation as a
+    # nonempty structure is accepted alongside plain text.
+    if isinstance(finding["coverage"], (list, dict)):
+        if not finding["coverage"]:
+            raise ResearchError("invalid_record", "Openness coverage must be nonempty")
+    else:
+        text(finding["coverage"], "Openness coverage", code="invalid_record")
     strings(finding["evidence"], "Openness evidence", nonempty=True, code="invalid_record")
     statement = find_current_statement(records)
     if (statement is None or finding["statement_digest"] != compute_statement_digest(statement)
@@ -134,7 +140,7 @@ def export_openness(store, spec, destination):
     fields(spec, ("assignment_id", "reviewer_id", "minimum"))
     text(spec["assignment_id"], "Openness assignment ID")
     text(spec["reviewer_id"], "Openness reviewer ID")
-    fields(spec["minimum"], ("searches", "settling_work_id", "duplicate_resolutions"))
+    fields(spec["minimum"], ("searches", "settling_work_id", "duplicate_resolutions"), ("text_priority",))
     statement = find_current_statement(records)
     if statement is None:
         raise ResearchError("problem_statement_missing", "Record the exact statement before openness review")
@@ -169,11 +175,27 @@ def export_openness(store, spec, destination):
                "searches": searches, "reading_digests": sorted(digest(row) for row in readings.values()),
                "settling_work_id": spec["minimum"]["settling_work_id"], "duplicate_resolutions": spec["minimum"]["duplicate_resolutions"]}
     include_record(statement)
+    scientific_context = {"openness_minimum": minimum}
+    if spec["minimum"].get("text_priority"):
+        # The research record declares which decisive full texts a text-limited route delivers first; the transport
+        # applies the route limit to the rest.
+        strings(spec["minimum"]["text_priority"], "Text delivery priority")
+        priority = []
+        for version in spec["minimum"]["text_priority"]:
+            work = records.get("work", {}).get(version)
+            if work is None or not work.get("fulltexts"):
+                raise ResearchError("openness_reading_gap", "Text delivery priority names a work without a captured full text", {"version_id": version})
+            priority.append(work["fulltexts"][0]["text"]["sha256"])
+        scientific_context["text_delivery_priority"] = priority
+        scientific_context["text_delivery_rule"] = (
+            "On a text-limited reviewer route the bodies of the listed full texts are delivered in this order "
+            "while the route input limit allows; a body that does not fit is replaced by an explicit elision "
+            "note, and the reading record of that work (its notes and inspected excerpts) is delivered in full.")
     packet = {"protocol": PROTOCOL, "kind": "result", "root": str(store.root.resolve()), "objective_id": statement["id"],
               "contract": {"orchestration": "problem_creation", "area": marker["area"]}, "subject": statement,
               "subject_digest": digest(statement), "claim_digest": compute_statement_digest(statement),
               "reviewer": {"source": "host", "actor_id": spec["reviewer_id"], "attestation_id": ATTESTATION_PREFIX + spec["assignment_id"]},
-              "scientific_context": {"openness_minimum": minimum}, "evidence": [evidence[key] for key in sorted(evidence)],
+              "scientific_context": scientific_context, "evidence": [evidence[key] for key in sorted(evidence)],
               "execution_provenance": [], "unmaterialized_digests": []}
     reference = artifacts.put(json.dumps(packet, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode(), "application/json")
     load_packet(artifacts, reference, spec["reviewer_id"])

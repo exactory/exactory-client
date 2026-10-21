@@ -9,7 +9,7 @@ from .artifacts import describe_artifact
 from .evaluation import Evaluation
 from .errors import ResearchError
 from .reading import validate_read_evidence
-from .source_links import span_locator
+from .source_links import covers_text, span_locator
 
 _PASSAGE_CHARACTERS = 2000
 # Match the existing scientific-delivery per-artifact bound for original visuals.
@@ -44,8 +44,11 @@ def _find_visual_gaps(context):
             if item['code'] != 'visual_scope_unresolved' or visual['resources']]
 
 
-def _build_passages(records, evaluation, link):
-    """Resolve every inspected byte into bounded chunks without storing objects."""
+def _build_passages(records, evaluation, link, *, whole_text=True):
+    """Resolve every inspected byte into bounded chunks without storing objects. With whole_text False, a text
+    inspection that covers the complete extracted text yields no chunks."""
+    if not whole_text and link['locator']['kind'] in _TEXT_KINDS and covers_text(evaluation, link):
+        return []
     context = evaluation.link(link)
     locator = link['locator']
     kind = locator['kind']
@@ -100,12 +103,36 @@ def _build_passages(records, evaluation, link):
     return result
 
 
-def build_reading_passages(records, artifacts, readings):
+def build_reading_passages(records, artifacts, readings, *, whole_text=True):
     """Return complete passage descriptors and bytes without writing or rereading."""
     evaluation = Evaluation.of(records, artifacts)
     return [(dict(passage, reading_id=reading['id'], inspection_index=index), data)
             for reading in readings for index, inspection in enumerate(reading['inspections'])
-            for passage, data in _build_passages(records, evaluation, inspection['link'])]
+            for passage, data in _build_passages(records, evaluation, inspection['link'], whole_text=whole_text)]
+
+
+def build_inline_passages(records, artifacts, readings):
+    """The passages of a problem packet, as (passage, bytes) pairs. A text inspection that does
+    not cover the complete text is one inline passage {reading_id, inspection_index, version_id, start, end, text}
+    with the exact text of its span and bytes None. A text inspection over the complete text yields none: the full
+    text is held and is requested by its version. Any other inspection keeps its bounded descriptors."""
+    evaluation = Evaluation.of(records, artifacts)
+    result = []
+    for reading in readings:
+        for index, inspection in enumerate(reading['inspections']):
+            link = inspection['link']
+            locator = link['locator']
+            if locator['kind'] not in _TEXT_KINDS:
+                result.extend((dict(passage, reading_id=reading['id'], inspection_index=index), data)
+                              for passage, data in _build_passages(records, evaluation, link))
+                continue
+            validate_read_evidence(records, evaluation, link, depth='passage')
+            if covers_text(evaluation, link):
+                continue
+            span_text = evaluation.text(link['artifact'])[locator['start']:locator['end']]
+            result.append(({'reading_id': reading['id'], 'inspection_index': index, 'version_id': link['version_id'],
+                            'start': locator['start'], 'end': locator['end'], 'text': span_text}, None))
+    return result
 
 
 def has_attachment(evaluation, packet, reference):
@@ -144,7 +171,27 @@ def _matches_span(source, location):
     return location.get('kind') == 'text' and location.get('quote') == source[start:end]
 
 
+def _find_inline_interval(evaluation, supplied, link):
+    """The interval of an inline passage: it names a stored inspection of the same source as the
+    expected passage, its offsets lie within that inspection's span, and its text equals the source text there."""
+    reading = evaluation.records.get('reading', {}).get(supplied.get('reading_id'))
+    index, start, end = supplied.get('inspection_index'), supplied.get('start'), supplied.get('end')
+    if reading is None or any(type(value) is not int for value in (index, start, end)):
+        return None
+    if not 0 <= index < len(reading['inspections']):
+        return None
+    named = reading['inspections'][index]['link']
+    locator = named['locator']
+    if (locator['kind'] not in _TEXT_KINDS or named['version_id'] != link['version_id']
+            or named['source_id'] != link['source_id'] or named['artifact']['sha256'] != link['artifact']['sha256']
+            or not locator['start'] <= start < end <= locator['end']):
+        return None
+    return (start, end) if evaluation.text(named['artifact'])[start:end] == supplied.get('text') else None
+
+
 def _find_supplied_interval(evaluation, packet, supplied, expected, link):
+    if 'text' in supplied:
+        return _find_inline_interval(evaluation, supplied, link)
     if (supplied.get('version_id') != expected['version_id']
             or not has_attachment(evaluation, packet, supplied.get('excerpt'))):
         return None
@@ -232,16 +279,22 @@ def _has_visual_content(evaluation, packets, inspection):
         for asset in inspection['link']['locator'].get('assets', []))
 
 
-def find_delivered_readings(records, artifacts, readings, packets):
-    """Require all inspected ranges and visual bytes in the observed history."""
+def find_delivered_readings(records, artifacts, readings, packets, *, whole_text=True):
+    """Require all inspected ranges and visual bytes in the observed history. With whole_text False, a text
+    inspection over the complete text is not required as passages, and a reading inspected only that way is
+    delivered when the history attached its full text."""
     evaluation = Evaluation.of(records, artifacts)
     eligible = [reading for reading in readings
                 if all(_has_visual_content(evaluation, packets, inspection) for inspection in reading['inspections'])]
-    expected = build_reading_passages(records, evaluation, eligible)
+    expected = build_reading_passages(records, evaluation, eligible, whole_text=whole_text)
     covered, ranges = set(), {}
     for reading in eligible:
         passages = [item for item, _ in expected if item['reading_id'] == reading['id']]
         if passages and all(_covers_passage(evaluation, packets, passage,
                 reading['inspections'][passage['inspection_index']]['link'], ranges) for passage in passages):
+            covered.add(reading['id'])
+        elif not passages and not whole_text and reading['inspections'] and all(
+                any(_has_source_content(evaluation, packet, inspection['link']) for packet in packets)
+                for inspection in reading['inspections']):
             covered.add(reading['id'])
     return covered
