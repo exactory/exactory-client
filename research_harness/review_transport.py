@@ -215,13 +215,11 @@ def _compact_history(supplied, history):
     return messages
 
 
-def _fit_codex_input(route, prompt, supplied, history):
-    """Elide re-delivered and replayed evidence bodies until the input fits the Codex app-server limit. An input that
-    no elision fits is sent as it stands: the app-server refuses it, and the refusal is recorded as a failed attempt."""
-    from . import review_codex_transport
-
+def _fit_local_input(route, prompt, supplied, history, limit, measure):
+    """Elide re-delivered and replayed evidence bodies until the input fits the route limit. An input that no elision
+    fits is sent as it stands: the provider refuses it, and the refusal is recorded as a failed attempt."""
     def fits(request):
-        return len(review_codex_transport.packet_text(request)) <= CODEX_INPUT_LIMIT_CHARS
+        return len(measure(request)) <= limit
 
     messages = _compact_history(supplied, history)
     request = _build_local_request(route, prompt, supplied, messages)
@@ -238,10 +236,17 @@ def _fit_codex_input(route, prompt, supplied, history):
     return request
 
 
-def _compact_claude_input(route, prompt, supplied, history):
-    """The Claude Code route replays the session's earlier turns as the packet's history marker asks. Its window
-    admits the packet without elision; an input above the route limit is refused by the adapter and recorded."""
-    return _build_local_request(route, prompt, supplied, _compact_history(supplied, history))
+def _fit_codex_input(route, prompt, supplied, history):
+    """The Codex app-server admits 1,048,576 characters of input."""
+    from . import review_codex_transport
+    return _fit_local_input(route, prompt, supplied, history, CODEX_INPUT_LIMIT_CHARS, review_codex_transport.packet_text)
+
+
+def _fit_claude_input(route, prompt, supplied, history):
+    """The Claude Code route admits its own limit of characters; the adapter refuses a larger input and records it."""
+    from . import review_claude_transport
+    return _fit_local_input(route, prompt, supplied, history, review_claude_transport.INPUT_LIMIT_CHARACTERS,
+                            review_claude_transport.packet_text)
 
 
 def request_body(route, prompt, packet, history=()):
@@ -278,7 +283,7 @@ def request_body(route, prompt, packet, history=()):
     if route['adapter'] == 'codex_cli_v1':
         return _fit_codex_input(route, prompt, supplied, history)
     if route['adapter'] == 'claude_cli_v1':
-        return _compact_claude_input(route, prompt, supplied, history)
+        return _fit_claude_input(route, prompt, supplied, history)
     return request
 
 

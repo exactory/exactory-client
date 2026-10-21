@@ -112,6 +112,23 @@ class HistoryCompactionTests(unittest.TestCase):
         self.assertEqual(packet_of(sent['input'][-1])['text'], unfittable['text'])
 
 
+class ClaudeRouteElisionTests(unittest.TestCase):
+    def test_the_claude_route_elides_the_same_way_against_its_own_limit(self):
+        from research_harness import review_claude_transport
+        limit = review_claude_transport.INPUT_LIMIT_CHARACTERS
+        big = {'id': 'now', 'history_delivery': transport.HISTORY_COMPACT_V2,
+               'scientific_history': [{'packet': {'evidence': [{'artifact': artifact('ee'), 'content': 'z' * (limit + 1000),
+                                                                 'encoding': 'utf-8'}]}}]}
+        request = transport.request_body(CLAUDE, 'Review.', big)
+        supplied = packet_of(request['input'][-1])
+        self.assertEqual(supplied['scientific_history'][0]['packet']['evidence'][0]['delivery'], 'body-elided-from-replayed-history')
+        self.assertLessEqual(len(review_claude_transport.packet_text(request)), limit)
+        small = {'id': 'now', 'scientific_history': [{'packet': {'evidence': [{'artifact': artifact('ff'), 'content': 'z' * 9000,
+                                                                                 'encoding': 'utf-8'}]}}]}
+        kept = packet_of(transport.request_body(CLAUDE, 'Review.', small)['input'][-1])
+        self.assertEqual(kept['scientific_history'][0]['packet']['evidence'][0]['content'], 'z' * 9000)
+
+
 class ReviewCitationTests(unittest.TestCase):
     def records(self):
         return {'problem_value': {'value-1': {'id': 'value-1', 'motivation': []}}}
