@@ -100,29 +100,39 @@ def instruction_provenance(records, artifacts, identifier):
     return {"id": identifier, "path": pinned["path"], "artifact": pinned["artifact"], "text": content}
 
 
+def evidence_fields(reference):
+    """The shared evidence-reference grammar, independent of current records/readings."""
+    if not isinstance(reference, dict):
+        raise ResearchError("invalid_strategy", "Evidence must identify exact held bytes or a recorded result")
+    if {"path", "sha256", "size", "media_type"} <= reference.keys():
+        fields(reference, ("path", "sha256", "size", "media_type"), code="invalid_strategy")
+    elif reference.get("kind") == "source":
+        fields(reference, ("kind", "link"), code="invalid_strategy")
+    elif reference.get("kind") == "record":
+        fields(reference, ("kind", "record_kind", "id", "digest"), code="invalid_strategy")
+        text(reference["record_kind"], "Evidence record kind", code="invalid_strategy")
+        text(reference["id"], "Evidence record ID", code="invalid_strategy")
+        text(reference["digest"], "Evidence record digest", code="invalid_strategy")
+    else:
+        raise ResearchError("invalid_strategy", "Use an artifact descriptor, source link or exact record reference")
+
+
 def evidence(records, artifacts, values, *, required=True):
     """Verify exact artifacts, read source locators or existing typed record references."""
     for reference in items(values, "Evidence", nonempty=required):
-        if not isinstance(reference, dict):
-            raise ResearchError("invalid_strategy", "Evidence must identify exact held bytes or a recorded result")
+        evidence_fields(reference)
         if {"path", "sha256", "size", "media_type"} <= reference.keys():
-            fields(reference, ("path", "sha256", "size", "media_type"), code="invalid_strategy")
             artifacts.read(reference)
         elif reference.get("kind") == "source":
-            fields(reference, ("kind", "link"), code="invalid_strategy")
             from .reading import validate_read_evidence
             validate_read_evidence(records, artifacts, reference["link"])
         elif reference.get("kind") == "record":
             from .claim_dependencies import verify_record_dependency
-            fields(reference, ("kind", "record_kind", "id", "digest"), code="invalid_strategy")
-            text(reference["record_kind"], "Evidence record kind", code="invalid_strategy")
             saved = get_record(records, reference["record_kind"], reference["id"])
             if not verify_record_dependency(records, reference["record_kind"], reference["id"], reference["digest"]):
                 raise ResearchError("strategy_evidence_stale", "The cited record differs from the bound evidence", {"id": reference["id"]})
             if reference["record_kind"] == "local_artifact":
                 artifacts.read(saved["artifact"])
-        else:
-            raise ResearchError("invalid_strategy", "Use an artifact descriptor, source link or exact record reference")
     return values
 
 

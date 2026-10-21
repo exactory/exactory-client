@@ -166,8 +166,10 @@ class BarSourceTests(StrategyCase):
         response['source_requests'] = [{'id': 'page', 'kind': 'inventory_page', 'page': 0}]
         self.invoke(response)
         self.error('invalid_review_source_request', lambda: self.assign('b', prior_assignment_id='a'))
-        self.error('invalid_review_source_request', lambda: self.mutate(research_decisions.record_value_review,
-            dict(response, id='bar-a', dossier_id='dossier-1', assignment_id='a')))
+        refusal = self.assert_refusal('invalid_review_source_request', lambda: self.mutate(
+            research_decisions.record_value_review,
+            dict(response, id='bar-a', dossier_id='dossier-1', assignment_id='a')), 'attempt-a')
+        self.assertEqual(refusal['check'], 'review.source_requests')
 
     def test_out_of_range_page_is_explicitly_rejected(self):
         self.metadata(1)

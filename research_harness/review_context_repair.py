@@ -282,26 +282,38 @@ def validate_repair_binding(records, artifacts, assignment):
         raise ResearchError('review_context_repair_stale', 'Later predecessor contamination requires explicit reassessment of the new evidence')
 
 
-def validate_reassessment(records, artifacts, assignment, observed_output):
+def frozen_reassessment_packet(records, artifacts, assignment):
+    """The actual latest repair fixes its predecessor finals, even across later continuations/refreshes."""
+    repairs = [item for item in _lineage(records, assignment)
+               if item.get('context', {}).get('context_repair') is not None]
+    bound = repairs[-1] if repairs else assignment
+    return json.loads(artifacts.read(bound['packet']))
+
+
+def validate_reassessment(records, artifacts, assignment, observed_output, *, reading_checks=True, packet=None, evidence_validator=None):
     """Require an observed, evidenced disposition of every inherited finding."""
-    chain = _lineage(records, assignment)
-    repairs = [item for item in chain if item.get('context', {}).get('context_repair') is not None]
-    if not repairs:
+    if packet is None:
+        chain = _lineage(records, assignment)
+        repairs = [item for item in chain if item.get('context', {}).get('context_repair') is not None]
+        repair = repairs[-1]['context']['context_repair'] if repairs else None
+        inherited = reassessment_reviews(records, assignment) if repairs else []
+    else:
+        repair = packet.get('context_repair')
+        inherited = packet.get('historical_reviews', []) if repair else []
+    if repair is None:
         if 'reassessment' in observed_output:
             raise ResearchError('review_reassessment_mismatch', 'An ordinary review has no reassessment predecessor')
         return
-    repair = repairs[-1]['context']['context_repair']
-    predecessor = _assignment(records, repair['assignment_id'])
-    inherited = reassessment_reviews(records, assignment)
+    predecessor_id = repair['assignment_id']
     if 'reassessment' not in observed_output:
         raise ResearchError('review_reassessment_missing', 'The observed output must address the retained historical findings')
     reassessment = observed_output['reassessment']
     fields(reassessment, ('assignment_id', 'findings'), code='review_reassessment_mismatch')
-    if reassessment['assignment_id'] != predecessor['id']:
+    if reassessment['assignment_id'] != predecessor_id:
         raise ResearchError('review_reassessment_mismatch', 'Reassess the exact recorded predecessor')
     findings = strategy.items(reassessment['findings'], 'Reassessment findings')
     seen = set()
-    originals = {saved['id']: saved['payload'] for saved in inherited}
+    originals = {saved['id']: saved.get('payload', saved) for saved in inherited}
     for finding in findings:
         fields(finding, ('review_id', 'disposition', 'reason', 'evidence'), code='review_reassessment_mismatch')
         text(finding['review_id'], 'Historical review ID', code='review_reassessment_mismatch')
@@ -310,8 +322,14 @@ def validate_reassessment(records, artifacts, assignment, observed_output):
         seen.add(finding['review_id'])
         strategy.choice(finding['disposition'], ('confirmed', 'revised', 'unresolved'), 'Reassessment disposition', 'review_reassessment_mismatch')
         text(finding['reason'], 'Reassessment scientific reasoning', code='review_reassessment_mismatch')
-        strategy.evidence(records, artifacts, finding['evidence'])
-        if finding['disposition'] == 'confirmed' and _scientific_content(originals[finding['review_id']]) != _scientific_content(observed_output):
+        if reading_checks:
+            strategy.evidence(records, artifacts, finding['evidence'])
+        else:
+            from .review_refusal import validate_evidence_contract
+            (evidence_validator or validate_evidence_contract)(records, artifacts, finding['evidence'])
+        from .review_protocol import _reference_templates
+        content = _reference_templates(observed_output) if packet is not None else observed_output
+        if finding['disposition'] == 'confirmed' and _scientific_content(originals[finding['review_id']]) != _scientific_content(content):
             raise ResearchError('review_reassessment_mismatch', 'A changed scientific finding cannot be labeled confirmed')
     if seen != set(originals):
         raise ResearchError('review_reassessment_incomplete', 'Address every inherited final review')

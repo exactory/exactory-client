@@ -75,6 +75,18 @@ class StrategyCase(unittest.TestCase):
         self.assertEqual(self.store.revision, revision, "A rejected mutation must not publish partial state")
         return caught.exception
 
+    def assert_refusal(self, code, action, attempt_id):
+        """A refused review output leaves one immutable refusal record beside the original error."""
+        revision = self.store.revision
+        with self.assertRaises(ResearchError) as caught:
+            action()
+        self.assertEqual(caught.exception.code, code)
+        self.assertEqual(self.store.revision, revision + 1, "A refused review output records one refusal")
+        refusal = self.store.snapshot()["records"]["review_output_refusal"][attempt_id]
+        self.assertEqual((refusal["attempt_id"], refusal["code"], refusal["recorded_revision"]),
+                         (attempt_id, code, revision + 1))
+        return refusal
+
     def intent(self, identifier="intent-1"):
         return {"id": identifier, "previous": None, "task_kind": "open_research",
                 "instruction": "instruction", "recorded_at": "2026-09-30T18:00:00Z",

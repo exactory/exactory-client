@@ -69,11 +69,11 @@ All new mutations use the normal `--file`, `--expected-revision` and
 | `review-route` | Register the explicit instrumented provider, model and resource configuration. |
 | `review-probe` | Execute and retain the input-boundary positive-control test. A failed test establishes no independence. |
 | `review-assignment` | Freeze the canonical role, exact allowed packet, reviewer identity and current verified route. |
-| `review-run` | Execute that assignment once, retaining actual output, usage and failed or interrupted attempts. |
+| `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. After a refused output, one retry with the same request is permitted. |
 | `review-attempt` | Preserve imported output or failure history; imported assertions never establish verified independence. |
 | `review-context` | Record evidence of later contamination or other context observations. |
-| `review-adjudication` | Bind the observed fresh assessor's focused objection or correction finding. |
-| `value-review` | Record the exact observed bar, slate or combined support/value result. |
+| `review-adjudication` | Record the exact observed focused finding. An output that fails its output contract leaves a refusal record. |
+| `value-review` | Record the exact observed bar, slate or combined support/value result. An output that fails its output contract leaves a refusal record. |
 | `research-decision` | Select the canonical scientific action, artifact disposition and full-goal status. |
 | `source-impact` | Bind an explicit impact classification for the complete source delta since the selected decision. |
 
@@ -116,6 +116,30 @@ native evidence and preserves that assessor's own history. Keep all ancestor
 source gaps and charge the continuation to the same allowance. A request response
 remains unresolved and cannot be recorded with `value-review`; a final phase
 assessment cannot use this interface to obtain a replacement answer.
+
+A final assessment binds its assignment. `value-review` and `review-adjudication`
+check the observed output against its output contract: the shape of the payload,
+its locators against the delivered bytes, its citations against the delivered
+content, its bar ids against the delivered bars, its findings on the objections
+that its own packet delivered and on the historical reviews of its lineage, a
+reassessment against its frozen predecessor, and the adjudicator's objection id
+and disposition. When the output fails one of these checks, the command returns
+the error and writes one immutable `review_output_refusal` record for the
+attempt, with the code, the details and the name of the check. A check that
+depends on the store (a pending source request, a reading that is not current, a
+conflict with a stored review) writes no record. An output whose provenance does
+not authenticate is never refused. While every completed attempt of an
+assignment is refused, and each refused output still fails its check,
+`review-run` invokes the assignment again with the same packet, prompt, route
+and request, and the reviewer receives nothing about the refusal. A refused
+output that has become recordable binds again, and `review-run` refuses the
+retry with `review_resampling_forbidden`. After two refused outputs,
+`review-run` refuses the next invocation with `review_slot_exhausted`. A new
+reviewer can take an exhausted initial bar slot; the same reviewer is refused.
+A slate or result slot keeps its bar continuity, and the adjudicator stays
+fixed, so those roles recover through the retry only. `status` lists the
+refused attempts of each assignment under `review.assignments`, and
+`usage_report` counts them as calls.
 
 After recorded context contamination, first record every actual observed final
 assessment in the inherited history with `value-review`, retaining the exact
@@ -1433,7 +1457,8 @@ an `objection_findings` entry for every material objection of the version 1 bar
 stay current. Cite the refreshed bars
 in the slate; the slate and result reviews then continue the version 2 sessions,
 because only the latest bar of each slot is current. A reviewer whose latest bar
-is on version 2 cannot be assigned another bar (`review_resampling_forbidden`).
+is on version 2 cannot be assigned another bar (`review_resampling_forbidden`),
+unless its latest bar carries `review_evidence_undelivered` (the refresh below).
 
 A focused slate review is optional. `review_ids` lists zero to two observed
 problem slate reviews from distinct reviewers and slots. Each must assess exactly
@@ -1465,7 +1490,8 @@ findings in `historical_reviews`, and adds `problem_refresh` with `{assignment_i
 previous_candidate_set_digest, candidate_set_digest, previous_bar_ids, bar_ids,
 review_ids}`. The new response covers the earlier material objections in
 `objection_findings`. While the candidate set and the bars are unchanged, another
-slate assignment for that reviewer returns `review_resampling_forbidden`.
+slate assignment for that reviewer returns `review_resampling_forbidden`, unless
+its latest slate review carries `review_evidence_undelivered`.
 
 The material objections of observed slate reviews bind the post like the bars'
 objections, whether or not the latest slate cites the review; `review_ids` names
@@ -1754,7 +1780,8 @@ the packet delivers, its id and material version). A new result assignment for a
 whose completed result review was given under another currency continues that
 reviewer's session and slot as a refresh, and its `problem_refresh` adds
 `previous_problem_review_currency` and `problem_review_currency`; under the same
-currency it returns `review_resampling_forbidden`. The result template
+currency it returns `review_resampling_forbidden`, unless the reviewer's latest
+result review carries `review_evidence_undelivered`. The result template
 `exactory-problem-review-v2/result` receives `problem_evidence`
 with the claim, attempt, accepted results, openness, value, assessment, resolved
 `assessment_evidence`, citations, delivered readings/passages,
@@ -1782,13 +1809,15 @@ historical bar review (a contaminated or repaired bar lineage) as the version
 its review stated: the same collection from which `value-review` requires a
 finding on each such objection. Every delivered passage mapping (`prior_context`,
 `version_source_mappings`, `supplied_source_mappings` and the mappings under an
-objection) carries `citation`, a complete, valid source link
+objection) carries `citation` only when its text or span link passes the receiving
+role's evidence validator, requiring a current full-text reading whose inspections
+contain the passage. The citation is a complete, valid source link
 `{version_id, source_id, artifact, locator}` for exactly that passage, which a
 reviewer copies verbatim to cite it; the citation names its original without
-attaching it. A JSON passage mapping in a bar, slate or result packet carries no
-`citation` and is delivered for reading only, because source evidence in a
-review needs a full-text reading; every mapping in an adjudicator packet carries
-its `citation` for a correction to cite. The packet attaches only the bounded excerpts of those passages,
+attaching it. An abstract-only text passage or a JSON passage carries no
+`citation` in a review or adjudicator packet and is delivered for reading.
+A correction may still cite any delivered passage, including JSON: correction
+input and adjudicator output evidence have separate requirements. The packet attaches only the bounded excerpts of those passages,
 and a link within a passage's bounds that the reviewer copies is delivered when
 an adjudicator receives the reviewer's version. Bytes reach a
 reviewer only through the problem evidence, the delivered sources and passages
@@ -1797,7 +1826,7 @@ with their bounds, an objection's `version_evidence` and
 `previously_supplied_evidence` and the reviewer's own session history; a
 reviewer that needs a source that another review cites requests it with
 `source_requests`. A
-bar, slate or result review cites a record only when one of its observed packets
+bar, slate or result review, or a problem adjudicator, cites a record only when one of its observed packets
 carried that record at the cited digest as content; a reference that the
 reviewer received only inside a finding, or as an undelivered entry, does not
 count. It cites an artifact as a descriptor only when its observed packets
@@ -1806,7 +1835,8 @@ artifact received only as passages names those passages and does not widen
 their bounds. It cites a source link only when its packets delivered the
 artifact in full, or when the link's locator lies within a delivered passage of
 the same artifact (a text locator by its offsets; a locator of another kind
-equal to the passage's). `value-review` refuses another citation, after the
+equal to the passage's). These delivery checks also cover `reassessment.findings[].evidence`.
+`value-review` and `review-adjudication` refuse another citation, after the
 shape checks, with `review_evidence_undelivered`, naming the record, or the
 artifact's `sha256` and, for a source link, its `locator`.
 Both result reviews must pass exactly `problem_statement`, `problem_openness`,
@@ -1859,9 +1889,14 @@ the adjudicated objection, or an earlier adjudicator packet that lacked a delive
 that the post gate requires of it (below) retains the focused adjudicator and its
 observed history rather than opening a new reviewer choice: its next assignment is
 a `focused_refresh` naming the previous and current evidence digests and material
-versions and its `reason`, `version_changed`, `evidence_changed` or
+versions and its `reason`, `version_changed`, `evidence_changed`,
+`disposition_unsupported` or
 `packet_incomplete`, the last with the lacking keys in `undelivered_keys`. Under
-an unchanged digest and version and a complete earlier packet, another assignment
+`disposition_unsupported`, `undelivered_references` names the evidence that the
+previous recorded adjudication cited without receiving it. The reviewer, route
+and author must remain the same. Under
+an unchanged digest and version, a complete earlier packet and a disposition
+whose evidence was delivered, another assignment
 returns `review_adjudicator_fixed`, also when a delivery that the gate does not
 require of the earlier packet differs, such as the calibrations of another pair
 or `current_bar_calibrations`.
@@ -1931,6 +1966,34 @@ lacks or cannot deliver is named in `undelivered_keys` as
 differs, for example by an extra entry; the post gate does not count that
 adjudication, and the same adjudicator refreshes with reason
 `packet_incomplete`.
+The adjudicator's own output evidence must have reached it through its packet
+lineage: the problem evidence, projected records, the objection's `version_evidence`
+and attachments, or the original and version passage mappings, including deliveries
+retained through a correction or focused refresh. A record reference merely named
+in a prior finding supplies no record content. An earlier saved adjudication
+that cites undelivered content retains its history but carries
+`review_adjudication_evidence_undelivered`, with `undelivered_references`; status
+names that obligation and the disposition cannot resolve the objection or make
+the post gate ready. A focused refresh with reason `disposition_unsupported`
+lets the same adjudicator reassess it; a later ready adjudication supplies the
+current disposition.
+At assessment time the post gate also audits every current recorded bar, slate
+and result review of the problem against the frozen delivery of the review's
+assignment lineage, reassessment findings included. A review that cites content
+its packets did not deliver stays in the record and carries
+`review_evidence_undelivered` with `review_id` and `undelivered_references`,
+the details of the `value-review` refusal. The pair is not ready, and no refusal
+record is written for a recorded review. The audit reads the delivery as the
+packets recorded it, so a current reading added or removed after the record
+changes nothing. The same reviewer refreshes the review in its session and
+slot: a new assignment of the same role with an empty `context`. Its packet
+carries `problem_refresh` with `reason: "evidence_undelivered"` and `review_ids`
+naming the superseded review, which `historical_reviews` delivers so that the
+new output gives its findings on the same objections. The refreshed review
+supersedes the audited one and ends the obligation. Another refresh under the
+same currency is refused with `review_resampling_forbidden`. A post decision
+that names the superseded pair needs a new post decision with the refreshed
+reviews. The audit and the refresh apply to problem reviews only.
 The original grades remain visible. An old-evidence adjudication, a resolution
 of another item, or a material-objection finding cannot waive the shortfall;
 the five independent assurances still have to pass.
@@ -1978,6 +2041,7 @@ records retain nonmanaged dependency composition and empirical meaning.
 | `problem_bar_pending`, `review_bar_mismatch` | Obtain both current field/area bars. |
 | `problem_review_pair_required`, `problem_evidence_unassessed`, `problem_assurance_pending` | Obtain the independent observed pair with delivered current evidence and all five assurances passed. |
 | `research_objection_unresolved` | Resolve the named material objection with evidence or a focused independent adjudication. |
+| `review_evidence_undelivered` | The named recorded review cites content that its packets did not deliver (`review_id`, `undelivered_references`). Assign the same reviewer and role again with an empty context to refresh it. |
 | `problem_decision_missing`, `problem_decision_stale` | Record a `post` decision covering the current evidence digest. |
 | `review_sources_pending` | Resolve the reviewers' pending source requests. |
 | `problem_already_posted` | Retain the existing confirmed post; the same statement cannot be posted twice. |

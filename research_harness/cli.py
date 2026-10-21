@@ -293,6 +293,18 @@ def acquisition_command(store, command, payload, identity):
     return acquisition.import_response(store, **values, **identity)
 
 
+def _review_status(records, artifacts):
+    from . import review_refusal
+    completed = sorted((attempt for attempt in records.get("review_attempt", {}).values()
+                        if attempt["status"] == "completed"), key=lambda attempt: attempt["recorded_revision"])
+    by_assignment = {}
+    for attempt in completed:
+        by_assignment.setdefault(attempt["assignment_id"], []).append(attempt)
+    return {"assignments": {identifier: {"refused_attempts": review_refusal.refused_attempts(
+                                records, artifacts, by_assignment.get(identifier, []))}
+                            for identifier in records.get("review_assignment", {})}}
+
+
 def status_report(store, *, counters=False):
     started = time.monotonic()
     snapshot = store.snapshot()
@@ -313,7 +325,7 @@ def status_report(store, *, counters=False):
                     problem=records["workspace"]["problem"], resources=resources.account_report(records, "research"),
                     limits={"depth": describe_depth(records)}, source_deferrals=assess_deferrals(records, evaluation, "research"),
                     candidates=problem_candidates.count_candidates(records), slate_id=None if slate is None else slate["id"],
-                    next=upcoming)
+                    next=upcoming, review=_review_status(records, evaluation))
     config = records.get("configuration", {}).get("research")
     profile = config["profile"] if config else "research"
     study = records.get("workspace", {}).get("study")
@@ -377,7 +389,7 @@ def status_report(store, *, counters=False):
                 pending_executions=[key for key in records.get("execution_admission", {}) if key not in records.get("execution_outcome", {})],
                 remote_intents=list(records.get("remote_intent", {}).values()),
                 remote_observations=list(records.get("remote_observation", {}).values()),
-                historical_adoptions=list(records.get("workspace_adoption", {}).values()))
+                historical_adoptions=list(records.get("workspace_adoption", {}).values()), review=_review_status(records, evaluation))
 
 
 def load_candidates(path):

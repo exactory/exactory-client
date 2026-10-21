@@ -137,6 +137,7 @@ class ResultSourceRequestTests(StrategicSourceHelpers, DevelopmentCase):
     module = StrategyCase.module
     put = StrategyCase.put
     error = StrategyCase.error
+    assert_refusal = StrategyCase.assert_refusal
     dossier = StrategyCase.dossier
     provider_response = StrategyCase.provider_response
     route = StrategyCase.route
@@ -215,4 +216,6 @@ class ResultSourceRequestTests(StrategicSourceHelpers, DevelopmentCase):
         response["source_requests"] = [{"id": "inventory", "kind": "inventory_page", "page": 0}]
         self.invoke(response)
         self.error("invalid_review_source_request", lambda: self.continue_review())
-        self.error("invalid_review_source_request", lambda: self.record_final(response, "source-a"))
+        refusal = self.assert_refusal("invalid_review_source_request",
+                                      lambda: self.record_final(response, "source-a"), "attempt-source-a")
+        self.assertEqual(refusal["check"], "review.source_requests")

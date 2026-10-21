@@ -35,6 +35,13 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.55.1](docs/releases/0.55.1.md) corrects the delivery boundary of
+the problem reviews: a delivered passage carries a citation only when the
+receiving role can record it, the adjudicator's output is checked against the
+content the adjudicator received, and a review output that fails the output
+contract leaves a refusal record and permits one retry of the same assignment
+instead of blocking its slot.
+
 Version [0.55.0](docs/releases/0.55.0.md) adds the research half of
 `math-conjecturer`: the harness creates an open mathematical problem as
 research before it posts it. A problem record holds an exploration with its

@@ -659,7 +659,8 @@ class ProblemResultCalibrationTests(ProblemDeliveryCase):
                                    identifier="refreshed-second")
         packet = json.loads(self.artifacts.read(self.store.snapshot()["records"]["review_assignment"]["refreshed-second"]["packet"]))
         self.assertNotIn("bars", packet)
-        with self.assertRaises(ResearchError) as caught:
+        # The second half models pre-R60 history; its original refusal probe wrote no certificate.
+        with patch("research_harness.review_refusal._record_refusal"), self.assertRaises(ResearchError) as caught:
             self.mutate(decisions.record_value_review, payload)
         self.assertEqual((caught.exception.code, caught.exception.details),
                          ("review_bar_mismatch", {"bar_ids": self.version_two_bar_ids}))

@@ -162,6 +162,28 @@ class ProblemReviewTests(LiteratureCase):
                 "audit": {"subject_digest": "checked-subject"}}}}]
         return output, validation
 
+    def test_bar_citations_require_a_current_fulltext_reading(self):
+        """R61: an abstract is readable context; only the full-text passage offers output evidence."""
+        self.supporting = self.artifacts.put(b"An abstract-only field standard.", "text/plain")
+        self.prepare_review_route()
+        abstract_context = self.deliver_supporting("first")
+        self.add_reading_and_computation()
+        full = self.read_records()["reading"]["decisive-reading"]["inspections"][0]["link"]
+        assignment = self.assign("bar", "first", source_links=abstract_context["source_links"] + [full])
+        packet = json.loads(self.artifacts.read(assignment["packet"]))
+        abstract_mapping, full_mapping = packet["prior_context"]
+        self.assertNotIn("citation", abstract_mapping)
+        self.assertIn("A mapping delivered without a citation is for reading and cannot be cited in this role.",
+                      assignment["prompt"]["text"])
+        output = self.build_review_output("bar")
+        output["value"]["evidence"] = [{"kind": "source", "link": full_mapping["citation"]}]
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {"id": "attempt-bar-first", "assignment_id": "bar-first"},
+                        credential="test-only")
+        saved = self.mutate(decisions.record_value_review,
+            dict(output, id="review-bar-first", dossier_id=None, assignment_id="bar-first"))["result"]
+        self.assertEqual(saved["payload"]["value"]["evidence"], output["value"]["evidence"])
+
     def test_problem_templates_are_version_two_and_other_prompts_unchanged(self):
         hashes = {"bar": "88b53e388fa267f8aa5f72da297b28ebdab5ac6e020f81b4be6c2b756d30f3ca",
             "slate": "38fed1d12ce4376f4144d3dd6c57e2e9475db73a30b7a86c8471f00c84588312",

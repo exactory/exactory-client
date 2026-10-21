@@ -330,3 +330,161 @@ d73c29d, the merge of wave 6 (store `mc-live-check-0.55.0-d73c29d`, log
 `live-check-d73c29d.log`), and at the release tree, 4038d9b, the merge of
 wave 7, with the release files present (store `mc-live-check-0.55.0-4038d9b`,
 log `live-check-4038d9b.log`), gave the outcomes of the 0f4a82c run exactly.
+
+## Release 0.55.1
+
+Release 0.55.1 corrects the delivery boundary of the problem reviews and adds
+the recovery after a refused review output. Astra's eighth round
+(MSG-016-ASTRA, gpt-6-astra at effort max through the Codex CLI on the fork of
+the design thread, settings verified from the session record) reviewed the
+wave 7 code of 0.55.0 after the release: F6 to F9 closed; F10 (citations
+offered that the receiving role cannot record), F11 (no delivery check on the
+adjudicator's output and on reassessment findings) and F12 (a wording of the
+evidence grammar, deferred to the next prompt version under ruling R63, the
+prompts staying byte-identical) found; and the controller's recovery proposal
+judged sound with changes, adopted as ruling R60. Implementer: gpt-6.1-sol at
+effort xhigh (waves 8, 8a, 8b and 8c); the controller (Claude Fable 5.1) read
+every diff, ran its own probe and wrote every text an AI reads (R26). Astra's
+ninth round (MSG-017-ASTRA, same settings) reviewed 7b95663: the R60 code
+confirmed on every design change and R64 passed, with two findings on saved
+0.55.0 records: F13 (a reassessment finding recorded through the 0.55.0 path
+that cites undelivered content passed the post gate), fixed in wave 8d under
+ruling R65, and F14 (a saved 0.55.0 bar packet with a citation of an
+abstract-only passage strands the reviewer that copied it), deferred to 0.55.2
+under ruling R66 and named in the release notes as a known limitation.
+Astra's tenth round (MSG-018-ASTRA, 16:44 to 16:52 PDT, same settings) reviewed b672f29: RELEASE with F14 deferred; F13 closed; the R65 recovery keeps the R60 invariants; no new finding; Astra ran eleven regression cases and two recovery probes on both Pythons itself.
+
+### Commits
+
+| Commit | Subject |
+| --- | --- |
+| cd399dc | Pin the typed missing-artifact error and the legacy undelivered entry |
+| 7644de0 | Offer citations a role can record, and check the adjudicator's evidence for delivery |
+| 7b95663 | Record a refused review output and permit one retry of the same assignment |
+| b672f29 | Audit recorded review evidence at assessment time and refresh after it |
+| b35fd17 | Expect the refusal record in the two source-request tests |
+
+The test commit b35fd17 on top of b672f29 changes two tests and the fixture
+only; the release commit on top of it changes the version files, the README
+and the documentation only.
+
+### RED and GREEN evidence
+
+The logs are under `.superpowers/sdd/PLAN/` of the worktree `mc-0.55.1` and
+in `misc/math-conjecturer/test-logs/` of the exactory repository where the
+controller ran them.
+
+- Wave 8 (cd399dc): the raw `FileNotFoundError` of a missing problem-evidence
+  attachment did not reproduce (`ArtifactStore.read` raises `artifact_missing`
+  on every path), so the two tests pin the typed error and the legacy
+  undelivered entry of `describe_version_evidence`; 734 OK on Python 3.12 and
+  3.9 over the 34 review modules.
+- Wave 8a (7644de0): eight tests added and one corrected (the JSON-correction
+  test of R58 expects no output citation), each failing first on cd399dc; 764
+  OK on 3.12 (953.5 s) and 3.9 (1153.8 s) over 36 modules. Sol's own reviewer
+  caught one regression during the wave (a typed `artifact_missing` turned
+  into an error in `assess_rubric_reviews`), fixed before the report.
+- Wave 8b (7b95663): 31 tests added, 22 failing first on 7644de0
+  (`wave-8b-red-python312.log`, sixteen failures and six errors at the old
+  resampling prohibition) and nine review-driven additions replayed against an
+  isolated archive of 7644de0; three legacy fixtures patch the refusal writer
+  to model pre-0.55.1 history; 795 OK on 3.12 (957.3 s) and 3.9 (1186.4 s).
+  The controller's probe (`test-logs/probe-refresh-findings-8b.log`, the
+  probe beside it) then found that a refreshed result was required to give a
+  finding on an objection that only an earlier packet of the session had
+  delivered, resolved since by a refreshed bar: both refreshed outputs were
+  refused and two refusal records written, where 0.55.0 records them
+  (`probe-refresh-findings-0.55.0.log`).
+- Wave 8c (same commit): ruling R64 (the own packet's material objections plus
+  the historical reviews and historical bars of the lineage) and the status
+  section without `assignment_state`; four tests, each failing first on the
+  8b tree (`wave-8c-red-python312.log`, `wave-8c-red-final-python312.log`).
+  Sol's full runs stopped on a stray empty store at the repository root that
+  the workspace walk-up found (six CLI tests met `corrupt_state`); the
+  controller moved it aside, reran the CLI module (28 OK), its probe (both
+  outputs recorded, no refusal record), the 35 refusal tests (OK) and the two
+  full runs: 799 OK on 3.12 (1032.3 s) and 799 OK on 3.9
+  (1232.3 s) over the 36 modules (`test-logs/wave-8c-merged-312.log`,
+  `wave-8c-merged-39.log`).
+- Wave 8d (b672f29): ruling R65 after Astra's F13; eight tests in
+  `RecordedReviewEvidenceTests`, each failing first on 7b95663
+  (`wave-8d-red-final-python312.log`, replayed against an archive of 7b95663
+  in `wave-8d-red-baseline-final-python312.log`); 807 OK on 3.12 (1304.0 s)
+  and 3.9 (1560.7 s) in Sol's runs. The controller's two probes on the tree:
+  the R64 probe again (`test-logs/probe-refresh-findings-8d.log`, both
+  refreshed outputs recorded) and the R60 retry inside an R65 refresh
+  (`test-logs/probe-evidence-refresh-retry-8d.log`: one refusal record, the
+  obligation kept until the retry records, then cleared, a third assignment
+  refused). After the controller's texts: the eight tests OK
+  (`wave-8d-focused-controller-312.log`), then 807 OK on 3.12
+  (1256.9 s) and 807 OK on 3.9 (1528.9 s) over the
+  36 modules (`test-logs/wave-8d-merged-312.log`, `wave-8d-merged-39.log`).
+- The pinned prompt hash tests (four) are unchanged and pass at every commit.
+
+GREEN at the release tree, the controller's runs. The first run of the 73
+release modules at b672f29 with the release files gave 1385 tests with two
+failures on Python 3.12 (6803.4 s; `test-logs/final-0.55.1-312.log`) and
+the same two failures of 1385 on 3.9 (8529.0 s; `final-0.55.1-39.log`). The two
+failures, `test_sufficient_response_with_source_requests_cannot_continue_or_finalize`
+of `test_research_bar_sources` and
+`test_result_request_cannot_include_a_final_support_verdict` of
+`test_research_strategic_source_requests`, expected a refused review output
+with contradictory source requests to leave the store unchanged. Since
+7b95663 (R60) that output writes one `review_output_refusal` record through
+the pure check `review.source_requests`, and the two modules lie outside the
+36 modules of the fix waves, so no wave run reached them (the 73-module run at
+7b95663 ended with the lost session). b35fd17 corrects the two tests through
+the fixture helper `assert_refusal`; the harness code is unchanged. The two
+modules then gave 31 OK on 3.12 (35.3 s) and 31 OK on 3.9
+(42.2 s) (`fix-source-request-modules-312.log`, `-39.log`). No module
+outside the 73 records a review or adjudication output, so the pull
+request's CI run over the complete test tree is the full evidence at the
+release commit. The math-solver harness suite alone 840 OK on 3.12 (1181.9 s)
+and 840 OK on 3.9 (1239.4 s).
+
+### CI runs
+
+| Run | Head | Result |
+| --- | --- | --- |
+| the pull request's run | the release commit | the pull request's checks (19 jobs: Python 3.9, 3.12 and 3.14 shards, the remaining checks, the summary and the immutable test sources job); the merge waited for them |
+| the post-merge runs | the merge commit on main, dev, local-dev and the tag | recorded in the SDD ledger of the context folder |
+
+### Runs on recorded stores
+
+The thirteen local stores of the 0.55.0 comparison were read with release
+0.54.0 (label base0540, the recorded run of 2026-10-19) and with the release
+tree of 0.55.1 (b672f29 with the release files; label mcb672f29, 16:45 to
+17:03 PDT, while the 73-module runs and the harness suite on both Pythons
+shared the machine): `test-logs/upgrade-compare-base0540-mcb672f29.json`,
+log `upgrade-compare-run-5.log`.
+
+| Store | 0.54.0 s | release s | 0.54.0 MiB | release MiB | Report |
+| --- | ---: | ---: | ---: | ---: | --- |
+| exactory-research-research-cli-moz3brnm | 1.7 | 0.2 | 32 | 24 | identical |
+| lineage-acceptance-author | 7.5 | 7.4 | 769 | 772 | identical |
+| lineage-acceptance-verify | 29.7 | 33.9 | 1043 | 1048 | identical |
+| storage-replay-performance001-evidence-active-fixture | 14.1 | 14.2 | 686 | 687 | identical |
+| studies-2402.14112 | 233.1 | 239.1 | 8707 | 8746 | identical |
+| studies-2409.17337 | 372.6 | 381.4 | 11467 | 11483 | identical |
+| studies-2601.01283 | 114.5 | 122.3 | 6031 | 6027 | identical |
+| studies-2607.29015 | 14.0 | 15.9 | 577 | 577 | identical |
+| studies-closed-gravity-internal-measurements | 19.2 | 23.9 | 2295 | 2290 | identical |
+| studies-closed-gravity-operational-reconstruction-20260913 | 10.7 | 13.2 | 566 | 603 | identical |
+| studies-haar-purity-optimal-designs | 47.7 | 52.6 | 4852 | 4690 | identical |
+| verify-2607.02120 | 6.7 | 8.5 | 324 | 326 | identical |
+| verify-zenodo-22773593 | 32.7 | 41.9 | 1068 | 1072 | identical |
+
+Every report is identical. Under the shared load the wall time is between
+0.1x and 1.28x of the 0.54.0 run (1.28x on `verify-zenodo-22773593`, 32.7 s
+to 41.9 s) and the peak memory within 1.07x (603 MiB against 566 MiB on
+`studies-closed-gravity-operational-reconstruction-20260913`); the three
+largest stores are within 1.07x in time and 1.01x in memory.
+
+### Live check of the problem commands
+
+The live check of 0.55.0 (`bin/live_check.py`) at the release tree (b672f29
+with the release files, 16:46 PDT; store `mc-live-check-0.55.1-b672f29`, log
+`live-check-b672f29.log`) gave the outcomes of the 4038d9b run of 0.55.0 at
+every step, with the same exit codes. The only differences in the output are
+the timestamps, the executable path, the package digest, the version, the
+source commit and the `review` section that 0.55.1 adds to `status`.

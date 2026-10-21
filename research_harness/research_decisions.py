@@ -7,6 +7,7 @@ rating or a nonempty author justification establishes scientific approval.
 
 import copy
 import json
+from functools import partial
 
 from .artifacts import ArtifactStore
 from .claim_dependencies import verify_record_dependency
@@ -16,6 +17,7 @@ from .graph import obligation
 from .operations import fields, immutable_record, normalized_text, prepared_mutation, strings, text
 from . import strategy
 from . import problem_rubric
+from .review_refusal import contract_check, evidence_arrays, record_refusal_on_error, validate_evidence_contract
 
 
 CONTINUE_CHECKS_V1 = ("impact", "demand", "novelty_risk", "feasibility", "distinctness", "continuity", "grand_challenge")
@@ -46,7 +48,7 @@ def _response(payload):
     return {key: value for key, value in payload.items() if key not in ("id", "dossier_id", "assignment_id")}
 
 
-def _validate_checks(records, artifacts, values, expected):
+def _validate_checks(records, artifacts, values, expected, *, evidence_validator=validate_evidence_contract):
     checks = strategy.items(values, "Independent decision assurances")
     seen = set()
     for check in checks:
@@ -55,7 +57,7 @@ def _validate_checks(records, artifacts, values, expected):
         strategy.choice(check["kind"], PROBLEM_CHECKS if problem else ALL_CHECKS, "Independent assurance", "invalid_value_review")
         strategy.choice(check["status"], ("passed", "failed", "not_assessed") if problem else ("passed", "failed", "unresolved"), "Assurance status", "invalid_value_review")
         text(check["reason"], "Independent assurance reasoning")
-        strategy.evidence(records, artifacts, check["evidence"])
+        evidence_validator(records, artifacts, check["evidence"])
         if check["kind"] in seen:
             raise ResearchError("invalid_value_review", "Assess each independent assurance once")
         seen.add(check["kind"])
@@ -83,7 +85,8 @@ def _validate_slate_potential(value, packet):
 
 
 def _validate_value(records, artifacts, value, stage, dossier, historical=(), *, expected_checks=ALL_CHECKS, problem=None,
-                    problem_objections=(), problem_rubric_required=True, slate_packet=None):
+                    problem_objections=(), problem_rubric_required=True, slate_packet=None,
+                    evidence_validator=validate_evidence_contract, require_two_bars=True):
     rubric_required = problem is not None and stage == "result" and problem_rubric_required
     potential_required = problem is not None and stage == "slate"
     fields(value, ("status", "consequence", "bar_ids", "objective_adequacy", "method_adequacy", "reason", "evidence",
@@ -101,37 +104,26 @@ def _validate_value(records, artifacts, value, stage, dossier, historical=(), *,
     for key in ("objective_adequacy", "method_adequacy"):
         strategy.choice(value[key], ("adequate", "inadequate", "unresolved", "not_assessed"), key, "invalid_value_review")
     strings(value["bar_ids"], "Independently recorded bar reviews")
-    strategy.evidence(records, artifacts, value["evidence"])
+    evidence_validator(records, artifacts, value["evidence"])
     if stage == "bar":
         if value["bar_ids"] or any(value[key] != "not_assessed" for key in ("objective_adequacy", "method_adequacy")):
             raise ResearchError("invalid_value_review", "The initial bar cannot assess the withheld author proposal")
         expected = ()
     else:
         expected = expected_checks
-        if len(value["bar_ids"]) < 2:
+        if require_two_bars and len(value["bar_ids"]) < 2:
             raise ResearchError("review_bar_pending", "Assess the recorded independent bars before accepting the slate or result")
-        for identifier in value["bar_ids"]:
-            bar = strategy.get_record(records, "value_review", identifier)
-            if problem is not None:
-                from .review_protocol import validate_problem_bars
-                if bar.get("subject", {}).get("kind") != "problem" or bar["payload"]["stage"] != "bar":
-                    raise ResearchError("review_bar_mismatch", "Use independent bars for this problem field")
-                validate_problem_bars(records, artifacts, [bar])
-                continue
-            bar_dossier = strategy.get_record(records, "strategy_dossier", bar["dossier_id"])
-            if bar["payload"]["stage"] != "bar" or bar_dossier["payload"]["intent_id"] != dossier["payload"]["intent_id"]:
-                raise ResearchError("review_bar_mismatch", "Use bar findings for the current actual intent")
-    _validate_checks(records, artifacts, value["assurances"], expected)
+    _validate_checks(records, artifacts, value["assurances"], expected, evidence_validator=evidence_validator)
     if potential_required:
         _validate_slate_potential(value, slate_packet)
     work_ids = set()
     for finding in strategy.items(value["work_items"], "Independent work-item classifications"):
         fields(finding, ("id", "classification", "status", "reason", "evidence"), code="invalid_value_review")
-        strategy.get_record(records, "research_work_item", finding["id"])
+        text(finding["id"], "Independent work-item ID", code="invalid_value_review")
         strategy.choice(finding["classification"], strategy.CLASSIFICATIONS, "Independent obligation class", "invalid_value_review")
         strategy.choice(finding["status"], ("accepted", "rejected", "unresolved"), "Work finding", "invalid_value_review")
         text(finding["reason"], "Work-item reasoning")
-        strategy.evidence(records, artifacts, finding["evidence"])
+        evidence_validator(records, artifacts, finding["evidence"])
         if finding["id"] in work_ids:
             raise ResearchError("invalid_value_review", "Assess each work item once")
         work_ids.add(finding["id"])
@@ -143,7 +135,7 @@ def _validate_value(records, artifacts, value, stage, dossier, historical=(), *,
         text(finding["id"], "Prior objection ID")
         strategy.choice(finding["status"], ("resolved", "continuing", "contested"), "Prior objection status", "invalid_value_review")
         text(finding["reason"], "Prior objection reasoning")
-        strategy.evidence(records, artifacts, finding["evidence"])
+        evidence_validator(records, artifacts, finding["evidence"])
         if finding["id"] in prior_ids:
             raise ResearchError("invalid_value_review", "Assess each prior objection once")
         prior_ids.add(finding["id"])
@@ -155,6 +147,119 @@ def _validate_value(records, artifacts, value, stage, dossier, historical=(), *,
         raise ResearchError("review_objection_history_incomplete", "Assess each recorded predecessor objection")
 
 
+def _validate_review_bar_records(records, artifacts, output, dossier, problem):
+    """Current stored bar identities and their current qualification are state checks."""
+    if output["stage"] == "bar":
+        return
+    if len(output["value"]["bar_ids"]) < 2:
+        raise ResearchError("review_bar_pending", "Assess the recorded independent bars before accepting the slate or result")
+    for identifier in output["value"]["bar_ids"]:
+        bar = strategy.get_record(records, "value_review", identifier)
+        if problem is not None:
+            from .review_protocol import validate_problem_bars
+            if bar.get("subject", {}).get("kind") != "problem" or bar["payload"]["stage"] != "bar":
+                raise ResearchError("review_bar_mismatch", "Use independent bars for this problem field")
+            validate_problem_bars(records, artifacts, [bar])
+        else:
+            bar_dossier = strategy.get_record(records, "strategy_dossier", bar["dossier_id"])
+            if bar["payload"]["stage"] != "bar" or bar_dossier["payload"]["intent_id"] != dossier["payload"]["intent_id"]:
+                raise ResearchError("review_bar_mismatch", "Use bar findings for the current actual intent")
+
+
+def validate_review_contract(records, artifacts, assignment, output):
+    """Pure review checks against this assignment's frozen contract and delivered lineage."""
+    from . import bar_sources, review_context_repair, review_supplied_evidence
+    from .review_protocol import is_previous_prompt, collect_carried_records
+    with contract_check("review.shape"):
+        fields(output, ("stage", "support", "value", "objections", "limitations"),
+               ("source_requests", "reassessment"), code="invalid_value_review")
+        strategy.choice(output["stage"], ("bar", "slate", "result"), "Review phase", "invalid_value_review")
+    packets = review_supplied_evidence.lineage_packets(records, artifacts, [assignment["id"]])
+    packet = packets[0]
+    contract_evidence = partial(validate_evidence_contract, packets=packets)
+    with contract_check("review.source_requests"):
+        pending = bar_sources.pending(packet, output)
+    if pending and "source_inventory" in packet:
+        inventory = packet["source_inventory"]
+        rows = bar_sources.validate_inventory(artifacts, inventory)
+        with contract_check("review.source_requests"):
+            for request in pending:
+                if request["kind"] in ("inventory_page", "inventory_query"):
+                    bar_sources._page(rows, inventory["digest"], request["page"], request.get("query"),
+                                      page_size=inventory["page_size"])
+    # Valid pending requests are retained turns, not intrinsically unrecordable final assessments.
+    if pending:
+        return
+    problem = assignment.get("subject", {}).get("kind") == "problem"
+    stage = output["stage"]
+    dossier_payload = next((item["dossier"] for item in packets if "dossier" in item), {})
+    frozen_dossier = {"payload": dict(dossier_payload, work_items=dossier_payload.get("work_items", []),
+                                     material_change=dossier_payload.get("material_change"))}
+    phase_packets = [item for item in packets if item.get("role") == assignment["role"]]
+    delivered_objections = list(packet.get("material_objections", []))
+    for item in phase_packets:
+        delivered_objections.extend(review_supplied_evidence.list_delivered_objections(
+            {"historical_reviews": item.get("historical_reviews", [])}))
+        for historical in item.get("historical_bars", []):
+            delivered_objections.extend(historical.get("review", historical).get("objections", []))
+    expected_checks = (PROBLEM_CHECKS if problem else
+                       CONTINUE_CHECKS_V1 + ("stop",) if is_previous_prompt(assignment) else ALL_CHECKS)
+    delivered_bars = {bar["id"] for item in packets for bar in item.get("bars", [])}
+    with contract_check("review.value"):
+        _validate_value(records, artifacts, output["value"], stage, frozen_dossier,
+                        expected_checks=expected_checks, problem={} if problem else None,
+                        problem_rubric_required=not is_previous_prompt(assignment),
+                        problem_objections=delivered_objections, slate_packet=packet,
+                        evidence_validator=contract_evidence, require_two_bars=len(delivered_bars) >= 2)
+        if stage != "bar":
+            undelivered = find_undelivered_bar_ids(records, artifacts, assignment["id"], output["value"]["bar_ids"], packets=packets)
+            if undelivered:
+                raise ResearchError("review_bar_mismatch", "Assess only bars delivered to this reviewer", {"bar_ids": undelivered})
+        strings(output["limitations"], "Independent assessment limitations", nonempty=True)
+    with contract_check("review.objections"):
+        candidate_ids = ({candidate["id"] for candidate in packet["candidates"]} if problem and stage == "slate" else None)
+        seen = set()
+        for objection in strategy.items(output["objections"], "Material objections"):
+            fields(objection, ("id", "claim", "reason", "evidence", "resolution_condition") +
+                   (("candidate_ids",) if candidate_ids is not None else ()), code="invalid_value_review")
+            for key in ("id", "claim", "reason", "resolution_condition"):
+                text(objection[key], "Material objection " + key)
+            contract_evidence(records, artifacts, objection["evidence"])
+            if candidate_ids is not None:
+                strings(objection["candidate_ids"], "Candidates of a slate objection", code="invalid_value_review")
+                if not set(objection["candidate_ids"]) <= candidate_ids:
+                    raise ResearchError("invalid_value_review", "Name only candidates of the slate packet",
+                                        {"objection_id": objection["id"], "candidate_ids": sorted(candidate_ids)})
+            if objection["id"] in seen:
+                raise ResearchError("invalid_value_review", "Material objection identities must be unique")
+            seen.add(objection["id"])
+    repair_packet = review_context_repair.frozen_reassessment_packet(records, artifacts, assignment)
+    with contract_check("review.reassessment"):
+        review_context_repair.validate_reassessment(records, artifacts, assignment, output, reading_checks=False, packet=repair_packet,
+                                                    evidence_validator=contract_evidence)
+    if problem:
+        carried = collect_carried_records(records, artifacts, assignment["id"], packets=packets)
+        supplied, mappings = review_supplied_evidence.supplied_context(records, artifacts, [assignment["id"]], frozen=True)
+        for evidence in evidence_arrays(output):
+            missing = review_supplied_evidence.undelivered_references(records, artifacts, evidence, carried, supplied, mappings, frozen=True)
+            if missing:
+                details = missing[0]
+                description = (details["record_kind"] + " " + details["id"] + " at the cited digest"
+                               if "record_kind" in details else "artifact " + details["sha256"]
+                               + (" within the cited locator" if "locator" in details else ""))
+                with contract_check("review.evidence_delivery"):
+                    raise ResearchError("review_evidence_undelivered",
+                        "Cite only content that this review received: no packet of the review delivered " + description, details)
+    with contract_check("review.support"):
+        if problem and output["support"] is not None:
+            raise ResearchError("invalid_value_review", "A problem review supplies problem assurances, not native proof acceptance")
+        if not problem and stage != "result" and output["support"] is not None:
+            raise ResearchError("invalid_value_review", "The bar and proposed slate cannot fabricate a completed result review")
+        if not problem and stage == "result" and not isinstance(output["support"], dict):
+            raise ResearchError("value_review_support_missing", "A result assessment contains the existing native support checks first")
+
+
+@record_refusal_on_error
 def record_value_review(store, payload, *, expected_revision, request_id):
     artifacts = ArtifactStore(store.root)
 
@@ -176,6 +281,8 @@ def record_value_review(store, payload, *, expected_revision, request_id):
             raise ResearchError("value_review_assignment_mismatch", "The review must concern the assigned dossier and role")
         if assignment["output"] != _response(value):
             raise ResearchError("value_review_output_mismatch", "Record the exact observed independent output without author substitutions")
+        saved_assignment = records["review_assignment"][value["assignment_id"]]
+        validate_review_contract(records, artifacts, saved_assignment, assignment["output"])
         if value["stage"] in ("bar", "slate", "result"):
             from .bar_sources import pending
             saved_assignment = records["review_assignment"][value["assignment_id"]]
@@ -192,23 +299,21 @@ def record_value_review(store, payload, *, expected_revision, request_id):
             if normalized_text(saved_assignment["author_id"]) not in {normalized_text(author) for author in problem["authors"]}:
                 raise ResearchError("problem_author_unknown", "Use an assignment by one of the immutable problem authors")
         review_context_repair.validate_repair_origin(records, artifacts, saved_assignment)
-        review_context_repair.validate_reassessment(records, artifacts, saved_assignment, assignment["output"])
+        # Reassessment shape and predecessor findings were checked against the frozen packet above.
+        for evidence in evidence_arrays(assignment["output"]):
+            strategy.evidence(records, artifacts, evidence)
+        for finding in value["value"]["work_items"]:
+            strategy.get_record(records, "research_work_item", finding["id"])
+        _validate_review_bar_records(records, artifacts, value, dossier, problem)
+        if problem is not None and value["stage"] == "result":
+            undelivered = find_undelivered_bar_ids(records, artifacts, value["assignment_id"], value["value"]["bar_ids"])
+            if undelivered:
+                raise ResearchError("review_bar_mismatch", "Assess only bars delivered to this reviewer", {"bar_ids": undelivered})
         inherited = review_context_repair.reassessment_reviews(records, saved_assignment)
         refreshed = (review_context_repair.collect_problem_review_history(records, saved_assignment)
                      if problem is not None else [])
         # A refreshed bar, slate or result review supersedes its earlier review, so it inherits that review's material
         # objections and gives a finding on each; until it is recorded, the earlier objections stay current.
-        historical = inherited + refreshed
-        if value["stage"] != "bar" and problem is not None:
-            historical.extend(review for review in review_context_repair.historical_reviews(records, None, value["stage"])
-                              if review.get("subject") == saved_assignment["subject"])
-            from .review_protocol import find_historical_bar_reviews
-            historical.extend(find_historical_bar_reviews(records))
-        elif value["stage"] != "bar":
-            for previous_dossier in records.get("strategy_dossier", {}).values():
-                if previous_dossier["payload"]["intent_id"] == dossier["payload"]["intent_id"]:
-                    historical.extend(review_context_repair.historical_reviews(records, previous_dossier["id"], "bar"))
-            historical.extend(review_context_repair.historical_reviews(records, value["dossier_id"], value["stage"]))
         inherited_ids = {review["id"] for review in inherited + refreshed}
         reviewer = normalized_text(assignment["reviewer_id"])
         authors = problem["authors"] if problem is not None else intent["payload"]["authors"]
@@ -221,77 +326,15 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                and (problem is None or value["stage"] == "bar" or saved.get("subject") == saved_assignment["subject"])
                for saved in records.get("value_review", {}).values()):
             raise ResearchError("value_review_duplicate", "A reviewer cannot replace its initial finding by another sample")
-        from .review_protocol import is_previous_prompt
-        expected_checks = (PROBLEM_CHECKS if problem is not None else
-                           CONTINUE_CHECKS_V1 + ("stop",) if is_previous_prompt(saved_assignment) else ALL_CHECKS)
-        _validate_value(records, artifacts, value["value"], value["stage"], dossier, historical,
-                        expected_checks=expected_checks, problem=problem,
-                        problem_rubric_required=not is_previous_prompt(saved_assignment),
-                        problem_objections=(json.loads(artifacts.read(saved_assignment["packet"])).get("material_objections", [])
-                                             if problem is not None and value["stage"] == "result" else ()),
-                        slate_packet=packet)
-        if problem is not None and value["stage"] == "result":
-            undelivered = find_undelivered_bar_ids(records, artifacts, value["assignment_id"], value["value"]["bar_ids"])
-            if undelivered:
-                raise ResearchError("review_bar_mismatch", "Assess only bars delivered to this reviewer", {"bar_ids": undelivered})
-        strings(value["limitations"], "Independent assessment limitations", nonempty=True)
-        # A slate objection names the candidates it concerns; an empty list concerns the slate as a whole.
-        slate_candidate_ids = ({candidate["id"] for candidate in packet["candidates"]}
-                               if problem is not None and value["stage"] == "slate" else None)
-        objection_ids = set()
-        for objection in strategy.items(value["objections"], "Material objections"):
-            fields(objection, ("id", "claim", "reason", "evidence", "resolution_condition") +
-                   (("candidate_ids",) if slate_candidate_ids is not None else ()), code="invalid_value_review")
-            for key in ("id", "claim", "reason", "resolution_condition"):
-                text(objection[key], "Material objection " + key)
-            strategy.evidence(records, artifacts, objection["evidence"])
-            if slate_candidate_ids is not None:
-                strings(objection["candidate_ids"], "Candidates of a slate objection", code="invalid_value_review")
-                if not set(objection["candidate_ids"]) <= slate_candidate_ids:
-                    raise ResearchError("invalid_value_review", "Name only candidates of the slate packet",
-                                        {"objection_id": objection["id"], "candidate_ids": sorted(slate_candidate_ids)})
-            if objection["id"] in objection_ids:
-                raise ResearchError("invalid_value_review", "Material objection identities must be unique")
-            objection_ids.add(objection["id"])
+        for objection in value["objections"]:
             for saved in records.get("value_review", {}).values():
                 for earlier in saved["payload"]["objections"]:
                     if earlier["id"] == objection["id"] and earlier["claim"] != objection["claim"]:
                         raise ResearchError("research_objection_identity_conflict", "A stable objection ID cannot name a different contested claim")
-        if problem is not None:
-            # A review cites a record only as content that its own observed packets delivered; every reference
-            # read here has passed the shape checks above.
-            from .review_protocol import collect_carried_records, find_carried_record
-            from .review_supplied_evidence import is_received, supplied_context
-            carried = collect_carried_records(records, artifacts, value["assignment_id"])
-            supplied, mappings = supplied_context(records, artifacts, [value["assignment_id"]])
-            for evidence in [value["value"]["evidence"]] + [row["evidence"] for row in (
-                    value["objections"] + value["value"]["objection_findings"] + value["value"]["assurances"])]:
-                for reference in evidence:
-                    if reference.get("kind") == "record":
-                        if find_carried_record(records, carried, reference) is None:
-                            raise ResearchError("review_evidence_undelivered",
-                                "Cite only content that this review received: no packet of the review delivered "
-                                + reference["record_kind"] + " " + reference["id"] + " at the cited digest",
-                                {key: reference[key] for key in ("record_kind", "id", "digest")})
-                        continue
-                    # An artifact counts as received in full or as its passages; a source link only within them.
-                    if not is_received(records, reference, supplied, mappings):
-                        artifact = reference["link"]["artifact"] if reference.get("kind") == "source" else reference
-                        details = {"sha256": artifact["sha256"]}
-                        if reference.get("kind") == "source":
-                            details["locator"] = reference["link"]["locator"]
-                        raise ResearchError("review_evidence_undelivered",
-                            "Cite only content that this review received: no packet of the review delivered artifact "
-                            + artifact["sha256"] + (" within the cited locator" if "locator" in details else ""), details)
         changes, support = [], None
-        if problem is not None:
-            if value["support"] is not None:
-                raise ResearchError("invalid_value_review", "A problem review supplies problem assurances, not native proof acceptance")
-        elif value["stage"] == "result":
+        if problem is None and value["stage"] == "result":
             if dossier["payload"]["phase"] not in ("result", "post_measurement"):
                 raise ResearchError("value_review_phase_mismatch", "A result review requires a result dossier")
-            if not isinstance(value["support"], dict):
-                raise ResearchError("value_review_support_missing", "A result assessment contains the existing native support checks first")
             recorded_assignment = records["review_assignment"][value["assignment_id"]]
             packet = json.loads(artifacts.read(recorded_assignment["packet"]))
             if value["support"].get("assessor") != packet.get("assessor") or normalized_text(value["support"]["assessor"]["id"]) != reviewer:
@@ -308,8 +351,6 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                 from .development import prepare_combined_support
                 changes, support = prepare_combined_support(records, artifacts, value["support"],
                     revision=expected_revision + 1, request_id=request_id, assignment_id=value["assignment_id"])
-        elif value["support"] is not None:
-            raise ResearchError("invalid_value_review", "The bar and proposed slate cannot fabricate a completed result review")
         record = {"id": value["id"], "payload": value, "digest": digest(value), "recorded_revision": expected_revision + 1,
                   "dossier_id": value["dossier_id"], "dossier_digest": None if dossier is None else dossier["digest"], "assignment_id": value["assignment_id"],
                   "reviewer_id": assignment["reviewer_id"], "packet_digest": assignment["packet_digest"], "prompt_hash": assignment["prompt_hash"],
@@ -685,12 +726,28 @@ def find_undelivered_adjudication_keys(records, artifacts, assignment_id, *, rub
     return sorted(undelivered)
 
 
-def find_undelivered_bar_ids(records, artifacts, assignment_id, bar_ids):
+def find_undelivered_bar_ids(records, artifacts, assignment_id, bar_ids, *, packets=None):
     """The named bars whose content no observed packet of the reviewer's lineage delivered."""
-    from .direction_reviews import collect_observed_packets
-    delivered = {bar['id'] for _, packet in collect_observed_packets(records, artifacts, assignment_id)
-                 for bar in packet.get('bars', [])}
+    if packets is None:
+        from .direction_reviews import collect_observed_packets
+        packets = [packet for _, packet in collect_observed_packets(records, artifacts, assignment_id)]
+    delivered = {bar['id'] for packet in packets for bar in packet.get('bars', [])}
     return sorted(set(bar_ids) - delivered)
+
+
+def find_undelivered_review_references(records, artifacts, review):
+    """Audit a recorded problem review against its frozen assignment delivery."""
+    from . import review_supplied_evidence
+    from .review_protocol import collect_carried_records
+    if review.get('subject', {}).get('kind') != 'problem':
+        return []
+    assignment_id = review['assignment_id']
+    packets = review_supplied_evidence.lineage_packets(records, artifacts, [assignment_id])
+    carried = collect_carried_records(records, artifacts, assignment_id, packets=packets)
+    supplied, mappings = review_supplied_evidence.supplied_context(records, artifacts, [assignment_id], frozen=True)
+    evidence = [reference for array in evidence_arrays(review['payload']) for reference in array]
+    return review_supplied_evidence.undelivered_references(
+        records, artifacts, evidence, carried, supplied, mappings, frozen=True)
 
 
 def assess_problem_objections(records, artifacts, subject, bars, reviews, evidence_digest):
@@ -734,6 +791,20 @@ def assess_problem_reviews(records, artifacts, review_ids=None, bar_review_ids=N
             pairs[stage] = []
         obligations.extend(_independence(records, artifacts, pairs[stage]))
     bars, reviews = pairs['bar'], pairs['result']
+    slate_ids = _collect_problem_reviews(records, 'slate', build_problem_subject(records, 'slate'))
+    for identifier in dict.fromkeys(bar_review_ids + review_ids + slate_ids):
+        review = records.get('value_review', {}).get(identifier)
+        if review is None:
+            continue
+        try:
+            missing = find_undelivered_review_references(records, artifacts, review)
+        except ResearchError as error:
+            obligations.append(obligation(error.code, str(error), review_id=identifier, **(error.details or {})))
+            continue
+        if missing:
+            obligations.append(obligation('review_evidence_undelivered',
+                'The review cites content that its packets did not deliver. Assign the same reviewer and role again with an empty context to refresh it.',
+                review_id=identifier, undelivered_references=missing))
     if bars:
         try:
             validate_problem_bars(records, artifacts, bars)
@@ -793,15 +864,17 @@ def assess_rubric_reviews(records, artifacts, reviews, evidence_digest):
                         key=lambda row: row['recorded_revision'], default=None)
             resolved = False
             if saved is not None:
-                state = adjudication_state(records, artifacts, saved['id'])
-                resolved = state['ready'] and state['disposition'] == 'not_upheld'
-                if resolved:
-                    try:
+                try:
+                    state = adjudication_state(records, artifacts, saved['id'])
+                    obligations.extend(item for item in state['obligations']
+                                       if item['code'] == 'review_adjudication_evidence_undelivered')
+                    resolved = state['ready'] and state['disposition'] == 'not_upheld'
+                    if resolved:
                         strategy.evidence(records, artifacts, saved['evidence'])
-                    except ResearchError as error:
-                        resolved = False
-                        obligations.append(obligation(error.code, str(error), review_id=review['id'],
-                                                      objection_id=identifier, adjudication_id=saved['id']))
+                except ResearchError as error:
+                    resolved = False
+                    obligations.append(obligation(error.code, str(error), review_id=review['id'],
+                                                  objection_id=identifier, adjudication_id=saved['id']))
             if not resolved:
                 pending.append(shortfall)
         if pending:
