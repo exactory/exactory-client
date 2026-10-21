@@ -225,7 +225,7 @@ def validate_review_contract(records, artifacts, assignment, output):
                    (("candidate_ids",) if candidate_ids is not None else ()), code="invalid_value_review")
             for key in ("id", "claim", "reason", "resolution_condition"):
                 text(objection[key], "Material objection " + key)
-            contract_evidence(records, artifacts, objection["evidence"])
+            contract_evidence(records, artifacts, objection["evidence"], review_binding=problem)
             if candidate_ids is not None:
                 strings(objection["candidate_ids"], "Candidates of a slate objection", code="invalid_value_review")
                 if not set(objection["candidate_ids"]) <= candidate_ids:

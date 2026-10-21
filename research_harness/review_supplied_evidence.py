@@ -139,7 +139,8 @@ def undelivered_references(records, artifacts, evidence, carried, references, ma
     for reference in evidence:
         if reference.get('kind') == 'record':
             if find_carried_record(records, carried, reference, frozen=frozen) is None:
-                missing.append({key: reference[key] for key in ('record_kind', 'id', 'digest')})
+                missing.append({'record_kind': reference['record_kind'], 'id': reference['id'],
+                                'digest': reference.get('digest')})
         elif not is_received(records, reference, references, mappings, artifacts=artifacts, frozen=frozen):
             artifact = reference['link']['artifact'] if reference.get('kind') == 'source' else reference
             details = {'sha256': artifact['sha256']}

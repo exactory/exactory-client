@@ -233,7 +233,7 @@ class ProblemReviewTests(LiteratureCase):
 
     def test_problem_slate_template_is_version_two_only_and_keeps_bar_and_result_bytes(self):
         version_two = {"bar": "e402dcf92926adac0a536d702e93a6e0d33c317f8ec5ff9440028731f695703b",
-                       "result": "4ac669f17499b113cb9fcea6a091045bfe39f637b99c03eaeb8360051c0f273e",
+                       "result": "dbe0052d524fce3b04fd975777f3c19d163e5e13bb6e56fc50943d547782fc93",
                        "adjudicator": "80a3eeb2a0cd65f1edf434c74a245b68cc8bb33a2edffffcdadbd562a35dd346"}
         for role, expected in version_two.items():
             self.assertEqual(protocol.canonical_prompt(role, orchestration="problem_creation")["template_hash"], expected)

@@ -334,11 +334,12 @@ def validate_reassessment(records, artifacts, assignment, observed_output, *, re
         seen.add(finding['review_id'])
         strategy.choice(finding['disposition'], ('confirmed', 'revised', 'unresolved'), 'Reassessment disposition', 'review_reassessment_mismatch')
         text(finding['reason'], 'Reassessment scientific reasoning', code='review_reassessment_mismatch')
+        binding = assignment.get('subject', {}).get('kind') == 'problem'
         if reading_checks:
-            strategy.evidence(records, artifacts, finding['evidence'])
+            strategy.evidence(records, artifacts, finding['evidence'], review_binding=binding)
         else:
             from .review_refusal import validate_evidence_contract
-            (evidence_validator or validate_evidence_contract)(records, artifacts, finding['evidence'])
+            (evidence_validator or validate_evidence_contract)(records, artifacts, finding['evidence'], review_binding=binding)
         from .review_protocol import _reference_templates
         content = _reference_templates(observed_output) if packet is not None else observed_output
         if finding['disposition'] == 'confirmed' and _scientific_content(originals[finding['review_id']]) != _scientific_content(content):

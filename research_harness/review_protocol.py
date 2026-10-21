@@ -861,12 +861,15 @@ def find_carried_record(records, carried, reference, *, frozen=False):
     stored_digest = None if stored is None else digest(stored)
     # A reference without a digest names the stored record, which a packet must have carried.
     wanted = reference.get('digest', stored_digest)
-    if wanted is None:
+    if wanted is None and not frozen:
         return None
+    # Frozen validation of a reference without a digest cannot read the stored record; the record-time check
+    # bound the citation to the stored version, so any row that carried this record is its delivery.
     return next(((projection, supplied) for kind, identifier, recorded_digest, projection, supplied in carried
                  if canonical_record_kind(records, kind) == record_kind and identifier in (None, reference['id'])
-                 and ((frozen and recorded_digest is None)
-                      or (recorded_digest or stored_digest) == wanted)), None)
+                 and ((wanted is None and (identifier is not None or projection.get('id') == reference['id']))
+                      or (frozen and recorded_digest is None)
+                      or (wanted is not None and (recorded_digest or stored_digest) == wanted))), None)
 
 
 def describe_version_evidence(records, artifacts, version):

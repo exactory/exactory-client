@@ -83,6 +83,17 @@ class ClaudeStreamInspectionTests(unittest.TestCase):
         self.assertTrue(evidence['input_verified'], evidence['issues'])
         self.assertEqual(evidence['session_id'], 'session-1')
 
+    def test_the_thinking_token_accounting_event_does_not_invalidate_the_stream(self):
+        request = request_for()
+        events = clean_stream(request)
+        accounting = {'type': 'system', 'subtype': 'thinking_tokens', 'session_id': 'session-1', 'thinking_tokens': 1200}
+        events.insert(3, accounting)
+        evidence = module().inspect_stream(events, request, ROUTE, 'EXCLUDED_PROJECT_x')
+        self.assertEqual((evidence['input_verified'], evidence['issues']), (True, []))
+        events[3] = dict(accounting, subtype='compact_boundary')
+        evidence = module().inspect_stream(events, request, ROUTE, 'EXCLUDED_PROJECT_x')
+        self.assertEqual((evidence['input_verified'], evidence['issues']), (False, ['system_event_compact_boundary']))
+
     def test_any_extra_context_or_capability_invalidates_the_stream(self):
         request = request_for()
 
@@ -163,6 +174,20 @@ class ClaudeInvocationTests(unittest.TestCase):
             with self.subTest(returncode=returncode, events=len(events)):
                 response, _ = self.invoke(events, returncode=returncode, request=request)
                 self.assertEqual(response['status'], 'incomplete')
+
+    def test_a_fenced_json_answer_is_handed_on_without_its_fence(self):
+        request = request_for()
+        fenced = '```json\n{"ok": true}\n```'
+        response, _ = self.invoke(clean_stream(request, output=fenced), request=request)
+        self.assertEqual((response['status'], response['output'][0]['content'][0]['text']), ('completed', '{"ok": true}'))
+        self.assertTrue(response['context_evidence']['input_verified'])
+        self.assertTrue(response['execution']['fence_removed'])
+        plain, _ = self.invoke(clean_stream(request), request=request)
+        self.assertEqual((plain['output'][0]['content'][0]['text'], plain['execution']['fence_removed']), ('{"ok": true}', False))
+        # A fence that does not enclose the whole answer, or a bare language tag, is left as it is.
+        for text in ('```json\n{"ok": true}', 'See ```json\n{"ok": true}\n``` above', '```'):
+            self.assertEqual(module().strip_fence(text), (text, False))
+        self.assertEqual(module().strip_fence('```\n{"ok": true}\n```'), ('{"ok": true}', True))
 
     def test_a_contaminated_stream_cannot_verify_the_context(self):
         request = request_for()

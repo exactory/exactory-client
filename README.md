@@ -35,6 +35,12 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.56.1](docs/releases/0.56.1.md) repairs the post gate of a problem
+record whose result reviews cite delivered records by kind and id, applies the
+review binding to objections and reassessment findings, and lets the Claude
+Code route verify a fenced JSON answer and the thinking-token accounting event
+of effort `max`.
+
 Version [0.55.1](docs/releases/0.55.1.md) corrects the delivery boundary of
 the problem reviews: a delivered passage carries a citation only when the
 receiving role can record it, the adjudicator's output is checked against the

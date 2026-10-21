@@ -104,7 +104,8 @@ def inspect_stream(events, request, route, control):
         if control in json.dumps(event, ensure_ascii=False):
             issues.append('excluded_control_exposed')
         if kind == 'system':
-            if event.get('subtype') != 'init':
+            # thinking_tokens reports the thinking budget that the turn used; it carries no context and no capability.
+            if event.get('subtype') not in ('init', 'thinking_tokens'):
                 issues.append('system_event_' + str(event.get('subtype')))
         elif kind == 'user':
             text = _replayed_text(event.get('message'))
@@ -198,10 +199,10 @@ def send_request(route, request, credential=None):
     complete = (result.returncode == 0 and not malformed and len(results) == 1 and final.get('subtype') == 'success'
                 and final.get('is_error') is False and output_tokens is not None
                 and output_tokens <= config['max_output_tokens'])
+    answer, fenced = strip_fence(final.get('result') if isinstance(final.get('result'), str) else '')
     return {'id': evidence['session_id'] or 'failed-' + uuid.uuid4().hex, 'model': route['model'],
             'status': 'completed' if complete else 'incomplete',
-            'output': [{'type': 'message', 'role': 'assistant',
-                        'content': [{'type': 'output_text', 'text': final.get('result') if isinstance(final.get('result'), str) else ''}]}],
+            'output': [{'type': 'message', 'role': 'assistant', 'content': [{'type': 'output_text', 'text': answer}]}],
             'usage': {'input_tokens': input_tokens, 'output_tokens': output_tokens,
                       'cost_usd_estimate': final.get('total_cost_usd')},
             'context_evidence': evidence,
@@ -209,7 +210,21 @@ def send_request(route, request, credential=None):
                           'stdout_digest': hashlib.sha256(result.stdout.encode()).hexdigest(),
                           'stderr_digest': hashlib.sha256((result.stderr or '').encode()).hexdigest(),
                           'malformed_line_digests': malformed, 'event_count': len(events),
-                          'event_types': [event.get('type') for event in events]}}
+                          'event_types': [event.get('type') for event in events], 'fence_removed': fenced}}
+
+
+def strip_fence(text):
+    """The answer without one Markdown code fence around the whole of it, and whether a fence was removed. A print
+    run has no JSON output mode and a model often fences a JSON answer. The raw result stays in the stream digests, and
+    the inspection compares the raw assistant text with the raw result before this step."""
+    stripped = text.strip()
+    if not (len(stripped) >= 6 and stripped.startswith('```') and stripped.endswith('```')):
+        return text, False
+    body = stripped[3:-3]
+    newline = body.find('\n')
+    if newline != -1 and body[:newline].strip().isalnum():
+        body = body[newline + 1:]
+    return body.strip(), True
 
 
 def verify_context(route, request, response):
