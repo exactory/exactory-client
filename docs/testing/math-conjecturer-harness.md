@@ -624,3 +624,9 @@ transport now passes `CLAUDE_CODE_MAX_OUTPUT_TOKENS` equal to the route's `max_o
 process; `test_the_command_isolates_the_reviewer_and_sends_one_replayed_message` asserts it (14 tests OK).
 The record continued on `route-claude-opus-2` and `route-claude-fable-2` (effort `high`, bound 64,000;
 probes verified).
+
+Final run on the branch at a402226 (the stop assurance, the replayed-history elision, the final suffix wording and
+the history-packet elision included): the ten modules `test_research_context_repair`, `test_research_review_delivery`,
+`test_research_route_retirement`, `test_research_problem_reviews`, `test_research_claude_transport`,
+`test_research_context_repair_integration`, `test_research_problem_adjudication_resolution`,
+`test_research_problem_objections`, `test_research_review_protocol` and `test_codex`: 319 OK in 726 s (Python 3.9.6).
