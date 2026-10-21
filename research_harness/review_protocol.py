@@ -655,6 +655,23 @@ def compute_problem_review_currency(records, artifacts):
                    'objection_versions': [[row['id'], row['material_version']] for row in objections]})
 
 
+def reviewer_slot(records, reviewer_id, role):
+    """The slot that a reviewer holds in this problem record through its latest observed assignment of a problem role, or
+    None. A reviewer that a context repair installed holds the slot's bar session without a bar of its own, and keeps
+    that slot for a fresh review of a later statement."""
+    roles = ('bar', 'slate', 'result') if role in ('slate', 'result') else (role,)
+    own = [assignment for assignment in records.get('review_assignment', {}).values()
+           if normalized_text(assignment['reviewer_id']) == normalized_text(reviewer_id)
+           and assignment['dossier_id'] is None and assignment['role'] in roles
+           and assignment.get('subject', {}).get('kind') == 'problem'
+           and any(attempt['assignment_id'] == assignment['id'] and attempt['status'] == 'completed'
+                   for attempt in records.get('review_attempt', {}).values())]
+    if not own:
+        return None
+    latest = max(own, key=lambda assignment: assignment['recorded_revision'])
+    return context_repair.slot_id(records, latest)
+
+
 def add_problem_bars(records, artifacts, packet, reviewer_id, slot=None):
     """Bind a slate or result packet to both current field bars and the reviewer's own bar session: its own bar, or
     for a review that continues a slot, the bar of that slot, which a reviewer holds through a context repair."""
@@ -1180,7 +1197,7 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
         if role == 'bar':
             packet['prior_context'] = bar_sources.prior_context(records, artifacts, context.get('source_links', []))
         else:
-            bars = add_problem_bars(records, artifacts, packet, reviewer_id)
+            bars = add_problem_bars(records, artifacts, packet, reviewer_id, slot=reviewer_slot(records, reviewer_id, role))
             packet['historical_reviews'] = [{'review': deliver_historical_review(records, artifacts, review),
                                              'independence': 'no_longer_qualified'}
                 for review in context_repair.historical_reviews(records, None, role)

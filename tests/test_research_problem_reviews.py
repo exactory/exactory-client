@@ -289,6 +289,29 @@ class ProblemReviewTests(LiteratureCase):
                      "prompt": protocol.canonical_prompt("bar", repair=True, repair_prompt=review_context_repair.PROMPT_0560)}
         self.assertTrue(protocol._prompt_matches(strategic))
 
+    def test_a_reviewer_installed_by_a_repair_keeps_its_slot_for_a_later_statement(self):
+        """A reviewer that a context repair installed holds the slot's bar session without a bar of its own; a fresh
+        result review of a later statement binds to that slot through the reviewer's latest observed assignment."""
+        subject = {"kind": "problem", "statement_id": "statement-1"}
+        records = {"review_assignment": {
+            "bar-a": {"id": "bar-a", "reviewer_id": "first", "dossier_id": None, "role": "bar", "subject": subject,
+                      "recorded_revision": 1, "context": {}},
+            "repair-a": {"id": "repair-a", "reviewer_id": "replacement", "dossier_id": None, "role": "result", "subject": subject,
+                         "recorded_revision": 5, "context": {"context_repair": {"assignment_id": "bar-a"}}},
+            "repair-a-2": {"id": "repair-a-2", "reviewer_id": "replacement", "dossier_id": None, "role": "result", "subject": subject,
+                           "recorded_revision": 7, "context": {"prior_assignment_id": "repair-a"}},
+            "dead": {"id": "dead", "reviewer_id": "replacement", "dossier_id": None, "role": "result", "subject": subject,
+                     "recorded_revision": 9, "context": {}}},
+            "review_attempt": {"t1": {"assignment_id": "bar-a", "status": "completed"},
+                               "t2": {"assignment_id": "repair-a-2", "status": "completed"},
+                               "t3": {"assignment_id": "dead", "status": "failed"}}}
+        self.assertEqual(protocol.reviewer_slot(records, "replacement", "result"), "bar-a")
+        self.assertEqual(protocol.reviewer_slot(records, "first", "result"), "bar-a")
+        self.assertIsNone(protocol.reviewer_slot(records, "nobody", "result"))
+        # An assignment without a completed attempt binds nothing.
+        self.assertIsNone(protocol.reviewer_slot({"review_assignment": {"dead": records["review_assignment"]["dead"]},
+                                                  "review_attempt": records["review_attempt"]}, "replacement", "result"))
+
     def test_version_one_problem_assignment_stays_verified_and_gate_requires_version_two_result(self):
         original = protocol.canonical_prompt
         hashes = {'bar': '818b715d1acdfcd10db45e60d70ce6ef5f864dcdcbd82be9312125cf0fe42fca',
