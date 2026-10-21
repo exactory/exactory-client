@@ -7,6 +7,16 @@ from .operations import fields, strings, text
 from .problem_claims import find_current_statement, find_latest, find_value, find_assessment, compute_statement_digest
 from .reading import fulltext_coverage, validate_read_evidence
 
+# The reviewer reads this note with the problem evidence of a result packet.
+INLINE_DELIVERY_NOTE = (
+    "Each passage is the exact text of one inspected span of a reading, with the reading id, the inspection index and "
+    "the offsets of the span in the source text. An inspection that covers the complete text is listed in its reading "
+    "with whole_text true and is not repeated as a passage. Full texts, including those that a material objection "
+    "names by reference, are not attached in this turn; request a held full text with source_requests by its "
+    "version_id. Cite a delivered record by copying its cite object, which names the record by kind and id. "
+    "A source link is citable only for a full text that a source request delivered to you. "
+    "This review is verified only when it calls no tool, so a held text is obtained only through a source request.")
+
 
 def collect_value_items(value):
     return [item for section in ("motivation", "current_state") for paragraph in (value or {}).get(section, [])
@@ -396,8 +406,11 @@ def describe_binding(records, artifacts):
 
 
 def describe_evidence(records, artifacts):
-    from .direction_sources import build_reading_passages
+    from .direction_sources import build_inline_passages
+    from .evaluation import Evaluation
     from .problem_attempt import find_current_attempt
+    from .review_protocol import _reference_templates
+    from .source_links import TEXT_KINDS, covers_text
     statement, value = find_current_statement(records), find_value(records)
     openness = find_latest(records, "problem_openness")
     assessment = find_assessment(records)
@@ -421,7 +434,28 @@ def describe_evidence(records, artifacts):
                 attempt_evidence["acceptances"].append({"acceptance_id": identifier, "claim": checkpoint["claim"],
                     "outcome": acceptance["outcome"], "standard": acceptance["standard"]})
     readings = collect_readings(records)
-    prepared = build_reading_passages(records, artifacts, readings)
+    evaluation = Evaluation.of(records, artifacts)
+    prepared = build_inline_passages(records, evaluation, readings)
+    # A reading arrives with its notes and, for each inspection, its unit, note and offsets; the text of its inspected
+    # spans arrives once, as inline passages, so its source links are not attached again.
+    delivered_readings = []
+    for row in readings:
+        inspections = []
+        for index, inspection in enumerate(row["inspections"]):
+            link = inspection["link"]
+            entry = dict({key: value for key, value in inspection.items() if key != "link"},
+                         index=index, version_id=link["version_id"])
+            if link["locator"]["kind"] in TEXT_KINDS:
+                entry.update(start=link["locator"]["start"], end=link["locator"]["end"],
+                             whole_text=covers_text(evaluation, link))
+            else:
+                entry["link"] = _reference_templates(link)
+            inspections.append(entry)
+        delivered_readings.append({"id": row["id"], "version_id": row["version_id"], "digest": digest(row),
+                                   "depth": row["depth"], "reading": dict(
+                                       {key: value for key, value in row.items() if key != "inspections"},
+                                       inspections=inspections)})
+    held = {(row["id"], row["digest"]) for row in delivered_readings}
     computations = [validate_computation(records, artifacts, item, recorded_revision=value.get("recorded_revision")) for item in collect_value_items(value)
                     if item["kind"] == "computation"]
     results = []
@@ -431,7 +465,7 @@ def describe_evidence(records, artifacts):
         results.append({"attempt_id": attempt_id, "acceptance_id": acceptance["id"], "claim": checkpoint["claim"],
                         "outcome": acceptance["outcome"], "standard": acceptance["standard"]})
     # Each projected record carries the stored record's id and digest, so that a reviewer can cite it exactly.
-    return {"claim": None if statement is None else dict(
+    delivered = {"claim": None if statement is None else dict(
                 {key: statement[key] for key in ("title", "area", "statement", "resolution_criteria", "formal_statement")},
                 id=statement["id"], digest=digest(statement),
                 statement_id=statement["id"], statement_digest=compute_statement_digest(statement)),
@@ -443,13 +477,17 @@ def describe_evidence(records, artifacts):
                                                      digest=digest(value)),
             "assessment": None if assessment is None else dict(
                 {key: assessment[key] for key in ("id", "grades", "items", "primary")}, digest=digest(assessment)),
-            "assessment_evidence": resolve_assessment_evidence(records),
+            "assessment_evidence": [
+                dict({key: value for key, value in reference.items() if key != "record"}, delivered_under="readings")
+                if reference.get("kind") == "record" and reference.get("record_kind") == "reading"
+                and (reference["id"], reference["digest"]) in held else reference
+                for reference in resolve_assessment_evidence(records)],
             "attempt": attempt_evidence,
             "results": results,
             "citations": project_citations(records, artifacts),
-            "readings": [{"id": row["id"], "version_id": row["version_id"], "digest": digest(row),
-                          "depth": row["depth"], "reading": row} for row in readings],
+            "readings": delivered_readings,
             "passages": [passage for passage, _ in prepared],
+            "delivery": {"protocol": "inline-passages-v1", "note": INLINE_DELIVERY_NOTE},
             "computations": [dict(row, record_references=[cite_record(kind, row[key]["id"], row[key]) for key, kind in (
                 ("admission", "execution_admission"), ("execution", "execution"), ("assessment", "cycle_assessment"))])
                 for row in computations],
@@ -457,6 +495,18 @@ def describe_evidence(records, artifacts):
                                    record_references=[cite_record("native_closure", row["native_closure_digest"],
                                                                   records["native_closure"][row["native_closure_digest"]])])
                               for row in find_formal_checks(records)]}
+    # Each projected record names how a reviewer cites it, by kind and id.
+    for key, kind, field in (("claim", "problem_statement", "statement_id"), ("openness", "problem_openness", "id"),
+                             ("value", "problem_value", "id"), ("assessment", "problem_assessment", "id"),
+                             ("attempt", "problem_attempt", "id")):
+        entry = delivered[key]
+        if entry is not None and entry.get(field) is not None:
+            entry["cite"] = {"kind": "record", "record_kind": kind, "id": entry[field]}
+    for entry in delivered["readings"]:
+        entry["cite"] = {"kind": "record", "record_kind": "reading", "id": entry["id"]}
+    for row in delivered["openness_searches"]:
+        row["cite"] = {"kind": "record", "record_kind": "literature_search", "id": row["search"]["id"]}
+    return delivered
 
 
 def cite_record(kind, identifier, record):

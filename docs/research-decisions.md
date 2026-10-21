@@ -538,16 +538,67 @@ The subscription-backed route uses this shape:
 }
 ```
 
-Its inspected startup contract is for Codex CLI 0.159.2 with user configuration
-and rules disabled. It accepts text evidence only. The adapter checks actual
-recorded input and rejects uninspected startup declarations, additional context
-and tool events. Other runtime contexts remain unverified until inspected and
-probed. `timeout_seconds` is a hard wall-time limit, positive and at most 600.
-`max_output_tokens` is checked after generation; it is not a provider-side token
-reservation or a guarantee against spending beyond that value. Binary evidence
-requires a separately configured and verified supported route. The
-`openai_responses_v1` adapter uses an HTTPS endpoint and an API credential; its
-existence does not authorize paid calls or establish live route verification.
+Its inspected startup contract is for Codex CLI 0.159.2 and 0.162.1 with user
+configuration and rules disabled, at reasoning effort `high`. It accepts text
+evidence only. The adapter checks actual recorded input and rejects uninspected
+startup declarations, additional context and tool events. Other runtime contexts
+remain unverified until inspected and probed. `timeout_seconds` is a hard
+wall-time limit, positive and at most 600. `max_output_tokens` is checked after
+generation; it is not a provider-side token reservation or a guarantee against
+spending beyond that value. Binary evidence requires a separately configured and
+verified supported route. The `openai_responses_v1` adapter uses an HTTPS
+endpoint and an API credential; its existence does not authorize paid calls or
+establish live route verification.
+
+The reviewer of a Claude Code session is the Claude Code CLI itself, on the
+owner's subscription:
+
+```json
+{
+  "id": "claude-route-001",
+  "adapter": "claude_cli_v1",
+  "model": "claude-opus-5-5",
+  "endpoint": "claude://local",
+  "configuration": {"effort": "max", "max_output_tokens": 20000, "timeout_seconds": 1800}
+}
+```
+
+Each invocation runs `claude -p` as its own process in an empty working
+directory, in safe mode (no CLAUDE.md, skills, plugins, hooks, MCP servers or
+auto memory), with no built-in tools, a system prompt replaced by the canonical
+review prompt, no session persistence and no permission prompts. The packet goes
+in as one stream-json user message that the CLI echoes back, and the adapter
+verifies the observed stream: the session initialization reports no tools, MCP
+servers, skills or commands and the configured model; the echoed input equals
+the request; no tool use, tool result, hook output, compaction or second turn
+appears; and the result is one successful turn. `effort` is one of `low`,
+`medium`, `high`, `xhigh` or `max`; `timeout_seconds` is at most 3600. The
+route limit is 1,300,000 characters of input; a larger request is refused before
+the CLI runs and recorded as a failed attempt. The recorded runtime names the
+isolation flags, not the installed CLI version, which is recorded with each
+invocation instead, so a CLI update does not invalidate earlier reviews. Like
+the Codex route it accepts text evidence only. The API credentials of the parent
+session are not passed to the reviewer process.
+
+On the local routes the packet is labelled as JSON, a binary artifact is named
+without its bytes, and a packet that carries problem evidence asks the transport
+to replay the session's earlier turns without long evidence bodies, without the
+packets of a scientific history and without the parts the current packet
+repeats. The Codex route additionally elides re-delivered and prioritized text
+bodies until the input fits the app-server limit, and sends an input that no
+elision fits as it stands, so that the app-server's refusal is recorded.
+
+A route can be retired: an account closes, a model is withdrawn, or the owner
+forbids the route. Record `review-context` with `kind: "route_retired"` on the
+slot's last observed assignment, `source: "owner"` or the actual cause, a
+reason, and the owner's instruction as the evidence artifact. From then on the
+route accepts no new assignment and no run (`review_route_retired`), an
+assignment on it that never produced an observed output is dead and holds no
+slot, and the observed outputs on it stay verified. The slot continues through
+the context-repair path: probe another route after the retirement, then assign
+the same role with `context.context_repair` naming the retirement event, its
+evidence and the probe. The repair packet carries the cause under
+`context_repair.cause`, so the replacement reviewer reads why it reassesses.
 
 `source-impact` has exactly `id`, `decision_id` and `source_impact`. An empty
 source delta uses this payload shape:

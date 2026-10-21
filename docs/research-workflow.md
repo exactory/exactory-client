@@ -155,8 +155,13 @@ bound to the latest delivered snapshot of the objective.
 For `kind: "literature"`, use null `solver` and
 `literature: {readings: [{version_id, reading_id}], description}` with full readings
 and a critical assessment of the exact statement. Exactly one binding is non-null.
-The current literature attempt's full readings are delivered with their passages
-to the result reviewers, checked for coverage and cited like value readings.
+The current literature attempt's full readings are delivered to the result
+reviewers like value readings: each reading with its notes and, per inspection,
+its unit, note and offsets, and each inspected span once as inline text. An
+inspection that covers the complete text is marked in the reading and is not
+repeated as a passage; the full text is held and a reviewer requests it with
+`source_requests`. The coverage check verifies each delivered span against the
+stored source text, and the reviewer cites a reading as a record.
 Those works are included in the exported problem's citations even when its
 value or openness evidence does not otherwise cite them.
 `outcomes` gives `resolved`, `footholds: [{claim, evidence}]`,
@@ -235,10 +240,14 @@ at recording and projection. Matching mutable records, including
 the assessment with the current digests. A source without a matching full
 reading returns that code with `{item, link}`.
 Assessment source readings join value readings for passage delivery, coverage,
-citations and export. References to `local_artifact` records also require
-delivery of their artifact bytes to both reviewers. Both result reviewers must
-receive `assessment_evidence`
-(`problem_evidence_unassessed`).
+citations and export. A reading record that the packet already projects under
+`readings` is not repeated under `assessment_evidence`; the entry names where
+it is delivered. References to `local_artifact` records also require delivery
+of their artifact bytes to both reviewers. Both result reviewers must receive
+`assessment_evidence` (`problem_evidence_unassessed`). Each projected record
+carries a `cite` object, and a result reviewer cites a delivered record by its
+kind and id, without a digest: the recording binds the citation to the version
+that the packets delivered.
 
 Use the existing verified review routes. Both bar reviewers receive the field,
 area and source context before the statement is shown, and calibrate levels

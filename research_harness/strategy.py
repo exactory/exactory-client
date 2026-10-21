@@ -100,8 +100,9 @@ def instruction_provenance(records, artifacts, identifier):
     return {"id": identifier, "path": pinned["path"], "artifact": pinned["artifact"], "text": content}
 
 
-def evidence_fields(reference):
-    """The shared evidence-reference grammar, independent of current records/readings."""
+def evidence_fields(reference, *, review_binding=False):
+    """The shared evidence-reference grammar, independent of current records/readings. With review_binding, a record
+    reference may omit its digest: the review's recording binds it to the version its packets delivered."""
     if not isinstance(reference, dict):
         raise ResearchError("invalid_strategy", "Evidence must identify exact held bytes or a recorded result")
     if {"path", "sha256", "size", "media_type"} <= reference.keys():
@@ -109,18 +110,28 @@ def evidence_fields(reference):
     elif reference.get("kind") == "source":
         fields(reference, ("kind", "link"), code="invalid_strategy")
     elif reference.get("kind") == "record":
-        fields(reference, ("kind", "record_kind", "id", "digest"), code="invalid_strategy")
+        fields(reference, ("kind", "record_kind", "id") + (() if review_binding else ("digest",)),
+               ("digest",) if review_binding else (), code="invalid_strategy")
         text(reference["record_kind"], "Evidence record kind", code="invalid_strategy")
         text(reference["id"], "Evidence record ID", code="invalid_strategy")
-        text(reference["digest"], "Evidence record digest", code="invalid_strategy")
+        if "digest" in reference:
+            text(reference["digest"], "Evidence record digest", code="invalid_strategy")
     else:
         raise ResearchError("invalid_strategy", "Use an artifact descriptor, source link or exact record reference")
 
 
-def evidence(records, artifacts, values, *, required=True):
-    """Verify exact artifacts, read source locators or existing typed record references."""
+def canonical_record_kind(records, kind):
+    """A record kind written with hyphens names the kind written with underscores, when only that form exists."""
+    if records.get(kind) is None and records.get(kind.replace("-", "_")) is not None:
+        return kind.replace("-", "_")
+    return kind
+
+
+def evidence(records, artifacts, values, *, required=True, review_binding=False):
+    """Verify exact artifacts, read source locators or existing typed record references. With review_binding, a record
+    reference may omit its digest and may write its kind with hyphens; the review's recording binds it."""
     for reference in items(values, "Evidence", nonempty=required):
-        evidence_fields(reference)
+        evidence_fields(reference, review_binding=review_binding)
         if {"path", "sha256", "size", "media_type"} <= reference.keys():
             artifacts.read(reference)
         elif reference.get("kind") == "source":
@@ -128,10 +139,11 @@ def evidence(records, artifacts, values, *, required=True):
             validate_read_evidence(records, artifacts, reference["link"])
         elif reference.get("kind") == "record":
             from .claim_dependencies import verify_record_dependency
-            saved = get_record(records, reference["record_kind"], reference["id"])
-            if not verify_record_dependency(records, reference["record_kind"], reference["id"], reference["digest"]):
+            kind = canonical_record_kind(records, reference["record_kind"]) if review_binding else reference["record_kind"]
+            saved = get_record(records, kind, reference["id"])
+            if "digest" in reference and not verify_record_dependency(records, kind, reference["id"], reference["digest"]):
                 raise ResearchError("strategy_evidence_stale", "The cited record differs from the bound evidence", {"id": reference["id"]})
-            if reference["record_kind"] == "local_artifact":
+            if kind == "local_artifact":
                 artifacts.read(saved["artifact"])
     return values
 

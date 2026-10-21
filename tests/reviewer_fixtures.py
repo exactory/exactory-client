@@ -22,7 +22,7 @@ def manuscript_assignment(case, bundle, assessor, core, prediction, reasons):
             'model':'fixture-model','endpoint':'https://api.openai.com/v1/responses',
             'configuration':{'max_output_tokens':10000,'timeout_seconds':5}})
         def positive(route, request, credential):
-            packet = json.loads(request['input'][0]['content'])
+            packet = json.loads(request['input'][0]['content'].removeprefix('The packet below is JSON.\n'))
             return response({'allowed_control':packet['allowed_control'],
                              'evidence_control':packet['evidence_control'],'excluded_controls':[]})
         with patch('research_harness.review_transport.send_request', side_effect=positive):
@@ -51,7 +51,7 @@ def verdict_assignment(case, payload):
             'model': 'fixture-model', 'endpoint': 'https://api.openai.com/v1/responses',
             'configuration': {'max_output_tokens': 10000, 'timeout_seconds': 5}})
         def positive(route, request, credential):
-            packet = json.loads(request['input'][0]['content'])
+            packet = json.loads(request['input'][0]['content'].removeprefix('The packet below is JSON.\n'))
             return response({'allowed_control': packet['allowed_control'],
                              'evidence_control': packet['evidence_control'], 'excluded_controls': []})
         with patch('research_harness.review_transport.send_request', side_effect=positive):

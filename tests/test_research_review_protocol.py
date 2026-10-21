@@ -80,7 +80,7 @@ class ReviewProtocolTests(LiteratureCase):
     def run_probe(self, positive=True):
         p = self.protocol()
         def provider(route, request, credential):
-            packet = json.loads(request['input'][0]['content'])
+            packet = json.loads(request['input'][0]['content'].removeprefix('The packet below is JSON.\n'))
             return self.response({'allowed_control':packet['allowed_control'] if positive else 'missing',
                                   'evidence_control':packet['evidence_control'] if positive else 'missing',
                                   'excluded_controls':[]})

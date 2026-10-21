@@ -6,6 +6,7 @@ fixed inventory and satisfy actual observed requests from native source bytes.
 
 import hashlib
 import json
+import os
 
 from .errors import ResearchError
 from .evaluation import Evaluation
@@ -343,6 +344,16 @@ def _source(records, artifacts, request, original_rows):
         result['source_scope_pending'].extend(unit_pending)
         if scopes:
             result['scope_status'] = 'declared_with_pending_units' if unit_pending else 'declared_units_available'
+    from .review_transport import text_only_enabled
+    text_only = text_only_enabled()
+    if text_only:
+        # On a text-only reviewer route the original bytes (PDF, images) are withheld and the delivery says so; the
+        # extracted text stays.
+        def _is_text(reference):
+            return not (reference['media_type'] == 'application/pdf' or reference['media_type'].startswith('image/'))
+        for capture in captures:
+            capture['artifacts'] = [a for a in capture['artifacts'] if _is_text(a)]
+        captures = [capture for capture in captures if capture['artifacts']]
     for capture in captures:
         source = captured_source(records, artifacts, capture['source_id'])
         for reference in capture['artifacts']:
@@ -354,6 +365,7 @@ def _source(records, artifacts, request, original_rows):
             'capture_method': source.get('capture_method'), 'origin_verified': source.get('origin_verified'),
             'content_scope': source.get('content_scope'),
             **{key: capture[key] for key in ('kind', 'url', 'html_sha256', 'unit_id', 'bundle_id') if key in capture},
+            'delivery_mode': 'extracted-text-only' if text_only else 'exact-bytes',
             'delivered_sha256': [a['sha256'] for a in capture['artifacts']]})
     if result['evidence'] and not result['source_scope_pending'] and any(capture['completeness'] == 'complete' for capture in captures):
         result.update(status='delivered', reason='All available native captures at the requested depth are supplied. Delivery does not certify complete reading or scientific support.')

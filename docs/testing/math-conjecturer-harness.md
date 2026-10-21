@@ -488,3 +488,76 @@ with the release files, 16:46 PDT; store `mc-live-check-0.55.1-b672f29`, log
 every step, with the same exit codes. The only differences in the output are
 the timestamps, the executable path, the package digest, the version, the
 source commit and the `review` section that 0.55.1 adds to `status`.
+
+## Release 0.56.0
+
+The Claude Code reviewer route and the repairs of `misc/harness-improvement/v19` of the exactory
+repository (T2 to T26, recorded on the first problem record on 2026-10-20 and 2026-10-21), merged onto
+0.55.1 on the branch `feat/claude-review-route`. The owner's instructions of 2026-10-21: no Codex
+call in this process, and the plugin before the problem. The design was not reviewed by Astra for
+that reason; the merge resolutions are listed in the commit `273e62b`.
+
+### Commits
+
+- `976736b` test: add the contract of the Claude Code reviewer route (RED: `ImportError`, 26 errors
+  in `tests.test_research_claude_transport`, the module did not exist).
+- `dc9d3b5` feat: add the Claude Code reviewer route (GREEN: 12 tests of that module and the 7 tests
+  of `tests.test_research_codex_transport`).
+- `5cc4a7f` fix: local repairs T2 to T26 of harness-improvement v19 on 0.55.0 (the ten files of the
+  installed 0.55.0 copy after the repairs, on a branch from the tag `exactory--v0.55.0`).
+- `273e62b` fix: ship the v19 repairs of the problem reviews with the Claude Code route (the merge
+  of that branch, the conflict resolutions in `strategy.py`, `research_decisions.py`,
+  `review_transport.py` and `review_protocol.py`, the previous-prompt recognition, the route-driven
+  text-only delivery, the tests, the documentation and the version).
+
+### RED and GREEN evidence
+
+| Module | RED | GREEN |
+| --- | --- | --- |
+| `tests.test_research_claude_transport` | 26 errors, `ImportError: cannot import name 'review_claude_transport'` | 12 tests OK |
+| `tests.test_research_codex_transport` | after the merge, 1 failure: the setup patched `NATIVE_DECLARATIONS` only, and the repaired adapter checks `NATIVE_DECLARATION_SETS` | 7 tests OK with the set patched |
+| `tests.test_research_review_delivery` | written after the merge; the Codex elision test first expected the second reduction on an input that the first reduction already fit (`KeyError: 'delivery'`) | 11 tests OK with a 1,100,000-character body |
+| `tests.test_research_inline_passages` | written after the merge; the tamper case that pointed a passage at the whole-text inspection still covered, because the offsets and text matched the source | 5 tests OK with a case that points at an inspection that does not contain the span |
+
+The run of the four modules together: 35 tests OK (`PYTHONPATH=tests python3 -m unittest ...`).
+
+| Module | RED | GREEN |
+| --- | --- | --- |
+| `tests.test_research_route_retirement` | 3 errors `invalid_review_context` (the kind `route_retired` was not accepted) and 1 setup error (a request-turn parent unverified under a fixture that did not strip the JSON label) | 4 tests OK; with `tests.test_research_context_repair_integration`, `tests.test_research_context_repair` and `tests.test_research_review_protocol`, 66 tests OK |
+
+Commits `d357072` (the fixtures strip the JSON label), `e2c8bc0` (the retirement tests, RED) and `4c93143`
+(the retirement, GREEN).
+
+### Runs on the recorded store
+
+The first problem record (`math-conjectures/stretched-lr-positivity`, revision 478, 34 assignments)
+recomputed with the branch's harness and with the repaired 0.55.0 copy: the same state for 31
+assignments, the same `problem_evidence_digest`
+(`dae50a55ddd16fbee2bae3476e84334affbb7e40e4d87f8ea4f6180ebfc79a84`) and the same prompt hashes for
+the bar, slate, result, adjudicator and native_math roles. The three result assignments on the
+0.55.x result prompt (`assignment-result-astra`, `assignment-result-luna`, `assignment-result-luna-2`)
+report `verified_for_route` under the branch and `unverified` under the repaired copy, because the
+branch recognizes that prompt as a previous prompt. No record was written.
+
+### CI runs
+
+The first run of PR #42 (commit `aee4338`) failed the "remaining checks" jobs on Python 3.12 and 3.14:
+`test_codex.TestCodexPackage.test_manifest_selects_codex_entrypoints_and_hooks` compared the Codex manifest
+version with the Claude manifest (`0.55.1 != 0.56.0`), and the two `TestCodexHooks` tests that build a
+managed objective failed with `review_context_unverified`, because the math-solver reviewer fixture
+(`skills/math-solver/harness/tests/native_reviewer_support.py`) parsed the labelled reviewer request as bare
+JSON and its probe never echoed the controls. Commit `109a484` bumps `.codex-plugin/plugin.json` to 0.56.0,
+updates the literal in the test, and strips the label in that fixture and in
+`tests/test_research_strategic_source_requests.py`; `test_codex`, `test_math_search_hooks` and
+`test_research_strategic_source_requests` pass together (59 tests). The full matrix on the final commit is
+recorded below when it completes.
+
+### Live check of the Claude route
+
+Pending: `review-route` and `review-probe` on the installed 0.56.0 against `claude-opus-5-5`, recorded
+on the first problem record. An exploratory invocation outside the harness on 2026-10-21
+(`claude -p --safe-mode --tools "" --strict-mcp-config --mcp-config '{"mcpServers":{}}'
+--disable-slash-commands --no-session-persistence --system-prompt ... --model claude-sonnet-5-5
+--output-format stream-json --verbose --input-format stream-json --replay-user-messages`) returned the
+init event with `tools: []`, `mcp_servers: []`, `skills: []`, `slash_commands: []`, the replayed user
+message, one assistant text and a `result` of subtype `success` with `num_turns: 1`.

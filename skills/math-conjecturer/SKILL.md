@@ -125,7 +125,10 @@ significance.
    earlier one is then no longer current.
 4. Obtain two blind problem bars from distinct reviewers on distinct review slots before any
    candidate is shown to a reviewer. Register and test each route with `review-route` and
-   `review-probe`. Assign each bar with `review-assignment`, role `bar` and `dossier_id: null`;
+   `review-probe`: in a Claude Code session a `claude_cli_v1` route at `claude://local`, which
+   runs the Claude Code CLI itself as an isolated reviewer on the owner's subscription; in a
+   Codex session a `codex_cli_v1` route. Two reviewers are two routes with distinct models or
+   reviewer ids. Assign each bar with `review-assignment`, role `bar` and `dossier_id: null`;
    the harness uses the template `exactory-problem-review-v2/bar`. Run the assignment with
    `review-run` and record the observed bar with `value-review`. The bars fix what levels 2 and 3
    of significance and priority mean in this field before the candidates can shape the answer.
@@ -379,7 +382,11 @@ evidence the record binds delivered to them.
    (`review_bar_continuity`), except a replacement that a validated context repair installed in
    the preserved slot, and refuses the assignment while a bar is still on the version 1 prompt
    (`problem_bar_calibration_required`). When a route is not yet verified, register and test it
-   first with `review-route` and `review-probe`.
+   first with `review-route` and `review-probe`. When a route becomes unavailable (an account
+   closes, a model is withdrawn, or the user forbids it), record `review-context` with kind
+   `route_retired` on the slot's last observed assignment and the user's instruction as evidence,
+   probe another route, and continue the slot with a `context_repair` assignment that names the
+   retirement; the replacement reviewer gives the final reassessment in the preserved slot.
 3. Assign each result review with `review-assignment`, role `result` and `dossier_id: null`;
    the harness uses the template `exactory-problem-review-v2/result`, delivers the current bars,
    the statement, the openness finding, the value evidence, the assessment with its references
