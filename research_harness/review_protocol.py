@@ -1497,11 +1497,11 @@ def _uses_previous_repair_suffix(assignment):
         return False
     role, problem = assignment['role'], assignment.get('subject', {}).get('kind') == 'problem'
     candidates = []
-    if problem and role in _PROBLEM_PROMPTS:
-        candidates.append(canonical_prompt(role, repair=True, orchestration='problem_creation',
-                                           repair_prompt=context_repair.PROMPT_0560))
-    elif role in bar_sources.ROLES:
-        candidates.append(canonical_prompt(role, repair=True, repair_prompt=context_repair.PROMPT_0560))
+    for earlier in context_repair.EARLIER_PROMPTS:
+        if problem and role in _PROBLEM_PROMPTS:
+            candidates.append(canonical_prompt(role, repair=True, orchestration='problem_creation', repair_prompt=earlier))
+        elif role in bar_sources.ROLES:
+            candidates.append(canonical_prompt(role, repair=True, repair_prompt=earlier))
     return assignment['prompt'] in candidates
 
 

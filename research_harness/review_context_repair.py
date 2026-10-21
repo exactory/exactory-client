@@ -28,13 +28,31 @@ PROMPT_0560 = (
     'Explain any revised or unresolved finding with exact supplied evidence. A changed judgment alone '
     'does not dispose of a historical material objection; the ordinary objection procedure still applies.'
 )
-PROMPT = (
+# The wording of the night of 2026-10-21, kept for the assignments recorded with it: a reviewer read "that object" as
+# the value object and placed the reassessment inside it.
+PROMPT_0561_NIGHT = (
     ' This is an explicit reassessment after recorded context contamination, not a new blind review. '
     'The historical scientific inputs, observed assessments and unresolved objections remain evidence. '
     'Do not treat their former independence as currently qualified. Your output is still the one JSON object of '
     'this role; give it one more member, "reassessment": {assignment_id,findings:[{review_id,disposition:confirmed|'
     'revised|unresolved,reason,evidence}]}, written inside that object before its closing brace, never as a second '
     'object or after the first object is closed. '
+    'Use the exact predecessor assignment_id from context_repair and cover every inherited final review '
+    'of this phase. A source-request turn may defer reassessment; the final phase output must include it. '
+    'A confirmed finding must retain its scientific support, value, objections and limitations. '
+    'Explain any revised or unresolved finding with exact supplied evidence. A changed judgment alone '
+    'does not dispose of a historical material objection; the ordinary objection procedure still applies.'
+)
+# Every earlier suffix that a recorded assignment of the current version may carry.
+EARLIER_PROMPTS = (PROMPT_0560, PROMPT_0561_NIGHT)
+PROMPT = (
+    ' This is an explicit reassessment after recorded context contamination, not a new blind review. '
+    'The historical scientific inputs, observed assessments and unresolved objections remain evidence. '
+    'Do not treat their former independence as currently qualified. Your output is still the one top-level JSON '
+    'object of this role, with the top-level members stage, support, value, objections and limitations; add one more '
+    'top-level member beside them, "reassessment": {assignment_id,findings:[{review_id,disposition:confirmed|revised|'
+    'unresolved,reason,evidence}]}, at the same level as "value" (not inside "value", and not after the closing brace '
+    'of the object). '
     'Use the exact predecessor assignment_id from context_repair and cover every inherited final review '
     'of this phase. A source-request turn may defer reassessment; the final phase output must include it. '
     'A confirmed finding must retain its scientific support, value, objections and limitations. '

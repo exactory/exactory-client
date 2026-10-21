@@ -258,22 +258,25 @@ class ProblemReviewTests(LiteratureCase):
 
     def test_a_context_repair_assignment_recorded_with_the_earlier_suffix_keeps_its_prompt(self):
         from research_harness import review_context_repair
-        self.assertIn('one more member, "reassessment"', review_context_repair.PROMPT)
+        self.assertIn('one more top-level member beside them, "reassessment"', review_context_repair.PROMPT)
         self.assertIn('Return an additional reassessment', review_context_repair.PROMPT_0560)
+        self.assertIn('written inside that object', review_context_repair.PROMPT_0561_NIGHT)
+        self.assertEqual(review_context_repair.EARLIER_PROMPTS,
+                         (review_context_repair.PROMPT_0560, review_context_repair.PROMPT_0561_NIGHT))
         for role in ("bar", "slate", "result"):
             current = protocol.canonical_prompt(role, repair=True, orchestration="problem_creation")
-            earlier = protocol.canonical_prompt(role, repair=True, orchestration="problem_creation",
-                                                repair_prompt=review_context_repair.PROMPT_0560)
-            self.assertEqual((current["template_id"], earlier["template_id"]),
-                             ("exactory-problem-review-v2/" + role + "/context-repair",) * 2)
-            self.assertNotEqual(current["template_hash"], earlier["template_hash"])
-            recorded = {"role": role, "subject": {"kind": "problem", "statement_id": None},
-                        "reassessment_required": True, "prompt": earlier}
-            # The earlier suffix keeps the prompt verified; it does not make the assignment a version 1 prompt, so its
-            # checks, rubric and bar calibration are those of the version 2 template.
-            self.assertFalse(protocol.is_previous_prompt(recorded))
-            self.assertTrue(protocol._prompt_matches(recorded))
-            self.assertFalse(protocol._prompt_matches(dict(recorded, reassessment_required=False)))
+            for suffix in review_context_repair.EARLIER_PROMPTS:
+                earlier = protocol.canonical_prompt(role, repair=True, orchestration="problem_creation", repair_prompt=suffix)
+                self.assertEqual((current["template_id"], earlier["template_id"]),
+                                 ("exactory-problem-review-v2/" + role + "/context-repair",) * 2)
+                self.assertNotEqual(current["template_hash"], earlier["template_hash"])
+                recorded = {"role": role, "subject": {"kind": "problem", "statement_id": None},
+                            "reassessment_required": True, "prompt": earlier}
+                # An earlier suffix keeps the prompt verified; it does not make the assignment a version 1 prompt, so
+                # its checks, rubric and bar calibration are those of the version 2 template.
+                self.assertFalse(protocol.is_previous_prompt(recorded))
+                self.assertTrue(protocol._prompt_matches(recorded))
+                self.assertFalse(protocol._prompt_matches(dict(recorded, reassessment_required=False)))
             fresh = dict(recorded, prompt=current)
             self.assertFalse(protocol.is_previous_prompt(fresh))
             self.assertTrue(protocol._prompt_matches(fresh))
