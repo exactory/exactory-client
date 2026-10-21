@@ -7,6 +7,7 @@ Credentials are a separate argument and are never placed in a saved receipt.
 
 import hashlib
 import http.client
+import importlib
 import json
 import platform
 import ssl
@@ -20,21 +21,32 @@ from .evidence import digest
 ADAPTER = 'openai_responses_v1'
 EXCLUDED_SOURCES = ('author_history', 'prior_assessments', 'startup_memory',
                     'project_instructions', 'hooks', 'shared_cache', 'tool_context', 'fork_resume')
+# Local reviewer adapters run a subscription CLI of the host and inspect its observed input. The Claude Code adapter is
+# the reviewer of a Claude Code session; the Codex adapter is the reviewer of a Codex session.
+LOCAL_ADAPTERS = {'claude_cli_v1': 'review_claude_transport', 'codex_cli_v1': 'review_codex_transport'}
+OMITTED_BYTES_NOTE = ('The original bytes of this artifact are not delivered on this text-only reviewer route. When the '
+                      'harness holds a text extraction of the work, that text is a separate evidence entry.')
+
+
+def _local_adapter(route):
+    """The module of a local reviewer adapter, or None for the HTTPS Responses adapter."""
+    name = LOCAL_ADAPTERS.get(route['adapter'])
+    return None if name is None else importlib.import_module('.' + name, __package__)
 
 
 def runtime(route=None):
-    if route and route['adapter'] == 'codex_cli_v1':
-        from . import review_codex_transport
-        return review_codex_transport.runtime()
+    local = None if not route else _local_adapter(route)
+    if local is not None:
+        return local.runtime()
     return {'adapter': ADAPTER, 'implementation_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             'host': platform.node(), 'platform': platform.platform(), 'python': platform.python_version(),
             'input_contract': 'explicit-packet-only-v1'}
 
 
 def validate_route(route):
-    if route['adapter'] == 'codex_cli_v1':
-        from . import review_codex_transport
-        return review_codex_transport.validate_route(route)
+    local = _local_adapter(route)
+    if local is not None:
+        return local.validate_route(route)
     if route['adapter'] != ADAPTER:
         raise ResearchError('review_route_unsupported', 'Only the instrumented stateless Responses adapter can execute')
     url = urlsplit(route['endpoint'])
@@ -54,10 +66,15 @@ def request_body(route, prompt, packet, history=()):
     validate_route(route)
     supplied = json.loads(json.dumps(packet))
     files = []
+    local = _local_adapter(route)
     for evidence in supplied.get('evidence', []):
         if not isinstance(evidence, dict) or evidence.get('encoding') != 'base64':
             continue
         reference = evidence['artifact']
+        if getattr(local, 'OMITS_BINARY_EVIDENCE', False):
+            evidence.pop('content')
+            evidence.update(encoding='omitted', delivery='bytes-omitted-on-text-route', note=OMITTED_BYTES_NOTE)
+            continue
         data = 'data:' + reference['media_type'] + ';base64,' + evidence.pop('content')
         if reference['media_type'] == 'application/pdf':
             files.append({'type': 'input_file', 'filename': reference['sha256'] + '.pdf', 'file_data': data})
@@ -75,9 +92,9 @@ def request_body(route, prompt, packet, history=()):
 
 def send_request(route, request, credential):
     """Send once without redirects, implicit proxy configuration, or retries."""
-    if route['adapter'] == 'codex_cli_v1':
-        from . import review_codex_transport
-        return review_codex_transport.send_request(route, request, credential)
+    local = _local_adapter(route)
+    if local is not None:
+        return local.send_request(route, request, credential)
     if not isinstance(credential, str) or not credential:
         raise ResearchError('review_credential_missing', 'An explicit provider credential is required')
     validate_route(route)
@@ -101,9 +118,9 @@ def send_request(route, request, credential):
 
 
 def context_verified(route, request, response):
-    if route['adapter'] == 'codex_cli_v1':
-        from . import review_codex_transport
-        return review_codex_transport.verify_context(route, request, response)
+    local = _local_adapter(route)
+    if local is not None:
+        return local.verify_context(route, request, response)
     return (route['adapter'] == ADAPTER and request.get('tools') == [] and request.get('store') is False
             and 'previous_response_id' not in request and 'conversation' not in request)
 
