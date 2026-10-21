@@ -133,7 +133,9 @@ class ProblemResultReviewTests(ProblemDeliveryCase):
             evidence = packet["problem_evidence"]
             self.assertIn(dict(record_ref, record=other), evidence["assessment_evidence"])
             self.assertIn(dict(source_ref, reading_ids=["assessment-only-reading"]), evidence["assessment_evidence"])
-            self.assertIn(reading, [row["reading"] for row in evidence["readings"]])
+            delivered = next(row for row in evidence["readings"] if row["id"] == "assessment-only-reading")
+            self.assertEqual((delivered["digest"], delivered["reading"]["notes"], delivered["reading"]["version_id"]),
+                             (digest(reading), reading["notes"], reading["version_id"]))
             self.assertIn("assessment-only-reading", [row["reading_id"] for row in evidence["passages"]])
             self.assertIn("2601.00002v1", [row["locator"] for row in evidence["citations"]])
         assessed = research_decisions.assess_problem_reviews(self.store.snapshot()["records"], self.artifacts)

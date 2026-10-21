@@ -630,3 +630,18 @@ the history-packet elision included): the ten modules `test_research_context_rep
 `test_research_route_retirement`, `test_research_problem_reviews`, `test_research_claude_transport`,
 `test_research_context_repair_integration`, `test_research_problem_adjudication_resolution`,
 `test_research_problem_objections`, `test_research_review_protocol` and `test_codex`: 319 OK in 726 s (Python 3.9.6).
+
+### CI of PR #43
+
+The first run on the branch head 7243468 (run 39589489106) failed every general shard on Python 3.9, 3.12 and
+3.14 with the same eight tests that main has failed since 0.56.0 (the "remaining checks" jobs passed): the
+plugin manifest version literal (`test_manifest`), the release-guidance version literal
+(`test_research_guidance`), and six 0.55.1-era delivery expectations that 0.56.0's inline-passage delivery and
+cite objects changed: `test_assessment_enters_the_evidence_digest_and_the_reviewer_evidence` and
+`test_assessment_source_references_collect_full_readings_and_citations` (`test_research_problem_assessment`),
+`test_attempt_enters_the_evidence_digest_and_reviewer_evidence` (`test_research_problem_attempt`),
+`test_assessment_references_are_delivered_and_covered` (`test_research_problem_results`),
+`test_result_packets_carry_the_complete_finding_and_its_bound_searches` (`test_research_problem_openness`) and
+`test_focused_review_delivers_and_permits_a_genuinely_new_source`
+(`test_research_problem_adjudication_contract`). Each now states the 0.56.x contract; no harness code changed.
+The seven modules together: 93 OK (Python 3.9.6). The run of the next head is recorded below when it completes.
