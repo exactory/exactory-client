@@ -334,7 +334,7 @@ class ProblemSlateTests(ProblemDeliveryCase):
                           lambda: self.record_slate(review_ids=[original["id"]]))
 
         def respond_to_probe(route, request, credential):
-            packet = json.loads(request["input"][0]["content"])
+            packet = json.loads(request["input"][0]["content"].removeprefix("The packet below is JSON.\n"))
             return self.build_provider_response({"allowed_control": packet["allowed_control"],
                 "evidence_control": packet["evidence_control"], "excluded_controls": []})
         with patch("research_harness.review_transport.send_request", side_effect=respond_to_probe):
@@ -626,7 +626,7 @@ class ProblemResultCalibrationTests(ProblemDeliveryCase):
             "evidence": [self.supporting]})
 
         def respond_to_probe(route, request, credential):
-            supplied = json.loads(request["input"][0]["content"])
+            supplied = json.loads(request["input"][0]["content"].removeprefix("The packet below is JSON.\n"))
             return self.build_provider_response({"allowed_control": supplied["allowed_control"],
                 "evidence_control": supplied["evidence_control"], "excluded_controls": []})
         with patch("research_harness.review_transport.send_request", side_effect=respond_to_probe):

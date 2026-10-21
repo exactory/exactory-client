@@ -158,7 +158,7 @@ class StrategyCase(unittest.TestCase):
                     "endpoint": "https://api.openai.com/v1/responses", "configuration": {"max_output_tokens": 1500, "timeout_seconds": 5}})
 
         def probe(route, request, credential):
-            packet = json.loads(request["input"][0]["content"])
+            packet = json.loads(request["input"][0]["content"].removeprefix("The packet below is JSON.\n"))
             return self.provider_response({"allowed_control": packet["allowed_control"], "evidence_control": packet["evidence_control"],
                                            "excluded_controls": []})
 

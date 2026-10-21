@@ -68,7 +68,7 @@ class ProblemReviewTests(LiteratureCase):
             "model": "fixture-model", "endpoint": "https://api.openai.com/v1/responses",
             "configuration": {"max_output_tokens": 1000, "timeout_seconds": 5}})
         def respond_to_probe(route, request, credential):
-            packet = json.loads(request["input"][0]["content"])
+            packet = json.loads(request["input"][0]["content"].removeprefix("The packet below is JSON.\n"))
             return self.build_provider_response({"allowed_control": packet["allowed_control"],
                 "evidence_control": packet["evidence_control"], "excluded_controls": []})
         with patch("research_harness.review_transport.send_request", side_effect=respond_to_probe):
@@ -435,7 +435,7 @@ class ProblemReviewTests(LiteratureCase):
             'kind': 'contamination', 'source': 'author_history', 'reason': 'Author advocacy entered the bar context.',
             'evidence': [self.supporting]})
         def respond_to_probe(route, request, credential):
-            packet = json.loads(request['input'][0]['content'])
+            packet = json.loads(request['input'][0]['content'].removeprefix('The packet below is JSON.\n'))
             return self.build_provider_response({'allowed_control': packet['allowed_control'],
                 'evidence_control': packet['evidence_control'], 'excluded_controls': []})
         with patch('research_harness.review_transport.send_request', side_effect=respond_to_probe):
@@ -960,7 +960,7 @@ class ProblemOpennessReviewTests(ProblemCase):
             "kind": "contamination", "source": "author_history", "reason": "Author advocacy entered the context.",
             "evidence": [self.supporting]})
         def respond_to_probe(route, request, credential):
-            packet = json.loads(request["input"][0]["content"])
+            packet = json.loads(request["input"][0]["content"].removeprefix("The packet below is JSON.\n"))
             return self.build_provider_response({"allowed_control": packet["allowed_control"],
                 "evidence_control": packet["evidence_control"], "excluded_controls": []})
         with patch("research_harness.review_transport.send_request", side_effect=respond_to_probe):

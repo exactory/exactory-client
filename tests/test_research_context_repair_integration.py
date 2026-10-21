@@ -28,7 +28,7 @@ class ContextRepairIntegrationTests(StrategyCase):
 
     def probe_repair(self, identifier="repair-probe"):
         def provider(route, request, credential):
-            packet = json.loads(request["input"][0]["content"])
+            packet = json.loads(request["input"][0]["content"].removeprefix("The packet below is JSON.\n"))
             return self.provider_response({"allowed_control": packet["allowed_control"],
                 "evidence_control": packet["evidence_control"], "excluded_controls": []})
         with patch("research_harness.review_transport.send_request", side_effect=provider):
