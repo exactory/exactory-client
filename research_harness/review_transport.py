@@ -243,7 +243,27 @@ def _fit_local_input(route, prompt, supplied, history, limit, measure):
         messages[index] = _elide_history_bodies(messages[index])
         request = _build_local_request(route, prompt, supplied, messages)
         index += 1
+    # The replayed packets of earlier turns, oldest first, give way to a digest reference while the input is still too
+    # large; the earlier assistant outputs stay as they were observed.
+    index = 0
+    while not fits(request) and index < len(messages):
+        messages[index] = _elide_history_packet(messages[index])
+        request = _build_local_request(route, prompt, supplied, messages)
+        index += 1
     return request
+
+
+def _elide_history_packet(message):
+    """An earlier user turn reduced to the digest of the packet it carried, stating the omission."""
+    content = message.get('content')
+    if message.get('role') != 'user' or not isinstance(content, str) or not content.startswith(PACKET_LABEL):
+        return message
+    replayed = json.loads(content[len(PACKET_LABEL):])
+    if replayed.get('delivery') == 'packet-elided-route-limit':
+        return message
+    reduced = {'delivery': 'packet-elided-route-limit', 'packet_digest': replayed.get('digest'),
+               'history_delivery': replayed.get('history_delivery'), 'note': HISTORY_PACKET_LIMIT_NOTE}
+    return dict(message, content=PACKET_LABEL + json.dumps(reduced, sort_keys=True, ensure_ascii=False))
 
 
 def _fit_codex_input(route, prompt, supplied, history):

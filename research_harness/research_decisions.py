@@ -822,8 +822,12 @@ def assess_problem_reviews(records, artifacts, review_ids=None, bar_review_ids=N
     for review in reviews:
         findings = review['payload']['value']
         checks = findings.get('assurances', [])
+        # The stop assurance passes when nothing requires a stop; the result prompt's example writes that as
+        # not_assessed with the reason "Nothing in the record requires a stop", so both statuses count. Every other
+        # assurance passes only as passed.
         pending = [kind for kind in PROBLEM_CHECKS
-                   if len([check for check in checks if check.get('kind') == kind and check.get('status') == 'passed']) != 1]
+                   if len([check for check in checks if check.get('kind') == kind
+                           and check.get('status') in (('passed', 'not_assessed') if kind == 'stop' else ('passed',))]) != 1]
         if (pending or len(checks) != len(PROBLEM_CHECKS) or findings.get('status') != 'sufficient'):
             obligations.append(obligation('problem_assurance_pending', 'Every problem assurance must pass against the recorded evidence.',
                 review_id=review['id'], assurances=pending))
