@@ -521,6 +521,13 @@ that reason; the merge resolutions are listed in the commit `273e62b`.
 
 The run of the four modules together: 35 tests OK (`PYTHONPATH=tests python3 -m unittest ...`).
 
+| Module | RED | GREEN |
+| --- | --- | --- |
+| `tests.test_research_route_retirement` | 3 errors `invalid_review_context` (the kind `route_retired` was not accepted) and 1 setup error (a request-turn parent unverified under a fixture that did not strip the JSON label) | 4 tests OK; with `tests.test_research_context_repair_integration`, `tests.test_research_context_repair` and `tests.test_research_review_protocol`, 66 tests OK |
+
+Commits `d357072` (the fixtures strip the JSON label), `e2c8bc0` (the retirement tests, RED) and `4c93143`
+(the retirement, GREEN).
+
 ### Runs on the recorded store
 
 The first problem record (`math-conjectures/stretched-lr-positivity`, revision 478, 34 assignments)
