@@ -588,6 +588,18 @@ repeats. The Codex route additionally elides re-delivered and prioritized text
 bodies until the input fits the app-server limit, and sends an input that no
 elision fits as it stands, so that the app-server's refusal is recorded.
 
+A route can be retired: an account closes, a model is withdrawn, or the owner
+forbids the route. Record `review-context` with `kind: "route_retired"` on the
+slot's last observed assignment, `source: "owner"` or the actual cause, a
+reason, and the owner's instruction as the evidence artifact. From then on the
+route accepts no new assignment and no run (`review_route_retired`), an
+assignment on it that never produced an observed output is dead and holds no
+slot, and the observed outputs on it stay verified. The slot continues through
+the context-repair path: probe another route after the retirement, then assign
+the same role with `context.context_repair` naming the retirement event, its
+evidence and the probe. The repair packet carries the cause under
+`context_repair.cause`, so the replacement reviewer reads why it reassesses.
+
 `source-impact` has exactly `id`, `decision_id` and `source_impact`. An empty
 source delta uses this payload shape:
 

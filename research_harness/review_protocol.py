@@ -1502,7 +1502,7 @@ def _repair_packet(records, artifacts, value, repair):
     packet['pending_source_requests'] = bar_sources.pending(
         repair['packet'], repair['scientific_history'][-1]['observed_output'])
     packet['context_repair'] = {'assignment_id': repair['predecessor']['id'], 'slot_id': repair['slot_id'],
-        'event_ids': repair['event_ids'], 'probe_id': repair['probe_id'],
+        'event_ids': repair['event_ids'], 'probe_id': repair['probe_id'], 'cause': repair['cause'],
         'historical_review_ids': [review['id'] for review in repair['historical_reviews']]}
     packet['scientific_history'] = _reference_templates(repair['scientific_history'])
     packet['historical_reviews'] = _reference_templates(repair['historical_reviews'])
@@ -1601,6 +1601,7 @@ def _initial_slot(records, artifacts, value):
                 and context_repair.is_same_subject(prior, value)):
             slots.setdefault(context_repair.slot_id(records, prior), []).append(prior)
     from .review_refusal import refused_attempts
+    retired = retired_routes(records)
     replaceable = []
     for identifier, members in slots.items():
         if any(normalized_text(prior['reviewer_id']) == normalized_text(value['reviewer_id']) for prior in members):
@@ -1613,7 +1614,9 @@ def _initial_slot(records, artifacts, value):
             completed = [a for a in attempts if a['status'] == 'completed']
             exhausted = (value['role'] == 'bar' and len(completed) >= 2
                          and len(refused_attempts(records, artifacts, completed)) == len(completed))
-            if pending or not attempts or (completed and not exhausted):
+            # An assignment never run on a retired route is dead; it does not hold the slot.
+            dead = not attempts and not pending and prior['route_id'] in retired
+            if pending or (not attempts and not dead) or (completed and not exhausted):
                 replaceable_members = False
         if replaceable_members:
             replaceable.append((min(p['recorded_revision'] for p in members), identifier))
@@ -1643,6 +1646,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         if normalized_text(value['reviewer_id']) == normalized_text(value['author_id']):
             raise ResearchError('review_not_independent', 'The author cannot provide an independent assessment')
         route = _get(records, 'review_route', value['route_id'])
+        if value['route_id'] in retired_routes(records):
+            raise ResearchError('review_route_retired', 'The route was retired; assign on another route, and continue a preserved slot through a context repair')
         if value['dossier_id'] is not None:
             d = _payload(_get(records, 'strategy_dossier', value['dossier_id']))
             intent = _payload(_get(records, 'research_intent', d['intent_id']))
@@ -1807,6 +1812,8 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
     def start(records, value):
         fields(value, ('id', 'assignment_id'))
         assignment = _get(records, 'review_assignment', value['assignment_id'])
+        if assignment['route_id'] in retired_routes(records):
+            raise ResearchError('review_route_retired', 'The route of this assignment was retired; continue its slot through a context repair on another route')
         completed = [a for a in records.get('review_attempt', {}).values()
                      if a['assignment_id'] == value['assignment_id'] and a['status'] == 'completed'
                      and _context_observed(artifacts, a)]
@@ -1950,6 +1957,8 @@ def assignment_state(records, artifacts, assignment_id):
                                                refused_attempts=state['refused_attempts']))
     else:
         state['obligations'].append(obligation('review_output_pending', 'A complete observed reviewer response is required.'))
+    if binding is None and assignment['route_id'] in retired_routes(records):
+        state['obligations'].append(obligation('review_route_retired', 'The route of this assignment was retired before an observed output; continue its slot through a context repair on another route.'))
     if assignment['role'] in bar_sources.ROLES:
         state.update(source_request_status='not_assessed', source_requests=[], pending_source_requests=[], source_request_obligations=[])
         if state['output'] is not None:
@@ -1972,13 +1981,21 @@ def assignment_state(records, artifacts, assignment_id):
     return state
 
 
+def retired_routes(records):
+    """The routes that a recorded retirement event withdrew: no new assignment or run uses them, and an assignment on
+    one of them without an observed output is dead. Observed outputs on a retired route stay verified."""
+    assignments = records.get('review_assignment', {})
+    return {assignments[event['assignment_id']]['route_id'] for event in records.get('review_context_event', {}).values()
+            if event['kind'] == 'route_retired' and event['assignment_id'] in assignments}
+
+
 def record_context_event(store, payload, *, expected_revision, request_id):
     artifacts = ArtifactStore(store.root)
     def prepare(records, value):
         fields(value, ('id', 'assignment_id', 'kind', 'source', 'reason', 'evidence'))
         _get(records, 'review_assignment', value['assignment_id'])
-        if value['kind'] not in ('contamination', 'observation'):
-            raise ResearchError('invalid_review_context', 'Context events record contamination or observation')
+        if value['kind'] not in ('contamination', 'observation', 'route_retired'):
+            raise ResearchError('invalid_review_context', 'Context events record contamination, observation or route retirement')
         for key in ('source', 'reason'):
             text(value[key], key)
         if not isinstance(value['evidence'], list) or not list(collect_references(value['evidence'])):

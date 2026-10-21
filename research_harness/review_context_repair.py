@@ -13,6 +13,8 @@ from .operations import fields, normalized_text, strings, text
 from . import strategy
 
 ROLES = ('bar', 'slate', 'result')
+# The recorded events that end a reviewer context: a contamination of the context, or the retirement of its route.
+CAUSE_KINDS = ('contamination', 'route_retired')
 PROMPT = (
     ' This is an explicit reassessment after recorded context contamination, not a new blind review. '
     'The historical scientific inputs, observed assessments and unresolved objections remain evidence. '
@@ -102,6 +104,13 @@ def _exposure_lineage(records, assignment):
     return ordered
 
 
+def cause_events(records, identifiers):
+    """The recorded contaminations and route retirements of the assignments in a lineage, in recorded order."""
+    return sorted((event for event in records.get('review_context_event', {}).values()
+                   if event['assignment_id'] in identifiers and event['kind'] in CAUSE_KINDS),
+                  key=lambda event: (event['recorded_revision'], event['id']))
+
+
 def _reviews(records, identifiers):
     return sorted((saved for saved in records.get('value_review', {}).values()
                    if saved['assignment_id'] in identifiers),
@@ -153,18 +162,20 @@ def prepare_repair(records, artifacts, assignment_payload):
         raise ResearchError('review_context_repair_mismatch', 'Reassess the exact phase, dossier and author boundary')
     chain = _exposure_lineage(records, predecessor)
     identifiers = {item['id'] for item in chain}
-    events = [event for event in records.get('review_context_event', {}).values()
-              if event['assignment_id'] in identifiers and event['kind'] == 'contamination']
+    events = cause_events(records, identifiers)
     if not events or set(repair['event_ids']) != {event['id'] for event in events}:
-        raise ResearchError('review_context_repair_mismatch', 'Bind every actual contamination event in the predecessor lineage')
+        raise ResearchError('review_context_repair_mismatch', 'Bind every actual contamination or retirement event in the predecessor lineage')
     strategy.evidence(records, artifacts, repair['evidence'])
     if {digest(item) for item in repair['evidence']} != {digest(item) for event in events for item in event['evidence']}:
         raise ResearchError('review_context_repair_mismatch', 'Use the exact recorded contamination evidence without author substitutes')
+    from .review_protocol import retired_routes
+    retired = retired_routes(records)
     state = assignment_state(records, artifacts, predecessor['id'])
     dependency_codes = {'review_source_parent_unverified', 'review_context_repair_stale'}
     dependency_lost = any(item['code'] in dependency_codes for item in state['obligations'])
-    if (state['context_status'] != 'contaminated' and not dependency_lost) or state['output'] is None:
-        raise ResearchError('review_context_repair_mismatch', 'Repair an actual contaminated observed assessment')
+    if (state['context_status'] != 'contaminated' and not dependency_lost
+            and predecessor['route_id'] not in retired) or state['output'] is None:
+        raise ResearchError('review_context_repair_mismatch', 'Repair an actual contaminated or retired observed assessment')
     proof = route_state(records, artifacts, assignment_payload['route_id'])
     probe = records.get('review_route_probe', {}).get(repair['probe_id'])
     if (proof['context_status'] != 'verified_for_route' or proof['probe_id'] != repair['probe_id']
@@ -182,12 +193,14 @@ def prepare_repair(records, artifacts, assignment_payload):
             attempts = [item for item in records.get('review_attempt', {}).values() if item['assignment_id'] == prior['id']]
             pending = any(item['assignment_id'] == prior['id'] and item['id'] not in records.get('review_attempt', {})
                           for item in records.get('review_invocation', {}).values())
-            if pending or not attempts or any(item['status'] not in ('failed', 'incomplete') for item in attempts):
+            dead = not attempts and not pending and prior['route_id'] in retired
+            if (pending or not attempts or any(item['status'] not in ('failed', 'incomplete') for item in attempts)) and not dead:
                 raise ResearchError('review_resampling_forbidden', 'Retain the existing repair or source continuation without forking')
     history = []
     for ancestor in chain:
         prior_state = assignment_state(records, artifacts, ancestor['id'])
-        allowed = {'review_context_contaminated', 'review_source_parent_unverified', 'review_context_repair_stale'}
+        allowed = {'review_context_contaminated', 'review_source_parent_unverified', 'review_context_repair_stale',
+                   'review_route_retired'}
         if prior_state['output'] is None or any(item['code'] not in allowed for item in prior_state['obligations']):
             raise ResearchError('review_context_repair_unverified', 'Preserve only the exact observed scientific history with verified invocation provenance')
         packet = json.loads(artifacts.read(ancestor['packet']))
@@ -204,7 +217,8 @@ def prepare_repair(records, artifacts, assignment_payload):
     return {'predecessor': predecessor, 'slot_id': original_slot, 'packet': history[-1]['packet'],
             'historical_reviews': _reviews(records, {item['id'] for item in chain if item['role'] == predecessor['role']}),
             'scientific_history': history,
-            'event_ids': sorted(repair['event_ids']), 'probe_id': repair['probe_id']}
+            'event_ids': sorted(repair['event_ids']), 'probe_id': repair['probe_id'],
+            'cause': [{key: event[key] for key in ('id', 'kind', 'source', 'reason')} for event in events]}
 
 
 def _scientific_content(output):
@@ -248,9 +262,8 @@ def validate_repair_origin(records, artifacts, assignment):
     repair = bound['context']['context_repair']
     predecessor = _assignment(records, repair['assignment_id'])
     identifiers = {item['id'] for item in _exposure_lineage(records, predecessor)}
-    events = [event for event in records.get('review_context_event', {}).values()
-              if event['assignment_id'] in identifiers and event['kind'] == 'contamination'
-              and event['recorded_revision'] < bound['recorded_revision']]
+    events = [event for event in cause_events(records, identifiers)
+              if event['recorded_revision'] < bound['recorded_revision']]
     if set(repair['event_ids']) != {event['id'] for event in events}:
         raise ResearchError('review_context_repair_unverified', 'The original repair must cover its complete prospective exposure history')
     probe = records.get('review_route_probe', {}).get(repair['probe_id'])
@@ -276,8 +289,7 @@ def validate_repair_binding(records, artifacts, assignment):
     repair = repairs[-1]['context']['context_repair']
     predecessor = _assignment(records, repair['assignment_id'])
     identifiers = {item['id'] for item in _exposure_lineage(records, predecessor)}
-    events = {event['id'] for event in records.get('review_context_event', {}).values()
-              if event['assignment_id'] in identifiers and event['kind'] == 'contamination'}
+    events = {event['id'] for event in cause_events(records, identifiers)}
     if set(repair['event_ids']) != events:
         raise ResearchError('review_context_repair_stale', 'Later predecessor contamination requires explicit reassessment of the new evidence')
 

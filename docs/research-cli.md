@@ -71,7 +71,7 @@ All new mutations use the normal `--file`, `--expected-revision` and
 | `review-assignment` | Freeze the canonical role, exact allowed packet, reviewer identity and current verified route. |
 | `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. After a refused output, one retry with the same request is permitted. |
 | `review-attempt` | Preserve imported output or failure history; imported assertions never establish verified independence. |
-| `review-context` | Record evidence of later contamination or other context observations. |
+| `review-context` | Record evidence of later contamination or other context observations, or retire a route: `kind: "route_retired"` on an assignment of that route, with the owner's instruction as evidence. A retired route accepts no new assignment or run, an assignment on it without an observed output is dead, and a preserved slot continues through a context repair that names the retirement as its cause. |
 | `review-adjudication` | Record the exact observed focused finding. An output that fails its output contract leaves a refusal record. |
 | `value-review` | Record the exact observed bar, slate or combined support/value result. An output that fails its output contract leaves a refusal record. |
 | `research-decision` | Select the canonical scientific action, artifact disposition and full-goal status. |
