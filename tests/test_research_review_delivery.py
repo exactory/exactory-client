@@ -129,6 +129,52 @@ class ClaudeRouteElisionTests(unittest.TestCase):
         self.assertEqual(kept['scientific_history'][0]['packet']['evidence'][0]['content'], 'z' * 9000)
 
 
+    def test_a_repair_packet_whose_history_still_exceeds_the_limit_elides_the_earlier_packets(self):
+        from research_harness import review_claude_transport
+        limit = review_claude_transport.INPUT_LIMIT_CHARACTERS
+        # The weight sits in the earlier packets' readings, not in evidence bodies, so body elision cannot fit the input.
+        heavy = {'digest': 'h' * 64, 'problem_evidence': {'readings': [{'text': 'r' * limit}]}}
+        light = {'digest': 'l' * 64, 'problem_evidence': {'readings': [{'text': 'r' * 1000}]}}
+        big = {'id': 'now', 'scientific_history': [
+            {'assignment_id': 'bar-a', 'observed_output': {'value': 'kept'}, 'independence': 'verified_for_route', 'packet': light},
+            {'assignment_id': 'bar-b', 'observed_output': {'value': 'kept too'}, 'independence': 'verified_for_route', 'packet': heavy},
+            {'assignment_id': 'bar-c', 'observed_output': {'value': 'kept as well'}, 'independence': 'verified_for_route',
+             'packet': dict(heavy, digest='k' * 64)}]}
+        request = transport.request_body(CLAUDE, 'Review.', big)
+        supplied = packet_of(request['input'][-1])
+        self.assertLessEqual(len(review_claude_transport.packet_text(request)), limit)
+        turns = {turn['assignment_id']: turn for turn in supplied['scientific_history']}
+        # The largest packets gave way first, each to a digest reference; the light one and every output stayed.
+        for identifier, digest_value in (('bar-b', 'h' * 64), ('bar-c', 'k' * 64)):
+            self.assertEqual(turns[identifier]['packet'], {'delivery': 'packet-elided-route-limit', 'packet_digest': digest_value,
+                                                           'note': transport.HISTORY_PACKET_LIMIT_NOTE})
+        self.assertEqual(turns['bar-a']['packet'], light)
+        self.assertEqual([turn['observed_output'] for turn in supplied['scientific_history']],
+                         [{'value': 'kept'}, {'value': 'kept too'}, {'value': 'kept as well'}])
+
+
+    def test_a_replayed_turn_whose_packet_still_exceeds_the_limit_gives_way_to_its_digest(self):
+        from research_harness import review_claude_transport
+        limit = review_claude_transport.INPUT_LIMIT_CHARACTERS
+        # The weight of the earlier turn sits in its readings, which no body elision reaches.
+        earlier = {'digest': 'e' * 64, 'history_delivery': transport.HISTORY_COMPACT_V2,
+                   'problem_evidence': {'readings': [{'text': 'r' * limit}]}}
+        history = [{'role': 'user', 'content': transport.PACKET_LABEL + json.dumps(earlier, sort_keys=True)},
+                   {'role': 'assistant', 'content': '{"value": "the earlier answer"}'}]
+        current = {'id': 'now', 'history_delivery': transport.HISTORY_COMPACT_V2, 'problem_evidence': {'readings': [{'text': 'r' * 1000}]}}
+        request = transport.request_body(CLAUDE, 'Review.', current, history)
+        self.assertLessEqual(len(review_claude_transport.packet_text(request)), limit)
+        replayed = packet_of(request['input'][0])
+        self.assertEqual(replayed, {'delivery': 'packet-elided-route-limit', 'packet_digest': 'e' * 64,
+                                    'history_delivery': transport.HISTORY_COMPACT_V2, 'note': transport.HISTORY_PACKET_LIMIT_NOTE})
+        self.assertEqual(request['input'][1], history[1])
+        self.assertEqual(packet_of(request['input'][-1]), current)
+        # A history that fits is replayed as it was compacted, not reduced to a digest.
+        small_history = [{'role': 'user', 'content': transport.PACKET_LABEL + json.dumps(dict(earlier, problem_evidence={'readings': [{'text': 'r' * 500}]}), sort_keys=True)}]
+        kept = transport.request_body(CLAUDE, 'Review.', current, small_history)
+        self.assertIn('problem_evidence', packet_of(kept['input'][0]))
+
+
 class ReviewCitationTests(unittest.TestCase):
     def records(self):
         return {'problem_value': {'value-1': {'id': 'value-1', 'motivation': []}}}

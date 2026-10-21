@@ -561,3 +561,87 @@ on the first problem record. An exploratory invocation outside the harness on 20
 --output-format stream-json --verbose --input-format stream-json --replay-user-messages`) returned the
 init event with `tools: []`, `mcp_servers: []`, `skills: []`, `slash_commands: []`, the replayed user
 message, one assistant text and a `result` of subtype `success` with `num_turns: 1`.
+
+## Release 0.56.1
+
+The repairs of `misc/harness-improvement/v19` T30 (the exactory repository), found on the night of
+2026-10-21 when the first problem record ran its result reviews on the Claude Code route and reached the
+post gate. Branch `fix/frozen-audit-digestless-citation` from main `9fcf478` (0.56.0).
+
+### Reproduction on the recorded store
+
+`exactory-research status` on `math-conjectures/stretched-lr-positivity` (revision 478) under the installed
+0.56.0 died with `KeyError: 'digest'` in `review_supplied_evidence.undelivered_references`, reached from
+`assess_problem_reviews` through the frozen audit of `problem-result-luna`, whose evidence cites records as
+`{kind, record_kind, id}`. After the repair of `find_carried_record` and `undelivered_references` the same
+command reports revision 478 with five post obligations and no `review_evidence_undelivered` obligation.
+
+### RED and GREEN evidence
+
+| Test | On main 9fcf478 | On the branch |
+| --- | --- | --- |
+| `test_a_result_review_citing_a_record_without_a_digest_passes_the_frozen_audit` | `invalid_strategy` ("Expected fields: digest, id, kind, record_kind") at record time: the objection evidence was validated without the review binding | OK |
+| `test_a_result_review_citing_an_uncarried_record_without_a_digest_is_refused_with_a_null_digest` | `invalid_strategy` for the same reason | OK, refused with `review_evidence_undelivered` and `digest: null` |
+| `test_a_fenced_json_answer_is_handed_on_without_its_fence` | not present | OK |
+| `test_the_thinking_token_accounting_event_does_not_invalidate_the_stream` | not present | OK |
+
+Three tests of 0.55.1 failed on main `9fcf478` before this branch touched them (run on a pristine checkout
+of main): `test_problem_slate_template_is_version_two_only_and_keeps_bar_and_result_bytes` (the result prompt
+hash changed in 0.56.0), `test_a_first_slate_after_another_bar_repair_receives_the_historical_objection`
+(an artifact cited by a historical objection reaches the slate reviewer as a reference template since
+0.56.0) and `test_a_result_review_citing_a_reading_and_the_value_record_is_adjudicated_complete` (a full
+text travels by reference since 0.56.0, so the cited reading carries no artifact descriptor). Their
+expectations now state the 0.56.x contract. A fourth test,
+`test_a_malformed_objection_gets_its_typed_refusal_before_the_record_citation_check`, treated a record
+reference without a digest as malformed; its malformed case is now a reference without an `id`.
+
+Runs on the branch (`PYTHONPATH=<root> python3 -m unittest`, Python 3.9.6, from `tests/`):
+`test_research_claude_transport` 14 OK; `test_codex` 29 OK; the seven modules
+`test_research_problem_adjudication_resolution`, `test_research_problem_reviews`,
+`test_research_route_retirement`, `test_research_problem_objections`, `test_research_review_delivery`,
+`test_research_context_repair` and `test_research_claude_transport` together: 235 OK in 675 s. The full
+matrix runs in CI on the pull request.
+
+### Live check of the Claude route
+
+On the first problem record, with the installed 0.56.0 carrying these repairs: `route-claude-opus`
+(`claude-opus-5-5`, effort `max`) and `route-claude-fable` (`claude-fable-5-1`, effort `max`), both at
+`claude://local` with `max_output_tokens` 32000 and `timeout_seconds` 3600. The first probes failed with
+`review_transport_failure` (`JSONDecodeError`: the answer inside a Markdown fence); after the fence repair
+the second probes completed but stayed `input_verified: false` with the issue `system_event_thinking_tokens`;
+after the inspection accepted that event, `probe-route-claude-opus-3` and `probe-route-claude-fable-3`
+verified both routes (`verified_for_route`). The context-repair result assignment
+`assignment-result-astra-repair` was then accepted on `route-claude-opus` (packet 3,425,560 bytes, template
+`exactory-problem-review-v2/result/context-repair`).
+
+### The output bound of the Claude route
+
+The first result review on `route-claude-opus` (effort `max`) ended `review_incomplete` after 1,891 s: input
+909,524 tokens, output 209,111 tokens, 1,457 events (1,449 `thinking_tokens` system events, 2 user events, 3
+assistant events, 1 result), issues `incomplete_turn` and `tool_or_injected_input`. The CLI had stopped the
+answer at its own default output limit and continued in a second turn with its own user message. The
+transport now passes `CLAUDE_CODE_MAX_OUTPUT_TOKENS` equal to the route's `max_output_tokens` to the child
+process; `test_the_command_isolates_the_reviewer_and_sends_one_replayed_message` asserts it (14 tests OK).
+The record continued on `route-claude-opus-2` and `route-claude-fable-2` (effort `high`, bound 64,000;
+probes verified).
+
+Final run on the branch at a402226 (the stop assurance, the replayed-history elision, the final suffix wording and
+the history-packet elision included): the ten modules `test_research_context_repair`, `test_research_review_delivery`,
+`test_research_route_retirement`, `test_research_problem_reviews`, `test_research_claude_transport`,
+`test_research_context_repair_integration`, `test_research_problem_adjudication_resolution`,
+`test_research_problem_objections`, `test_research_review_protocol` and `test_codex`: 319 OK in 726 s (Python 3.9.6).
+
+### CI of PR #43
+
+The first run on the branch head 7243468 (run 39589489106) failed every general shard on Python 3.9, 3.12 and
+3.14 with the same eight tests that main has failed since 0.56.0 (the "remaining checks" jobs passed): the
+plugin manifest version literal (`test_manifest`), the release-guidance version literal
+(`test_research_guidance`), and six 0.55.1-era delivery expectations that 0.56.0's inline-passage delivery and
+cite objects changed: `test_assessment_enters_the_evidence_digest_and_the_reviewer_evidence` and
+`test_assessment_source_references_collect_full_readings_and_citations` (`test_research_problem_assessment`),
+`test_attempt_enters_the_evidence_digest_and_reviewer_evidence` (`test_research_problem_attempt`),
+`test_assessment_references_are_delivered_and_covered` (`test_research_problem_results`),
+`test_result_packets_carry_the_complete_finding_and_its_bound_searches` (`test_research_problem_openness`) and
+`test_focused_review_delivers_and_permits_a_genuinely_new_source`
+(`test_research_problem_adjudication_contract`). Each now states the 0.56.x contract; no harness code changed.
+The seven modules together: 93 OK (Python 3.9.6). The run of the next head is recorded below when it completes.

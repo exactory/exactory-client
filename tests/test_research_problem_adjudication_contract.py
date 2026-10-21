@@ -6,6 +6,7 @@ from unittest.mock import patch
 import test_research_problem_delivery as delivery_fixtures
 import test_research_problem_objections as objection_fixtures
 from research_harness import literature, reading, research_decisions as decisions, review_protocol as protocol
+from research_harness.evidence import digest
 
 
 class ProblemAdjudicationContractTests(delivery_fixtures.ProblemDeliveryCase):
@@ -50,7 +51,8 @@ class ProblemAdjudicationContractTests(delivery_fixtures.ProblemDeliveryCase):
     def test_focused_review_delivers_and_permits_a_genuinely_new_source(self):
         self.prepare_reviews(result_reviewer="first")
         original = self.read_records()["review_assignment"]["result-first"]
-        original_digest = json.loads(self.artifacts.read(original["packet"]))["problem_evidence_digest"]
+        original_packet = json.loads(self.artifacts.read(original["packet"]))
+        original_digest = original_packet["problem_evidence_digest"]
         new_source = self.add_new_source()
         assignment = self.assign_focused_review()
         packet = json.loads(self.artifacts.read(assignment["packet"]))
@@ -58,13 +60,22 @@ class ProblemAdjudicationContractTests(delivery_fixtures.ProblemDeliveryCase):
         self.assertEqual(packet["protocol"], "exactory-problem-review-v2")
         self.assertIn("current_evidence", assignment["prompt"]["text"])
         self.assertNotIn("Assess only original_evidence", assignment["prompt"]["text"])
-        self.assertIn(new_source, packet["current_evidence"])
+        # Since 0.56.0 a full text reaches the adjudicator as the inline passages of its reading, which the original
+        # packets did not carry; the raw text artifact is no longer a delivered evidence entry.
+        passages = [row for row in packet["problem_evidence"]["passages"] if row["reading_id"] == "read-new-comparator"]
+        self.assertTrue(passages)
+        self.assertNotIn("read-new-comparator", [row["reading_id"] for row in original_packet["problem_evidence"]["passages"]])
+        delivered = next(row for row in packet["problem_evidence"]["readings"] if row["id"] == "read-new-comparator")
+        # The body inspection covers the whole text, which travels by reference; the partial spans travel as passages.
+        self.assertTrue(any(row["unit_id"] == "body" and row["whole_text"] for row in delivered["reading"]["inspections"]))
+        self.assertNotIn("read-new-comparator", [row["id"] for row in original_packet["problem_evidence"]["readings"]])
+        self.assertNotIn(new_source, packet["current_evidence"])
         self.assertNotIn(new_source, packet["original_evidence"])
         self.assertNotEqual(packet["problem_evidence_digest"], original_digest)
-        delivered = next(entry for entry in packet["evidence"] if entry["artifact"] == new_source)
-        self.assertEqual(delivered["content"].encode(), self.artifacts.read(new_source))
         self.assertIn(b"new comparator B", self.artifacts.read(new_source))
-        saved = self.observe_focused_review(new_source)
+        cited_reading = {"kind": "record", "record_kind": "reading", "id": "read-new-comparator",
+                         "digest": digest(self.read_records()["reading"]["read-new-comparator"])}
+        saved = self.observe_focused_review(cited_reading)
         self.assertEqual(saved["problem_evidence_digest"], packet["problem_evidence_digest"])
         state = protocol.adjudication_state(self.read_records(), self.artifacts, saved["id"])
         self.assertTrue(state["ready"], state["obligations"])

@@ -136,7 +136,8 @@ class ProblemAssessmentTests(ProblemCase):
         self.assertNotEqual(before, after)
         self.assertEqual(describe_binding(records, self.artifacts)['assessment'], saved)
         self.assertEqual(describe_evidence(records, self.artifacts)['assessment'], dict(
-            {key: saved[key] for key in ('id', 'grades', 'items', 'primary')}, digest=digest(saved)))
+            {key: saved[key] for key in ('id', 'grades', 'items', 'primary')}, digest=digest(saved),
+            cite={'kind': 'record', 'record_kind': 'problem_assessment', 'id': saved['id']}))
         newer = build_assessment(self.statement, 'assessment-2')
         newer['items']['B1']['note'] = 'A more detailed account of the mathematical payoff.'
         self.record_assessment(newer)
@@ -184,7 +185,15 @@ class ProblemAssessmentTests(ProblemCase):
         evidence = describe_evidence(records, self.artifacts)
         self.assertEqual(evidence['assessment_evidence'][0], dict(reference, reading_ids=['read-full']))
         self.assertEqual([row['id'] for row in collect_readings(records)], ['read-full'])
-        self.assertEqual(evidence['readings'][0]['reading'], reading)
+        delivered = evidence['readings'][0]
+        self.assertEqual((delivered['id'], delivered['digest'], delivered['cite']),
+                         ('read-full', digest(reading), {'kind': 'record', 'record_kind': 'reading', 'id': 'read-full'}))
+        self.assertEqual({key: value for key, value in delivered['reading'].items() if key != 'inspections'},
+                         {key: value for key, value in reading.items() if key != 'inspections'})
+        self.assertEqual([(row['unit_id'], row['start'], row['end'], row['version_id']) for row in delivered['reading']['inspections']],
+                         [(row['unit_id'], row['link']['locator']['start'], row['link']['locator']['end'], row['link']['version_id'])
+                          for row in reading['inspections']])
+        self.assertTrue(all('link' not in row for row in delivered['reading']['inspections']))
         self.assertIn('read-full', [row['reading_id'] for row in evidence['passages']])
         self.assertEqual([row['locator'] for row in evidence['citations']], ['2601.00001v1'])
         changed = copy.deepcopy(records)

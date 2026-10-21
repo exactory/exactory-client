@@ -354,7 +354,9 @@ class ProblemAttemptTests(ProblemCase):
             "id": "attempt-1", "digest": digest(saved), "native_attempt_digest": payload["solver"]["native_attempt_digest"]})
         native_id = payload["solver"]["native_attempt_digest"]
         self.assertEqual(describe_evidence(records, self.artifacts)["attempt"], {
-            "id": "attempt-1", "digest": digest(saved), "record_references": [{"kind": "record",
+            "id": "attempt-1", "digest": digest(saved),
+            "cite": {"kind": "record", "record_kind": "problem_attempt", "id": "attempt-1"},
+            "record_references": [{"kind": "record",
                 "record_kind": "native_attempt", "id": native_id, "digest": digest(records["native_attempt"][native_id])}],
             "kind": "solver", "outcomes": payload["outcomes"], "proportion": payload["proportion"],
             "state": native["state"], "totals": native["totals"], "literature": None,
@@ -371,7 +373,8 @@ class ProblemAttemptTests(ProblemCase):
             "id": "literature-2", "digest": digest(literary), "native_attempt_digest": None})
         self.assertEqual(describe_evidence(records, self.artifacts)["attempt"], {
             **{key: literary[key] for key in ("id", "kind", "outcomes", "proportion", "literature")},
-            "digest": digest(literary), "acceptances": []})
+            "digest": digest(literary), "acceptances": [],
+            "cite": {"kind": "record", "record_kind": "problem_attempt", "id": "literature-2"}})
 
     def test_milestone_attempt_and_next_order(self):
         from research_harness.cli import status_report

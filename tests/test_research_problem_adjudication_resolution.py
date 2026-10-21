@@ -287,9 +287,10 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         self.assertEqual(stating["problem_evidence"]["value"]["digest"], value["digest"])
         self.assertEqual((reading["record_kind"], reading["record"]["id"], reading["record"]["digest"]),
                          ("reading", self.item["reading_id"], reading["digest"]))
-        supplied = [entry["artifact"] for entry in stating["evidence"]]
-        self.assertTrue(reading["artifacts"])
-        self.assertTrue(all(artifact in supplied for artifact in reading["artifacts"]))
+        # The adjudicator receives the reading as the projection the stating result packet carried; since 0.56.0 the full
+        # text travels by reference, so no artifact descriptor accompanies it.
+        carried = next(entry for entry in stating["problem_evidence"]["readings"] if entry["id"] == self.item["reading_id"])
+        self.assertEqual((reading["record"], reading["artifacts"]), (carried, []))
         self.assertEqual((value["record_kind"], value["record"]["motivation"], value["artifacts"]),
                          ("problem_value", stating["problem_evidence"]["value"]["motivation"], []))
         self.assertEqual(undelivered, [])
@@ -315,6 +316,63 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
                          ("review_evidence_undelivered", {key: output["objections"][0]["evidence"][0][key]
                                                           for key in ("record_kind", "id", "digest")}))
         self.assertIn("problem_candidate candidate-1", caught.exception.message)
+
+    def test_a_result_review_citing_a_record_without_a_digest_passes_the_frozen_audit(self):
+        """The version 2 result prompt cites a delivered record as {kind, record_kind, id}. The post gate audits
+        every recorded review against its frozen delivery, where the stored record is not read; a citation
+        without a digest binds to the row that carried the record instead of being reported undelivered."""
+        self.prepare_reviews(results=False)
+        output = self.build_review_output("result")
+        cited = self.cite_record("problem_value", "value-1")
+        del cited["digest"]
+        output["objections"] = [dict(self.make_objection(), evidence=[cited])]
+        self.observe("result", "first", output)
+        records = self.store.snapshot()["records"]
+        review = records["value_review"]["review-result-first"]
+        self.assertEqual(review["payload"]["objections"][0]["evidence"], [cited])
+        self.assertEqual(decisions.find_undelivered_review_references(records, self.artifacts, review), [])
+        codes = {item["code"] for item in decisions.assess_problem_reviews(records, self.artifacts)["obligations"]}
+        self.assertNotIn("review_evidence_undelivered", codes)
+
+    def test_a_result_review_citing_an_uncarried_record_without_a_digest_is_refused_with_a_null_digest(self):
+        self.prepare_reviews(results=False)
+        output = self.build_review_output("result")
+        cited = {"kind": "record", "record_kind": "problem_candidate", "id": "candidate-1"}
+        output["objections"] = [dict(self.make_objection(), evidence=[cited])]
+        with self.assertRaises(ResearchError) as caught:
+            self.observe("result", "first", output)
+        self.assertEqual((caught.exception.code, caught.exception.details),
+                         ("review_evidence_undelivered", {"record_kind": "problem_candidate", "id": "candidate-1", "digest": None}))
+
+    def test_a_stop_assurance_written_as_not_assessed_passes_the_gate(self):
+        """The result prompt's own example writes the stop assurance as not_assessed with the reason that nothing
+        requires a stop; the gate counts that as the assurance passing. Every other assurance passes only as passed."""
+        self.prepare_reviews(results=False)
+        for reviewer in ("first", "second"):
+            output = self.build_review_output("result")
+            if reviewer == "second":
+                for check in output["value"]["assurances"]:
+                    if check["kind"] == "stop":
+                        check["status"] = "not_assessed"
+                        check["reason"] = "Nothing in the record requires a stop."
+            self.observe("result", reviewer, output)
+        records = self.store.snapshot()["records"]
+        codes = {item["code"] for item in decisions.assess_problem_reviews(records, self.artifacts)["obligations"]}
+        self.assertNotIn("problem_assurance_pending", codes)
+        # A value assurance written as not_assessed still blocks.
+        output = self.build_review_output("result")
+        for check in output["value"]["assurances"]:
+            if check["kind"] == "problem_value":
+                check["status"] = "not_assessed"
+        from research_harness.evidence import digest
+        changed = self.build_value([self.item], identifier="value-stop-test")
+        changed["motivation"][0]["text"] = "A narrower implication follows from the supplied comparator."
+        self.mutate(self.load_problem_module().record_value, changed)
+        self.observe("result", "second", output, identifier="refreshed-second-stop")
+        records = self.store.snapshot()["records"]
+        pending = [item for item in decisions.assess_problem_reviews(records, self.artifacts)["obligations"]
+                   if item["code"] == "problem_assurance_pending"]
+        self.assertTrue(any(item.get("assurances") == ["problem_value"] for item in pending))
 
     def add_unbound_full_source(self):
         """A fully read source that the current problem evidence does not cite; returns the link of its first unit."""
@@ -380,7 +438,7 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         cited = self.cite_record("reading", self.item["reading_id"])
         malformed = {"first": ({key: value for key, value in self.make_objection().items() if key != "evidence"},
                                "invalid_value_review"),
-                     "second": (dict(self.make_objection(), evidence=[{key: cited[key] for key in ("kind", "record_kind", "id")}]),
+                     "second": (dict(self.make_objection(), evidence=[{key: cited[key] for key in ("kind", "record_kind")}]),
                                 "invalid_strategy")}
         for reviewer, (objection, code) in malformed.items():
             with self.subTest(reviewer=reviewer):
@@ -1015,8 +1073,10 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         stated = self.make_objection()
         self.assertEqual({key: objection[key] for key in ("id", "claim", "reason", "resolution_condition")},
                          {key: stated[key] for key in ("id", "claim", "reason", "resolution_condition")})
+        template = {"artifact_descriptor": {"location": self.supporting["path"], "extensions": {},
+                                            **{key: self.supporting[key] for key in ("sha256", "size", "media_type")}}}
         self.assertEqual((objection["review_id"], objection["version_evidence"], objection["version_source_mappings"]),
-                         ("review-bar-first", [self.supporting], json.loads(self.artifacts.read(
+                         ("review-bar-first", [template], json.loads(self.artifacts.read(
                              self.store.snapshot()["records"]["review_assignment"]["bar-first"]["packet"]))["prior_context"]))
         self.assertIn("material_version", objection)
         output = self.build_slate_output(["candidate-1"])
