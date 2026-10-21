@@ -541,8 +541,16 @@ branch recognizes that prompt as a previous prompt. No record was written.
 
 ### CI runs
 
-Pending: the pull request's CI matrix (Python 3.9, 3.12, 3.14; four general shards; Codex and
-math-solver jobs).
+The first run of PR #42 (commit `aee4338`) failed the "remaining checks" jobs on Python 3.12 and 3.14:
+`test_codex.TestCodexPackage.test_manifest_selects_codex_entrypoints_and_hooks` compared the Codex manifest
+version with the Claude manifest (`0.55.1 != 0.56.0`), and the two `TestCodexHooks` tests that build a
+managed objective failed with `review_context_unverified`, because the math-solver reviewer fixture
+(`skills/math-solver/harness/tests/native_reviewer_support.py`) parsed the labelled reviewer request as bare
+JSON and its probe never echoed the controls. Commit `109a484` bumps `.codex-plugin/plugin.json` to 0.56.0,
+updates the literal in the test, and strips the label in that fixture and in
+`tests/test_research_strategic_source_requests.py`; `test_codex`, `test_math_search_hooks` and
+`test_research_strategic_source_requests` pass together (59 tests). The full matrix on the final commit is
+recorded below when it completes.
 
 ### Live check of the Claude route
 
