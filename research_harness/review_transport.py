@@ -100,6 +100,9 @@ ELIDED_BODY_NOTE = ('This evidence body was delivered in this earlier turn of th
 HISTORY_COMPACT = 'earlier-bodies-and-history-packets-elided'
 HISTORY_PACKET_NOTE = ('This packet of an earlier turn was delivered in that turn of the same review session. It is '
                        'elided from the replayed history; the observed output of that turn is kept.')
+HISTORY_PACKET_LIMIT_NOTE = ('This packet of an earlier turn of this slot exceeds the reviewer route input limit together with '
+                             'the current packet. Its observed output and independence are kept here, and the record '
+                             'holds the packet at this digest.')
 HISTORY_BODY_NOTE = ('This evidence body was delivered in this earlier turn of the same review and is omitted from the '
                      'replay. The review is verified only when it calls no tool, so request its work with '
                      'source_requests if the review needs this text again.')
@@ -194,6 +197,13 @@ def _elide_packet_bodies(supplied):
     for sha256 in reversed(priority):
         if sha256 in entries and _elide_body(entries[sha256], 'body-elided-route-limit', ELIDED_TEXT_NOTE):
             yield 'text_delivery_priority:' + sha256
+    # The earlier packets of the slot's history, largest first, give way to a digest reference while the input is
+    # still too large; each turn keeps its observed output and its independence.
+    turns = [turn for turn in supplied.get('scientific_history', []) if isinstance(turn, dict) and isinstance(turn.get('packet'), dict)]
+    for turn in sorted(turns, key=lambda turn: -len(json.dumps(turn['packet'], sort_keys=True, ensure_ascii=False))):
+        turn['packet'] = {'delivery': 'packet-elided-route-limit', 'packet_digest': turn['packet'].get('digest'),
+                          'note': HISTORY_PACKET_LIMIT_NOTE}
+        yield 'scientific_history_packet:' + str(turn.get('assignment_id'))
 
 
 def _build_local_request(route, prompt, supplied, messages):
