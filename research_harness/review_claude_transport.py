@@ -48,7 +48,8 @@ def runtime():
     updates itself, and an update must not invalidate the reviews that an earlier version recorded."""
     return {'adapter': ADAPTER, 'flags': list(FLAGS), 'input_contract': INPUT_CONTRACT,
             'implementation_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-            'credential_mode': 'claude-subscription', 'output_limit': 'checked-after-generation',
+            'credential_mode': 'claude-subscription',
+            'output_limit': 'CLAUDE_CODE_MAX_OUTPUT_TOKENS=max_output_tokens, checked after generation',
             'wall_limit': 'owned-process-group-timeout'}
 
 
@@ -175,6 +176,9 @@ def send_request(route, request, credential=None):
     executable, version = _cli()
     environment = clean_environment(os.environ)
     config = route['configuration']
+    # The route's bound is the CLI's bound for the one turn: without it the CLI stops a long answer at its own default
+    # and continues in a second turn, which the inspection refuses as an injected input.
+    environment['CLAUDE_CODE_MAX_OUTPUT_TOKENS'] = str(config['max_output_tokens'])
     # A synthetic project instruction is reachable in the working directory but must stay out of the model's context.
     control = 'EXCLUDED_PROJECT_' + uuid.uuid4().hex
     message = json.dumps({'type': 'user', 'message': {'role': 'user', 'content': [{'type': 'text', 'text': text}]}},

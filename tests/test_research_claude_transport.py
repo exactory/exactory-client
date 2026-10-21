@@ -155,6 +155,8 @@ class ClaudeInvocationTests(unittest.TestCase):
         self.assertEqual(call['system_prompt'], request['instructions'])
         self.assertEqual(call['timeout'], 1800)
         self.assertNotIn('ANTHROPIC_API_KEY', call['environment'])
+        self.assertEqual(call['environment']['CLAUDE_CODE_MAX_OUTPUT_TOKENS'],
+                         str(ROUTE['configuration']['max_output_tokens']))
         self.assertEqual(call['files'], ['CLAUDE.md', 'system-prompt.txt'])
         line = json.loads(call['packet'])
         self.assertEqual(line['message']['content'][0]['text'], module().packet_text(request))

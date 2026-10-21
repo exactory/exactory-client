@@ -613,3 +613,14 @@ after the inspection accepted that event, `probe-route-claude-opus-3` and `probe
 verified both routes (`verified_for_route`). The context-repair result assignment
 `assignment-result-astra-repair` was then accepted on `route-claude-opus` (packet 3,425,560 bytes, template
 `exactory-problem-review-v2/result/context-repair`).
+
+### The output bound of the Claude route
+
+The first result review on `route-claude-opus` (effort `max`) ended `review_incomplete` after 1,891 s: input
+909,524 tokens, output 209,111 tokens, 1,457 events (1,449 `thinking_tokens` system events, 2 user events, 3
+assistant events, 1 result), issues `incomplete_turn` and `tool_or_injected_input`. The CLI had stopped the
+answer at its own default output limit and continued in a second turn with its own user message. The
+transport now passes `CLAUDE_CODE_MAX_OUTPUT_TOKENS` equal to the route's `max_output_tokens` to the child
+process; `test_the_command_isolates_the_reviewer_and_sends_one_replayed_message` asserts it (14 tests OK).
+The record continued on `route-claude-opus-2` and `route-claude-fable-2` (effort `high`, bound 64,000;
+probes verified).
