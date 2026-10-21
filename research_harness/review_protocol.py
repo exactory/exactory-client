@@ -504,7 +504,12 @@ def _project_scoped_result(records, artifacts, packet, report):
     return packet
 
 
-def canonical_prompt(role, *, legacy=False, repair=False, version=3, orchestration=None):
+def canonical_prompt(role, *, legacy=False, repair=False, version=3, orchestration=None, repair_prompt=None):
+    """The canonical prompt of a role. A previous version (version 1) keeps the context-repair suffix it was recorded
+    with; the current version uses the current suffix; repair_prompt names a suffix explicitly."""
+    if repair_prompt is None:
+        repair_prompt = context_repair.PROMPT if version != 1 else context_repair.PROMPT_0560
+    repair_suffix = repair_prompt
     if role not in ROLES:
         raise ResearchError('invalid_review_role', 'Unknown reviewer role')
     if orchestration == 'problem_creation' and role == 'adjudicator':
@@ -523,7 +528,7 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=3, orchestrati
         parameters = {'role': role, 'orchestration': orchestration}
         suffix = ''
         if repair:
-            prompt += context_repair.PROMPT
+            prompt += repair_suffix
             if role == 'bar':
                 prompt += ' For a final bar reassessment, objection_findings must cover every inherited material objection despite the ordinary empty-bar default.'
             parameters['context_repair'] = True
@@ -552,7 +557,7 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=3, orchestrati
     if repair:
         if role not in bar_sources.ROLES or legacy:
             raise ResearchError('invalid_review_context', 'Context reassessment uses a current strategic review phase')
-        prompt += context_repair.PROMPT + ' Source-request turns need no final reassessment; final output must include it. For a final bar reassessment, objection_findings must cover every inherited material objection despite the ordinary empty-bar default.'
+        prompt += repair_suffix + ' Source-request turns need no final reassessment; final output must include it. For a final bar reassessment, objection_findings must cover every inherited material objection despite the ordinary empty-bar default.'
         parameters['context_repair'] = True
         suffix = '/context-repair'
     if role in bar_sources.ROLES and version != 1:
@@ -1446,13 +1451,16 @@ def route_state(records, artifacts, route_id):
                                   'The packet can identify published work; no model-family independence is claimed.']}
 
 
-def previous_problem_result_prompt(repair=False):
-    """The version 2 result prompt of 0.55.0 and 0.55.1, as canonical_prompt rendered it."""
+def previous_problem_result_prompt(repair=False, repair_prompt=None):
+    """The version 2 result prompt of 0.55.0 and 0.55.1, as canonical_prompt rendered it, with the context-repair
+    suffix of that time unless repair_prompt names another."""
+    if repair_prompt is None:
+        repair_prompt = context_repair.PROMPT_0560
     prompt = _COMMON + _PROBLEM_PROMPTS['result'] + _PROBLEM_RESULT_RESPONSE_0551.replace('ROLE', 'result') + bar_sources.PROMPT
     parameters = {'role': 'result', 'orchestration': 'problem_creation'}
     suffix = ''
     if repair:
-        prompt += context_repair.PROMPT
+        prompt += repair_prompt
         parameters['context_repair'] = True
         suffix = '/context-repair'
     return {'template_id': _PROBLEM_PROTOCOL + '/result' + suffix, 'template_hash': digest(prompt),
@@ -1468,7 +1476,9 @@ def is_previous_prompt(assignment):
                 and assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair,
                                                              version=1, orchestration='problem_creation')):
             return True
-        if assignment['role'] == 'result' and assignment['prompt'] == previous_problem_result_prompt(repair):
+        if assignment['role'] == 'result' and assignment['prompt'] in (
+                [previous_problem_result_prompt(repair)]
+                + ([previous_problem_result_prompt(True, repair_prompt=context_repair.PROMPT_0560)] if repair else [])):
             return True
         if assignment['role'] != 'adjudicator':
             return False
@@ -1480,15 +1490,31 @@ def is_previous_prompt(assignment):
     return assignment['prompt'] in candidates
 
 
+def _uses_previous_repair_suffix(assignment):
+    """A context-repair assignment recorded with the suffix of 0.56.0 or earlier keeps its verified prompt. The
+    suffix does not make it a previous (version 1) prompt: its checks and rubric are those of its template."""
+    if assignment.get('reassessment_required') is not True:
+        return False
+    role, problem = assignment['role'], assignment.get('subject', {}).get('kind') == 'problem'
+    candidates = []
+    if problem and role in _PROBLEM_PROMPTS:
+        candidates.append(canonical_prompt(role, repair=True, orchestration='problem_creation',
+                                           repair_prompt=context_repair.PROMPT_0560))
+    elif role in bar_sources.ROLES:
+        candidates.append(canonical_prompt(role, repair=True, repair_prompt=context_repair.PROMPT_0560))
+    return assignment['prompt'] in candidates
+
+
 def _prompt_matches(assignment):
     repair = assignment.get('reassessment_required') is True
     if assignment.get('subject', {}).get('kind') == 'problem' and assignment['role'] in _PROBLEM_PROMPTS:
         return (assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair, orchestration='problem_creation')
-                or is_previous_prompt(assignment))
+                or is_previous_prompt(assignment) or _uses_previous_repair_suffix(assignment))
     if (assignment.get('subject', {}).get('kind') == 'problem' and assignment['role'] == 'adjudicator'
             and assignment['prompt'] == canonical_prompt('adjudicator', orchestration='problem_creation')):
         return True
-    if assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair) or is_previous_prompt(assignment):
+    if (assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair) or is_previous_prompt(assignment)
+            or _uses_previous_repair_suffix(assignment)):
         return True
     # Native assignments recorded before the openness finding keep their exact prompt.
     return assignment['role'] == 'native_math' and assignment['prompt'] == canonical_prompt('native_math', legacy=True)

@@ -15,11 +15,26 @@ from . import strategy
 ROLES = ('bar', 'slate', 'result')
 # The recorded events that end a reviewer context: a contamination of the context, or the retirement of its route.
 CAUSE_KINDS = ('contamination', 'route_retired')
-PROMPT = (
+# The suffix of 0.56.0 and earlier, kept so that assignments recorded with it stay verified: it said "Return an
+# additional reassessment object", which reviewers read as a second JSON object after the role's object.
+PROMPT_0560 = (
     ' This is an explicit reassessment after recorded context contamination, not a new blind review. '
     'The historical scientific inputs, observed assessments and unresolved objections remain evidence. '
     'Do not treat their former independence as currently qualified. Return an additional reassessment '
     'object {assignment_id,findings:[{review_id,disposition:confirmed|revised|unresolved,reason,evidence}]}. '
+    'Use the exact predecessor assignment_id from context_repair and cover every inherited final review '
+    'of this phase. A source-request turn may defer reassessment; the final phase output must include it. '
+    'A confirmed finding must retain its scientific support, value, objections and limitations. '
+    'Explain any revised or unresolved finding with exact supplied evidence. A changed judgment alone '
+    'does not dispose of a historical material objection; the ordinary objection procedure still applies.'
+)
+PROMPT = (
+    ' This is an explicit reassessment after recorded context contamination, not a new blind review. '
+    'The historical scientific inputs, observed assessments and unresolved objections remain evidence. '
+    'Do not treat their former independence as currently qualified. Your output is still the one JSON object of '
+    'this role; give it one more member, "reassessment": {assignment_id,findings:[{review_id,disposition:confirmed|'
+    'revised|unresolved,reason,evidence}]}, written inside that object before its closing brace, never as a second '
+    'object or after the first object is closed. '
     'Use the exact predecessor assignment_id from context_repair and cover every inherited final review '
     'of this phase. A source-request turn may defer reassessment; the final phase output must include it. '
     'A confirmed finding must retain its scientific support, value, objections and limitations. '
