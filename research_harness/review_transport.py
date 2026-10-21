@@ -49,6 +49,151 @@ def validate_route(route):
         raise ResearchError('invalid_review_route', 'timeout_seconds must be positive and at most 600')
 
 
+CODEX_INPUT_LIMIT_CHARS = 1048576
+PACKET_LABEL = 'The packet below is JSON.\n'
+ELIDED_TEXT_NOTE = ('The body of this full text is withheld because the reviewer route input limit does not admit '
+                    'it; the reading record of this work, with its notes and inspected excerpts, is delivered in full, '
+                    'and the artifact reference identifies the exact bytes.')
+ELIDED_BODY_NOTE = ('This evidence body was delivered in this earlier turn of the same review. It is elided from '
+                    'the replayed history so that the exchange fits the reviewer route input limit; request the '
+                    'artifact again by its reference if the review needs its text.')
+# Local repair (v19, T22): a packet whose history_delivery names this value replays its session's earlier turns
+# without long evidence bodies and without the packets of a scientific history; other packets replay unchanged.
+HISTORY_COMPACT = 'earlier-bodies-and-history-packets-elided'
+HISTORY_PACKET_NOTE = ('This packet of an earlier turn was delivered in that turn of the same review session. It is '
+                       'elided from the replayed history; the observed output of that turn is kept.')
+HISTORY_BODY_NOTE = ('This evidence body was delivered in this earlier turn of the same review and is omitted from the '
+                     'replay. The review is verified only when it calls no tool, so request its work with '
+                     'source_requests if the review needs this text again.')
+# Local repair (v19, T26): the second marker also drops, from each replayed turn, a part that the current packet
+# repeats unchanged. Packets with the first marker replay as before.
+HISTORY_COMPACT_V2 = 'earlier-bodies-history-packets-and-repeated-parts-elided'
+REPEATABLE_KEYS = ('bars', 'own_bars', 'material_objections', 'source_inventory', 'problem_evidence')
+REPEATED_PART_NOTE = 'This part of the earlier packet is repeated unchanged in the current packet.'
+DELIVERY_SUMMARY_NOTE = ('This source delivery of an earlier turn is summarized in the replay: its request and status are '
+                         'kept, and its evidence was delivered in that turn.')
+REPEATED_EVIDENCE_NOTE = ('This problem evidence was delivered in full in an earlier turn of this review session, and the '
+                          'replayed history carries that packet.')
+
+
+def _elide_history_bodies(message):
+    """Local repair (v19, T13): drop the bodies of evidence delivered in an earlier turn, stating it."""
+    content = message.get('content')
+    if message.get('role') != 'user' or not isinstance(content, str) or not content.startswith(PACKET_LABEL):
+        return message
+    replayed = json.loads(content[len(PACKET_LABEL):])
+    changed = False
+    for evidence in replayed.get('evidence', []):
+        if isinstance(evidence, dict) and isinstance(evidence.get('content'), str) and len(evidence['content']) > 4096:
+            evidence['content'] = ''
+            evidence['delivery'] = 'body-elided-from-replayed-history'
+            evidence['note'] = ELIDED_BODY_NOTE
+            changed = True
+    if not changed:
+        return message
+    return dict(message, content=PACKET_LABEL + json.dumps(replayed, sort_keys=True, ensure_ascii=False))
+
+
+def _elide_body(evidence, delivery, note):
+    if isinstance(evidence, dict) and isinstance(evidence.get('content'), str) and len(evidence['content']) > 4096:
+        evidence['content'] = ''
+        evidence['delivery'] = delivery
+        evidence['note'] = note
+        return True
+    return False
+
+
+def _compact_history_message(message, repeated=None):
+    """Local repair (v19, T22): an earlier user turn without its evidence bodies longer than 4096 characters and without
+    the packets of the scientific history that it carried."""
+    content = message.get('content')
+    if message.get('role') != 'user' or not isinstance(content, str) or not content.startswith(PACKET_LABEL):
+        return message
+    replayed = json.loads(content[len(PACKET_LABEL):])
+    changed = False
+    for evidence in replayed.get('evidence', []):
+        changed = _elide_body(evidence, 'body-elided-from-replayed-history', HISTORY_BODY_NOTE) or changed
+    for turn in replayed.get('scientific_history', []):
+        if isinstance(turn, dict) and isinstance(turn.get('packet'), dict):
+            turn['packet'] = {'delivery': 'packet-elided-from-replayed-history',
+                              'packet_digest': turn['packet'].get('digest'), 'note': HISTORY_PACKET_NOTE}
+            changed = True
+    for key, value in (repeated or {}).items():
+        if key in replayed and replayed[key] == value:
+            replayed[key] = {'delivery': 'repeated-in-the-current-packet', 'note': REPEATED_PART_NOTE}
+            changed = True
+    if repeated is not None:
+        # Local repair (v19, T26b): with the second marker a replayed source delivery keeps its request and status.
+        deliveries = replayed.get('source_deliveries')
+        if isinstance(deliveries, list) and deliveries:
+            replayed['source_deliveries'] = [
+                {'request': item.get('request'), 'status': item.get('status'),
+                 'delivery': 'summarized-in-replayed-history', 'note': DELIVERY_SUMMARY_NOTE}
+                if isinstance(item, dict) else item for item in deliveries]
+            changed = True
+    if not changed:
+        return message
+    return dict(message, content=PACKET_LABEL + json.dumps(replayed, sort_keys=True, ensure_ascii=False))
+
+
+def _elide_packet_bodies(supplied):
+    """Local repair (v19, T13b): two deterministic reductions of a packet that re-delivers earlier
+    turns' sources (a context-repair packet). Each is applied only while the input is too large."""
+    for turn in supplied.get('scientific_history', []):
+        for evidence in (turn.get('packet') or {}).get('evidence', []):
+            _elide_body(evidence, 'body-elided-from-replayed-history', ELIDED_BODY_NOTE)
+    yield 'scientific_history'
+    supplied_before = {entry.get('sha256') for entry in supplied.get('previously_supplied_evidence', []) if isinstance(entry, dict)}
+    for evidence in supplied.get('evidence', []):
+        if isinstance(evidence, dict) and (evidence.get('artifact') or {}).get('sha256') in supplied_before:
+            _elide_body(evidence, 'body-elided-previously-supplied', ELIDED_BODY_NOTE)
+    yield 'previously_supplied_evidence'
+    # Local repair (v19, T18): a native packet may declare the delivery priority of its full
+    # texts; bodies are elided from the lowest priority upwards, one per step.
+    priority = ((supplied.get('native') or {}).get('scientific_context') or {}).get('text_delivery_priority') or []
+    entries = {(evidence.get('artifact') or {}).get('sha256'): evidence
+               for evidence in supplied.get('evidence', []) if isinstance(evidence, dict)}
+    for sha256 in reversed(priority):
+        if sha256 in entries and _elide_body(entries[sha256], 'body-elided-route-limit', ELIDED_TEXT_NOTE):
+            yield 'text_delivery_priority:' + sha256
+
+
+def _fit_codex_input(route, prompt, supplied, history):
+    """Local repair (v19, T13 and T13b): elide re-delivered and replayed evidence bodies, until the input fits."""
+    from . import review_codex_transport
+
+    def build(messages):
+        content = PACKET_LABEL + json.dumps(supplied, sort_keys=True, ensure_ascii=False)
+        return {'model': route['model'], 'instructions': prompt,
+                'input': list(messages) + [{'role': 'user', 'content': content}],
+                'tools': [], 'store': False, 'max_output_tokens': route['configuration']['max_output_tokens'],
+                'text': {'format': {'type': 'json_object'}}}
+
+    def fits(request):
+        return len(review_codex_transport.packet_text(request)) <= CODEX_INPUT_LIMIT_CHARS
+
+    messages = list(history)
+    marker = supplied.get('history_delivery')
+    if marker in (HISTORY_COMPACT, HISTORY_COMPACT_V2):
+        repeated = ({key: supplied[key] for key in REPEATABLE_KEYS if key in supplied}
+                    if marker == HISTORY_COMPACT_V2 else None)
+        messages = [_compact_history_message(message, repeated) for message in messages]
+    request = build(messages)
+    reductions = _elide_packet_bodies(supplied)
+    while not fits(request):
+        if next(reductions, None) is None:
+            break
+        request = build(messages)
+    index = 0
+    while not fits(request) and index < len(messages):
+        messages[index] = _elide_history_bodies(messages[index])
+        request = build(messages)
+        index += 1
+    # Local repair (v19, T23): an input that no elision fits is sent as it stands. The Codex app-server refuses it and the
+    # refusal is recorded as a failed attempt, so the slot of the assignment can be reassigned with a deliverable packet.
+    return request
+
+
 def request_body(route, prompt, packet, history=()):
     """History contains only the same reviewer's verified, canonical bar exchange."""
     validate_route(route)
@@ -58,19 +203,34 @@ def request_body(route, prompt, packet, history=()):
         if not isinstance(evidence, dict) or evidence.get('encoding') != 'base64':
             continue
         reference = evidence['artifact']
+        if route['adapter'] == 'codex_cli_v1':
+            # Local repair (v19, T4b): the Codex route carries text only; the
+            # original bytes are withheld and the omission is stated in the packet.
+            evidence.pop('content')
+            evidence['encoding'] = 'omitted'
+            evidence['delivery'] = 'bytes-omitted-on-text-route'
+            evidence['note'] = ('The original bytes of this artifact are not delivered on the text-only reviewer '
+                                'route. When the harness captured an extraction of a full text, its text is a '
+                                'separate evidence entry.')
+            continue
         data = 'data:' + reference['media_type'] + ';base64,' + evidence.pop('content')
         if reference['media_type'] == 'application/pdf':
             files.append({'type': 'input_file', 'filename': reference['sha256'] + '.pdf', 'file_data': data})
         else:
             files.append({'type': 'input_image', 'image_url': data})
         evidence['delivery'] = 'attached-exact-bytes'
-    content = json.dumps(supplied, sort_keys=True, ensure_ascii=False)
+    # The Responses API refuses text.format json_object unless the input messages
+    # contain the word 'json'; the packet is labelled as JSON for that reason.
+    content = PACKET_LABEL + json.dumps(supplied, sort_keys=True, ensure_ascii=False)
     if files:
         content = [{'type': 'input_text', 'text': content}] + files
-    return {'model': route['model'], 'instructions': prompt,
-            'input': list(history) + [{'role': 'user', 'content': content}],
-            'tools': [], 'store': False, 'max_output_tokens': route['configuration']['max_output_tokens'],
-            'text': {'format': {'type': 'json_object'}}}
+    request = {'model': route['model'], 'instructions': prompt,
+               'input': list(history) + [{'role': 'user', 'content': content}],
+               'tools': [], 'store': False, 'max_output_tokens': route['configuration']['max_output_tokens'],
+               'text': {'format': {'type': 'json_object'}}}
+    if route['adapter'] == 'codex_cli_v1':
+        return _fit_codex_input(route, prompt, supplied, history)
+    return request
 
 
 def send_request(route, request, credential):

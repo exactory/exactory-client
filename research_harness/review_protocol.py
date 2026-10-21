@@ -9,6 +9,7 @@ independence without rewriting the original assessment.
 import base64
 import copy
 import json
+import os
 import uuid
 
 from .artifacts import ArtifactStore, describe_artifact
@@ -265,15 +266,22 @@ _PROBLEM_RESULT_SCHEMA['value'].update(
             'significance': dict.fromkeys(problem_rubric.GROUNDS, '0|1|2|3'), 'priority': '0|1|2|3',
             'attempt': 'pass|fail', 'accessibility': 'E-F|E-A|E-N', 'calibration': 'pass|fail'},
     rubric_evidence=dict.fromkeys(problem_rubric.ITEMS, 'Evidence and reasoning for this item.'))
+# Local repair (v19, T25): the result role cites a delivered record by kind and id, without copying its digest. The
+# reviewer reads this text; before a release it needs Fable authoring and an Astra review.
+_RESULT_RECORD_EXAMPLE = '{"kind":"record","record_kind":"<record kind>","id":"<record id>"}'
+_RESULT_REVIEW_GRAMMAR = _REVIEW_GRAMMAR.replace(
+    'cited as ' + _RECORD_EXAMPLE + ' with record_kind, id and digest copied from the delivery',
+    'cited as ' + _RESULT_RECORD_EXAMPLE + ' by copying the cite object delivered with it, or with record_kind and id '
+    'copied from the delivery, and without a digest, which the harness binds to the version that the packet delivered')
 _PROBLEM_RESULT_EXAMPLE = (
     '{"stage":"result","support":null,"value":{"status":"sufficient","consequence":"...","bar_ids":["<bar id 1>","<bar id 2>"],'
     '"objective_adequacy":"not_assessed","method_adequacy":"not_assessed","reason":"...",'
-    '"evidence":[' + _RECORD_EXAMPLE + '],"work_items":[],'
-    '"assurances":[{"kind":"problem_statement","status":"passed","reason":"...","evidence":[' + _RECORD_EXAMPLE + ']},'
-    '{"kind":"problem_openness","status":"passed","reason":"...","evidence":[' + _RECORD_EXAMPLE + ']},'
-    '{"kind":"problem_value","status":"passed","reason":"...","evidence":[' + _LINK_EXAMPLE + ']},'
-    '{"kind":"problem_citations","status":"passed","reason":"...","evidence":[' + _LINK_EXAMPLE + ']},'
-    '{"kind":"stop","status":"not_assessed","reason":"Nothing in the record requires a stop.","evidence":[' + _RECORD_EXAMPLE + ']}],'
+    '"evidence":[' + _RESULT_RECORD_EXAMPLE + '],"work_items":[],'
+    '"assurances":[{"kind":"problem_statement","status":"passed","reason":"...","evidence":[' + _RESULT_RECORD_EXAMPLE + ']},'
+    '{"kind":"problem_openness","status":"passed","reason":"...","evidence":[' + _RESULT_RECORD_EXAMPLE + ']},'
+    '{"kind":"problem_value","status":"passed","reason":"...","evidence":[' + _RESULT_RECORD_EXAMPLE + ']},'
+    '{"kind":"problem_citations","status":"passed","reason":"...","evidence":[' + _RESULT_RECORD_EXAMPLE + ']},'
+    '{"kind":"stop","status":"not_assessed","reason":"Nothing in the record requires a stop.","evidence":[' + _RESULT_RECORD_EXAMPLE + ']}],'
     '"objection_findings":[],"rubric":{"admission":{"A1":"pass","A2":"pass","A3":"pass","A4":"pass","A5":"pass","A6":"pass"},'
     '"significance":{"B1":2,"B2":1},"priority":2,"attempt":"pass","accessibility":"E-F","calibration":"pass"},'
     '"rubric_evidence":{"A1":"...","A2":"...","A3":"...","A4":"...","A5":"...","A6":"...","B1":"...","B2":"...",'
@@ -287,7 +295,9 @@ _PROBLEM_RESULT_RESPONSE = (
     'nonempty text for exactly A1, A2, A3, A4, A5, A6, B1, B2, priority, attempt, accessibility and '
     'calibration, naming the delivered evidence for each grade. Name the findings and the exact supplied '
     'evidence in reason and evidence. Every prior material objection requires an objection_findings entry '
-    '{id,status:resolved|continuing|contested,reason,evidence}. ' + _REVIEW_GRAMMAR +
+    '{id,status:resolved|continuing|contested,reason,evidence}. objections lists only the material objections that you '
+    'raise yourself, each under a new id; a prior material objection receives its finding in objection_findings and is '
+    'not restated in objections. ' + _RESULT_REVIEW_GRAMMAR +
     'A valid final response, with the placeholders replaced by the delivered values: ' + _PROBLEM_RESULT_EXAMPLE + '.')
 _PROBLEM_SLATE_SCHEMA = copy.deepcopy(_RESPONSE_SCHEMA)
 _PROBLEM_SLATE_SCHEMA['value']['rubric_potential'] = {
@@ -391,6 +401,14 @@ def _evidence(artifacts, value, *, transitive=False):
             continue
         data = artifacts.read(reference)
         binary = reference['media_type'] == 'application/pdf' or reference['media_type'].startswith('image/')
+        if binary and os.environ.get('EXACTORY_REVIEW_TEXT_ONLY_DELIVERY') == '1':
+            # Local repair (v19, T4b): a text-only reviewer route receives no original
+            # bytes; the omission is explicit in the packet the reviewer reads.
+            included[reference['sha256']] = {'artifact': reference, 'content': '', 'encoding': 'omitted',
+                'delivery': 'bytes-omitted-on-text-route',
+                'note': 'The original bytes of this artifact are not delivered on the text-only reviewer route. '
+                        'When the harness captured an extraction of a full text, its text is a separate evidence entry.'}
+            continue
         if binary:
             content, encoding = base64.b64encode(data).decode('ascii'), 'base64'
         else:
@@ -649,13 +667,16 @@ def add_problem_candidates(records, packet):
 def add_problem_evidence(records, artifacts, packet):
     """Bind a result or source supplement to the exact delivered problem evidence."""
     from .problem_claims import describe_problem_evidence, compute_problem_evidence_digest
-    from .direction_sources import build_reading_passages
+    from .direction_sources import build_inline_passages
     packet['problem_evidence'] = describe_problem_evidence(records, artifacts)
     readings = [records['reading'][item['id']] for item in packet['problem_evidence']['readings']]
-    for passage, data in build_reading_passages(records, artifacts, readings):
-        if artifacts.put(data, passage['excerpt']['media_type']) != passage['excerpt']:
+    for passage, data in build_inline_passages(records, artifacts, readings):
+        if data is not None and artifacts.put(data, passage['excerpt']['media_type']) != passage['excerpt']:
             raise ResearchError('artifact_corrupt', 'Problem reading passages retain their exact content-addressed identity')
     packet['problem_evidence_digest'] = compute_problem_evidence_digest(records, artifacts)
+    # Local repair (v19, T22): a packet that carries problem evidence replays the earlier turns of its session without
+    # their long evidence bodies and without the packets of a scientific history (review_transport).
+    packet['history_delivery'] = transport.HISTORY_COMPACT_V2
 
 
 def describe_direction_evidence(records, artifacts, direction, dossier):
@@ -755,7 +776,7 @@ def _list_packet_records(packet):
     for objection in supplied_evidence.list_delivered_objections(packet):
         for entry in objection.get('version_evidence', []):
             if entry.get('kind') == 'record':
-                yield entry['record_kind'], entry['id'], entry['digest'], entry['record'], entry['artifacts']
+                yield entry['record_kind'], entry['id'], entry.get('digest'), entry['record'], entry['artifacts']
 
 
 def _list_projected_records(packet):
@@ -803,11 +824,19 @@ def collect_carried_records(records, artifacts, assignment_id):
 def find_carried_record(records, carried, reference):
     """The (projection, artifacts) that carried rows hold for a record reference at its digest, or None. The stored
     record is read only for its digest, where a projection exposes none."""
-    stored = records.get(reference['record_kind'], {}).get(reference['id'])
+    # Local repair (v19, T25b): a record kind written with hyphens names the underscore kind when only that one exists.
+    def canonical(kind):
+        return kind.replace('-', '_') if records.get(kind) is None and records.get(kind.replace('-', '_')) is not None else kind
+    record_kind = canonical(reference['record_kind'])
+    stored = records.get(record_kind, {}).get(reference['id'])
     stored_digest = None if stored is None else digest(stored)
+    # Local repair (v19, T25): a reference without a digest names the stored record, which a packet must have carried.
+    wanted = reference.get('digest', stored_digest)
+    if wanted is None:
+        return None
     return next(((projection, supplied) for kind, identifier, recorded_digest, projection, supplied in carried
-                 if kind == reference['record_kind'] and identifier in (None, reference['id'])
-                 and (recorded_digest or stored_digest) == reference['digest']), None)
+                 if canonical(kind) == record_kind and identifier in (None, reference['id'])
+                 and (recorded_digest or stored_digest) == wanted), None)
 
 
 def describe_version_evidence(records, artifacts, version):
@@ -1002,7 +1031,11 @@ def describe_objection_delivery(records, artifacts, version):
     mappings = [{key: value for key, value in mapping.items() if key != 'citation'}
                 if mapping['origin']['locator']['kind'] == 'json' else mapping
                 for mapping in delivery['version_source_mappings']]
-    return {'version_evidence': delivery['version_evidence'], 'version_source_mappings': mappings}
+    # Local repair (v19, T22): an artifact that the stating review received in full is named here by reference, as a
+    # full text is in the problem evidence; the reviewer requests its work with source_requests. A record keeps its delivery.
+    evidence = [_reference_templates(entry) if 'sha256' in entry and 'kind' not in entry else entry
+                for entry in delivery['version_evidence']]
+    return {'version_evidence': evidence, 'version_source_mappings': mappings}
 
 
 def deliver_historical_review(records, artifacts, review):
@@ -1050,7 +1083,15 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
             if problem and role == 'result':
                 bars = add_problem_bars(records, artifacts, packet, reviewer_id, slot=context_repair.slot_id(records, prior))
                 require_calibrated_bars(records, bars)
-                add_problem_evidence(records, artifacts, packet)
+                from .problem_claims import compute_problem_evidence_digest
+                if not refreshed and previous.get('problem_evidence_digest') == compute_problem_evidence_digest(records, artifacts):
+                    # Local repair (v19, T26): a source-request turn continues a session whose earlier packet delivered this
+                    # exact problem evidence. The replayed history carries it, so this packet names it instead of repeating it.
+                    packet['problem_evidence'] = {'delivery': 'delivered-in-an-earlier-turn', 'note': transport.REPEATED_EVIDENCE_NOTE}
+                    packet['problem_evidence_digest'] = previous['problem_evidence_digest']
+                    packet['history_delivery'] = transport.HISTORY_COMPACT_V2
+                else:
+                    add_problem_evidence(records, artifacts, packet)
                 add_problem_objections(records, artifacts, packet, bars)
                 packet['problem_review_currency'] = compute_problem_review_currency(records, artifacts)
                 if refreshed:
@@ -1497,6 +1538,17 @@ def _find_problem_refresh_parent(records, artifacts, value):
     return prior['id'] if _is_problem_refresh(records, artifacts, prior, _read_json(artifacts, prior['packet'])) else None
 
 
+REFUSED_OUTPUT_SOURCE = 'review_output_refused'
+
+
+def _has_refused_output(records, assignment_id):
+    """Whether a recorded observation names the completed output of the assignment as refused by the review recording,
+    while no review of the assignment is recorded (local repair v19, T24)."""
+    return (any(event['assignment_id'] == assignment_id and event['kind'] == 'observation'
+                and event['source'] == REFUSED_OUTPUT_SOURCE for event in records.get('review_context_event', {}).values())
+            and not any(review['assignment_id'] == assignment_id for review in records.get('value_review', {}).values()))
+
+
 def _initial_slot(records, value):
     slots = {}
     for prior in records.get('review_assignment', {}).values():
@@ -1510,7 +1562,9 @@ def _initial_slot(records, value):
             attempts = [a for a in records.get('review_attempt', {}).values() if a['assignment_id'] == prior['id']]
             pending = any(a['assignment_id'] == prior['id'] and a['id'] not in records.get('review_attempt', {})
                           for a in records.get('review_invocation', {}).values())
-            if pending or not attempts or any(a['status'] not in ('failed', 'incomplete') for a in attempts):
+            # Local repair (v19, T24): an assignment whose completed output the recording refused counts as failed.
+            refused = _has_refused_output(records, prior['id'])
+            if pending or not attempts or (not refused and any(a['status'] not in ('failed', 'incomplete') for a in attempts)):
                 failed_only = False
         if failed_only:
             replaceable.append((min(p['recorded_revision'] for p in members), identifier))
@@ -1678,13 +1732,24 @@ def validate_assignment_inventories(records, artifacts, assignment_id):
             bar_sources.validate_inventory(artifacts, packet['source_inventory'])
 
 
+def _context_observed(artifacts, attempt):
+    """Local repair (v19, T15): a completed attempt whose transport inspection found the context
+    compromised at run time (foreign or tool input) is not an observed review of the assignment."""
+    try:
+        evidence = _read_json(artifacts, attempt['response']).get('context_evidence', {})
+    except (ResearchError, ValueError, TypeError, KeyError):
+        return True
+    return not (evidence.get('inspected') is True and evidence.get('input_verified') is False)
+
+
 def invoke_assignment(store, payload, *, expected_revision, request_id, credential=None):
     artifacts = ArtifactStore(store.root)
     def start(records, value):
         fields(value, ('id', 'assignment_id'))
         assignment = _get(records, 'review_assignment', value['assignment_id'])
         completed = [a for a in records.get('review_attempt', {}).values()
-                     if a['assignment_id'] == value['assignment_id'] and a['status'] == 'completed']
+                     if a['assignment_id'] == value['assignment_id'] and a['status'] == 'completed'
+                     and _context_observed(artifacts, a)]
         if completed:
             raise ResearchError('review_resampling_forbidden', 'A completed review cannot be replaced by another sampled output')
         context_repair.require_current_slot(records, assignment)
@@ -1755,23 +1820,26 @@ def assignment_state(records, artifacts, assignment_id):
     attempts = sorted((a for a in records.get('review_attempt', {}).values() if a['assignment_id'] == assignment_id),
                       key=lambda a: a['recorded_revision'])
     completed = [a for a in attempts if a['status'] == 'completed']
+    observed = [a for a in completed if _context_observed(artifacts, a)]
     if completed:
-        attempt = completed[0]
+        attempt = (observed or completed)[0]
         state['attempt_id'] = attempt['id']
         try:
             state['output'] = _read_json(artifacts, attempt['output'])
             state['output_digest'] = digest(state['output'])
             request = _read_json(artifacts, attempt['request']) if attempt.get('request') else None
             packet = _read_json(artifacts, assignment['packet'])
-            valid = (attempt.get('origin') == 'instrumented' and request is not None
+            provenance_valid = (attempt.get('origin') == 'instrumented' and request is not None
                      and attempt.get('runtime') == transport.runtime(route)
                      and attempt.get('route_digest') == digest(route)
                      and request == transport.request_body(route, assignment['prompt']['text'], packet, assignment.get('history', ()))
                      and attempt.get('packet_digest') == assignment['packet_digest']
                      and attempt.get('prompt_hash') == assignment['prompt_hash']
-                     and transport.response_output(_read_json(artifacts, attempt['response'])) == state['output']
-                     and transport.context_verified(route, request, _read_json(artifacts, attempt['response'])))
-            if not valid:
+                     and transport.response_output(_read_json(artifacts, attempt['response'])) == state['output'])
+            context_valid = provenance_valid and transport.context_verified(route, request, _read_json(artifacts, attempt['response']))
+            # Local repair (v19, T16): a recorded contamination event names the defect of an attempt
+            # whose provenance is otherwise exact; the context-repair path then takes over the slot.
+            if not context_valid and not (provenance_valid and events):
                 state['obligations'].append(obligation('review_invocation_unverified', 'Imported or mismatched invocation provenance cannot approve.'))
         except (ResearchError, ValueError, TypeError, KeyError):
             state['obligations'].append(obligation('review_output_unavailable', 'Verify the exact packet, request, and output artifact bytes.'))

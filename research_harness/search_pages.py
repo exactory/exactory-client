@@ -18,7 +18,9 @@ from .providers import Arxiv, Crossref, OpenAlex
 # filter such as cites:W123 is a query, so a citing-works capture binds it directly.
 QUERY_PARAMETER_NAMES = {"arxiv": frozenset({"search_query"}),
                          "crossref": frozenset({"query", "query.bibliographic", "query.author"}),
-                         "openalex": frozenset({"search", "filter"})}
+                         "openalex": frozenset({"search", "filter"}),
+                         # Local repair (v19, T19): zbMATH's API names its query parameter search_string.
+                         "web": frozenset({"q", "query", "search", "search_query", "search_string"})}
 # The URL parameters that page through the results of one native request.
 PAGINATION_PARAMETER_NAMES = {"arxiv": frozenset({"start", "max_results"}),
                               "crossref": frozenset({"offset", "rows", "cursor"}),

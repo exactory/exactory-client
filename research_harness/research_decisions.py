@@ -46,7 +46,7 @@ def _response(payload):
     return {key: value for key, value in payload.items() if key not in ("id", "dossier_id", "assignment_id")}
 
 
-def _validate_checks(records, artifacts, values, expected):
+def _validate_checks(records, artifacts, values, expected, *, review_binding=False):
     checks = strategy.items(values, "Independent decision assurances")
     seen = set()
     for check in checks:
@@ -55,7 +55,7 @@ def _validate_checks(records, artifacts, values, expected):
         strategy.choice(check["kind"], PROBLEM_CHECKS if problem else ALL_CHECKS, "Independent assurance", "invalid_value_review")
         strategy.choice(check["status"], ("passed", "failed", "not_assessed") if problem else ("passed", "failed", "unresolved"), "Assurance status", "invalid_value_review")
         text(check["reason"], "Independent assurance reasoning")
-        strategy.evidence(records, artifacts, check["evidence"])
+        strategy.evidence(records, artifacts, check["evidence"], review_binding=review_binding)
         if check["kind"] in seen:
             raise ResearchError("invalid_value_review", "Assess each independent assurance once")
         seen.add(check["kind"])
@@ -101,7 +101,7 @@ def _validate_value(records, artifacts, value, stage, dossier, historical=(), *,
     for key in ("objective_adequacy", "method_adequacy"):
         strategy.choice(value[key], ("adequate", "inadequate", "unresolved", "not_assessed"), key, "invalid_value_review")
     strings(value["bar_ids"], "Independently recorded bar reviews")
-    strategy.evidence(records, artifacts, value["evidence"])
+    strategy.evidence(records, artifacts, value["evidence"], review_binding=problem is not None)
     if stage == "bar":
         if value["bar_ids"] or any(value[key] != "not_assessed" for key in ("objective_adequacy", "method_adequacy")):
             raise ResearchError("invalid_value_review", "The initial bar cannot assess the withheld author proposal")
@@ -121,7 +121,7 @@ def _validate_value(records, artifacts, value, stage, dossier, historical=(), *,
             bar_dossier = strategy.get_record(records, "strategy_dossier", bar["dossier_id"])
             if bar["payload"]["stage"] != "bar" or bar_dossier["payload"]["intent_id"] != dossier["payload"]["intent_id"]:
                 raise ResearchError("review_bar_mismatch", "Use bar findings for the current actual intent")
-    _validate_checks(records, artifacts, value["assurances"], expected)
+    _validate_checks(records, artifacts, value["assurances"], expected, review_binding=problem is not None)
     if potential_required:
         _validate_slate_potential(value, slate_packet)
     work_ids = set()
@@ -131,7 +131,7 @@ def _validate_value(records, artifacts, value, stage, dossier, historical=(), *,
         strategy.choice(finding["classification"], strategy.CLASSIFICATIONS, "Independent obligation class", "invalid_value_review")
         strategy.choice(finding["status"], ("accepted", "rejected", "unresolved"), "Work finding", "invalid_value_review")
         text(finding["reason"], "Work-item reasoning")
-        strategy.evidence(records, artifacts, finding["evidence"])
+        strategy.evidence(records, artifacts, finding["evidence"], review_binding=problem is not None)
         if finding["id"] in work_ids:
             raise ResearchError("invalid_value_review", "Assess each work item once")
         work_ids.add(finding["id"])
@@ -143,7 +143,7 @@ def _validate_value(records, artifacts, value, stage, dossier, historical=(), *,
         text(finding["id"], "Prior objection ID")
         strategy.choice(finding["status"], ("resolved", "continuing", "contested"), "Prior objection status", "invalid_value_review")
         text(finding["reason"], "Prior objection reasoning")
-        strategy.evidence(records, artifacts, finding["evidence"])
+        strategy.evidence(records, artifacts, finding["evidence"], review_binding=problem is not None)
         if finding["id"] in prior_ids:
             raise ResearchError("invalid_value_review", "Assess each prior objection once")
         prior_ids.add(finding["id"])
@@ -244,7 +244,7 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                    (("candidate_ids",) if slate_candidate_ids is not None else ()), code="invalid_value_review")
             for key in ("id", "claim", "reason", "resolution_condition"):
                 text(objection[key], "Material objection " + key)
-            strategy.evidence(records, artifacts, objection["evidence"])
+            strategy.evidence(records, artifacts, objection["evidence"], review_binding=problem is not None)
             if slate_candidate_ids is not None:
                 strings(objection["candidate_ids"], "Candidates of a slate objection", code="invalid_value_review")
                 if not set(objection["candidate_ids"]) <= slate_candidate_ids:
@@ -550,7 +550,8 @@ def _assess_problem_coverage(records, artifacts, reviews, expected, evidence_dig
         missing = [key for key in ('claim', 'openness', 'openness_searches', 'value', 'assessment', 'assessment_evidence', 'attempt', 'results', 'citations', 'readings', 'computations', 'formal_checks')
                    if not any(key in packet_evidence and packet_evidence[key] == expected[key] for packet_evidence in current_evidence)]
         delivered = find_delivered_readings(records, evaluation, readings,
-            [dict(packet, direction_evidence=packet_evidence) for packet, packet_evidence in zip(current, current_evidence)])
+            [dict(packet, direction_evidence=packet_evidence) for packet, packet_evidence in zip(current, current_evidence)],
+            whole_text=False)
         missing_readings = sorted(reading['id'] for reading in readings if reading['id'] not in delivered)
         assessment_artifacts = [reference for reference in expected['assessment_evidence'] if 'kind' not in reference]
         assessment_artifacts.extend(reference['record']['artifact'] for reference in expected['assessment_evidence']
@@ -845,7 +846,7 @@ def _objection_obligations(records, artifacts, dossier, decision, reviews, *, pr
             if resolved and dossier.get("kind") == "problem":
                 for finding in findings:
                     try:
-                        strategy.evidence(records, artifacts, finding[item["id"]]["evidence"])
+                        strategy.evidence(records, artifacts, finding[item["id"]]["evidence"], review_binding=True)
                     except ResearchError as error:
                         resolved = False
                         obligations.append(obligation(error.code, str(error), objection_id=item["id"]))
