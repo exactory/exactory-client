@@ -1,9 +1,5 @@
 """Bind observed native proof reviews and their delivered bytes to openness."""
 
-import base64
-import binascii
-import hashlib
-
 from .errors import ResearchError
 from .evidence import digest
 from .native_review import load_packet, require_assignment_identity
@@ -119,6 +115,7 @@ def required_evidence(artifacts, packet, native):
 
 def actual_delivery(records, artifacts, state, packet, required):
     """Inspect the authenticated current request, including its exact binary attachments."""
+    from .review_input_projection import collect_attachments, find_attachment
     from .review_transport import PACKET_LABEL
     attempt = records["review_attempt"][state["attempt_id"]]
     request = strict_json(artifacts.read(attempt["request"]))
@@ -126,18 +123,11 @@ def actual_delivery(records, artifacts, state, packet, required):
     require(isinstance(messages, list) and bool(messages) and messages[-1].get("role") == "user",
             "The observed request must deliver its current packet", UNDELIVERED)
     content = messages[-1].get("content")
-    attachments = []
+    attachments = {}
     if isinstance(content, list):
         texts = [part["text"] for part in content if part.get("type") == "input_text"]
         require(len(texts) == 1, "The observed request must identify one current packet", UNDELIVERED)
-        for part in content:
-            data = part.get("file_data") if part.get("type") == "input_file" else part.get("image_url")
-            if isinstance(data, str) and data.startswith("data:") and ";base64," in data:
-                media_type, encoded = data[5:].split(";base64,", 1)
-                try:
-                    attachments.append((media_type, base64.b64decode(encoded, validate=True)))
-                except (ValueError, binascii.Error) as error:
-                    raise ResearchError(UNDELIVERED, "The observed attachment is not exact base64 content") from error
+        attachments = collect_attachments(content)
         content = texts[0]
     require(isinstance(content, str) and content.startswith(PACKET_LABEL),
             "The observed request must identify its supplied packet", UNDELIVERED)
@@ -155,7 +145,6 @@ def actual_delivery(records, artifacts, state, packet, required):
                 "The actual request must retain the exact source representation contract", UNDELIVERED)
     entries = {row["digest"]: row for row in packet["evidence"]}
     supplied_entries = supplied.get("evidence", [])
-    attached = {(media_type, hashlib.sha256(data).hexdigest()) for media_type, data in attachments}
     for identity in required:
         require(identity in entries, "The openness packet must retain every scientific dependency", MISSING, digest=identity)
         reference = entries[identity]["artifact"]
@@ -164,7 +153,7 @@ def actual_delivery(records, artifacts, state, packet, required):
                       and row.get("artifact", {}).get("sha256") == identity]
         delivered = any(row.get("encoding") == "utf-8" and isinstance(row.get("content"), str)
                         and row["content"].encode("utf-8") == expected for row in candidates)
-        delivered = delivered or ((reference["media_type"], identity) in attached and bool(candidates))
+        delivered = delivered or (find_attachment(attachments, reference) is not None and bool(candidates))
         require(delivered, "Required scientific bytes were omitted or changed in the actual observed request",
                 UNDELIVERED, digest=identity)
     return supplied

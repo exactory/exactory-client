@@ -37,6 +37,25 @@ class ActualInputProjectionTests(unittest.TestCase):
         self.assertEqual(packets[0]['evidence'][0]['content'], self.encoded)
         self.assertEqual(request, before)
 
+    def test_an_earlier_turn_reduced_to_its_packet_digest_delivers_nothing_and_the_current_packet_stays(self):
+        earlier = transport._elide_history_packet(self.message(dict(self.packet, digest='2' * 64)))
+        request = {'input': [earlier, {'role': 'assistant', 'content': '{"value": "earlier"}'}, self.message()]}
+        packets = packets_from_request(request)
+        self.assertEqual([packet['digest'] for packet in packets], [self.packet['digest']])
+
+    def test_a_pdf_captured_as_generic_binary_is_matched_by_its_attached_pdf_bytes(self):
+        packet = copy.deepcopy(self.packet)
+        packet['evidence'][0]['artifact'] = dict(self.reference, media_type='application/octet-stream')
+        projected = packets_from_request(self.request(packet=packet), native_attachments=True)
+        self.assertEqual(projected[0]['evidence'][0]['content'], self.encoded)
+        # Bytes without the PDF signature are not a PDF, whatever the attachment declares.
+        data = b'Plain bytes declared as a PDF'
+        packet['evidence'][0]['artifact'] = describe_artifact(data, 'application/octet-stream')
+        file = {'type': 'input_file', 'filename': 'x.pdf',
+                'file_data': 'data:application/pdf;base64,' + base64.b64encode(data).decode()}
+        projected = packets_from_request(self.request(file=file, packet=packet), native_attachments=True)
+        self.assertNotIn('content', projected[0]['evidence'][0])
+
     def test_inline_base64_prose_is_not_native_file_delivery(self):
         packet = copy.deepcopy(self.packet)
         packet['evidence'][0]['content'] = self.encoded

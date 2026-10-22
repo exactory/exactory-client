@@ -112,26 +112,19 @@ def validate_request(artifacts, frozen, request):
     """Check the frozen contract against exact model input, including actual inline file/image attachments."""
     if MARKER not in frozen:
         return
-    import base64
-    import hashlib
     import json
+    from .review_input_projection import collect_attachments, find_attachment
     from .review_transport import logical_messages, PACKET_LABEL
     try:
         message = logical_messages(request)[-1]
         content = message['content']
-        attachments = []
+        attachments = {}
         if isinstance(content, list):
             texts = [part['text'] for part in content if part.get('type') == 'input_text'
                      and isinstance(part.get('text'), str) and part['text'].startswith(PACKET_LABEL)]
             if len(texts) != 1:
                 _incomplete({'reason': 'The actual input has no unique focused packet.'})
-            for part in content:
-                uri = part.get('file_data') if part.get('type') == 'input_file' else (
-                    part.get('image_url') if part.get('type') == 'input_image' else None)
-                if isinstance(uri, str) and uri.startswith('data:') and ';base64,' in uri:
-                    header, encoded = uri.split(';base64,', 1)
-                    data = base64.b64decode(encoded, validate=True)
-                    attachments.append((header[5:], hashlib.sha256(data).hexdigest(), len(data), encoded))
+            attachments = collect_attachments(content)
             content = texts[0]
         if message.get('role') != 'user' or not isinstance(content, str) or not content.startswith(PACKET_LABEL):
             _incomplete({'reason': 'The actual focused input is not an inspected packet.'})
@@ -151,10 +144,9 @@ def validate_request(artifacts, frozen, request):
             entry.pop('content', None)
             if entry.get('encoding') != 'base64' or entry.get('delivery') != 'attached-exact-bytes':
                 continue
-            matched = [encoded for media, sha256, size, encoded in attachments
-                       if (media, sha256, size) == (reference['media_type'], reference['sha256'], reference['size'])]
-            if matched:
-                entry['content'] = matched[0]
+            matched = find_attachment(attachments, reference)
+            if matched is not None:
+                entry['content'] = matched
         validate(artifacts, actual)
     except (KeyError, IndexError, TypeError, ValueError) as error:
         _incomplete({'reason': 'The actual focused packet or its binary attachments are malformed.'})

@@ -9,8 +9,8 @@ from .errors import ResearchError
 from .workspace import strict_json
 
 
-def _attachments(parts):
-    """Index only actual inline native file and image inputs by exact media and bytes."""
+def collect_attachments(parts):
+    """Index only actual inline native file and image inputs by the size and SHA-256 of their bytes."""
     attached = {}
     for part in parts:
         if not isinstance(part, dict):
@@ -26,8 +26,19 @@ def _attachments(parts):
             data = base64.b64decode(encoded, validate=True)
         except (binascii.Error, ValueError):
             continue
-        attached[(media, len(data), hashlib.sha256(data).hexdigest())] = encoded
+        attached[(len(data), hashlib.sha256(data).hexdigest())] = (media, encoded, data)
     return attached
+
+
+def find_attachment(attached, reference):
+    """The base64 body of an actual attachment of exactly the descriptor's bytes, attached as the media type that
+    request construction attaches for the descriptor: a PDF reported as generic binary is attached as a PDF."""
+    from .fulltext import detect_media_type
+    found = attached.get((reference.get('size'), reference.get('sha256')))
+    if found is None:
+        return None
+    media, encoded, data = found
+    return encoded if media == detect_media_type(data, reference.get('media_type'))[0] else None
 
 
 def _require_problem_packet(packet):
@@ -80,22 +91,25 @@ def packets_from_request(request, *, native_attachments=False):
         if not isinstance(content, str) or not content.startswith(transport.PACKET_LABEL):
             continue
         packet = strict_json(content[len(transport.PACKET_LABEL):].encode('utf-8'))
+        if set(packet) == {'delivery', 'packet_digest', 'history_delivery', 'note'} and packet['delivery'] == 'packet-elided-route-limit':
+            # An earlier turn that the route limit reduced to its packet digest delivers nothing at this position.
+            continue
         _require_problem_packet(packet)
         # A native compaction marker delivers no content at this position.
         # Only an actual later packet can supply the omitted part.
         repeated = {'delivery': 'repeated-in-the-current-packet', 'note': transport.REPEATED_PART_NOTE}
         packet = {key: value for key, value in packet.items() if value != repeated}
-        attached = _attachments(parts) if native_attachments else {}
+        attached = collect_attachments(parts) if native_attachments else {}
         for entry in packet.get('evidence', []):
             if not isinstance(entry, dict) or not isinstance(entry.get('artifact'), dict):
                 raise ResearchError('review_input_unreadable', 'Evidence entries require native artifact descriptors')
             reference = entry['artifact']
             if entry.get('encoding') != 'base64' and not _binary(reference):
                 continue
-            key = (reference.get('media_type'), reference.get('size'), reference.get('sha256'))
             entry.pop('content', None)
-            if entry.get('delivery') == 'attached-exact-bytes' and key in attached:
-                entry.update(content=attached[key], encoding='base64')
+            content = find_attachment(attached, reference) if entry.get('delivery') == 'attached-exact-bytes' else None
+            if content is not None:
+                entry.update(content=content, encoding='base64')
             else:
                 entry['encoding'] = 'omitted'
                 entry['delivery'] = 'bytes-absent-from-actual-native-input'
