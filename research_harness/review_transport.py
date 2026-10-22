@@ -250,8 +250,9 @@ def _reduce_previously_supplied(fit):
     """The bodies that an earlier turn of the session supplied, in one step."""
     supplied_before = {entry.get('sha256') for entry in fit.supplied.get('previously_supplied_evidence', [])
                        if isinstance(entry, dict)}
+    kept = fit.protected | fit.requested()
     for evidence in _list_evidence(fit.supplied):
-        if _sha256(evidence) in supplied_before and _sha256(evidence) not in fit.protected:
+        if _sha256(evidence) in supplied_before and _sha256(evidence) not in kept:
             _elide_body(evidence, 'body-elided-previously-supplied', ELIDED_BODY_NOTE)
     yield
 
@@ -261,8 +262,9 @@ def _reduce_text_priority(fit):
     priority upwards, one per step."""
     priority = ((fit.supplied.get('native') or {}).get('scientific_context') or {}).get('text_delivery_priority') or []
     entries = {_sha256(evidence): evidence for evidence in _list_evidence(fit.supplied)}
+    kept = fit.protected | fit.requested()
     for sha256 in reversed(priority):
-        if (sha256 not in fit.protected and sha256 in entries
+        if (sha256 not in kept and sha256 in entries
                 and _elide_body(entries[sha256], 'body-elided-route-limit', ELIDED_TEXT_NOTE)):
             yield
 
@@ -272,7 +274,7 @@ def _reduce_search_responses(fit):
     problem evidence delivers each search record with its queries, coverage and result dispositions. The response
     bodies give way, largest first, one per step."""
     searches = (fit.supplied.get('problem_evidence') or {}).get('openness_searches') or []
-    responses = {source['response']['sha256'] for search in searches for source in search['sources']} - fit.protected
+    responses = {source['response']['sha256'] for search in searches for source in search['sources']} - fit.protected - fit.requested()
     bodies = [evidence for evidence in _list_evidence(fit.supplied) if _sha256(evidence) in responses]
     for evidence in sorted(bodies, key=lambda evidence: -len(evidence.get('content') or '')):
         if _elide_body(evidence, 'body-elided-route-limit', ELIDED_SEARCH_RESPONSE_NOTE):
@@ -421,8 +423,9 @@ _REDUCTIONS = {'history_bodies': _reduce_history_bodies, 'history_packets': _red
 
 class _Fit:
     """The state of one local input fit: the packet and the replayed messages that the reductions change, and the
-    bodies that no reduction may elide. Under FIT_ORDER the last two steps also keep the protected bodies and the
-    bodies of the sources that this turn delivers, which a source request asked for."""
+    bodies that no reduction may elide. Under FIT_ORDER every reduction of the current evidence also keeps the bodies
+    of the sources that this turn delivers on request, except that an HTML original is withheld when its complete
+    extraction is delivered and whole sources can be deferred as pending."""
 
     def __init__(self, supplied, messages, order):
         from .problem_openness_sources import protected_evidence
@@ -430,13 +433,16 @@ class _Fit:
         self.protected = set(protected_evidence(supplied))
         self.keeps_requested_sources = order == FIT_ORDER
 
-    def kept(self):
+    def requested(self):
+        """Under FIT_ORDER, the bodies of the sources that this turn delivers on request."""
         if not self.keeps_requested_sources:
             return set()
         from .review_source_capacity import _references
-        return self.protected | {sha256 for delivery in self.supplied.get('source_deliveries', [])
-                                 if delivery.get('status') == 'delivered'
-                                 for sha256 in _references(delivery.get('evidence', []))}
+        return {sha256 for delivery in self.supplied.get('source_deliveries', []) if delivery.get('status') == 'delivered'
+                for sha256 in _references(delivery.get('evidence', []))}
+
+    def kept(self):
+        return self.protected | self.requested() if self.keeps_requested_sources else set()
 
 
 def _fit_local_input(route, prompt, supplied, history, limit, measure, order=FIT_ORDER):

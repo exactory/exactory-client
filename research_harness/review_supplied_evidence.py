@@ -48,21 +48,36 @@ def list_delivered_objections(packet):
         for objection in entry.get('payload', entry).get('objections', [])]
 
 
-def collect_qualified_objections(value):
-    """Yield every objection that the harness delivered in a packet under a qualified identity, wherever it sits: the
-    material objections, the versions in their history, the records of their version evidence, the bars, own bars and
-    historical reviews, and the same parts of the earlier packets that a scientific history carries. A qualified
-    objection has the text fields id, stated_id and claim. The walk skips the observed outputs of a scientific history,
-    which are the reviewers' own text, and the objection_identities maps of stored reviews, whose keys are stated ids."""
-    if isinstance(value, dict):
-        if all(isinstance(value.get(key), str) for key in ('id', 'stated_id', 'claim')):
-            yield value
-        for key, item in value.items():
-            if key not in ('observed_output', 'objection_identities'):
-                yield from collect_qualified_objections(item)
-    elif isinstance(value, list):
-        for item in value:
-            yield from collect_qualified_objections(item)
+def _list_review_objections(review):
+    """The objections of a delivered review: a stored record, its payload, or a first packet's wrapper of either."""
+    review = review.get('review', review) if isinstance(review, dict) else {}
+    objections = review.get('payload', review).get('objections', []) if isinstance(review.get('payload', review), dict) else []
+    return objections if isinstance(objections, list) else []
+
+
+def collect_qualified_objections(packet):
+    """Yield every objection that the harness delivered in a packet under a qualified identity: in its material
+    objections, the versions in their history and the reviews that their version evidence projects, in its bars, own
+    bars, historical reviews and historical bars, and in the packets that its scientific history carries. Only these
+    objection lists are read: other delivered content and the observed outputs of a scientific history can hold an
+    object of any shape. A qualified objection has the text fields id, stated_id and claim."""
+    if not isinstance(packet, dict):
+        return
+    objections = []
+    for objection in packet.get('material_objections', []):
+        if isinstance(objection, dict):
+            objections += [objection, *objection.get('history', [])]
+            objections += [item for entry in objection.get('version_evidence', [])
+                           if isinstance(entry, dict) and entry.get('kind') == 'record'
+                           for item in _list_review_objections(entry.get('record'))]
+    for key in ('bars', 'own_bars', 'historical_reviews', 'historical_bars'):
+        objections += [item for review in packet.get(key, []) for item in _list_review_objections(review)]
+    for objection in objections:
+        if isinstance(objection, dict) and all(isinstance(objection.get(key), str) for key in ('id', 'stated_id', 'claim')):
+            yield objection
+    for turn in packet.get('scientific_history', []):
+        if isinstance(turn, dict):
+            yield from collect_qualified_objections(turn.get('packet'))
 
 
 def supplied_context(records, artifacts, assignment_ids, *, frozen=False):

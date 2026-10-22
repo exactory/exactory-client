@@ -1915,7 +1915,9 @@ Read-only file references and command-like prose are not write authorization.
 The hook skips a shell token as a path when one of its slash-separated
 components is longer than 255 bytes, since such a token names no file; free text
 of that length, such as a long `task add` text with a slash, is not probed. A
-shorter token with a slash is still probed as a path.
+shorter token with a slash remains a candidate path, subject to the hook's other
+filters for options, interpreter code or module arguments, and newline or NUL
+characters.
 The hooks read a record with the controller of their own plugin. When that
 controller cannot replay the record's log, the denial names the controller and
 says that a record written by another exactory-math, such as a newer release or a

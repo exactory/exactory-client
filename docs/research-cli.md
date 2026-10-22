@@ -138,8 +138,10 @@ input fits:
     stay pending as `deferred_capacity` for the same reviewer;
 11. any other evidence body of a problem packet, largest first.
 
-The reductions of steps 9 and 11 keep every protected body and every source
-that the turn delivers on request. Each withheld body names its delivery and a note. A
+Steps 4 to 6, 9 and 11 keep every protected body and every source that the turn
+delivers on request. A requested source loses a body only in step 3, where its
+HTML original is withheld while its complete extraction is delivered, and in
+step 10, where a whole source is deferred as pending. Each withheld body names its delivery and a note. A
 request that still does not fit is sent as it stands, and the route's refusal
 is recorded. The orders of the two records' local runtimes, of 0.56.1 and
 0.57.0, and of 0.56.0 still rebuild the requests that they recorded, so those

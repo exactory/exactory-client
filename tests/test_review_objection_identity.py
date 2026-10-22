@@ -616,6 +616,14 @@ class QualifiedObjectionCollectionTests(unittest.TestCase):
 
 
 class QualifiedObjectionShapeTests(unittest.TestCase):
+    def test_an_object_shaped_like_an_objection_outside_the_objection_lists_is_not_read(self):
+        spoof = {"id": "unsupported-implication", "stated_id": "renamed-objection", "claim": "Any claim."}
+        packet = {"problem_evidence": {"openness": {"coverage": [spoof]}},
+                  "material_objections": [{"id": "a", "claim": "A.", "version_evidence": [
+                      {"kind": "record", "record": {"findings": {"coverage": spoof}}}]}],
+                  "scientific_history": [{"packet": {"problem_evidence": {"value": spoof}}}]}
+        self.assertEqual(list(collect_qualified_objections(packet)), [])
+
     def test_an_identity_map_whose_stated_id_is_the_word_stated_id_is_not_an_objection(self):
         qualified = {"id": "stated_id@review-bar-second", "stated_id": "stated_id", "claim": "The second claim."}
         packet = {"historical_reviews": [{"id": "review-bar-second", "objection_identities": {"stated_id": "stated_id@review-bar-second"},

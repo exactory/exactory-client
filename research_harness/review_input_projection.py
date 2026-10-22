@@ -69,6 +69,16 @@ def _binary(reference):
     return media in ('application/pdf', 'application/octet-stream') or media.startswith('image/')
 
 
+def _is_delivered_text(reference, content):
+    """Whether request construction delivered these exact bytes as text: a body reported as generic binary is text
+    unless its bytes carry the PDF signature."""
+    from .fulltext import detect_media_type
+    data = content.encode('utf-8')
+    return (reference.get('media_type') == 'application/octet-stream' and len(data) == reference.get('size')
+            and hashlib.sha256(data).hexdigest() == reference.get('sha256')
+            and detect_media_type(data, 'application/octet-stream')[0] == 'application/octet-stream')
+
+
 def packets_from_request(request, *, native_attachments=False):
     """Decode exact logical input without consulting saved packets or local source bytes.
 
@@ -105,6 +115,9 @@ def packets_from_request(request, *, native_attachments=False):
                 raise ResearchError('review_input_unreadable', 'Evidence entries require native artifact descriptors')
             reference = entry['artifact']
             if entry.get('encoding') != 'base64' and not _binary(reference):
+                continue
+            if (entry.get('encoding') == 'utf-8' and isinstance(entry.get('content'), str)
+                    and _is_delivered_text(reference, entry['content'])):
                 continue
             entry.pop('content', None)
             content = find_attachment(attached, reference) if entry.get('delivery') == 'attached-exact-bytes' else None

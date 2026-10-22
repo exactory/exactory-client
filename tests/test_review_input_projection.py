@@ -56,6 +56,14 @@ class ActualInputProjectionTests(unittest.TestCase):
         projected = packets_from_request(self.request(file=file, packet=packet), native_attachments=True)
         self.assertNotIn('content', projected[0]['evidence'][0])
 
+    def test_utf8_text_declared_as_generic_binary_is_delivered_text(self):
+        data = b'{"result": 7}'
+        packet = copy.deepcopy(self.packet)
+        packet['evidence'] = [{'artifact': describe_artifact(data, 'application/octet-stream'), 'encoding': 'utf-8',
+                               'content': data.decode()}]
+        projected = packets_from_request({'input': [self.message(packet)]}, native_attachments=True)
+        self.assertEqual(projected[0]['evidence'][0]['content'], data.decode())
+
     def test_inline_base64_prose_is_not_native_file_delivery(self):
         packet = copy.deepcopy(self.packet)
         packet['evidence'][0]['content'] = self.encoded

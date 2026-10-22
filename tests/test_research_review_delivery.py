@@ -234,6 +234,26 @@ class ProblemSearchResponseElisionTests(unittest.TestCase):
                 self.assertLessEqual(len(measure(request)), limit)
 
 
+class RequestedSourceFitTests(unittest.TestCase):
+    """Under the current fit order a source that the turn delivers on request keeps its body, even when an earlier
+    turn also supplied it; whole requested sources are only deferred, as pending."""
+
+    def test_a_requested_source_that_an_earlier_turn_supplied_keeps_its_body(self):
+        from research_harness import review_claude_transport
+        limit = review_claude_transport.INPUT_LIMIT_CHARACTERS
+        requested, other = artifact('aa'), artifact('bb')
+        packet = {'id': 'now', 'problem_evidence': {}, 'previously_supplied_evidence': [requested],
+                  'source_deliveries': [{'request': {'kind': 'source', 'version_id': 'arxiv:1', 'depth': 'fulltext'},
+                                         'status': 'delivered', 'evidence': [requested]}],
+                  'evidence': [{'artifact': requested, 'content': 'a' * int(limit * 0.6), 'encoding': 'utf-8'},
+                               {'artifact': other, 'content': 'b' * int(limit * 0.6), 'encoding': 'utf-8'}]}
+        request = transport.request_body(CLAUDE, 'Review.', packet)
+        delivered = {entry['artifact']['sha256'][:2]: entry for entry in packet_of(request['input'][-1])['evidence']}
+        self.assertEqual(delivered['aa']['content'], 'a' * int(limit * 0.6))
+        self.assertEqual(delivered['bb']['delivery'], 'body-elided-route-limit')
+        self.assertLessEqual(len(review_claude_transport.packet_text(request)), limit)
+
+
 class ProblemFullTextElisionTests(unittest.TestCase):
     """A problem packet delivers each full reading as its record, notes and inspected passages; the full text of a work
     that the packet cites through a source link can give way at the route limit."""
