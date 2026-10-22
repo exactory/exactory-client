@@ -188,7 +188,7 @@ class ProblemReviewTests(LiteratureCase):
             dict(output, id="review-bar-first", dossier_id=None, assignment_id="bar-first"))["result"]
         self.assertEqual(saved["payload"]["value"]["evidence"], output["value"]["evidence"])
 
-    def test_problem_result_template_is_version_three_and_other_prompts_unchanged(self):
+    def test_problem_result_template_is_version_four_and_other_prompts_unchanged(self):
         hashes = {"bar": "88b53e388fa267f8aa5f72da297b28ebdab5ac6e020f81b4be6c2b756d30f3ca",
             "slate": "38fed1d12ce4376f4144d3dd6c57e2e9475db73a30b7a86c8471f00c84588312",
             "result": "236703cb1f256d93b60cfa4c82ea7e2eb76fcd7a66c9984542767c675e4e32bc"}
@@ -199,7 +199,7 @@ class ProblemReviewTests(LiteratureCase):
         for role in ("bar", "result", "adjudicator"):
             prompt = protocol.canonical_prompt(role, orchestration="problem_creation")
             self.assertEqual(prompt["template_id"],
-                             ("exactory-problem-review-v3/" if role == "result" else "exactory-problem-review-v2/") + role)
+                             ("exactory-problem-review-v4/" if role == "result" else "exactory-problem-review-v2/") + role)
         self.assertIn("nearest known problems", protocol.canonical_prompt("bar", orchestration="problem_creation")["text"])
         result = protocol.canonical_prompt("result", orchestration="problem_creation")["text"]
         for kind in CHECKS + ITEMS + ('value.rubric', 'value.rubric_evidence', 'max(B1, B2) at least 2',
@@ -241,8 +241,11 @@ class ProblemReviewTests(LiteratureCase):
         version_two = {"bar": "e402dcf92926adac0a536d702e93a6e0d33c317f8ec5ff9440028731f695703b",
                        "result": "dbe0052d524fce3b04fd975777f3c19d163e5e13bb6e56fc50943d547782fc93",
                        "adjudicator": "80a3eeb2a0cd65f1edf434c74a245b68cc8bb33a2edffffcdadbd562a35dd346"}
+        # The adjudicator prompt of version 2 before the not_binding disposition keeps its bytes.
+        before = {"adjudicator_prompt": protocol._PROBLEM_ADJUDICATOR_PROMPT_BEFORE_NOT_BINDING}
         for role, expected in version_two.items():
-            self.assertEqual(protocol.canonical_prompt(role, version=2, orchestration="problem_creation")["template_hash"], expected)
+            self.assertEqual(protocol.canonical_prompt(role, version=2, orchestration="problem_creation",
+                                                       **(before if role == "adjudicator" else {}))["template_hash"], expected)
         slate = protocol.canonical_prompt("slate", orchestration="problem_creation")
         self.assertEqual(slate["template_id"], "exactory-problem-review-v2/slate")
         for content in ("value.rubric_potential", "not_assessed", "B1", "B2", "priority", "level 1",
@@ -268,18 +271,19 @@ class ProblemReviewTests(LiteratureCase):
         self.assertIn('Return an additional reassessment', review_context_repair.PROMPT_0560)
         self.assertIn('written inside that object', review_context_repair.PROMPT_0561_NIGHT)
         self.assertEqual(review_context_repair.EARLIER_PROMPTS,
-                         (review_context_repair.PROMPT_0560, review_context_repair.PROMPT_0561_NIGHT))
+                         (review_context_repair.PROMPT_0560, review_context_repair.PROMPT_0561_NIGHT,
+                          review_context_repair.PROMPT_RETAIN_RULE, review_context_repair.PROMPT_EXACT_COPY_RULE))
         for role in ("bar", "slate", "result"):
             current = protocol.canonical_prompt(role, repair=True, orchestration="problem_creation")
             for suffix in review_context_repair.EARLIER_PROMPTS:
                 earlier = protocol.canonical_prompt(role, repair=True, orchestration="problem_creation", repair_prompt=suffix)
-                self.assertEqual((current["template_id"], earlier["template_id"]),
-                                 ("exactory-problem-review-v2/" + role + "/context-repair",) * 2)
+                template = ("exactory-problem-review-v4/" if role == "result" else "exactory-problem-review-v2/") + role
+                self.assertEqual((current["template_id"], earlier["template_id"]), (template + "/context-repair",) * 2)
                 self.assertNotEqual(current["template_hash"], earlier["template_hash"])
                 recorded = {"role": role, "subject": {"kind": "problem", "statement_id": None},
                             "reassessment_required": True, "prompt": earlier}
                 # An earlier suffix keeps the prompt verified; it does not make the assignment a version 1 prompt, so
-                # its checks, rubric and bar calibration are those of the version 2 template.
+                # its checks, rubric and bar calibration are those of its template.
                 self.assertFalse(protocol.is_previous_prompt(recorded))
                 self.assertTrue(protocol._prompt_matches(recorded))
                 self.assertFalse(protocol._prompt_matches(dict(recorded, reassessment_required=False)))
@@ -900,18 +904,23 @@ class ProblemOpennessReviewTests(ProblemCase):
             saved = self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})["result"]
         self.assertEqual(saved["outcome"], "unresolved")
 
+    def assert_openness_refused_at_run(self):
+        """A finding bound to another statement than its packet is refused when the run completes."""
+        refusal = self.store.snapshot()["records"]["review_output_refusal"]["openness-attempt"]
+        self.assertEqual((refusal["code"], refusal["check"]), ("invalid_native_review", "native.output"))
+        self.assert_error("review_context_unverified", lambda: self.mutate(self.load_problem_module().record_openness,
+            {"assignment_id": "openness-assignment"}))
+
     def test_observed_finding_for_a_different_statement_is_refused(self):
         self.observe_openness(change_output=lambda output: output["findings"]["openness"].update(statement_digest="0" * 64))
-        self.assert_error("openness_statement_mismatch", lambda: self.mutate(self.load_problem_module().record_openness,
-            {"assignment_id": "openness-assignment"}))
+        self.assert_openness_refused_at_run()
 
     def test_unresolved_output_cannot_rebind_an_old_packet_to_a_new_statement(self):
         def change(output):
             revised = self.select_statement(identifier="statement-2", statement="A different exact proposition.")
             output["findings"]["openness"]["statement_digest"] = self.load_problem_module().compute_statement_digest(revised)
         self.observe_openness("unresolved", change_output=change)
-        self.assert_error("openness_statement_mismatch", lambda: self.mutate(self.load_problem_module().record_openness,
-            {"assignment_id": "openness-assignment"}))
+        self.assert_openness_refused_at_run()
 
     def test_real_problem_evidence_is_observed_and_assessed_without_artifact_writes(self):
         self.observe_openness()

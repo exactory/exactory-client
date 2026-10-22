@@ -185,7 +185,10 @@ class NativeOpennessReviewTests(ProblemCase):
         self.corrupt_observation("proof-review")
         self.assert_error("openness_native_review_unverified", self.export)
         self.observe_support("bad-schema", change_output=lambda output: output["findings"]["openness"].update(coverage={"bad": "object"}))
-        self.assert_error("openness_native_review_mismatch", lambda: self.export(support="bad-schema"))
+        # The run refuses an output outside the native schema at once, so the support is not an observed approval.
+        refusals = self.store.snapshot()["records"]["review_output_refusal"]
+        self.assertEqual([row["check"] for row in refusals.values() if row["assignment_id"] == "bad-schema"], ["native.output"])
+        self.assert_error("openness_native_review_unverified", lambda: self.export(support="bad-schema"))
 
     def test_missing_proof_from_observed_packet_cannot_be_supplied_as_status(self):
         self.observe_support("missing-proof", change_packet=lambda p: p.update(evidence=[self.evidence(self.manifest_ref, "blob")]))

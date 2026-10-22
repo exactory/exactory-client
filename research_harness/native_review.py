@@ -229,7 +229,9 @@ def _validate_openness(openness, claim_digest):
                  "openness.searched_at must be YYYY-MM-DD")
     except ValueError as error:
         raise ResearchError("invalid_native_review", "openness.searched_at must be YYYY-MM-DD") from error
-    _require("minimum" not in openness or isinstance(openness["minimum"], dict), "openness.minimum must be the supplied record")
+    if "minimum" in openness:
+        from .openness_minimum import validate_minimum
+        validate_minimum(openness["minimum"])
 
 
 def validate_output(packet, output):
