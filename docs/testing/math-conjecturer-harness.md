@@ -730,3 +730,23 @@ round 4 RELEASE with none. The texts that an agent reads at `max` through the Co
 round 2 RELEASE with two minor findings, round 3 RELEASE with none. Every finding was fixed in the commits after
 `5011adb`; the record of the exactory repository
 (`misc/harness-improvement/20261022002458-release-0-58-0-of-local-repairs/`) holds the prompts and the answers.
+
+## Release 0.58.1
+
+0.58.1 repairs the actual-request coverage of a problem result in a bar slot that a context repair continued after the
+statement was recorded (`misc/harness-improvement/20261022095233-coverage-rejects-repaired-bar-history` of the exactory
+repository). Branch `release/0.58.1` from main `72113cc` (0.58.0).
+
+### RED and GREEN evidence
+
+| Test | On main 72113cc | On the branch |
+| --- | --- | --- |
+| `test_a_result_in_a_bar_slot_repaired_after_the_statement_keeps_its_actual_input` | FAIL: `collect_actual_input_packets` returned `[]` for the result in the repaired slot | OK |
+| `test_bound_ancestry_holds_a_bar_packet_to_the_field_and_a_result_packet_to_its_statement` | FAIL: the check refused the bar packet that names no statement | OK |
+| `test_lab.TestProbeLifecycle.test_lost_worker_cleans_up_descendants_when_the_script_exits` | FAIL once in pull request run 39793175846 of 0.58.0: the owner lock was still held when the descendant was gone | OK: waits until the process group has no live member |
+
+The whole module passes on the branch (12 tests, Python 3.9.6), and so do nine review modules near the change (209
+tests). With read-only commands on the Sidorenko girth-six store (revision 432), all 37 completed review attempts
+authenticate. `next` keeps only the bodies that the route withheld at the text limit for each result review (11 and 20
+captured search responses); 0.58.0 had also listed every part of the problem evidence for the result in the repaired
+slot.
