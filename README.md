@@ -35,6 +35,12 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.58.0](docs/releases/0.58.0.md) ships the repairs that two problem records made in local runtimes
+on 2026-10-21 and 2026-10-22: a fixed order of input reductions on local routes, whole-source batches, two new Codex
+routes for framed and visual evidence, the version 4 result prompt, distinct identities for colliding objections,
+the `not_binding` adjudication, the native strategy obstruction milestone and standalone results, and repairs of the
+math hook and `exactory-lab probe`. It reads the records that those runtimes wrote.
+
 Version [0.57.0](docs/releases/0.57.0.md) sends a problem statement in two parts. The text above the one line
 that holds only `---` is the statement, which the problem page shows in a box. The text below that line is the
 details, which the page shows under the box.
