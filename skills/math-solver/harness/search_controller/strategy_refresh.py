@@ -78,7 +78,7 @@ def inventory(state):
 
 def context(state):
     from .proof import obligation_support
-    return {"objective_id": state["objective_id"], "contract_digest": state["contract_digest"],
+    result = {"objective_id": state["objective_id"], "contract_digest": state["contract_digest"],
             "evidence": evidence(state), "strategies": inventory(state),
             "planning_priorities": {
                 key: copy.deepcopy(state["control"][key]) for key in
@@ -87,6 +87,10 @@ def context(state):
                                                  for rid, route in state["routes"].items()}},
             "remaining_obligation_ids": sorted(oid for oid in state["obligations"]
                                                if obligation_support(state, oid) is None)}
+    interval = state["control"]["side_interval"]
+    if interval is not None and "instruction" in interval:
+        result["planning_priorities"]["side_interval"] = copy.deepcopy(interval)
+    return result
 
 
 def assessment_status(state):
@@ -94,7 +98,7 @@ def assessment_status(state):
     records = state["control"]["strategy_refresh"]["assessments"]
     latest = records[-1] if records else None
     digest = s.digest(current)
-    required = bool(current["evidence"] or latest) and (
+    required = bool(current["evidence"] or latest or "side_interval" in current["planning_priorities"]) and (
         latest is None or latest["assessment"]["context_digest"] != digest)
     return {"context_digest": digest, "required": required,
             "policy_enabled": state["control"]["strategy_refresh"]["enabled"],

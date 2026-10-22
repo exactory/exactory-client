@@ -79,7 +79,7 @@ class Controller:
             return describe_context(self, state) if name == "strategy-context" else effective_next_action(self, state)
         s.integer(expected_revision)
         s.text(request_id)
-        if name not in {"admit", "accept", "retreat", "checkpoint", "begin", "run", "amend-computation", "amend-foundation", "interpret"}:
+        if name not in {"admit", "accept", "retreat", "checkpoint", "begin", "run", "side-interval", "amend-computation", "amend-foundation", "interpret"}:
             s.require(target is None, "This command has no positional target")
         elif name != "checkpoint":
             s.text(target)
@@ -198,7 +198,7 @@ class Controller:
                 payload = {"bindings": bindings}
                 record_probe_origins(state, payload)
                 emit("probe_origins_recorded", payload)
-        if name in {"begin", "reassess"} and not state["control"]["strategy_refresh"]["enabled"]:
+        if name in {"begin", "reassess", "side-interval"} and not state["control"]["strategy_refresh"]["enabled"]:
             from .strategy_refresh_io import policy_payload
             from .strategy_refresh import enable_policy
             activation = policy_payload(self, state, content)
@@ -357,6 +357,10 @@ class Controller:
             if effect is not None:
                 effects.append(effect)
             emit("proposal_admitted", {"proposal_id": target})
+        elif name == "side-interval":
+            s.closed(spec, "max_moves message_id instruction provenance")
+            s.text(spec["instruction"])
+            emit("control_recorded", dict(spec, action="side_interval", node_id=target))
         elif name in {"pause", "resume", "focus", "hook-stop"}:
             s.require("action" not in spec, "Control action is selected by the command")
             if name == "hook-stop":

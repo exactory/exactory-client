@@ -154,6 +154,7 @@ def validate_checkpoint_criterion(value):
     fields = {
         "accepted_obligation": "obligation_id",
         "accepted_case_set": "obligation_id case_ids",
+        "accepted_standalone_claim": "",
         "verified_reduction": "obligation_id",
         "verified_obstruction": "route_id",
         "verified_strategy_obstruction": "obligation_id",

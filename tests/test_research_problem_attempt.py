@@ -358,6 +358,7 @@ class ProblemAttemptTests(ProblemCase):
             "cite": {"kind": "record", "record_kind": "problem_attempt", "id": "attempt-1"},
             "record_references": [{"kind": "record",
                 "record_kind": "native_attempt", "id": native_id, "digest": digest(records["native_attempt"][native_id])}],
+            "cite": {"kind": "record", "record_kind": "problem_attempt", "id": "attempt-1"},
             "kind": "solver", "outcomes": payload["outcomes"], "proportion": payload["proportion"],
             "state": native["state"], "totals": native["totals"], "literature": None,
             "applicability": payload["solver"]["applicability"],

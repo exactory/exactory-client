@@ -40,10 +40,13 @@ def record_checkpoint(state, payload):
         s.digest_string(origin["journal_prefix_digest"])
         s.require(cp["milestone_id"] in {x["criterion_id"] for x in node["checkpoint_criteria"]}, "Checkpoint must name a declared milestone")
         criterion = next(x for x in node["checkpoint_criteria"] if x["criterion_id"] == cp["milestone_id"])
+        if criterion["kind"] == "accepted_standalone_claim":
+            s.require(node["category"] == "standalone", "Own-claim proof milestones require standalone admission")
         expected = (state["obligations"][criterion["obligation_id"]]["claim"]
                     if "obligation_id" in criterion else node["claim"])
         s.require(s.claim_identity(cp["claim"]) == s.claim_identity(expected), "Checkpoint claim differs from its producer's admitted milestone")
         permitted = {"accepted_obligation": {"proof"}, "accepted_case_set": {"proof"},
+                     "accepted_standalone_claim": {"proof"},
                      "verified_reduction": {"reduction"}, "verified_obstruction": {"obstruction"},
                      "verified_strategy_obstruction": {"obstruction"}, "hypothesis_recorded": {"hypothesis"}}
         s.require(cp["kind"] in permitted[criterion["kind"]], "Checkpoint kind differs from its declared milestone")
@@ -211,6 +214,11 @@ def accept_result(state, payload):
     s.choice(value["classification"], {"analytical", "computational"})
     s.choice(value["standard"], s.POLICIES)
     oid = value["obligation_id"]
+    if cp["origin"]["kind"] == "journal_move":
+        producer = state["nodes"][cp["origin"]["node_id"]]
+        criterion = next(x for x in producer["checkpoint_criteria"] if x["criterion_id"] == cp["milestone_id"])
+        if criterion["kind"] == "accepted_standalone_claim":
+            s.require(oid is None, "Standalone claim acceptance requires a null target")
     if oid is not None:
         claim = reference(state["obligations"], oid, "obligation")["claim"]
     else:
@@ -433,6 +441,9 @@ def checkpoint_milestone(state, checkpoint_id):
     for aid, value in state["acceptances"].items():
         if value["checkpoint_id"] != checkpoint_id or acceptance_closure(state, aid, node["claim"]["proof_policy"]) is None:
             continue
+        if (kind == "accepted_standalone_claim" and node["category"] == "standalone"
+                and value["outcome"] == "proof" and value["obligation_id"] is None):
+            return True
         if kind == "accepted_obligation" and value["outcome"] == "proof" and value["obligation_id"] == criterion["obligation_id"]:
             return True
         if kind == "accepted_case_set" and value["outcome"] == "proof" and value["obligation_id"] == criterion["obligation_id"]:

@@ -66,7 +66,7 @@ MINIMUM_PROMPT = OPENNESS_PROMPT.replace(
     'unresolved. '
 )
 
-PROMPT = MINIMUM_PROMPT.replace(
+RESOLUTIONS_PROMPT = MINIMUM_PROMPT.replace(
     '{schema_version:1,statement,neighbours,searches:[{formulation,search_digest}],reading_digests,settling_work_id}. ',
     '{schema_version:1,statement,neighbours,searches:[{formulation,search_digest}],reading_digests,settling_work_id}, '
     'optionally with duplicate_resolutions:[{search_digest,work_id,canonical_work_id}]. '
@@ -74,6 +74,33 @@ PROMPT = MINIMUM_PROMPT.replace(
     'An out_of_scope resolution removes the uncertain hit\'s reading obligation; duplicate_resolutions '
     'transfers it to the named relevant or contradictory canonical source in that resolving search. '
     'The canonical source needs a complete fulltext reading; a duplicate without that binding remains a gap. '
+)
+
+STRATEGY_PROMPT = RESOLUTIONS_PROMPT + (
+    "The result review type is also used for policy and strategy subjects; identify the actual subject before judging it. "
+    "A native.subject containing context_digest, assessments, plan_bindings, strategy_order, next_hypotheses and "
+    "remaining_obligation_ids is a StrategyAssessment. Its subject_digest binds that assessment, while claim_digest "
+    "identifies the original objective claim whose unresolved obligations must be preserved. "
+    "For this subject, judge whether the proposed dispositions follow from the supplied current context, studies, "
+    "retained failures, plan bindings and next hypotheses. Check that each continuing strategy is justified, "
+    "that a failed method has concrete changed inputs before reuse, and that the proposed execution order and "
+    "success and failure criteria can advance the remaining obligations within the recorded resource rules. "
+    "A justified StrategyAssessment may be approved while the original theorem and openness remain unresolved. "
+    "Such approval does not accept a proof, establish openness, renew a budget or close an obligation. "
+    "Do not demand a proof of the original theorem as a prerequisite for approving a justified research step. "
+    "Use the same required result findings to explain the assessment's statement, assumptions, scope, dependencies "
+    "and policy; give the openness finding supported by the delivered evidence, using unresolved when necessary. "
+    "This distinction does not relax any proof checkpoint, computation, acceptance or root-closure requirement. "
+)
+
+# Codex normalizes outer whitespace when loading its instruction file. Keep the
+# prior prompt exact for historical records; fresh prompts must survive that load.
+TRIMMED_STRATEGY_PROMPT = STRATEGY_PROMPT.rstrip()
+PROMPT = TRIMMED_STRATEGY_PROMPT + (
+    " For every native result review, findings.statement, findings.assumptions, findings.scope, "
+    "findings.dependencies and findings.policy must each be a nonempty JSON string. "
+    "findings.openness.coverage and findings.openness.reason must each be a nonempty JSON string, "
+    "not an object or an array. Keep structured search details inside those strings when needed."
 )
 
 

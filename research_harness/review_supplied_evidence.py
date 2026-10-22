@@ -26,7 +26,8 @@ def lineage_packets(records, artifacts, assignment_ids):
         assignment = records.get('review_assignment', {}).get(identifier)
         if assignment is None:
             raise ResearchError('review_record_missing', 'The exact evidence-supplying assignment is missing')
-        packet = json.loads(artifacts.read(assignment['packet']))
+        from .review_protocol import source_delivery_packet
+        packet = source_delivery_packet(records, artifacts, assignment)
         result.append(packet)
         parent = assignment.get('history_assignment_id') or assignment.get('context', {}).get('prior_assignment_id')
         repair = assignment.get('context', {}).get('context_repair')
@@ -69,8 +70,12 @@ def supplied_context(records, artifacts, assignment_ids, *, frozen=False):
     delivered: prior context, an adjudicator's original and version passages, and passages delivered with a material
     objection or an objection of a historical review. Focused refreshes and corrections retain their packet lineage."""
     references, mappings = {}, []
+    from .review_source_capacity import BODY_DELIVERY
+    from .review_source_complete import ALTERNATE
     for packet in lineage_packets(records, artifacts, assignment_ids):
         for entry in packet.get('evidence', []):
+            if entry.get('delivery') in (BODY_DELIVERY, ALTERNATE):
+                continue
             reference = entry['artifact']
             artifacts.read(reference)
             references[reference['sha256']] = reference
@@ -91,17 +96,57 @@ def supplied_context(records, artifacts, assignment_ids, *, frozen=False):
     return references, mappings
 
 
-def is_received(records, reference, references, mappings, *, artifacts, frozen=False):
+def _inline_passage_received(records, artifacts, packets, link):
+    """An actual inline span supplies only its bound native reading's exact bytes."""
+    from .direction_sources import _find_inline_interval
+    from .evaluation import Evaluation
+    from .evidence import digest
+    if link.get('locator', {}).get('kind') not in ('text', 'span'):
+        return False
+    evaluation = Evaluation.of(records, artifacts)
+    try:
+        evaluation.link(link)
+        for packet in packets:
+            for key in ('problem_evidence', 'direction_evidence'):
+                evidence = packet.get(key, {})
+                for passage in evidence.get('passages', []):
+                    native = records.get('reading', {}).get(passage.get('reading_id'))
+                    if (native is None or passage.get('version_id') != link['version_id']
+                            or not any(row.get('id') == native['id'] and row.get('digest') == digest(native)
+                                       for row in evidence.get('readings', []))):
+                        continue
+                    interval = _find_inline_interval(evaluation, passage, link)
+                    if interval is None:
+                        continue
+                    inspection = native['inspections'][passage['inspection_index']]
+                    if (inspection['link']['artifact'] == link['artifact']
+                            and interval[0] <= link['locator']['start'] < link['locator']['end'] <= interval[1]):
+                        return True
+    except (ResearchError, KeyError, TypeError, ValueError):
+        return False
+    return False
+
+
+def is_received(records, reference, references, mappings, *, artifacts, frozen=False, packets=()):
     """Whether a cited artifact descriptor or source link names content that the given delivery supplied: the
     artifact in full, or, for a source link, a locator within a supplied passage of the same artifact (text locators
     by offsets; another kind equal to the passage's). A raw descriptor of an artifact delivered only as passages names
     those passages, without widening their bounds."""
     artifact = reference['link']['artifact'] if reference.get('kind') == 'source' else reference
+    if (reference.get('kind') == 'source' and packets
+            and _inline_passage_received(records, artifacts, packets, reference['link'])):
+        return True
+    if reference.get('kind') == 'source' and reference['link']['locator'].get('kind') == 'pdf' and packets:
+        from .evaluation import Evaluation
+        from .review_visual_sources import has_pdf_page
+        evaluation = Evaluation.of(records, artifacts)
+        if any(has_pdf_page(evaluation, packet, reference['link']) for packet in packets):
+            return True
     if artifact['sha256'] in references:
         return True
     passages = [mapping for mapping in mappings if mapping['origin']['artifact_descriptor']['sha256'] == artifact['sha256']]
     if reference.get('kind') != 'source':
-        return bool(passages)
+        return bool(passages) if not packets else False
     if frozen:
         # Delivery supplies the same version's exact bytes and bounds. Current captured-source and component
         # qualification remains a separate recording check; it cannot create or remove a pure refusal.
@@ -148,7 +193,7 @@ def deliver_passage(records, artifacts, mapping):
     return delivered
 
 
-def undelivered_references(records, artifacts, evidence, carried, references, mappings, *, frozen=False):
+def undelivered_references(records, artifacts, evidence, carried, references, mappings, *, frozen=False, packets=()):
     """The delivery failures of validated evidence, in the review refusal's reference detail format."""
     from .review_protocol import find_carried_record
     missing = []
@@ -157,7 +202,7 @@ def undelivered_references(records, artifacts, evidence, carried, references, ma
             if find_carried_record(records, carried, reference, frozen=frozen) is None:
                 missing.append({'record_kind': reference['record_kind'], 'id': reference['id'],
                                 'digest': reference.get('digest')})
-        elif not is_received(records, reference, references, mappings, artifacts=artifacts, frozen=frozen):
+        elif not is_received(records, reference, references, mappings, artifacts=artifacts, frozen=frozen, packets=packets):
             artifact = reference['link']['artifact'] if reference.get('kind') == 'source' else reference
             details = {'sha256': artifact['sha256']}
             if reference.get('kind') == 'source':

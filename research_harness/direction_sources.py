@@ -238,8 +238,10 @@ def _covers_passage(evaluation, packets, expected, link, ranges):
     wanted = expected['origin']
     location = wanted['locator']
     if location['kind'] == 'pdf':
-        # The checked typed PDF has the native original's exact bytes.
-        return any(_has_source_content(evaluation, packet, dict(link, artifact=expected['excerpt'])) for packet in packets)
+        # Exact full-page native images cover this page/region without supplying the original PDF.
+        from .review_visual_sources import has_pdf_page
+        return any(_has_source_content(evaluation, packet, dict(link, artifact=expected['excerpt']))
+                   or has_pdf_page(evaluation, packet, link) for packet in packets)
     if location['kind'] == 'html':
         span = wanted['character_range']
         start, end = location['anchor']['start'] + span['start'], location['anchor']['start'] + span['end']

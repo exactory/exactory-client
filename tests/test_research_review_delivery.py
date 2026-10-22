@@ -331,9 +331,11 @@ class PromptAndDeliveryCompatibilityTests(unittest.TestCase):
     def test_the_result_prompt_of_0_55_is_a_recognized_previous_prompt(self):
         from research_harness import review_protocol
         previous = review_protocol.previous_problem_result_prompt()
+        legacy = review_protocol.canonical_prompt('result', version=2, orchestration='problem_creation')
         current = review_protocol.canonical_prompt('result', orchestration='problem_creation')
         self.assertNotEqual(previous['text'], current['text'])
-        self.assertEqual(previous['template_id'], current['template_id'])
+        self.assertEqual(previous['template_id'], legacy['template_id'])
+        self.assertEqual(current['template_id'], 'exactory-problem-review-v4/result')
         self.assertIn('with record_kind, id and digest copied from the delivery', previous['text'])
         assignment = {'role': 'result', 'subject': {'kind': 'problem', 'statement_id': 's'}, 'prompt': previous}
         self.assertTrue(review_protocol.is_previous_prompt(assignment))
@@ -343,7 +345,7 @@ class PromptAndDeliveryCompatibilityTests(unittest.TestCase):
         repaired = {'role': 'result', 'subject': {'kind': 'problem', 'statement_id': 's'}, 'reassessment_required': True,
                     'prompt': review_protocol.previous_problem_result_prompt(repair=True)}
         self.assertTrue(review_protocol.is_previous_prompt(repaired))
-        self.assertEqual(repaired['prompt']['template_id'], current['template_id'] + '/context-repair')
+        self.assertEqual(repaired['prompt']['template_id'], legacy['template_id'] + '/context-repair')
 
     def test_text_only_delivery_names_binary_originals_without_their_bytes(self):
         import tempfile

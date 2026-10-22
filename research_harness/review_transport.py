@@ -27,9 +27,11 @@ EXCLUDED_SOURCES = ('author_history', 'prior_assessments', 'startup_memory',
                     'project_instructions', 'hooks', 'shared_cache', 'tool_context', 'fork_resume')
 # Local reviewer adapters run a subscription CLI of the host and inspect its observed input. The Claude Code adapter is
 # the reviewer of a Claude Code session; the Codex adapter is the reviewer of a Codex session.
-LOCAL_ADAPTERS = {'claude_cli_v1': 'review_claude_transport', 'codex_cli_v1': 'review_codex_transport'}
+LOCAL_ADAPTERS = {'claude_cli_v1': 'review_claude_transport', 'codex_cli_v1': 'review_codex_transport',
+                  'codex_cli_framed_v1': 'review_codex_framed_transport',
+                  'codex_cli_visual_v1': 'review_codex_visual_transport'}
 # Both local adapters carry text only: a binary artifact is named in the packet without its bytes.
-TEXT_ONLY_ADAPTERS = frozenset(LOCAL_ADAPTERS)
+TEXT_ONLY_ADAPTERS = frozenset(name for name in LOCAL_ADAPTERS if name != 'codex_cli_visual_v1')
 TEXT_ONLY_DELIVERY_VARIABLE = 'EXACTORY_REVIEW_TEXT_ONLY_DELIVERY'
 
 
@@ -97,6 +99,8 @@ def validate_route(route):
 
 
 CODEX_INPUT_LIMIT_CHARS = 1048576
+# The Codex routes whose input the transport fits to the app-server limit.
+FITTED_ADAPTERS = ('codex_cli_v1', 'codex_cli_framed_v1')
 PACKET_LABEL = 'The packet below is JSON.\n'
 ELIDED_TEXT_NOTE = ('The body of this full text is withheld because the reviewer route input limit does not admit '
                     'it; the reading record of this work, with its notes and inspected excerpts, is delivered in full, '
@@ -128,6 +132,12 @@ REPEATABLE_KEYS = ('bars', 'own_bars', 'material_objections', 'source_inventory'
 REPEATED_PART_NOTE = 'This part of the earlier packet is repeated unchanged in the current packet.'
 DELIVERY_SUMMARY_NOTE = ('This source delivery of an earlier turn is summarized in the replay: its request and status are '
                          'kept, and its evidence was delivered in that turn.')
+HTML_ORIGINAL_OMISSION_NOTE = (
+    'The HTML original body is withheld because the local reviewer input limit does not admit it. '
+    'The exact native plain-text extraction from the same capture is supplied in full as separate evidence. '
+    'The HTML artifact descriptor identifies the retained original bytes. Visual layout, figures, or formulas '
+    'may lose information in extraction. This delivery does not establish inspection of the HTML original. '
+    'Use the delivered extraction for citations, retain any source gaps, and request needed original material.')
 REPEATED_EVIDENCE_NOTE = ('This problem evidence was delivered in full in an earlier turn of this review session, and the '
                           'replayed history carries that packet.')
 
@@ -205,64 +215,160 @@ def _collect_source_links(value):
     return []
 
 
-def _elide_packet_bodies(supplied):
-    """Deterministic reductions of a packet that re-delivers earlier turns' sources (a context-repair packet) or
-    declares a delivery priority of its full texts. Each is applied only while the input is too large."""
-    for turn in supplied.get('scientific_history', []):
+def _list_evidence(supplied):
+    return [evidence for evidence in supplied.get('evidence', []) if isinstance(evidence, dict)]
+
+
+def _sha256(evidence):
+    return (evidence.get('artifact') or {}).get('sha256')
+
+
+def _reduce_history_bodies(fit):
+    """The evidence bodies of the replayed earlier turns, oldest turn first."""
+    for index in range(len(fit.messages)):
+        fit.messages[index] = _elide_history_bodies(fit.messages[index])
+        yield
+
+
+def _reduce_history_packets(fit):
+    """The replayed packets of earlier turns, oldest first, give way to a digest reference; the earlier assistant
+    outputs stay as they were observed."""
+    for index in range(len(fit.messages)):
+        fit.messages[index] = _elide_history_packet(fit.messages[index])
+        yield
+
+
+def _reduce_scientific_history_bodies(fit):
+    """The evidence bodies that the packets of a context repair's scientific history re-deliver, in one step."""
+    for turn in fit.supplied.get('scientific_history', []):
         for evidence in (turn.get('packet') or {}).get('evidence', []):
             _elide_body(evidence, 'body-elided-from-replayed-history', ELIDED_BODY_NOTE)
-    yield 'scientific_history'
-    supplied_before = {entry.get('sha256') for entry in supplied.get('previously_supplied_evidence', []) if isinstance(entry, dict)}
-    for evidence in supplied.get('evidence', []):
-        if isinstance(evidence, dict) and (evidence.get('artifact') or {}).get('sha256') in supplied_before:
+    yield
+
+
+def _reduce_previously_supplied(fit):
+    """The bodies that an earlier turn of the session supplied, in one step."""
+    supplied_before = {entry.get('sha256') for entry in fit.supplied.get('previously_supplied_evidence', [])
+                       if isinstance(entry, dict)}
+    for evidence in _list_evidence(fit.supplied):
+        if _sha256(evidence) in supplied_before and _sha256(evidence) not in fit.protected:
             _elide_body(evidence, 'body-elided-previously-supplied', ELIDED_BODY_NOTE)
-    yield 'previously_supplied_evidence'
-    # A native packet may declare the delivery priority of its full texts; bodies are elided from the lowest
-    # priority upwards, one per step.
-    priority = ((supplied.get('native') or {}).get('scientific_context') or {}).get('text_delivery_priority') or []
-    entries = {(evidence.get('artifact') or {}).get('sha256'): evidence
-               for evidence in supplied.get('evidence', []) if isinstance(evidence, dict)}
+    yield
+
+
+def _reduce_text_priority(fit):
+    """A native packet may declare the delivery priority of its full texts; bodies are elided from the lowest
+    priority upwards, one per step."""
+    priority = ((fit.supplied.get('native') or {}).get('scientific_context') or {}).get('text_delivery_priority') or []
+    entries = {_sha256(evidence): evidence for evidence in _list_evidence(fit.supplied)}
     for sha256 in reversed(priority):
-        if sha256 in entries and _elide_body(entries[sha256], 'body-elided-route-limit', ELIDED_TEXT_NOTE):
-            yield 'text_delivery_priority:' + sha256
-    # A problem packet attaches the captured responses of the searches that its openness finding binds, and its
-    # problem evidence delivers each search record with its queries, coverage and result dispositions. The response
-    # bodies give way, largest first, one per step.
-    searches = (supplied.get('problem_evidence') or {}).get('openness_searches') or []
-    responses = {source['response']['sha256'] for search in searches for source in search['sources']}
-    bodies = [evidence for evidence in supplied.get('evidence', []) if isinstance(evidence, dict)
-              and (evidence.get('artifact') or {}).get('sha256') in responses]
+        if (sha256 not in fit.protected and sha256 in entries
+                and _elide_body(entries[sha256], 'body-elided-route-limit', ELIDED_TEXT_NOTE)):
+            yield
+
+
+def _reduce_search_responses(fit):
+    """A problem packet attaches the captured responses of the searches that its openness finding binds, and its
+    problem evidence delivers each search record with its queries, coverage and result dispositions. The response
+    bodies give way, largest first, one per step."""
+    searches = (fit.supplied.get('problem_evidence') or {}).get('openness_searches') or []
+    responses = {source['response']['sha256'] for search in searches for source in search['sources']} - fit.protected
+    bodies = [evidence for evidence in _list_evidence(fit.supplied) if _sha256(evidence) in responses]
     for evidence in sorted(bodies, key=lambda evidence: -len(evidence.get('content') or '')):
         if _elide_body(evidence, 'body-elided-route-limit', ELIDED_SEARCH_RESPONSE_NOTE):
-            yield 'openness_search_response:' + evidence['artifact']['sha256']
-    # The earlier packets of the slot's history, largest first, give way to a digest reference while the input is
-    # still too large; each turn keeps its observed output and its independence.
-    turns = [turn for turn in supplied.get('scientific_history', []) if isinstance(turn, dict) and isinstance(turn.get('packet'), dict)]
+            yield
+
+
+def _reduce_scientific_history_packets(fit):
+    """The earlier packets of the slot's history, largest first, give way to a digest reference; each turn keeps its
+    observed output and its independence."""
+    turns = [turn for turn in fit.supplied.get('scientific_history', [])
+             if isinstance(turn, dict) and isinstance(turn.get('packet'), dict)]
     for turn in sorted(turns, key=lambda turn: -len(json.dumps(turn['packet'], sort_keys=True, ensure_ascii=False))):
         turn['packet'] = {'delivery': 'packet-elided-route-limit', 'packet_digest': turn['packet'].get('digest'),
                           'note': HISTORY_PACKET_LIMIT_NOTE}
-        yield 'scientific_history_packet:' + str(turn.get('assignment_id'))
+        yield
 
 
-def _elide_problem_bodies(supplied):
-    """Reductions of a problem packet that still exceeds the route limit after every other reduction, so that every
-    request that fitted before them is built unchanged."""
-    # The problem evidence delivers each full reading as its record, notes and inspected passages, so the full texts that
-    # the packet cites through a source link of a fully read work give way next, largest first, one per step.
-    read = {row['version_id'] for row in (supplied.get('problem_evidence') or {}).get('readings') or []
+def _reduce_read_full_texts(fit):
+    """The problem evidence delivers each full reading as its record, notes and inspected passages, so the full texts
+    that the packet cites through a source link of a fully read work give way, largest first, one per step."""
+    read = {row['version_id'] for row in (fit.supplied.get('problem_evidence') or {}).get('readings') or []
             if row.get('depth') == 'fulltext'}
-    texts = {sha256 for version_id, sha256 in _collect_source_links(supplied) if version_id in read}
-    bodies = [evidence for evidence in supplied.get('evidence', []) if isinstance(evidence, dict)
-              and (evidence.get('artifact') or {}).get('sha256') in texts]
+    texts = {sha256 for version_id, sha256 in _collect_source_links(fit.supplied) if version_id in read} - fit.kept()
+    bodies = [evidence for evidence in _list_evidence(fit.supplied) if _sha256(evidence) in texts]
     for evidence in sorted(bodies, key=lambda evidence: -len(evidence.get('content') or '')):
         if _elide_body(evidence, 'body-elided-route-limit', ELIDED_TEXT_NOTE):
-            yield 'read_full_text:' + evidence['artifact']['sha256']
-    # Any other evidence body of a problem packet then gives way, largest first, one per step.
-    if 'problem_evidence' in supplied:
-        bodies = [evidence for evidence in supplied.get('evidence', []) if isinstance(evidence, dict)]
-        for evidence in sorted(bodies, key=lambda evidence: -len(evidence.get('content') or '')):
-            if _elide_body(evidence, 'body-elided-route-limit', ELIDED_EVIDENCE_NOTE):
-                yield 'evidence_body:' + evidence['artifact']['sha256']
+            yield
+
+
+def _reduce_other_bodies(fit):
+    """Any other evidence body of a problem packet gives way, largest first, one per step."""
+    if 'problem_evidence' not in fit.supplied:
+        return
+    bodies = [evidence for evidence in _list_evidence(fit.supplied) if _sha256(evidence) not in fit.kept()]
+    for evidence in sorted(bodies, key=lambda evidence: -len(evidence.get('content') or '')):
+        if _elide_body(evidence, 'body-elided-route-limit', ELIDED_EVIDENCE_NOTE):
+            yield
+
+
+def _reduce_html_originals(fit):
+    """Withhold an oversized HTML original only with its complete, same-capture native extraction; every extraction
+    that justified an omission stays for the later steps."""
+    for _ in _elide_html_originals(fit.supplied):
+        yield
+    fit.protected.update(omission['extraction_sha256'] for delivery in fit.supplied.get('source_deliveries', [])
+                         for omission in delivery.get('transport_omissions', []) if 'extraction_sha256' in omission)
+
+
+def _complete_text_entry(evidence):
+    reference = evidence.get('artifact') or {}
+    content = evidence.get('content')
+    if evidence.get('encoding') != 'utf-8' or not isinstance(content, str) or not content:
+        return False
+    data = content.encode('utf-8')
+    return len(data) == reference.get('size') and hashlib.sha256(data).hexdigest() == reference.get('sha256')
+
+
+def _elide_html_originals(supplied):
+    """Withhold oversized HTML only with its complete, same-capture native extraction."""
+    entries = {(entry.get('artifact') or {}).get('sha256'): entry
+               for entry in supplied.get('evidence', []) if isinstance(entry, dict)}
+    for delivery in supplied.get('source_deliveries', []):
+        if (delivery.get('request') or {}).get('depth') != 'fulltext':
+            continue
+        for provenance in delivery.get('source_provenance', []):
+            original = provenance.get('original_descriptor') or {}
+            if (provenance.get('kind') is not None or provenance.get('capture_method') != 'http'
+                    or provenance.get('origin_verified') is not True
+                    or provenance.get('completeness') != 'complete'
+                    or provenance.get('delivery_mode') != 'extracted-text-only'
+                    or original.get('media_type') not in ('text/html', 'application/xhtml+xml')):
+                continue
+            original_sha = original.get('sha256')
+            html = entries.get(original_sha)
+            captured = provenance.get('delivered_sha256', [])
+            if html is None or original_sha not in captured or not _complete_text_entry(html):
+                continue
+            extractions = [entries[sha] for sha in captured if sha != original_sha and sha in entries
+                           and (entries[sha].get('artifact') or {}).get('media_type', '').split(';')[0] == 'text/plain'
+                           and _complete_text_entry(entries[sha])]
+            if len(extractions) != 1:
+                continue
+            html.update(content='', delivery='body-elided-html-original-route-limit', note=HTML_ORIGINAL_OMISSION_NOTE)
+            for related in supplied.get('source_deliveries', []):
+                affected = False
+                for source in related.get('source_provenance', []):
+                    delivered = source.get('delivered_sha256', [])
+                    if original_sha in delivered:
+                        source.setdefault('captured_delivery_sha256', list(delivered))
+                        source['delivered_sha256'] = [sha for sha in delivered if sha != original_sha]
+                        affected = True
+                if affected:
+                    related.setdefault('transport_omissions', []).append({
+                        'sha256': original_sha, 'reason': 'local_input_limit',
+                        'extraction_sha256': extractions[0]['artifact']['sha256'], 'note': HTML_ORIGINAL_OMISSION_NOTE})
+            yield 'html_original:' + original_sha
 
 
 def _build_local_request(route, prompt, supplied, messages):
@@ -284,36 +390,77 @@ def _compact_history(supplied, history):
     return messages
 
 
-def _fit_local_input(route, prompt, supplied, history, limit, measure):
-    """Elide re-delivered and replayed evidence bodies until the input fits the route limit. An input that no elision
-    fits is sent as it stands: the provider refuses it, and the refusal is recorded as a failed attempt."""
+# The reductions that a local route applies, in order, while the input exceeds its limit. Each step is applied one
+# reduction at a time until the input fits; an input that no step fits is sent as it stands, so that the provider's
+# refusal is recorded as a failed attempt. FIT_ORDER builds every new request. The earlier orders rebuild the requests
+# that earlier releases and the records' local runtimes recorded, so that their attempts stay authenticated.
+FIT_ORDER = ('history_bodies', 'scientific_history_bodies', 'html_originals', 'previously_supplied', 'text_priority',
+             'search_responses', 'scientific_history_packets', 'history_packets', 'read_full_texts', 'source_capacity',
+             'other_bodies')
+EARLIER_FIT_ORDERS = (
+    # 0.56.0.
+    ('scientific_history_bodies', 'previously_supplied', 'text_priority', 'history_bodies'),
+    # 0.56.1 and 0.57.0.
+    ('scientific_history_bodies', 'previously_supplied', 'text_priority', 'scientific_history_packets',
+     'history_bodies', 'history_packets'),
+    # The local runtime of the Sidorenko girth-six record (candidates 10 and 11).
+    ('scientific_history_bodies', 'previously_supplied', 'text_priority', 'search_responses',
+     'scientific_history_packets', 'history_bodies', 'history_packets', 'read_full_texts', 'other_bodies'),
+    # The local runtime of the extremal-graph-stability record.
+    ('history_bodies', 'scientific_history_bodies', 'html_originals', 'previously_supplied', 'text_priority',
+     'source_capacity'),
+)
+_REDUCTIONS = {'history_bodies': _reduce_history_bodies, 'history_packets': _reduce_history_packets,
+               'scientific_history_bodies': _reduce_scientific_history_bodies,
+               'previously_supplied': _reduce_previously_supplied, 'text_priority': _reduce_text_priority,
+               'search_responses': _reduce_search_responses,
+               'scientific_history_packets': _reduce_scientific_history_packets,
+               'read_full_texts': _reduce_read_full_texts, 'other_bodies': _reduce_other_bodies,
+               'html_originals': _reduce_html_originals}
+
+
+class _Fit:
+    """The state of one local input fit: the packet and the replayed messages that the reductions change, and the
+    bodies that no reduction may elide. Under FIT_ORDER the last two steps also keep the protected bodies and the
+    bodies of the sources that this turn delivers, which a source request asked for."""
+
+    def __init__(self, supplied, messages, order):
+        from .problem_openness_sources import protected_evidence
+        self.supplied, self.messages = supplied, messages
+        self.protected = set(protected_evidence(supplied))
+        self.keeps_requested_sources = order == FIT_ORDER
+
+    def kept(self):
+        if not self.keeps_requested_sources:
+            return set()
+        from .review_source_capacity import _references
+        return self.protected | {sha256 for delivery in self.supplied.get('source_deliveries', [])
+                                 if delivery.get('status') == 'delivered'
+                                 for sha256 in _references(delivery.get('evidence', []))}
+
+
+def _fit_local_input(route, prompt, supplied, history, limit, measure, order=FIT_ORDER):
+    """Apply the reductions of the order until the input fits the route limit."""
     def fits(request):
         return len(measure(request)) <= limit
 
-    messages = _compact_history(supplied, history)
-    request = _build_local_request(route, prompt, supplied, messages)
-    reductions = _elide_packet_bodies(supplied)
-    while not fits(request):
-        if next(reductions, None) is None:
+    fit = _Fit(supplied, _compact_history(supplied, history), order)
+    request = _build_local_request(route, prompt, supplied, fit.messages)
+    for step in order:
+        if fits(request):
             break
-        request = _build_local_request(route, prompt, supplied, messages)
-    index = 0
-    while not fits(request) and index < len(messages):
-        messages[index] = _elide_history_bodies(messages[index])
-        request = _build_local_request(route, prompt, supplied, messages)
-        index += 1
-    # The replayed packets of earlier turns, oldest first, give way to a digest reference while the input is still too
-    # large; the earlier assistant outputs stay as they were observed.
-    index = 0
-    while not fits(request) and index < len(messages):
-        messages[index] = _elide_history_packet(messages[index])
-        request = _build_local_request(route, prompt, supplied, messages)
-        index += 1
-    reductions = _elide_problem_bodies(supplied)
-    while not fits(request):
-        if next(reductions, None) is None:
-            break
-        request = _build_local_request(route, prompt, supplied, messages)
+        if step == 'source_capacity':
+            from .problem_openness_sources import protected_evidence
+            from .review_source_capacity import fit as fit_sources
+            batched = fit_sources(supplied, lambda packet: _build_local_request(route, prompt, packet, fit.messages),
+                                  measure, limit, protected_evidence(supplied))
+            if batched is not None:
+                return batched
+            continue
+        for _ in _REDUCTIONS[step](fit):
+            request = _build_local_request(route, prompt, supplied, fit.messages)
+            if fits(request):
+                break
     return request
 
 
@@ -330,23 +477,48 @@ def _elide_history_packet(message):
     return dict(message, content=PACKET_LABEL + json.dumps(reduced, sort_keys=True, ensure_ascii=False))
 
 
-def _fit_codex_input(route, prompt, supplied, history):
+def _fit_codex_input(route, prompt, supplied, history, order):
     """The Codex app-server admits 1,048,576 characters of input."""
-    from . import review_codex_transport
-    return _fit_local_input(route, prompt, supplied, history, CODEX_INPUT_LIMIT_CHARS, review_codex_transport.packet_text)
+    return _fit_local_input(route, prompt, supplied, history, CODEX_INPUT_LIMIT_CHARS, _local_adapter(route).packet_text,
+                            order)
 
 
-def _fit_claude_input(route, prompt, supplied, history):
+def _fit_claude_input(route, prompt, supplied, history, order):
     """The Claude Code route admits its own limit of characters; the adapter refuses a larger input and records it."""
     from . import review_claude_transport
     return _fit_local_input(route, prompt, supplied, history, review_claude_transport.INPUT_LIMIT_CHARACTERS,
-                            review_claude_transport.packet_text)
+                            review_claude_transport.packet_text, order)
 
 
-def request_body(route, prompt, packet, history=()):
-    """History contains only the same reviewer's verified, canonical bar exchange."""
+def logical_messages(request):
+    """Recover the exact declared logical messages solely from an actual request."""
+    from . import review_exact_text, review_exact_text_v2
+    messages = request['input']
+    if len(messages) == 1 and messages[0].get('role') == 'user':
+        for codec in (review_exact_text, review_exact_text_v2):
+            if codec.is_encoded(messages[0].get('content')):
+                return codec.decode(messages[0]['content'])
+    return messages
+
+
+def request_body(route, prompt, packet, history=(), order=FIT_ORDER):
+    """History contains only the same reviewer's verified, canonical bar exchange. A local route fits the input with
+    the reductions of the order."""
     validate_route(route)
     supplied = json.loads(json.dumps(packet))
+    from .problem_openness_sources import apply_delivery
+    apply_delivery(supplied)
+    if route['adapter'] == 'codex_cli_visual_v1':
+        from .review_visual_inputs import probe_request, source_request
+        if set(supplied) == {'allowed_control', 'evidence_control', 'evidence'}:
+            return probe_request(route, prompt, supplied)
+        request = source_request(route, prompt, supplied, history)
+        from .review_visual_context_repair import MARKER, validate_profile
+        if MARKER in supplied:
+            from .review_exact_text_cost_v1 import optimize_request
+            validate_profile(supplied[MARKER])
+            request = optimize_request(request)
+        return request
     files = []
     for evidence in supplied.get('evidence', []):
         if not isinstance(evidence, dict) or evidence.get('encoding') != 'base64':
@@ -376,11 +548,38 @@ def request_body(route, prompt, packet, history=()):
                'input': list(history) + [{'role': 'user', 'content': content}],
                'tools': [], 'store': False, 'max_output_tokens': route['configuration']['max_output_tokens'],
                'text': {'format': {'type': 'json_object'}}}
-    if route['adapter'] == 'codex_cli_v1':
-        return _fit_codex_input(route, prompt, supplied, history)
+    from .review_source_complete import MARKER, project
+    if MARKER in supplied:
+        if route['adapter'] != 'codex_cli_v1':
+            raise ResearchError('review_complete_source_route', 'Complete visible source input uses the unchanged Codex local route')
+        from .review_exact_text import encode
+        messages, complete_sources = project(supplied, list(history))
+        request['input'] = [{'role': 'user', 'content': encode(messages, complete_sources)}]
+        if len(_local_adapter(route).packet_text(request)) > CODEX_INPUT_LIMIT_CHARS:
+            from .review_exact_text_v2 import encode as encode_v2
+            request['input'] = [{'role': 'user', 'content': encode_v2(messages, complete_sources)}]
+        return request
+    if route['adapter'] in FITTED_ADAPTERS:
+        return _fit_codex_input(route, prompt, supplied, history, order)
     if route['adapter'] == 'claude_cli_v1':
-        return _fit_claude_input(route, prompt, supplied, history)
+        return _fit_claude_input(route, prompt, supplied, history, order)
     return request
+
+
+def list_built_requests(route, prompt, packet, history=()):
+    """The requests that this harness builds from these inputs: the request of FIT_ORDER first, then, on a local route
+    that fits its input, each request of an earlier fit order that differs from it. A recorded request is the
+    harness's own when it equals one of them."""
+    current = request_body(route, prompt, packet, history)
+    yield current
+    if route['adapter'] not in FITTED_ADAPTERS + ('claude_cli_v1',):
+        return
+    seen = [current]
+    for order in EARLIER_FIT_ORDERS:
+        built = request_body(route, prompt, packet, history, order)
+        if built not in seen:
+            seen.append(built)
+            yield built
 
 
 def send_request(route, request, credential):

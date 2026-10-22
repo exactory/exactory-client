@@ -66,7 +66,7 @@ All new mutations use the normal `--file`, `--expected-revision` and
 | `strategy` | Freeze a comparative prospective, result or post-measurement dossier, exact dependencies and a bounded question. |
 | `work-item` | Retain one stable reviewer request or development obligation, classification, actual execution state and lineage. |
 | `research-lead` | Preserve an earlier discrepancy and its original provenance, verification status and next check. |
-| `review-route` | Register the explicit instrumented provider, model and resource configuration: `claude_cli_v1` at `claude://local` (the reviewer of a Claude Code session, run as an isolated `claude -p` process on the owner's subscription), `codex_cli_v1` at `codex://local` (the reviewer of a Codex session), or `openai_responses_v1` at an HTTPS endpoint with an API credential. |
+| `review-route` | Register the explicit instrumented provider, model and resource configuration: `claude_cli_v1` at `claude://local` (the reviewer of a Claude Code session, run as an isolated `claude -p` process on the owner's subscription), `codex_cli_v1` at `codex://local` (the reviewer of a Codex session), `codex_cli_framed_v1` at `codex://local` (an isolated versioned route for lossless openness evidence framing), or `openai_responses_v1` at an HTTPS endpoint with an API credential. |
 | `review-probe` | Execute and retain the input-boundary positive-control test. A failed test establishes no independence. |
 | `review-assignment` | Freeze the canonical role, exact allowed packet, reviewer identity and current verified route. |
 | `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. After a refused output, one retry with the same request is permitted. |
@@ -1556,6 +1556,40 @@ route and an author from the marker, then invoke `review-run`. Record the
 observed result through `problem-openness`. A new unbound material search,
 changed bound reading/search or missing current formulation makes the finding
 stale (`problem_openness_stale`).
+
+For primary evidence used to screen a search hit, the spec also accepts optional
+`source_evidence: [{source_id, reason, locator?}]`. Each source ID names an exact
+current common acquisition record. The default delivers its complete captured
+response, which does not assert access to a complete article. An optional span
+locator `{kind: "span", start, end, sha256, excerpt?}` selects an exact substring
+of the saved UTF-8 response using Unicode character offsets and its SHA-256.
+The immutable source record and selected response bytes are supplied together.
+The packet binds the actual acquisition provenance, including unverified
+external-import origins, and explicitly grants no fulltext reading credit.
+Registration and later currency assessment validate the source record, original
+response, exact selection, and both artifacts in the authenticated reviewer
+request. A missing or changed binding fails with
+`openness_screening_evidence_mismatch`; an undelivered required artifact fails
+with `openness_native_evidence_undelivered`. Existing reading obligations and
+native proof evidence remain binding. Input fitting cannot omit the selected
+screening evidence or its provenance to satisfy a route limit.
+
+New screening-source exports carry
+`scientific_context.review_text_encoding: "openness-verbatim-evidence-v1"`.
+The separate `codex_cli_framed_v1` route renders their complete UTF-8 evidence
+as visible numbered blocks with exact character lengths, byte sizes and SHA-256
+bindings. The header retains every descriptor, omission and native context.
+Before sending, the renderer reconstructs the exact original canonical message;
+the adapter then compares the actual observed input against the complete framed
+text. No source text is summarized or compressed. Source bodies that contain
+delimiter-like text are parsed by their declared lengths. The canonical request
+remains the authenticated stored request for ordinary evidence validation.
+The route's operational probe puts both positive controls in one framed body.
+Register and probe this new route separately. The existing Codex adapter and
+its runtime fingerprint remain unchanged, preserving earlier observations.
+The new runtime fingerprint binds both its adapter and its renderer. Framing
+supports one canonical user packet without history; unmarked inputs retain
+their existing serialization.
 
 Record an attempt with `problem-attempt --file attempt.json
 --expected-revision N --request-id ID`. `kind` is `solver` or `literature`;

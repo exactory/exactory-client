@@ -212,10 +212,10 @@ def historical_reviews(records, dossier_id, stage):
 
 def prepare_repair(records, artifacts, assignment_payload):
     """Validate a prospective repair without altering the original record."""
-    from .review_protocol import assignment_state, route_state
+    from .review_protocol import assignment_state, route_state, source_delivery_packet
 
     context = assignment_payload['context']
-    fields(context, (), ('context_repair', 'prior_assignment_id', 'source_links'), code='invalid_review_context')
+    fields(context, (), ('context_repair', 'prior_assignment_id', 'source_links', 'source_delivery'), code='invalid_review_context')
     if 'context_repair' not in context:
         return None
     fields(context, ('context_repair',), code='invalid_review_context')
@@ -279,7 +279,7 @@ def prepare_repair(records, artifacts, assignment_payload):
                    'review_route_retired'}
         if prior_state['output'] is None or any(item['code'] not in allowed for item in prior_state['obligations']):
             raise ResearchError('review_context_repair_unverified', 'Preserve only the exact observed scientific history with verified invocation provenance')
-        packet = json.loads(artifacts.read(ancestor['packet']))
+        packet = source_delivery_packet(records, artifacts, ancestor)
         from .bar_sources import pending
         if ancestor['role'] in ROLES and not pending(packet, prior_state['output']):
             finals = _reviews(records, {ancestor['id']})

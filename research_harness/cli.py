@@ -107,7 +107,13 @@ def _review_run(store, payload, **identity):
     return review_protocol.invoke_assignment(store, payload, credential=os.environ.get("OPENAI_API_KEY"), **identity)
 
 
-OPERATIONS.update({"review-probe": _review_probe, "review-run": _review_run})
+def _review_output_correction(store, payload, **identity):
+    from .review_output_correction import invoke_correction
+    return invoke_correction(store, payload, credential=os.environ.get("OPENAI_API_KEY"), **identity)
+
+
+OPERATIONS.update({"review-probe": _review_probe, "review-run": _review_run,
+                   "review-output-correction": _review_output_correction})
 
 from .execution import bind_execution, reconcile_execution, record_imported_execution
 OPERATIONS.update({"bind-run": bind_execution, "reconcile-run": reconcile_execution, "result": record_imported_execution})
@@ -238,7 +244,7 @@ def build_parser():
             item.add_argument("action", choices=GATES)
         if command == "export":
             item.add_argument("--kind", choices=("workspace", "foundation", "readiness", "manuscript", "round", "native", "problem", "problem-openness"), default="workspace")
-            item.add_argument("--spec", help="JSON assignment identity and openness minimum for problem-openness.")
+            item.add_argument("--spec", help="JSON assignment identity, openness minimum, optional analytical native_reviews [{attempt_id,assignment_id}], and source_evidence [{source_id,reason,locator?}] for problem-openness.")
             item.add_argument("--destination", help="New independent reviewer directory for the readiness, manuscript or round packet and its actual source bytes.")
             item.add_argument("--attack-root", help="Native attack root for an immutable foundation delivery.")
             item.add_argument("--claim-binding", help="JSON source correspondence for an external native verification claim.")

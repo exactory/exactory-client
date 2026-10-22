@@ -35,6 +35,7 @@ def service_operation(state, payload):
         "retreat": {"node_retreated"}, "replan": {"replan_recorded"},
         "focus": {"control_recorded", "discovery_recorded"}, "pause": {"control_recorded"},
         "resume": {"control_recorded", "discovery_recorded"}, "hook-stop": {"control_recorded", "node_facts_recorded"},
+        "side-interval": {"control_recorded", "strategy_policy_enabled"},
         "begin": {"strategy_policy_enabled", "move_reserved"},
         "reassess": {"strategy_policy_enabled", "strategies_reassessed"},
         "amend-computation": {"computation_amended"}, "amend-foundation": {"foundation_amended"}, "interpret": {"run_interpreted"},

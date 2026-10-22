@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .artifacts import ArtifactStore
 from .errors import ResearchError
+from .evaluation import Evaluation
 from .evidence import digest
 from .graph import obligation
 from .operations import fields, immutable_record, strings, text
@@ -66,6 +67,7 @@ def find_post(records, statement):
 
 
 def assess_post(records, artifacts):
+    artifacts = Evaluation.of(records, artifacts)
     require_problem(records)
     from .research_decisions import assess_problem_reviews
     statement = find_current_statement(records)
@@ -118,6 +120,7 @@ def assess_post(records, artifacts):
 
 
 def prepare_decision(records, artifacts, value, revision):
+    artifacts = Evaluation.of(records, artifacts)
     require_problem(records)
     fields(value, ("id", "action", "review_ids", "bar_review_ids", "reason"))
     text(value["id"], "Problem decision ID")
@@ -164,7 +167,7 @@ def build_projection(records, artifacts):
 def export_problem(store, destination):
     from .gates import require_ready
     records = store.snapshot()["records"]
-    artifacts = ArtifactStore(store.root)
+    artifacts = Evaluation.of(records, ArtifactStore(store.root))
     require_ready(assess_post(records, artifacts), "post")
     directory = Path(destination).absolute()
     if directory.exists() or directory.is_symlink():
@@ -178,6 +181,7 @@ def export_problem(store, destination):
 
 
 def prepare_posted(records, artifacts, value):
+    artifacts = Evaluation.of(records, artifacts)
     require_problem(records)
     fields(value, ("problem_id", "export_directory"))
     text(value["problem_id"], "Posted problem ID")

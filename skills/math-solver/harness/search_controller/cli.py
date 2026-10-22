@@ -55,10 +55,10 @@ def install_parser(commands, strategies_default):
     nested = search.add_subparsers(dest="search_command", required=True, parser_class=SearchParser)
     readonly = {"status", "next", "strategy-context", "review-packet"}
     specs = {"init", "adopt", "propose", "review", "begin", "run", "checkpoint", "accept",
-             "retreat", "replan", "focus", "pause", "resume", "hook-stop", "complete", "amend-computation", "amend-foundation", "interpret", "reassess", "review-packet"}
-    targets = {"admit", "begin", "run", "accept", "retreat", "amend-computation", "amend-foundation", "interpret"}
+             "retreat", "replan", "focus", "pause", "resume", "side-interval", "hook-stop", "complete", "amend-computation", "amend-foundation", "interpret", "reassess", "review-packet"}
+    targets = {"admit", "begin", "run", "accept", "retreat", "side-interval", "amend-computation", "amend-foundation", "interpret"}
     for name in ["init", "adopt", "propose", "review", "admit", "begin", "run", "reconcile",
-                 "checkpoint", "accept", "retreat", "replan", "focus", "pause", "resume",
+                 "checkpoint", "accept", "retreat", "replan", "focus", "pause", "resume", "side-interval",
                  "audit", "status", "next", "hook-stop", "render", "complete", "amend-computation", "amend-foundation", "interpret", "strategy-context", "reassess", "review-packet", "deliver-closure", "deliver-attempt"]:
         parser = nested.add_parser(name)
         if name in {"init", "focus", "resume"}:

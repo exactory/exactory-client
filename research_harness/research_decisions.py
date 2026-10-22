@@ -167,15 +167,49 @@ def _validate_review_bar_records(records, artifacts, output, dossier, problem):
                 raise ResearchError("review_bar_mismatch", "Use bar findings for the current actual intent")
 
 
+def _visual_supplied_context(records, artifacts, packets):
+    """Credit exact delivered bytes and scoped mappings on the native visual route."""
+    from .direction_sources import has_attachment
+    from .evaluation import Evaluation
+    from .review_supplied_evidence import list_delivered_objections
+    evaluation = Evaluation.of(records, artifacts)
+    references, mappings = {}, []
+    for packet in packets:
+        for entry in packet.get('evidence', []):
+            reference = entry['artifact']
+            if has_attachment(evaluation, packet, reference):
+                references[reference['sha256']] = reference
+        delivered = (packet.get('prior_context', []) + packet.get('version_source_mappings', [])
+                     + packet.get('supplied_source_mappings', []))
+        delivered += [mapping for objection in list_delivered_objections(packet)
+                      for mapping in objection.get('version_source_mappings', [])]
+        for mapping in delivered:
+            if ('origin' in mapping and 'excerpt' in mapping and mapping not in mappings
+                    and has_attachment(evaluation, packet, mapping['excerpt'])):
+                mappings.append(mapping)
+    return references, mappings
+
+
 def validate_review_contract(records, artifacts, assignment, output):
     """Pure review checks against this assignment's frozen contract and delivered lineage."""
     from . import bar_sources, review_context_repair, review_supplied_evidence
-    from .review_protocol import is_previous_prompt, collect_carried_records
+    from .review_protocol import has_problem_result_rubric, is_previous_prompt, collect_carried_records
     with contract_check("review.shape"):
         fields(output, ("stage", "support", "value", "objections", "limitations"),
                ("source_requests", "reassessment"), code="invalid_value_review")
         strategy.choice(output["stage"], ("bar", "slate", "result"), "Review phase", "invalid_value_review")
-    packets = review_supplied_evidence.lineage_packets(records, artifacts, [assignment["id"]])
+    route = records['review_route'][assignment['route_id']]
+    visual = route['adapter'] == 'codex_cli_visual_v1'
+    if visual:
+        from . import review_transport
+        from .review_input_projection import packets_from_visual_request
+        frozen = json.loads(artifacts.read(assignment['packet']))
+        request = review_transport.request_body(route, assignment['prompt']['text'], frozen, assignment.get('history', ()))
+        # Attempt authentication independently requires these exact request bytes.
+        # Avoid assignment_state here: its refusal classifier invokes this validator.
+        packets = list(reversed(packets_from_visual_request(request)))
+    else:
+        packets = review_supplied_evidence.lineage_packets(records, artifacts, [assignment["id"]])
     packet = packets[0]
     contract_evidence = partial(validate_evidence_contract, packets=packets)
     with contract_check("review.source_requests"):
@@ -209,7 +243,7 @@ def validate_review_contract(records, artifacts, assignment, output):
     with contract_check("review.value"):
         _validate_value(records, artifacts, output["value"], stage, frozen_dossier,
                         expected_checks=expected_checks, problem={} if problem else None,
-                        problem_rubric_required=not is_previous_prompt(assignment),
+                        problem_rubric_required=(has_problem_result_rubric(assignment) if problem else not is_previous_prompt(assignment)),
                         problem_objections=delivered_objections, slate_packet=packet,
                         evidence_validator=contract_evidence, require_two_bars=len(delivered_bars) >= 2)
         if stage != "bar":
@@ -246,9 +280,11 @@ def validate_review_contract(records, artifacts, assignment, output):
                                                     evidence_validator=contract_evidence)
     if problem:
         carried = collect_carried_records(records, artifacts, assignment["id"], packets=packets)
-        supplied, mappings = review_supplied_evidence.supplied_context(records, artifacts, [assignment["id"]], frozen=True)
+        supplied, mappings = (_visual_supplied_context(records, artifacts, packets) if visual else
+                              review_supplied_evidence.supplied_context(records, artifacts, [assignment["id"]], frozen=True))
         for evidence in evidence_arrays(output):
-            missing = review_supplied_evidence.undelivered_references(records, artifacts, evidence, carried, supplied, mappings, frozen=True)
+            missing = review_supplied_evidence.undelivered_references(records, artifacts, evidence, carried, supplied, mappings,
+                                                                     frozen=True, packets=packets if visual else ())
             if missing:
                 details = missing[0]
                 description = (details["record_kind"] + " " + details["id"] + " at the cited digest"
@@ -291,10 +327,7 @@ def record_value_review(store, payload, *, expected_revision, request_id):
         saved_assignment = records["review_assignment"][value["assignment_id"]]
         validate_review_contract(records, artifacts, saved_assignment, assignment["output"])
         if value["stage"] in ("bar", "slate", "result"):
-            from .bar_sources import pending
-            saved_assignment = records["review_assignment"][value["assignment_id"]]
-            packet = json.loads(artifacts.read(saved_assignment["packet"]))
-            if pending(packet, assignment["output"]):
+            if assignment.get("pending_source_requests"):
                 raise ResearchError("review_sources_pending", "Retain the observed request turn; resolve its source deliveries before recording a final phase assessment")
         from . import review_context_repair
         saved_assignment = records["review_assignment"][value["assignment_id"]]
@@ -362,6 +395,8 @@ def record_value_review(store, payload, *, expected_revision, request_id):
             record["subject"] = saved_assignment["subject"]
         if identities:
             record["objection_identities"] = identities
+        if assignment.get("output_correction_id") is not None:
+            record["output_correction_id"] = assignment["output_correction_id"]
         changes.append(immutable_record(records, "value_review", value["id"], record))
         if support is not None:
             changes.append(immutable_record(records, "research_support", value["id"], {
@@ -582,7 +617,7 @@ def _collect_problem_reviews(records, stage, subject):
 
 
 def _assess_problem_coverage(records, artifacts, reviews, expected, evidence_digest):
-    from .direction_reviews import collect_observed_packets
+    from .direction_reviews import collect_actual_input_packets
     from .direction_sources import find_delivered_readings, has_attachment
     from .evaluation import Evaluation
     from .review_protocol import collect_references
@@ -590,7 +625,7 @@ def _assess_problem_coverage(records, artifacts, reviews, expected, evidence_dig
     readings = [records['reading'][item['id']] for item in expected['readings']]
     obligations = []
     for review in reviews:
-        packets = [packet for _, packet in collect_observed_packets(records, evaluation, review['assignment_id'])]
+        packets = collect_actual_input_packets(records, evaluation, review['assignment_id'])
         current = [packet for packet in packets if packet.get('problem_evidence_digest') == evidence_digest]
         current_evidence = [packet.get('problem_evidence', {}) for packet in current]
         missing = [key for key in ('claim', 'openness', 'openness_searches', 'value', 'assessment', 'assessment_evidence', 'attempt', 'results', 'citations', 'readings', 'computations', 'formal_checks')
@@ -805,12 +840,19 @@ def find_undelivered_review_references(records, artifacts, review):
     if review.get('subject', {}).get('kind') != 'problem':
         return []
     assignment_id = review['assignment_id']
-    packets = review_supplied_evidence.lineage_packets(records, artifacts, [assignment_id])
+    assignment = records['review_assignment'][assignment_id]
+    visual = records['review_route'][assignment['route_id']]['adapter'] == 'codex_cli_visual_v1'
+    if visual:
+        from .direction_reviews import collect_actual_input_packets
+        packets = collect_actual_input_packets(records, artifacts, assignment_id)
+    else:
+        packets = review_supplied_evidence.lineage_packets(records, artifacts, [assignment_id])
     carried = collect_carried_records(records, artifacts, assignment_id, packets=packets)
-    supplied, mappings = review_supplied_evidence.supplied_context(records, artifacts, [assignment_id], frozen=True)
+    supplied, mappings = (_visual_supplied_context(records, artifacts, packets) if visual else
+                          review_supplied_evidence.supplied_context(records, artifacts, [assignment_id], frozen=True))
     evidence = [reference for array in evidence_arrays(review['payload']) for reference in array]
     return review_supplied_evidence.undelivered_references(
-        records, artifacts, evidence, carried, supplied, mappings, frozen=True)
+        records, artifacts, evidence, carried, supplied, mappings, frozen=True, packets=packets if visual else ())
 
 
 def assess_problem_objections(records, artifacts, subject, bars, reviews, evidence_digest):
@@ -911,14 +953,13 @@ def assess_problem_reviews(records, artifacts, review_ids=None, bar_review_ids=N
 
 def assess_rubric_reviews(records, artifacts, reviews, evidence_digest):
     """Require current rubric results and independently adjudicate named shortfalls."""
-    from .review_protocol import PROBLEM_PROTOCOL, adjudication_state
+    from .review_protocol import has_problem_result_rubric, adjudication_state
     obligations = []
     for review in reviews:
         assignment = records['review_assignment'][review['assignment_id']]
-        template = assignment['prompt']['template_id']
         findings = review['payload']['value']
-        if template not in (PROBLEM_PROTOCOL + '/result', PROBLEM_PROTOCOL + '/result/context-repair'):
-            obligations.append(obligation('problem_rubric_review_required', 'Obtain a version 2 problem result with rubric grades.',
+        if not has_problem_result_rubric(assignment):
+            obligations.append(obligation('problem_rubric_review_required', 'Obtain a problem result with the required rubric grades.',
                                           review_id=review['id']))
             continue
         pending = []
