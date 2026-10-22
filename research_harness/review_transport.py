@@ -477,16 +477,26 @@ def _elide_history_packet(message):
     return dict(message, content=PACKET_LABEL + json.dumps(reduced, sort_keys=True, ensure_ascii=False))
 
 
+def local_input_limit(route):
+    """The input limit, in characters, of a local text route; None for a route without one."""
+    if route['adapter'] in FITTED_ADAPTERS:
+        return CODEX_INPUT_LIMIT_CHARS
+    if route['adapter'] == 'claude_cli_v1':
+        from . import review_claude_transport
+        return review_claude_transport.INPUT_LIMIT_CHARACTERS
+    return None
+
+
 def _fit_codex_input(route, prompt, supplied, history, order):
     """The Codex app-server admits 1,048,576 characters of input."""
-    return _fit_local_input(route, prompt, supplied, history, CODEX_INPUT_LIMIT_CHARS, _local_adapter(route).packet_text,
+    return _fit_local_input(route, prompt, supplied, history, local_input_limit(route), _local_adapter(route).packet_text,
                             order)
 
 
 def _fit_claude_input(route, prompt, supplied, history, order):
     """The Claude Code route admits its own limit of characters; the adapter refuses a larger input and records it."""
     from . import review_claude_transport
-    return _fit_local_input(route, prompt, supplied, history, review_claude_transport.INPUT_LIMIT_CHARACTERS,
+    return _fit_local_input(route, prompt, supplied, history, local_input_limit(route),
                             review_claude_transport.packet_text, order)
 
 

@@ -66,13 +66,14 @@ All new mutations use the normal `--file`, `--expected-revision` and
 | `strategy` | Freeze a comparative prospective, result or post-measurement dossier, exact dependencies and a bounded question. |
 | `work-item` | Retain one stable reviewer request or development obligation, classification, actual execution state and lineage. |
 | `research-lead` | Preserve an earlier discrepancy and its original provenance, verification status and next check. |
-| `review-route` | Register the explicit instrumented provider, model and resource configuration: `claude_cli_v1` at `claude://local` (the reviewer of a Claude Code session, run as an isolated `claude -p` process on the owner's subscription), `codex_cli_v1` at `codex://local` (the reviewer of a Codex session), `codex_cli_framed_v1` at `codex://local` (an isolated versioned route for lossless openness evidence framing), or `openai_responses_v1` at an HTTPS endpoint with an API credential. |
+| `review-route` | Register the explicit instrumented provider, model and resource configuration: `claude_cli_v1` at `claude://local` (the reviewer of a Claude Code session, run as an isolated `claude -p` process on the owner's subscription), `codex_cli_v1` at `codex://local` (the reviewer of a Codex session), `codex_cli_framed_v1` at `codex://local` (an isolated versioned route for lossless openness evidence framing), `codex_cli_visual_v1` at `codex://local` (a Codex route that also receives the rendered pages of a required PDF inspection as images), or `openai_responses_v1` at an HTTPS endpoint with an API credential. |
 | `review-probe` | Execute and retain the input-boundary positive-control test. A failed test establishes no independence. |
 | `review-assignment` | Freeze the canonical role, exact allowed packet, reviewer identity and current verified route. |
 | `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. After a refused output, one retry with the same request is permitted. |
 | `review-attempt` | Preserve imported output or failure history; imported assertions never establish verified independence. |
 | `review-context` | Record evidence of later contamination or other context observations, or retire a route: `kind: "route_retired"` on an assignment of that route, with the owner's instruction as evidence. A retired route accepts no new assignment or run, an assignment on it without an observed output is dead, and a preserved slot continues through a context repair that names the retirement as its cause. |
 | `review-adjudication` | Record the exact observed focused finding. An output that fails its output contract leaves a refusal record. |
+| `review-output-correction` | `{id, assignment_id, route_id}`. Once per assignment, ask the same reviewer, on a verified route of the same provider and model, to relabel as `revised` the reassessment findings of its refused problem result that it labeled `confirmed` although their content changed. The reviewer returns only those dispositions and reasons, or declines; every other value of the output is kept, and `value-review` then records the composed output with its `output_correction_id`. It is not a new review and grants no further sample. |
 | `value-review` | Record the exact observed bar, slate or combined support/value result. An output that fails its output contract leaves a refusal record. |
 | `research-decision` | Select the canonical scientific action, artifact disposition and full-goal status. |
 | `source-impact` | Bind an explicit impact classification for the complete source delta since the selected decision. |
@@ -1563,6 +1564,18 @@ route and an author from the marker, then invoke `review-run`. Record the
 observed result through `problem-openness`. A new unbound material search,
 changed bound reading/search or missing current formulation makes the finding
 stale (`problem_openness_stale`).
+
+On a text route (`claude_cli_v1`, `codex_cli_v1`, `codex_cli_framed_v1`) the
+packet's full-text bodies count against the route's input limit. The optional
+`minimum.text_priority` lists version ids of read works, the decisive ones first.
+While the input exceeds the limit, the route withholds the bodies of the listed
+full texts from the end of the list, one at a time; the reading records, with
+their notes and inspected excerpts, are always delivered, and a body that is not
+listed is never withheld this way. A listed version needs a captured full text.
+Without the field no body is withheld, and a route whose limit is below the
+packet refuses the run (`review_input_too_large`). The export estimates the
+packet and returns a `review_input_too_large` warning that names each registered
+text route whose limit it exceeds when the spec has no `text_priority`.
 
 For primary evidence used to screen a search hit, the spec also accepts optional
 `source_evidence: [{source_id, reason, locator?}]`. Each source ID names an exact

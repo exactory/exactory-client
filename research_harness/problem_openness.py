@@ -244,4 +244,28 @@ def export_openness(store, spec, destination):
     load_packet(artifacts, reference, spec["reviewer_id"])
     from .review_delivery import deliver_packet
     delivered = deliver_packet(store, destination, packet, transitive=True)
-    return dict(delivered, native_packet=reference, subject_digest=packet["subject_digest"], claim_digest=packet["claim_digest"])
+    result = dict(delivered, native_packet=reference, subject_digest=packet["subject_digest"], claim_digest=packet["claim_digest"])
+    if not spec["minimum"].get("text_priority"):
+        # A lower bound of the reviewer input: the packet and its text evidence bodies as JSON strings. Without a
+        # priority no body gives way, so a route whose limit is below it refuses the run.
+        from . import review_transport
+        estimate = len(json.dumps(packet, ensure_ascii=False)) + sum(
+            len(json.dumps(data.decode("utf-8"), ensure_ascii=False))
+            for data in (artifacts.read(entry["artifact"]) for entry in packet["evidence"]) if _is_utf8(data))
+        routes = sorted(identifier for identifier, route in records.get("review_route", {}).items()
+                        if (review_transport.local_input_limit(route) or estimate) < estimate)
+        if routes:
+            result["warnings"] = [{"code": "review_input_too_large", "message":
+                "This packet is larger than the input limit of these text routes, and review-run sends it as it stands "
+                "without minimum.text_priority. List the read full texts in minimum.text_priority, the decisive ones "
+                "first, so that a route withholds the bodies from the end of the list.",
+                "details": {"route_ids": routes, "estimated_characters": estimate}}]
+    return result
+
+
+def _is_utf8(data):
+    try:
+        data.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return True

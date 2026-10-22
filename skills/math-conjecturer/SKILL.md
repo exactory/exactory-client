@@ -259,7 +259,12 @@ result and its source; start no solver work to reproduce an established result.
    bounded or complete coverage.
 2. Read every decisive prior or settling work in full. Keep an unavailable source as a gap.
 3. Write the openness spec `{assignment_id, reviewer_id, minimum: {searches: [{formulation,
-   search_id}], settling_work_id, duplicate_resolutions}}`. When a local supporting proof is
+   search_id}], settling_work_id, duplicate_resolutions}}`. For a text route, add
+   `minimum.text_priority`: the version ids of the read works, the decisive ones first (the works
+   that state a formulation open or hold the strongest partial result). While the packet exceeds
+   the route's input limit, the route withholds full-text bodies from the end of that list and
+   still delivers every reading record. The export warns with `review_input_too_large` when the
+   list is missing and a registered text route's limit is below the packet. When a local supporting proof is
    material, add `native_reviews: [{attempt_id, assignment_id}]`. Use the current exact-statement
    solver attempt and its observed approving native result review of a proof or reduction
    checkpoint. This interface requires analytical evidence manifests with `verification: null`

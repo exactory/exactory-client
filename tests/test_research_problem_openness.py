@@ -138,7 +138,45 @@ class ProblemNativeResultShapeTests(ProblemCase):
         self.prepare_review_route = fixtures.ProblemReviewTests.prepare_review_route.__get__(self)
         self.build_provider_response = fixtures.ProblemReviewTests.build_provider_response.__get__(self)
         fixtures.ProblemOpennessReviewTests.observe_openness(self, change_output=lambda output: output["findings"].pop("policy"))
-        self.assert_error("invalid_record", lambda: self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"}))
+        # The run refuses the output at once, so the assignment can run again.
+        refusal = self.store.snapshot()["records"]["review_output_refusal"]["openness-attempt"]
+        self.assertEqual((refusal["code"], refusal["check"]), ("invalid_native_review", "native.output"))
+        self.assert_error("review_context_unverified",
+                          lambda: self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"}))
+
+    def prepare_claude_export(self):
+        """A problem record with a Claude route and one bound search whose relevant work is fully read; returns the
+        export spec and the version id of that work."""
+        import test_research_problem_openness_minimum as minimum_fixtures
+        self.initialize_problem()
+        self.selected = self.select_statement()
+        self.mutate(review_protocol.record_route, {"id": "route-claude", "adapter": "claude_cli_v1", "model": "claude-opus-5-5",
+            "endpoint": "claude://local", "configuration": {"effort": "high", "max_output_tokens": 64000, "timeout_seconds": 1800}})
+        evidence = self.record_full_reading()
+        search = minimum_fixtures.ProblemOpennessMinimumTests.search(self, [evidence["version_id"]])
+        spec = {"assignment_id": "openness-assignment", "reviewer_id": "native-reviewer",
+                "minimum": {"searches": [{"formulation": self.selected["statement"], "search_id": search["id"]}],
+                            "settling_work_id": None, "duplicate_resolutions": []}}
+        return spec, evidence["version_id"]
+
+    def export_openness(self, spec, name="packet"):
+        from research_harness.problem_openness import export_openness
+        return export_openness(self.store, spec, self.root / name)
+
+    def test_an_export_above_a_text_route_limit_without_a_priority_is_warned(self):
+        spec, _ = self.prepare_claude_export()
+        with patch("research_harness.review_claude_transport.INPUT_LIMIT_CHARACTERS", 2000):
+            warning, = self.export_openness(spec)["warnings"]
+        self.assertEqual(warning["code"], "review_input_too_large")
+        self.assertEqual(warning["details"]["route_ids"], ["route-claude"])
+        self.assertGreater(warning["details"]["estimated_characters"], 2000)
+
+    def test_an_export_with_a_text_priority_or_within_the_limit_has_no_warning(self):
+        spec, version_id = self.prepare_claude_export()
+        self.assertNotIn("warnings", self.export_openness(spec, "within-limit"))
+        spec["minimum"]["text_priority"] = [version_id]
+        with patch("research_harness.review_claude_transport.INPUT_LIMIT_CHARACTERS", 2000):
+            self.assertNotIn("warnings", self.export_openness(spec, "with-priority"))
 
     def test_resolved_finding_cannot_claim_reading_records_without_delivered_source_bytes(self):
         import test_research_problem_reviews as reviewers
@@ -212,6 +250,12 @@ class ProblemOpennessMinimumSchemaTests(ProblemCase):
     def record_finding(self):
         return self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})["result"]
 
+    def assert_refused_at_run(self):
+        """A minimum that the shared schema refuses is refused when the run completes, and the finding waits for a new run."""
+        refusal = self.store.snapshot()["records"]["review_output_refusal"]["openness-attempt"]
+        self.assertEqual((refusal["code"], refusal["check"]), ("invalid_record", "native.output"))
+        self.assert_error("review_context_unverified", self.record_finding)
+
     def assert_unresolved_status(self):
         from research_harness.cli import status_report
         from research_harness.problem_delivery import assess_post
@@ -229,11 +273,11 @@ class ProblemOpennessMinimumSchemaTests(ProblemCase):
 
     def test_unresolved_null_minimum_is_refused_by_the_shared_schema(self):
         self.observe_minimum("unresolved", "null")
-        self.assert_error("invalid_record", self.record_finding)
+        self.assert_refused_at_run()
 
     def test_unresolved_malformed_minimum_is_refused_by_the_shared_schema(self):
         self.observe_minimum("unresolved", "malformed")
-        self.assert_error("invalid_record", self.record_finding)
+        self.assert_refused_at_run()
 
     def test_unresolved_incomplete_minimum_records_without_evidence_audit(self):
         self.observe_minimum("unresolved", "incomplete")
@@ -247,11 +291,11 @@ class ProblemOpennessMinimumSchemaTests(ProblemCase):
 
     def test_resolved_null_minimum_is_refused_by_the_shared_schema(self):
         self.observe_minimum("supported_open", "null")
-        self.assert_error("invalid_record", self.record_finding)
+        self.assert_refused_at_run()
 
     def test_resolved_malformed_minimum_is_refused_by_the_shared_schema(self):
         self.observe_minimum("supported_open", "malformed")
-        self.assert_error("invalid_record", self.record_finding)
+        self.assert_refused_at_run()
 
     def test_resolved_incomplete_minimum_still_requires_evidence_audit(self):
         self.observe_minimum("supported_open", "incomplete")

@@ -4431,6 +4431,11 @@
     "id": "attempt-bar-a",
     "assignment_id": "assignment-bar-a"
   },
+  "review-output-correction": {
+    "id": "correction-result-a",
+    "assignment_id": "assignment-result-a",
+    "route_id": "route-a"
+  },
   "review-attempt": {
     "id": "imported-attempt-1",
     "assignment_id": "assignment-bar-a",

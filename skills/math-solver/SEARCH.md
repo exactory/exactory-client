@@ -971,6 +971,11 @@ bundles. The reviewer returns that same declaration as `findings.openness.minimu
 and binds its search and reading digests in `findings.openness.evidence`. The
 records must exist in this objective's associated common review store; copying a
 record from another workspace does not establish that association.
+`OpennessMinimum` has no delivery priority of full texts, so a text route
+delivers this packet whole or refuses it as too large. A problem record exports
+its openness packet with `exactory-research export --kind problem-openness`
+instead, whose `minimum.text_priority` lets a text route withhold full-text
+bodies in a declared order.
 
 ```sh
 exactory-math --attack-root attack search review-packet --spec native-review.json --json
