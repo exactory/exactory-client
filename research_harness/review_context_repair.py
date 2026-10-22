@@ -10,12 +10,15 @@ import json
 from .errors import ResearchError
 from .evidence import digest
 from .operations import fields, normalized_text, strings, text
+from .review_supplied_evidence import list_packet_objections
 from . import strategy
 
 ROLES = ('bar', 'slate', 'result')
 # The recorded events that end a reviewer context: a contamination of the context, or the retirement of its route.
 CAUSE_KINDS = ('contamination', 'route_retired')
-PROMPT = (
+# The suffix of 0.56.0 and earlier, kept so that assignments recorded with it stay verified: it said "Return an
+# additional reassessment object", which reviewers read as a second JSON object after the role's object.
+PROMPT_0560 = (
     ' This is an explicit reassessment after recorded context contamination, not a new blind review. '
     'The historical scientific inputs, observed assessments and unresolved objections remain evidence. '
     'Do not treat their former independence as currently qualified. Return an additional reassessment '
@@ -23,6 +26,73 @@ PROMPT = (
     'Use the exact predecessor assignment_id from context_repair and cover every inherited final review '
     'of this phase. A source-request turn may defer reassessment; the final phase output must include it. '
     'A confirmed finding must retain its scientific support, value, objections and limitations. '
+    'Explain any revised or unresolved finding with exact supplied evidence. A changed judgment alone '
+    'does not dispose of a historical material objection; the ordinary objection procedure still applies.'
+)
+# The wording of the night of 2026-10-21, kept for the assignments recorded with it: a reviewer read "that object" as
+# the value object and placed the reassessment inside it.
+PROMPT_0561_NIGHT = (
+    ' This is an explicit reassessment after recorded context contamination, not a new blind review. '
+    'The historical scientific inputs, observed assessments and unresolved objections remain evidence. '
+    'Do not treat their former independence as currently qualified. Your output is still the one JSON object of '
+    'this role; give it one more member, "reassessment": {assignment_id,findings:[{review_id,disposition:confirmed|'
+    'revised|unresolved,reason,evidence}]}, written inside that object before its closing brace, never as a second '
+    'object or after the first object is closed. '
+    'Use the exact predecessor assignment_id from context_repair and cover every inherited final review '
+    'of this phase. A source-request turn may defer reassessment; the final phase output must include it. '
+    'A confirmed finding must retain its scientific support, value, objections and limitations. '
+    'Explain any revised or unresolved finding with exact supplied evidence. A changed judgment alone '
+    'does not dispose of a historical material objection; the ordinary objection procedure still applies.'
+)
+# The wording before the exact-copy rule, kept for the assignments recorded with it: replacement reviewers read
+# "retain" as keeping the meaning and labeled a reworded inherited review confirmed.
+PROMPT_RETAIN_RULE = (
+    ' This is an explicit reassessment after recorded context contamination, not a new blind review. '
+    'The historical scientific inputs, observed assessments and unresolved objections remain evidence. '
+    'Do not treat their former independence as currently qualified. Your output is still the one top-level JSON '
+    'object of this role, with the top-level members stage, support, value, objections and limitations; add one more '
+    'top-level member beside them, "reassessment": {assignment_id,findings:[{review_id,disposition:confirmed|revised|'
+    'unresolved,reason,evidence}]}, at the same level as "value" (not inside "value", and not after the closing brace '
+    'of the object). '
+    'Use the exact predecessor assignment_id from context_repair and cover every inherited final review '
+    'of this phase. A source-request turn may defer reassessment; the final phase output must include it. '
+    'A confirmed finding must retain its scientific support, value, objections and limitations. '
+    'Explain any revised or unresolved finding with exact supplied evidence. A changed judgment alone '
+    'does not dispose of a historical material objection; the ordinary objection procedure still applies.'
+)
+# The exact-copy wording without the rule on prior objections, kept for the assignments recorded with it: a
+# replacement reviewer restated inherited objections under their ids with reworded claims.
+PROMPT_EXACT_COPY_RULE = (
+    ' This is an explicit reassessment after recorded context contamination, not a new blind review. '
+    'The historical scientific inputs, observed assessments and unresolved objections remain evidence. '
+    'Do not treat their former independence as currently qualified. Your output is still the one top-level JSON '
+    'object of this role, with the top-level members stage, support, value, objections and limitations; add one more '
+    'top-level member beside them, "reassessment": {assignment_id,findings:[{review_id,disposition:confirmed|revised|'
+    'unresolved,reason,evidence}]}, at the same level as "value" (not inside "value", and not after the closing brace '
+    'of the object). '
+    'Use the exact predecessor assignment_id from context_repair and cover every inherited final review '
+    'of this phase. A source-request turn may defer reassessment; the final phase output must include it. '
+    'Label an inherited review confirmed only when your output repeats its support, value, objections and limitations '
+    'exactly; when your output changes any of them, including their wording, label it revised. '
+    'Explain any revised or unresolved finding with exact supplied evidence. A changed judgment alone '
+    'does not dispose of a historical material objection; the ordinary objection procedure still applies.'
+)
+# Every earlier suffix that a recorded assignment of the current version may carry.
+EARLIER_PROMPTS = (PROMPT_0560, PROMPT_0561_NIGHT, PROMPT_RETAIN_RULE, PROMPT_EXACT_COPY_RULE)
+PROMPT = (
+    ' This is an explicit reassessment after recorded context contamination, not a new blind review. '
+    'The historical scientific inputs, observed assessments and unresolved objections remain evidence. '
+    'Do not treat their former independence as currently qualified. Your output is still the one top-level JSON '
+    'object of this role, with the top-level members stage, support, value, objections and limitations; add one more '
+    'top-level member beside them, "reassessment": {assignment_id,findings:[{review_id,disposition:confirmed|revised|'
+    'unresolved,reason,evidence}]}, at the same level as "value" (not inside "value", and not after the closing brace '
+    'of the object). '
+    'Use the exact predecessor assignment_id from context_repair and cover every inherited final review '
+    'of this phase. A source-request turn may defer reassessment; the final phase output must include it. '
+    'Label an inherited review confirmed only when your output repeats its support, value, objections and limitations '
+    'exactly; when your output changes any of them, including their wording, label it revised. '
+    'A prior material objection receives its finding in objection_findings and is not restated in objections; '
+    'objections lists only the material objections that you raise yourself, each under a new id. '
     'Explain any revised or unresolved finding with exact supplied evidence. A changed judgment alone '
     'does not dispose of a historical material objection; the ordinary objection procedure still applies.'
 )
@@ -169,6 +239,7 @@ def prepare_repair(records, artifacts, assignment_payload):
     if {digest(item) for item in repair['evidence']} != {digest(item) for event in events for item in event['evidence']}:
         raise ResearchError('review_context_repair_mismatch', 'Use the exact recorded contamination evidence without author substitutes')
     from .review_protocol import retired_routes
+    from .review_refusal import refused_attempts
     retired = retired_routes(records)
     state = assignment_state(records, artifacts, predecessor['id'])
     dependency_codes = {'review_source_parent_unverified', 'review_context_repair_stale'}
@@ -194,7 +265,12 @@ def prepare_repair(records, artifacts, assignment_payload):
             pending = any(item['assignment_id'] == prior['id'] and item['id'] not in records.get('review_attempt', {})
                           for item in records.get('review_invocation', {}).values())
             dead = not attempts and not pending and prior['route_id'] in retired
-            if (pending or not attempts or any(item['status'] not in ('failed', 'incomplete') for item in attempts)) and not dead:
+            # Two refused outputs exhaust an assignment, so an exhausted repair gives way to a new one, as an exhausted
+            # initial bar slot takes a new reviewer.
+            completed = [item for item in attempts if item['status'] == 'completed']
+            exhausted = len(completed) >= 2 and len(refused_attempts(records, artifacts, completed)) == len(completed)
+            if ((pending or not attempts or any(item['status'] not in ('failed', 'incomplete') for item in attempts))
+                    and not dead and not exhausted):
                 raise ResearchError('review_resampling_forbidden', 'Retain the existing repair or source continuation without forking')
     history = []
     for ancestor in chain:
@@ -226,6 +302,19 @@ def _scientific_content(output):
     if isinstance(content['support'], dict):
         content['support'] = {key: value for key, value in content['support'].items() if key not in ('id', 'assessor')}
     return content
+
+
+def _is_unchanged(original, output, identities):
+    """Whether the output repeats the original's scientific content, each objection compared under its identity.
+
+    identities maps the stated id and claim of each qualified objection that the frozen repair packet delivers to its
+    identity; an output objection with that id and claim is compared under the identity."""
+    original_objections = [{key: value for key, value in objection.items() if key != 'stated_id'}
+                           for objection in original['objections']]
+    output_objections = [dict(objection, id=identities.get((objection['id'], objection['claim']), objection['id']))
+                         for objection in output['objections']]
+    return (_scientific_content(dict(original, objections=original_objections))
+            == _scientific_content(dict(output, objections=output_objections)))
 
 
 def reassessment_reviews(records, assignment):
@@ -326,6 +415,11 @@ def validate_reassessment(records, artifacts, assignment, observed_output, *, re
     findings = strategy.items(reassessment['findings'], 'Reassessment findings')
     seen = set()
     originals = {saved['id']: saved.get('payload', saved) for saved in inherited}
+    # Collected over every part of the frozen packet that delivers objections and over the earlier packets that its
+    # scientific history carries: an inherited review recorded under a qualified identity itself delivers no stated_id.
+    packets = [] if packet is None else [packet] + [turn['packet'] for turn in packet.get('scientific_history', [])]
+    identities = {(objection['stated_id'], objection['claim']): objection['id']
+                  for each_packet in packets for objection in list_packet_objections(each_packet) if 'stated_id' in objection}
     for finding in findings:
         fields(finding, ('review_id', 'disposition', 'reason', 'evidence'), code='review_reassessment_mismatch')
         text(finding['review_id'], 'Historical review ID', code='review_reassessment_mismatch')
@@ -334,14 +428,15 @@ def validate_reassessment(records, artifacts, assignment, observed_output, *, re
         seen.add(finding['review_id'])
         strategy.choice(finding['disposition'], ('confirmed', 'revised', 'unresolved'), 'Reassessment disposition', 'review_reassessment_mismatch')
         text(finding['reason'], 'Reassessment scientific reasoning', code='review_reassessment_mismatch')
+        binding = assignment.get('subject', {}).get('kind') == 'problem'
         if reading_checks:
-            strategy.evidence(records, artifacts, finding['evidence'])
+            strategy.evidence(records, artifacts, finding['evidence'], review_binding=binding)
         else:
             from .review_refusal import validate_evidence_contract
-            (evidence_validator or validate_evidence_contract)(records, artifacts, finding['evidence'])
+            (evidence_validator or validate_evidence_contract)(records, artifacts, finding['evidence'], review_binding=binding)
         from .review_protocol import _reference_templates
         content = _reference_templates(observed_output) if packet is not None else observed_output
-        if finding['disposition'] == 'confirmed' and _scientific_content(originals[finding['review_id']]) != _scientific_content(content):
+        if finding['disposition'] == 'confirmed' and not _is_unchanged(originals[finding['review_id']], content, identities):
             raise ResearchError('review_reassessment_mismatch', 'A changed scientific finding cannot be labeled confirmed')
     if seen != set(originals):
         raise ResearchError('review_reassessment_incomplete', 'Address every inherited final review')

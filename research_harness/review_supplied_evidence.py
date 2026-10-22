@@ -47,6 +47,13 @@ def list_delivered_objections(packet):
         for objection in entry.get('payload', entry).get('objections', [])]
 
 
+def list_packet_objections(packet):
+    """Every objection that a packet delivers: those that list_delivered_objections returns and the objections of the
+    bars and own bars that the packet delivers."""
+    return list_delivered_objections(packet) + [objection for key in ('bars', 'own_bars') for review in packet.get(key, [])
+                                                for objection in review.get('objections', [])]
+
+
 
 def supplied_context(records, artifacts, assignment_ids, *, frozen=False):
     """The artifacts that the packets of the assignments' lineages attached, by sha256, and the passage mappings they
@@ -139,7 +146,8 @@ def undelivered_references(records, artifacts, evidence, carried, references, ma
     for reference in evidence:
         if reference.get('kind') == 'record':
             if find_carried_record(records, carried, reference, frozen=frozen) is None:
-                missing.append({key: reference[key] for key in ('record_kind', 'id', 'digest')})
+                missing.append({'record_kind': reference['record_kind'], 'id': reference['id'],
+                                'digest': reference.get('digest')})
         elif not is_received(records, reference, references, mappings, artifacts=artifacts, frozen=frozen):
             artifact = reference['link']['artifact'] if reference.get('kind') == 'source' else reference
             details = {'sha256': artifact['sha256']}

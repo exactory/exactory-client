@@ -5,8 +5,9 @@ includes_abstract, visual_inspection_required, extractor, version, options,
 media_type, format_detection}. media_type is the type the extraction used and
 format_detection names how it was decided: 'reported_media_type', or
 'pdf_signature_from_generic_binary' for an application/octet-stream body whose
-bytes start with the PDF signature. PDF extractor injection accepts bytes and
-returns {status, text}; its successful status is 'extracted'.
+bytes start with the PDF signature. detect_media_type(data, media_type) makes
+that decision; review delivery uses it as well. PDF extractor injection accepts
+bytes and returns {status, text}; its successful status is 'extracted'.
 extraction_measures(text, original_size) describes an extraction (bytes, pages,
 longest line, whitespace fraction, expansion) so a coordinator sees layout
 padding before a reader does; a high value is a signal to inspect, never a
@@ -181,13 +182,19 @@ class _Article(HTMLParser):
                 self.body_text.append(data)
 
 
+def detect_media_type(data, media_type):
+    """Return the media type these bytes are handled as, and how it was decided: a body reported as generic binary
+    whose bytes start with the PDF signature is a PDF, and every other body keeps its reported type."""
+    if media_type == "application/octet-stream" and data.startswith(b"%PDF-"):
+        return "application/pdf", "pdf_signature_from_generic_binary"
+    return media_type, "reported_media_type"
+
+
 def extract(data, media_type, *, extractor=None, layout=True, ocr=False):
+    media_type, format_detection = detect_media_type(data, media_type)
     result = {"status": "unsupported_fulltext", "text": None, "includes_abstract": None, "visual_inspection_required": True,
               "extractor": None, "version": None, "options": {},
-              "media_type": media_type, "format_detection": "reported_media_type"}
-    if media_type == "application/octet-stream" and data.startswith(b"%PDF-"):
-        media_type = "application/pdf"
-        result.update({"media_type": media_type, "format_detection": "pdf_signature_from_generic_binary"})
+              "media_type": media_type, "format_detection": format_detection}
     if media_type == "application/pdf":
         if extractor is None and ocr:
             from .ocr import OcrPdfExtractor
