@@ -147,6 +147,19 @@ def _find_workspace(start_dir: Path | None = None) -> Path:
     raise AssertionError("unreachable")
 
 
+def _find_research_workspace(start_dir: Path | None = None) -> Path:
+    """The nearest workspace that holds a research store: a study, or a problem record, which has no study.json."""
+    start = (start_dir or Path.cwd()).resolve()
+    for directory in (start, *start.parents):
+        if (directory / _STUDY_STATE_PATH).is_file() or (directory / ".exactory/research.sqlite3").is_file():
+            return directory
+    _exit_with_error(
+        "No study or problem workspace holds this directory."
+        " Run exactory-lab init or exactory-research problem-init first.", 2
+    )
+    raise AssertionError("unreachable")
+
+
 def _load_study_state(workspace_dir: Path) -> dict:
     if (workspace_dir / ".exactory/research.sqlite3").exists():
         try:
@@ -393,7 +406,7 @@ def _parse_stage(value: str) -> str:
 def _run_probe(args: argparse.Namespace) -> None:
     try:
         from research_harness.probe import launch_probe
-        receipt = launch_probe(current_store(_find_workspace()), identifier=args.id, question=args.question,
+        receipt = launch_probe(current_store(_find_research_workspace()), identifier=args.id, question=args.question,
                                script=args.script, inputs=args.input, output_dir=args.output_dir,
                                timeout=args.timeout, observation=args.observation)
     except ResearchError as error:

@@ -667,3 +667,66 @@ formulas for long mathematics. Branch `feat/statement-box` from main `0536977` (
 
 Runs on the branch (`python3 -m unittest discover -s tests -p <module>`, Python 3.9.6): `test_math_problems_cli`
 179 OK; `test_research_problem_tools`, `test_codex`, `test_research_guidance` OK; `codex/generate.py --check` OK.
+
+## Release 0.58.0
+
+0.58.0 merges into 0.57.0 (main `bee3bca`) the local runtimes of two problem records, each built on 0.56.0, and closes
+the open tasks of their harness records (`misc/harness-improvement/20261021*` of the exactory repository). Branch
+`release/0.58.0`. The release adds 40 test files and changes 16 (`git diff --stat bee3bca -- tests
+skills/math-solver/harness/tests`). The imported runtimes bring their own tests, recorded with their red and green
+runs in the records.
+
+### RED and GREEN evidence of the tests written for the release
+
+| Test | Before the change | After |
+| --- | --- | --- |
+| `test_review_objection_identity`: P2, P3, P4 and an id-only change (version 6, finding V1) | on version 6: P2 `KeyError('claim')`, P3 not refused, the collection test reads an observed output | 39 OK |
+| `test_math_search_hooks`: a long `task add` text with a slash | denied with `[Errno 63] File name too long` | OK (24 of 24) |
+| `test_math_search_hooks`: a record that the installed controller cannot replay | the bare recovery text | OK |
+| `test_native_review_output_check` (harness tests): a reviewer string, a well-formed approval, six malformed parts, the receipt, non-approvals | the validator did not exist; no `output_refusal` in the receipt; a revision with findings refused | 5 OK |
+| `test_lab.TestProbeInProblemWorkspace` (4 tests) | the probe exited with the study error | OK |
+| `test_research_problem_value_readings`: the locator warning, and none with an HTTPS unit url | `KeyError: 'warnings'` | OK |
+| `test_research_problem_openness`: the export warning above a text route limit, none with a priority | `KeyError: 'warnings'` | OK |
+| `test_review_frozen_pdf_capture`: a page outside the delivered PDF | classification `None` | OK |
+| `test_review_input_projection`: an elided earlier turn, a generic binary PDF, UTF-8 text declared as generic binary | `review_input_unreadable`; no content | OK |
+| `test_research_problem_reviews`: openness coverage per formulation | refused at run (`native.output`) | OK |
+| `test_review_objection_identity.QualifiedObjectionShapeTests` (3 tests) | the identity map and a spoofed object were collected; a nested version was not | OK |
+| `test_research_review_delivery.RequestedSourceFitTests` | the requested source was elided as previously supplied | OK |
+
+Tests of the imported lines that stated one line's contract were changed to the merged contract, each named in its
+commit: the version 3 result prompt pinned with the suffix it was recorded with, digest-free record references in every
+problem review (0.56.1), the stop assurance of a version 2 result, the focused adjudicator's current sources, the
+version 4 result template and the four recorded context-repair suffixes, the frozen refusal detail `digest: None`, and
+the native outputs that the run now refuses.
+
+### Release runs
+
+On a detached checkout of `5011adb` (`ci/unittest_shards.py run`, 6 shards per Python; 3405 test ids, each run
+exactly once):
+
+- Python 3.12.8: no failure.
+- Python 3.9.6: one failure, `test_research_remote_execution.RemoteExecutionTests.test_no_runner_stays_pending_and_reconciliation_reuses_the_only_job`
+  (`result["ok"]` was false). The test gives its remote job a 0.1-second timeout and ran while twelve shards, two
+  reviews and a store comparison shared the machine. The release does not change the execution code, and the module
+  passed three times in a row alone on the final head.
+- Math-solver harness suite, 876 tests on each Python: one failure, the proposal review observed as a result-style
+  reject, which the run now refuses; the test was updated in `08c1d3b`.
+
+Commits after `5011adb` were tested by their focused modules, listed in each commit message; the pull request's CI runs
+the full matrix on the final head. `compileall`, `codex/generate.py --check` and the JSON validation pass.
+
+### Store compatibility and live checks
+
+Copies of the three problem stores read the same under 0.58.0 as under the runtime that recorded them (routes and
+assignment states, zero differences): the Sidorenko girth-six store (candidate-11), the extremal-graph-stability
+store (its runtime) and the stretched-LR store (0.57.0). Live probes of a `claude_cli_v1` route (Claude Code
+2.1.308) and a `codex_cli_v1` route (Codex CLI 0.163.0) from the release tree were `verified_for_route`.
+
+### Reviews
+
+Astra 6 (`gpt-6-astra`), settings verified from the session records. Code and design at `xhigh` through
+codex-plugin-cc: round 1 REVISE (F1 to F7), round 2 REVISE (F4, F8, F9), round 3 RELEASE with two minor findings,
+round 4 RELEASE with none. The texts that an agent reads at `max` through the Codex CLI: round 1 REVISE (T1 to T18),
+round 2 RELEASE with two minor findings, round 3 RELEASE with none. Every finding was fixed in the commits after
+`5011adb`; the record of the exactory repository
+(`misc/harness-improvement/20261022002458-release-0-58-0-of-local-repairs/`) holds the prompts and the answers.

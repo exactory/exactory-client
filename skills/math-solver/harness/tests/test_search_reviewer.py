@@ -73,9 +73,11 @@ class NativeReviewerTests(SearchCLIWorkspace, unittest.TestCase):
     def test_rejected_observed_result_cannot_be_changed_into_native_approval(self):
         value = self.approved(output={"decision": "reject", "reason": "The exact evidence does not prove this claim.",
                                       "objections": ["A required case is missing."]})
+        # A proposal review needs the native Review shape for every decision, so the run already refused this output
+        # (check native.output) and the observed review that the submission names is not verified.
         with self.assertRaises(SearchError) as caught:
             self.submit(value)
-        self.assertEqual(caught.exception.code, "review_output_mismatch")
+        self.assertEqual(caught.exception.code, "review_context_unverified")
 
     def verifier_packet(self, scientific_bytes):
         from search_controller.schema import digest

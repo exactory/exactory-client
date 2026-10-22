@@ -206,7 +206,16 @@ def import_bundle(store, payload, *, expected_revision, request_id):
         if reference_set not in updated["reference_sets"]:
             updated["reference_sets"].append(reference_set)
         changes.append(("work", work["id"], updated))
-        return changes, {"id": value["id"], "version_id": work["id"], "digest": bundle_digest(bundle, records), "occurrence_ids": occurrence_ids}
+        result = {"id": value["id"], "version_id": work["id"], "digest": bundle_digest(bundle, records), "occurrence_ids": occurrence_ids}
+        from .problem_evidence import find_citation_locator
+        if "problem" in records.get("workspace", {}) and find_citation_locator(work, value["units"]) is None:
+            # A unit url belongs to the digest that a full reading binds, so it is set before any reading depends on it.
+            result["warnings"] = [{"code": "problem_citation_locator_missing", "message":
+                "A problem record cites a work by its DOI, arXiv id or an HTTPS unit url, and this work has none of them. "
+                "Before recording a fulltext reading, import another bundle of this version with the HTTPS url of the "
+                "read original in the url of one of its units: a fulltext reading binds the digest of its bundle, so a "
+                "later bundle with that url makes every fulltext reading of this one stale."}]
+        return changes, result
 
     return prepared_mutation(store, "literature.bundle", payload, prepare, expected_revision=expected_revision, request_id=request_id)
 

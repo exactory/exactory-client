@@ -874,9 +874,14 @@ exactly the fields in the table. The list is nonempty and criterion IDs are uniq
 | --- | --- |
 | `accepted_obligation` | `obligation_id: ObligationRef` |
 | `accepted_case_set` | `obligation_id: ObligationRef`, `case_ids: [Text]` (nonempty) |
+| `accepted_standalone_claim` | None; only a standalone proposal may declare this criterion |
 | `verified_reduction` | `obligation_id: ObligationRef` |
 | `verified_obstruction` | `route_id: RouteRef` |
+| `verified_strategy_obstruction` | `obligation_id: ObligationRef`, resolving to the proposal's target obligation |
 | `hypothesis_recorded` | None |
+
+A standalone proposal has no target obligation, so it cannot declare
+`verified_strategy_obstruction`.
 
 Retreat criteria are nonempty and have exactly `kind` and the corresponding field:
 
@@ -966,6 +971,12 @@ bundles. The reviewer returns that same declaration as `findings.openness.minimu
 and binds its search and reading digests in `findings.openness.evidence`. The
 records must exist in this objective's associated common review store; copying a
 record from another workspace does not establish that association.
+`OpennessMinimum` has no delivery priority of full texts, so a text route cannot
+withhold this packet's full texts by priority; it still omits binary originals,
+which a text route never carries. A problem record exports its openness packet
+with `exactory-research export --kind problem-openness` instead, whose
+`minimum.text_priority` lets a text route withhold full-text bodies in a declared
+order.
 
 ```sh
 exactory-math --attack-root attack search review-packet --spec native-review.json --json
@@ -1205,12 +1216,26 @@ claim, including scope and assumptions. It has null `milestone_id` and never
 fabricates a journal move. Sources, studies, and evidence are immutable pinned
 inputs. Neither origin contains its own review, avoiding a content-digest cycle.
 
-A local origin requires a declared milestone of its admitted producer. For
+A local origin requires a declared milestone of its admitted producer. An
+`accepted_standalone_claim` milestone permits a proof checkpoint for the exact
+admitted standalone producer claim, without installing a controller obligation.
+It is satisfied only by an accepted proof with `obligation_id: null` whose
+dependencies and proof policy remain valid. Its acceptance cannot target a root
+obligation, even if the standalone claim happens to match that obligation. It
+provides no root coverage or renewal credit and leaves root closure unchanged.
+Existing journal, evidence, and independent result review checks still apply.
+Previously admitted milestones remain immutable; this criterion requires a
+reviewed proposal and does not authorize rewriting earlier admissions.
+
+For the other milestone kinds,
 `accepted_obligation`, `accepted_case_set`, or `verified_reduction`, the checkpoint
 claim must equal the named milestone obligation. For `verified_obstruction` or
 `hypothesis_recorded`, it must equal the producer's admitted claim. Permitted
 checkpoint kinds are respectively proof, proof, reduction, obstruction, and
-hypothesis. This permits a reviewed, predeclared intermediate output but forbids
+hypothesis. For `verified_strategy_obstruction`, the checkpoint kind must be
+obstruction and the claim must equal the producer's admitted claim, which is the
+claim of the named obligation because that obligation is the producer's target.
+This permits a reviewed, predeclared intermediate output but forbids
 arbitrary cross-node claim capture. The service additionally checks that the
 pinned journal prefix really belongs to this producer, the move was properly
 reserved and journalled, and the admitted milestone corresponds to the actual
@@ -1405,6 +1430,13 @@ matching usable acceptance, except `hypothesis_recorded`, which only records a
 hypothesis and grants no proof or renewal credit. Verified reduction recognizes
 both a nonclosing reduction and a proved reduction. Verified obstruction names
 the producer's declared route and never disproves the objective by implication.
+Verified strategy obstruction recognizes a usable `obstruction` acceptance of the
+checkpoint on the named obligation. The accepted obstruction excludes the
+producer's admitted strategy for its target obligation, as the admitted method,
+hypothesis and success criterion state it; the controller records no direction of
+its own. It neither proves nor refutes the obligation, grants no proof credit, and
+changes no obligation or route status. Like any accepted obstruction, it can be
+the basis of a budget renewal.
 
 Invalidation preserves checkpoints and acceptance history, invalidates transitive
 acceptance dependencies, and recomputes obligation status. If it affects the stored
@@ -1599,7 +1631,7 @@ verified resume can clear an existing pause.
 {action: "hook_stop", delivery_id: Text | null, session_id: Text | null,
  turn_id: Text | null, stop_hook_active: Boolean | null}
 {action: "side_interval", node_id: NodeID, max_moves: Integer[1,24],
- message_id: Text, provenance: Provenance}
+ message_id: Text, instruction?: Text, provenance: Provenance}
 ```
 
 The host/operator must authenticate explicit user instruction for resume and side
@@ -1610,6 +1642,19 @@ rearm later pauses. Side intervals stay within the admitted node's current accou
 and remaining move allowance, and are measured from its cumulative used moves.
 Main work keeps priority even during a side interval. Standalone nodes can also
 run when admitted main work is externally blocked; they confer no root coverage.
+
+The public `search side-interval NODE --spec FILE` command requires exactly
+`max_moves`, `message_id`, `instruction`, and `provenance` in its spec. Use the
+actual explicit user instruction and the existing authenticated host/operator
+command boundary. It records the existing bounded side-interval control action;
+it requires no additional mathematical review beyond the standalone admission.
+The instruction is optional only for replay of older internal records. A new
+public allocation enters the strategy context and requires a current strategy
+reassessment before research, including when no earlier evidence exists. Old
+records without an instruction retain their historical strategy context.
+The command creates no account, spending, reservation, resource refund, external
+block, or proof credit. It cannot resume a paused objective or change main-work
+priority, and ordinary execution limits and pending-work guards still apply.
 
 Stop accounting is objective-wide, capped at 40 continuations. Repeated delivery
 IDs do not consume another count. For a previously continuing delivery, the returned
@@ -1727,6 +1772,7 @@ Public command specs are closed records:
 | replan | The documented `replan_recorded` payload |
 | reassess | The reviewed record under [Mandatory strategy reassessment](#mandatory-strategy-reassessment) |
 | focus | `{focus: "focused"|"ambiguous"|"unrelated", provenance: Provenance, session_id: Text}` |
+| side-interval ID | `{max_moves: Integer[1,24], message_id: Text, instruction: Text, provenance: Provenance}` |
 | pause, resume, hook-stop | The respective `ControlInput` without `action` |
 | audit, render, status, next, strategy-context | `{}`; no spec file |
 
@@ -1866,6 +1912,16 @@ Supported patch add/update/delete/move operations protect `.search` snapshots an
 artifacts, generated `SEARCH_TREE.md`/`LINEAGE.md`, discovery pointers, and native
 records under custom roots. Combined unit/draft sequencing remains enforced.
 Read-only file references and command-like prose are not write authorization.
+The hook skips a shell token as a path when one of its slash-separated
+components is longer than 255 bytes, since such a token names no file; free text
+of that length, such as a long `task add` text with a slash, is not probed. A
+shorter token with a slash remains a candidate path, subject to the hook's other
+filters for options, interpreter code or module arguments, and newline or NUL
+characters.
+The hooks read a record with the controller of their own plugin. When that
+controller cannot replay the record's log, the denial names the controller and
+says that a record written by another exactory-math, such as a newer release or a
+local runtime, needs a release that reads it; the log does not name its writer.
 Recognized managed mutations with corrupt state or unsupported visible shell or
 wrapper payloads fail closed with direct-call recovery guidance. The adapter does
 not parse arbitrary shell programs or JavaScript. Nested operations that the host

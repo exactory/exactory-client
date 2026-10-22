@@ -90,6 +90,54 @@ class RetiredRouteTests(RouteRetirementCase):
         self.assertEqual(refused.exception.code, "review_context_repair_mismatch")
 
 
+class ExhaustedRepairTests(RouteRetirementCase):
+    """A repair whose two outputs were both refused gives way to a new repair of the same slot."""
+
+    def setUp(self):
+        super().setUp()
+        self.setup_dossier()
+        self.route()
+        self.record_response("bar-a", "reviewer-a", self.review_response("bar", status="insufficient"))
+        self.record_response("bar-b", "reviewer-b", self.review_response("bar"))
+        self.retire()
+        self.second_route()
+
+    def refuse_twice(self, assignment):
+        """Two outputs that label the inherited bar confirmed while changing its status; recording each is refused."""
+        output = dict(self.review_response("bar"), reassessment={"assignment_id": "assignment-bar-a", "findings": [
+            {"review_id": "bar-a", "disposition": "confirmed", "reason": "The standard stands.", "evidence": [self.evidence]}]})
+        for attempt in ("first", "second"):
+            with patch("research_harness.review_transport.send_request", return_value=self.provider_response(output)):
+                review_protocol.invoke_assignment(self.store, {"id": assignment + "-" + attempt, "assignment_id": assignment},
+                    expected_revision=self.store.revision, request_id="invoke-" + assignment + "-" + attempt, credential="fixture-only")
+            with self.assertRaises(ResearchError) as refused:
+                self.mutate(research_decisions.record_value_review,
+                            dict(output, id="repaired-" + attempt, dossier_id="dossier-1", assignment_id=assignment))
+            self.assertEqual(refused.exception.code, "review_reassessment_mismatch")
+
+    def test_a_new_repair_continues_the_slot_after_two_refused_outputs(self):
+        self.mutate(review_protocol.record_assignment, self.repair_payload())
+        self.refuse_twice("repair-a")
+        saved = self.mutate(review_protocol.record_assignment,
+                            dict(self.repair_payload(), id="repair-b", reviewer_id="repair-reviewer-2"))["result"]
+        self.assertEqual(review_context_repair.slot_id(self.store.snapshot()["records"], saved), "assignment-bar-a")
+
+    def test_a_repair_with_a_recordable_output_still_holds_the_slot(self):
+        self.mutate(review_protocol.record_assignment, self.repair_payload())
+        with patch("research_harness.review_transport.send_request",
+                   return_value=self.provider_response(self.review_response("bar"))):
+            review_protocol.invoke_assignment(self.store, {"id": "repair-a-first", "assignment_id": "repair-a"},
+                expected_revision=self.store.revision, request_id="invoke-repair-a-first", credential="fixture-only")
+        with self.assertRaises(ResearchError) as refused:
+            self.mutate(review_protocol.record_assignment, dict(self.repair_payload(), id="repair-b", reviewer_id="repair-reviewer-2"))
+        self.assertEqual(refused.exception.code, "review_resampling_forbidden")
+
+    def test_the_repair_prompt_names_the_exact_copy_rule_and_keeps_the_earlier_wording(self):
+        self.assertIn("Label an inherited review confirmed only when", review_context_repair.PROMPT)
+        self.assertIn(review_context_repair.PROMPT_RETAIN_RULE, review_context_repair.EARLIER_PROMPTS)
+        self.assertIn("A confirmed finding must retain its scientific support", review_context_repair.PROMPT_RETAIN_RULE)
+
+
 class RetiredSourceTurnTests(RouteRetirementCase):
     """The shape of the first problem record: the slot's last observed turn requested sources, and its continuation was
     assigned but never run when the route was retired."""

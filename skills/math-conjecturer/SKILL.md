@@ -239,7 +239,9 @@ and it is honest about its outcome.
 10. Cite evidence for each foothold and each obstruction. For a literature attempt, cite a listed
     full reading. For a solver foothold, cite an accepted `proof` or `reduction` acceptance. For a
     solver obstruction, cite an accepted `obstruction` or `counterexample` acceptance on an
-    obligation other than the root obligation.
+    obligation other than the root obligation. An acceptance under the milestone
+    `verified_strategy_obstruction` excludes only the producer's admitted strategy for its target
+    obligation: state it as an obstruction of that strategy, not of the route or the statement.
 11. Give `proportion: {extension_reason}`. When a delivered total exceeds a normal limit (24
     moves, 24 runs, 1 worker, 300 seconds), write the reason in `extension_reason`.
 12. Record a new attempt for every new statement id. When the solver delivers a later snapshot
@@ -259,7 +261,35 @@ result and its source; start no solver work to reproduce an established result.
    bounded or complete coverage.
 2. Read every decisive prior or settling work in full. Keep an unavailable source as a gap.
 3. Write the openness spec `{assignment_id, reviewer_id, minimum: {searches: [{formulation,
-   search_id}], settling_work_id, duplicate_resolutions}}`.
+   search_id}], settling_work_id, duplicate_resolutions}}`. For a text route, add
+   `minimum.text_priority`: the version ids of the read works, the decisive ones first (the works
+   that state a formulation open or hold the strongest partial result). While the packet exceeds
+   the route's input limit, the route withholds the full-text bodies of the listed versions from
+   the end of that list. It still delivers every reading record and every protected body (required
+   proof bytes, selected source texts and screening evidence). The export warns with
+   `review_input_too_large` when the list is missing and the estimated packet exceeds a registered
+   text route's limit. When a local supporting proof is
+   material, add `native_reviews: [{attempt_id, assignment_id}]`. Use the current exact-statement
+   solver attempt and its observed approving native result review, with `schema_version: 2`, of a
+   proof or reduction checkpoint. This interface requires analytical evidence manifests with `verification: null`
+   throughout the dependency closure; certificate and Lean evidence need a future typed delivery
+   contract. The exporter binds the full reviewed checkpoint, exact claim, unchanged output
+   and scientific dependency bytes. This reports an observed approving review, without asserting
+   that native acceptance used it or that the original objective was resolved.
+   For captured primary evidence used to screen a search hit, add optional
+   `source_evidence: [{source_id, reason, locator?}]`. The source must be a retained common
+   acquisition record. Without a locator the exact captured response is supplied; an optional
+   `{kind: "span", start, end, sha256, excerpt?}` selects an exact UTF-8 text substring using
+   Unicode character offsets. The complete source provenance record and selected original
+   bytes reach the reviewer, with an explicit partial-access scope and no fulltext reading
+   credit. Imported sources retain their actual origin-verification status. A partial publisher
+   preview can support a screening judgment only within the evidence the reviewer receives.
+   These exports also carry the explicit `openness-verbatim-evidence-v1` text-encoding
+   marker. If ordinary Codex serialization exceeds its input limit, register and probe a
+   separate `codex_cli_framed_v1` route at `codex://local`. That route supplies the exact
+   evidence bodies as reversible visible text blocks and authenticates the observed framed
+   input. Keep earlier proof observations on their unchanged original route. Framing does not
+   permit omitted required evidence or change any scientific gate.
 4. Run `exactory-research export --kind problem-openness --spec openness-spec.json --destination
    openness-packet`.
 5. Put the exported packet in the `context` of a `review-assignment` with that assignment id and
@@ -271,7 +301,22 @@ result and its source; start no solver work to reproduce an established result.
 8. On `already_solved`, redirect to the settling result, or record a new statement.
 9. When a neighbour is added, a new material search is not bound, a bound search or reading
    changes, or the finding no longer covers the current formulation, refresh the finding
-   (`problem_openness_stale`).
+   (`problem_openness_stale`). A supplied native review also becomes stale when its current
+   solver attempt, native snapshot, observed review or proof bytes change. Its required proof
+   bytes must have reached both the original reviewer and the openness reviewer in their actual
+   authenticated requests. An omitted body or artifact descriptor alone supplies no proof bytes.
+   Screening evidence also becomes stale when its source record, original response, selected
+   bytes or authenticated reviewer delivery changes. Both the original acquisition record and
+   the selected text must remain delivered, even under route input limits.
+   New packets with native support also bind a versioned `openness_delivery` record. It selects
+   one authenticated complete main representation per exact source version while retaining all
+   full reading records and evidence descriptors. Alternate bodies are explicitly marked as
+   omitted; required supplements and inspected visuals remain protected. A complete extraction
+   may be represented by exact UTF-8 byte bounds inside a fully delivered mandatory proof
+   artifact only when its size and SHA-256 match. This never substitutes a partial excerpt,
+   normalized text or an omitted container, and it makes no claim that omitted original layout
+   was delivered. Recording and later assessment check the actual request and current source
+   bindings. Historical packets without this delivery record retain their original behavior.
 
 ## Value and the rubric
 
@@ -415,10 +460,17 @@ evidence the record binds delivered to them.
    `attempt` or `calibration`, and name both original result review ids in
    `context.review_ids`. Run the assignment with `review-run` and record the observed finding
    with `review-adjudication`.
-7. Treat only a ready `not_upheld` adjudication on the current evidence digest as a resolution of
-   that one item.
+7. For a rubric grade, treat only a ready `not_upheld` adjudication on the current evidence digest
+   as a resolution of that one item.
 8. Resolve every material objection of both bars, of the applicable slate reviews and of both
-   result reviews with evidence, or with a focused adjudication that finds it not upheld. When a
+   result reviews with evidence, or with a ready focused adjudication on the current evidence
+   that finds it `not_upheld` or `not_binding`. `not_binding` means that the objection's claim
+   holds, but each affected part of the statement, the resolution criteria and the value
+   paragraphs either does not depend on the contested premise or states that dependence
+   explicitly. Name an
+   objection in `context.objection_id` by the identity that its packets deliver: two blind
+   reviewers who chose one id for different claims hold distinct identities, the later one
+   `<id>@<review id>` with its `stated_id`. When a
    slate objection or the bars change after the result reviews, the same reviewers can be
    reassigned (the harness permits the refresh when the review's currency changed and refuses a
    repeat otherwise).

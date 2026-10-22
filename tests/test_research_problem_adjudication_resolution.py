@@ -287,13 +287,73 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         self.assertEqual(stating["problem_evidence"]["value"]["digest"], value["digest"])
         self.assertEqual((reading["record_kind"], reading["record"]["id"], reading["record"]["digest"]),
                          ("reading", self.item["reading_id"], reading["digest"]))
-        # The adjudicator receives the reading as the projection the stating result packet carried; since 0.56.0 the full
-        # text travels by reference, so no artifact descriptor accompanies it.
-        carried = next(entry for entry in stating["problem_evidence"]["readings"] if entry["id"] == self.item["reading_id"])
-        self.assertEqual((reading["record"], reading["artifacts"]), (carried, []))
+        original_reading = next(row for row in stating["problem_evidence"]["readings"]
+                                if row["id"] == self.item["reading_id"])
+        self.assertEqual(reading["record"], protocol._reference_templates(original_reading))
+        # The original result received the compact record and exact inline spans, not its held full text.
+        self.assertEqual(reading["artifacts"], [])
+        original_passages = [row for row in stating["problem_evidence"]["passages"]
+                             if row["reading_id"] == self.item["reading_id"]]
+        self.assertTrue(original_passages)
+        self.assertEqual(original_passages, [row for row in packet["problem_evidence"]["passages"]
+                                             if row["reading_id"] == self.item["reading_id"]])
+        full_reading = self.store.snapshot()["records"]["reading"][self.item["reading_id"]]
+        source = full_reading["inspections"][0]["link"]["artifact"]
+        self.assertNotIn(source, [row["artifact"] for row in stating["evidence"]])
+        self.assertNotIn(source, packet["original_evidence"])
+        self.assertIn(source, packet["current_evidence"])
+        for passage in original_passages:
+            inspected = full_reading["inspections"][passage["inspection_index"]]["link"]
+            source_text = self.artifacts.read(inspected["artifact"]).decode("utf-8")
+            self.assertEqual(passage["text"], source_text[passage["start"]:passage["end"]])
         self.assertEqual((value["record_kind"], value["record"]["motivation"], value["artifacts"]),
                          ("problem_value", stating["problem_evidence"]["value"]["motivation"], []))
         self.assertEqual(undelivered, [])
+        self.assert_delivered()
+
+    def test_a_reading_and_explicitly_requested_original_full_source_keep_their_distinct_delivery(self):
+        self.prepare_reviews(results=False)
+        reading_ref = self.cite_record("reading", self.item["reading_id"])
+        reading = self.store.snapshot()["records"]["reading"][self.item["reading_id"]]
+        source = reading["inspections"][0]["link"]["artifact"]
+        request = self.build_review_output("result")
+        request["value"]["status"] = "unresolved"
+        request["source_requests"] = [{"id": "exact-original-source", "kind": "source",
+            "version_id": self.item["version_id"], "depth": "fulltext"}]
+        self.observe("result", "first", request, record=False, identifier="result-first-request")
+        assignment = self.assign("result", "first", identifier="result-first",
+                                 prior_assignment_id="result-first-request")
+        supplied_packet = self.read_packet("result-first")
+        delivery = next(row for row in supplied_packet["source_deliveries"]
+                        if row["request"]["version_id"] == self.item["version_id"])
+        self.assertEqual(delivery["status"], "delivered")
+        self.assertIn(source, delivery["evidence"])
+        original_body = next(row for row in supplied_packet["evidence"] if row["artifact"] == source)
+        self.assertEqual(original_body["encoding"], "utf-8")
+        self.assertEqual(original_body["content"].encode("utf-8"), self.artifacts.read(source))
+        output = self.build_review_output("result")
+        output["objections"] = [dict(self.make_objection(), evidence=[reading_ref, source])]
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {"id": "attempt-result-first", "assignment_id": assignment["id"]},
+                        credential="test-only")
+        self.mutate(decisions.record_value_review, dict(output, id="review-result-first", dossier_id=None,
+                                                       assignment_id=assignment["id"]))
+        self.observe("result", "second")
+        self.observe_adjudication(review_ids=["review-result-first", "review-result-second"])
+        focused = self.read_packet("focused")
+        carried_reading, carried_source = focused["version_evidence"]
+        self.assertEqual(carried_reading["digest"], reading_ref["digest"])
+        self.assertEqual(carried_reading["artifacts"], [])
+        self.assertEqual(carried_source, source)
+        self.assertIn(source, focused["original_evidence"])
+        focused_body = next(row for row in focused["evidence"] if row["artifact"] == source)
+        self.assertEqual(focused_body["encoding"], "utf-8")
+        self.assertEqual(focused_body["content"].encode("utf-8"), self.artifacts.read(source))
+        records = self.store.snapshot()["records"]
+        [version] = decisions.collect_problem_post_objections(records, self.artifacts,
+            [records["value_review"][identifier] for identifier in ("review-result-first", "review-result-second")])
+        self.assertEqual(decisions.find_undelivered_adjudication_keys(records, self.artifacts, "focused",
+            version_evidence=protocol.describe_version_evidence(records, self.artifacts, version)), [])
         self.assert_delivered()
 
     def test_the_attempt_record_cited_by_a_result_review_is_delivered(self):
@@ -345,8 +405,15 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
                          ("review_evidence_undelivered", {"record_kind": "problem_candidate", "id": "candidate-1", "digest": None}))
 
     def test_a_stop_assurance_written_as_not_assessed_passes_the_gate(self):
-        """The result prompt's own example writes the stop assurance as not_assessed with the reason that nothing
-        requires a stop; the gate counts that as the assurance passing. Every other assurance passes only as passed."""
+        """The version 2 result prompt's own example writes the stop assurance as not_assessed with the reason that
+        nothing requires a stop; the gate counts that as the assurance passing for a result on that prompt. Every
+        other assurance passes only as passed."""
+        original_prompt = protocol.canonical_prompt
+
+        def build_version_two_prompt(role, **options):
+            if role == "result" and options.get("orchestration") == "problem_creation":
+                options["version"] = 2
+            return original_prompt(role, **options)
         self.prepare_reviews(results=False)
         for reviewer in ("first", "second"):
             output = self.build_review_output("result")
@@ -355,7 +422,10 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
                     if check["kind"] == "stop":
                         check["status"] = "not_assessed"
                         check["reason"] = "Nothing in the record requires a stop."
-            self.observe("result", reviewer, output)
+            with patch.object(protocol, "canonical_prompt", side_effect=build_version_two_prompt):
+                self.observe("result", reviewer, output)
+            self.assertEqual(self.store.snapshot()["records"]["review_assignment"]["result-" + reviewer]["prompt"]["template_id"],
+                             "exactory-problem-review-v2/result")
         records = self.store.snapshot()["records"]
         codes = {item["code"] for item in decisions.assess_problem_reviews(records, self.artifacts)["obligations"]}
         self.assertNotIn("problem_assurance_pending", codes)
@@ -1069,7 +1139,8 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
     def test_a_first_slate_after_another_bar_repair_receives_the_historical_objection(self):
         """R57: the slate packet delivers the objection on which the slate review must give a finding."""
         assignment = self.repair_the_first_bar_that_stated_o1()
-        [objection] = json.loads(self.artifacts.read(assignment["packet"]))["material_objections"]
+        packet = json.loads(self.artifacts.read(assignment["packet"]))
+        [objection] = packet["material_objections"]
         stated = self.make_objection()
         self.assertEqual({key: objection[key] for key in ("id", "claim", "reason", "resolution_condition")},
                          {key: stated[key] for key in ("id", "claim", "reason", "resolution_condition")})
@@ -1078,6 +1149,9 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         self.assertEqual((objection["review_id"], objection["version_evidence"], objection["version_source_mappings"]),
                          ("review-bar-first", [template], json.loads(self.artifacts.read(
                              self.store.snapshot()["records"]["review_assignment"]["bar-first"]["packet"]))["prior_context"]))
+        body = next(row for row in packet["evidence"] if row["artifact"] == self.supporting)
+        self.assertEqual(body["encoding"], "utf-8")
+        self.assertEqual(body["content"].encode("utf-8"), self.artifacts.read(self.supporting))
         self.assertIn("material_version", objection)
         output = self.build_slate_output(["candidate-1"])
         output["value"]["bar_ids"] = json.loads(self.artifacts.read(assignment["packet"]))["bar_ids"]
@@ -1793,8 +1867,8 @@ class ReviewOutputRefusalTests(delivery_fixtures.ProblemDeliveryCase):
     def test_native_adjudicator_retry_preserves_existing_evidence_contract(self):
         import test_research_review_protocol as native
         case = native.ReviewProtocolTests("test_inadmissible_correction_is_preserved_without_clearing_the_finding")
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         p = case.protocol()
         case.bar_reviews()
         case.mutate(p.record_assignment, {"id": "focused", "route_id": "route", "dossier_id": "dossier", "role": "adjudicator",

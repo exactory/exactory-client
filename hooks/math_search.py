@@ -18,6 +18,8 @@ import tempfile
 import uuid
 
 CONTROLLER_TIMEOUT = 20
+# The longest file name, in bytes, that the supported hosts' file systems (APFS, ext4) accept.
+NAME_MAX = 255
 LAUNCHER = Path(__file__).resolve().parents[1] / "bin/exactory-math"
 _SHELL_NAMES = {"Bash", "exec_command", "functions.exec_command"}
 _FILE_NAMES = {"Write", "Edit", "Delete", "Read"}
@@ -139,7 +141,9 @@ def operation_paths(payload):
             if not token or token.startswith("-") or token in {";", "&&", "|", ">", ">>", "<"}:
                 continue
             candidate = token.split("=", 1)[-1] if token.startswith(("of=", "if=")) else token
-            if "\n" not in candidate and "\x00" not in candidate:
+            # A token with a component longer than any file name names no file; free text with a slash is one.
+            if ("\n" not in candidate and "\x00" not in candidate
+                    and all(len(os.fsencode(part)) <= NAME_MAX for part in candidate.split("/"))):
                 paths.append(resolve(candidate, cwd))
         return paths
     return []
@@ -251,7 +255,18 @@ def controller_call(root, command, spec=None, session=None, focus=None, identity
         except subprocess.SubprocessError as error:
             raise ManagedError("Controller recovery required after bounded invocation failed: " + str(error)) from error
     if process.returncode:
-        raise ManagedError("Controller recovery required: " + (process.stderr.strip() or "no diagnostic"))
+        diagnostic = process.stderr.strip() or "no diagnostic"
+        try:
+            code = json.loads(diagnostic)["error"]["code"]
+        except (ValueError, TypeError, KeyError):
+            code = None
+        if code == "invalid_record":
+            # The log holds no version of the controller that wrote it, so a record of a newer or local controller and
+            # a damaged record fail alike.
+            raise ManagedError("The installed controller " + str(LAUNCHER) + " could not replay this record: " + diagnostic
+                               + ". A record that another exactory-math wrote, such as a newer release or a local "
+                               "runtime, needs a release that reads it; a damaged record needs recovery.")
+        raise ManagedError("Controller recovery required: " + diagnostic)
     result = json.loads(process.stdout, object_pairs_hook=_unique)
     if not isinstance(result, dict):
         raise ManagedError("Controller returned an unsupported JSON response; recover the controller")

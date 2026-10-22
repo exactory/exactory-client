@@ -1,5 +1,6 @@
 """Canonical native mathematical review packets, without strategic-value gates."""
 
+from datetime import date
 import re
 
 from .artifacts import validate_reference
@@ -66,7 +67,7 @@ MINIMUM_PROMPT = OPENNESS_PROMPT.replace(
     'unresolved. '
 )
 
-PROMPT = MINIMUM_PROMPT.replace(
+RESOLUTIONS_PROMPT = MINIMUM_PROMPT.replace(
     '{schema_version:1,statement,neighbours,searches:[{formulation,search_digest}],reading_digests,settling_work_id}. ',
     '{schema_version:1,statement,neighbours,searches:[{formulation,search_digest}],reading_digests,settling_work_id}, '
     'optionally with duplicate_resolutions:[{search_digest,work_id,canonical_work_id}]. '
@@ -74,6 +75,33 @@ PROMPT = MINIMUM_PROMPT.replace(
     'An out_of_scope resolution removes the uncertain hit\'s reading obligation; duplicate_resolutions '
     'transfers it to the named relevant or contradictory canonical source in that resolving search. '
     'The canonical source needs a complete fulltext reading; a duplicate without that binding remains a gap. '
+)
+
+STRATEGY_PROMPT = RESOLUTIONS_PROMPT + (
+    "The result review type is also used for policy and strategy subjects; identify the actual subject before judging it. "
+    "A native.subject containing context_digest, assessments, plan_bindings, strategy_order, next_hypotheses and "
+    "remaining_obligation_ids is a StrategyAssessment. Its subject_digest binds that assessment, while claim_digest "
+    "identifies the original objective claim whose unresolved obligations must be preserved. "
+    "For this subject, judge whether the proposed dispositions follow from the supplied current context, studies, "
+    "retained failures, plan bindings and next hypotheses. Check that each continuing strategy is justified, "
+    "that a failed method has concrete changed inputs before reuse, and that the proposed execution order and "
+    "success and failure criteria can advance the remaining obligations within the recorded resource rules. "
+    "A justified StrategyAssessment may be approved while the original theorem and openness remain unresolved. "
+    "Such approval does not accept a proof, establish openness, renew a budget or close an obligation. "
+    "Do not demand a proof of the original theorem as a prerequisite for approving a justified research step. "
+    "Use the same required result findings to explain the assessment's statement, assumptions, scope, dependencies "
+    "and policy; give the openness finding supported by the delivered evidence, using unresolved when necessary. "
+    "This distinction does not relax any proof checkpoint, computation, acceptance or root-closure requirement. "
+)
+
+# Codex normalizes outer whitespace when loading its instruction file. Keep the
+# prior prompt exact for historical records; fresh prompts must survive that load.
+TRIMMED_STRATEGY_PROMPT = STRATEGY_PROMPT.rstrip()
+PROMPT = TRIMMED_STRATEGY_PROMPT + (
+    " For every native result review, findings.statement, findings.assumptions, findings.scope, "
+    "findings.dependencies and findings.policy must each be a nonempty JSON string. "
+    "findings.openness.coverage and findings.openness.reason must each be a nonempty JSON string, "
+    "not an object or an array. Keep structured search details inside those strings when needed."
 )
 
 
@@ -154,3 +182,103 @@ def require_assignment_identity(packet, assignment):
                 "attestation_id": ATTESTATION_PREFIX + assignment["id"]}
     if packet["reviewer"] != expected or assignment["dossier_id"] is not None:
         raise ResearchError("invalid_native_review_packet", "Native review binds one exact assignment without a dossier")
+
+
+PROPOSAL_FINDINGS = ("root_connection", "mathematical_substance", "assumptions", "scope", "equivalence", "necessity",
+                     "novelty", "significance", "renewal_basis")
+RESULT_FINDINGS = ("statement", "assumptions", "scope", "dependencies", "policy")
+RECOVERY_FINDINGS = ("read_only_origin", "delta", "authority", "preservation", "quiescence")
+
+
+def _require(condition, message):
+    if not condition:
+        raise ResearchError("invalid_native_review", message)
+
+
+def _closed(value, keys, message):
+    _require(isinstance(value, dict) and set(value) == set(keys), message)
+
+
+def _nonempty(value):
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _validate_objections(value, *, empty=False):
+    _require(isinstance(value, list) and (not empty or not value), "unresolved_objections must be a list" +
+             (" and empty in an approval" if empty else ""))
+    for objection in value:
+        _closed(objection, ("blocking", "description"), "Each unresolved objection is exactly {blocking,description}")
+        _require(type(objection["blocking"]) is bool and _nonempty(objection["description"]),
+                 "An objection needs a boolean blocking flag and a nonempty description")
+
+
+def _validate_openness(openness, claim_digest, *, structured_coverage):
+    _require(isinstance(openness, dict) and set(openness) - {"minimum"} == {
+        "outcome", "statement_digest", "evidence", "searched_at", "coverage", "reason"},
+        "openness is exactly {outcome,statement_digest,evidence,searched_at,coverage,reason}, with minimum when supplied")
+    _require(openness["outcome"] in ("supported_open", "already_solved", "unresolved"), "Unknown openness outcome")
+    _require(openness["statement_digest"] == claim_digest, "openness.statement_digest must equal native.claim_digest")
+    evidence = openness["evidence"]
+    _require(isinstance(evidence, list) and evidence and len(set(map(str, evidence))) == len(evidence)
+             and all(isinstance(item, str) and re.fullmatch(r"[0-9a-f]{64}", item) for item in evidence),
+             "openness.evidence is a nonempty list of distinct SHA-256 digests")
+    _require(all(_nonempty(openness[key]) for key in ("searched_at", "reason")),
+             "searched_at and reason must be nonempty strings")
+    # problem-openness records a problem record's coverage as given, also as a nonempty list or object.
+    coverage = openness["coverage"]
+    _require(_nonempty(coverage) or (structured_coverage and isinstance(coverage, (list, dict)) and bool(coverage)),
+             "coverage must be a nonempty string" + (", list or object" if structured_coverage else ""))
+    try:
+        _require(date.fromisoformat(openness["searched_at"]).isoformat() == openness["searched_at"],
+                 "openness.searched_at must be YYYY-MM-DD")
+    except ValueError as error:
+        raise ResearchError("invalid_native_review", "openness.searched_at must be YYYY-MM-DD") from error
+    if "minimum" in openness:
+        from .openness_minimum import validate_minimum
+        validate_minimum(openness["minimum"])
+
+
+def validate_output(packet, output):
+    """Check an observed native review against the shape that its prompt states and the native controller records:
+    the exact subject, claim and reviewer bindings of the packet, the decision vocabulary and the closed fields. A
+    result or recovery that is not an approval is retained only as an assessment and authorizes nothing, so it needs
+    only its decision and a reason."""
+    _require(isinstance(output, dict), "A native review is one JSON object")
+    kind = packet["kind"]
+    if kind != "proposal" and output.get("decision") != "approve":
+        _require(output.get("decision") in ("revise", "reject") and _nonempty(output.get("reason")),
+                 "A result or recovery that is not approved needs decision revise or reject and a nonempty reason")
+        return
+    _require(output.get("subject_digest") == packet["subject_digest"], "Use the exact native.subject_digest")
+    _require(output.get("reviewer") == packet["reviewer"], "Use the exact native.reviewer object")
+    if kind == "proposal":
+        _closed(output, ("schema_version", "subject_digest", "claim_digest", "reviewer", "decision", "findings",
+                         "unresolved_objections"), "A proposal review has exactly the fields of the native Review")
+        _require(output["schema_version"] == 1 and type(output["schema_version"]) is int, "Proposal reviews use schema_version 1")
+        _require(output["claim_digest"] == packet["claim_digest"], "Use the exact native.claim_digest")
+        _require(output["decision"] in ("approve", "revise", "reject"), "Use decision approve, revise or reject")
+        _closed(output["findings"], PROPOSAL_FINDINGS, "Proposal findings are exactly the nine native findings")
+        _require(all(isinstance(value, str) for value in output["findings"].values()), "Proposal findings are strings")
+        _validate_objections(output["unresolved_objections"])
+    elif kind == "result":
+        version = output.get("schema_version", 1)
+        _require(type(version) is int and version in (1, 2), "Result reviews use schema_version 1 or 2")
+        _closed(output, ("subject_digest", "claim_digest", "reviewer", "decision", "findings")
+                + (("schema_version",) if "schema_version" in output else ()),
+                "A result approval has exactly the fields of the native result review")
+        _require(output["claim_digest"] == packet["claim_digest"], "Use the exact native.claim_digest")
+        _closed(output["findings"], RESULT_FINDINGS + (("openness",) if version == 2 else ()),
+                "Result findings are statement, assumptions, scope, dependencies and policy, with openness in version 2")
+        _require(all(_nonempty(output["findings"][key]) for key in RESULT_FINDINGS),
+                 "findings.statement, findings.assumptions, findings.scope, findings.dependencies and findings.policy "
+                 "must each be a nonempty string; in schema_version 2, findings.openness is an object")
+        if version == 2:
+            _validate_openness(output["findings"]["openness"], packet["claim_digest"],
+                               structured_coverage=packet["contract"].get("orchestration") == "problem_creation")
+    else:
+        _closed(output, ("schema_version", "subject_digest", "reviewer", "decision", "findings", "unresolved_objections"),
+                "A recovery approval has exactly the fields of the native recovery review")
+        _require(output["schema_version"] == 1 and type(output["schema_version"]) is int, "Recovery reviews use schema_version 1")
+        _closed(output["findings"], RECOVERY_FINDINGS, "Recovery findings are exactly the five native findings")
+        _require(all(_nonempty(value) for value in output["findings"].values()), "Every recovery finding is a nonempty string")
+        _validate_objections(output["unresolved_objections"], empty=True)

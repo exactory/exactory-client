@@ -249,8 +249,8 @@ class RankOperatorRecoveryTests(WorkspaceTest):
     def prepared_fixture(self, prepare):
         fixture = RankOperatorRecoveryTests("test_default_reconcile_remains_closed_to_ambiguous_effects")
         fixture.prepare_native_before_intent = prepare
+        self.addCleanup(fixture.doCleanups)
         fixture.setUp()
-        self.addCleanup(fixture.tearDown)
         return fixture
 
     def test_unaccounted_original_journal_cannot_be_hidden_by_zero_counters(self):

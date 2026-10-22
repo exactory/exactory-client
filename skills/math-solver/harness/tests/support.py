@@ -47,13 +47,11 @@ class WorkspaceTest(unittest.TestCase):
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
         self.attack_root = Path(self._tmp.name).resolve() / "attack"
         self.attack_root.mkdir()
         self.workspace = self.attack_root / self.slug
         run(["init", self.slug], self.attack_root)
-
-    def tearDown(self):
-        self._tmp.cleanup()
 
     def run_cli(self, *argv):
         return run(argv, self.attack_root)
