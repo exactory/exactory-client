@@ -539,7 +539,9 @@ exactory-lab probe --id finite-check-1 --question "Does the finite example fit?"
 The launcher pins the script and repeated `--input` files, records a managed
 intent, and reserves the timeout against the experiment wall-time budget before
 launch. It requires an initialized configuration, with no target, stage or
-readiness check. The intent payload is:
+readiness check. It runs in the nearest workspace that holds a research store:
+a study, or a problem record of `problem-init`, which has no `study.json`. The
+intent payload is:
 
 ```text
 {id, question, interpreter, program, inputs, timeout_seconds}

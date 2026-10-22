@@ -299,6 +299,53 @@ class TestProbe(_InsideWorkspaceTestCase):
         self.assertEqual(json.loads(result)["result"]["exit_status"], "interrupted")
 
 
+class TestProbeInProblemWorkspace(unittest.TestCase):
+    """A problem record keeps its research store without a study projection; a probe runs in it all the same."""
+
+    def setUp(self):
+        from research_harness.problem_claims import initialize_problem
+        from research_harness.storage import Store
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.workspace = Path(temporary.name) / "problem"
+        self.workspace.mkdir()
+        store = Store(self.workspace, create=True)
+        initialize_problem(store, {"slug": "bounded-sequences", "area": "math.CO", "field": "Extremal sequences",
+                                   "authors": ["problem-author"]}, expected_revision=store.revision, request_id="init")
+        (self.workspace / "notes").mkdir()
+        original_dir = os.getcwd()
+        os.chdir(self.workspace / "notes")
+        self.addCleanup(os.chdir, original_dir)
+
+    def run_probe(self, script, expected_exit_code=None, timeout="2"):
+        path = self.workspace / "notes/source.py"
+        path.write_text(script, encoding="utf-8")
+        return _run_lab_command(["probe", "--id", "probe-1", "--question", "What does this calculation show?",
+                                 "--script", str(path), "--timeout", timeout], expected_exit_code, self)
+
+    def test_a_probe_runs_in_a_problem_workspace(self):
+        from research_harness.storage import Store
+        receipt = json.loads(self.run_probe('print(6 * 7)\n'))
+        records = Store(self.workspace).snapshot()["records"]
+        self.assertEqual(receipt["result"], records["probe"]["probe-1"])
+        self.assertEqual(records["probe"]["probe-1"]["exit_status"], 0)
+        self.assertFalse((self.workspace / ".exactory/study.json").exists())
+        self.assertEqual(json.loads(self.run_probe('print(6 * 7)\n'))["result"], receipt["result"])
+
+    def test_a_timeout_in_a_problem_workspace_is_recorded(self):
+        receipt = json.loads(self.run_probe('import time\ntime.sleep(10)\n', timeout="0.2"))
+        self.assertEqual(receipt["result"]["exit_status"], "timed_out")
+
+    def test_state_commands_still_need_a_study(self):
+        output = _run_lab_command(["state", "show"], 2, self)
+        self.assertIn("No study workspace holds this directory", output)
+
+    def test_a_directory_without_a_research_store_is_refused(self):
+        os.chdir(tempfile.mkdtemp(dir=self.workspace.parent))
+        output = self.run_probe('print(1)\n', expected_exit_code=2)
+        self.assertIn("No study or problem workspace holds this directory", output)
+
+
 class TestProbeLifecycle(_InsideWorkspaceTestCase):
     def build_command(self, identifier, script, timeout="5"):
         path = self.workspace / "probe-script.py"
