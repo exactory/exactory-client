@@ -5,6 +5,7 @@ import json
 from .direction_sources import find_delivered_readings
 from .evaluation import Evaluation
 from .graph import obligation
+from .review_context_repair import is_same_subject
 from .review_protocol import assignment_state, describe_direction_evidence
 
 
@@ -54,9 +55,10 @@ def _matches_bound_input_ancestry(records, assignment_id, packets):
             pending.append(repair['assignment_id'])
         elif parent is None and assignment.get('session_id') not in (None, identifier):
             pending.append(assignment['session_id'])
+    # A context repair keeps the bar subject of the packet that it reassesses, which can predate the statement.
     return all(any(packet.get('digest') == assignment.get('packet_digest')
-                   and all(packet.get(key) == assignment.get(key)
-                           for key in ('role', 'reviewer_id', 'dossier_id', 'subject'))
+                   and all(packet.get(key) == assignment.get(key) for key in ('role', 'reviewer_id', 'dossier_id'))
+                   and is_same_subject(packet, assignment)
                    for assignment in ancestors) for packet in packets)
 
 
