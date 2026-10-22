@@ -34,7 +34,7 @@
     "id": "statement-1",
     "title": "An extremal sequence bound",
     "area": "math.CO",
-    "statement": "For every admissible sequence of length $n$, does $B(n) \\leq n^2$ hold?",
+    "statement": "For every admissible sequence of length $n$, does the following bound hold?\n$$B(n) \\leq n^2$$",
     "resolution_criteria": "Prove the bound for every admissible sequence or exhibit a counterexample.",
     "neighbours": [],
     "formal_statement": null,

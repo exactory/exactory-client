@@ -1034,7 +1034,7 @@ def _run_post_problem(args: argparse.Namespace) -> None:
     }
     if statement_details is not None:
         body["statementDetails"] = _require_plain_text_bounds(
-            "statement details", statement_details, 1, 20000, is_trim_required=True)
+            "text below the --- line", statement_details, 1, 20000, is_trim_required=True)
     if args.paper:
         _require_at_most(args.paper, "papers", _MAX_CREATION_PAPERS, "Attach the rest with link-problem-paper.")
         body["paperIdentifiers"] = args.paper
@@ -1564,7 +1564,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Post an open mathematical problem. Check every citation locator first.")
     post_problem.add_argument("--title", required=True, help="The problem title, 8-200 characters.")
     post_problem.add_argument("--area", required=True, help="One math.* subject class, for example math.CO.")
-    for name, bounds in (("statement", "the precise problem in TeX, 50-20000"),
+    for name, bounds in (("statement", "the precise problem in TeX, 50-20000 characters, shown in a box. To add"
+                                       " details under the box, add one line that holds only --- and then the"
+                                       " details, 1-20000"),
                          ("motivation", "why a resolution matters, 100-10000"),
                          ("current-state", "the prior work and why the problem is open, 100-10000"),
                          ("resolution-criteria", "what a proof or a disproof must establish, 50-5000")):
