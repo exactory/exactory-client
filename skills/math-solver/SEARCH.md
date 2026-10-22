@@ -1414,8 +1414,8 @@ both a nonclosing reduction and a proved reduction. Verified obstruction names
 the producer's declared route and never disproves the objective by implication.
 Verified strategy obstruction recognizes a usable `obstruction` acceptance of the
 checkpoint on the named obligation. The accepted obstruction excludes the
-producer's admitted strategy for its target obligation, as the admitted hypothesis
-and success criterion state that strategy; the controller records no direction of
+producer's admitted strategy for its target obligation, as the admitted method,
+hypothesis and success criterion state it; the controller records no direction of
 its own. It neither proves nor refutes the obligation, grants no proof credit, and
 changes no obligation or route status. Like any accepted obstruction, it can be
 the basis of a budget renewal.

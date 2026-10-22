@@ -626,12 +626,13 @@ def list_stated_objections(review):
 
 
 def _list_delivered_objection_ids(records, artifacts, assignment_id):
-    """Return the identity of every objection that a packet of the assignment's lineage delivered, and the stated id of
-    each qualified one."""
+    """Return the identity of every objection in the objection lists of the packets of the assignment's lineage (the
+    material objections, the historical reviews, the bars and the own bars), and the stated id of each qualified one."""
     from . import review_supplied_evidence
     delivered = set()
     for packet in review_supplied_evidence.lineage_packets(records, artifacts, [assignment_id]):
-        objections = review_supplied_evidence.list_packet_objections(packet)
+        objections = review_supplied_evidence.list_delivered_objections(packet) + [
+            objection for key in ('bars', 'own_bars') for review in packet.get(key, []) for objection in review.get('objections', [])]
         delivered.update(objection['id'] for objection in objections)
         delivered.update(objection['stated_id'] for objection in objections if 'stated_id' in objection)
     return delivered

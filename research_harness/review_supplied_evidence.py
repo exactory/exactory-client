@@ -47,14 +47,6 @@ def list_delivered_objections(packet):
         for objection in entry.get('payload', entry).get('objections', [])]
 
 
-def list_packet_objections(packet):
-    """The objections in a packet's objection lists: those that list_delivered_objections returns and the objections of
-    the bars and own bars that the packet delivers. The earlier versions in a material objection's history and the
-    records of its version evidence are not read; collect_qualified_objections reads them."""
-    return list_delivered_objections(packet) + [objection for key in ('bars', 'own_bars') for review in packet.get(key, [])
-                                                for objection in review.get('objections', [])]
-
-
 def collect_qualified_objections(value):
     """Yield every objection that the harness delivered in a packet under a qualified identity, wherever it sits: the
     material objections, the versions in their history, the records of their version evidence, the bars, own bars and
