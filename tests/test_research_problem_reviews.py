@@ -904,6 +904,13 @@ class ProblemOpennessReviewTests(ProblemCase):
             saved = self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})["result"]
         self.assertEqual(saved["outcome"], "unresolved")
 
+    def test_a_finding_with_its_coverage_per_formulation_is_recorded(self):
+        coverage = [{"formulation": self.selected["statement"], "query": "bounded sequences", "date": "2026-09-07"}]
+        self.observe_openness(change_output=lambda output: output["findings"]["openness"].update(coverage=coverage))
+        self.assertNotIn("openness-attempt", self.store.snapshot()["records"].get("review_output_refusal", {}))
+        saved = self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})["result"]
+        self.assertEqual(saved["coverage"], coverage)
+
     def assert_openness_refused_at_run(self):
         """A finding bound to another statement than its packet is refused when the run completes."""
         refusal = self.store.snapshot()["records"]["review_output_refusal"]["openness-attempt"]

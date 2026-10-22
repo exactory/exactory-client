@@ -212,7 +212,7 @@ def _validate_objections(value, *, empty=False):
                  "An objection needs a boolean blocking flag and a nonempty description")
 
 
-def _validate_openness(openness, claim_digest):
+def _validate_openness(openness, claim_digest, *, structured_coverage):
     _require(isinstance(openness, dict) and set(openness) - {"minimum"} == {
         "outcome", "statement_digest", "evidence", "searched_at", "coverage", "reason"},
         "openness is exactly {outcome,statement_digest,evidence,searched_at,coverage,reason}, with minimum when supplied")
@@ -222,8 +222,12 @@ def _validate_openness(openness, claim_digest):
     _require(isinstance(evidence, list) and evidence and len(set(map(str, evidence))) == len(evidence)
              and all(isinstance(item, str) and re.fullmatch(r"[0-9a-f]{64}", item) for item in evidence),
              "openness.evidence is a nonempty list of distinct SHA-256 digests")
-    _require(all(_nonempty(openness[key]) for key in ("searched_at", "coverage", "reason")),
-             "searched_at, coverage and reason must be nonempty strings")
+    _require(all(_nonempty(openness[key]) for key in ("searched_at", "reason")),
+             "searched_at and reason must be nonempty strings")
+    # problem-openness records a problem record's coverage as given, also as a nonempty list or object.
+    coverage = openness["coverage"]
+    _require(_nonempty(coverage) or (structured_coverage and isinstance(coverage, (list, dict)) and bool(coverage)),
+             "coverage must be a nonempty string" + (", list or object" if structured_coverage else ""))
     try:
         _require(date.fromisoformat(openness["searched_at"]).isoformat() == openness["searched_at"],
                  "openness.searched_at must be YYYY-MM-DD")
@@ -268,7 +272,8 @@ def validate_output(packet, output):
                 "Result findings are statement, assumptions, scope, dependencies and policy, with openness in version 2")
         _require(all(_nonempty(output["findings"][key]) for key in RESULT_FINDINGS), "Every result finding is a nonempty string")
         if version == 2:
-            _validate_openness(output["findings"]["openness"], packet["claim_digest"])
+            _validate_openness(output["findings"]["openness"], packet["claim_digest"],
+                               structured_coverage=packet["contract"].get("orchestration") == "problem_creation")
     else:
         _closed(output, ("schema_version", "subject_digest", "reviewer", "decision", "findings", "unresolved_objections"),
                 "A recovery approval has exactly the fields of the native recovery review")
