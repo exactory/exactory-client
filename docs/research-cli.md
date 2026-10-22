@@ -118,20 +118,30 @@ source gaps and charge the continuation to the same allowance. A request respons
 remains unresolved and cannot be recorded with `value-review`; a final phase
 assessment cannot use this interface to obtain a replacement answer.
 
-A local route fits an oversized input by withholding bodies in a fixed order:
-the evidence bodies of the replayed earlier turns, the bodies that a context
-repair's scientific history re-delivers, an HTML original whose complete
-extraction from the same capture stays, the bodies that an earlier turn of the
-session supplied, the full texts of a declared `text_delivery_priority`, whole
-requested sources that do not fit (they stay pending as `deferred_capacity` for
-the same reviewer), the captured responses of a problem record's bound searches,
-the packets of the slot's history, the replayed packets of earlier turns, the
-full texts of fully read works, and any other evidence body. The last two steps
-never withhold a source that the turn delivers on request or a protected
-evidence body. Each withheld body names its delivery and a note. A request that
-still does not fit is sent as it stands, and the route's refusal is recorded.
-The earlier orders of 0.56.0, of 0.56.1 and 0.57.0, and of the two records'
-local runtimes of 0.58.0 still rebuild the requests that they recorded, so those
+A local route fits an oversized input by applying these reductions in order,
+one at a time, until the input fits:
+
+1. the evidence bodies of the replayed earlier turns of the session;
+2. the bodies that the scientific history of a context repair re-delivers;
+3. an HTML original whose complete extraction from the same capture is
+   delivered; that extraction then stays;
+4. the bodies that an earlier turn of the session supplied;
+5. the full texts of a declared `text_delivery_priority`, from the end of the
+   list;
+6. the captured responses of the searches that a problem record's openness
+   finding binds, largest first;
+7. the packets of the slot's scientific history, largest first;
+8. the replayed packets of earlier turns, oldest first;
+9. the full texts of fully read works that the packet cites, largest first;
+10. whole requested sources that do not fit, in a deterministic batch: they
+    stay pending as `deferred_capacity` for the same reviewer;
+11. any other evidence body of a problem packet, largest first.
+
+Steps 9 and 11 never withhold a protected body or a source that the turn
+delivers on request. Each withheld body names its delivery and a note. A
+request that still does not fit is sent as it stands, and the route's refusal
+is recorded. The orders of the two records' local runtimes, of 0.56.1 and
+0.57.0, and of 0.56.0 still rebuild the requests that they recorded, so those
 attempts stay authenticated.
 
 On the `codex_cli_v1` route, a problem result continuation can set
@@ -154,7 +164,8 @@ review is recorded by `exactory-math`, not by this harness, so `review-run`
 checks its output when the run completes: the exact `subject_digest`,
 `claim_digest` and `reviewer` of the packet, the decision vocabulary and the
 closed fields of the native proposal, result or recovery review. A failure writes
-the refusal record (check `native.output`) at once. A check that
+the refusal record (check `native.output`) at once, and the receipt of
+`review-run` names it under `output_refusal` with the revision after it. A check that
 depends on the store (a pending source request, a reading that is not current, a
 conflict with a stored review) writes no record. An output whose provenance does
 not authenticate is never refused. While every completed attempt of an

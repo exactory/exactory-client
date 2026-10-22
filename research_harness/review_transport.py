@@ -398,17 +398,17 @@ FIT_ORDER = ('history_bodies', 'scientific_history_bodies', 'html_originals', 'p
              'search_responses', 'scientific_history_packets', 'history_packets', 'read_full_texts', 'source_capacity',
              'other_bodies')
 EARLIER_FIT_ORDERS = (
-    # 0.56.0.
-    ('scientific_history_bodies', 'previously_supplied', 'text_priority', 'history_bodies'),
-    # 0.56.1 and 0.57.0.
-    ('scientific_history_bodies', 'previously_supplied', 'text_priority', 'scientific_history_packets',
-     'history_bodies', 'history_packets'),
-    # The local runtime of the Sidorenko girth-six record (candidates 10 and 11).
-    ('scientific_history_bodies', 'previously_supplied', 'text_priority', 'search_responses',
-     'scientific_history_packets', 'history_bodies', 'history_packets', 'read_full_texts', 'other_bodies'),
     # The local runtime of the extremal-graph-stability record.
     ('history_bodies', 'scientific_history_bodies', 'html_originals', 'previously_supplied', 'text_priority',
      'source_capacity'),
+    # The local runtime of the Sidorenko girth-six record (candidates 10 and 11).
+    ('scientific_history_bodies', 'previously_supplied', 'text_priority', 'search_responses',
+     'scientific_history_packets', 'history_bodies', 'history_packets', 'read_full_texts', 'other_bodies'),
+    # 0.56.1 and 0.57.0.
+    ('scientific_history_bodies', 'previously_supplied', 'text_priority', 'scientific_history_packets',
+     'history_bodies', 'history_packets'),
+    # 0.56.0.
+    ('scientific_history_bodies', 'previously_supplied', 'text_priority', 'history_bodies'),
 )
 _REDUCTIONS = {'history_bodies': _reduce_history_bodies, 'history_packets': _reduce_history_packets,
                'scientific_history_bodies': _reduce_scientific_history_bodies,
