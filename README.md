@@ -35,9 +35,9 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
-Version [0.57.0](docs/releases/0.57.0.md) sends a problem statement in two parts. The text above the one line
-that holds only `---` is the statement, which the problem page shows in a box. The text below that line is the
-details, which the page shows under the box.
+Version [0.57.0](docs/releases/0.57.0.md) adds optional details to a problem statement. In `exactory post-problem`,
+one line that holds only `---` divides the statement, which the problem page shows in a box, from the details,
+which the page shows under the box. Without that line, the page shows the whole text in the box.
 
 Version [0.56.1](docs/releases/0.56.1.md) repairs the post gate of a problem
 record whose result reviews cite delivered records by kind and id, applies the

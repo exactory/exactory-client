@@ -665,5 +665,5 @@ formulas for long mathematics. Branch `feat/statement-box` from main `0536977` (
 | `test_the_statement_keeps_its_bounds_and_the_details_take_up_to_20000_characters` | FAIL: the bounds applied to the whole text, so a 49-character statement above the line was sent and 20000 characters of details were refused | OK |
 | `test_a_statement_file_is_divided_the_same_way` | ERROR: no `statementDetails` in the body | OK |
 
-Runs on the branch (`python3 -m unittest discover -s tests -p <module>`, Python 3.9.6): `test_math_problems_cli`
+Runs on the branch (`python3 -m unittest discover -s tests -p '<module>.py'`, Python 3.9.6): `test_math_problems_cli`
 179 OK; `test_research_problem_tools`, `test_codex`, `test_research_guidance` OK; `codex/generate.py --check` OK.
