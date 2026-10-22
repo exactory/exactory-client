@@ -234,6 +234,12 @@ def validate_review_contract(records, artifacts, assignment, output):
             if objection["id"] in seen:
                 raise ResearchError("invalid_value_review", "Material objection identities must be unique")
             seen.add(objection["id"])
+        if problem:
+            # A stated id that names another claim than the delivered objection it restates is an output failure, so its
+            # refusal is recorded and the assignment can run again. Recording names a qualified identity after the
+            # review id; this check uses the assignment id, so an identity already taken under the review id is found
+            # only at recording.
+            _assign_objection_identities(records, artifacts, dict(output, assignment_id=assignment["id"], id=assignment["id"]), True)
     repair_packet = review_context_repair.frozen_reassessment_packet(records, artifacts, assignment)
     with contract_check("review.reassessment"):
         review_context_repair.validate_reassessment(records, artifacts, assignment, output, reading_checks=False, packet=repair_packet,
@@ -327,11 +333,7 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                and (problem is None or value["stage"] == "bar" or saved.get("subject") == saved_assignment["subject"])
                for saved in records.get("value_review", {}).values()):
             raise ResearchError("value_review_duplicate", "A reviewer cannot replace its initial finding by another sample")
-        for objection in value["objections"]:
-            for saved in records.get("value_review", {}).values():
-                for earlier in saved["payload"]["objections"]:
-                    if earlier["id"] == objection["id"] and earlier["claim"] != objection["claim"]:
-                        raise ResearchError("research_objection_identity_conflict", "A stable objection ID cannot name a different contested claim")
+        identities = _assign_objection_identities(records, artifacts, value, problem is not None)
         changes, support = [], None
         if problem is None and value["stage"] == "result":
             if dossier["payload"]["phase"] not in ("result", "post_measurement"):
@@ -358,6 +360,8 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                   "output_digest": assignment["output_digest"], "support": support, "independence_at_recording": assignment["context_status"]}
         if problem is not None:
             record["subject"] = saved_assignment["subject"]
+        if identities:
+            record["objection_identities"] = identities
         changes.append(immutable_record(records, "value_review", value["id"], record))
         if support is not None:
             changes.append(immutable_record(records, "research_support", value["id"], {
@@ -608,6 +612,63 @@ def _assess_problem_coverage(records, artifacts, reviews, expected, evidence_dig
     return obligations
 
 
+def apply_objection_identities(identities, objections):
+    """Return the objections under their record-wide identities: an objection whose stated id the map names carries the
+    mapped identity as its id and its stated id as stated_id; every other objection, including one that already
+    carries stated_id, is returned unchanged."""
+    return [dict(objection, id=identities[objection['id']], stated_id=objection['id'])
+            if objection['id'] in identities and 'stated_id' not in objection else objection for objection in objections]
+
+
+def list_stated_objections(review):
+    """Return the objections that a stored review states, under the identities recorded with the review."""
+    return apply_objection_identities(review.get('objection_identities', {}), review['payload']['objections'])
+
+
+def _list_delivered_objection_ids(records, artifacts, assignment_id):
+    """Return the identity of every objection in the objection lists of the packets of the assignment's lineage (the
+    material objections, the historical reviews, the bars and the own bars), and the stated id of each qualified one."""
+    from . import review_supplied_evidence
+    delivered = set()
+    for packet in review_supplied_evidence.lineage_packets(records, artifacts, [assignment_id]):
+        objections = review_supplied_evidence.list_delivered_objections(packet) + [
+            objection for key in ('bars', 'own_bars') for review in packet.get(key, []) for objection in review.get('objections', [])]
+        delivered.update(objection['id'] for objection in objections)
+        delivered.update(objection['stated_id'] for objection in objections if 'stated_id' in objection)
+    return delivered
+
+
+def _assign_objection_identities(records, artifacts, value, problem):
+    """Return the identities of the new review's objections that differ from their stated ids, keyed by stated id.
+
+    A stated id and claim that an earlier review stated keep that objection's identity. An identity that already names
+    another claim conflicts, except in a problem record when no packet of this review's lineage delivered that
+    objection: reviewers who cannot see each other's objections cannot avoid each other's ids, so the new objection
+    gets the identity <id>@<review id>."""
+    earlier, claims = {}, {}
+    for saved in records.get('value_review', {}).values():
+        for stated, held in zip(saved['payload']['objections'], list_stated_objections(saved)):
+            earlier.setdefault((stated['id'], stated['claim']), held['id'])
+            claims.setdefault(held['id'], held['claim'])
+    delivered = None
+    identities, assigned = {}, set()
+    for objection in value['objections']:
+        identity = earlier.get((objection['id'], objection['claim']), objection['id'])
+        names_another_claim = claims.get(identity, objection['claim']) != objection['claim']
+        if names_another_claim:
+            if delivered is None:
+                delivered = _list_delivered_objection_ids(records, artifacts, value['assignment_id']) if problem else set()
+            identity = objection['id'] + '@' + value['id']
+            if not problem or objection['id'] in delivered or identity in claims:
+                raise ResearchError("research_objection_identity_conflict", "A stable objection ID cannot name a different contested claim")
+        if identity in assigned:
+            raise ResearchError("invalid_value_review", "Material objection identities must be unique")
+        assigned.add(identity)
+        if identity != objection['id']:
+            identities[objection['id']] = identity
+    return identities
+
+
 def state_objection(review, objection):
     """One material version of an objection: its finding content bound to the review and revision that stated it."""
     finding = {key: objection[key] for key in ('claim', 'reason', 'evidence', 'resolution_condition', 'candidate_ids')
@@ -642,14 +703,14 @@ def _fold_objection_versions(reviews, superseded):
 
     A stated objection is a new version. A finding compares with the version it continues: the latest held version,
     or the latest version when none is held. A finding with another reason or evidence is a new version that keeps
-    the claim, the resolution condition and the candidates of that version; a finding about an objection that no
-    review states is a version without a claim. A review holds the versions it states and the versions its findings
-    continue, unless a later review of its lineage superseded it."""
+    the claim, the resolution condition, the candidates and the stated id of that version; a finding about an
+    objection that no review states is a version without a claim. A review holds the versions it states and the
+    versions its findings continue, unless a later review of its lineage superseded it."""
     versions, latest, current, held = {}, {}, {}, set()
     for review in sorted(reviews, key=lambda row: (row['recorded_revision'], row['id'])):
         holds = review['id'] not in superseded
         stated = set()
-        for objection in review['payload']['objections']:
+        for objection in list_stated_objections(review):
             version = latest[objection['id']] = state_objection(review, objection)
             versions.setdefault(objection['id'], []).append(version)
             stated.add(objection['id'])
@@ -662,7 +723,7 @@ def _fold_objection_versions(reviews, superseded):
                 continue
             version = current.get(identifier, latest.get(identifier))
             if version is None or (finding['reason'], finding['evidence']) != (version['reason'], version['evidence']):
-                kept = {key: version[key] for key in ('claim', 'resolution_condition', 'candidate_ids')
+                kept = {key: version[key] for key in ('claim', 'resolution_condition', 'candidate_ids', 'stated_id')
                         if version is not None and key in version}
                 version = latest[identifier] = state_objection(review, dict(kept, **{key: finding[key] for key in ('id', 'reason', 'evidence')}))
                 versions.setdefault(identifier, []).append(version)
@@ -909,7 +970,9 @@ def _objection_obligations(records, artifacts, dossier, decision, reviews, *, pr
                                  and saved.get("problem_evidence_digest") == problem_evidence_digest)
             else:
                 scope_matches = saved["dossier_id"] == dossier["id"]
-            resolved = adjudication["ready"] and adjudication["disposition"] == "not_upheld" and scope_matches
+            # A problem objection that holds but does not bind the problem is resolved for it like one that does not hold.
+            resolved = (adjudication["ready"] and scope_matches and (adjudication["disposition"] == "not_upheld"
+                        or (dossier.get("kind") == "problem" and adjudication["disposition"] == "not_binding")))
             if resolved and dossier.get("kind") == "problem":
                 try:
                     strategy.evidence(records, artifacts, adjudication["adjudication"]["evidence"])
@@ -919,7 +982,7 @@ def _objection_obligations(records, artifacts, dossier, decision, reviews, *, pr
         if not resolved and item["disposition"] == "resolved":
             findings = [{finding["id"]: finding for finding in review["payload"]["value"]["objection_findings"]} for review in reviews]
             resolved = all(item["id"] in finding and finding[item["id"]]["status"] == "resolved" for finding in findings)
-            if any(item["id"] in {objection["id"] for objection in review["payload"]["objections"]} for review in reviews):
+            if any(item["id"] in {objection["id"] for objection in list_stated_objections(review)} for review in reviews):
                 resolved = False
             if resolved and dossier.get("kind") == "problem":
                 for finding in findings:

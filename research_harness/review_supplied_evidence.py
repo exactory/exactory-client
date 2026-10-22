@@ -47,6 +47,22 @@ def list_delivered_objections(packet):
         for objection in entry.get('payload', entry).get('objections', [])]
 
 
+def collect_qualified_objections(value):
+    """Yield every objection that the harness delivered in a packet under a qualified identity, wherever it sits: the
+    material objections, the versions in their history, the records of their version evidence, the bars, own bars and
+    historical reviews, and the same parts of the earlier packets that a scientific history carries. The walk skips the
+    observed outputs of a scientific history: they are the reviewers' own text, and a source-request turn is checked
+    for its requests only, so an object in it can carry any key."""
+    if isinstance(value, dict):
+        if 'stated_id' in value:
+            yield value
+        for key, item in value.items():
+            if key != 'observed_output':
+                yield from collect_qualified_objections(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from collect_qualified_objections(item)
+
 
 def supplied_context(records, artifacts, assignment_ids, *, frozen=False):
     """The artifacts that the packets of the assignments' lineages attached, by sha256, and the passage mappings they

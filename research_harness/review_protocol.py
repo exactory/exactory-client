@@ -352,7 +352,8 @@ _PROBLEM_SLATE_RESPONSE = (
     'objection_findings entry {id,status:resolved|continuing|contested,reason,evidence}. ' + _REVIEW_GRAMMAR +
     'A valid final response, with the placeholders replaced by the delivered values: ' + _PROBLEM_SLATE_EXAMPLE + '.')
 _PROBLEM_RESPONSES = {'bar': _PROBLEM_BAR_RESPONSE, 'slate': _PROBLEM_SLATE_RESPONSE, 'result': _PROBLEM_RESULT_RESPONSE}
-_PROBLEM_ADJUDICATOR_PROMPT = (
+# The wording before the not_binding disposition, kept for the adjudications recorded with it.
+_PROBLEM_ADJUDICATOR_PROMPT_BEFORE_NOT_BINDING = (
     'Resolve only the named material problem objection or the documented correction; this is not a '
     'third vote on the problem. Examine the preserved original assessments, the original evidence and '
     'the exact supplied source mappings, and the current delivered problem evidence named by '
@@ -381,6 +382,41 @@ _PROBLEM_ADJUDICATOR_PROMPT = (
     'reasoning and the delivered evidence; do not average grades, and do not waive any assurance or any '
     'other rubric item. Return exactly one JSON object with objection_id, disposition (upheld, '
     'not_upheld, unresolved), reason, evidence, and correction_admissible (null when no correction is '
+    'requested, otherwise a boolean), and no other field: no limitations and no source requests. '
+    + _EVIDENCE_GRAMMAR + 'evidence is a nonempty array of such references.')
+_PROBLEM_ADJUDICATOR_PROMPT = (
+    'Resolve only the named material problem objection or the documented correction; this is not a '
+    'third vote on the problem. Examine the preserved original assessments, the original evidence and '
+    'the exact supplied source mappings, and the current delivered problem evidence named by '
+    'current_evidence; the packet supplies those bytes. Current evidence may resolve the objection even '
+    'when the original pair did not receive it. Keep the two apart: a correction is admissible only on '
+    'a demonstrated error in the original evidence or its supplied source mappings, never on newly '
+    'favourable current evidence. Native artifact references in assessments, objections and '
+    'corrections are descriptive templates: for an artifact_descriptor, location is the native '
+    'artifact path, and sha256, size and media_type keep their native meanings; a template does not '
+    'supply an entire original, so honour the recorded locator bounds of mapped passages and do not '
+    'assess unsupplied portions. For a material objection, the packet delivers the objection version '
+    'you decide: version_review is the review that stated it, version_evidence the evidence supplied '
+    'for it, one entry for every reference the version cites (an artifact descriptor; a cited record as '
+    'the projection its stating reviewer received, with its content under record and the descriptors of '
+    'its artifacts under artifacts; or an undelivered entry, which means the packet is incomplete and '
+    'you cannot decide the version on it), except an artifact delivered only as passages, which is in '
+    'version_source_mappings, the passages of the version\'s sources; all kept apart from '
+    'original_evidence and supplied_source_mappings of the original pair; decide the version '
+    'delivered, and treat an older resolution as a resolution of an older version. A rubric objection '
+    'carries none of those three keys. A rubric objection names one below-threshold '
+    'grade of one result review: the packet delivers the original bar reviews those results were graded '
+    'against as bar_calibrations (and, when a context repair replaced a bar since, the replacement as '
+    'current_bar_calibrations, which is not the standard the grade was given against) and the '
+    'adjudicated item\'s normative definition and threshold as rubric_definition; decide only that '
+    'shortfall from those standards, rubric_grades, the item\'s '
+    'reasoning and the delivered evidence; do not average grades, and do not waive any assurance or any '
+    'other rubric item. For a material objection, use not_binding when its claim holds on the delivered '
+    'evidence but does not bind the problem: the statement, its resolution criteria and its value '
+    'paragraphs do not rest on the contested premise, or state their dependence on it explicitly; cite '
+    'the problem evidence that shows this. A rubric objection is never not_binding. Return exactly one '
+    'JSON object with objection_id, disposition (upheld, not_upheld, not_binding, unresolved), reason, '
+    'evidence, and correction_admissible (null when no correction is '
     'requested, otherwise a boolean), and no other field: no limitations and no source requests. '
     + _EVIDENCE_GRAMMAR + 'evidence is a nonempty array of such references.')
 
@@ -425,7 +461,7 @@ def _evidence(artifacts, value, *, transitive=False):
         if reference['sha256'] in included:
             continue
         data = artifacts.read(reference)
-        binary = reference['media_type'] == 'application/pdf' or reference['media_type'].startswith('image/')
+        binary = transport.is_binary_evidence(data, reference['media_type'])
         if binary and transport.text_only_enabled():
             # A text-only reviewer route receives no original bytes; the omission is explicit in the packet.
             included[reference['sha256']] = {'artifact': reference, 'content': '', 'encoding': 'omitted',
@@ -504,7 +540,8 @@ def _project_scoped_result(records, artifacts, packet, report):
     return packet
 
 
-def canonical_prompt(role, *, legacy=False, repair=False, version=3, orchestration=None, repair_prompt=None):
+def canonical_prompt(role, *, legacy=False, repair=False, version=3, orchestration=None, repair_prompt=None,
+                     adjudicator_prompt=None):
     """The canonical prompt of a role. A previous version (version 1) keeps the context-repair suffix it was recorded
     with; the current version uses the current suffix; repair_prompt names a suffix explicitly."""
     if repair_prompt is None:
@@ -515,7 +552,7 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=3, orchestrati
     if orchestration == 'problem_creation' and role == 'adjudicator':
         if repair:
             raise ResearchError('invalid_review_context', 'Context reassessment uses a current strategic review phase')
-        prompt = _COMMON + (_PROBLEM_ADJUDICATOR_PROMPT_V1 if version == 1 else _PROBLEM_ADJUDICATOR_PROMPT)
+        prompt = _COMMON + (_PROBLEM_ADJUDICATOR_PROMPT_V1 if version == 1 else adjudicator_prompt or _PROBLEM_ADJUDICATOR_PROMPT)
         return {'template_id': (_PROBLEM_PROTOCOL_V1 if version == 1 else _PROBLEM_PROTOCOL) + '/adjudicator', 'template_hash': digest(prompt),
                 'rendered_prompt_hash': digest(prompt), 'parameters': {'role': role, 'orchestration': orchestration},
                 'text': prompt}
@@ -693,9 +730,18 @@ def add_problem_bars(records, artifacts, packet, reviewer_id, slot=None):
 def deliver_review(records, payload):
     """A review payload as a problem packet delivers it: its content with artifact references as templates, so that a
     payload which cites a source attaches none of its bytes, and the exact reference by which a reviewer cites that
-    review, the digest of the stored record, which record references are checked against."""
-    return dict(_reference_templates(payload), record_reference={'kind': 'record', 'record_kind': 'value_review',
-        'id': payload['id'], 'digest': digest(_get(records, 'value_review', payload['id']))})
+    review, the digest of the stored record, which record references are checked against. Each objection carries its
+    record-wide identity (research_decisions.apply_objection_identities), by which a reviewer gives a finding on it."""
+    from .research_decisions import apply_objection_identities
+    stored = _get(records, 'value_review', payload['id'])
+    delivered = dict(_reference_templates(payload), record_reference={'kind': 'record', 'record_kind': 'value_review',
+        'id': payload['id'], 'digest': digest(stored)})
+    identities = stored.get('objection_identities')
+    if identities:
+        # A repair packet delivers stored records, whose objections sit under their payload.
+        content = delivered['payload'] if 'payload' in delivered else delivered
+        content['objections'] = apply_objection_identities(identities, content['objections'])
+    return delivered
 
 
 def describe_calibration(payload):
@@ -795,7 +841,8 @@ def resolve_original_calibrations(records, artifacts, review_ids):
     from .direction_reviews import collect_observed_packets
     reviews = [_get(records, 'value_review', identifier) for identifier in review_ids]
     if all(review['payload']['stage'] == 'bar' for review in reviews):
-        return sorted((describe_calibration(_payload(review)) for review in reviews), key=lambda bar: bar['id'])
+        return sorted((describe_calibration(deliver_review(records, _payload(review))) for review in reviews),
+                      key=lambda bar: bar['id'])
     calibrations = {}
     for review in reviews:
         delivered = {bar['id']: bar for _, observed in collect_observed_packets(records, artifacts, review['assignment_id'])
@@ -906,6 +953,7 @@ def describe_version_evidence(records, artifacts, version):
     references as templates, and the descriptors of its artifacts that those packets supplied. A reference that
     cannot be delivered (a record no observed packet carried at that digest, or an artifact those packets did not
     supply) is an entry {kind: undelivered, identity, reference}."""
+    from .research_decisions import list_stated_objections
     review = _get(records, 'value_review', version['review_id'])
     supplied, mappings = supplied_evidence.supplied_context(records, artifacts, [review['assignment_id']])
     carried = collect_carried_records(records, artifacts, review['assignment_id'])
@@ -932,7 +980,7 @@ def describe_version_evidence(records, artifacts, version):
                 continue
         entries.append({'kind': 'undelivered', 'identity': identity, 'reference': _reference_templates(reference)})
     return dict(zip(VERSION_EVIDENCE_KEYS, (
-        _reference_templates(_payload(review)), entries,
+        _reference_templates(dict(_payload(review), objections=list_stated_objections(review))), entries,
         [mapping for mapping in mappings if mapping['origin']['artifact_descriptor']['sha256'] in cited])))
 
 
@@ -977,6 +1025,7 @@ def add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id
     ids = context.get('review_ids', [])
     if len(ids) != 2 or len(set(ids)) != 2:
         raise ResearchError('review_packet_incomplete', 'Adjudication requires both exact original review IDs')
+    from .research_decisions import list_stated_objections
     reviews = [_payload(_get(records, 'value_review', identifier)) for identifier in ids]
     if any(r['dossier_id'] != dossier_id for r in reviews):
         raise ResearchError('review_packet_mismatch', 'Both reviews must concern the adjudicated dossier')
@@ -998,7 +1047,7 @@ def add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id
         if reviews[0]['stage'] == 'bar':
             slates = [review for review in collect_bound_slate_reviews(records, artifacts)
                       if any(objection['id'] == context.get('objection_id') and project_slate_objection(records, objection)
-                             for objection in review['payload']['objections'])]
+                             for objection in list_stated_objections(review))]
         initial = {normalized_text(review['reviewer_id']) for review in records.get('value_review', {}).values()
                    if review.get('subject', {}).get('kind') == 'problem'
                    and (review['payload']['stage'] in ('bar', 'slate') or review['subject'] == packet['subject'])}
@@ -1007,7 +1056,9 @@ def add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id
     states = [assignment_state(records, artifacts, r['assignment_id']) for r in reviews]
     if normalized_text(reviewer_id) in {normalized_text(s['reviewer_id']) for s in states}:
         raise ResearchError('review_not_independent', 'An initial assessor cannot adjudicate its own dispute')
-    assessed = reviews + [_payload(review) for review in slates]
+    # The assessed reviews carry their objections under the identities by which the objection is named.
+    assessed = [dict(payload, objections=list_stated_objections(_get(records, 'value_review', payload['id'])))
+                for payload in reviews + [_payload(review) for review in slates]]
     objections = [o for r in reviews for o in r.get('objections', []) if o['id'] == context.get('objection_id')]
     if problem:
         # The adjudicated version is the latest one that the post gate holds, so collect over the current pairs too.
@@ -1069,9 +1120,9 @@ def find_historical_bar_reviews(records):
 def collect_historical_bar_objections(records, artifacts):
     """The objections of the historical bar reviews, one per id as its latest stated version, with the evidence that
     an adjudicator of that version receives."""
-    from .research_decisions import state_objection
+    from .research_decisions import list_stated_objections, state_objection
     versions = {objection['id']: state_objection(review, objection) for review in find_historical_bar_reviews(records)
-                for objection in review['payload']['objections']}
+                for objection in list_stated_objections(review)}
     return [dict(_reference_templates(version), **describe_objection_delivery(records, artifacts, version))
             for _, version in sorted(versions.items())]
 
@@ -1092,9 +1143,9 @@ def describe_objection_delivery(records, artifacts, version):
 def deliver_historical_review(records, artifacts, review):
     """A review of another lineage that a first slate or result packet delivers, with the evidence of each of its
     objections, on which the reviewer gives a finding."""
-    from .research_decisions import state_objection
+    from .research_decisions import list_stated_objections, state_objection
     payload = deliver_review(records, _payload(review))
-    for delivered, objection in zip(payload['objections'], review['payload']['objections']):
+    for delivered, objection in zip(payload['objections'], list_stated_objections(review)):
         delivered.update(describe_objection_delivery(records, artifacts, state_objection(review, objection)))
     return payload
 
@@ -1528,7 +1579,9 @@ def _prompt_matches(assignment):
         return (assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair, orchestration='problem_creation')
                 or is_previous_prompt(assignment) or _uses_previous_repair_suffix(assignment))
     if (assignment.get('subject', {}).get('kind') == 'problem' and assignment['role'] == 'adjudicator'
-            and assignment['prompt'] == canonical_prompt('adjudicator', orchestration='problem_creation')):
+            and assignment['prompt'] in (canonical_prompt('adjudicator', orchestration='problem_creation'),
+                                         canonical_prompt('adjudicator', orchestration='problem_creation',
+                                                          adjudicator_prompt=_PROBLEM_ADJUDICATOR_PROMPT_BEFORE_NOT_BINDING))):
         return True
     if (assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair) or is_previous_prompt(assignment)
             or _uses_previous_repair_suffix(assignment)):
@@ -1759,7 +1812,9 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                     reason = ('disposition_unsupported' if unsupported else
                               'version_changed' if previous_version != version else
                               'evidence_changed' if previous_packet['problem_evidence_digest'] != packet['problem_evidence_digest'] else
-                              'packet_incomplete' if undelivered else None)
+                              'packet_incomplete' if undelivered else
+                              'protocol_changed' if previous['prompt'] != canonical_prompt('adjudicator', orchestration='problem_creation')
+                              else None)
                     if reason is not None:
                         if (normalized_text(previous['reviewer_id']) != normalized_text(value['reviewer_id'])
                                 or previous['route_id'] != value['route_id']
@@ -2060,7 +2115,11 @@ def validate_adjudication_contract(records, artifacts, assignment, packet, outpu
         fields(output, ('objection_id', 'disposition', 'reason', 'evidence', 'correction_admissible'))
         if packet['objection']['id'] != output['objection_id']:
             raise ResearchError('review_adjudication_mismatch', 'Disposition must concern the assigned objection')
-        if output['disposition'] not in ('upheld', 'not_upheld', 'unresolved'):
+        allowed = ('upheld', 'not_upheld', 'unresolved')
+        if (packet.get('subject', {}).get('kind') == 'problem' and 'rubric_definition' not in packet
+                and assignment['prompt'] == canonical_prompt('adjudicator', orchestration='problem_creation')):
+            allowed += ('not_binding',)
+        if output['disposition'] not in allowed:
             raise ResearchError('invalid_review_adjudication', 'Use a focused objection disposition, not a third vote')
         if output['correction_admissible'] is not None and type(output['correction_admissible']) is not bool:
             raise ResearchError('invalid_review_adjudication', 'Correction admissibility must be null or a boolean finding')

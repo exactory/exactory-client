@@ -344,15 +344,13 @@ def _source(records, artifacts, request, original_rows):
         result['source_scope_pending'].extend(unit_pending)
         if scopes:
             result['scope_status'] = 'declared_with_pending_units' if unit_pending else 'declared_units_available'
-    from .review_transport import text_only_enabled
+    from .review_transport import is_binary_evidence, text_only_enabled
     text_only = text_only_enabled()
     if text_only:
         # On a text-only reviewer route the original bytes (PDF, images) are withheld and the delivery says so; the
         # extracted text stays.
-        def _is_text(reference):
-            return not (reference['media_type'] == 'application/pdf' or reference['media_type'].startswith('image/'))
         for capture in captures:
-            capture['artifacts'] = [a for a in capture['artifacts'] if _is_text(a)]
+            capture['artifacts'] = [a for a in capture['artifacts'] if not is_binary_evidence(artifacts.read(a), a['media_type'])]
         captures = [capture for capture in captures if capture['artifacts']]
     for capture in captures:
         source = captured_source(records, artifacts, capture['source_id'])

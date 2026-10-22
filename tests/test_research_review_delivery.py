@@ -173,6 +173,113 @@ class ClaudeRouteElisionTests(unittest.TestCase):
         small_history = [{'role': 'user', 'content': transport.PACKET_LABEL + json.dumps(dict(earlier, problem_evidence={'readings': [{'text': 'r' * 500}]}), sort_keys=True)}]
         kept = transport.request_body(CLAUDE, 'Review.', current, small_history)
         self.assertIn('problem_evidence', packet_of(kept['input'][0]))
+class ProblemSearchResponseElisionTests(unittest.TestCase):
+    """A problem packet attaches the captured responses of the searches that its openness finding binds."""
+
+    def routes(self):
+        from research_harness import review_claude_transport, review_codex_transport
+        return ((CLAUDE, review_claude_transport.INPUT_LIMIT_CHARACTERS, review_claude_transport.packet_text),
+                (CODEX, transport.CODEX_INPUT_LIMIT_CHARS, review_codex_transport.packet_text))
+
+    def problem_packet(self, responses, others=(), history=None):
+        """Responses and others are (name, length) pairs; only the responses belong to a bound search."""
+        evidence = [{'artifact': artifact(name, 'application/json'), 'content': name[0] * length, 'encoding': 'utf-8'}
+                    for name, length in [*responses, *others]]
+        sources = [{'id': 'acq:' + name, 'provider': 'openalex', 'response': artifact(name, 'application/json')}
+                   for name, _ in responses]
+        packet = {'id': 'now', 'history_delivery': transport.HISTORY_COMPACT_V2, 'evidence': evidence,
+                  'problem_evidence': {'openness_searches': [{'formulation': 'The statement.', 'search_digest': 'sd',
+                                                              'search': {'id': 'search-1'}, 'sources': sources}]}}
+        if history is not None:
+            packet['scientific_history'] = history
+        return packet
+
+    def test_the_route_limit_elides_search_responses_largest_first_until_the_input_fits(self):
+        for route, limit, measure in self.routes():
+            with self.subTest(route=route['adapter']):
+                sizes = {'a1': int(limit * 0.30), 'b2': int(limit * 0.45), 'c3': int(limit * 0.10), 'd4': int(limit * 0.60)}
+                packet = self.problem_packet([('a1', sizes['a1']), ('b2', sizes['b2']), ('c3', sizes['c3'])],
+                                             others=[('d4', sizes['d4'])])
+                request = transport.request_body(route, 'Review.', packet)
+                delivered = {entry['artifact']['sha256'][:2]: entry for entry in packet_of(request['input'][-1])['evidence']}
+                for name in ('b2', 'a1'):
+                    self.assertEqual(delivered[name]['content'], '')
+                    self.assertEqual(delivered[name]['delivery'], 'body-elided-route-limit')
+                    self.assertEqual(delivered[name]['note'], transport.ELIDED_SEARCH_RESPONSE_NOTE)
+                self.assertEqual(delivered['c3']['content'], 'c' * sizes['c3'])
+                self.assertEqual(delivered['d4']['content'], 'd' * sizes['d4'])
+                self.assertLessEqual(len(measure(request)), limit)
+                self.assertEqual(packet['evidence'][1]['content'], 'b' * sizes['b2'])
+                self.assertEqual(transport.request_body(route, 'Review.', packet), request)
+
+    def test_a_problem_packet_within_the_limit_keeps_its_search_responses(self):
+        for route, _, _ in self.routes():
+            with self.subTest(route=route['adapter']):
+                packet = self.problem_packet([('a1', 9000)], others=[('d4', 9000)])
+                delivered = packet_of(transport.request_body(route, 'Review.', packet)['input'][-1])['evidence']
+                self.assertEqual([entry['content'] for entry in delivered], ['a' * 9000, 'd' * 9000])
+                self.assertEqual([entry.get('delivery') for entry in delivered], [None, None])
+
+    def test_search_responses_give_way_before_the_packets_of_the_slot_history(self):
+        for route, limit, measure in self.routes():
+            with self.subTest(route=route['adapter']):
+                notes = 'h' * int(limit * 0.3)
+                history = [{'assignment_id': 'bar-1', 'packet': {'digest': 'h1', 'notes': notes},
+                            'observed_output': {'stage': 'bar'}}]
+                packet = self.problem_packet([('a1', int(limit * 0.9))], history=history)
+                request = transport.request_body(route, 'Review.', packet)
+                supplied = packet_of(request['input'][-1])
+                self.assertEqual(supplied['evidence'][0]['delivery'], 'body-elided-route-limit')
+                self.assertEqual(supplied['scientific_history'][0]['packet'], {'digest': 'h1', 'notes': notes})
+                self.assertLessEqual(len(measure(request)), limit)
+
+
+class ProblemFullTextElisionTests(unittest.TestCase):
+    """A problem packet delivers each full reading as its record, notes and inspected passages; the full text of a work
+    that the packet cites through a source link can give way at the route limit."""
+
+    def problem_packet(self, response_length, read_length, unread_length):
+        evidence = [{'artifact': artifact('re', 'application/json'), 'content': 'r' * response_length, 'encoding': 'utf-8'},
+                    {'artifact': artifact('tx'), 'content': 'x' * read_length, 'encoding': 'utf-8'},
+                    {'artifact': artifact('ty'), 'content': 'y' * unread_length, 'encoding': 'utf-8'}]
+        return {'id': 'now', 'history_delivery': transport.HISTORY_COMPACT_V2, 'evidence': evidence,
+                'objection': {'evidence': [{'kind': 'source', 'link': {'version_id': 'arxiv:read', 'artifact_reference_template': {'artifact_descriptor': artifact('tx')}}},
+                                           {'kind': 'source', 'link': {'version_id': 'arxiv:unread', 'artifact': artifact('ty')}}]},
+                'problem_evidence': {
+                    'openness_searches': [{'formulation': 'The statement.', 'search_digest': 'sd', 'search': {'id': 'search-1'},
+                                           'sources': [{'id': 'acq:re', 'response': artifact('re', 'application/json')}]}],
+                    'readings': [{'id': 'reading-1', 'version_id': 'arxiv:read', 'depth': 'fulltext'}]}}
+
+    def delivered(self, request):
+        return {entry['artifact']['sha256'][:2]: entry for entry in packet_of(request['input'][-1])['evidence']}
+
+    def test_a_read_full_text_gives_way_after_the_search_responses(self):
+        from research_harness import review_claude_transport
+        limit = review_claude_transport.INPUT_LIMIT_CHARACTERS
+        request = transport.request_body(CLAUDE, 'Review.', self.problem_packet(int(limit * 0.2), int(limit * 0.6), int(limit * 0.45)))
+        delivered = self.delivered(request)
+        self.assertEqual(delivered['re']['delivery'], 'body-elided-route-limit')
+        self.assertEqual(delivered['tx']['delivery'], 'body-elided-route-limit')
+        self.assertEqual(delivered['tx']['note'], transport.ELIDED_TEXT_NOTE)
+        self.assertEqual(delivered['ty']['content'], 'y' * int(limit * 0.45))
+        self.assertLessEqual(len(review_claude_transport.packet_text(request)), limit)
+
+    def test_another_body_of_a_problem_packet_gives_way_last(self):
+        from research_harness import review_claude_transport
+        limit = review_claude_transport.INPUT_LIMIT_CHARACTERS
+        request = transport.request_body(CLAUDE, 'Review.', self.problem_packet(int(limit * 0.2), int(limit * 0.6), int(limit * 1.05)))
+        delivered = self.delivered(request)
+        self.assertEqual([delivered[name].get('delivery') for name in ('re', 'tx', 'ty')], ['body-elided-route-limit'] * 3)
+        self.assertEqual(delivered['ty']['note'], transport.ELIDED_EVIDENCE_NOTE)
+        self.assertLessEqual(len(review_claude_transport.packet_text(request)), limit)
+
+    def test_a_read_full_text_stays_when_the_search_responses_suffice(self):
+        from research_harness import review_claude_transport
+        limit = review_claude_transport.INPUT_LIMIT_CHARACTERS
+        request = transport.request_body(CLAUDE, 'Review.', self.problem_packet(int(limit * 0.6), int(limit * 0.3), int(limit * 0.2)))
+        delivered = self.delivered(request)
+        self.assertEqual(delivered['re']['delivery'], 'body-elided-route-limit')
+        self.assertEqual(delivered['tx']['content'], 'x' * int(limit * 0.3))
 
 
 class ReviewCitationTests(unittest.TestCase):

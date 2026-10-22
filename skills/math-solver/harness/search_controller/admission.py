@@ -154,7 +154,9 @@ def validate_proposal_context(state, proposal, proposal_id):
             s.require(child_scope == parent_scope, "Named coverage requires exact scope identity")
     for criterion in proposal["checkpoint_criteria"] + proposal["retreat_criteria"]:
         if "obligation_id" in criterion:
-            reference(refs, criterion["obligation_id"], "criterion obligation")
+            obligation_id = reference(refs, criterion["obligation_id"], "criterion obligation")
+            if criterion["kind"] == "verified_strategy_obstruction":
+                s.require(obligation_id == target, "Strategy obstruction must name the proposal's target obligation")
         if "route_id" in criterion:
             reference(route_refs, criterion["route_id"], "criterion route")
         if "strategy_id" in criterion:

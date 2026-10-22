@@ -45,7 +45,7 @@ def record_checkpoint(state, payload):
         s.require(s.claim_identity(cp["claim"]) == s.claim_identity(expected), "Checkpoint claim differs from its producer's admitted milestone")
         permitted = {"accepted_obligation": {"proof"}, "accepted_case_set": {"proof"},
                      "verified_reduction": {"reduction"}, "verified_obstruction": {"obstruction"},
-                     "hypothesis_recorded": {"hypothesis"}}
+                     "verified_strategy_obstruction": {"obstruction"}, "hypothesis_recorded": {"hypothesis"}}
         s.require(cp["kind"] in permitted[criterion["kind"]], "Checkpoint kind differs from its declared milestone")
     else:
         s.closed(origin, "kind source source_digest statement statement_digest study_digest")
@@ -442,6 +442,8 @@ def checkpoint_milestone(state, checkpoint_id):
         if kind == "verified_reduction" and value["outcome"] in {"reduction", "proof"} and value["obligation_id"] == criterion["obligation_id"]:
             return True
         if kind == "verified_obstruction" and value["outcome"] == "obstruction" and node["route_id"] == criterion["route_id"]:
+            return True
+        if kind == "verified_strategy_obstruction" and value["outcome"] == "obstruction" and value["obligation_id"] == criterion["obligation_id"]:
             return True
     return False
 

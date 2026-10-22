@@ -156,6 +156,7 @@ def validate_checkpoint_criterion(value):
         "accepted_case_set": "obligation_id case_ids",
         "verified_reduction": "obligation_id",
         "verified_obstruction": "route_id",
+        "verified_strategy_obstruction": "obligation_id",
         "hypothesis_recorded": "",
     }
     require(isinstance(value, dict), "Criterion must be a record")

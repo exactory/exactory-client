@@ -876,7 +876,11 @@ exactly the fields in the table. The list is nonempty and criterion IDs are uniq
 | `accepted_case_set` | `obligation_id: ObligationRef`, `case_ids: [Text]` (nonempty) |
 | `verified_reduction` | `obligation_id: ObligationRef` |
 | `verified_obstruction` | `route_id: RouteRef` |
+| `verified_strategy_obstruction` | `obligation_id: ObligationRef`, resolving to the proposal's target obligation |
 | `hypothesis_recorded` | None |
+
+A standalone proposal has no target obligation, so it cannot declare
+`verified_strategy_obstruction`.
 
 Retreat criteria are nonempty and have exactly `kind` and the corresponding field:
 
@@ -1210,7 +1214,10 @@ A local origin requires a declared milestone of its admitted producer. For
 claim must equal the named milestone obligation. For `verified_obstruction` or
 `hypothesis_recorded`, it must equal the producer's admitted claim. Permitted
 checkpoint kinds are respectively proof, proof, reduction, obstruction, and
-hypothesis. This permits a reviewed, predeclared intermediate output but forbids
+hypothesis. For `verified_strategy_obstruction`, the checkpoint kind must be
+obstruction and the claim must equal the producer's admitted claim, which is the
+claim of the named obligation because that obligation is the producer's target.
+This permits a reviewed, predeclared intermediate output but forbids
 arbitrary cross-node claim capture. The service additionally checks that the
 pinned journal prefix really belongs to this producer, the move was properly
 reserved and journalled, and the admitted milestone corresponds to the actual
@@ -1405,6 +1412,13 @@ matching usable acceptance, except `hypothesis_recorded`, which only records a
 hypothesis and grants no proof or renewal credit. Verified reduction recognizes
 both a nonclosing reduction and a proved reduction. Verified obstruction names
 the producer's declared route and never disproves the objective by implication.
+Verified strategy obstruction recognizes a usable `obstruction` acceptance of the
+checkpoint on the named obligation. The accepted obstruction excludes the
+producer's admitted strategy for its target obligation, as the admitted method,
+hypothesis and success criterion state it; the controller records no direction of
+its own. It neither proves nor refutes the obligation, grants no proof credit, and
+changes no obligation or route status. Like any accepted obstruction, it can be
+the basis of a budget renewal.
 
 Invalidation preserves checkpoints and acceptance history, invalidates transitive
 acceptance dependencies, and recomputes obligation status. If it affects the stored

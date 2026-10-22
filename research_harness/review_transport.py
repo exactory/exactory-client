@@ -5,6 +5,7 @@ The transport never loads local agent configuration, memory, history, or tools.
 Credentials are a separate argument and are never placed in a saved receipt.
 """
 
+import base64
 import contextlib
 import hashlib
 import http.client
@@ -19,6 +20,7 @@ from urllib.parse import urlsplit
 
 from .errors import ResearchError
 from .evidence import digest
+from .fulltext import detect_media_type
 
 ADAPTER = 'openai_responses_v1'
 EXCLUDED_SOURCES = ('author_history', 'prior_assessments', 'startup_memory',
@@ -34,6 +36,13 @@ TEXT_ONLY_DELIVERY_VARIABLE = 'EXACTORY_REVIEW_TEXT_ONLY_DELIVERY'
 def text_only_enabled():
     """Whether packets are being built for a text-only route."""
     return os.environ.get(TEXT_ONLY_DELIVERY_VARIABLE) == '1'
+
+
+def is_binary_evidence(data, media_type):
+    """Whether evidence bytes travel as an original rather than as text: a PDF, including one that its server
+    reported as generic binary, or an image."""
+    delivered_type, _ = detect_media_type(data, media_type)
+    return delivered_type == 'application/pdf' or delivered_type.startswith('image/')
 
 
 @contextlib.contextmanager
@@ -92,6 +101,12 @@ PACKET_LABEL = 'The packet below is JSON.\n'
 ELIDED_TEXT_NOTE = ('The body of this full text is withheld because the reviewer route input limit does not admit '
                     'it; the reading record of this work, with its notes and inspected excerpts, is delivered in full, '
                     'and the artifact reference identifies the exact bytes.')
+ELIDED_SEARCH_RESPONSE_NOTE = ('The body of this captured search response is withheld because the reviewer route input '
+                               'limit does not admit it; the search record in problem_evidence.openness_searches, with '
+                               'its queries, coverage and the disposition of every result, is delivered in full, and the '
+                               'artifact reference identifies the exact bytes.')
+ELIDED_EVIDENCE_NOTE = ('The body of this evidence artifact is withheld because the reviewer route input limit does not '
+                        'admit it; the artifact reference identifies the exact bytes.')
 ELIDED_BODY_NOTE = ('This evidence body was delivered in this earlier turn of the same review. It is elided from '
                     'the replayed history so that the exchange fits the reviewer route input limit; request the '
                     'artifact again by its reference if the review needs its text.')
@@ -177,6 +192,19 @@ def _compact_history_message(message, repeated=None):
     return dict(message, content=PACKET_LABEL + json.dumps(replayed, sort_keys=True, ensure_ascii=False))
 
 
+def _collect_source_links(value):
+    """The (version_id, sha256) of every source link under a packet, whether it names its artifact directly or, as a
+    delivered review payload does, through an artifact reference template."""
+    if isinstance(value, dict):
+        descriptor = value.get('artifact') or (value.get('artifact_reference_template') or {}).get('artifact_descriptor') or {}
+        own = ([(value['version_id'], descriptor['sha256'])] if isinstance(value.get('version_id'), str)
+               and isinstance(descriptor, dict) and isinstance(descriptor.get('sha256'), str) else [])
+        return own + [link for item in value.values() for link in _collect_source_links(item)]
+    if isinstance(value, list):
+        return [link for item in value for link in _collect_source_links(item)]
+    return []
+
+
 def _elide_packet_bodies(supplied):
     """Deterministic reductions of a packet that re-delivers earlier turns' sources (a context-repair packet) or
     declares a delivery priority of its full texts. Each is applied only while the input is too large."""
@@ -197,6 +225,16 @@ def _elide_packet_bodies(supplied):
     for sha256 in reversed(priority):
         if sha256 in entries and _elide_body(entries[sha256], 'body-elided-route-limit', ELIDED_TEXT_NOTE):
             yield 'text_delivery_priority:' + sha256
+    # A problem packet attaches the captured responses of the searches that its openness finding binds, and its
+    # problem evidence delivers each search record with its queries, coverage and result dispositions. The response
+    # bodies give way, largest first, one per step.
+    searches = (supplied.get('problem_evidence') or {}).get('openness_searches') or []
+    responses = {source['response']['sha256'] for search in searches for source in search['sources']}
+    bodies = [evidence for evidence in supplied.get('evidence', []) if isinstance(evidence, dict)
+              and (evidence.get('artifact') or {}).get('sha256') in responses]
+    for evidence in sorted(bodies, key=lambda evidence: -len(evidence.get('content') or '')):
+        if _elide_body(evidence, 'body-elided-route-limit', ELIDED_SEARCH_RESPONSE_NOTE):
+            yield 'openness_search_response:' + evidence['artifact']['sha256']
     # The earlier packets of the slot's history, largest first, give way to a digest reference while the input is
     # still too large; each turn keeps its observed output and its independence.
     turns = [turn for turn in supplied.get('scientific_history', []) if isinstance(turn, dict) and isinstance(turn.get('packet'), dict)]
@@ -204,6 +242,27 @@ def _elide_packet_bodies(supplied):
         turn['packet'] = {'delivery': 'packet-elided-route-limit', 'packet_digest': turn['packet'].get('digest'),
                           'note': HISTORY_PACKET_LIMIT_NOTE}
         yield 'scientific_history_packet:' + str(turn.get('assignment_id'))
+
+
+def _elide_problem_bodies(supplied):
+    """Reductions of a problem packet that still exceeds the route limit after every other reduction, so that every
+    request that fitted before them is built unchanged."""
+    # The problem evidence delivers each full reading as its record, notes and inspected passages, so the full texts that
+    # the packet cites through a source link of a fully read work give way next, largest first, one per step.
+    read = {row['version_id'] for row in (supplied.get('problem_evidence') or {}).get('readings') or []
+            if row.get('depth') == 'fulltext'}
+    texts = {sha256 for version_id, sha256 in _collect_source_links(supplied) if version_id in read}
+    bodies = [evidence for evidence in supplied.get('evidence', []) if isinstance(evidence, dict)
+              and (evidence.get('artifact') or {}).get('sha256') in texts]
+    for evidence in sorted(bodies, key=lambda evidence: -len(evidence.get('content') or '')):
+        if _elide_body(evidence, 'body-elided-route-limit', ELIDED_TEXT_NOTE):
+            yield 'read_full_text:' + evidence['artifact']['sha256']
+    # Any other evidence body of a problem packet then gives way, largest first, one per step.
+    if 'problem_evidence' in supplied:
+        bodies = [evidence for evidence in supplied.get('evidence', []) if isinstance(evidence, dict)]
+        for evidence in sorted(bodies, key=lambda evidence: -len(evidence.get('content') or '')):
+            if _elide_body(evidence, 'body-elided-route-limit', ELIDED_EVIDENCE_NOTE):
+                yield 'evidence_body:' + evidence['artifact']['sha256']
 
 
 def _build_local_request(route, prompt, supplied, messages):
@@ -250,6 +309,11 @@ def _fit_local_input(route, prompt, supplied, history, limit, measure):
         messages[index] = _elide_history_packet(messages[index])
         request = _build_local_request(route, prompt, supplied, messages)
         index += 1
+    reductions = _elide_problem_bodies(supplied)
+    while not fits(request):
+        if next(reductions, None) is None:
+            break
+        request = _build_local_request(route, prompt, supplied, messages)
     return request
 
 
@@ -295,11 +359,13 @@ def request_body(route, prompt, packet, history=()):
             evidence['delivery'] = 'bytes-omitted-on-text-route'
             evidence['note'] = OMITTED_BYTES_NOTE
             continue
-        data = 'data:' + reference['media_type'] + ';base64,' + evidence.pop('content')
-        if reference['media_type'] == 'application/pdf':
-            files.append({'type': 'input_file', 'filename': reference['sha256'] + '.pdf', 'file_data': data})
+        encoded = evidence.pop('content')
+        delivered_type, _ = detect_media_type(base64.b64decode(encoded), reference['media_type'])
+        data_url = 'data:' + delivered_type + ';base64,' + encoded
+        if delivered_type == 'application/pdf':
+            files.append({'type': 'input_file', 'filename': reference['sha256'] + '.pdf', 'file_data': data_url})
         else:
-            files.append({'type': 'input_image', 'image_url': data})
+            files.append({'type': 'input_image', 'image_url': data_url})
         evidence['delivery'] = 'attached-exact-bytes'
     # The Responses API refuses text.format json_object unless the input messages
     # contain the word 'json'; the packet is labelled as JSON for that reason.
