@@ -415,8 +415,8 @@ def validate_reassessment(records, artifacts, assignment, observed_output, *, re
     findings = strategy.items(reassessment['findings'], 'Reassessment findings')
     seen = set()
     originals = {saved['id']: saved.get('payload', saved) for saved in inherited}
-    # Read wherever the frozen packet delivers a qualified objection: an inherited review recorded under a qualified
-    # identity itself delivers no stated_id.
+    # Read wherever the harness delivered a qualified objection in the frozen packet, and never in a reviewer's
+    # observed output: an inherited review recorded under a qualified identity itself delivers no stated_id.
     identities = {(objection['stated_id'], objection['claim']): objection['id']
                   for objection in collect_qualified_objections(packet)}
     for finding in findings:
