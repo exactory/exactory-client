@@ -337,6 +337,16 @@ def collect_readings(records):
             if identifier in identifiers or digest(row) in digests]
 
 
+def find_citation_locator(work, units):
+    """The locator of a cited work: its DOI, else its arXiv id, else the first HTTPS url of a unit of the bundle that
+    its reading binds. None when the work has none of them."""
+    identifiers = [work["id"], *work.get("aliases", [])]
+    locator = next((item[4:] for item in identifiers if item.startswith("doi:")), None)
+    locator = locator or next((item[6:] for item in identifiers if item.startswith("arxiv:")), None)
+    return locator or next((unit["url"] for unit in units
+                            if isinstance(unit.get("url"), str) and unit["url"].startswith("https://")), None)
+
+
 def project_citations(records, artifacts):
     from .identities import family_id
     seen, citations = set(), []
@@ -347,13 +357,8 @@ def project_citations(records, artifacts):
         if family in seen:
             continue
         seen.add(family)
-        identifiers = [work["id"], *work.get("aliases", [])]
-        locator = next((item[4:] for item in identifiers if item.startswith("doi:")), None)
-        locator = locator or next((item[6:] for item in identifiers if item.startswith("arxiv:")), None)
-        if locator is None:
-            bundle = records.get("source_bundle", {}).get(reading.get("bundle_id"))
-            locator = next((unit["url"] for unit in (bundle or {}).get("units", [])
-                            if isinstance(unit.get("url"), str) and unit["url"].startswith("https://")), None)
+        bundle = records.get("source_bundle", {}).get(reading.get("bundle_id"))
+        locator = find_citation_locator(work, (bundle or {}).get("units", []))
         if locator is None:
             raise ResearchError("problem_citation_locator_missing", "Record a DOI, arXiv id or HTTPS locator for the read source",
                                 {"version_id": version, "reading_id": reading["id"]})

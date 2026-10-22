@@ -39,6 +39,21 @@ class ProblemValueReadingTests(ProblemCase):
         self.capture_second_original(read=False)
         self.assert_error("problem_value_reading_missing", lambda: self.mutate(self.load_problem_module().record_value, self.build_value([self.first])))
 
+    def test_a_bundle_with_an_https_unit_url_imports_without_a_locator_warning(self):
+        from research_harness.acquisition import import_response, acquire_fulltext
+        from research_fixtures import client
+        url = "https://example.org/finite-bound"
+        version = "url:" + url
+        import_response(self.store, "web", json.dumps({"id": version, "title": "A recorded finite bound"}).encode(),
+            source_url="https://example.org/catalog", captured_at="2026-09-07T12:00:00Z", media_type="application/json",
+            mappings=[{"id": "/id", "title": "/title"}], expected_revision=self.store.revision, request_id="https-work")
+        http, _, _ = client([(200, {"Content-Type": "text/html"},
+            b'<article><section class="article-body"><p>A bounded result. References: none.</p></section></article>')])
+        capture = acquire_fulltext(self.store, version, url, http=http, expected_revision=self.store.revision, request_id="https-body")["capture"]
+        bundle = self.bundle(version, capture=capture, bundle_id="https-bundle")
+        bundle["units"][0]["url"] = url
+        self.assertNotIn("warnings", self.mutate(import_bundle, bundle)["result"])
+
     def test_a_read_https_work_without_a_bundle_locator_has_an_explicit_post_obligation(self):
         from research_harness.acquisition import import_response, acquire_fulltext
         from research_harness.gates import gate_state
@@ -52,7 +67,9 @@ class ProblemValueReadingTests(ProblemCase):
             b'<article><section class="article-body"><p>A bounded result. References: none.</p></section></article>')])
         capture = acquire_fulltext(self.store, version, url, http=http, expected_revision=self.store.revision, request_id="https-body")["capture"]
         bundle = self.bundle(version, capture=capture, bundle_id="https-bundle")
-        self.mutate(import_bundle, bundle)
+        imported = self.mutate(import_bundle, bundle)["result"]
+        # The import names the missing locator before any reading depends on this bundle.
+        self.assertEqual([warning["code"] for warning in imported["warnings"]], ["problem_citation_locator_missing"])
         self.mutate(record_reading, self.full_note(bundle, "https-reading"))
         self.mutate(self.load_problem_module().record_value, self.build_value([{"kind": "reading", "version_id": version, "reading_id": "https-reading"}]))
         report = gate_state(self.store.snapshot()["records"], self.artifacts, "post")

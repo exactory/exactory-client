@@ -2078,7 +2078,7 @@ records retain nonmanaged dependency composition and empirical meaning.
 | `problem_rubric_review_required` | Obtain a version 2 result review with full rubric grades for the named review. |
 | `exploratory_evidence` | Preserve the probe observation and obtain admissible support for the claim. |
 | `problem_formal_check_missing`, `problem_formal_check_stale` | Bind the requested check for the current value evidence to its authenticated native completion. |
-| `problem_citation_locator_missing` | Record a DOI, arXiv id or read-version bundle HTTPS locator for the cited work. |
+| `problem_citation_locator_missing` | Record a DOI, arXiv id or read-version bundle HTTPS locator for the cited work. In a problem record, `bundle` returns this code as a warning when the bundle's work has none of them, before a reading binds the bundle. |
 | `problem_bar_pending`, `review_bar_mismatch` | Obtain both current field/area bars. |
 | `problem_review_pair_required`, `problem_evidence_unassessed`, `problem_assurance_pending` | Obtain the independent observed pair with delivered current evidence and all five assurances passed. |
 | `research_objection_unresolved` | Resolve the named material objection with evidence or a focused independent adjudication. |
