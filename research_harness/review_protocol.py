@@ -2146,8 +2146,13 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
                       packet_digest=invocation['packet_digest'], prompt_hash=invocation['prompt_hash'],
                       recorded_revision=revision)
         return [immutable_record(records, 'review_attempt', value['id'], result)], result
-    return _invoke_once(store, payload, 'review.invoke', start, finish,
-                        expected_revision=expected_revision, request_id=request_id, credential=credential)
+    result = _invoke_once(store, payload, 'review.invoke', start, finish,
+                          expected_revision=expected_revision, request_id=request_id, credential=credential)
+    assignment = store.snapshot()['records']['review_assignment'][payload['assignment_id']]
+    if assignment['role'] == 'native_math':
+        from .review_refusal import record_native_refusal
+        record_native_refusal(store, assignment['id'], request_id=request_id)
+    return result
 
 
 def authenticate_provenance(records, artifacts, assignment, attempt):

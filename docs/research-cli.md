@@ -125,7 +125,12 @@ that its own packet delivered and on the historical reviews of its lineage, a
 reassessment against its frozen predecessor, and the adjudicator's objection id
 and disposition. When the output fails one of these checks, the command returns
 the error and writes one immutable `review_output_refusal` record for the
-attempt, with the code, the details and the name of the check. A check that
+attempt, with the code, the details and the name of the check. A `native_math`
+review is recorded by `exactory-math`, not by this harness, so `review-run`
+checks its output when the run completes: the exact `subject_digest`,
+`claim_digest` and `reviewer` of the packet, the decision vocabulary and the
+closed fields of the native proposal, result or recovery review. A failure writes
+the refusal record (check `native.output`) at once. A check that
 depends on the store (a pending source request, a reading that is not current, a
 conflict with a stored review) writes no record. An output whose provenance does
 not authenticate is never refused. While every completed attempt of an

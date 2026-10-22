@@ -109,6 +109,10 @@ def classify_observed_output(records, artifacts, attempt_id):
         elif assignment['role'] == 'adjudicator':
             packet = json.loads(artifacts.read(assignment['packet']))
             validate_adjudication_contract(records, artifacts, assignment, packet, output)
+        elif assignment['role'] == 'native_math':
+            from .native_review import validate_output
+            with contract_check('native.output'):
+                validate_output(json.loads(artifacts.read(assignment['packet']))['native'], output)
     except ResearchError as error:
         check = getattr(error, 'contract_check', None)
         if check is not None:
@@ -144,6 +148,17 @@ def record_refusal_on_error(record_function):
                 pass
             raise
     return wrapped
+
+
+def record_native_refusal(store, assignment_id, *, request_id):
+    """Record the refusal of a native review output when the run completes: the native controller records the review
+    in another program, so the run is the harness's only chance to refuse it and let the assignment run again."""
+    try:
+        _record_refusal(store, {'assignment_id': assignment_id}, expected_revision=store.revision,
+                        request_id=request_id + ':refusal')
+    except (ResearchError, ValueError, TypeError, KeyError):
+        # A stale revision or unavailable provenance leaves the completed run as it was.
+        pass
 
 
 def _record_refusal(store, payload, *, expected_revision, request_id):
