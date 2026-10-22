@@ -16,8 +16,8 @@ import test_research_problem_reviews as reviewers
 class NativeCompleteSourceTests(unittest.TestCase):
     def setUp(self):
         self.fixture = fixture = reviewers.ProblemReviewTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         self.store, self.artifacts = fixture.store, fixture.artifacts
         for target, value in (('runtime', lambda: {'adapter': 'codex_cli_v1', 'fixture': 'native-record-test'}),
                               ('NATIVE_DECLARATIONS', ()), ('NATIVE_DECLARATION_SETS', {()})):

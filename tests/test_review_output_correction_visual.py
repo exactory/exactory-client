@@ -17,8 +17,8 @@ import test_visual_context_repair as fixtures
 class VisualCorrectionTests(unittest.TestCase):
     def test_original_visual_delivery_and_negative_science_survive_observed_text_delta(self):
         fixture = fixtures.VisualContextRepairTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         case, artifacts = fixture.case, fixture.artifacts
         assignment = fixture.assign()
         packet = json.loads(artifacts.read(assignment['packet']))

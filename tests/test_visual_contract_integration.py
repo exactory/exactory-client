@@ -100,8 +100,8 @@ class VisualContractIntegrationTests(unittest.TestCase):
     def contract_fixture(self, *, image):
         import test_research_problem_reviews as fixtures
         case = fixtures.ProblemReviewTests()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         case.observe_bar_reviews()
         assignment = case.assign('result', 'first')
         records = case.read_records()

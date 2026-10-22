@@ -16,8 +16,8 @@ import test_visual_context_repair as repair_fixtures
 class BridgeEvaluationScopeTests(unittest.TestCase):
     def setUp(self):
         self.fixture = bridge_fixtures.VisualBridgeOriginTests()
-        self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
         self.records = self.fixture.case.read_records()
         self.artifacts = self.fixture.artifacts
         self.child, self.parent = self.fixture.child, self.fixture.parent
@@ -66,8 +66,8 @@ class BridgeEvaluationScopeTests(unittest.TestCase):
 class RepairEvaluationScopeTests(unittest.TestCase):
     def test_repeated_repair_uses_one_frozen_view_and_keeps_all_history_checks(self):
         fixture = repair_fixtures.VisualContextRepairTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         assignment = fixture.assign()
         records = fixture.case.read_records()
         packet = json.loads(fixture.artifacts.read(assignment['packet']))

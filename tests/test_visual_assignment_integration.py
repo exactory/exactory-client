@@ -16,8 +16,8 @@ class VisualAssignmentIntegrationTests(unittest.TestCase):
     def setUp(self):
         import test_research_visual_route as fixtures
         self.case = fixtures.VisualRouteTests()
-        self.case.setUp()
         self.addCleanup(self.case.doCleanups)
+        self.case.setUp()
         self.records = self.case.records
         self.records['workspace'] = {'problem': {'orchestration': 'problem_creation', 'authors': ['Author']}}
         self.case.prior['session_id'] = 'original-session'

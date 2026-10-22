@@ -15,8 +15,8 @@ import test_problem_result_reassessment_binding as fixtures
 class CorrectionTests(unittest.TestCase):
     def setUp(self):
         self.case = fixtures.ResultReassessmentBindingTests()
-        self.case.setUp()
         self.addCleanup(self.case.doCleanups)
+        self.case.setUp()
         self.case.prepare()
         self.fixture = self.case.fixture
         self.output = copy.deepcopy(self.case.output)

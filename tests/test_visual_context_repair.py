@@ -21,8 +21,8 @@ class VisualContextRepairTests(unittest.TestCase):
     def setUp(self):
         from test_visual_result_delivery import VisualResultDeliveryTests
         self.fixture = VisualResultDeliveryTests()
-        self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
         self.case, self.artifacts = self.fixture.case, self.fixture.artifacts
         self.prior = self.fixture.assignment
         self.output = self.case.build_review_output('result')

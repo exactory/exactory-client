@@ -12,8 +12,8 @@ import test_review_output_correction as fixtures
 class CorrectionNegativeTests(unittest.TestCase):
     def setUp(self):
         self.case = fixtures.CorrectionTests()
-        self.case.setUp()
         self.addCleanup(self.case.doCleanups)
+        self.case.setUp()
         self.fixture = self.case.fixture
 
     def assert_no_binding_or_original_changes(self):

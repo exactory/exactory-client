@@ -33,8 +33,8 @@ class VisualResultDeliveryTests(unittest.TestCase):
         previous_contract.start()
         self.addCleanup(previous_contract.stop)
         self.native = fixtures.NativeCompleteSourceTests()
-        self.native.setUp()
         self.addCleanup(self.native.doCleanups)
+        self.native.setUp()
         self.case = case = self.native.fixture
         self.store, self.artifacts = case.store, case.artifacts
         active = patch.object(visual, 'runtime', return_value={'adapter': visual.ADAPTER, 'fixture': 'visual-result-test'})

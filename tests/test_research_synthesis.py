@@ -822,8 +822,8 @@ class SectionDependencyTests(SynthesisCase):
         from research_harness.reading import record_reading
         from development_fixtures import DevelopmentCase
         case = DevelopmentCase("prepared_study")
+        self.addCleanup(case.doCleanups)
         case.setUp()
-        self.addCleanup(case.temporary.cleanup)
         case.prepared_study()
         self.assertEqual(case.synthesis_codes(), set())
         work = case.links[0]["version_id"]
@@ -856,8 +856,8 @@ class SectionDependencyTests(SynthesisCase):
         self.scope([a], [collection])
         first = foundation_report(self.store, "research")["population_digest"]
         other = SynthesisCase("setUp")
+        self.addCleanup(other.doCleanups)
         other.setUp()
-        self.addCleanup(other.temporary.cleanup)
         b = other.metadata()
         wider = other.cohort((1, 2))
         other.scope([b], [wider])

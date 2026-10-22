@@ -127,8 +127,8 @@ class NativePublicStateTests(unittest.TestCase):
     def setUp(self):
         import test_visual_bridge_origin as fixtures
         self.fixture = fixtures.VisualBridgeOriginTests()
-        self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
         self.fixture.fixture.observe([])
         self.records = self.fixture.case.read_records()
         self.evaluation = Evaluation(self.records, self.fixture.artifacts)
@@ -166,8 +166,8 @@ class NativeEmitterProfileBoundaryTests(unittest.TestCase):
         import test_visual_context_repair as fixtures
         from research_harness import review_exact_text_cost_v1 as emitter, review_protocol as protocol
         fixture = fixtures.VisualContextRepairTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         repaired = fixture.assign()
         packet = json.loads(fixture.artifacts.read(repaired['packet']))
         response = copy.deepcopy(fixture.output)

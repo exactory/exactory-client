@@ -1867,8 +1867,8 @@ class ReviewOutputRefusalTests(delivery_fixtures.ProblemDeliveryCase):
     def test_native_adjudicator_retry_preserves_existing_evidence_contract(self):
         import test_research_review_protocol as native
         case = native.ReviewProtocolTests("test_inadmissible_correction_is_preserved_without_clearing_the_finding")
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         p = case.protocol()
         case.bar_reviews()
         case.mutate(p.record_assignment, {"id": "focused", "route_id": "route", "dossier_id": "dossier", "role": "adjudicator",

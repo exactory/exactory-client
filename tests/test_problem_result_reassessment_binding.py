@@ -15,8 +15,8 @@ import test_research_problem_reviews as fixtures
 class ResultReassessmentBindingTests(unittest.TestCase):
     def setUp(self):
         self.fixture = fixture = fixtures.ProblemReviewTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         self.value = {'id': 'value-1', 'motivation': [{'text': 'A bounded mathematical consequence.', 'evidence': []}],
                       'current_state': []}
         fixture.put('problem_value', 'value-1', self.value)

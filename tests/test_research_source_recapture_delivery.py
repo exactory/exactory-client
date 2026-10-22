@@ -62,8 +62,8 @@ class SourceRecaptureDeliveryTests(LiteratureCase):
 
     def component_owner(self):
         owner = component_fixtures.ComponentTests()
-        owner.setUp()
         self.addCleanup(owner.doCleanups)
+        owner.setUp()
         return owner
 
     def test_pending_component_then_exact_bound_component_delivers(self):

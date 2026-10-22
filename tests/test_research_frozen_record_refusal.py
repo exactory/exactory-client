@@ -13,8 +13,8 @@ import test_research_problem_reviews as reviewers
 class NativeFrozenRecordTests(unittest.TestCase):
     def setUp(self):
         self.fixture = fixture = reviewers.ProblemReviewTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         self.record = {'id': 'value-1', 'motivation': [{'text': 'Exact delivered value.', 'evidence': []}],
                        'current_state': []}
         fixture.put('problem_value', self.record['id'], self.record)

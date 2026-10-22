@@ -16,7 +16,7 @@ from research_harness import review_protocol, review_transport
 class VisualRouteTests(unittest.TestCase):
     def setUp(self):
         import test_research_visual_sources as fixtures
-        fixture = fixtures.VisualSourceTests(); fixture.setUp(); self.addCleanup(fixture.doCleanups)
+        fixture = fixtures.VisualSourceTests(); self.addCleanup(fixture.doCleanups); fixture.setUp()
         self.artifacts = fixture.artifacts
         self.fixture = fixture
         self.native_records = fixture.records

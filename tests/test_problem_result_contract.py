@@ -19,8 +19,8 @@ class ProblemResultContractTests(unittest.TestCase):
         # Load the native candidate dependency before the existing claim fixture replaces its module.
         importlib.import_module('research_harness.problem_candidates')
         self.case = fixtures.ProblemReviewTests()
-        self.case.setUp()
         self.addCleanup(self.case.doCleanups)
+        self.case.setUp()
 
     def old_result(self):
         case = self.case
