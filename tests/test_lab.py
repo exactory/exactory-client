@@ -777,7 +777,7 @@ class TestProbeLifecycle(_InsideWorkspaceTestCase):
 
     def test_lost_worker_cleans_up_descendants_when_the_script_exits(self):
         from research_harness.probe import hold_probe_owner
-        from research_harness.probe_supervision import find_probe_process_identity
+        from research_harness.probe_supervision import find_probe_group_members
         from research_harness.resources import account_report
         from research_harness.storage import Store
         marker, release = self.workspace / "descendant", self.workspace / "finish-parent"
@@ -806,10 +806,11 @@ class TestProbeLifecycle(_InsideWorkspaceTestCase):
         self.assertEqual(owner.returncode, 0, stderr)
         self.assertEqual(json.loads(stdout)["status"], "pending")
         release.write_text("finish")
+        # The program that holds the owner lock ends in the same group kill as the descendant, possibly after it.
         deadline = time.monotonic() + 2
-        while find_probe_process_identity(child_pid) is not None and time.monotonic() < deadline:
+        while find_probe_group_members(group) and time.monotonic() < deadline:
             time.sleep(0.01)
-        self.assertIsNone(find_probe_process_identity(child_pid), "A script exit must not strand its same-group descendants")
+        self.assertEqual(find_probe_group_members(group), [], "A script exit must not strand its same-group descendants")
         with hold_probe_owner(self.workspace, "lost-parent") as descriptor:
             self.assertIsNotNone(descriptor)
         retry = subprocess.run(command, cwd=self.workspace, capture_output=True, timeout=5)
